@@ -92,10 +92,12 @@ A close failure stops the deletion or the archive, like a terminal stop failure.
 `browser` is a panel kind that both panels allow. The browser layer mounts once in `WorkspaceAppShell` and places each page surface over the slot of its tab. A page therefore does not reload when its tab moves, hides, or the user switches pages.
 
 - Every page surface stays mounted. A hidden surface keeps its page.
-- In Electron, each panel tab is a native page view that the engine creates and places. While no panel shows a view, the engine keeps it visible in a one-pixel invisible keeper window. A hidden view produces no compositor frames, so a screenshot could wait for a frame that never comes. The keeper shows nothing, ignores the pointer, and never takes the keyboard focus. When the last OpenDucktor window closes, the engine ends its pages and closes the keeper, so the app can quit.
+- In Electron, each panel tab is a native page view that the engine creates and places. While no panel shows a view, the engine detaches it, so an idle hidden page draws no frames, like a background tab.
+- A detached view produces no compositor frames, so a screenshot would wait for a frame that never comes. While a wake hold is open, the engine therefore keeps a hidden view drawing in a one-pixel invisible keeper window. Each agent action, each DevTools connection, and each page screenshot or snapshot takes a wake hold.
+- The keeper shows nothing, ignores the pointer, and never takes the keyboard focus. When the last OpenDucktor window closes, the engine ends its pages and closes the keeper, so the app can quit.
 - The engine state view, the load error, the certificate warning, and the popup window placeholder replace the page. The page surface then hides, so it never covers them.
 - A native page view draws above every element of the OpenDucktor window. The page script therefore draws the picker highlight, the annotation markers, and the agent marker in a closed shadow root inside the page. The shadow host is a manual popover, so it shares the top layer of the page and paints above modal dialogs and page popovers, which no `z-index` reaches. The page raises the overlay again when it opens a new top-layer element.
-- A host overlay, such as a dialog, a menu, or the selection comment box, marks its content with `data-page-occluder`. While an overlay box covers a page, the browser layer hides that native page and shows a snapshot in its place, so the overlay stays visible. An overlay elsewhere on the window leaves the page as it is.
+- A host overlay, such as a dialog, a menu, or the selection comment box, marks its content with `data-page-occluder`. The lint rule `architecture/require-page-occluder` requires this mark in each portal of `packages/frontend`. While an overlay box covers a page, the browser layer hides that native page and shows a snapshot in its place, so the overlay stays visible. The snapshot stays until the page is back in its place. An overlay elsewhere on the window leaves the page as it is.
 
 The tab coordinator applies each host tab change to the layout of its owner, also when no page shows that owner:
 
@@ -121,7 +123,7 @@ In Electron, the DevTools button shows and hides DevTools in the same panel tab.
 ### Electron
 
 - The loopback CORS rewrite and the custom protocols apply only to `persist:openducktor`, never to browser partitions.
-- Each panel tab is a `WebContentsView` with `focusOnNavigation: false`, the sandbox, context isolation, and no Node integration. The engine creates the view, keeps it in the keeper window, and places it in the OpenDucktor window when a panel shows it.
+- Each panel tab is a `WebContentsView` with `focusOnNavigation: false`, the sandbox, context isolation, and no Node integration. The engine creates the view, places it in the OpenDucktor window when a panel shows it, and detaches it or keeps it in the keeper window otherwise.
 - A popup window also sets `focusOnNavigation: false`, because it inherits no other page preference from its opener.
 - `will-attach-webview` removes preloads and forces the sandbox and context isolation. Only the bundled DevTools frontend may still attach a `<webview>`, in the DevTools partition.
 - Popup windows cannot attach a `<webview>`.

@@ -73,7 +73,7 @@ export type ElectronBrowserEngine = BrowserEnginePort & {
   isMainWindow(webContentsId: number): boolean;
   /** Prepares the workspace partition before the engine creates a page of the workspace. */
   prepareWorkspace(workspaceId: string): void;
-  /** Places the page of a panel tab in its window, or moves it back to the keeper. */
+  /** Places the page of a panel tab in its window, or takes it out of the window. */
   setSurface(
     senderId: number,
     tabId: string,
@@ -109,9 +109,10 @@ const pageNotReady = (operation: string, tabId: string) =>
  * places. A popup window tab keeps its page in the popup window. The host drives each page over
  * the page `webContents.debugger`.
  *
- * The engine moves each view into the invisible keeper window while no panel shows it, and it
- * never calls `webContents.focus()` except for `focusPage`. A CDP input command thus reaches the
- * page without a focus change of any window.
+ * A view that no panel shows stays detached, and costs no frames. While a wake hold is open, the
+ * engine keeps it drawing in the invisible keeper window instead. The engine never calls
+ * `webContents.focus()` except for `focusPage`. A CDP input command thus reaches the page without
+ * a focus change of any window.
  */
 export const createElectronBrowserEngine = (
   input: ElectronBrowserEngineInput,
@@ -192,7 +193,7 @@ export const createElectronBrowserEngine = (
     return tab;
   };
 
-  /** Shows a view in its window, or keeps it in the keeper while no panel shows it. */
+  /** Shows a view in its window. Otherwise it draws in the keeper while held awake, or detaches. */
   const applyView = (tab: EngineTab): void => {
     const view = tab.view;
     // An agent action keeps its page unthrottled while it runs. A popup window has its page in
@@ -215,12 +216,42 @@ export const createElectronBrowserEngine = (
       // The window closed while the renderer still listed its tabs.
       tab.viewWindowId = null;
     }
-    // A hidden view draws no frame, and a CDP screenshot waits for one. Keep the page visible in
-    // the keeper window while no panel shows it.
-    input.viewPort.keepInKeeper(view);
+    // A detached view draws no frame, and a CDP screenshot waits for one. While a wake hold is
+    // open, the keeper window keeps the page drawing. An idle page stays detached and costs no
+    // frames, like a background tab.
+    if (tab.wakeHolds > 0) {
+      input.viewPort.keepInKeeper(view);
+    } else {
+      input.viewPort.detach(view);
+    }
   };
 
-  /** Moves the pages of a window to the keeper, so a window that lost its renderer shows none. */
+  // A release ends only the hold that its acquire took, on the same tab. A hold on a tab that
+  // does not exist yet, or a release after the tab closed, changes nothing.
+  const holdWake = (tabId: string) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const tab = tabs.get(tabId);
+        if (tab) {
+          tab.wakeHolds += 1;
+          applyView(tab);
+        }
+        return tab;
+      }),
+      (held) =>
+        Effect.sync(() => {
+          if (held !== undefined && tabs.get(tabId) === held && held.wakeHolds > 0) {
+            held.wakeHolds -= 1;
+            applyView(held);
+          }
+        }),
+    );
+
+  /** A screenshot waits for a frame, so the page draws while it runs, also when no panel shows it. */
+  const whileAwake = <A, E>(tabId: string, effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+    Effect.scoped(holdWake(tabId).pipe(Effect.andThen(effect)));
+
+  /** Takes the pages out of a window that lost its renderer, so the window shows none. */
   const detachWindowViews = (webContentsId: number): void => {
     for (const tab of tabs.values()) {
       if (tab.viewWindowId === webContentsId) {
@@ -584,17 +615,20 @@ export const createElectronBrowserEngine = (
       const operation = "electron.browser.capture_page";
       return pageBinding(tabId, operation).pipe(
         Effect.flatMap(({ connection }) =>
-          Effect.tryPromise({
-            try: () => capturePageImage(connection, PAGE_SNAPSHOT_JPEG_QUALITY),
-            catch: (cause) =>
-              new BrowserEngineError({
-                code: "operation_failed",
-                operation,
-                message: `OpenDucktor could not capture the page: ${errorMessage(cause)}`,
-                tabId,
-                cause,
-              }),
-          }),
+          whileAwake(
+            tabId,
+            Effect.tryPromise({
+              try: () => capturePageImage(connection, PAGE_SNAPSHOT_JPEG_QUALITY),
+              catch: (cause) =>
+                new BrowserEngineError({
+                  code: "operation_failed",
+                  operation,
+                  message: `OpenDucktor could not capture the page: ${errorMessage(cause)}`,
+                  tabId,
+                  cause,
+                }),
+            }),
+          ),
         ),
       );
     },
@@ -623,26 +657,7 @@ export const createElectronBrowserEngine = (
           (session) => Effect.promise(() => session.close()),
         );
       }),
-    // A release ends only the hold that its acquire took, on the same tab. A hold on a tab that
-    // does not exist yet, or a release after the tab closed, changes nothing.
-    holdWake: (tabId) =>
-      Effect.acquireRelease(
-        Effect.sync(() => {
-          const tab = tabs.get(tabId);
-          if (tab) {
-            tab.wakeHolds += 1;
-            applyView(tab);
-          }
-          return tab;
-        }),
-        (held) =>
-          Effect.sync(() => {
-            if (held !== undefined && tabs.get(tabId) === held && held.wakeHolds > 0) {
-              held.wakeHolds -= 1;
-              applyView(held);
-            }
-          }),
-      ),
+    holdWake,
     reloadPage: (tabId, ignoreCache) =>
       pageBinding(tabId, "electron.browser.reload_page").pipe(
         Effect.map(({ guest }) => {
@@ -655,17 +670,20 @@ export const createElectronBrowserEngine = (
       const operation = "electron.browser.capture_screenshot";
       return pageBinding(tabId, operation).pipe(
         Effect.flatMap(({ connection }) =>
-          Effect.tryPromise({
-            try: () => captureGuestScreenshot(connection, input.decodePng, params),
-            catch: (cause) =>
-              new BrowserEngineError({
-                code: "operation_failed",
-                operation,
-                message: `OpenDucktor could not capture the page: ${errorMessage(cause)}`,
-                tabId,
-                cause,
-              }),
-          }),
+          whileAwake(
+            tabId,
+            Effect.tryPromise({
+              try: () => captureGuestScreenshot(connection, input.decodePng, params),
+              catch: (cause) =>
+                new BrowserEngineError({
+                  code: "operation_failed",
+                  operation,
+                  message: `OpenDucktor could not capture the page: ${errorMessage(cause)}`,
+                  tabId,
+                  cause,
+                }),
+            }),
+          ),
         ),
       );
     },

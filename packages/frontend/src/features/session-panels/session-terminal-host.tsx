@@ -111,6 +111,7 @@ const TerminalSurfacePortal = memo(function TerminalSurfacePortal({
 }: {
   surface: SurfaceSnapshot;
 }) {
+  // oxlint-disable-next-line architecture/require-page-occluder -- A terminal surface sits in its panel slot. It is not an overlay.
   return createPortal(
     <Tabs value={model.selectedTabId ?? ""} className="contents">
       <TerminalLayer

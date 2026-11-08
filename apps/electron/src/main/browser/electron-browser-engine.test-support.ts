@@ -239,6 +239,8 @@ export class FakeViewPort implements ElectronBrowserViewPort {
   readonly views: FakeView[] = [];
   readonly placed: Array<{ view: FakeView; windowId: number; box: ElectronViewBox }> = [];
   readonly kept: FakeView[] = [];
+  /** Each placement change of a view, in order: a window id, `"keeper"`, or `"detached"`. */
+  readonly moves: Array<{ view: FakeView; to: number | "keeper" | "detached" }> = [];
   readonly closed: FakeView[] = [];
   keeperCloses = 0;
 
@@ -262,12 +264,25 @@ export class FakeViewPort implements ElectronBrowserViewPort {
     // SAFETY: the engine places only views that this port created, which are FakeView values.
     const own = view as FakeView;
     this.placed.push({ view: own, windowId, box });
+    this.moves.push({ view: own, to: windowId });
     return true;
   }
 
   keepInKeeper(view: ElectronBrowserView): void {
     // SAFETY: the engine keeps only views that this port created, which are FakeView values.
-    this.kept.push(view as FakeView);
+    const own = view as FakeView;
+    this.kept.push(own);
+    this.moves.push({ view: own, to: "keeper" });
+  }
+
+  detach(view: ElectronBrowserView): void {
+    // SAFETY: the engine detaches only views that this port created, which are FakeView values.
+    this.moves.push({ view: view as FakeView, to: "detached" });
+  }
+
+  /** Where the view is now, or `"detached"` when the port never placed it. */
+  placeOf(view: FakeView): number | "keeper" | "detached" {
+    return this.moves.findLast((move) => move.view === view)?.to ?? "detached";
   }
 
   close(view: ElectronBrowserView): void {

@@ -88,12 +88,13 @@ describe("Electron browser engine pages", () => {
     expect(guest.debuggerAttachedAtLoad).toEqual([false, true]);
   });
 
-  test("keeps a page that no panel shows in the keeper", async () => {
+  test("leaves an idle page that no panel shows detached, so it draws no frames", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
 
     expect(harness.viewPort.views).toHaveLength(1);
-    expect(harness.viewPort.kept).toEqual([harness.view()]);
+    expect(harness.viewPort.placeOf(harness.view())).toBe("detached");
+    expect(harness.viewPort.kept).toEqual([]);
     expect(harness.viewPort.placed).toEqual([]);
   });
 
@@ -114,22 +115,21 @@ describe("Electron browser engine pages", () => {
     ]);
 
     await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(false)));
-    expect(harness.viewPort.kept.at(-1)).toBe(view);
+    expect(harness.viewPort.placeOf(view)).toBe("detached");
   });
 
-  test("keeps the pages in the keeper while its window has no renderer", async () => {
+  test("detaches the pages of a window that has no renderer", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
     const view = harness.view();
     await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(true)));
-    const kept = harness.viewPort.kept.length;
 
     harness.engine.setMainWindowLoaded(MAIN_WINDOW_ID, false);
 
-    expect(harness.viewPort.kept).toHaveLength(kept + 1);
-    expect(harness.viewPort.kept.at(-1)).toBe(view);
+    expect(harness.viewPort.placeOf(view)).toBe("detached");
+    const moves = harness.viewPort.moves.length;
     harness.engine.setMainWindowLoaded(MAIN_WINDOW_ID, true);
-    expect(harness.viewPort.kept).toHaveLength(kept + 1);
+    expect(harness.viewPort.moves).toHaveLength(moves);
   });
 
   test("rounds a fractional box and refuses a shown page without one", async () => {
@@ -203,14 +203,25 @@ describe("Electron browser engine pages", () => {
     );
   });
 
-  test("takes a screenshot of a hidden page without showing it", async () => {
+  test("keeps a hidden page drawing in the keeper only while its screenshot runs", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
-    harness.viewPort.kept.length = 0;
+    harness.viewPort.moves.length = 0;
 
     await Effect.runPromise(harness.engine.captureScreenshot(TAB_ID, { format: "png" }));
 
-    expect(harness.viewPort.kept).toEqual([]);
+    expect(harness.viewPort.moves.map((move) => move.to)).toEqual(["keeper", "detached"]);
+    expect(harness.viewPort.placed).toEqual([]);
+  });
+
+  test("keeps a hidden page drawing while its snapshot runs", async () => {
+    const harness = createEngineHarness();
+    await createTab(harness);
+    harness.viewPort.moves.length = 0;
+
+    await Effect.runPromise(harness.engine.capturePage(TAB_ID));
+
+    expect(harness.viewPort.moves.map((move) => move.to)).toEqual(["keeper", "detached"]);
   });
 
   test("ends the tab when its page closes", async () => {
@@ -395,7 +406,7 @@ describe("Electron browser engine page events", () => {
     expect([allowed.prevented, heldAgain.prevented]).toEqual([true, false]);
   });
 
-  test("keeps a page unthrottled while any wake hold is open", async () => {
+  test("keeps a hidden page drawing and unthrottled while any wake hold is open", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
     const view = harness.view();
@@ -405,12 +416,28 @@ describe("Electron browser engine page events", () => {
     await Effect.runPromise(harness.engine.holdWake(TAB_ID).pipe(Scope.provide(first)));
     await Effect.runPromise(harness.engine.holdWake(TAB_ID).pipe(Scope.provide(second)));
     expect(guest.backgroundThrottling).toBe(false);
+    expect(harness.viewPort.placeOf(view)).toBe("keeper");
     await Effect.runPromise(Scope.close(first, Exit.void));
     expect(guest.backgroundThrottling).toBe(false);
+    expect(harness.viewPort.placeOf(view)).toBe("keeper");
     await Effect.runPromise(Scope.close(second, Exit.void));
 
     expect(guest.backgroundThrottling).toBe(true);
-    expect(harness.viewPort.kept.at(-1)).toBe(view);
+    expect(harness.viewPort.placeOf(view)).toBe("detached");
+  });
+
+  test("leaves a shown page in its window while a wake hold is open", async () => {
+    const harness = createEngineHarness();
+    await createTab(harness);
+    const view = harness.view();
+    await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(true)));
+    const scope = await Effect.runPromise(Scope.make());
+
+    await Effect.runPromise(harness.engine.holdWake(TAB_ID).pipe(Scope.provide(scope)));
+    expect(harness.viewPort.placeOf(view)).toBe(MAIN_WINDOW_ID);
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+
+    expect(harness.viewPort.placeOf(view)).toBe(MAIN_WINDOW_ID);
   });
 
   test("a hold taken before the tab exists does not end a later hold", async () => {
@@ -423,10 +450,11 @@ describe("Electron browser engine page events", () => {
     await Effect.runPromise(harness.engine.holdWake(TAB_ID).pipe(Scope.provide(late)));
 
     await Effect.runPromise(Scope.close(early, Exit.void));
-    expect(harness.viewPort.kept.at(-1)).toBe(view);
+    expect(harness.viewPort.placeOf(view)).toBe("keeper");
     expect(harness.page().backgroundThrottling).toBe(false);
     await Effect.runPromise(Scope.close(late, Exit.void));
     expect(harness.page().backgroundThrottling).toBe(true);
+    expect(harness.viewPort.placeOf(view)).toBe("detached");
   });
 
   test("reports granted page notifications only", async () => {

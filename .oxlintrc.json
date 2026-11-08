@@ -64,6 +64,7 @@
       "files": ["packages/frontend/**/*.ts", "packages/frontend/**/*.tsx"],
       "plugins": ["oxc", "react", "typescript", "unicorn"],
       "rules": {
+        "architecture/require-page-occluder": "error",
         "react/exhaustive-deps": "warn",
         "react/no-danger": "warn",
         "react/rules-of-hooks": "warn"

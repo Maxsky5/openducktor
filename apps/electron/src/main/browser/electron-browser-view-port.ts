@@ -28,9 +28,11 @@ export type ElectronBrowserView = {
  * Places the pages of panel tabs. Each page is a `WebContentsView`, not a `<webview>` guest, so a
  * CDP input command never moves the keyboard focus of the window that shows the page.
  *
- * A view draws only while it is attached to a shown window and visible. A hidden view produces no
- * compositor frames, so a CDP screenshot waits for a frame that never comes. The port keeps a page
- * that no panel shows visible in the keeper window: one pixel, no opacity, no focus, no pointer.
+ * A view draws only while it is attached to a shown window and visible. A detached view produces
+ * no compositor frames, so a CDP screenshot waits for a frame that never comes. While an agent or
+ * a capture needs a page that no panel shows, the port keeps it visible in the keeper window: one
+ * pixel, no opacity, no focus, no pointer. An idle page that no panel shows stays detached, so it
+ * costs no frames, like a background tab of a browser.
  */
 export type ElectronBrowserViewPort = {
   /** Remembers the window of an OpenDucktor renderer, so the engine can place views in it. */
@@ -41,6 +43,8 @@ export type ElectronBrowserViewPort = {
   showInWindow(view: ElectronBrowserView, windowId: number, box: ElectronViewBox): boolean;
   /** Keeps the view visible in the keeper window, which no user sees or reaches. */
   keepInKeeper(view: ElectronBrowserView): void;
+  /** Removes the view from its window, so its page stops drawing until it shows again. */
+  detach(view: ElectronBrowserView): void;
   /** Removes the view from its window and ends its page. */
   close(view: ElectronBrowserView): void;
   /**
@@ -109,18 +113,24 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
     return window;
   };
 
+  const unplace = (view: ElectronBrowserView): void => {
+    const current = placements.get(view);
+    if (current === undefined) {
+      return;
+    }
+    // A closed window destroys its content view, but the page view outlives it.
+    if (!current.owner.isDestroyed()) {
+      current.owner.contentView.removeChildView(current.native);
+    }
+    placements.delete(view);
+  };
+
   const place = (view: ElectronBrowserView, owner: ElectronViewOwner): electron.WebContentsView => {
     const current = placements.get(view);
     if (current?.owner === owner) {
       return current.native;
     }
-    if (current !== undefined) {
-      // A closed window destroys its content view, but the page view outlives it.
-      if (!current.owner.isDestroyed()) {
-        current.owner.contentView.removeChildView(current.native);
-      }
-      placements.delete(view);
-    }
+    unplace(view);
     // SAFETY: this port creates each `ElectronBrowserView` as a `WebContentsView`.
     const native = view as electron.WebContentsView;
     owner.contentView.addChildView(native);
@@ -163,14 +173,9 @@ export const createElectronBrowserViewPort = (): ElectronBrowserViewPort => {
       const native = place(view, keeperWindow());
       native.setVisible(true);
     },
+    detach: unplace,
     close(view) {
-      const current = placements.get(view);
-      if (current !== undefined) {
-        if (!current.owner.isDestroyed()) {
-          current.owner.contentView.removeChildView(current.native);
-        }
-        placements.delete(view);
-      }
+      unplace(view);
       if (!view.webContents.isDestroyed()) {
         view.webContents.close();
       }

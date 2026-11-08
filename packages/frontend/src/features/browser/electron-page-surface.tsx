@@ -21,7 +21,7 @@ type ElectronPageSurfaceProps = {
  *
  * While an overlay opens, the page keeps its place for a moment, then turns into its last
  * snapshot. The snapshot keeps the page visible to the user under the overlay, and the page view
- * moves out of the window until the overlay closes.
+ * moves out of the window until the overlay closes. The snapshot stays until the page is back.
  */
 export function ElectronPageSurface({
   bridge,
@@ -32,6 +32,8 @@ export function ElectronPageSurface({
 }: ElectronPageSurfaceProps): ReactElement | null {
   const [snapshot, setSnapshot] = useState<PageSnapshot>(undefined);
   const frozen = placement.visible && occluded;
+  // Keep the page in place until its snapshot is ready, so the overlay does not flash a gap.
+  const waitingForSnapshot = frozen && snapshot === undefined;
 
   useEffect(
     () =>
@@ -44,10 +46,7 @@ export function ElectronPageSurface({
   );
 
   useEffect(() => {
-    if (!frozen) {
-      setSnapshot(undefined);
-      return;
-    }
+    if (!frozen) return;
     let cancelled = false;
     bridge.capturePage(tabId).then(
       (url) => {
@@ -75,20 +74,23 @@ export function ElectronPageSurface({
 
   useEffect(() => {
     if (!placement.visible) {
+      setSnapshot(undefined);
       void bridge
         .setSurface({ tabId, visible: false })
         .catch(reportBrowserFailure("Could not place the browser page"));
       return;
     }
-    // Keep the page in place until its snapshot is ready, so the overlay does not flash a gap.
-    if (frozen && snapshot === undefined) return;
+    if (waitingForSnapshot) return;
     if (frozen) {
       void bridge
         .setSurface({ tabId, visible: false })
         .catch(reportBrowserFailure("Could not place the browser page"));
       return;
     }
-    void bridge
+    // The native page shows over the snapshot when the host places it. Removing the snapshot
+    // before then would show an empty slot for a frame.
+    let cancelled = false;
+    bridge
       .setSurface({
         tabId,
         visible: true,
@@ -99,7 +101,12 @@ export function ElectronPageSurface({
           height: placement.height,
         },
       })
-      .catch(reportBrowserFailure("Could not place the browser page"));
+      .then(() => {
+        if (!cancelled) setSnapshot(undefined);
+      }, reportBrowserFailure("Could not place the browser page"));
+    return () => {
+      cancelled = true;
+    };
   }, [
     bridge,
     frozen,
@@ -108,8 +115,8 @@ export function ElectronPageSurface({
     placement.top,
     placement.visible,
     placement.width,
-    snapshot,
     tabId,
+    waitingForSnapshot,
   ]);
 
   return snapshot === undefined || snapshot === null ? null : (

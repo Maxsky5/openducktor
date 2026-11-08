@@ -95,6 +95,32 @@ describe("ElectronPageSurface", () => {
     expect(queryByTestId("browser-page-snapshot")).toBeNull();
   });
 
+  test("keeps the snapshot until the page is back in its window", async () => {
+    const { bridge, setSurface } = createBridge();
+    const { queryByTestId, rerenderSurface } = renderSurface(bridge, placement(true), true);
+    await waitFor(() => expect(queryByTestId("browser-page-snapshot")).not.toBeNull());
+    let placed = (): void => {};
+    setSurface.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          placed = resolve;
+        }),
+    );
+
+    rerenderSurface(placement(true), false);
+    await waitFor(() =>
+      expect(setSurface).toHaveBeenLastCalledWith({
+        tabId: TAB_ID,
+        visible: true,
+        bounds: { x: 12, y: 24, width: 640, height: 480 },
+      }),
+    );
+    expect(queryByTestId("browser-page-snapshot")).not.toBeNull();
+
+    placed();
+    await waitFor(() => expect(queryByTestId("browser-page-snapshot")).toBeNull());
+  });
+
   test("keeps a page out of every window while no panel shows it", async () => {
     const { bridge, setSurface } = createBridge();
     renderSurface(bridge, placement(false), false);

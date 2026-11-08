@@ -153,7 +153,8 @@ function ElectronTabContent({
         }
       />
       {overlayHost && replacement === null
-        ? createPortal(
+        ? // oxlint-disable-next-line architecture/require-page-occluder -- The comment box and the dialog prompt mark themselves.
+          createPortal(
             <>
               {/* The comment box hides the native page, so it waits until the picker stops.
                   Otherwise the first pick would block the Shift-clicks that follow it. */}
