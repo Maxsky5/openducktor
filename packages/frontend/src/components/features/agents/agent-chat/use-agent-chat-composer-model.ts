@@ -49,6 +49,7 @@ export type AgentChatComposerConfig = {
   runningTurnModel: AgentChatComposerModel["runningTurnModel"];
   messageQueue: AgentChatComposerModel["messageQueue"];
   goalRow: AgentChatComposerModel["goalRow"];
+  goalRowScope: AgentChatComposerModel["goalRowScope"];
   isSending: boolean;
   isStarting: boolean;
   isSavingModel?: boolean;
@@ -146,6 +147,7 @@ export function useAgentChatComposerModel({
       runningTurnModel: composer.runningTurnModel,
       messageQueue: composer.messageQueue,
       goalRow: composer.goalRow,
+      goalRowScope: composer.goalRowScope,
       isSending: composer.isSending,
       isStarting: composer.isStarting,
       isSavingModel: composer.isSavingModel ?? false,

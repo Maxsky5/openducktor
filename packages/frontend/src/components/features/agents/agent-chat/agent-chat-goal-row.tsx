@@ -53,14 +53,16 @@ const ACTION_ICONS = {
  */
 export function AgentChatGoalRow({
   model,
-  sessionKey,
+  scope,
 }: {
   model: AgentSessionGoalRowModel | null;
-  sessionKey: string | null;
+  /** The session and its live presence. A new scope shows its goal at once. */
+  scope: string | null;
 }): ReactElement {
   return (
-    // Another chat shows its goal at once. Only later changes animate.
-    <CssPresenceList key={sessionKey ?? "none"}>
+    // Another chat, or a session that becomes attached, shows its known goal at once. Only
+    // later changes animate.
+    <CssPresenceList key={scope ?? "none"}>
       {model ? [<GoalRowCard key="goal" model={model} />] : []}
     </CssPresenceList>
   );

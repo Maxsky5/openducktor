@@ -19,7 +19,7 @@ const rowModel = (overrides: Partial<AgentSessionGoalRowModel> = {}): AgentSessi
 describe("AgentChatGoalRow", () => {
   test("shows the status, objective, reason, and runtime actions", () => {
     const onAction = mock((_action: string) => {});
-    render(<AgentChatGoalRow model={rowModel({ onAction })} sessionKey="session" />);
+    render(<AgentChatGoalRow model={rowModel({ onAction })} scope="session:present" />);
 
     const row = screen.getByRole("region", { name: "Goal" });
     expect(row.textContent).toContain("Paused");
@@ -40,7 +40,7 @@ describe("AgentChatGoalRow", () => {
       render(
         <AgentChatGoalRow
           model={rowModel({ pendingAction: "clear", error: "No goal" })}
-          sessionKey="session"
+          scope="session:present"
         />,
       );
 
@@ -63,15 +63,30 @@ describe("AgentChatGoalRow", () => {
   });
 
   test("offers no expand for an objective that fits", () => {
-    render(<AgentChatGoalRow model={rowModel()} sessionKey="session" />);
+    render(<AgentChatGoalRow model={rowModel()} scope="session:present" />);
 
     const line = screen.getByRole("button", { name: /Goal Paused/ });
     expect(line).toHaveProperty("disabled", true);
     expect(line.getAttribute("aria-expanded")).toBeNull();
   });
 
+  test("animates a goal that appears while attached, but not one that comes with the attach", () => {
+    const attached = render(<AgentChatGoalRow model={null} scope="session:present" />);
+    attached.rerender(<AgentChatGoalRow model={rowModel()} scope="session:present" />);
+    expect(screen.getByRole("region", { name: "Goal" }).getAttribute("data-animate-entry")).toBe(
+      "true",
+    );
+    attached.unmount();
+
+    const attaching = render(<AgentChatGoalRow model={null} scope="session:absent" />);
+    attaching.rerender(<AgentChatGoalRow model={rowModel()} scope="session:present" />);
+    expect(screen.getByRole("region", { name: "Goal" }).getAttribute("data-animate-entry")).toBe(
+      "false",
+    );
+  });
+
   test("shows no row without a goal", () => {
-    render(<AgentChatGoalRow model={null} sessionKey="session" />);
+    render(<AgentChatGoalRow model={null} scope="session:present" />);
 
     expect(screen.queryByRole("region", { name: "Goal" })).toBeNull();
   });

@@ -626,7 +626,7 @@ function AgentChatComposerFormView({
       ) : null}
       <AgentChatGoalRow
         model={model.isReadOnly ? null : model.goalRow}
-        sessionKey={model.displayedSessionKey}
+        scope={model.goalRowScope}
       />
       <div
         className={composerCardClassName({

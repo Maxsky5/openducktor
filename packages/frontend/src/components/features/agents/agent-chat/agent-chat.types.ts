@@ -96,6 +96,8 @@ export type AgentChatComposerModel = {
   messageQueue: AgentChatMessageQueueModel | null;
   /** The goal row of the session, or null when the session has no goal. */
   goalRow: AgentSessionGoalRowModel | null;
+  /** The goal row animates only changes within this scope. */
+  goalRowScope: string | null;
   isModelSelectionPending: boolean;
   selectedModelSelection: AgentModelSelection | null;
   /** Null when no speed control is available. */

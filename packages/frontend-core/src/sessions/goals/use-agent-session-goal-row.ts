@@ -113,3 +113,12 @@ export const useSessionGoalRow = ({
   );
   return useAgentSessionGoalRow({ repoPath, session, runtimeDescriptor });
 };
+
+/**
+ * The scope in which the goal row animates its changes. A session that becomes attached, such as
+ * after a switch or a reload, shows its known goal at once, so the transcript does not move.
+ */
+export const useSessionGoalRowScope = (identity: AgentSessionIdentity | null): string | null => {
+  const livePresence = useAgentSessionField(identity, "livePresence");
+  return identity ? `${identity.externalSessionId}:${livePresence ?? "unobserved"}` : null;
+};

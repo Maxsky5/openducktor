@@ -24,6 +24,7 @@ const buildComposerConfig = (
   runningTurnModel: null,
   messageQueue: null,
   goalRow: null,
+  goalRowScope: null,
   canStopSession: false,
   isResumingSession: false,
   stopAgentSession: async () => {},
