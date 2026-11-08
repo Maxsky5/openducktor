@@ -4,7 +4,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { useCommandBlocked } from "@/host-session/active-session-context";
-import { touchSlop } from "@/theme/tokens";
+import { touchSlop, verticalTouchSlop } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
@@ -84,7 +84,7 @@ export const QuietSelector = memo(function QuietSelector({
       feedback="opacity"
       onPress={onPress}
       disabled={disabled}
-      hitSlop={touchSlop(28)}
+      hitSlop={verticalTouchSlop(28)}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
@@ -302,7 +302,7 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.lg,
     borderCurve: "continuous",
   },
-  selectorArea: { flexShrink: 1, minWidth: 0 },
+  selectorArea: { flex: 1, minWidth: 0 },
   selectorFixed: { flexShrink: 0 },
   // The controls that hold text keep their desktop height as a minimum, so they grow with the
   // system text size.
