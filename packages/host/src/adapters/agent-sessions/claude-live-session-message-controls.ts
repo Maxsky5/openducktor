@@ -102,8 +102,8 @@ export const createClaudeMessageControls = ({
 
   /**
    * Sends a Claude `/goal` command and waits until Claude reports its outcome. Claude never runs
-   * a slash command inside a running turn, so a clear during a turn uses priority `now`, which
-   * stops the turn and then clears the goal. The goal shows as clearing until the clear ends, so
+   * a slash command inside a running turn, so a command during a goal turn uses priority `now`,
+   * which stops the turn and then sets or clears the goal. The goal shows as clearing until the clear ends, so
    * the command turn of the clear does not show it as active.
    */
   const runGoalCommand = (
@@ -127,7 +127,7 @@ export const createClaudeMessageControls = ({
           { kind: "slash_command", command: { ...GOAL_SLASH_COMMAND, hints: [] } },
           { kind: "text", text: ` ${command.kind === "set" ? command.objective : "clear"}` },
         ],
-        delivery: command.kind === "clear" && !canStartUserTurn(session) ? "steer" : "new_turn",
+        delivery: canStartUserTurn(session) ? "new_turn" : "steer",
       };
       if (input.systemPrompt !== undefined) sendInput.systemPrompt = input.systemPrompt;
       if (input.submissionId !== undefined) sendInput.submissionId = input.submissionId;

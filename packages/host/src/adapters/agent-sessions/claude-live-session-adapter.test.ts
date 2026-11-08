@@ -2687,6 +2687,39 @@ describe("Claude host live-session adapter goals", () => {
     expect(await snapshotGoal()).toBeUndefined();
   });
 
+  test("replaces a goal during its running turn with priority now", async () => {
+    const { harness, goalSession, sent, reply, observe, accept } = await goalHarness([setRecord]);
+    await Effect.runPromise(
+      harness.adapter.resumeSession({
+        ...startInput,
+        resumeMode: "reattach",
+        externalSessionId: "session-1",
+      }),
+    );
+    goalSession.foregroundTurnActive = true;
+    harness.setSendUserMessage((input) => {
+      sent.push(input);
+      setTimeout(() => {
+        reply("Ship the release", "Goal set: Ship the release");
+        observe({ type: "assistant", parent_tool_use_id: null, message: { content: [] } });
+      }, 0);
+      return accept("goal-2", "/goal Ship the release");
+    });
+    await Effect.runPromise(
+      harness.adapter.controlGoal(goalInput({ kind: "set", objective: "Ship the release" })),
+    );
+
+    expect(sent).toMatchObject([
+      {
+        delivery: "steer",
+        parts: [
+          { kind: "slash_command", command: { trigger: "goal" } },
+          { kind: "text", text: " Ship the release" },
+        ],
+      },
+    ]);
+  });
+
   test("reads the goal of a retained session before the resume call", async () => {
     const { harness, goalSession, snapshotGoal } = await goalHarness([setRecord]);
     let goalAtCall: unknown;
