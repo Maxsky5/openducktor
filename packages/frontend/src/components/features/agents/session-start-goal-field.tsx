@@ -54,11 +54,16 @@ export function SessionStartGoalField({
             onClick={generation.start}
           >
             {generation.running ? (
-              <LoaderCircle className="size-4 animate-spin" />
+              <>
+                <LoaderCircle className="size-4 animate-spin" />
+                Generating goal…
+              </>
             ) : (
-              <Sparkles className="size-4" />
+              <>
+                <Sparkles className="size-4" />
+                Generate goal
+              </>
             )}
-            {generation.running ? "Generating goal…" : "Generate goal"}
           </Button>
         </div>
         <p id="session-start-goal-hint" className="text-sm text-muted-foreground">

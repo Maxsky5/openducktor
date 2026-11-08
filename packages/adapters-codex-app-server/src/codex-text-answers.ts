@@ -46,21 +46,20 @@ export class CodexTextAnswers {
     }
     const notification = event.message;
     if (
-      notification?.method === "item/completed" &&
+      notification.method === "item/completed" &&
       notification.params.item.type === "agentMessage" &&
       notification.params.item.phase !== "commentary"
     ) {
       answer.text = notification.params.item.text;
-    } else if (notification?.method === "turn/completed") {
+    } else if (notification.method === "turn/completed") {
       this.pending.delete(key);
       const { turn } = notification.params;
-      if (turn.status === "completed" && answer.text?.trim()) answer.resolve(answer.text);
-      else
-        answer.reject(
-          new Error(
-            `Codex did not generate the text: ${turn.error?.message ?? `the turn ended as ${turn.status}`}.`,
-          ),
-        );
+      if (turn.status === "completed" && answer.text?.trim()) {
+        answer.resolve(answer.text);
+      } else {
+        const reason = turn.error?.message ?? `the turn ended as ${turn.status}`;
+        answer.reject(new Error(`Codex did not generate the text: ${reason}.`));
+      }
     }
     return true;
   }

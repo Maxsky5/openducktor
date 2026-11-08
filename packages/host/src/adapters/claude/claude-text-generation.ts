@@ -26,8 +26,6 @@ export const generateClaudeText = async (
   { claudeExecutablePath, processEnv, createQuery = query }: ClaudeTextRuntime,
   signal: AbortSignal,
 ): Promise<string> => {
-  const { variant } = input.model;
-  const effort = variant === undefined ? undefined : toClaudeEffort(variant);
   const abortController = new AbortController();
   signal.addEventListener("abort", () => abortController.abort(), { once: true });
   const options: Options = {
@@ -43,7 +41,7 @@ export const generateClaudeText = async (
     persistSession: false,
     maxTurns: 1,
   };
-  if (effort !== undefined) options.effort = effort;
+  if (input.model.variant !== undefined) options.effort = toClaudeEffort(input.model.variant);
   const answer = createQuery({ prompt: input.prompt, options });
   try {
     for await (const message of answer) {

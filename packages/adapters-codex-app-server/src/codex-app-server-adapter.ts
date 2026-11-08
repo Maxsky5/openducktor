@@ -1057,10 +1057,10 @@ export class CodexAppServerAdapter
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const client = this.runtimeClients.clientForRuntime(runtimeId);
     await this.models.validate(client, runtimeId, input.model);
-    const model = toTransportModelSelection(input.model);
+    const transport = toTransportModelSelection(input.model);
     const { thread } = await client.threadStart({
       cwd: input.repoPath,
-      model: model.model,
+      model: transport.model,
       ephemeral: true,
       approvalPolicy: "never",
       sandbox: "read-only",
@@ -1073,7 +1073,7 @@ export class CodexAppServerAdapter
       await client.turnStart({
         threadId: thread.id,
         input: [{ type: "text", text: input.prompt, text_elements: [] }],
-        ...model,
+        ...transport,
       });
       return await answer;
     } finally {
