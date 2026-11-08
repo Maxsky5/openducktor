@@ -66,7 +66,6 @@ const styles = StyleSheet.create((theme) => ({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    maxWidth: "100%",
     borderWidth: 1,
     borderRadius: theme.radius.pill,
   },
