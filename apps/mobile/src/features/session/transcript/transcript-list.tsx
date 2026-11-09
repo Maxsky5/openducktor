@@ -11,9 +11,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { View } from "react-native";
+import { Platform, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useListViewport, ViewportProvider } from "@/rich-content/viewport/use-in-viewport";
+import { NativeParagraphKeyContext } from "@/ui/use-native-paragraph-key";
 import type { JumpToLatestSignal } from "./jump-to-latest-signal";
 import { TranscriptChatList } from "./transcript-chat-list";
 import { TranscriptLatestButton, TranscriptTopButton } from "./transcript-controls";
@@ -97,6 +98,8 @@ export function TranscriptList({
   onOpenSubagent,
   latestSignal,
 }: TranscriptListProps): ReactElement {
+  const { fontScale } = useWindowDimensions();
+  const paragraphKey = Platform.OS === "ios" ? fontScale : undefined;
   const latestA = useRef<FlashListRef<TranscriptListItem>>(null);
   const latestB = useRef<FlashListRef<TranscriptListItem>>(null);
   const firstA = useRef<FlashListRef<TranscriptListItem>>(null);
@@ -287,29 +290,31 @@ export function TranscriptList({
   return (
     <ViewportProvider value={viewportStore}>
       <View ref={frameRef} style={styles.fill} onLayout={onFrameLayout}>
-        <TranscriptNoticeContext value={notice}>
-          {TRANSCRIPT_LIST_SLOTS.map((slot) =>
-            ready.has(slot) ? (
-              <TranscriptChatList
-                key={slot}
-                kind={SLOT_KIND[slot]}
-                rows={slotRows[slot]}
-                shown={slot === shownSlot}
-                listRef={refs[slot]}
-                itemsRef={itemRefs[slot]}
-                rowState={rowState}
-                presentToolCall={presentToolCall}
-                onOpenSubagent={onOpenSubagent}
-                openFullView={setFullView}
-                onPlace={placeHandlers[slot]}
-                onRest={onRest}
-                onTopRow={onTopRow}
-                accessibilityActions={TRANSCRIPT_ACTIONS}
-                onAccessibilityAction={jumps.onAccessibilityAction}
-              />
-            ) : null,
-          )}
-        </TranscriptNoticeContext>
+        <NativeParagraphKeyContext value={paragraphKey}>
+          <TranscriptNoticeContext value={notice}>
+            {TRANSCRIPT_LIST_SLOTS.map((slot) =>
+              ready.has(slot) ? (
+                <TranscriptChatList
+                  key={slot}
+                  kind={SLOT_KIND[slot]}
+                  rows={slotRows[slot]}
+                  shown={slot === shownSlot}
+                  listRef={refs[slot]}
+                  itemsRef={itemRefs[slot]}
+                  rowState={rowState}
+                  presentToolCall={presentToolCall}
+                  onOpenSubagent={onOpenSubagent}
+                  openFullView={setFullView}
+                  onPlace={placeHandlers[slot]}
+                  onRest={onRest}
+                  onTopRow={onTopRow}
+                  accessibilityActions={TRANSCRIPT_ACTIONS}
+                  onAccessibilityAction={jumps.onAccessibilityAction}
+                />
+              ) : null,
+            )}
+          </TranscriptNoticeContext>
+        </NativeParagraphKeyContext>
         <TranscriptTopButton atTop={follow.atTop} onJumpToTop={jumps.jumpToTop} />
         <TranscriptLatestButton
           atBottom={follow.atBottom}

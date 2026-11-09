@@ -5,8 +5,17 @@ import {
 import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import type { WorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
 import { useRouter } from "expo-router";
-import { Fragment, memo, type ReactElement, useMemo } from "react";
-import { View } from "react-native";
+import {
+  type ComponentRef,
+  Fragment,
+  memo,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
+import { ScrollView, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTaskSessionGroups } from "@/features/tasks/details/use-task-session-groups";
 import {
@@ -30,6 +39,8 @@ import { useRepoTask } from "@/features/work-owner/use-repo-task";
 
 /** One row under the navigation bar, or one column in the side panel of a low or wide window. */
 export type WorkflowRailOrientation = "row" | "column";
+
+const ROW_STEP_MIN_WIDTH = 72;
 
 /**
  * The desktop workflow rail of a task session, in the compact `WorkflowRailPreview` form: Spec,
@@ -85,55 +96,94 @@ function WorkflowRailSteps({
   const router = useRouter();
   const { groups } = useTaskSessionGroups({ workspaceId, repoPath }, task.id);
   const steps = useMemo(() => taskWorkflowSteps(task, groups), [groups, task]);
+  const { fontScale } = useWindowDimensions();
+  const enlarged = fontScale > 1;
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const positions = useRef(new Map<AgentRole | null, number>());
+  const scrollToSelected = useCallback(() => {
+    const x = positions.current.get(role);
+    if (!column && x !== undefined) scroll.current?.scrollTo({ x, animated: false });
+  }, [column, role]);
+  useEffect(scrollToSelected, [fontScale, scrollToSelected]);
+  const content = steps.map((step, index) => {
+    const next = steps[index + 1];
+    const { session } = step;
+    const selected = step.role === role;
+    // As on desktop, a step opens its newest session. A step without a session starts one when
+    // the host allows that action now.
+    const startAction = step.launchActionId;
+    let press: StepPress | null = null;
+    if (session && !selected) {
+      press = {
+        hint: `Opens the newest ${step.label} session.`,
+        run: () => router.setParams(switchedSessionParams(workspaceId, session)),
+      };
+    } else if (!session && startAction !== null) {
+      press = {
+        hint: `Starts a ${step.label} session.`,
+        run: () =>
+          router.push(
+            task.taskWorkflow.launchAction(startAction).context === "human_feedback"
+              ? routes.requestChanges(workspaceId, task.id, {
+                  kind: "launch",
+                  launchActionId: startAction,
+                })
+              : routes.quickAction(workspaceId, task.id, startAction),
+            SINGLE_SHEET,
+          ),
+      };
+    }
+    return (
+      <Fragment key={step.id}>
+        <View
+          style={[
+            column ? styles.columnHolder : styles.holder,
+            !column && enlarged
+              ? [styles.enlargedHolder, { minWidth: ROW_STEP_MIN_WIDTH * fontScale }]
+              : null,
+          ]}
+          onLayout={(event) => {
+            positions.current.set(step.role, event.nativeEvent.layout.x);
+            if (selected) scrollToSelected();
+          }}
+        >
+          <WorkflowStep step={step} selected={selected} press={press} column={column} />
+        </View>
+        {next ? (
+          <View
+            style={[
+              column ? styles.columnConnector : styles.connector,
+              { backgroundColor: workflowConnectorColor(theme, next.state.tone) },
+            ]}
+          />
+        ) : null}
+      </Fragment>
+    );
+  });
+  if (column) {
+    return (
+      <View
+        style={styles.columnBand}
+        accessibilityRole="tablist"
+        accessibilityLabel="Task workflow"
+      >
+        {content}
+      </View>
+    );
+  }
   return (
-    <View
-      style={column ? styles.columnBand : styles.band}
+    <ScrollView
+      ref={scroll}
+      horizontal
+      style={styles.rowScroll}
+      contentContainerStyle={styles.band}
+      onContentSizeChange={scrollToSelected}
+      showsHorizontalScrollIndicator={false}
       accessibilityRole="tablist"
       accessibilityLabel="Task workflow"
     >
-      {steps.map((step, index) => {
-        const next = steps[index + 1];
-        const { session } = step;
-        const selected = step.role === role;
-        // As on desktop, a step opens its newest session. A step without a session starts one when
-        // the host allows that action now.
-        const startAction = step.launchActionId;
-        let press: StepPress | null = null;
-        if (session && !selected) {
-          press = {
-            hint: `Opens the newest ${step.label} session.`,
-            run: () => router.setParams(switchedSessionParams(workspaceId, session)),
-          };
-        } else if (!session && startAction !== null) {
-          press = {
-            hint: `Starts a ${step.label} session.`,
-            run: () =>
-              router.push(
-                task.taskWorkflow.launchAction(startAction).context === "human_feedback"
-                  ? routes.requestChanges(workspaceId, task.id, {
-                      kind: "launch",
-                      launchActionId: startAction,
-                    })
-                  : routes.quickAction(workspaceId, task.id, startAction),
-                SINGLE_SHEET,
-              ),
-          };
-        }
-        return (
-          <Fragment key={step.id}>
-            <WorkflowStep step={step} selected={selected} press={press} column={column} />
-            {next ? (
-              <View
-                style={[
-                  column ? styles.columnConnector : styles.connector,
-                  { backgroundColor: workflowConnectorColor(theme, next.state.tone) },
-                ]}
-              />
-            ) : null}
-          </Fragment>
-        );
-      })}
-    </View>
+      {content}
+    </ScrollView>
   );
 }
 
@@ -193,12 +243,8 @@ const WorkflowStep = memo(function WorkflowStep({
     <View style={[styles.step, styles.columnStep, tone === "optional" && styles.dashed]}>
       <RoleIcon hint={step.iconHint} size={16} color={colors.icon} />
       <View style={styles.columnText}>
-        <Text numberOfLines={1} style={[styles.label, { color: colors.text }]}>
-          {step.label}
-        </Text>
-        <Text numberOfLines={1} style={[styles.state, { color: colors.text }]}>
-          {step.stateLabel}
-        </Text>
+        <Text style={[styles.label, { color: colors.text }]}>{step.label}</Text>
+        <Text style={[styles.state, { color: colors.text }]}>{step.stateLabel}</Text>
       </View>
       {markView}
     </View>
@@ -222,7 +268,6 @@ const WorkflowStep = memo(function WorkflowStep({
   if (!press) {
     return (
       <View
-        style={column ? styles.columnHolder : styles.holder}
         accessible
         accessibilityRole="tab"
         accessibilityLabel={label}
@@ -242,7 +287,6 @@ const WorkflowStep = memo(function WorkflowStep({
       accessibilityLabel={label}
       accessibilityHint={press.hint}
       accessibilityState={{ selected }}
-      containerStyle={column ? styles.columnHolder : styles.holder}
     >
       {frame}
     </Touchable>
@@ -252,6 +296,7 @@ const WorkflowStep = memo(function WorkflowStep({
 const styles = StyleSheet.create((theme) => ({
   // `border-b border-border bg-card px-4 py-2`, as the desktop rail band.
   band: {
+    flexGrow: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
@@ -263,8 +308,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   // The steps of a column fill the side panel, one under the other.
   columnBand: { alignItems: "stretch", gap: 3, padding: theme.space.md },
+  rowScroll: { flexGrow: 0, flexShrink: 0 },
   // The steps share the width equally, so each role is a tap target of the same size.
   holder: { flex: 1, minWidth: 0 },
+  enlargedHolder: { flexGrow: 1, flexShrink: 0, flexBasis: "auto" },
   columnHolder: { alignSelf: "stretch" },
   // The desktop connectors between the steps, in the ring color of the next step.
   connector: { width: 8, height: 2, borderRadius: 1 },
@@ -279,11 +326,12 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: "transparent",
   },
   step: {
-    height: 40,
+    minHeight: 40,
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
     paddingHorizontal: 4,
+    paddingVertical: theme.space.xs,
     borderRadius: theme.radius.md,
     borderCurve: "continuous",
     borderWidth: 1,
@@ -317,11 +365,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   // A step of a column: the role icon, the role name over its state, and the state mark.
   columnStep: {
-    height: 46,
+    minHeight: 46,
     flexDirection: "row",
     justifyContent: "flex-start",
     gap: theme.space.sm,
     paddingHorizontal: 10,
+    paddingVertical: theme.space.sm,
   },
   columnText: { flex: 1, minWidth: 0 },
   dashed: { borderStyle: "dashed" },

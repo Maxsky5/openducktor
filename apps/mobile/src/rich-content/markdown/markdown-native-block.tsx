@@ -23,6 +23,7 @@ import {
 import { StyleSheet } from "react-native-unistyles";
 import { sansWeight } from "@/theme/tokens";
 import { Icon } from "@/ui/icon";
+import { useNativeParagraphKey } from "@/ui/use-native-paragraph-key";
 import { CodeBlock } from "../code/code-block";
 import { MARKDOWN_BODY, type MarkdownAppearance, useMarkdownContext } from "./markdown-context";
 import { lastDescendant } from "./markdown-document";
@@ -37,6 +38,8 @@ import {
 } from "./markdown-layout";
 
 type FlowContent = BlockContent | DefinitionContent;
+
+// Native text keys must reread Unistyles getters; compiler style caches kept the previous theme.
 
 const FLOW_TYPES: ReadonlySet<string> = new Set<FlowContent["type"]>([
   "blockquote",
@@ -151,19 +154,32 @@ function FlowBlock({ node }: { node: FlowContent }): ReactElement | null {
 }
 
 function PlainTextBlock({ text }: { text: string }): ReactElement {
+  "use no memo";
+
   const { selectable, appearance } = useMarkdownContext();
+  const paragraphKey = useNativeParagraphKey();
   return (
-    <Text style={[styles.paragraph, ...textAppearance(appearance)]} selectable={selectable}>
+    <Text
+      key={paragraphKey}
+      style={[styles.paragraph, ...textAppearance(appearance)]}
+      selectable={selectable}
+    >
       {text}
     </Text>
   );
 }
 
 function FootnoteBlock({ node }: { node: FootnoteDefinition }): ReactElement {
+  "use no memo";
+
   const { appearance } = useMarkdownContext();
+  const paragraphKey = useNativeParagraphKey();
   return (
     <View style={styles.footnote}>
-      <Text style={[styles.paragraph, ...textAppearance(appearance), styles.footnoteLabel]}>
+      <Text
+        key={paragraphKey}
+        style={[styles.paragraph, ...textAppearance(appearance), styles.footnoteLabel]}
+      >
         {`${node.label ?? node.identifier}.`}
       </Text>
       <View style={styles.flow}>
@@ -186,7 +202,10 @@ function FlowChildren({ nodes }: { nodes: readonly FlowContent[] }): ReactElemen
 }
 
 function ParagraphBlock({ node }: { node: Paragraph }): ReactElement {
+  "use no memo";
+
   const { definitions, selectable, appearance } = useMarkdownContext();
+  const paragraphKey = useNativeParagraphKey();
   const quote = use(QuoteMarksContext);
   const segments = useMemo(
     () => paragraphSegments(node.children, definitions),
@@ -198,6 +217,7 @@ function ParagraphBlock({ node }: { node: Paragraph }): ReactElement {
   if (segments.length === 1 && first?.kind === "text") {
     return (
       <Text
+        key={paragraphKey}
         style={[
           styles.paragraph,
           ...textAppearance(appearance),
@@ -222,7 +242,7 @@ function ParagraphBlock({ node }: { node: Paragraph }): ReactElement {
         ) : (
           <Text
             // react-doctor-disable-next-line react-doctor/no-array-index-as-key
-            key={index}
+            key={paragraphKey === undefined ? index : `${index}:${paragraphKey}`}
             style={[
               styles.paragraph,
               ...textAppearance(appearance),
@@ -254,11 +274,15 @@ type HeadingLevel = (typeof HEADING_LEVELS)[Heading["depth"]] | "compactHeading"
 
 /** A heading with the desktop `prose` size of its depth and `prose-headings:font-semibold`. */
 function HeadingBlock({ node }: { node: Heading }): ReactElement {
+  "use no memo";
+
   const { selectable, appearance } = useMarkdownContext();
+  const paragraphKey = useNativeParagraphKey();
   const level: HeadingLevel =
     appearance.variant === "compact" ? "compactHeading" : HEADING_LEVELS[node.depth];
   return (
     <Text
+      key={paragraphKey}
       accessibilityRole="header"
       style={[
         styles.heading,
@@ -351,7 +375,10 @@ function ListItemRow({
   ordered: boolean;
   markerColumn: ViewStyle;
 }): ReactElement {
+  "use no memo";
+
   const { appearance } = useMarkdownContext();
+  const paragraphKey = useNativeParagraphKey();
   const compact = appearance.variant === "compact";
   return (
     <View style={styles.listItem}>
@@ -362,6 +389,7 @@ function ListItemRow({
         </View>
       ) : (
         <Text
+          key={paragraphKey}
           style={[
             styles.listMarker,
             compact ? styles.compactBody : styles.documentBody,
@@ -419,7 +447,10 @@ function TaskCheckbox({ checked }: { checked: boolean }): ReactElement {
  * `gray-200` rules between rows. It scrolls sideways on a narrow screen.
  */
 function TableBlock({ node }: { node: Table }): ReactElement {
+  "use no memo";
+
   const { selectable, appearance } = useMarkdownContext();
+  const paragraphKey = useNativeParagraphKey();
   const { fontScale } = useWindowDimensions();
   const compact = appearance.variant === "compact";
   const columnStyles = useMemo(
@@ -455,6 +486,7 @@ function TableBlock({ node }: { node: Table }): ReactElement {
                   ]}
                 >
                   <Text
+                    key={paragraphKey}
                     style={[
                       styles.cellText,
                       compact ? styles.compactCellText : styles.documentCellText,

@@ -36,7 +36,7 @@ export type KeyboardInsetViewProps = PropsWithChildren<{
  * `barSafeArea`. The keyboard then covers the safe area part, so the padding never changes size
  * while the keyboard moves.
  */
-export const useBottomEdgePadding = (padding: number): ViewStyle => {
+export const useBottomEdgePadding = (padding: number): { paddingBottom: number } => {
   const { bottom } = useSafeAreaInsets();
   return useMemo(() => ({ paddingBottom: bottom + padding }), [bottom, padding]);
 };

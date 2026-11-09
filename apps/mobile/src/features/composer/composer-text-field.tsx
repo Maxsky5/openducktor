@@ -25,6 +25,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { referenceChipColors, referenceChipIcon } from "@/features/session/reference-chip-paint";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { focusWithKeyboard } from "@/ui/focus-with-keyboard";
+import { useCompactHeight } from "@/ui/use-wide-layout";
 import { sansWeight } from "@/theme/tokens";
 import { Icon } from "@/ui/icon";
 import {
@@ -96,7 +97,9 @@ export function ComposerTextField({
   autoFocus = false,
 }: ComposerTextFieldProps): ReactElement {
   const theme = useAppTheme();
+  const compact = useCompactHeight();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
+  const selection = useRef({ start: 0, end: 0 });
   useEffect(() => {
     if (autoFocus) focusWithKeyboard(input.current);
   }, [autoFocus]);
@@ -106,7 +109,8 @@ export function ComposerTextField({
   });
   const hasChips = layout.spans.some((span) => span.kind === "chip" && span.text.length > 0);
   const empty = layout.text.length === 0;
-  const placeholderHeight = usePlaceholderHeight(empty);
+  // A low window bounds the field, so a long placeholder must not set its minimum height.
+  const placeholderHeight = usePlaceholderHeight(empty && !compact);
   // An empty field is at least as tall as its placeholder (see `PlaceholderCopy`).
   const fieldMinHeight =
     placeholderHeight.value === null
@@ -119,11 +123,12 @@ export function ComposerTextField({
   // A chip edit or a replaced draft changes the text, so the caret goes where the edit names.
   useEffect(() => {
     if (!selectionRequest) return;
+    selection.current = { start: selectionRequest.position, end: selectionRequest.position };
     input.current?.setSelection(selectionRequest.position, selectionRequest.position);
   }, [selectionRequest]);
 
   return (
-    <View>
+    <View style={styles.field}>
       {hasChips ? <ChipPills layout={layout} scrollY={scrollY} /> : null}
       {placeholderHeight.measure ? (
         <PlaceholderCopy placeholder={placeholder} onHeight={placeholderHeight.set} />
@@ -150,7 +155,14 @@ export function ComposerTextField({
         onChangeText={onChangeText}
         onSelectionChange={(event) => {
           const { start, end } = event.nativeEvent.selection;
+          selection.current = { start, end };
           onSelectionChange(start, end);
+        }}
+        onLayout={() => {
+          if (Platform.OS === "ios" && input.current?.isFocused()) {
+            const { start, end } = selection.current;
+            input.current.setSelection(start, end);
+          }
         }}
         onScroll={onScroll}
         onFocus={() => onFocusChange(true)}
@@ -164,14 +176,12 @@ export function ComposerTextField({
 }
 
 /**
- * The height of the placeholder text while the field is empty on Android, or null. After the user
- * deletes the whole draft, the Android input keeps measuring the text that it had, so it can stay
- * one line high and cut a placeholder of two lines. iOS measures the placeholder itself.
+ * The empty field's measured placeholder height, or null. Native inputs can keep a one-line
+ * allocation after clearing a draft or changing text size, which clips a multiline placeholder.
  */
 const usePlaceholderHeight = (empty: boolean) => {
   const [height, setHeight] = useState<number | null>(null);
-  const measure = empty && Platform.OS === "android";
-  return { measure, value: measure ? height : null, set: setHeight };
+  return { measure: empty, value: empty ? height : null, set: setHeight };
 };
 
 /** A copy of the placeholder that draws nothing and reports the height of its lines. */
@@ -182,8 +192,10 @@ function PlaceholderCopy({
   placeholder: string;
   onHeight: (height: number) => void;
 }): ReactElement {
+  const { fontScale } = useWindowDimensions();
   return (
     <Text
+      key={Platform.OS === "ios" ? fontScale : undefined}
       style={[styles.text, styles.copy, styles.copyWidth]}
       textBreakStrategy="simple"
       accessibilityElementsHidden
@@ -337,10 +349,12 @@ const ChipPill = memo(function ChipPill({
 });
 
 const styles = StyleSheet.create((theme) => ({
+  field: { flexShrink: 1, minHeight: 0 },
   // The desktop editor: `min-h-11 px-3 py-2.5`, 15 points on a 24-point line; the phone uses one
   // step more. A multiline input with a line height moves its caret on iOS, so the input takes
   // only the size.
   input: {
+    flexShrink: 1,
     paddingHorizontal: theme.space.md,
     paddingVertical: INPUT_PADDING_VERTICAL,
   },

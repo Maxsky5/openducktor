@@ -131,15 +131,17 @@ export const StructuredQuestionCard = memo(function StructuredQuestionCard({
             disabled={inputDisabled}
             onPress={draft.resetDraft}
           />
-          <QuestionMainAction
-            action={view.action}
-            isSubmitting={isSubmitting}
-            disabled={disabled}
-            inputDisabled={inputDisabled}
-            blockedReason={blockedReason}
-            onSubmit={() => send(draft.buildAnswers(), "Answers not sent")}
-            onSelectStep={selectStep}
-          />
+          <View style={styles.mainAction}>
+            <QuestionMainAction
+              action={view.action}
+              isSubmitting={isSubmitting}
+              disabled={disabled}
+              inputDisabled={inputDisabled}
+              blockedReason={blockedReason}
+              onSubmit={() => send(draft.buildAnswers(), "Answers not sent")}
+              onSelectStep={selectStep}
+            />
+          </View>
         </View>
       </View>
     </RequestCard>
@@ -231,7 +233,6 @@ function QuestionMainAction({
         label={isSubmitting ? "Submitting…" : action.label}
         icon="sparkles"
         command
-        fill
         loading={isSubmitting}
         disabled={inputDisabled || !action.enabled}
         accessibilityHint={disabled ? (blockedReason ?? undefined) : undefined}
@@ -244,7 +245,6 @@ function QuestionMainAction({
       label={action.label}
       icon={action.kind === "review" ? "list-checks" : undefined}
       trailingIcon={action.kind === "next" ? "chevron-right" : undefined}
-      fill
       disabled={disabled || isSubmitting}
       onPress={() => onSelectStep(action.tabId)}
     />
@@ -677,5 +677,12 @@ const styles = StyleSheet.create((theme) => ({
     borderTopColor: theme.desktop.input,
   },
   completion: { fontSize: 11, lineHeight: 14, color: theme.desktop.mutedForeground },
-  footerActions: { flexDirection: "row", alignItems: "center", gap: theme.space.sm },
+  footerActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.space.sm,
+  },
+  // Keep the label's natural width for wrapping before sharing the remaining row space.
+  mainAction: { flexGrow: 1, flexShrink: 1, minWidth: 0 },
 }));
