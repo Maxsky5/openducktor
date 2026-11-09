@@ -103,6 +103,19 @@ export type CodexStreamingContext = {
   emitSessionEvent(externalSessionId: string, event: AgentEvent): void;
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
+  /**
+   * Called when a turn of the session ends. When Codex continues the active goal of the session
+   * with another turn, the session waits for that turn and keeps running. Returns true then.
+   */
+  continueGoalAfterTurn(session: CodexSessionState): boolean;
+  /** The session has no running turn and waits for the goal turn that Codex starts. */
+  isWaitingForGoalTurn(session: CodexSessionState): boolean;
+  /** Ends the wait for a goal turn, for example when the thread fails. */
+  stopWaitingForGoalTurn(session: CodexSessionState): void;
+  /** Ends the wait for a goal turn and makes a turn that Codex started the active turn. */
+  observeTurnStarted(session: CodexSessionState, turnId: string, startedAtMs: number): void;
+  /** Returns and forgets the IDs of the user messages of the turn that ends. */
+  takeTurnMessageIds(session: CodexSessionState): string[];
   failUnlinkedSubagentSpawns(
     parentThreadId: string,
     runtimeId: string,
@@ -682,6 +695,11 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "turn/started") {
+      context.observeTurnStarted(
+        session,
+        notification.params.turn.id,
+        receivedAtMsFromCodexNotification(notification.receivedAt),
+      );
       context.setSessionLiveStatus(session, {
         classification: "running",
       });
@@ -703,6 +721,14 @@ export const handleCodexPendingNotifications = async (
         ) {
           continue;
         }
+        // The turn ended, but Codex starts the next turn of the active goal by itself. A thread in
+        // `systemError` starts no goal turn, so it ends the wait.
+        if (notification.params.status.type === "systemError")
+          context.stopWaitingForGoalTurn(session);
+        const continuesGoal =
+          notification.params.status.type === "idle" &&
+          (context.isWaitingForGoalTurn(session) ||
+            (activeTurn !== undefined && context.continueGoalAfterTurn(session)));
         if (isIdleStatus) {
           context.settleImageGenerations(
             session,
@@ -716,6 +742,10 @@ export const handleCodexPendingNotifications = async (
               : { scope: "session", reason: "turn_ended", timestamp: notification.receivedAt },
           );
           emitUnlinkedSpawnFailures(context, session, timestamp);
+        }
+        if (continuesGoal) {
+          activeTurn?.markTurnSettled();
+          continue;
         }
         const liveStatus = codexThreadStatusSnapshot(notification.params.status);
         const hasBufferedFinalAgentMessage = Boolean(
@@ -856,30 +886,53 @@ export const handleCodexPendingNotifications = async (
       if (shouldSettleActiveTurn) {
         activeTurn.markTurnSettled();
       }
-      if (!activeTurn || shouldSettleActiveTurn) {
+      const endsSessionTurn = !activeTurn || shouldSettleActiveTurn;
+      const continuesGoal =
+        endsSessionTurn &&
+        (context.isWaitingForGoalTurn(session) || context.continueGoalAfterTurn(session));
+      if (endsSessionTurn) {
         delete session.firstTurnHistory;
-        context.setSessionLiveStatus(session, {
-          classification: "idle",
-        });
+        if (!continuesGoal) {
+          context.setSessionLiveStatus(session, {
+            classification: "idle",
+          });
+        }
       }
+      const turnMessageIds = endsSessionTurn ? context.takeTurnMessageIds(session) : [];
+      const lifecycleEvents = context.eventMapperPipeline.runLive(
+        { kind: "notification", notification },
+        (() => {
+          const mappingContext: CodexMappingContext = {
+            source: "live",
+            runtimeId: session.runtimeId,
+            threadId: session.threadId,
+            timestamp,
+          };
+          if (turnId) {
+            mappingContext.turnId = turnId;
+          }
+          return mappingContext;
+        })(),
+      );
+      if (!continuesGoal) {
+        emitCanonicalEvents(context, lifecycleEvents);
+        continue;
+      }
+      // The session stays running, so the turn end does not make it idle.
       emitCanonicalEvents(
         context,
-        context.eventMapperPipeline.runLive(
-          { kind: "notification", notification },
-          (() => {
-            const mappingContext: CodexMappingContext = {
-              source: "live",
-              runtimeId: session.runtimeId,
-              threadId: session.threadId,
-              timestamp,
-            };
-            if (turnId) {
-              mappingContext.turnId = turnId;
-            }
-            return mappingContext;
-          })(),
-        ),
+        lifecycleEvents.filter((event) => event.kind !== "session_idle"),
       );
+      if (turn.status !== "inProgress") {
+        emitCodexSessionEvent(context, session.threadId, {
+          type: "session_turn_finished",
+          externalSessionId: session.threadId,
+          timestamp,
+          completionId: turnId,
+          messageIds: turnMessageIds,
+          turnOutcome: turn.status,
+        });
+      }
       continue;
     }
 

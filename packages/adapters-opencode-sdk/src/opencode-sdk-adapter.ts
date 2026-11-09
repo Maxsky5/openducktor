@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import {
   ClientError,
+  isCommandNotFoundError,
   type OpenCodeClient,
   type SessionInfo,
   type ModelRef,
@@ -15,6 +16,7 @@ import {
   isManualSessionCompactionSlashCommand,
   type AgentSessionScope,
   type AgentSessionControlUpdateTitleInput,
+  type AgentTextGenerationInput,
 } from "@openducktor/contracts";
 import {
   AgentSessionMessageAcceptanceUnknownError,
@@ -40,6 +42,7 @@ import {
   type AgentSessionHistoryMessage,
   type ContinueInterruptedAgentTurnInput,
   type AgentModelSelection,
+  type AgentSessionGoalCommand,
 } from "@openducktor/core";
 import {
   createOpenCodeClient,
@@ -59,6 +62,7 @@ import {
 } from "./opencode-permissions";
 import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
+import { OPENCODE_GOAL_PLUGIN_OFF_MESSAGE, openCodeGoalCommandText } from "./opencode-goals";
 import { iso, modelSelection, projectInboxUser } from "./opencode-message-projection";
 import {
   readReplyForkBoundary,
@@ -103,6 +107,14 @@ const nativeModelSelection = (model: AgentModelSelection): ModelRef => {
 };
 
 const newSessionIdSchema = z.object({ id: z.string().startsWith("ses") });
+
+/** One native goal action. The host checks the command before it reaches the adapter. */
+export type OpenCodeGoalControlInput = Omit<
+  SendAgentUserMessageInput,
+  "parts" | "delivery" | "resolvedQuestionRequestIds" | "submissionId"
+> & { command: AgentSessionGoalCommand };
+
+const goalOperation = (command: AgentSessionGoalCommand): string => `${command.kind} the goal`;
 
 /** One controller for an owned authenticated V2 runtime. */
 export class OpencodeSdkAdapter {
@@ -469,7 +481,7 @@ export class OpencodeSdkAdapter {
   }
 
   private requirePreparedBinding(
-    input: SendAgentUserMessageInput | ResumeAgentSessionInput,
+    input: SendAgentUserMessageInput | ResumeAgentSessionInput | OpenCodeGoalControlInput,
   ): OpenCodeSessionBinding {
     assertAgentRuntimePolicyBinding(input, "use the OpenCode conversation");
     const binding = this.bindings.get(input.externalSessionId);
@@ -648,6 +660,68 @@ export class OpencodeSdkAdapter {
       } catch (cause) {
         throw unknownResult(cause);
       }
+    }).catch((cause: Error) => {
+      if (!submitted) throw new AgentSessionMessageRefusedError(cause);
+      throw cause;
+    });
+  }
+
+  /**
+   * One stateless model answer. OpenCode `generate.text` keeps no session and gives the model no
+   * tools. It takes no system prompt, so the instructions start the prompt.
+   */
+  async generateText(input: AgentTextGenerationInput): Promise<string> {
+    const model = nativeModelSelection(input.model);
+    return nativeRequest(
+      { repoPath: input.repoPath },
+      "generate text",
+      async () =>
+        (
+          await this.client.generate.text({
+            prompt: `${input.instructions}\n\n${input.prompt}`,
+            model,
+          })
+        ).text,
+    );
+  }
+
+  /**
+   * Runs the native `/goal` command. The goal plugin reports each goal change with its `changed`
+   * event, so this method returns no goal state. `delivery` applies to the kickoff of a new goal.
+   */
+  async controlGoal(
+    input: OpenCodeGoalControlInput,
+    options: { delivery: "queue" | "steer"; onSent?: (() => void) | undefined },
+  ): Promise<void> {
+    let submitted = false;
+    const generation = this.generation(input.externalSessionId);
+    await nativeRequest(input, goalOperation(input.command), async () => {
+      const binding = this.requirePreparedBinding(input);
+      // A new goal starts a turn, which needs the current instructions, as a new message does.
+      if (input.command.kind === "set" && !binding.detail.parentID && options.delivery === "queue")
+        await putOpenCodeInstructions({
+          client: this.client,
+          identity: input,
+          sessionID: binding.detail.id,
+          scope: input.sessionScope,
+          systemPrompt: input.systemPrompt,
+        });
+      this.assertCurrent(input, generation);
+      const sending = this.client.session.command({
+        sessionID: input.externalSessionId,
+        name: "goal",
+        text: openCodeGoalCommandText(input.command),
+        delivery: options.delivery,
+      });
+      submitted = true;
+      input.onWorkIssued?.();
+      options.onSent?.();
+      await sending.catch((cause: Error) => {
+        if (isCommandNotFoundError(cause))
+          throw new Error(OPENCODE_GOAL_PLUGIN_OFF_MESSAGE, { cause });
+        throw cause;
+      });
+      input.onWorkAccepted?.();
     }).catch((cause: Error) => {
       if (!submitted) throw new AgentSessionMessageRefusedError(cause);
       throw cause;

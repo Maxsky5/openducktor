@@ -1,6 +1,7 @@
 import "../../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import {
+  GOAL_SLASH_COMMAND,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type ReusablePrompt,
 } from "@openducktor/contracts";
@@ -65,6 +66,25 @@ describe("use-chat-composer-slash-commands", () => {
     expect(
       mergeSlashCommands(runtimeCommands, reusableCommands).map((command) => command.id),
     ).toEqual(["system:compact", "prompt-review"]);
+  });
+
+  test("lists /goal first and hides every other command named goal", () => {
+    const goal = { ...GOAL_SLASH_COMMAND, hints: [...GOAL_SLASH_COMMAND.hints] };
+    const runtimeCommands: AgentSlashCommand[] = [
+      MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      { id: "runtime-goal", trigger: "goal", title: "Runtime goal", hints: [] },
+      { id: "runtime-review", trigger: "review", title: "Runtime review", hints: [] },
+    ];
+    const reusableCommands: AgentSlashCommand[] = [
+      { id: "prompt-goal", trigger: "GOAL", title: "Prompt goal", hints: [] },
+    ];
+
+    expect(
+      mergeSlashCommands(runtimeCommands, reusableCommands, [goal]).map((command) => command.id),
+    ).toEqual(["system:compact", "system:goal", "runtime-review"]);
+    expect(
+      mergeSlashCommands(runtimeCommands, reusableCommands).map((command) => command.id),
+    ).toEqual(["system:compact", "runtime-review"]);
   });
 
   test("removes system commands from repository-scoped composers", () => {
@@ -151,6 +171,7 @@ describe("useChatComposerSlashCommands", () => {
         runtimeSupportsSlashCommands: false,
         reusablePrompts: [reusablePromptFixture],
         loadRuntimeCatalog,
+        goalsAvailable: false,
       },
       { wrapper },
     );
@@ -174,6 +195,30 @@ describe("useChatComposerSlashCommands", () => {
     }
   });
 
+  test("lists /goal in a session composer whose runtime has goals", async () => {
+    const harness = createHookHarness(
+      useChatComposerSlashCommands,
+      {
+        promptInputRuntime: sessionRuntime,
+        runtimeSupportsSlashCommands: false,
+        reusablePrompts: [],
+        loadRuntimeCatalog: mock(async () => createRuntimeCatalogFixture()),
+        goalsAvailable: true,
+      },
+      { wrapper },
+    );
+
+    try {
+      await harness.mount();
+      expect(harness.getLatest().supportsSlashCommands).toBe(true);
+      expect(harness.getLatest().slashCommands.map((command) => command.id)).toEqual([
+        "system:goal",
+      ]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("reads repo slash commands from a supported runtime", async () => {
     const runtimeCommand: AgentSlashCommand = {
       id: "runtime-review",
@@ -191,6 +236,7 @@ describe("useChatComposerSlashCommands", () => {
         runtimeSupportsSlashCommands: true,
         reusablePrompts: [],
         loadRuntimeCatalog,
+        goalsAvailable: false,
       },
       { wrapper },
     );
@@ -228,6 +274,7 @@ describe("useChatComposerSlashCommands", () => {
         runtimeSupportsSlashCommands: true,
         reusablePrompts: [],
         loadRuntimeCatalog,
+        goalsAvailable: false,
       },
       { wrapper },
     );

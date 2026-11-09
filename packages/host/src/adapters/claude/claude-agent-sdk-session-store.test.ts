@@ -12,6 +12,7 @@ import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession => ({
   acceptedUserMessages: [],
+  transcriptEnvironment: {},
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
   activity: "idle",

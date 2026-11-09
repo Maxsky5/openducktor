@@ -4,6 +4,10 @@ import {
   classifySystemSlashCommandInvocation,
 } from "@openducktor/core";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
+import {
+  GOAL_SLASH_COMMAND,
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+} from "@openducktor/contracts";
 import { useEffect, useMemo, useRef } from "react";
 import type { AgentChatSendTarget } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
 import {
@@ -99,7 +103,7 @@ export function useAgentStudioSendTarget({
         !isCatalogLoading,
       resolve: async (parts) => {
         if (!isCurrentContext()) return null;
-        requireCompactionTarget(parts, selectedSessionIdentity);
+        requireSystemCommandTarget(parts, selectedSessionIdentity);
         if (selectedSessionIdentity) {
           assertCanPrepareSession(selectedSessionIdentity);
           if (!isCurrentContext()) return null;
@@ -208,17 +212,16 @@ export function useAgentStudioSendTarget({
   );
 }
 
-/** A compaction needs an existing session of a runtime that can compact it. */
-const requireCompactionTarget = (
+/** A system command, such as `/compact` or `/goal`, needs an existing session. */
+const requireSystemCommandTarget = (
   parts: AgentUserMessagePart[],
   selectedSessionIdentity: AgentSessionIdentity | null,
 ): void => {
-  if (classifySystemSlashCommandInvocation(parts).kind !== "manual_session_compaction") return;
-  if (!selectedSessionIdentity) {
-    throw new Error("/compact requires an existing selected session.");
-  }
-  const { runtimeKind } = selectedSessionIdentity;
-  if (runtimeKind !== "opencode" && runtimeKind !== "codex" && runtimeKind !== "claude") {
-    throw new Error(`/compact is unavailable for ${runtimeKind} sessions.`);
-  }
+  const invocation = classifySystemSlashCommandInvocation(parts);
+  if (invocation.kind === "not_system" || selectedSessionIdentity) return;
+  const trigger =
+    invocation.kind === "goal"
+      ? GOAL_SLASH_COMMAND.trigger
+      : MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger;
+  throw new Error(`/${trigger} requires an existing selected session.`);
 };

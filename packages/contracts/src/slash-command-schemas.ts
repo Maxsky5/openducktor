@@ -34,6 +34,31 @@ export const isManualSessionCompactionSlashCommand = (command: SlashCommandDescr
   command.source === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.source &&
   command.trigger.toLowerCase() === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger;
 
+export const GOAL_SLASH_COMMAND = {
+  id: "system:goal",
+  trigger: "goal",
+  title: "Set goal",
+  description: "Keep working until the objective is met",
+  source: "system",
+  hints: ["<objective> | pause | resume | clear"],
+} as const satisfies SlashCommandDescriptor;
+
+const LEADING_GOAL_COMMAND = new RegExp(`^\\s*/${GOAL_SLASH_COMMAND.trigger}(?=\\s|$)\\s*`, "i");
+
+/**
+ * The text after a leading `/goal` command, or null when the text does not start with it. A
+ * `/goal` message reaches the chat as text, typed by the user or reported by a runtime.
+ */
+export const textAfterLeadingGoalCommand = (text: string): string | null => {
+  const match = LEADING_GOAL_COMMAND.exec(text);
+  return match ? text.slice(match[0].length) : null;
+};
+
+export const isGoalSlashCommand = (command: SlashCommandDescriptor): boolean =>
+  command.id === GOAL_SLASH_COMMAND.id &&
+  command.source === GOAL_SLASH_COMMAND.source &&
+  command.trigger.toLowerCase() === GOAL_SLASH_COMMAND.trigger;
+
 export const slashCommandCatalogSchema = z
   .object({
     commands: z.array(slashCommandDescriptorSchema),

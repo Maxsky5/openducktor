@@ -6,6 +6,7 @@ import type {
   SessionMessageAssistant,
 } from "@opencode/client";
 import {
+  GOAL_SLASH_COMMAND,
   agentSessionHistoryMessageSchema,
   agentStreamPartSchema,
   agentToolDataSchema,
@@ -17,6 +18,7 @@ import {
   type AgentNativeFileReference,
   type AgentToolResultContent,
 } from "@openducktor/contracts";
+import { readOpenCodeGoalKickoffObjective } from "./opencode-goals";
 import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX, type AgentEvent } from "@openducktor/core";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -464,6 +466,18 @@ export const projectMessage = (
   settledToolInputs?: ReadonlySet<string>,
 ): AgentSessionHistoryMessage => {
   const base = { messageId: message.id, timestamp: iso(message.time.created) };
+  const goalObjective = readOpenCodeGoalKickoffObjective(message);
+  if (goalObjective !== null) {
+    const text = `/${GOAL_SLASH_COMMAND.trigger} ${goalObjective}`;
+    return agentSessionHistoryMessageSchema.parse({
+      ...base,
+      role: "user",
+      text,
+      displayParts: [{ kind: "text", text }],
+      state: "read",
+      parts: [],
+    });
+  }
   if (message.type === "user")
     return agentSessionHistoryMessageSchema.parse({
       ...base,

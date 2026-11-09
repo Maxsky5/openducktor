@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { afterTransitions } from "./css-transitions";
 
 const AnimationReadyContext = createContext<boolean | null>(null);
 
@@ -53,15 +54,7 @@ export function useCssPresence() {
   useLayoutEffect(() => {
     const element = elementRef.current;
     if (isPresent || !element) return;
-    // getAnimations flushes the new CSS state, including an interrupted entrance.
-    const transitions = element.getAnimations();
-    let interrupted = false;
-    void Promise.allSettled(transitions.map((animation) => animation.finished)).then(() => {
-      if (!interrupted) safeToRemove?.();
-    });
-    return () => {
-      interrupted = true;
-    };
+    return afterTransitions(element, () => safeToRemove?.());
   }, [isPresent, safeToRemove]);
 
   return {

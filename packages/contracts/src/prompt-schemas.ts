@@ -91,6 +91,8 @@ export const WORKFLOW_PROMPT_IDS = {
   toolRules: "workflow.tool_rules",
   taskContext: "workflow.task_context",
   readOnlyRejection: "workflow.read_only_rejection",
+  /** Optional. It tells a model how to write a goal. Without it, the workflow offers no Goal mode. */
+  goal: "workflow.goal",
   pullRequest: "messages.pull_request",
 } as const;
 

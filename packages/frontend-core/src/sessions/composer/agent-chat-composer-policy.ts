@@ -1,4 +1,4 @@
-import type { AgentMessageSubmitMode } from "@openducktor/contracts";
+import type { AgentMessageSubmitMode, AgentSessionGoalStatus } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useMemo } from "react";
 import { validateComposerAttachments } from "../../drafts/agent-chat-attachments";
@@ -11,6 +11,7 @@ import type { SpeedControlModel } from "../model-selection/use-speed-control";
 import {
   draftSteerBlockedReason,
   hasForegroundTurn,
+  hasOngoingWork,
   steersRunningTurn,
 } from "../send/agent-chat-steering";
 import type {
@@ -47,6 +48,8 @@ export type ComposerPolicyModel = {
   readOnlyReason: string | null;
   waitingInputPlaceholder?: string | null | undefined;
   messageQueue: AgentChatMessageQueueModel | null;
+  /** The goal of the session, or null when it has none. */
+  goalRow?: { readonly status: AgentSessionGoalStatus } | null | undefined;
 };
 
 export type ComposerPolicy = {
@@ -209,7 +212,7 @@ const queuePlaceholderParts = (
 ): string[] => {
   const queueKey = primaryMode === "default" ? "Enter" : steerShortcutLabel;
   const steerKey = primaryMode === "steer" ? "Enter" : steerShortcutLabel;
-  const turnActive = hasForegroundTurn(model);
+  const turnActive = hasOngoingWork(model);
   if (turnActive && model.steerBlockedReason) return [`${queueKey} to queue`];
   const hasQueuedMessages = (model.messageQueue?.queue?.entries.length ?? 0) > 0;
   if (!turnActive && !hasQueuedMessages) return [];

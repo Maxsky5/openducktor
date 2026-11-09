@@ -1382,6 +1382,7 @@ describe("runtime schemas", () => {
       description: "Runtime fixture with item-level event history.",
       readOnlyRoleBlockedTools: ["shell", "apply_patch"],
       workflowToolAliasesByCanonical: OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
+      updateAction: "Update the runtime.",
       capabilities: withRuntimeCapabilities({
         provisioningMode: "external",
         workflow: {

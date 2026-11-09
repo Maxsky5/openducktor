@@ -15,6 +15,7 @@ const createClaudePermissionTestSessionForScope = (
   sessionScope: AgentSessionScope,
 ): ClaudeSessionContext => ({
   acceptedUserMessages: [],
+  transcriptEnvironment: {},
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
   activity: "idle",

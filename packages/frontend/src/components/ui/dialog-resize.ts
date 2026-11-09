@@ -1,3 +1,18 @@
+/**
+ * Content that animates its own height, such as a CSS presence reveal, already resizes the dialog
+ * in each frame. A dialog animation over it would hold the old size and then resize a second time.
+ */
+const contentAnimatesHeight = (element: HTMLElement): boolean =>
+  element
+    .getAnimations({ subtree: true })
+    .some(
+      (animation) =>
+        animation instanceof CSSTransition &&
+        animation.transitionProperty === "height" &&
+        animation.effect instanceof KeyframeEffect &&
+        animation.effect.target !== element,
+    );
+
 export function observeDialogResize(element: HTMLDivElement): () => void {
   let previousSize: { width: number; height: number } | null = null;
   let animation: Animation | null = null;
@@ -123,6 +138,7 @@ export function observeDialogResize(element: HTMLDivElement): () => void {
 
     const from = previousSize;
     previousSize = size;
+    if (contentAnimatesHeight(element)) return;
     animateResize(from, size);
   });
   observer.observe(element, { box: "border-box" });

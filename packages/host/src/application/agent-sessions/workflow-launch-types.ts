@@ -42,7 +42,7 @@ export type WorkflowLaunchPreparationDependencies = {
   startPreparation: Pick<TaskSessionStartPreparationService, "validateTarget">;
   git: Pick<GitPort, "canonicalizePath">;
   definitions: RuntimeDefinitionsService;
-  registry: Pick<RuntimeRegistryPort, "requireReady">;
+  registry: Pick<RuntimeRegistryPort, "requireReady" | "status">;
   queries: Pick<AgentRuntimeQueryPort, "loadRuntimeCatalog">;
   provider: Pick<GitProviderService, "getContext">;
   runtime: Pick<SessionLaunchRuntimePort, "read">;
@@ -53,7 +53,10 @@ export type WorkflowLaunchDependencies = WorkflowLaunchPreparationDependencies &
   messageDelivery: Pick<AgentMessageDeliveryService, "submit">;
   /** `sendUserMessage` must apply the normal workflow send policy. */
   runtime: SessionLaunchRuntimePort &
-    Pick<AgentSessionLiveStateService, "publishTaskSessionRecords" | "updateSessionModel">;
+    Pick<
+      AgentSessionLiveStateService,
+      "publishTaskSessionRecords" | "updateSessionModel" | "controlGoal"
+    >;
 };
 
 /** Decides, when a waiting automatic launch gets its turn, whether it still starts. */

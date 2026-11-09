@@ -4,6 +4,8 @@ import {
   AgentSessionMessageRefusedError,
   AgentSessionTurnActiveError,
   agentSessionRefsEqual,
+  goalCommandStartsWork,
+  resolveRuntimeGoalAvailability,
 } from "@openducktor/core";
 import type { SessionInfo, V2Event, OpenCodeClient } from "@opencode/client";
 import {
@@ -27,7 +29,16 @@ import {
   readMigration,
   type OpenCodeRequestDraft,
 } from "./opencode-client";
-import { OpencodeSdkAdapter, type OpenCodeSessionBinding } from "./opencode-sdk-adapter";
+import {
+  OpencodeSdkAdapter,
+  type OpenCodeGoalControlInput,
+  type OpenCodeSessionBinding,
+} from "./opencode-sdk-adapter";
+import {
+  OPENCODE_GOAL_CHANGED_EVENT,
+  readOpenCodeGoal,
+  readOpenCodeGoalChange,
+} from "./opencode-goals";
 import { installOpenCodePolicy } from "./opencode-permissions";
 import {
   permissionDecision,
@@ -87,8 +98,14 @@ export type OpencodeSessionRuntimeConnection = Pick<
   | "updateSessionModel"
   | "updateSessionTitle"
   | "stopSession"
+  | "generateText"
 > & {
   releaseSession: (ref: SessionRef) => Promise<void>;
+  /** Runs one native goal action. */
+  controlGoal: (
+    input: OpenCodeGoalControlInput,
+    options?: { onSent?: (() => void) | undefined },
+  ) => Promise<void>;
   readSessionSources: (
     repoPath: string,
     roots?: AgentSessionAuthorizedRoot[],
@@ -387,19 +404,25 @@ export const createPrepareOpencodeSessionRuntime =
         "The selected executable does not provide OpenCode V2.",
         "Install OpenCode V2 or select its executable in runtime settings.",
       );
+    // Goals come from a built-in plugin of newer servers. An older server gets no goal call.
+    const goals = resolveRuntimeGoalAvailability(OPENCODE_RUNTIME_DESCRIPTOR, info.version);
 
     const source = (
       binding: OpenCodeSessionBinding,
       parentExternalSessionId?: string,
     ): Promise<OpencodeRuntimeSnapshotSource> =>
       nativeRequest(binding.ref, "read the conversation", async () => {
-        const [active, approvals, forms, location, inbox, messages] = await Promise.all([
+        const [active, approvals, forms, location, inbox, messages, goal] = await Promise.all([
           client.session.active(),
           client.permission.list({ sessionID: binding.detail.id }),
           client.session.form.list({ sessionID: binding.detail.id }),
           client.location.get({ location: { directory: binding.ref.workingDirectory } }),
           client.session.inbox.list({ sessionID: binding.detail.id }),
           readOpenCodeTranscript(client, binding.detail),
+          // A child session starts with no goal, and the plugin reports later changes live.
+          goals.available && parentExternalSessionId === undefined
+            ? readOpenCodeGoal(client, binding.detail.id, binding.ref.workingDirectory)
+            : undefined,
         ]);
         if (location.directory !== binding.ref.workingDirectory)
           throw operationError(
@@ -461,6 +484,7 @@ export const createPrepareOpencodeSessionRuntime =
             item.type === "user" ? [projectInboxUser(item)] : [],
           ),
         };
+        if (goal !== undefined) snapshot.goal = goal;
         if (active[binding.detail.id]) nativeRunning.add(binding.detail.id);
         else nativeRunning.delete(binding.detail.id);
         if (parentExternalSessionId) snapshot.parentExternalSessionId = parentExternalSessionId;
@@ -755,6 +779,14 @@ export const createPrepareOpencodeSessionRuntime =
           "The native conversation location does not match the verified conversation.",
         );
       if (options.logEvent) options.logEvent({ externalSessionId, relevant: true, event });
+      if (event.type === OPENCODE_GOAL_CHANGED_EVENT) {
+        emit({
+          type: "goal_updated",
+          externalSessionId,
+          goal: readOpenCodeGoalChange(event),
+        });
+        return;
+      }
       const base = {
         externalSessionId,
         timestamp: iso("created" in event ? event.created : Date.now()),
@@ -913,6 +945,7 @@ export const createPrepareOpencodeSessionRuntime =
       throw cause;
     }
     const connection: OpencodeSessionRuntimeConnection = {
+      generateText: controller.generateText.bind(controller),
       startSession: async (ref) => {
         const summary = await controller.startSession(ref);
         admittedRoots.set(summary.externalSessionId, {
@@ -1078,6 +1111,48 @@ export const createPrepareOpencodeSessionRuntime =
             return recovered;
           })
           .finally(clearPending);
+      },
+      controlGoal: async (goalInput, goalOptions) => {
+        if (!goals.available)
+          throw new AgentSessionMessageRefusedError(
+            operationError(
+              goalInput,
+              "use goals",
+              "unsupported_operation",
+              goals.reason,
+              OPENCODE_RUNTIME_DESCRIPTOR.updateAction,
+            ),
+          );
+        const sessionID = goalInput.externalSessionId;
+        const working = nativeRunning.has(sessionID) || awaitingTurns.has(sessionID);
+        // A new or resumed goal starts work. The session shows it as running until native
+        // execution events confirm or end it. Pause and clear start no work.
+        const binding = controller.bindings.get(sessionID);
+        const turn: AwaitingTurn | undefined =
+          goalCommandStartsWork(goalInput.command) &&
+          binding &&
+          agentSessionRefsEqual(binding.ref, goalInput)
+            ? { ref: goalInput, submitted: false, customCommand: true, consumedInboxIds: new Set() }
+            : undefined;
+        if (turn) {
+          const turns = awaitingTurns.get(sessionID) ?? new Set<AwaitingTurn>();
+          turns.add(turn);
+          awaitingTurns.set(sessionID, turns);
+          reportActivity(goalInput);
+        }
+        try {
+          await (attachTails.get(goalInput.repoPath) ?? Promise.resolve());
+          await controller.controlGoal(goalInput, {
+            delivery: working ? "steer" : "queue",
+            onSent: () => {
+              if (turn) turn.submitted = true;
+              goalOptions?.onSent?.();
+            },
+          });
+        } catch (cause) {
+          if (turn && settleTurn(turn)) reportActivity(goalInput);
+          throw cause;
+        }
       },
       updateSessionModel: controller.updateSessionModel.bind(controller),
       updateSessionTitle: controller.updateSessionTitle.bind(controller),

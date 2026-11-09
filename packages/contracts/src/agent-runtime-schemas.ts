@@ -201,6 +201,16 @@ export type RuntimeMessageDeliveryCapabilities = z.infer<
   typeof runtimeMessageDeliveryCapabilitiesSchema
 >;
 
+export const runtimeGoalCapabilitiesSchema = z
+  .object({
+    /** The oldest runtime version with native goals. `null`: the runtime has no goals. */
+    minimumRuntimeVersion: runtimeVersionSchema.nullable(),
+    /** The runtime can pause and resume a goal. Every runtime with goals can clear one. */
+    supportsPauseResume: z.boolean(),
+  })
+  .strict();
+export type RuntimeGoalCapabilities = z.infer<typeof runtimeGoalCapabilitiesSchema>;
+
 export const runtimeHistoryCapabilitiesSchema = z
   .object({
     loadable: z.boolean(),
@@ -279,6 +289,7 @@ export const runtimeCapabilitiesSchema = z
     workflow: runtimeWorkflowCapabilitiesSchema,
     sessionLifecycle: runtimeSessionLifecycleCapabilitiesSchema,
     messageDelivery: runtimeMessageDeliveryCapabilitiesSchema,
+    goals: runtimeGoalCapabilitiesSchema,
     history: runtimeHistoryCapabilitiesSchema,
     approvals: runtimeApprovalCapabilitiesSchema,
     structuredInput: runtimeStructuredInputCapabilitiesSchema,
@@ -290,6 +301,16 @@ export const runtimeCapabilitiesSchema = z
     const addIssue = (path: (string | number)[], message: string): void => {
       context.addIssue({ code: "custom", path, message });
     };
+
+    if (
+      capabilities.goals.minimumRuntimeVersion === null &&
+      capabilities.goals.supportsPauseResume
+    ) {
+      addIssue(
+        ["goals", "supportsPauseResume"],
+        "Runtime descriptors without goals must not support goal pause and resume.",
+      );
+    }
 
     if (!capabilities.sessionLifecycle.supportedStartModes.includes("fresh")) {
       addIssue(
@@ -558,6 +579,8 @@ export const runtimeCapabilityKeyValues = [
   "sessionLifecycle.supportsSessionFork",
   "sessionLifecycle.supportsInterruptedTurnResume",
   "messageDelivery.minimumSteeringRuntimeVersion",
+  "goals.minimumRuntimeVersion",
+  "goals.supportsPauseResume",
   "history.fidelity",
   "history.replay",
   "approvals.supportedRequestTypes",
@@ -593,6 +616,8 @@ export const mandatoryRuntimeCapabilityKeys = [
 export const optionalRuntimeCapabilityKeys = [
   "speed.support",
   "messageDelivery.minimumSteeringRuntimeVersion",
+  "goals.minimumRuntimeVersion",
+  "goals.supportsPauseResume",
   "history.fidelity",
   "history.replay",
   "approvals.supportedRequestTypes",
@@ -629,6 +654,8 @@ export const runtimeCapabilityClasses = {
   "sessionLifecycle.supportsSessionFork": "launch_scoped",
   "sessionLifecycle.supportsInterruptedTurnResume": "launch_scoped",
   "messageDelivery.minimumSteeringRuntimeVersion": "optional_enhancement",
+  "goals.minimumRuntimeVersion": "optional_enhancement",
+  "goals.supportsPauseResume": "optional_enhancement",
   "history.fidelity": "launch_scoped",
   "history.replay": "launch_scoped",
   "approvals.supportedRequestTypes": "workflow",
@@ -826,6 +853,8 @@ export const runtimeDescriptorSchema = z
     workflowToolAliasesByCanonical: runtimeWorkflowToolAliasesByCanonicalSchema,
     capabilities: runtimeCapabilitiesSchema,
     capabilityLimits: z.array(runtimeCapabilityLimitSchema).default([]),
+    /** How the user updates the runtime, as one sentence, for example "Run `opencode upgrade`." */
+    updateAction: z.string().trim().min(1),
   })
   .strict();
 export type RuntimeDescriptor = z.infer<typeof runtimeDescriptorSchema>;

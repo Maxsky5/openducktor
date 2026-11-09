@@ -163,6 +163,10 @@ export const runtimeSupportsCapability = (
       return runtimeDescriptor.capabilities.sessionLifecycle.supportsInterruptedTurnResume;
     case "messageDelivery.minimumSteeringRuntimeVersion":
       return runtimeDescriptor.capabilities.messageDelivery.minimumSteeringRuntimeVersion !== null;
+    case "goals.minimumRuntimeVersion":
+      return runtimeDescriptor.capabilities.goals.minimumRuntimeVersion !== null;
+    case "goals.supportsPauseResume":
+      return runtimeDescriptor.capabilities.goals.supportsPauseResume;
     case "history.fidelity":
       return runtimeDescriptor.capabilities.history.fidelity !== "none";
     case "history.replay":

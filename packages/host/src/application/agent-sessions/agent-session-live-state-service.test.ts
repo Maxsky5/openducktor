@@ -1,5 +1,6 @@
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
 import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
+import { unexpectedTextGeneration } from "../../test-support/text-generation-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
@@ -65,6 +66,7 @@ const fakeAdapter = (input: {
   const adapter = {
     queries: unexpectedRuntimeQueries,
     sessionImport: unexpectedSessionImport,
+    textGeneration: unexpectedTextGeneration,
     supportsSessionControl: false,
     beginGeneratedImageBatch: () => Effect.die(new Error("Unexpected beginGeneratedImageBatch")),
     releaseGeneratedImageBatch: () =>
@@ -109,6 +111,7 @@ const titleControlAdapter = (
   forkSession: () => Effect.die(new Error("unexpected fork")),
   sendUserMessage: () => Effect.die(new Error("unexpected send")),
   updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+  controlGoal: () => Effect.die(new Error("unexpected goal action")),
   updateSessionTitle: updateTitle,
   stopSession: () => Effect.die(new Error("unexpected stop")),
   releaseSession: () => Effect.die(new Error("unexpected release")),
@@ -2197,6 +2200,7 @@ describe("createAgentSessionLiveStateService", () => {
       }),
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
+      textGeneration: unexpectedTextGeneration,
       supportsSessionControl: true,
       startSession: () => Effect.die(new Error("unexpected start")),
       resumeSession: (input) =>
@@ -2208,6 +2212,7 @@ describe("createAgentSessionLiveStateService", () => {
       forkSession: () => Effect.die(new Error("unexpected fork")),
       sendUserMessage: () => Effect.die(new Error("unexpected send")),
       updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+      controlGoal: () => Effect.die(new Error("unexpected goal action")),
       updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
       stopSession: () => Effect.die(new Error("unexpected stop")),
       releaseSession: () => Effect.die(new Error("unexpected release")),
@@ -2249,6 +2254,7 @@ describe("createAgentSessionLiveStateService", () => {
       ...fakeAdapter({ runtimeId: "runtime-1", snapshots: () => [] }),
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
+      textGeneration: unexpectedTextGeneration,
       supportsSessionControl: true,
       startSession: () => Effect.die(new Error("unexpected start")),
       resumeSession: () => Effect.die(new Error("unexpected resume")),
@@ -2263,6 +2269,7 @@ describe("createAgentSessionLiveStateService", () => {
       forkSession: () => Effect.die(new Error("unexpected fork")),
       sendUserMessage: () => Effect.die(new Error("unexpected send")),
       updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+      controlGoal: () => Effect.die(new Error("unexpected goal action")),
       updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
       stopSession: () => Effect.die(new Error("unexpected stop")),
       releaseSession: () => Effect.die(new Error("unexpected release")),
@@ -2369,6 +2376,7 @@ describe("createAgentSessionLiveStateService", () => {
       }),
       queries: unexpectedRuntimeQueries,
       sessionImport: unexpectedSessionImport,
+      textGeneration: unexpectedTextGeneration,
       supportsSessionControl: true,
       startSession: () => Effect.die(new Error("unexpected start")),
       resumeSession: () => Effect.die(new Error("unexpected resume")),
@@ -2383,6 +2391,7 @@ describe("createAgentSessionLiveStateService", () => {
         Effect.sync(() => {
           calls.push({ operation: "model", input });
         }),
+      controlGoal: () => Effect.die(new Error("unexpected goal action")),
       updateSessionTitle: (input) =>
         Effect.sync(() => {
           calls.push({ operation: "title", input });

@@ -1,4 +1,5 @@
 import type {
+  AgentSessionGoal,
   AgentSessionTranscriptEventType,
   RuntimeOperationFailure,
 } from "@openducktor/contracts";
@@ -24,6 +25,12 @@ export type OpencodeSessionRuntimeSignal =
       readonly type: "context_updated";
       readonly externalSessionId: string;
       readonly contextUsage: OpencodeSessionContextUsage | null;
+    }
+  | {
+      /** The goal plugin changed the goal. `null`: the session has no goal. */
+      readonly type: "goal_updated";
+      readonly externalSessionId: string;
+      readonly goal: AgentSessionGoal | null;
     }
   | { readonly type: "session_source"; readonly source: OpencodeRuntimeSnapshotSource }
   | { readonly type: "session_removed"; readonly externalSessionId: string }

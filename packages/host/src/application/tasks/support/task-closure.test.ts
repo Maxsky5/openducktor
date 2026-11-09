@@ -3,6 +3,7 @@ import {
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
   reviewTaskRoles,
+  specPlanBuildReference,
 } from "@openducktor/workflows/test-support";
 import { builtinTaskWorkflows, singleTaskWorkflow } from "../../../test-support/task-workflows";
 import type { TaskCard } from "@openducktor/contracts";
@@ -32,7 +33,7 @@ const closedTask = (): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
-  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflow: specPlanBuildReference(),
   workflowSteps: [],
   availableActions: [],
   labels: [],

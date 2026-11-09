@@ -44,7 +44,7 @@ const isWorkerFailure = (cause: unknown): cause is HostOperationError =>
   cause instanceof HostOperationError && cause.details === undefined;
 
 export const createClaudeTranscriptWorkerPool = (
-  options: ClaudeTranscriptWorkerOptions = {},
+  options: ClaudeTranscriptWorkerOptions = { mode: "history" },
 ): Effect.Effect<ClaudeTranscriptWorkerPool, HostOperationError> =>
   Effect.tryPromise({
     try: async () => {

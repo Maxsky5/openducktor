@@ -48,6 +48,18 @@ export const createCodexAppServerClient = (
     async threadCompactStart(params: CodexThreadCompactStartParams) {
       return requestCodex(transport, { method: "thread/compact/start", params });
     },
+    async threadGoalSet(params) {
+      return requestCodex(transport, { method: "thread/goal/set", params });
+    },
+    async threadGoalClear(params) {
+      return requestCodex(transport, { method: "thread/goal/clear", params });
+    },
+    async threadUnsubscribe(params) {
+      return requestCodex(transport, { method: "thread/unsubscribe", params });
+    },
+    async threadSettingsUpdate(params) {
+      return requestCodex(transport, { method: "thread/settings/update", params });
+    },
     async threadResume(params: CodexThreadResumeParams) {
       return requestCodex(transport, { method: "thread/resume", params });
     },

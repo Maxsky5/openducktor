@@ -1,7 +1,8 @@
-import type {
-  AgentMessageQueueAction,
-  AgentQueuedMessage,
-  AgentSessionUserMessagePart,
+import {
+  type AgentMessageQueueAction,
+  type AgentQueuedMessage,
+  type AgentSessionUserMessagePart,
+  isGoalSlashCommand,
 } from "@openducktor/contracts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
@@ -29,6 +30,7 @@ import { LoaderSpinner } from "@/ui/loader-spinner";
 import { ReferenceChip, type ReferenceChipProps } from "@/features/session/reference-chip";
 import { type AppTheme, motion, touchSlop } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
+import { CardIconButton } from "./card-icon-button";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { ATTACHMENT_KIND_ICONS, type AttachmentPickers } from "./composer-attachments";
@@ -455,7 +457,11 @@ const inlinePart = (part: AgentSessionUserMessagePart): ReactNode => {
     case "text":
       return part.text;
     case "slash_command":
-      return `/${part.command.trigger}`;
+      return isGoalSlashCommand(part.command) ? (
+        <InlineChip kind="goal" label="Goal" />
+      ) : (
+        `/${part.command.trigger}`
+      );
     case "file_reference":
       return <InlineChip kind="file" label={part.file.name} fileKind={part.file.kind} />;
     case "skill_mention":
@@ -499,35 +505,6 @@ function QueuedAttachmentChip({
         {part.attachment.name}
       </Text>
     </View>
-  );
-}
-
-/** The desktop card action: a ghost 24-point square with a muted 14-point icon. */
-function CardIconButton({
-  icon,
-  accessibilityLabel,
-  disabled,
-  onPress,
-}: {
-  icon: IconName;
-  accessibilityLabel: string;
-  disabled: boolean;
-  onPress: () => void;
-}): ReactElement {
-  const theme = useAppTheme();
-  return (
-    <Touchable
-      feedback="opacity"
-      onPress={onPress}
-      disabled={disabled}
-      hitSlop={touchSlop(24)}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
-      style={styles.cardButton}
-    >
-      <Icon name={icon} size={14} colorValue={theme.desktop.mutedForeground} />
-    </Touchable>
   );
 }
 
@@ -719,14 +696,6 @@ const styles = StyleSheet.create((theme, rt) => ({
     alignItems: "center",
     gap: 2 * touchSlop(24),
     marginVertical: -2,
-  },
-  cardButton: {
-    width: 24,
-    height: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.md,
-    borderCurve: "continuous",
   },
   editing: {
     gap: theme.space.xs,

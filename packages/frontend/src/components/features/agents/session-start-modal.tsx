@@ -1,3 +1,4 @@
+import { SessionStartGoalField } from "./session-start-goal-field";
 import { SessionStartKickoffField } from "./session-start-kickoff-field";
 import { SpeedSelect } from "./speed-select";
 import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
@@ -35,11 +36,12 @@ import {
   type SessionStartModalModel,
   type SessionStartSourceOption,
 } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
-import {
-  type SessionStartKickoffDraft,
-  useSessionStartKickoffDraft,
-} from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
+import type { SessionStartKickoffDraft } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
+import {
+  type SessionStartGoalDraft,
+  useSessionStartInstructionDrafts,
+} from "@openducktor/frontend-core/sessions/start/use-session-start-goal-draft";
 import {
   useStartupDialogAttempt,
   useStartupDialogClose,
@@ -53,11 +55,7 @@ import { cn } from "@/lib/utils";
 
 export function SessionStartModal({ model }: { model: SessionStartModalModel }): ReactElement {
   const { open, title, description, onOpenChange } = model;
-  const kickoffDraft = useSessionStartKickoffDraft({
-    requestId: model.requestId,
-    open,
-    prompt: model.kickoffPrompt,
-  });
+  const { goal: goalDraft, kickoff: kickoffDraft } = useSessionStartInstructionDrafts(model);
   const speed = useSessionStartSpeed(model);
   const startup = useStartupDialogAttempt(
     model.phase.kind === "progress" ? model.phase.startupAttemptId : null,
@@ -108,7 +106,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
             onEditChoices={model.onEditChoices}
           />
         ) : (
-          <SessionStartForm model={model} kickoffDraft={kickoffDraft} speed={speed} />
+          <SessionStartForm
+            model={model}
+            kickoffDraft={kickoffDraft}
+            goalDraft={goalDraft}
+            speed={speed}
+          />
         )}
       </DialogContent>
     </Dialog>
@@ -118,10 +121,12 @@ export function SessionStartModal({ model }: { model: SessionStartModalModel }):
 function SessionStartForm({
   model,
   kickoffDraft,
+  goalDraft,
   speed,
 }: {
   model: SessionStartModalModel;
   kickoffDraft: SessionStartKickoffDraft;
+  goalDraft: SessionStartGoalDraft;
   speed: ReturnType<typeof useSessionStartSpeed>;
 }): ReactElement {
   const {
@@ -156,6 +161,7 @@ function SessionStartForm({
   const selectedVariant = selectedModelSelection?.variant ?? "";
   const availability = resolveSessionStartAvailability(model, {
     kickoffInvalid: kickoffDraft.invalid,
+    goalError: goalDraft.blockedReason,
   });
   const {
     hasExistingSessionOptions,
@@ -170,6 +176,7 @@ function SessionStartForm({
     requiresExistingSession,
     speedChange: speed.change,
     kickoffPrompt: kickoffDraft.value,
+    goalObjective: goalDraft.value,
   });
   const handleConfirm = (): void => {
     if (isStarting || confirmDisabled) {
@@ -245,13 +252,18 @@ function SessionStartForm({
             />
           ) : null}
 
-          <SessionStartKickoffField
-            draft={kickoffDraft}
-            disabled={isStarting}
-            loading={model.isKickoffPromptLoading}
-            error={model.kickoffPromptError}
-            onRetry={model.onRetryKickoffPrompt}
-          />
+          {/* One block: each reveal owns the space above it, so a closing field ends flush. */}
+          <div className="flex flex-col">
+            <SessionStartGoalField draft={goalDraft} disabled={isStarting} />
+            <SessionStartKickoffField
+              draft={kickoffDraft}
+              disabled={isStarting}
+              loading={model.isKickoffPromptLoading}
+              error={model.kickoffPromptError}
+              onRetry={model.onRetryKickoffPrompt}
+              className={goalDraft.offered ? "pt-5" : undefined}
+            />
+          </div>
         </fieldset>
       </DialogBody>
 

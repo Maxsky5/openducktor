@@ -1,6 +1,7 @@
 import {
   AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS,
   type AgentRuntimePreviewModelsInput,
+  type AgentTextGenerationInput,
   type ClaudeToolCatalogInput,
 } from "@openducktor/contracts";
 import type {
@@ -19,6 +20,16 @@ export class HostAgentRuntimeQueryClient {
 
   agentRuntimeClaudeToolCatalog(input: ClaudeToolCatalogInput) {
     const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.claudeToolCatalog;
+    return this.invokeFn(
+      contract.command,
+      { input: contract.inputSchema.parse(input) },
+      contract.responseSchema,
+    );
+  }
+
+  /** One model answer with no tools and no saved session. */
+  agentRuntimeGenerateText(input: AgentTextGenerationInput) {
+    const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.generateText;
     return this.invokeFn(
       contract.command,
       { input: contract.inputSchema.parse(input) },

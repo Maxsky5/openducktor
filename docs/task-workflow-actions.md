@@ -57,6 +57,21 @@ Autopilot submits its first instruction through the host message queue. If the s
 
 Stop also cancels Autopilot submissions that are still being prepared. A canceled submission cannot send its instruction or add it to the queue.
 
+### Goal mode
+
+A launch action that declares `goal` shows a Goal mode switch in its start form, in the desktop app, the browser runner, and the mobile app. The workflow must also provide the goal prompt `workflow.goal`, so a workflow without a goal prompt offers no Goal mode. The built-in Spec, Plan, Build workflow declares Goal mode for Start Implementation, Fix QA Rejection, and Apply Human Changes, and provides the "Goal Writer" prompt.
+
+- The switch is off each time the form opens. When it is on, the Goal field shows the default goal text of the launch with the task ID, the task title, and any human feedback.
+- Goal mode replaces the first message. When the switch is on, the form hides "Customize first message", and the agent receives only the goal.
+- "Generate goal" asks the repository default model to write the goal. The goal prompt of the workflow, with its repository or global override, gives the instructions. Settings show it with the shared workflow prompts. The task description, the workflow artifacts, and the default goal are the material. The result replaces the goal text. Without a default model, the button is off and the form shows why. The generation uses `agent_runtime_generate_text`.
+- Each built-in default goal and the built-in goal prompt follow the OpenAI `define-goal` skill. It states the outcome, the checks that prove it, the `build-completed` submit step, the task scope, and when the agent must stop and ask.
+- An empty goal or a goal over 4000 characters disables the start and shows the reason.
+- A runtime without goals, such as OpenCode older than 2.2.1, disables the switch and shows the reason with its update action.
+- The launch request carries `goal` only when the switch is on. The host accepts it only for a manual kickoff launch without a custom first message, whose action declares `goal`, and whose runtime has goals.
+- The host sends no kickoff. It sets the goal with the runtime goal action, and the runtime starts the goal turn. If the start fails, the launch keeps `/goal <objective>` as its unsent instruction.
+- After the start, the goal is a normal session goal. Workflow events and task status changes do not end, pause, or clear it.
+- Autopilot starts never use Goal mode.
+
 ## Artifact actions
 
 `set_spec` writes or revises the specification. From `open`, it moves the task to `spec_ready`. In any other allowed status, it changes only the artifact.

@@ -26,7 +26,7 @@ export const createRuntimeSessionEngagement = () => {
     });
 
   return {
-    /** Records each session that a start, resume, continuation, fork, or send serves. */
+    /** Records each session that a start, resume, continuation, fork, send, or goal action serves. */
     trackControls: (adapter: AgentSessionRuntimeAdapterPort): AgentSessionRuntimeAdapterPort => ({
       ...adapter,
       startSession: (input) =>
@@ -48,6 +48,10 @@ export const createRuntimeSessionEngagement = () => {
       sendUserMessage: (input, options) =>
         adapter
           .sendUserMessage(input, options)
+          .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
+      controlGoal: (input, options) =>
+        adapter
+          .controlGoal(input, options)
           .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
     }),
     /** Records each session that an approval or question reply serves. */

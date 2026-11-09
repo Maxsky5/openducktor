@@ -1,3 +1,4 @@
+import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import {
@@ -59,7 +60,7 @@ const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
-  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflow: specPlanBuildReference(),
   workflowSteps: [],
   availableActions: [],
   labels: [],

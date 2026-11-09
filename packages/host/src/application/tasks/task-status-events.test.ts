@@ -1,3 +1,4 @@
+import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { specPlanBuildWorkflow, type TransitionCause } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createDefaultGlobalConfig } from "../../config/global-config";
@@ -390,7 +391,7 @@ test("records QA transitions only after the entire SQLite transaction commits", 
       {
         previousStatus: "open",
         task: {
-          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          workflow: specPlanBuildReference(),
           id: task.id,
           title: "Task",
           status: "human_review",

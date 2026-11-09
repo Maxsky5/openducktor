@@ -1,4 +1,9 @@
-import type { AgentMessageSubmitMode } from "@openducktor/contracts";
+import { type AgentMessageSubmitMode, isGoalSlashCommand } from "@openducktor/contracts";
+import {
+  AGENT_CHAT_GOAL_CHIP_CLASS_NAME,
+  AGENT_CHAT_GOAL_CHIP_LABEL,
+  getAgentChatGoalIconMarkup,
+} from "./agent-chat-goal-chip-markup";
 import type {
   AgentFileSearchResult,
   AgentSkillReference,
@@ -211,8 +216,14 @@ const buildComposerContentMarkup = (segments: AgentChatComposerSegments): string
         return buildComposerSubagentReferenceChipMarkup(segment.subagent, segment.id);
       }
 
+      if (segment.kind === "slash_command" && isGoalSlashCommand(segment.command)) {
+        return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segment.id)}" data-segment-id="${escapeHtml(segment.id)}" data-slash-command-id="${escapeHtml(segment.command.id)}" class="${escapeHtml(
+          cn(AGENT_CHAT_GOAL_CHIP_CLASS_NAME, "mx-0.5 mr-2"),
+        )}"><span class="inline-flex shrink-0">${getAgentChatGoalIconMarkup()}</span><span>${escapeHtml(AGENT_CHAT_GOAL_CHIP_LABEL)}</span></span>`;
+      }
+
       if (segment.kind === "slash_command") {
-        return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segment.id)}" data-segment-id="${escapeHtml(segment.id)}" class="${escapeHtml(
+        return `<span contenteditable="false" data-chip-segment-id="${escapeHtml(segment.id)}" data-segment-id="${escapeHtml(segment.id)}" data-slash-command-id="${escapeHtml(segment.command.id)}" class="${escapeHtml(
           cn(
             badgeVariants({ variant: "secondary" }),
             "mx-0.5 mr-2 inline-flex h-6 bg-yellow-300 dark:bg-yellow-600 items-center rounded-full px-2.5 text-xs font-medium align-middle",
@@ -291,9 +302,10 @@ const syncComposerDomInPlace = (
       }
 
       if (segment.kind === "slash_command") {
+        // A DOM that does not match is rebuilt, which moves the visible caret to the line start.
         return (
           node.dataset.chipSegmentId === segment.id &&
-          node.textContent === `/${segment.command.trigger}`
+          node.dataset.slashCommandId === segment.command.id
         );
       }
 

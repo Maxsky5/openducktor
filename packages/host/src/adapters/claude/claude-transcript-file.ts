@@ -13,6 +13,7 @@ import {
   type ClaudeTranscriptJsonReader,
 } from "./claude-transcript-json";
 import { scanClaudeTranscriptInWorkers } from "./claude-transcript-parallel-scan";
+import type { ClaudeTranscriptReadMode } from "./claude-transcript-retention";
 
 export const CLAUDE_TRANSCRIPT_MISSING_MESSAGE =
   "The selected Claude session is unavailable. Check its history on the host.";
@@ -94,9 +95,14 @@ export const scanClaudeTranscriptBatches = (
   path: string,
   consume: (records: readonly ClaudeProtocolObject[]) => Effect.Effect<void, ReadFailure>,
   options: {
-    mode?: "history" | "scope" | "summary";
-    range?: { tailBytes?: number; stopWhen?: () => boolean };
+    mode?: ClaudeTranscriptReadMode;
+    /**
+     * `startByte` reads from a line start and leaves a last line without a line feed unread.
+     * `onEnd` then gets the offset after the last line that the read consumed.
+     */
+    range?: { tailBytes?: number; startByte?: number; stopWhen?: () => boolean };
     onReadSnapshot?: (before: string, after: string) => void;
+    onEnd?: (endByte: number) => void;
   } = {},
 ): Effect.Effect<void, ReadFailure> =>
   Effect.acquireUseRelease(
@@ -104,16 +110,17 @@ export const scanClaudeTranscriptBatches = (
     (file) =>
       Effect.gen(function* () {
         const { range } = options;
-        const metadataOnly = options.mode === "scope";
-        const summaryOnly = options.mode === "summary";
+        const mode = options.mode ?? "history";
         const stat = yield* readFileStat(file, path);
         const size = Number(stat.size);
         const decoder = new StringDecoder("utf8");
-        let position = range?.tailBytes ? Math.max(0, size - range.tailBytes) : 0;
-        let skipPartialLine = position > 0;
+        const completeLinesOnly = range?.startByte !== undefined;
+        let position =
+          range?.startByte ?? (range?.tailBytes ? Math.max(0, size - range.tailBytes) : 0);
+        let skipPartialLine = position > 0 && !completeLinesOnly;
         let line = 1;
         let recordStart = position;
-        let reader = createClaudeTranscriptJsonReader({ metadataOnly, summaryOnly });
+        let reader = createClaudeTranscriptJsonReader(mode);
         let hasRecord = false;
         type Entry = {
           pass: ReturnType<ClaudeTranscriptJsonReader["finish"]>;
@@ -173,7 +180,7 @@ export const scanClaudeTranscriptBatches = (
             consume,
             (start, line) => {
               const decoder = new StringDecoder("utf8");
-              const reader = createClaudeTranscriptJsonReader({ metadataOnly, summaryOnly });
+              const reader = createClaudeTranscriptJsonReader(mode);
               return {
                 write: (bytes) => {
                   const text = decoder.write(bytes);
@@ -189,8 +196,9 @@ export const scanClaudeTranscriptBatches = (
                   }),
               };
             },
-            { metadataOnly, summaryOnly },
+            mode,
           );
+          options.onEnd?.(size);
           if (options.onReadSnapshot) {
             const after = yield* readFileStat(file, path);
             options.onReadSnapshot(fileFingerprint(stat), fileFingerprint(after));
@@ -236,7 +244,7 @@ export const scanClaudeTranscriptBatches = (
                     false,
                   );
                   entries.push({ pass, start: recordStart, end: chunkStart + index, line });
-                  reader = createClaudeTranscriptJsonReader({ metadataOnly, summaryOnly });
+                  reader = createClaudeTranscriptJsonReader(mode);
                   hasRecord = false;
                   line++;
                   start = index + 1;
@@ -262,7 +270,7 @@ export const scanClaudeTranscriptBatches = (
             if (range?.stopWhen?.()) return;
           }
         }
-        if (hasRecord) {
+        if (hasRecord && !completeLinesOnly) {
           const pass = yield* Effect.try({
             try: () => finishRecord(reader, decoder, "", true),
             catch: (cause) => sourceError("parse", `${path}:${line}`, cause),
@@ -270,6 +278,7 @@ export const scanClaudeTranscriptBatches = (
           const record = yield* complete({ pass, start: recordStart, end: size, line });
           if (record) yield* consume([record]);
         }
+        options.onEnd?.(hasRecord && completeLinesOnly ? recordStart : size);
         if (options.onReadSnapshot) {
           const after = yield* readFileStat(file, path);
           options.onReadSnapshot(fileFingerprint(stat), fileFingerprint(after));

@@ -3,7 +3,7 @@ import { HostValidationError, toHostOperationError } from "../../effect/host-err
 import { Effect } from "effect";
 import type { z } from "zod";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
-import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import {
   isClaudeSessionClosed,
   isClaudeSessionClosing,
@@ -23,11 +23,7 @@ type OperationValidationDetails = { readonly operation: string };
 
 export const createEventGuard =
   (store: CreateClaudeLiveSessionAdapterPreparerInput["sessionStore"]) =>
-  (
-    session: ClaudeSessionContext,
-    event: ClaudeAgentSdkEvent,
-    phase: "accept" | "deliver",
-  ): boolean => {
+  (session: ClaudeSessionContext, event: ClaudeLiveEvent, phase: "accept" | "deliver"): boolean => {
     const current = store.get(session.externalSessionId);
     if (current && current !== session) return false;
     // A query can close while its accepted events wait for delivery.
@@ -36,7 +32,7 @@ export const createEventGuard =
       (phase === "deliver" && (event.type === "session_error" || isClaudeSessionClosed(session)))
     )
       return store.isLatest(session) && (current === session || isClaudeSessionClosed(session));
-    if (event.statusUnavailable) return current === session;
+    if ("statusUnavailable" in event && event.statusUnavailable) return current === session;
     return current === session && !isClaudeSessionClosing(session);
   };
 

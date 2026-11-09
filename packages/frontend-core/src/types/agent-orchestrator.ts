@@ -247,6 +247,8 @@ export type AgentSessionState = {
   /** Native foreground activity, separate from background work and delivery. */
   foregroundTurnActive?: boolean | undefined;
   statusUnavailableReason?: string | null | undefined;
+  /** The native goal that the runtime reports. Live only; OpenDucktor stores no goal. */
+  goal?: import("@openducktor/contracts").AgentSessionGoal | undefined;
   startedAt: string;
   workingDirectory: string;
   /** Live-only parent link used to project descendant pending input to active ancestors. */

@@ -137,6 +137,19 @@ The host owns each message queue, its order, its pause, and its automatic delive
 - The host checks steer content with `steeringPartsBlockedReason` before it dispatches a steer, so runtime adapters do not check it again. The composer uses `draftSteerBlockedReason` and the queue card uses `queuedMessageSteerBlockedReason`. Both check the runtime steering limit first, then the content.
 - `findRunningTurnModelEntry` reads the model of the running turn from the latest user message that reports a model.
 
+## Session goals
+
+Files: `packages/core/src/services/agent-session-goals.ts`, `agent-system-slash-commands.ts`, `packages/host/src/application/agent-sessions/session-goal-rules.ts`, `agent-session-command-service.ts`, `agent-message-delivery-service.ts`, `packages/frontend-core/src/sessions/goals`, `agent-chat-goal-row.tsx`, and `apps/mobile/src/features/composer/goal-row.tsx`.
+
+Each runtime owns its native goal. OpenDucktor stores no goal data and runs no goal loop. The live snapshot carries the `goal` that the adapter reports, and the frontend projects it into `AgentSessionState.goal`.
+
+- `classifySystemSlashCommandInvocation` in core reads a `/goal` message as set, pause, resume, or clear, and refuses a bare command, a non-text part, an objective over 4000 characters, and any other command named `goal`.
+- `resolveRuntimeGoalAvailability` and `goalCommandBlockedReason` in core check the `goals` capability and the read runtime version. The composer, `prepareUserMessage`, and the row command use the same checks.
+- `sendUserMessage` routes a `/goal` message to the adapter `controlGoal`. A `/goal` message follows the `/compact` queue rules: while a turn runs, the host refuses it as busy, and the queue keeps it. While an active goal drives the work, the runtime starts each next turn by itself. The queue then holds other messages until the goal stops, and a `/goal` message applies at once, like a row action. The delivery service reads the parts of an accepted goal command. A command that starts no work, such as pause or clear, releases the next queued message at once.
+- `agent_session_goal_control` runs a row button action on the owned session. It does not hold the submission or change the queue.
+- `useSessionGoalRow` gives each composer its goal row model. It reads only the goal and the scope of the session, so streamed text does not render it again. The row shows the status, the objective on one line, the runtime reason, and the runtime actions. It keeps no optimistic state.
+- The slash menu of a session composer lists `/goal` when the session runtime has goals. Session composers that start no session do not list it.
+
 ## Host runtime lifecycle
 
 Files: `packages/host/src/application/agent-sessions/agent-session-live-state-service.ts`, `agent-session-live-runtime-lifecycle.ts`, and `packages/host/src/ports/agent-session-live-adapter-port.ts`.

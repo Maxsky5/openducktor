@@ -38,6 +38,19 @@ export const useAgentSession = (
   );
 };
 
+/**
+ * One field of a session. Other changes of the session, such as streamed text, do not render the
+ * reader again, because the field keeps its identity.
+ */
+export const useAgentSessionField = <Field extends keyof AgentSessionState>(
+  identity: AgentSessionIdentity | null,
+  field: Field,
+): AgentSessionState[Field] | undefined => {
+  const sessionStore = useAgentSessionsContext();
+  const read = () => sessionStore.getSessionSnapshot(identity)?.[field];
+  return useSyncExternalStore(sessionStore.subscribe, read, read);
+};
+
 /** Reads the host message queue of one session, or null when it has nothing to show. */
 export const useAgentMessageQueue = (
   ref: AgentSessionLiveRef | null,

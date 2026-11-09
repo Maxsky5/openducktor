@@ -21,7 +21,8 @@ const serializeAgentUserMessagePart = (part: AgentUserMessagePart): string | nul
   return null;
 };
 
-const shouldInsertSyntheticSpaceBeforePart = (
+/** A space goes between a command or reference and a word that follows it, as the runtime reads it. */
+export const shouldInsertSyntheticSpaceBeforePart = (
   previousPart: AgentUserMessagePart | null,
   part: AgentUserMessagePart,
 ): boolean => {

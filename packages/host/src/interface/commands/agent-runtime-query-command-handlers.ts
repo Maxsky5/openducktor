@@ -10,6 +10,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import type { AgentRuntimeQueryPort } from "../../ports/agent-runtime-query-port";
 import type { ClaudeToolCatalogPort } from "../../ports/claude-tool-catalog-port";
+import type { AgentTextGenerationPort } from "../../ports/agent-text-generation-port";
 import { HostValidationError } from "../../effect/host-errors";
 import {
   runtimeQueryError,
@@ -29,8 +30,33 @@ export const createAgentRuntimeQueryCommandHandlers = (
     input: AgentRuntimePreviewModelsInput,
   ) => Effect.Effect<AgentRuntimeCatalog, RuntimeQueryError>,
   claudeToolCatalog: ClaudeToolCatalogPort,
+  textGeneration: AgentTextGenerationPort,
 ) =>
   ({
+    agent_runtime_generate_text: (args) =>
+      Effect.gen(function* () {
+        const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.generateText;
+        const input = yield* Effect.try({
+          try: () => contract.inputSchema.parse(envelopeSchema.parse(args).input),
+          catch: (cause) =>
+            new HostValidationError({
+              field: "input",
+              message: "Select a model, and give instructions and a prompt for the text.",
+              cause,
+            }),
+        });
+        const text = yield* textGeneration.generate(input);
+        return yield* Effect.try({
+          try: () => contract.responseSchema.parse({ text }),
+          catch: (cause) =>
+            new HostValidationError({
+              field: "text",
+              message:
+                "The model returned no text. Generate the text again or select another model.",
+              cause,
+            }),
+        });
+      }),
     agent_runtime_claude_tool_catalog: (args) =>
       Effect.gen(function* () {
         const contract = AGENT_RUNTIME_QUERY_COMMAND_CONTRACTS.claudeToolCatalog;

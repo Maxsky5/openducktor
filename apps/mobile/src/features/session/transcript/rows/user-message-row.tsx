@@ -71,13 +71,20 @@ export const UserMessageRow = memo(function UserMessageRow({
         <View style={[styles.bubble, isUnread ? styles.unreadBubble : styles.readBubble]}>
           {nodes ? (
             <Text selectable style={styles.text}>
-              {nodes.map((node) =>
-                node.kind === "text" ? (
-                  <NativeText key={node.key}>{node.text}</NativeText>
-                ) : (
-                  <InlineReference key={node.key} node={node} alignWithText={hasText} />
-                ),
-              )}
+              {nodes.map((node) => {
+                if (node.kind === "text")
+                  return <NativeText key={node.key}>{node.text}</NativeText>;
+                if (node.kind === "goal_command")
+                  return (
+                    <View
+                      key={node.key}
+                      style={[styles.goal, hasText ? styles.referenceWithText : null]}
+                    >
+                      <ReferenceChip kind="goal" label="Goal" />
+                    </View>
+                  );
+                return <InlineReference key={node.key} node={node} alignWithText={hasText} />;
+              })}
             </Text>
           ) : null}
           {attachments.length > 0 ? (
@@ -150,6 +157,8 @@ const styles = StyleSheet.create((theme, rt) => ({
     color: theme.desktop.foreground,
   },
   reference: { marginHorizontal: theme.space.xs },
+  /** The goal chip starts the message, so it has space only after it. */
+  goal: { marginRight: theme.space.sm },
   // A 16-point placeholder aligns the 24-point capsule with the 15-point message text.
   // Follow half the 12-point label growth when the system text size changes.
   referenceWithText: { height: 16 + 6 * (rt.fontScale - 1) },

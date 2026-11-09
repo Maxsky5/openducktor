@@ -11,7 +11,8 @@ import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
 } from "../../ports/agent-session-live-adapter-port";
-import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import { createClaudeGoalProjection } from "./claude-live-session-goals";
 import { activityForSummary } from "./claude-live-session-activity";
 import {
   inputActivity,
@@ -57,6 +58,7 @@ export const createClaudeLiveSessionState = () => {
   const snapshotsByRef = new Map<string, AgentSessionLiveSnapshot>();
   const contextRevisionsByRef = new Map<string, number>();
   const nativeActivityByRef = new Map<string, AgentSessionLiveSnapshot["activity"]>();
+  const goals = createClaudeGoalProjection();
   const retiredSessionKeys = new Set<string>();
   const subagentOwnersByRef = new Map<
     string,
@@ -74,10 +76,12 @@ export const createClaudeLiveSessionState = () => {
       const key = refKey(current.ref);
       if (visited.has(key)) break;
       visited.add(key);
-      const parsed = cloneSnapshot({
-        ...current,
-        activity: inputActivity(current, snapshotsByRef.values(), nativeActivityByRef.get(key)),
-      });
+      const activity = inputActivity(
+        current,
+        snapshotsByRef.values(),
+        nativeActivityByRef.get(key),
+      );
+      const parsed = cloneSnapshot(goals.project(key, { ...current, activity }));
       const previous = snapshotsByRef.get(key);
       snapshotsByRef.set(key, parsed);
       if (!previous || JSON.stringify(previous) !== JSON.stringify(parsed)) {
@@ -123,6 +127,7 @@ export const createClaudeLiveSessionState = () => {
   const removeSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
     const key = refKey(ref);
     retiredSessionKeys.add(key);
+    goals.set(key, null);
     contextRevisionsByRef.delete(key);
     nativeActivityByRef.delete(key);
     subagentOwnersByRef.delete(key);
@@ -228,7 +233,7 @@ export const createClaudeLiveSessionState = () => {
 
   const applyEvent = (
     session: ClaudeSessionContext,
-    event: ClaudeAgentSdkEvent,
+    event: ClaudeLiveEvent,
   ): AgentSessionLiveAdapterChange[] => {
     if (event.type === "runtime_slash_commands_changed") {
       return [
@@ -243,6 +248,14 @@ export const createClaudeLiveSessionState = () => {
     }
     const ref = eventRef(session, event);
     const key = refKey(ref);
+    if (event.type === "session_goal_updated") {
+      // A restore reads the goal before the resume summary admits the session again.
+      // A restored goal can arrive before the resume ends the retirement, so the goal stays.
+      goals.set(key, event.goal, event.clearing === true);
+      if (retiredSessionKeys.has(key)) return [];
+      const current = readSnapshot(ref);
+      return current ? commitSnapshot(current) : [];
+    }
     if (retiredSessionKeys.has(refKey(rootRef(session))) || retiredSessionKeys.has(key)) {
       return [];
     }
@@ -421,6 +434,7 @@ export const createClaudeLiveSessionState = () => {
     release: (): AgentSessionLiveRef[] => {
       const refs = [...snapshotsByRef.values()].map((snapshot) => snapshot.ref);
       snapshotsByRef.clear();
+      goals.clear();
       contextRevisionsByRef.clear();
       nativeActivityByRef.clear();
       retiredSessionKeys.clear();

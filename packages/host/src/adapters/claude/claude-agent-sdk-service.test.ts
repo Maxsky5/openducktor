@@ -289,6 +289,7 @@ describe("createClaudeAgentSdkService", () => {
           externalSessionId: "session-1",
           options: { resume: "session-1" },
           reconcileTitle: true,
+          restoreGoal: true,
           startedMessage: "Resumed session",
           title: "Fairnest",
         });
@@ -782,6 +783,7 @@ describe("createClaudeAgentSdkService", () => {
     const store = createClaudeAgentSdkSessionStore();
     const service = createService(session, undefined, store);
     const consumption = consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore: store,
       emit: () => {},

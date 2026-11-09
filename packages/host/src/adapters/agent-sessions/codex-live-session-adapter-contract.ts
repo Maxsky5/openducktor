@@ -26,6 +26,7 @@ import type {
 
 export type CodexSessionController = Pick<
   CodexAppServerAdapter,
+  | "generateText"
   | "listSessionMetadataPage"
   | "openExistingSession"
   | "resolveSessionParent"
@@ -54,6 +55,8 @@ export type CodexSessionController = Pick<
   | "continueInterruptedTurn"
   | "forkSession"
   | "sendUserMessage"
+  | "controlGoal"
+  | "pauseGoalForStop"
   | "updateSessionModel"
   | "updateSessionTitle"
   | "stopSession"

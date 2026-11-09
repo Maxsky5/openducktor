@@ -2,11 +2,21 @@ import type {
   AcceptedAgentUserMessage,
   AgentSessionLiveEnvelope,
   AgentSessionLiveRef,
+  AgentSessionUserMessagePart,
 } from "@openducktor/contracts";
 import { agentSessionRefKey, BLOCKED_ON_INPUT_REASON } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
-import { type QueuePause, SESSION_LEFT_RUNTIME_REASON } from "./agent-message-queue-model";
-import { hasForegroundTurn, hasBlockingInput } from "./session-foreground-readiness";
+import {
+  type MessageQueue,
+  type QueuePause,
+  SESSION_LEFT_RUNTIME_REASON,
+} from "./agent-message-queue-model";
+import { classifySessionMessageSystemCommand } from "./session-message-system-command";
+import {
+  hasBlockingInput,
+  hasForegroundTurn,
+  isGoalDrivingWork,
+} from "./session-foreground-readiness";
 
 /** A live change that matters to the queue of its session. */
 export type QueueSignal =
@@ -25,13 +35,33 @@ export type QueueSignal =
  */
 export const createSessionConditions = () => {
   const working = new Set<string>();
+  /**
+   * An active goal drives the work, so the runtime starts each next turn by itself. A queued
+   * message waits until the goal stops, and a goal command applies at once.
+   */
+  const goalDriven = new Set<string>();
   const blockedOnInput = new Set<string>();
   const leftRuntime = new Set<string>();
   const unavailable = new Set<string>();
   const canDeliver = (key: string) =>
-    !working.has(key) && !blockedOnInput.has(key) && !leftRuntime.has(key) && !unavailable.has(key);
+    !working.has(key) &&
+    !goalDriven.has(key) &&
+    !blockedOnInput.has(key) &&
+    !leftRuntime.has(key) &&
+    !unavailable.has(key);
   return {
     isWorking: (sessionKey: string) => working.has(sessionKey),
+    /**
+     * Tells if a new message waits in the queue. While a goal drives the work, a goal command
+     * applies at once, like a goal row action, and any other message waits until the goal stops.
+     */
+    holdsInQueue: (
+      queue: Pick<MessageQueue, "key" | "entries" | "sendingNewTurn">,
+      parts: AgentSessionUserMessagePart[],
+    ): boolean =>
+      goalDriven.has(queue.key)
+        ? classifySessionMessageSystemCommand(parts).kind !== "goal"
+        : queue.entries.length > 0 || queue.sendingNewTurn,
     canDeliver,
     isBlockedOnInput: (sessionKey: string) => blockedOnInput.has(sessionKey),
     /** Applies one live change and returns what it means for the queue of its session. */
@@ -44,6 +74,8 @@ export const createSessionConditions = () => {
         else unavailable.delete(key);
         if (hasForegroundTurn(envelope.session)) working.add(key);
         else working.delete(key);
+        if (isGoalDrivingWork(envelope.session)) goalDriven.add(key);
+        else goalDriven.delete(key);
         if (hasBlockingInput(envelope.session)) {
           blockedOnInput.add(key);
           return null;
@@ -59,6 +91,7 @@ export const createSessionConditions = () => {
       if (left) {
         const key = agentSessionRefKey(left);
         working.delete(key);
+        goalDriven.delete(key);
         if (envelope.type === "session_removed") blockedOnInput.delete(key);
         leftRuntime.add(key);
         return { kind: "pause", ref: left, pause: { cause: "left_runtime" } };

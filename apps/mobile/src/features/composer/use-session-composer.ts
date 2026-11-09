@@ -1,3 +1,4 @@
+import { useSessionGoalRow } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -22,7 +23,7 @@ import {
   findRunningTurnMessage,
 } from "@openducktor/frontend-core/sessions/model-selection/model-selection-options";
 import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
-import { hasForegroundTurn } from "@openducktor/frontend-core/sessions/send/agent-chat-steering";
+import { hasOngoingWork } from "@openducktor/frontend-core/sessions/send/agent-chat-steering";
 import {
   useAgentChatSend,
   type AgentChatSendTarget,
@@ -212,6 +213,11 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     sendAgentMessage: operations.sendAgentMessage,
     target: sendTarget,
   });
+  const goalRow = useSessionGoalRow({
+    repoPath: target.repoPath,
+    identity,
+    runtimeDescriptor: descriptor,
+  });
   const inlineCommentOwner = useMemo(() => inlineCommentOwnerOf(target), [target]);
   const reviewComments = useReviewCommentComposer({
     owner: inlineCommentOwner,
@@ -309,14 +315,16 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     fieldText,
     primaryMode,
     secondaryMode: secondaryModeFor(
-      hasForegroundTurn({
+      hasOngoingWork({
         foregroundTurnActive: facts.foregroundTurnActive,
         isSessionWorking: facts.isWorking,
+        goalRow,
       }),
       primaryMode,
     ),
     submit,
     delivery,
+    goalRow,
     promptInput,
     reviewComments,
     /** The task or chat whose Changes hold the review comments of this composer. */

@@ -1,3 +1,4 @@
+import { createSessionGoalRules } from "../../application/agent-sessions/session-goal-rules";
 import { createWorkflowReads } from "../../application/tasks/workflow-reads";
 import { agentSessionRefKey } from "@openducktor/core";
 import { createTaskWorkflowSessionFork } from "../../application/agent-sessions/task-workflow-session-fork";
@@ -184,6 +185,10 @@ export const createNodeTaskSessionServices = ({
     reportFailure: (error) =>
       eventServiceInput.onBackgroundFailure(toHostOperationError(error, "approval-policy.observe")),
   });
+  const goalRules = createSessionGoalRules({
+    definitions: taskServiceInput.runtimeDefinitionsService,
+    registry: taskServiceInput.runtimeRegistry,
+  });
   const commandDeps: Omit<
     Parameters<typeof createAgentSessionCommandService>[0],
     "tasks" | "runtime"
@@ -194,6 +199,7 @@ export const createNodeTaskSessionServices = ({
     readSessionRootRefs,
     turnPreparation,
     approvalPolicy,
+    goalRules,
     taskReader: taskServiceInput.taskStore,
     taskWorkflows: taskServiceInput.taskWorkflows,
     persistTaskModel: (input) =>

@@ -86,7 +86,8 @@ const createLiveSessions = (existingPaths: ReadonlySet<string>) => {
       },
     ],
   ]);
-  const service: Pick<AgentSessionLiveStateService, "list" | "releaseSession"> = {
+  const service: Pick<AgentSessionLiveStateService, "list" | "releaseSession" | "stopSession"> = {
+    stopSession: () => Effect.die(new Error("No session in this test has a goal.")),
     list: (input) =>
       Effect.sync(() =>
         [...snapshots.values()].filter((snapshot) => snapshot.ref.repoPath === input.repoPath),

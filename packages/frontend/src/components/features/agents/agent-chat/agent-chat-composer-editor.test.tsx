@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { GOAL_SLASH_COMMAND, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentFileSearchResult } from "@openducktor/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useReducer } from "react";
@@ -2007,6 +2007,44 @@ describe("AgentChatComposerEditor", () => {
       },
       { timeout: COMPOSER_WAIT_TIMEOUT_MS },
     );
+  });
+
+  test("keeps the goal chip and the caret in place while text after it changes", async () => {
+    const rendered = render(
+      <EditorHarness
+        slashCommands={COMMANDS}
+        slashCommandsError={null}
+        initialDraft={{
+          segments: [
+            createTextSegment(""),
+            createSlashCommandSegment({ ...GOAL_SLASH_COMMAND, hints: [] }),
+            createTextSegment(" ship"),
+          ],
+        }}
+      />,
+    );
+    await expectComposerText(rendered.container, "Goal ship");
+    const chip = rendered.container.querySelector("[data-chip-segment-id]");
+    expect(chip?.textContent).toBe("Goal");
+
+    const trailing = getLastTextSegment(rendered.container);
+    if (!(trailing instanceof HTMLElement)) throw new Error("Expected trailing text segment");
+    renderMockEditableTextContent.mockClear();
+    trailing.textContent = " ship it";
+    const textNode = trailing.firstChild;
+    if (textNode) {
+      const range = document.createRange();
+      range.setStart(textNode, trailing.textContent.length);
+      range.collapse(true);
+      globalThis.getSelection()?.removeAllRanges();
+      globalThis.getSelection()?.addRange(range);
+    }
+    fireEvent.input(trailing);
+
+    await expectComposerText(rendered.container, "Goal ship it");
+    // A rebuilt editor moves the visible caret to the line start.
+    expect(rendered.container.querySelector("[data-chip-segment-id]")).toBe(chip);
+    expect(renderMockEditableTextContent).not.toHaveBeenCalled();
   });
 
   test("does not replace the trailing text segment after typing after a slash chip", async () => {

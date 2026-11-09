@@ -153,6 +153,52 @@ describe("agent message delivery: submit and drain", () => {
     expect(harness.service.listQueues("/repo")).toEqual([]);
   });
 
+  test("delivers the next message at once after a command that ends no turn", async () => {
+    const harness = createHarness();
+    harness.outcomes.push("busy");
+    await harness.submit("first");
+    await harness.submitGoal("pause");
+    await harness.submit("second");
+
+    harness.idle();
+    await harness.runBackground();
+    expect(harness.sentTexts()).toEqual(["first:new_turn", "first:new_turn"]);
+
+    harness.outcomes.push("command_without_turn");
+    harness.idle();
+    await harness.runBackground();
+
+    // The command ends no turn, so its acceptance releases "second" without a turn end.
+    expect(harness.sentTexts()).toEqual([
+      "first:new_turn",
+      "first:new_turn",
+      "/goal:new_turn",
+      "second:new_turn",
+    ]);
+    expect(harness.service.listQueues("/repo")).toEqual([]);
+  });
+
+  test("holds messages while a goal drives the work, but applies a goal command at once", async () => {
+    const harness = createHarness();
+    const goal = { objective: "Ship", status: "active" } as const;
+    harness.upsertSession({ activity: "running", foregroundTurnActive: true, goal });
+    await harness.submit("first");
+    // Between goal turns, the runtime starts the next goal turn by itself.
+    harness.upsertSession({ activity: "running", foregroundTurnActive: false, goal });
+    await harness.runBackground();
+    expect(harness.sentTexts()).toEqual([]);
+    expect(harness.queueTexts()).toEqual(["first:queued"]);
+
+    harness.outcomes.push("command_without_turn");
+    await harness.submitGoal("clear");
+    expect(harness.sentTexts()).toEqual(["/goal:new_turn"]);
+
+    // The goal stops, so the held message goes out.
+    harness.upsertSession({ activity: "idle" });
+    await harness.runBackground();
+    expect(harness.sentTexts()).toEqual(["/goal:new_turn", "first:new_turn"]);
+  });
+
   test("keeps the first message queued while the runtime still reports work", async () => {
     const harness = createHarness();
     harness.outcomes.push("busy", "busy");

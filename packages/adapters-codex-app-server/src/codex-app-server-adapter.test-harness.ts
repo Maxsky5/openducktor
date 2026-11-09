@@ -6,6 +6,7 @@ import {
   type CodexAppServerProtocolMessage,
   type CodexAppServerRequestResult,
   type CodexAppServerThread,
+  type CodexAppServerThreadGoal,
   type CodexAppServerTurn,
   type CodexAppServerTurnStartResult,
   type CodexEffectivePolicy,
@@ -149,6 +150,26 @@ export const createRuntimeStreamSubscription = () => {
     subscriptionCount: () => subscriptions.length,
   };
 };
+
+export const codexGoalFixture = (
+  overrides: Partial<CodexAppServerThreadGoal> = {},
+): CodexAppServerThreadGoal => ({
+  threadId: "thread/start-runtime-live",
+  objective: "Ship the release",
+  status: "active",
+  tokenBudget: null,
+  tokensUsed: 0,
+  timeUsedSeconds: 0,
+  createdAt: 1_778_112_000,
+  updatedAt: 1_778_112_000,
+  ...overrides,
+});
+
+/** A JSON-RPC error answer of Codex, as the host transport reports it. */
+export const codexRpcError = (message: string): Error =>
+  new Error(`Codex app-server request failed for runtime runtime-live: ${message}`, {
+    cause: { code: -32600, message },
+  });
 
 export const createDeferred = <T>(): PromiseWithResolvers<T> => Promise.withResolvers<T>();
 
@@ -396,6 +417,13 @@ export class RecordingTransport implements CodexJsonRpcTransport {
   readonly turnStartDeferred = createDeferred<CodexAppServerTurnStartResult | null>();
   firstTurnStatus: "completed" | "inProgress" | "interrupted" | null = "completed";
   historyMode: "paginated" | "legacy" = "paginated";
+  /** The failure of the next goal requests, like a JSON-RPC error answer of Codex. */
+  goalError: Error | null = null;
+  /** Runs before a goal request answers, like a goal update that Codex sends first. */
+  beforeGoalAnswer: (() => Promise<void>) | null = null;
+  beforeSettingsAnswer: (() => Promise<void>) | null = null;
+  beforeTurnStartAnswer: (() => Promise<void>) | null = null;
+  unsubscribeError: Error | null = null;
   private turnStartCount = 0;
 
   constructor(
@@ -461,11 +489,31 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           ? { ...result, thread: codexThreadFixture({ id: threadId, status: { type: "idle" } }) }
           : result;
       }
+      case "thread/settings/update":
+        await this.beforeSettingsAnswer?.();
+        return {};
       case "thread/name/set":
       case "thread/compact/start":
       case "turn/interrupt":
         return {};
+      case "thread/unsubscribe":
+        if (this.unsubscribeError) throw this.unsubscribeError;
+        return { status: "unsubscribed" };
+      case "thread/goal/set":
+        if (this.goalError) throw this.goalError;
+        await this.beforeGoalAnswer?.();
+        return {
+          goal: codexGoalFixture({
+            threadId: params.threadId,
+            objective: params.objective ?? "Ship the release",
+            status: params.status ?? "active",
+          }),
+        };
+      case "thread/goal/clear":
+        if (this.goalError) throw this.goalError;
+        return { cleared: true };
       case "turn/start": {
+        await this.beforeTurnStartAnswer?.();
         if (!isPlainObject(params) || !Array.isArray(params.input)) {
           throw new Error("Invalid request: missing field `type`");
         }

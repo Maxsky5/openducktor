@@ -108,6 +108,26 @@ export const requireOpenCodeEventSession = ({
   return { snapshot, runtimeActivity: "idle" as const };
 };
 
+/** The session and its descendants, parents before children. */
+export const openCodeSessionTreeRefs = (
+  sessions: Iterable<OpenCodeLiveSession>,
+  ref: AgentSessionLiveRef,
+): AgentSessionLiveRef[] => {
+  const all = [...sessions];
+  const refs = [toSessionRef(ref)];
+  for (let index = 0; index < refs.length; index += 1) {
+    const parent = refs[index];
+    if (!parent) continue;
+    for (const session of all)
+      if (
+        session.snapshot.parentExternalSessionId === parent.externalSessionId &&
+        !refs.some((candidate) => refsEqual(candidate, session.snapshot.ref))
+      )
+        refs.push(toSessionRef(session.snapshot.ref));
+  }
+  return refs;
+};
+
 export const openCodeLiveSnapshotsEqual = (
   left: AgentSessionLiveSnapshot,
   right: AgentSessionLiveSnapshot,

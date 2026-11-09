@@ -16,7 +16,7 @@ import {
 import { formatOdtToolArgs } from "./prompt-tool-args";
 import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
 
-export type PromptPurpose = "system" | "kickoff" | "message" | "permission";
+export type PromptPurpose = "system" | "kickoff" | "message" | "permission" | "goal";
 
 /** A prompt that a workflow declares. Its ID is unique within the workflow. */
 export type PromptTemplate = {
@@ -108,6 +108,14 @@ export type KickoffPromptInput = {
   overrides?: RepoPromptOverrides | undefined;
 };
 
+/** The instructions that tell a model how to write the goal of a Goal mode launch. */
+export type GoalPromptInput = {
+  launchActionId: string;
+  task: PromptTaskContext;
+  humanFeedback?: string | undefined;
+  overrides?: RepoPromptOverrides | undefined;
+};
+
 export type MessagePromptInput = {
   launchActionId: string;
   /** The role of the session. The core pull request launch needs it. */
@@ -132,6 +140,10 @@ export type TaskPrompts = {
   systemPrompt(input: SystemPromptInput): BuiltAgentPrompt;
   kickoffPrompt(input: KickoffPromptInput): BuiltAgentPrompt;
   messagePrompt(input: MessagePromptInput): BuiltAgentPrompt;
+  /** The workflow provides the goal prompt, so a launch action that declares `goal` offers Goal mode. */
+  readonly hasGoalPrompt: boolean;
+  /** The goal prompt of the workflow, which tells a model how to write the goal of a launch. */
+  goalPrompt(input: GoalPromptInput): BuiltAgentPrompt;
   readOnlyRejection(input: { role: string; overrides?: RepoPromptOverrides | undefined }): string;
   /** The enabled repository override wins over the enabled global override. */
   mergeOverrides(input: MergePromptOverridesInput): RepoPromptOverrides;
@@ -159,6 +171,13 @@ const SYSTEM_PROMPT_IDS = [
 const BASE_PROMPT_IDS = new Set<string>(Object.values(WORKFLOW_PROMPT_IDS));
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
+
+/** Fills each `{{placeholder}}` of a template. A placeholder without a value becomes empty. */
+export const fillPromptPlaceholders = (
+  template: string,
+  values: ReadonlyMap<string, string>,
+): string =>
+  template.replace(PLACEHOLDER_PATTERN, (_match, token: string) => values.get(token) ?? "");
 const OVERRIDE_FIX = "Edit or disable this prompt override in Settings.";
 
 const compact = (value: string | undefined): string => {
@@ -239,6 +258,8 @@ const checkTemplates = (
   for (const [launchActionId, launch] of launchTemplates) {
     requireTemplate(launch.templateId, launch.kind, `launch action "${launchActionId}"`);
   }
+  if (workflowTemplatesById.has(WORKFLOW_PROMPT_IDS.goal))
+    requireTemplate(WORKFLOW_PROMPT_IDS.goal, "goal", "Goal mode");
 };
 
 export const createTaskPrompts = (
@@ -434,10 +455,7 @@ export const createTaskPrompts = (
       hasStaleOverride: Boolean(
         override && override.baseVersion !== definitionTemplate.builtinVersion,
       ),
-      content: text.replace(
-        PLACEHOLDER_PATTERN,
-        (_match, token: string) => values.get(token) ?? "",
-      ),
+      content: fillPromptPlaceholders(text, values),
     };
     if (override) resolved.overrideBaseVersion = override.baseVersion;
     return resolved;
@@ -543,6 +561,16 @@ export const createTaskPrompts = (
             ? requirePullRequestTarget(launch.templateId, targetBranch)
             : undefined,
         }),
+        overrides,
+      );
+    },
+    hasGoalPrompt: workflowTemplatesById.has(WORKFLOW_PROMPT_IDS.goal),
+    goalPrompt: ({ launchActionId, task, humanFeedback, overrides }) => {
+      if (!workflowTemplatesById.has(WORKFLOW_PROMPT_IDS.goal))
+        throw new Error(`Task workflow "${definition.id}" has no goal prompt.`);
+      return buildPrompt(
+        [workflowKey(WORKFLOW_PROMPT_IDS.goal)],
+        placeholderValues({ role: roleOfLaunch(launchActionId, undefined), task, humanFeedback }),
         overrides,
       );
     },

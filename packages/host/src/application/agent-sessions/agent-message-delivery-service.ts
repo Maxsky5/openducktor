@@ -52,6 +52,7 @@ import {
 } from "./agent-message-session-conditions";
 import { createQueueRegistry } from "./agent-message-queue-registry";
 import {
+  endsWithoutTurn,
   type SendOutcome,
   sendOutcome,
   reconcileAcceptedOutcome,
@@ -164,10 +165,13 @@ export const createAgentMessageDeliveryService = (
     if (conditions.canDeliver(queue.key)) scheduleDrain(queue.key);
   };
 
-  /** Releases a turn that completed during the send. A stale count only gets a busy refusal. */
-  const settle = (queue: MessageQueue, completedTurnsBefore: number): void => {
+  /**
+   * Releases a turn that completed during the send, or an accepted send that ends no turn. A stale
+   * count only gets a busy refusal.
+   */
+  const settle = (queue: MessageQueue, completedTurnsBefore: number, endedNoTurn = false): void => {
     forgetIfUnused(queue);
-    if (queue.completedTurns !== completedTurnsBefore) scheduleDrain(queue.key);
+    if (endedNoTurn || queue.completedTurns !== completedTurnsBefore) scheduleDrain(queue.key);
   };
 
   /** Pauses queued messages and in-flight sends. The first cause stays. */
@@ -222,7 +226,11 @@ export const createAgentMessageDeliveryService = (
       else if (outcome.kind === "busy") head.state = "queued";
       else failEntry(queue, head, outcome);
       publish(queue);
-      settle(queue, completedTurns);
+      settle(
+        queue,
+        completedTurns,
+        outcome.kind === "accepted" && endsWithoutTurn(head.content.parts, outcome),
+      );
     });
 
   /** Retains an uncertain message at the front of its queue and blocks repeat delivery. */
@@ -258,7 +266,7 @@ export const createAgentMessageDeliveryService = (
   const submitDefault = (content: SubmittedContent, options?: AgentSessionSendOptions) =>
     Effect.gen(function* () {
       const queue = queueFor(content);
-      if (queue.entries.length > 0 || queue.sendingNewTurn) {
+      if (conditions.holdsInQueue(queue, content.parts)) {
         return yield* enqueue(queue, content, "last", options);
       }
       const completedTurns = queue.completedTurns;
@@ -267,7 +275,7 @@ export const createAgentMessageDeliveryService = (
         case "accepted":
           // A message that the agent received ends a pause that has no messages left.
           if (endPauseIfEmpty(queue)) publish(queue);
-          settle(queue, completedTurns);
+          settle(queue, completedTurns, endsWithoutTurn(content.parts, outcome));
           return { kind: "accepted", acceptedMessage: outcome.acceptedMessage } as const;
         case "busy": {
           // This message came before any message that queued while it was in flight.

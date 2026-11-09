@@ -1,9 +1,16 @@
-import { supportsTaskTargetBranchSelection } from "@openducktor/workflows";
+import { useQueryClient } from "@tanstack/react-query";
+import { repoDefaultModelSelectionFor } from "../session-start-selection";
+import {
+  GOAL_GENERATION_NEEDS_DEFAULT_MODEL,
+  generateSessionStartGoal,
+} from "./session-start-goal-generation";
+import { launchGoalObjective, supportsTaskTargetBranchSelection } from "@openducktor/workflows";
 import type { GitBranch, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentDeliveryAvailability, AgentModelSelection } from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
-import type { SessionStartModalModel } from "./session-start-modal-model";
+import type { SessionStartGoalMode, SessionStartModalModel } from "./session-start-modal-model";
+import { useRuntimeGoalAvailability } from "../goals/use-runtime-goal-availability";
 import { findRuntimeDefinition } from "../../lib/agent-runtime";
 import { errorMessage } from "../../lib/errors";
 import {
@@ -36,7 +43,10 @@ type SessionStartModalConfirmPayload = Exclude<
 
 type SessionStartDecisionInput = Omit<SessionStartModalConfirmPayload, "runInBackground">;
 
-type LaunchFields = Pick<SessionStartModalDecision, "targetBranch" | "kickoffPrompt">;
+type LaunchFields = Pick<
+  SessionStartModalDecision,
+  "targetBranch" | "kickoffPrompt" | "goalObjective"
+>;
 
 type SessionStartDecisionRequestContext = Pick<
   SessionStartModalOpenRequest,
@@ -86,6 +96,7 @@ export function useSessionStartModalRunner({
   onBackgroundTransfer?: ((attemptId: string) => void) | undefined;
 }): SessionStartModalRunnerResult {
   const { feedback, startupAttempts } = useClientConnection();
+  const queryClient = useQueryClient();
   const scopeRef = useRef(scopeKey);
   const pendingRunRef = useRef<PendingModalRun | null>(null);
   const startupAttemptId =
@@ -145,6 +156,52 @@ export function useSessionStartModalRunner({
       kickoff: intent?.kickoff,
       selectedTargetBranch,
     });
+
+  const goalRuntimeKind =
+    selectedStartMode === "reuse"
+      ? (existingSessionOptions.find((option) => option.value === selectedSourceSessionValue)
+          ?.sourceSession.runtimeKind ?? null)
+      : selectedRuntimeKind;
+  const goalAvailability = useRuntimeGoalAvailability(goalRuntimeKind);
+  const goalMode = useMemo((): SessionStartGoalMode | undefined => {
+    const task = intent?.kickoff?.task;
+    // Goal mode needs the goal prompt of the workflow.
+    if (
+      !intent ||
+      !task ||
+      intent.postStartAction === "none" ||
+      !intent.taskWorkflow.prompts.hasGoalPrompt
+    )
+      return undefined;
+    const defaultObjective = launchGoalObjective(
+      intent.taskWorkflow.launchAction(intent.launchActionId, intent.role),
+      task,
+      intent.kickoff?.request.humanFeedback,
+    );
+    if (defaultObjective === undefined) return undefined;
+    const model = repoDefaultModelSelectionFor(repoSettings);
+    return {
+      defaultObjective,
+      generation:
+        model && workspaceId && workspaceRepoPath
+          ? {
+              kind: "available",
+              run: () =>
+                generateSessionStartGoal({
+                  queryClient,
+                  workspace: { workspaceId, repoPath: workspaceRepoPath },
+                  task,
+                  taskWorkflow: intent.taskWorkflow,
+                  launchActionId: intent.launchActionId,
+                  humanFeedback: intent.kickoff?.request.humanFeedback,
+                  defaultObjective,
+                  model,
+                }),
+            }
+          : { kind: "unavailable", reason: GOAL_GENERATION_NEEDS_DEFAULT_MODEL },
+      unavailableReason: goalModeUnavailableReason(goalAvailability),
+    };
+  }, [goalAvailability, intent, queryClient, repoSettings, workspaceId, workspaceRepoPath]);
 
   const handleRetryRuntimeDefinitions = useCallback((): void => {
     void retryRuntimeDefinitions().catch((error) => {
@@ -437,6 +494,7 @@ export function useSessionStartModalRunner({
       isKickoffPromptLoading,
       kickoffPromptError,
       onRetryKickoffPrompt,
+      goalMode,
       title: intent.title,
       description:
         intent.description ??
@@ -492,6 +550,7 @@ export function useSessionStartModalRunner({
       onConfirm: confirmModal,
     };
   }, [
+    goalMode,
     kickoffPrompt,
     isKickoffPromptLoading,
     kickoffPromptError,
@@ -612,10 +671,20 @@ export const requireSourceSessionRuntimeKind = (
   throw new Error("Reusable session is missing a runtime kind.");
 };
 
+/** Why the selected runtime cannot use Goal mode, or null. Without a runtime, none is chosen. */
+const goalModeUnavailableReason = (
+  availability: AgentDeliveryAvailability | null,
+): string | null => {
+  if (availability === null) return "Choose a model to use Goal mode.";
+  if (availability.available) return null;
+  return availability.reason;
+};
+
 const buildLaunchFields = (input: SessionStartDecisionInput): LaunchFields => {
   const fields: LaunchFields = {};
   if (input.targetBranch) fields.targetBranch = targetBranchFromSelection(input.targetBranch);
   if (input.kickoffPrompt !== undefined) fields.kickoffPrompt = input.kickoffPrompt;
+  if (input.goalObjective !== undefined) fields.goalObjective = input.goalObjective;
   return fields;
 };
 

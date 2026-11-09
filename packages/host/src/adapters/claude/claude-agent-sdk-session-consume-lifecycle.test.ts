@@ -40,6 +40,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const session = createClaudeSession({ query: open.query });
     sessionStore.set(session);
     const consumption = consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       emit,
@@ -85,6 +86,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const session = createClaudeSession({ query });
     sessionStore.set(session);
     const consumption = consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       emit: () => {},
@@ -129,6 +131,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const sessionStore = createClaudeAgentSdkSessionStore({ emit });
     const consume = (target: typeof session) =>
       consumeClaudeSession({
+        emitGoal: () => {},
         session: target,
         sessionStore,
         emit,
@@ -163,6 +166,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sessionStore.set(session);
 
       const failure = await consumeClaudeSession({
+        emitGoal: () => {},
         session,
         sessionStore,
         now: () => "2026-06-25T20:00:00.000Z",
@@ -217,6 +221,7 @@ describe("consumeClaudeSession lifecycle", () => {
     });
     sessionStore.set(session);
     const consumption = consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -270,6 +275,7 @@ describe("consumeClaudeSession lifecycle", () => {
     });
     sessionStore.set(session);
     const failure = await consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -317,6 +323,7 @@ describe("consumeClaudeSession lifecycle", () => {
     };
     sessionStore.set(session);
     const consumption = consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -371,6 +378,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     const consumePromise = consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -444,6 +452,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     const consumePromise = consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",
@@ -473,6 +482,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     await consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -503,6 +513,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     const consumption = consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -600,6 +611,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     const consumePromise = consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",
@@ -670,6 +682,7 @@ describe("consumeClaudeSession lifecycle", () => {
     };
 
     await consumeClaudeSession({
+      emitGoal: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",

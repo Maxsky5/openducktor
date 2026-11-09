@@ -13,6 +13,8 @@ export const buildModel = () => ({
   steerBlockedReason: null,
   runningTurnModel: null,
   messageQueue: null,
+  goalRow: null,
+  goalRowScope: null,
   draftScope: {
     key: "draft-1",
     persistence: null,

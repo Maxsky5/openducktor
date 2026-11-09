@@ -4,6 +4,7 @@ import { createCodexControlPolicyBinder } from "./codex-control-policy";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import { createCodexImageOperations } from "./codex-image-operations";
+import { createCodexTextGeneration } from "./codex-text-generation";
 import { createCodexImageSettlement } from "./codex-live-session-images";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
@@ -28,7 +29,6 @@ import {
 import type { HostError, HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type { CodexAppServerRespondInput } from "../../ports/codex-app-server-port";
-import { stopCodexSession } from "../codex/codex-session-stop";
 import type {
   CodexLiveSessionAdapterPreparer,
   CodexSessionController,
@@ -37,6 +37,7 @@ import type {
 } from "./codex-live-session-adapter-contract";
 import { createCodexLiveSessionEventHub } from "./codex-live-session-event-hub";
 import { createCodexControlRunner } from "./codex-live-session-control-runner";
+import { createCodexGoalControls } from "./codex-live-session-goals";
 import {
   publishAcceptedCodexMessage,
   refreshAfterAcceptedCodexMessage,
@@ -209,7 +210,12 @@ export const createCodexLiveSessionAdapterPreparer = ({
       const messageError = (operation: string, input: AgentSessionLiveRef) => (cause: unknown) =>
         toCodexMessageSendError(cause, toCodexLiveSessionRef(input)) ??
         sessionError(operation, input.externalSessionId)(cause);
-
+      const goals = createCodexGoalControls({
+        controller,
+        refreshProjection,
+        sessionError,
+        stopTarget: { codexAppServer, directoriesMatch, runtimeId: runtime.runtimeId },
+      });
       const queries = createRuntimeQueryAdapter(controller);
       const loadRuntimeCatalog: typeof queries.loadRuntimeCatalog = (input) => {
         projection.recordCatalogRepository(input.repoPath);
@@ -223,6 +229,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
           refreshProjection,
         ),
         queries: { ...queries, loadRuntimeCatalog },
+        textGeneration: createCodexTextGeneration(controller, runtime.runtimeId),
         ...createCodexImageOperations(controller, sessionError),
         supportsSessionControl: true,
         binding: projection.binding,
@@ -457,6 +464,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               publishAcceptedCodexMessage(value, toCodexLiveSessionRef(input), refreshProjection),
             ),
           ),
+        controlGoal: goals.controlGoal,
         updateSessionModel: (input) =>
           Effect.tryPromise({
             try: async () => {
@@ -478,13 +486,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
             () => controller.updateSessionTitle(input),
           ),
         stopSession: (input) =>
-          stopCodexSession({
-            codexAppServer,
-            directoriesMatch,
-            runtimeId: runtime.runtimeId,
-            externalSessionId: input.externalSessionId,
-            workingDirectory: input.workingDirectory,
-          }).pipe(Effect.flatMap(() => finishSession(input, "stop"))),
+          goals.stopTurn(input).pipe(Effect.flatMap(() => finishSession(input, "stop"))),
         releaseSession: (input) => finishSession(input, "release"),
       };
 

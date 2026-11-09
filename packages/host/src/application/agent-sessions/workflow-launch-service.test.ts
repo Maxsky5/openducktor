@@ -1331,3 +1331,109 @@ test("shutdown during a failed ownership save stops the native session once", as
   expect(h.sends).toHaveLength(0);
   expect(h.records).toHaveLength(0);
 });
+
+test("Goal mode sends the goal instead of the kickoff", async () => {
+  const h = await createLaunchHarness("codex");
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      instruction: { kind: "kickoff" },
+      goal: { objective: "Implement task task." },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "completed",
+    acceptedMessage: { type: "command_accepted", commandName: "goal" },
+  });
+  expect(h.sends).toEqual([]);
+  expect(h.goalCommands).toMatchObject([
+    { externalSessionId: "session-1", command: { kind: "set", objective: "Implement task task." } },
+  ]);
+});
+
+const goalReuseRequest = (
+  sourceSession: Omit<AgentSessionLiveRef, "repoPath">,
+): WorkflowLaunchRequest => ({
+  ...requestFor("codex"),
+  policy: {
+    kind: "manual",
+    actionId: "build_after_qa_rejected",
+    decision: { startMode: "reuse", sourceSession },
+  },
+  instruction: { kind: "kickoff" },
+  goal: { objective: "Fix the QA findings." },
+});
+
+test("Goal mode refuses to reuse a session during a turn that no goal drives", async () => {
+  const h = await createLaunchHarness("codex");
+  h.setTaskStatus("in_progress");
+  const source = h.addTaskSession("source", { live: true, working: true });
+  const result = await Effect.runPromise(h.service.launch(goalReuseRequest(source)));
+  expect(result.status).toBe("failed");
+  expect(JSON.stringify(result)).toContain(
+    "The selected session is working. Wait until the turn ends, or start a new session.",
+  );
+  expect(h.goalCommands).toEqual([]);
+});
+
+test("Goal mode reuses a session whose goal drives the running turn", async () => {
+  const h = await createLaunchHarness("codex");
+  h.setTaskStatus("in_progress");
+  const source = h.addTaskSession("source", { live: true, working: true });
+  h.live.get(agentSessionRefKey({ repoPath: "/repo", ...source }))!.goal = {
+    objective: "Ship the release.",
+    status: "active",
+  };
+  const result = await Effect.runPromise(h.service.launch(goalReuseRequest(source)));
+  expect(result).toMatchObject({ status: "completed", startMode: "reuse" });
+  expect(h.goalCommands).toMatchObject([
+    { command: { kind: "set", objective: "Fix the QA findings." } },
+  ]);
+});
+
+test.each([
+  {
+    name: "a launch action without Goal mode",
+    runtimeVersion: "9.9.9",
+    request: (): WorkflowLaunchRequest => ({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "build_rebase_conflict_resolution",
+        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+      },
+      instruction: { kind: "message", parts: [{ kind: "text", text: "Resolve it." }] },
+      goal: { objective: "Resolve it." },
+    }),
+    message: "does not offer Goal mode",
+  },
+  {
+    name: "a runtime version without goals",
+    runtimeVersion: "0.150.0",
+    request: (): WorkflowLaunchRequest => ({
+      ...requestFor("codex"),
+      instruction: { kind: "kickoff" },
+      goal: { objective: "Implement it." },
+    }),
+    message: "Goals need Codex 0.166.0 or later.",
+  },
+  {
+    name: "a custom first message",
+    runtimeVersion: "9.9.9",
+    request: (): WorkflowLaunchRequest => ({
+      ...requestFor("codex"),
+      goal: { objective: "Implement it." },
+    }),
+    message: "Goal mode replaces the first message.",
+  },
+])(
+  "Goal mode refuses $name before the session starts",
+  async ({ runtimeVersion, request, message }) => {
+    const h = await createLaunchHarness("codex", { runtimeVersion });
+    const result = await Effect.runPromise(h.service.launch(request()));
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result)).toContain(message);
+    expect(h.starts).toEqual([]);
+    expect(h.sends).toEqual([]);
+  },
+);

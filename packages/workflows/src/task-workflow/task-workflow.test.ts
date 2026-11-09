@@ -7,8 +7,10 @@ import {
   reviewTaskRoles,
 } from "../../test-support/review-task-workflow";
 import { BUILTIN_ROLES } from "../builtin/roles/roles";
+import { SPEC_PLAN_BUILD_DEFINITION } from "../builtin/spec-plan-build/definition";
 import { specPlanBuildWorkflow } from "../builtin/spec-plan-build/workflow";
 import type { TaskFacts } from "./task-input";
+import { launchGoalObjective } from "./launch-goal";
 import { createTaskWorkflow } from "./task-workflow";
 
 const review = createReviewTaskWorkflow();
@@ -21,6 +23,25 @@ const reviewTask = (overrides: Partial<TaskFacts> = {}): TaskFacts => ({
   ...overrides,
 });
 
+const REVIEW_GOAL_TEMPLATE = {
+  id: "workflow.goal",
+  purpose: "goal",
+  builtinVersion: 1,
+  template: "Write the goal of the review.",
+} as const;
+const reviewGoal = (defaultObjective: string) => ({ defaultObjective });
+
+const withGoalChange = (change: (definition: WorkflowDefinition) => void) => {
+  const definition = reviewTaskDefinition();
+  change(definition);
+  return () =>
+    createTaskWorkflow(
+      definition,
+      [...reviewTaskPromptTemplates, REVIEW_GOAL_TEMPLATE],
+      reviewTaskRoles,
+    );
+};
+
 const withChange = (change: (definition: WorkflowDefinition) => void) => {
   const definition = reviewTaskDefinition();
   change(definition);
@@ -28,6 +49,119 @@ const withChange = (change: (definition: WorkflowDefinition) => void) => {
 };
 
 describe("createTaskWorkflow", () => {
+  test("shows the goal prompt with the shared workflow prompts", () => {
+    const template = specPlanBuildWorkflow.prompts.templates.find(
+      ({ id }) => id === "workflow.goal",
+    );
+    expect(template?.purpose).toBe("goal");
+    expect(specPlanBuildWorkflow.prompts.hasGoalPrompt).toBe(true);
+    expect(specPlanBuildWorkflow.prompts.templateRoles("workflow.goal")).toEqual([]);
+  });
+
+  test("declares Goal mode only for the implementation and rework launches", () => {
+    const task = { id: "task-7", title: "Add goals" };
+    const goals = Object.fromEntries(
+      SPEC_PLAN_BUILD_DEFINITION.steps.flatMap((step) =>
+        step.kind === "agent"
+          ? step.launchActions.flatMap((launch) => {
+              const objective = launchGoalObjective(launch, task, "Rename the button.");
+              return objective === undefined ? [] : [[launch.id, objective]];
+            })
+          : [],
+      ),
+    );
+    expect(goals).toEqual({
+      build_implementation_start: [
+        'Implement task task-7 "Add goals" as its description, spec, and implementation plan define.',
+        "",
+        "The goal is met when all of these are true:",
+        "- Each requirement and acceptance criterion of the task works in the code.",
+        "- Every check that the repository instructions require passes.",
+        "- odt_apply_workflow_event with eventId build-completed succeeded.",
+        "",
+        "Use taskId task-7 for every task-bound odt_* tool call. Change only what the task needs. Stop and ask the user when the task conflicts with the code, or a check fails for a cause outside the task.",
+      ].join("\n"),
+      build_after_qa_rejected: expect.stringContaining(
+        'Resolve the latest QA rejection of task task-7 "Add goals".',
+      ),
+      build_after_human_request_changes: expect.stringContaining(
+        'Apply the changes that human review requested for task task-7 "Add goals":\n\nRename the button.\n\nThe goal is met',
+      ),
+    });
+  });
+
+  test("rejects a default goal with a placeholder other than the task ID and title", () => {
+    const create = withGoalChange((definition) => {
+      const step = definition.steps.find((candidate) => candidate.kind === "agent");
+      if (step?.kind !== "agent") throw new Error("The review workflow has no agent step.");
+      step.launchActions[0] = {
+        ...step.launchActions[0]!,
+        goal: reviewGoal("Finish {{task.description}}"),
+      };
+    });
+    expect(create).toThrow('uses placeholder "task.description"');
+  });
+
+  test("offers Goal mode only with a goal prompt of the workflow", () => {
+    const goalOn = (templates: "with goal prompt" | "without goal prompt") => {
+      const change = (definition: WorkflowDefinition) => {
+        const step = definition.steps.find((candidate) => candidate.kind === "agent");
+        if (step?.kind !== "agent") throw new Error("The review workflow has no agent step.");
+        step.launchActions[0] = { ...step.launchActions[0]!, goal: reviewGoal("Finish it.") };
+      };
+      return templates === "with goal prompt" ? withGoalChange(change) : withChange(change);
+    };
+    const withoutPrompt = goalOn("without goal prompt")();
+    expect(withoutPrompt.prompts.hasGoalPrompt).toBe(false);
+    expect(() =>
+      withoutPrompt.prompts.goalPrompt({
+        launchActionId: "any",
+        task: { taskId: "task-1", title: "Review" },
+      }),
+    ).toThrow("has no goal prompt");
+    const workflow = goalOn("with goal prompt")();
+    expect(workflow.prompts.hasGoalPrompt).toBe(true);
+    const launchId = workflow.definition.steps.flatMap((step) =>
+      step.kind === "agent" ? step.launchActions : [],
+    )[0]!.id;
+    expect(
+      workflow.prompts.goalPrompt({
+        launchActionId: launchId,
+        task: { taskId: "task-1", title: "Review" },
+      }).prompt,
+    ).toBe("Write the goal of the review.");
+    const goalTemplate = workflow.prompts.templates.find(({ id }) => id === "workflow.goal");
+    expect(goalTemplate?.purpose).toBe("goal");
+    expect(
+      workflow.prompts.goalPrompt({
+        launchActionId: launchId,
+        task: { taskId: "task-1", title: "Review" },
+        overrides: {
+          [goalTemplate!.key]: {
+            template: "Write a short goal for {{task.id}}.",
+            baseVersion: 1,
+            enabled: true,
+          },
+        },
+      }).prompt,
+    ).toBe("Write a short goal for task-1.");
+  });
+
+  test("accepts {{humanFeedback}} in a default goal only for a launch that collects feedback", () => {
+    const withFeedbackGoal = (context: "human_feedback" | undefined) =>
+      withGoalChange((definition) => {
+        const step = definition.steps.find((candidate) => candidate.kind === "agent");
+        if (step?.kind !== "agent") throw new Error("The review workflow has no agent step.");
+        step.launchActions[0] = {
+          ...step.launchActions[0]!,
+          context,
+          goal: reviewGoal("Apply {{humanFeedback}}"),
+        };
+      });
+    expect(withFeedbackGoal(undefined)).toThrow('uses placeholder "humanFeedback"');
+    expect(withFeedbackGoal("human_feedback")).not.toThrow();
+  });
+
   test("reads states, roles, artifacts, and issue types from the definition", () => {
     expect(review.issueTypes).toEqual(["feature", "bug"]);
     expect(review.detectsMerge("approval")).toBe(true);

@@ -3,8 +3,8 @@ import { withAlpha } from "@/theme/color-alpha";
 import type { AppTheme } from "@/theme/tokens";
 import type { IconName } from "@/ui/icon";
 
-/** The kinds of reference chip: the desktop file, skill, subagent, and Slash Command chips. */
-export type ReferenceChipKind = "file" | "skill" | "subagent" | "slash_command";
+/** The kinds of reference chip: the desktop file, skill, subagent, Slash Command, and goal chips. */
+export type ReferenceChipKind = "file" | "skill" | "subagent" | "slash_command" | "goal";
 
 /** The desktop file reference icon of each file kind. */
 const FILE_ICONS = {
@@ -30,6 +30,8 @@ export const referenceChipIcon = (
       return "bot";
     case "slash_command":
       return null;
+    case "goal":
+      return "target";
   }
 };
 
@@ -65,6 +67,12 @@ export const referenceChipColors = (theme: AppTheme, kind: ReferenceChipKind) =>
         backgroundColor: dark ? palette.amber600 : palette.amber300,
         borderColor: "transparent",
         color: desktop.secondaryForeground,
+      };
+    case "goal":
+      return {
+        backgroundColor: desktop.infoSurface,
+        borderColor: desktop.infoBorder,
+        color: desktop.infoSurfaceForeground,
       };
   }
 };

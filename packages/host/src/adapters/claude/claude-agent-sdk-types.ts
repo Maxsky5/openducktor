@@ -48,7 +48,7 @@ export type ClaudeMcpBridgeConnectionResolver = (
 export type CreateClaudeAgentSdkServiceInput = {
   claudeExecutablePath: string;
   launchPolicy: ClaudeLaunchPolicyPort;
-  emit?: (session: ClaudeSessionContext, event: ClaudeAgentSdkEvent) => void;
+  emit?: ClaudeLiveEventEmitter;
   fileSearch?: ClaudeWorkspaceFileSearch;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
@@ -63,7 +63,36 @@ export type CreateClaudeAgentSdkServiceInput = {
   randomId?: () => string;
 };
 
+/**
+ * A goal that Claude reports. No `end`: the goal is set, and the next message continues it.
+ * `met`: Claude met the goal. `failed`: Claude found it impossible. `stopped`: Claude ended it for
+ * another reason, such as an unrecoverable error.
+ */
+export type ClaudeNativeGoal = {
+  readonly objective: string;
+  readonly end?: "met" | "failed" | "stopped";
+};
+
+/**
+ * The adapter read a new goal state of the session. `null`: no goal. `clearing`: OpenDucktor sent
+ * `/goal clear`, and Claude has not replied yet.
+ */
+export type ClaudeGoalEvent = {
+  readonly type: "session_goal_updated";
+  readonly externalSessionId: string;
+  readonly timestamp: string;
+  readonly goal: ClaudeNativeGoal | null;
+  readonly clearing?: true;
+};
+
 export type ClaudeAgentSdkEvent = AgentEvent & { readonly statusUnavailable?: true };
+
+/** An event that the Claude service publishes to the live session adapter. */
+export type ClaudeLiveEvent = ClaudeAgentSdkEvent | ClaudeGoalEvent;
+export type ClaudeLiveEventEmitter = (
+  session: ClaudeSessionContext,
+  event: ClaudeLiveEvent,
+) => void;
 export type ClaudeToolInput = ClaudeProtocolObject;
 
 export type ClaudeAgentSdkEventEmitter = (
@@ -172,6 +201,10 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     pendingUserMessageAdmissions: Map<string, ClaudePendingUserMessageAdmission>;
     /** Steered messages that no turn has read yet, by message UUID. */
     unreadSteeredUserMessages: Map<string, ClaudeAcceptedUserMessage>;
+    /** The goal state that the adapter read. It exists after a restore or a goal command. */
+    goalTracking?: import("./claude-agent-sdk-goals").ClaudeGoalTracking;
+    /** The environment of the Claude process, which locates its transcript. */
+    transcriptEnvironment: NodeJS.ProcessEnv;
   };
 
 export type ClaudeSessionContext = Omit<ClaudeSession, "query">;

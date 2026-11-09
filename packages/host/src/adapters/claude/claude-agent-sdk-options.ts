@@ -1,3 +1,4 @@
+import { toClaudeEffort } from "./claude-effort";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -259,23 +260,7 @@ export const buildClaudeAgentSdkOptions = async ({
   if (model?.modelId) {
     options.model = model.modelId;
   }
-  if (model?.variant) {
-    switch (model.variant) {
-      case "low":
-      case "medium":
-      case "high":
-      case "xhigh":
-      case "max":
-        options.effort = model.variant;
-        break;
-      default:
-        throw new HostValidationError({
-          field: "model.variant",
-          message: `Claude Agent SDK does not support effort '${model.variant}'.`,
-          details: { model },
-        });
-    }
-  }
+  if (model?.variant) options.effort = toClaudeEffort(model.variant);
   if (model?.profileId) {
     options.agent = model.profileId;
   }

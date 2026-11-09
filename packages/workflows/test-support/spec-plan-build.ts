@@ -30,3 +30,6 @@ export const SPEC_PLAN_BUILD_PROMPT_OVERRIDE_KEYS: readonly string[] =
   specPlanBuildWorkflow.prompts.templates.map(({ key }) => key);
 
 export { BUILTIN_ROLE_IDS } from "../src/builtin/roles/ids";
+
+/** The reference of the current Spec, Plan, Build revision, as a new object. */
+export const specPlanBuildReference = () => ({ ...specPlanBuildWorkflow.reference });

@@ -69,6 +69,7 @@ const SPEC_PLAN_BUILD_PROMPT_IDS = [
   "messages.build_start",
   "messages.build_after_qa_rejection",
   "messages.build_requested_changes",
+  "workflow.goal",
   "messages.pull_request",
   "messages.qa_review",
   "messages.build_git_conflict",

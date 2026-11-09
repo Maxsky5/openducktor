@@ -1,14 +1,15 @@
 import {
+  GOAL_SLASH_COMMAND,
   isManualSessionCompactionSlashCommand,
-  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
   type ReusablePrompt,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import type {
-  AgentRuntimeCatalog,
-  AgentSlashCommand,
-  AgentSlashCommandCatalog,
-  RuntimeWorkingDirectoryRef,
+import {
+  type AgentRuntimeCatalog,
+  type AgentSlashCommand,
+  type AgentSlashCommandCatalog,
+  RESERVED_SYSTEM_SLASH_COMMAND_TRIGGERS,
+  type RuntimeWorkingDirectoryRef,
 } from "@openducktor/core";
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,33 +21,39 @@ import {
 import type { ChatComposerPromptInputRuntime } from "./chat-composer-prompt-input-runtime";
 import { useChatComposerRuntimeCatalogQuery } from "./use-chat-composer-runtime-catalog-query";
 
+/**
+ * Merges the menu commands. `/compact` comes from the runtime catalog and `/goal` from the
+ * composer, so `systemSlashCommands` holds OpenDucktor commands that no runtime catalog lists.
+ */
 export const mergeSlashCommands = (
   runtimeSlashCommands: AgentSlashCommand[],
   reusablePromptSlashCommands: AgentSlashCommand[],
+  systemSlashCommands: AgentSlashCommand[] = [],
 ): AgentSlashCommand[] => {
-  const reservedTrigger = MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger;
-  const systemCommands = runtimeSlashCommands.filter(isManualSessionCompactionSlashCommand);
-  const systemTriggers = new Set(systemCommands.map((command) => command.trigger.toLowerCase()));
+  const isReserved = (command: AgentSlashCommand) =>
+    RESERVED_SYSTEM_SLASH_COMMAND_TRIGGERS.has(command.trigger.toLowerCase());
+  const systemCommands = [
+    ...runtimeSlashCommands.filter(isManualSessionCompactionSlashCommand),
+    ...systemSlashCommands,
+  ];
   const reusablePromptTriggers = new Set(
     reusablePromptSlashCommands
-      .map((command) => command.trigger.toLowerCase())
-      .filter((trigger) => trigger !== reservedTrigger && !systemTriggers.has(trigger)),
+      .filter((command) => !isReserved(command))
+      .map((command) => command.trigger.toLowerCase()),
   );
   return [
     ...systemCommands,
     ...runtimeSlashCommands.filter(
       (command) =>
-        !isManualSessionCompactionSlashCommand(command) &&
-        command.trigger.toLowerCase() !== reservedTrigger &&
-        !systemTriggers.has(command.trigger.toLowerCase()) &&
-        !reusablePromptTriggers.has(command.trigger.toLowerCase()),
+        !isReserved(command) && !reusablePromptTriggers.has(command.trigger.toLowerCase()),
     ),
-    ...reusablePromptSlashCommands.filter(
-      (command) =>
-        command.trigger.toLowerCase() !== reservedTrigger &&
-        !systemTriggers.has(command.trigger.toLowerCase()),
-    ),
+    ...reusablePromptSlashCommands.filter((command) => !isReserved(command)),
   ];
+};
+
+const GOAL_COMMAND: AgentSlashCommand = {
+  ...GOAL_SLASH_COMMAND,
+  hints: [...GOAL_SLASH_COMMAND.hints],
 };
 
 export const filterSlashCommandsForComposerScope = (
@@ -64,11 +71,14 @@ export const useChatComposerSlashCommands = ({
   runtimeSupportsSlashCommands,
   reusablePrompts,
   loadRuntimeCatalog,
+  goalsAvailable,
 }: {
   promptInputRuntime: ChatComposerPromptInputRuntime;
   runtimeSupportsSlashCommands: boolean;
   reusablePrompts: ReusablePrompt[];
   loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
+  /** The session runtime has native goals, so a session composer lists `/goal`. */
+  goalsAvailable: boolean;
 }) => {
   const queryClient = useQueryClient();
   const slashCommandsQuery = useChatComposerRuntimeCatalogQuery({
@@ -98,9 +108,18 @@ export const useChatComposerSlashCommands = ({
         )
       : [];
   }, [promptInputRuntime, runtimeSupportsSlashCommands, runtimeSlashCommandCatalog?.commands]);
+  const showsGoal =
+    goalsAvailable &&
+    promptInputRuntime.state === "available" &&
+    promptInputRuntime.scope === "session";
   const slashCommands = useMemo(
-    () => mergeSlashCommands(runtimeSlashCommands, reusablePromptSlashCommands),
-    [reusablePromptSlashCommands, runtimeSlashCommands],
+    () =>
+      mergeSlashCommands(
+        runtimeSlashCommands,
+        reusablePromptSlashCommands,
+        showsGoal ? [GOAL_COMMAND] : [],
+      ),
+    [reusablePromptSlashCommands, runtimeSlashCommands, showsGoal],
   );
   const slashCommandCatalog = useMemo<AgentSlashCommandCatalog>(
     () => ({ commands: slashCommands }),
@@ -128,7 +147,7 @@ export const useChatComposerSlashCommands = ({
       : null;
 
   return {
-    supportsSlashCommands: runtimeSupportsSlashCommands || reusablePrompts.length > 0,
+    supportsSlashCommands: runtimeSupportsSlashCommands || reusablePrompts.length > 0 || showsGoal,
     slashCommandCatalog,
     slashCommands,
     slashCommandsError,

@@ -1,8 +1,8 @@
-import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 
 export type ClaudeRuntimeEventListener = (
   session: ClaudeSessionContext,
-  event: ClaudeAgentSdkEvent,
+  event: ClaudeLiveEvent,
 ) => void;
 
 export type ClaudeAgentSdkEventHub = {

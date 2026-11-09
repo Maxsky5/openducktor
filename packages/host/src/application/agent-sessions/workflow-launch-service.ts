@@ -169,7 +169,23 @@ export const createWorkflowLaunchService = (
   return createSessionLaunchService<WorkflowLaunchAttemptRequest, WorkflowLaunchResult>({
     runtime: deps.runtime,
     send: (request, input, options) => {
-      if (request.policy.kind !== "automatic") return deps.runtime.sendUserMessage(input, options);
+      if (request.policy.kind !== "automatic") {
+        // The launch holds its new session as running, so it sets the goal without the `/goal`
+        // busy check of a composer message.
+        if (!request.goal) return deps.runtime.sendUserMessage(input, options);
+        return deps.runtime.controlGoal(
+          {
+            repoPath: input.repoPath,
+            runtimeKind: input.runtimeKind,
+            workingDirectory: input.workingDirectory,
+            externalSessionId: input.externalSessionId,
+            sessionScope: input.sessionScope,
+            systemPrompt: input.systemPrompt,
+            command: { kind: "set", objective: request.goal.objective },
+          },
+          options,
+        );
+      }
       return deps.messageDelivery
         .submit(
           {

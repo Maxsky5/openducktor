@@ -48,6 +48,7 @@ test("publishes the visible target while content is mounted and clears it on unm
 
   view.rerender(renderPublisher(null));
   expect(view.getByLabelText("Visible target").textContent).toBe("none");
+  view.unmount();
 });
 
 test("requires the provider", () => {

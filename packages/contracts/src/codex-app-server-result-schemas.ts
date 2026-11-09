@@ -14,6 +14,7 @@ import {
   codexAppServerSandboxPolicySchema,
 } from "./codex-app-server-request-schemas";
 import {
+  codexAppServerThreadGoalSchema,
   codexAppServerThreadSchema,
   codexAppServerTurnSchema,
 } from "./codex-app-server-thread-schemas";
@@ -109,6 +110,18 @@ export type CodexAppServerThreadResumeResult = z.output<
 export type CodexAppServerThreadForkResult = CodexAppServerThreadStartResult;
 export type CodexAppServerThreadSetNameResult = z.output<typeof codexAppServerEmptyResponseSchema>;
 export type CodexAppServerThreadCompactStartResult = CodexAppServerThreadSetNameResult;
+const codexAppServerThreadGoalSetResultSchema = z.object({ goal: codexAppServerThreadGoalSchema });
+export type CodexAppServerThreadGoalSetResult = z.output<
+  typeof codexAppServerThreadGoalSetResultSchema
+>;
+const codexAppServerThreadGoalClearResultSchema = z.object({ cleared: z.boolean() });
+const codexAppServerThreadUnsubscribeResultSchema = z.object({ status: z.string() });
+export type CodexAppServerThreadUnsubscribeResult = z.output<
+  typeof codexAppServerThreadUnsubscribeResultSchema
+>;
+export type CodexAppServerThreadGoalClearResult = z.output<
+  typeof codexAppServerThreadGoalClearResultSchema
+>;
 export type CodexAppServerThreadListResponse = z.output<
   typeof codexAppServerThreadListResponseSchema
 >;
@@ -146,6 +159,10 @@ export type CodexAppServerRequestResultMap = {
   "thread/start": CodexAppServerThreadStartResult;
   "thread/name/set": CodexAppServerThreadSetNameResult;
   "thread/compact/start": CodexAppServerThreadCompactStartResult;
+  "thread/goal/set": CodexAppServerThreadGoalSetResult;
+  "thread/goal/clear": CodexAppServerThreadGoalClearResult;
+  "thread/settings/update": CodexAppServerThreadSetNameResult;
+  "thread/unsubscribe": CodexAppServerThreadUnsubscribeResult;
   "thread/turns/list": CodexAppServerThreadTurnsListResponse;
   "skills/list": CodexAppServerSkillsListResponse;
   "turn/start": CodexAppServerTurnStartResult;
@@ -172,6 +189,10 @@ const codexAppServerRequestResultSchemas: CodexAppServerRequestResultSchemaMap =
   "thread/start": codexAppServerThreadLaunchResultSchema,
   "thread/name/set": codexAppServerEmptyResponseSchema,
   "thread/compact/start": codexAppServerEmptyResponseSchema,
+  "thread/goal/set": codexAppServerThreadGoalSetResultSchema,
+  "thread/goal/clear": codexAppServerThreadGoalClearResultSchema,
+  "thread/settings/update": codexAppServerEmptyResponseSchema,
+  "thread/unsubscribe": codexAppServerThreadUnsubscribeResultSchema,
   "thread/turns/list": codexAppServerThreadTurnsListResponseSchema,
   "skills/list": codexAppServerSkillsListResponseSchema,
   "turn/start": codexAppServerTurnStartResultSchema,

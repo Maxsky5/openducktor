@@ -21,7 +21,7 @@ Each adapter keeps its native protocol inside the adapter and exposes OpenDuckto
 | `AgentSessionRecord` | Durable data used to reopen a session | Durable |
 | Live-session adapter | Normalized state for running sessions | Runtime process |
 
-`RuntimeDescriptor` contains `kind`, `label`, `description`, `readOnlyRoleBlockedTools`, `workflowToolAliasesByCanonical`, `capabilities`, and `capabilityLimits`. Shared code reads the descriptor instead of testing the runtime kind.
+`RuntimeDescriptor` contains `kind`, `label`, `description`, `readOnlyRoleBlockedTools`, `workflowToolAliasesByCanonical`, `capabilities`, `capabilityLimits`, and `updateAction`. `updateAction` is one sentence that tells the user how to update the runtime, for example "Run `opencode upgrade`.". Shared code reads the descriptor instead of testing the runtime kind.
 
 `RuntimeInstanceSummary` contains the runtime kind and ID, route, start time, and descriptor. It contains no repository or working directory, because one instance serves every workspace. Keep it at registry and adapter boundaries. A replacement instance receives a new runtime ID.
 
@@ -148,6 +148,50 @@ Send messages only to an existing prepared session using its current settings. K
 
 A runtime without steering can still use the host queue. See [Queue and steering](#queue-and-steering).
 
+### Goals
+
+| Field | Meaning |
+|---|---|
+| `goals.minimumRuntimeVersion` | Lowest runtime version with native goals. Use `null` when the runtime has none. |
+| `goals.supportsPauseResume` | The runtime can pause and resume a goal. Every runtime with goals can clear one. |
+
+The runtime owns the goal state. OpenDucktor stores no goal data and runs no goal loop.
+
+- The adapter reports the native goal in the `goal` field of the live snapshot. No field means no goal. Statuses are `active`, `paused`, `blocked`, `limit_reached`, `complete`, `waiting_for_message`, and `ended`, with an optional runtime `reason`.
+- `controlGoal` runs one native goal action: set, pause, resume, or clear. It returns `command_accepted` with `commandName: "goal"` after the runtime accepts the action. It fails with the runtime reason when the runtime refuses. It never writes the snapshot goal.
+- Goal mode of a workflow launch calls `controlGoal` with `set` instead of `sendUserMessage`. The launch holds its new session as running, so it skips the busy check of a `/goal` message.
+- At resume, the adapter publishes the goal that its runtime restores.
+- When the runtime starts the next goal turn by itself, the adapter emits `session_turn_finished` at each turn end. It keeps `activity: "running"` with `foregroundTurnActive: false` until the next turn starts. It emits `session_idle` only when the goal can no longer continue.
+
+| Runtime | Native goal | Stop | Restore |
+|---|---|---|---|
+| Codex | `thread/goal/*` requests and notifications | Pauses the goal, then interrupts the turn | Codex sends the goal after `thread/resume` |
+| OpenCode 2.2.1 or later | `opencode.goal` plugin, `/goal` command, `rpc.opencode.goal.changed` event | OpenCode pauses the goal with "Stopped by the user" | Plugin `get` |
+| Claude | `/goal` input and `goal_status` transcript records | Keeps the goal; the next message continues it | Last `goal_status` record of the resumed chain |
+
+- Claude answers a refused `/goal <condition>` with text alone, and starts a model turn only after it sets the goal. The first model frame after the command reply therefore confirms a set. Claude writes its transcript on a 100 ms timer, so the adapter does not wait for the `goal_status` record before it confirms.
+- A Claude `goal_status` record with `met: true` reports a met goal, so the row shows `complete`. A record with `failed: true` reports an impossible goal, so the row shows `blocked`. A goal that ends for another reason, such as an unrecoverable error, shows `ended`.
+- Claude runs a `/goal clear` as a command turn that does not work on the goal. Until that clear ends, the Claude adapter shows the goal as `waiting_for_message`, not `active`. Claude `controlGoal` writes this status itself.
+- Codex starts goal turns itself with the thread settings. Before a goal set or resume, the Codex adapter sends `thread/settings/update` with the selected model, effort, and speed. Codex has no request that changes the workflow context of those turns.
+- Codex marks the goal `blocked` when a turn fails, so the session goes idle. After an interrupt that did not pause the goal, Codex starts the next goal turn when the thread is idle.
+- A release does not end a goal. Before task cleanup releases its sessions, it sends Stop to each session with an active goal. If a Stop fails, the cleanup releases no session.
+- The OpenCode goal plugin `opencode.goal` is not a protected plugin, so a config entry `"-opencode.goal"` in `plugins` turns it off. The goal read then fails with `rpc.unavailable`, and the adapter reports no goal. A `/goal` command fails with `CommandNotFoundError`, and the adapter names the config entry in the reason.
+- The OpenCode goal plugin writes no user message for `/goal <objective>`. It writes a synthetic message with `metadata.source: "goal"`, and only the message that starts a goal has a `description`. The adapter shows that message as the user message `/goal <objective>`, live and in history. It reads the objective from the `<untrusted_objective>` block and undoes the escapes of `&`, `<`, and `>`.
+
+### Text generation
+
+The `agent_runtime_generate_text` host command asks one runtime model for one text. The input names the repository, the model, the instructions, and the prompt. The command returns the final text of the model. Each feature that needs generated text uses this command, with its own instructions.
+
+- The runtime keeps no session and changes no files. Claude and OpenCode give the model no tools. Codex has no turn without tools: its built-in tools stay, but the thread is read-only, with no environment and no approvals.
+- The caller sends all the material that the model needs in the prompt.
+- Each live session adapter provides `textGeneration`.
+
+| Runtime | Request | No tools and no session |
+| --- | --- | --- |
+| Claude | One `query()` with a string prompt | `tools: []`, `mcpServers: {}`, `strictMcpConfig`, `settings: { disableAllHooks: true }`, `persistSession: false`, `maxTurns: 1`. It loads the settings files like a session, so it uses the same provider and authentication setup. The instructions replace the system prompt. |
+| Codex | `thread/start`, then one `turn/start`, then `thread/unsubscribe` | An `ephemeral` thread with `sandbox: "read-only"`, `approvalPolicy: "never"`, and `environments: []`. Codex 0.166 still lists built-in tools such as `exec` and `spawn_agent`, and feature overrides do not remove them. The instructions are the developer instructions. The thread has no session, so its events go only to the wait for its answer. |
+| OpenCode | `generate.text` | OpenCode makes one stateless model call. It takes no system prompt, so the instructions start the prompt. |
+
 ### History
 
 | Field | Meaning |
@@ -235,13 +279,14 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 - Live pending-input visibility requires pending-input snapshots.
 - Slash command, file search, skill, and subagent flags agree with `supportedParts`.
 - A runtime without subagents has no subagent execution modes.
+- A runtime without goals cannot pause or resume a goal.
 
 `runtimeCapabilityKeyValues` defines product gates.
 
 | Policy | Capability keys |
 |---|---|
 | Required | ODT workflow tools, read-only auto-reject, start modes, and prompt parts |
-| Optional | Steering, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, generated images, and subagents |
+| Optional | Steering, goals, history, approvals, questions, attachments, slash commands, file search, skill and subagent references, profiles, variants, todos, diff, file status, MCP status, generated images, and subagents |
 
 Capability classes record why a gate exists.
 

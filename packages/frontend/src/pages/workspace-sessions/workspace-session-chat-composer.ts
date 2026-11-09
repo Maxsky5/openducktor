@@ -22,6 +22,8 @@ type WorkspaceSessionComposerInput = {
     "isStarting" | "isSavingModel" | "isResumingSession"
   >;
   delivery: ReturnType<typeof useAgentChatSend>;
+  goalRow: AgentChatComposerConfig["goalRow"];
+  goalRowScope: AgentChatComposerConfig["goalRowScope"];
   pendingSend: ReturnType<typeof usePendingSendContext>;
   draftPersistence: ReturnType<typeof createWorkspaceSessionChatDraftPersistence>;
   picker: ReturnType<typeof useWorkspaceSessionModelPicker>;
@@ -35,6 +37,8 @@ export function buildWorkspaceSessionComposer({
   identity,
   actions,
   delivery,
+  goalRow,
+  goalRowScope,
   pendingSend,
   draftPersistence,
   picker,
@@ -46,6 +50,8 @@ export function buildWorkspaceSessionComposer({
     promptInput;
   return {
     ...delivery,
+    goalRow,
+    goalRowScope,
     displayedSessionKey: state.sessionKey,
     selectedSession: identity ? { ...identity, selectedModel: state.selectedModel } : null,
     isSessionModelCatalogLoading: picker.isLoading,

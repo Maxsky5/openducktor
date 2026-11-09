@@ -1,4 +1,5 @@
 import type {
+  AcceptedAgentInput,
   AcceptedAgentUserMessage,
   AgentMessageQueueAction,
   AgentMessageSubmitInput,
@@ -10,6 +11,7 @@ import type {
   AgentSessionUserMessagePart,
   AgentUserMessageDelivery,
 } from "@openducktor/contracts";
+import { goalCommandParts } from "@openducktor/contracts";
 import {
   type AgentDeliveryAvailability,
   AgentSessionMessageAcceptanceUnknownError,
@@ -40,7 +42,8 @@ export const slashCommand: AgentSessionUserMessagePart = {
 };
 
 type TranscriptEvent = Extract<AgentSessionLiveEnvelope, { type: "transcript_event" }>["event"];
-type SendResult = "accept" | "busy" | "unknown" | HostError;
+/** `command_without_turn`: the runtime accepts a command that ends no turn, like `/goal pause`. */
+type SendResult = "accept" | "command_without_turn" | "busy" | "unknown" | HostError;
 
 const timestamp = "2026-10-08T10:00:00.000Z";
 
@@ -71,11 +74,13 @@ export const sessionState = ({
   blocked = false,
   foregroundTurnActive,
   statusUnavailableReason,
+  goal,
 }: {
   readonly activity: AgentSessionActivity;
   readonly blocked?: boolean;
   readonly foregroundTurnActive?: boolean;
   readonly statusUnavailableReason?: string;
+  readonly goal?: AgentSessionLiveSnapshot["goal"];
 }): AgentSessionLiveSnapshot => {
   const snapshot: AgentSessionLiveSnapshot = {
     ref,
@@ -91,6 +96,7 @@ export const sessionState = ({
   if (foregroundTurnActive !== undefined) snapshot.foregroundTurnActive = foregroundTurnActive;
   if (statusUnavailableReason !== undefined)
     snapshot.statusUnavailableReason = statusUnavailableReason;
+  if (goal) snapshot.goal = goal;
   return snapshot;
 };
 
@@ -140,7 +146,7 @@ export const failureOf = (promise: Promise<unknown>): Promise<Error | null> =>
   );
 
 const sendFailure = (
-  result: Exclude<SendResult, "accept">,
+  result: Exclude<SendResult, "accept" | "command_without_turn">,
   input: AgentSessionControlSendInput,
 ) => {
   if (result === "busy") {
@@ -186,13 +192,14 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
     prepareQueueResume: () => Effect.void,
     prepare: (content) => Effect.succeed(content),
     send: (input) =>
-      Effect.suspend(() => {
+      Effect.suspend((): Effect.Effect<AcceptedAgentInput, HostError> => {
         calls.push({ input });
         onSend?.();
         const result = outcomes.shift() ?? "accept";
-        return result === "accept"
-          ? Effect.succeed(accepted(input))
-          : Effect.fail(sendFailure(result, input));
+        if (result === "accept") return Effect.succeed(accepted(input));
+        if (result === "command_without_turn")
+          return Effect.succeed({ type: "command_accepted" as const, commandName: "goal" });
+        return Effect.fail(sendFailure(result, input));
       }),
     steeringAvailability: () => Effect.succeed(steering),
     publish: (envelope) => envelopes.push(envelope),
@@ -236,6 +243,8 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
     userMessage,
     submit: (text: string, mode: AgentMessageSubmitInput["mode"] = "default") =>
       submitParts(`submission-${text}`, [{ kind: "text", text }], mode),
+    submitGoal: (argument: string) =>
+      submitParts(`submission-goal-${argument}`, goalCommandParts(argument)),
     manage: (action: AgentMessageQueueAction) =>
       Effect.runPromise(service.manage({ ...target, action })),
     runBackground: async () => {
@@ -268,7 +277,9 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
     pause: () => service.listQueues("/repo")[0]?.pause?.message ?? null,
     sentTexts: () =>
       calls.map(({ input }) =>
-        input.parts[0]?.kind === "text" ? `${input.parts[0].text}:${input.delivery}` : "",
+        input.parts[0]?.kind === "text"
+          ? `${input.parts[0].text}:${input.delivery}`
+          : `/${input.parts[0]?.kind === "slash_command" ? input.parts[0].command.trigger : ""}:${input.delivery}`,
       ),
   };
 };

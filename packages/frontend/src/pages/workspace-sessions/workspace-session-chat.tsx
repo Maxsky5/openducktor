@@ -1,3 +1,7 @@
+import {
+  useSessionGoalRow,
+  useSessionGoalRowScope,
+} from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import { sessionForkDisabledReason } from "@openducktor/frontend-core/sessions/session-fork-availability";
 import { useWorkspaceSessionFork } from "./use-workspace-session-fork";
 import { buildWorkspaceSessionComposer } from "./workspace-session-chat-composer";
@@ -254,6 +258,12 @@ export function WorkspaceSessionChat({
     sendAgentMessage: operations.sendAgentMessage,
     target,
   });
+  const goalRow = useSessionGoalRow({
+    repoPath: workspace.repoPath,
+    identity,
+    runtimeDescriptor: descriptor,
+  });
+  const goalRowScope = useSessionGoalRowScope(identity);
   const pendingSendContext = usePendingSendContext({
     owner: { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
     workingDirectory: record.executionTarget.workingDirectory,
@@ -327,6 +337,8 @@ export function WorkspaceSessionChat({
       identity,
       actions,
       delivery: messageDelivery,
+      goalRow,
+      goalRowScope,
       pendingSend: pendingSendContext,
       draftPersistence,
       picker,

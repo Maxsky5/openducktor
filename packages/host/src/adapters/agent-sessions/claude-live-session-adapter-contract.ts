@@ -4,6 +4,7 @@ import type { ClaudeAgentSdkService } from "../../application/runtimes/claude-ag
 import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
 import type { HostError } from "../../effect/host-errors";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
+import type { AgentTextGenerationPort } from "../../ports/agent-text-generation-port";
 import type {
   PreparedRuntimeLiveSessionAdapter,
   RuntimeLiveSessionLifecyclePort,
@@ -34,6 +35,7 @@ export type ClaudeRuntimeSessionAdapterPreparer = (
 
 export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly eventHub: ClaudeAgentSdkEventHub;
+  readonly textGeneration: AgentTextGenerationPort;
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "createRuntimeRegistration">;
   readonly service: Pick<
     ClaudeAgentSdkService,

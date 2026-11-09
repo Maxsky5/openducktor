@@ -42,6 +42,8 @@ export type FreshSessionStartDecision = {
   selectedModel: AgentModelSelection;
   targetBranch?: GitTargetBranch;
   kickoffPrompt?: string;
+  /** Goal mode: the goal that the start sets with its first message. */
+  goalObjective?: string;
 };
 
 export type ReuseSessionStartDecision = {
@@ -51,6 +53,8 @@ export type ReuseSessionStartDecision = {
   speed?: string | null;
   targetBranch?: GitTargetBranch;
   kickoffPrompt?: string;
+  /** Goal mode: the goal that the start sets with its first message. */
+  goalObjective?: string;
 };
 
 export type ForkSessionStartDecision = {
@@ -59,6 +63,8 @@ export type ForkSessionStartDecision = {
   sourceSession: AgentSessionIdentity;
   targetBranch?: GitTargetBranch;
   kickoffPrompt?: string;
+  /** Goal mode: the goal that the start sets with its first message. */
+  goalObjective?: string;
 };
 
 export type NewSessionStartDecision =

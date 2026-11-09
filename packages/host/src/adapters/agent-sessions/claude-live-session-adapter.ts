@@ -9,17 +9,11 @@ import {
   unsupportedGeneratedImageSource,
   unsupportedGeneratedImageOperations,
 } from "./generated-image-unsupported";
-import {
-  type AcceptedAgentUserMessage,
-  acceptedAgentUserMessageSchema,
-  agentSessionContextUsageSchema,
-  type RuntimeKind,
-} from "@openducktor/contracts";
+import { agentSessionContextUsageSchema, type RuntimeKind } from "@openducktor/contracts";
 import {
   AgentSessionResumeError,
   toAgentSessionResumeError,
 } from "../../ports/agent-session-resume-error";
-import { messageAcceptedFailure } from "../../ports/agent-session-send-error";
 import { Effect } from "effect";
 import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
 import {
@@ -35,8 +29,10 @@ import type {
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
 } from "../../ports/agent-session-live-adapter-port";
+import { createClaudeMessageControls } from "./claude-live-session-message-controls";
+import { beginClaudeGoalRestore } from "../claude/claude-agent-sdk-goals";
 import { parseClaudeTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
-import type { ClaudeAgentSdkEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import type {
   ClaudeRuntimeSessionAdapterPreparer,
   CreateClaudeLiveSessionAdapterPreparerInput,
@@ -55,7 +51,6 @@ import {
   toClaudeReplyApprovalInput,
   toClaudeReplyQuestionInput,
   toClaudeResumeInput,
-  toClaudeRuntimeUserMessageEvent,
   toClaudeSendInput,
   toClaudeStartInput,
 } from "./claude-live-session-service-inputs";
@@ -83,6 +78,7 @@ export const createClaudeLiveSessionAdapterPreparer =
     liveSessionLifecycle,
     service,
     sessionStore,
+    textGeneration,
     workingDirectoryDependencies,
   }: CreateClaudeLiveSessionAdapterPreparerInput): ClaudeRuntimeSessionAdapterPreparer =>
   (runtimeInput) =>
@@ -110,7 +106,7 @@ export const createClaudeLiveSessionAdapterPreparer =
 
       const processEvent = (
         session: ClaudeSessionContext,
-        event: ClaudeAgentSdkEvent,
+        event: ClaudeLiveEvent,
       ): Effect.Effect<void, HostError> =>
         commit("claude-live-session.process-event", () => ({
           value: undefined,
@@ -197,6 +193,18 @@ export const createClaudeLiveSessionAdapterPreparer =
           ),
         );
 
+      // A resume or continuation publishes the restored goal before its summary, so a re-attached
+      // session never shows a snapshot without its goal. The transcript read runs outside the
+      // serial lane: a retained session reads it before the resume, and a new session reads it
+      // while Claude starts. A fork reads it after its summary.
+      const restoreGoal = (repoPath: string) => (summary: { readonly externalSessionId: string }) =>
+        messages.restoreGoal(repoPath, summary.externalSessionId);
+      // `restoreGoal` reports a failed read.
+      const readRetainedGoal = (externalSessionId: string) =>
+        Effect.promise(async () => {
+          const retained = sessionStore.get(externalSessionId);
+          if (retained) await beginClaudeGoalRestore(retained).catch(() => {});
+        });
       const { runSummary, runTitleUpdate, runClosure } = createClaudeControlRunner({
         runControlMutation: eventCoordinator.runControlMutation,
         runSessionClosure: eventCoordinator.runSessionClosure,
@@ -214,8 +222,24 @@ export const createClaudeLiveSessionAdapterPreparer =
           Effect.flatMap(() => requireRuntimeWorkingDirectory(workingDirectoryDependencies, input)),
         );
 
+      const messages = createClaudeMessageControls({
+        commit,
+        runControlMutation: eventCoordinator.runControlMutation,
+        requireSessionContext,
+        send: (input, options) =>
+          service
+            .sendUserMessage(toClaudeSendInput(input), runtime.runtimeId, options)
+            .pipe(
+              Effect.mapError(
+                sessionError("claude-live-session.send-user-message", input.externalSessionId),
+              ),
+            ),
+        state,
+      });
+
       const adapter: AgentSessionRuntimeAdapterPort = {
         claudeToolCatalog: { load: (input) => service.loadToolCatalog(input) },
+        textGeneration,
         sessionImport: createClaudeSessionImportAdapter(
           service,
           runtime.runtimeId,
@@ -323,20 +347,23 @@ export const createClaudeLiveSessionAdapterPreparer =
           ),
         resumeSession: (input) =>
           requireSessionWorkingDirectory(input, "resume-session").pipe(
+            Effect.andThen(readRetainedGoal(input.externalSessionId)),
             Effect.flatMap(() =>
               runSummary(
                 "claude-live-session.resume-session",
                 input.repoPath,
                 () =>
-                  service.resumeSession(
-                    {
-                      ...toClaudeResumeInput(input),
-                      workStartGuard: input.workStartGuard,
-                      onWorkIssued: input.onWorkIssued,
-                      onWorkAccepted: input.onWorkAccepted,
-                    },
-                    runtime.runtimeId,
-                  ),
+                  service
+                    .resumeSession(
+                      {
+                        ...toClaudeResumeInput(input),
+                        workStartGuard: input.workStartGuard,
+                        onWorkIssued: input.onWorkIssued,
+                        onWorkAccepted: input.onWorkAccepted,
+                      },
+                      runtime.runtimeId,
+                    )
+                    .pipe(Effect.tap(restoreGoal(input.repoPath))),
                 { keepActivity: true },
               ),
             ),
@@ -349,18 +376,20 @@ export const createClaudeLiveSessionAdapterPreparer =
             return requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
               Effect.flatMap(() =>
                 runSummary(operation, input.repoPath, () =>
-                  service.continueInterruptedTurn(
-                    {
-                      ...toClaudeContinueInput(input),
-                      workStartGuard: input.workStartGuard,
-                      onWorkIssued: input.onWorkIssued,
-                      onWorkAccepted: input.onWorkAccepted,
-                    },
-                    runtime.runtimeId,
-                    () => {
-                      continuationAdmitted = true;
-                    },
-                  ),
+                  service
+                    .continueInterruptedTurn(
+                      {
+                        ...toClaudeContinueInput(input),
+                        workStartGuard: input.workStartGuard,
+                        onWorkIssued: input.onWorkIssued,
+                        onWorkAccepted: input.onWorkAccepted,
+                      },
+                      runtime.runtimeId,
+                      () => {
+                        continuationAdmitted = true;
+                      },
+                    )
+                    .pipe(Effect.tap(restoreGoal(input.repoPath))),
                 ),
               ),
               Effect.mapError((cause) =>
@@ -404,54 +433,18 @@ export const createClaudeLiveSessionAdapterPreparer =
                       )
                       .pipe(Effect.map(capture)),
                   { sessionScope: input.sessionScope },
-                ),
+                ).pipe(Effect.tap(restoreGoal(input.repoPath))),
               ),
             ),
           ),
         sendUserMessage: (input, options) =>
-          Effect.suspend(() => {
-            let acceptedMessage: AcceptedAgentUserMessage | null = null;
-            return requireSessionWorkingDirectory(input, "send-user-message").pipe(
-              Effect.flatMap(() =>
-                eventCoordinator.runControlMutation(
-                  Effect.gen(function* () {
-                    const output = yield* service
-                      .sendUserMessage(toClaudeSendInput(input), runtime.runtimeId, options)
-                      .pipe(
-                        Effect.mapError(
-                          sessionError(
-                            "claude-live-session.send-user-message",
-                            input.externalSessionId,
-                          ),
-                        ),
-                      );
-                    const accepted = yield* parseClaudeLiveSessionOutput(
-                      acceptedAgentUserMessageSchema,
-                      output,
-                      "claude-live-session.normalize-user-message",
-                    );
-                    acceptedMessage = accepted;
-                    const session = yield* requireSessionContext(input.externalSessionId);
-                    return yield* commit("claude-live-session.publish-user-message", () => {
-                      state.reactivateSession(input);
-                      return {
-                        value: accepted,
-                        changes: state.applyEvent(
-                          session,
-                          toClaudeRuntimeUserMessageEvent(accepted),
-                        ),
-                      };
-                    });
-                  }),
-                ),
-              ),
-              Effect.mapError((cause) =>
-                acceptedMessage
-                  ? messageAcceptedFailure(input, acceptedMessage, "live_update")(cause)
-                  : cause,
-              ),
-            );
-          }),
+          requireSessionWorkingDirectory(input, "send-user-message").pipe(
+            Effect.andThen(messages.sendUserMessage(input, options)),
+          ),
+        controlGoal: (input, options) =>
+          requireSessionWorkingDirectory(input, "control-goal").pipe(
+            Effect.andThen(messages.controlGoal(input, options)),
+          ),
         updateSessionModel: (input) =>
           eventCoordinator.runControlMutation(
             service

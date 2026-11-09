@@ -9,6 +9,7 @@ import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 
 const createSession = (): ClaudeSessionContext => ({
   acceptedUserMessages: [],
+  transcriptEnvironment: {},
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
   activity: "idle",

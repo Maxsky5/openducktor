@@ -350,6 +350,143 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
+  test("Goal mode is off on open and submits the edited goal when the user turns it on", () => {
+    const onConfirm = mock(() => {});
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          onConfirm,
+          goalMode: {
+            defaultObjective: 'Implement task T-1 "Goals".',
+            unavailableReason: null,
+            generation: { kind: "unavailable", reason: "Set a default model." },
+          },
+        }),
+      }),
+    );
+    const goalSwitch = screen.getByRole("switch", { name: "Goal mode" });
+    expect(goalSwitch.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(goalSwitch);
+    const goal = screen.getByRole("textbox", { name: "Goal" });
+    expect(goal).toHaveProperty("value", 'Implement task T-1 "Goals".');
+    fireEvent.change(goal, { target: { value: " " } });
+    expect(screen.getByRole("alert").textContent).toBe("Enter a goal.");
+    expect(screen.getByRole("button", { name: /start session/i })).toHaveProperty("disabled", true);
+
+    fireEvent.change(goal, { target: { value: "Implement task T-1 with tests." } });
+    fireEvent.click(screen.getByRole("button", { name: /start session/i }));
+    expect(onConfirm).toHaveBeenCalledWith({
+      runInBackground: false,
+      startMode: "fresh",
+      sourceSessionOptionValue: null,
+      goalObjective: "Implement task T-1 with tests.",
+    });
+    unmount();
+  });
+
+  test("Goal mode hides the first message and starts without it", () => {
+    const onConfirm = mock(() => {});
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          onConfirm,
+          kickoffPrompt: "Implement this task.",
+          goalMode: {
+            defaultObjective: 'Implement task T-1 "Goals".',
+            unavailableReason: null,
+            generation: { kind: "unavailable", reason: "Set a default model." },
+          },
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Customize first message" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "First message" }), {
+      target: { value: "Only fix the tests." },
+    });
+
+    fireEvent.click(screen.getByRole("switch", { name: "Goal mode" }));
+    expect(screen.queryByRole("switch", { name: "Customize first message" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /start session/i }));
+    expect(onConfirm).toHaveBeenCalledWith({
+      runInBackground: false,
+      startMode: "fresh",
+      sourceSessionOptionValue: null,
+      goalObjective: 'Implement task T-1 "Goals".',
+    });
+    unmount();
+  });
+
+  test("Generate goal replaces the goal text with the agent goal", async () => {
+    let finish: (text: string) => void = () => {};
+    const run = mock(() => new Promise<string>((resolve) => (finish = resolve)));
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          goalMode: {
+            defaultObjective: 'Implement task T-1 "Goals".',
+            unavailableReason: null,
+            generation: { kind: "available", run },
+          },
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Goal mode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate goal" }));
+    expect(screen.getByRole("button", { name: "Generating goal…" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+    // A start now would send the old goal text, so Start waits for the generated goal.
+    expect(screen.getByRole("button", { name: /start session/i })).toHaveProperty("disabled", true);
+    await act(async () => finish("Task T-1 is done when its tests pass."));
+    expect(screen.getByRole("button", { name: /start session/i })).toHaveProperty(
+      "disabled",
+      false,
+    );
+    expect(screen.getByRole("textbox", { name: "Goal" })).toHaveProperty(
+      "value",
+      "Task T-1 is done when its tests pass.",
+    );
+    expect(run).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  test("Generate goal is off with the reason when the repository has no default model", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          goalMode: {
+            defaultObjective: "Implement it.",
+            unavailableReason: null,
+            generation: { kind: "unavailable", reason: "Set a default model." },
+          },
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Goal mode" }));
+    expect(screen.getByRole("button", { name: "Generate goal" })).toHaveProperty("disabled", true);
+    expect(screen.getByText("Set a default model.")).toBeTruthy();
+    unmount();
+  });
+
+  test("Goal mode stays off with the reason when the runtime has no goals", () => {
+    const { unmount } = render(
+      createElement(SessionStartModal, {
+        model: createModel({
+          goalMode: {
+            defaultObjective: "Implement it.",
+            unavailableReason: "Goals need OpenCode 2.2.1 or later. Run `opencode upgrade`.",
+            generation: { kind: "unavailable", reason: "Set a default model." },
+          },
+        }),
+      }),
+    );
+    expect(screen.getByRole("switch", { name: "Goal mode" })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/Goals need OpenCode 2.2.1 or later/)).toBeTruthy();
+    unmount();
+  });
+
   test("starts a reused session from its speed and submits the changed speed", async () => {
     const onConfirm = mock(() => {});
     const claudeModel = { runtimeKind: "claude" as const, providerId: "claude", modelId: "opus" };
@@ -828,7 +965,7 @@ describe("kickoff customization", () => {
       view.unmount();
     },
   );
-  test("keeps edits across toggles and defaults, validates both buttons, resets for a new request", () => {
+  test("keeps edits across toggles and defaults, validates both buttons, resets for a new request", async () => {
     const onConfirm = mock(() => {});
     const model = createModel({ requestId: "one", kickoffPrompt: "Default\ntext", onConfirm });
     const view = render(<SessionStartModal model={model} />);
@@ -858,7 +995,8 @@ describe("kickoff customization", () => {
       screen.getByRole<HTMLButtonElement>("button", { name: "Run in background" }).disabled,
     ).toBe(true);
     view.rerender(<SessionStartModal model={{ ...model, requestId: "two" }} />);
-    expect(screen.queryByLabelText("First message")).toBeNull();
+    // The field closes before it leaves the page.
+    await waitFor(() => expect(screen.queryByLabelText("First message")).toBeNull());
     toggle();
     expect(screen.getByLabelText<HTMLTextAreaElement>("First message").value).toBe("Default\ntext");
     view.unmount();

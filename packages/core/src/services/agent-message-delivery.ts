@@ -3,6 +3,7 @@ import type {
   AgentSessionUserMessagePart,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
+import { compareRuntimeVersion } from "./runtime-version";
 
 export type AgentDeliveryAvailability =
   | { readonly available: true }
@@ -24,18 +25,17 @@ export const resolveRuntimeSteeringAvailability = (
       reason: `${label} cannot send a message to running work.`,
     };
   }
-  const minimum = parseRuntimeVersion(minimumSteeringRuntimeVersion);
-  const current = runtimeVersion === null ? null : parseRuntimeVersion(runtimeVersion);
-  if (!minimum || !current) {
+  const comparison = compareRuntimeVersion(runtimeVersion, minimumSteeringRuntimeVersion);
+  if (comparison === null) {
     return {
       available: false,
       reason: `OpenDucktor cannot read the ${label} version. Steering needs ${label} ${minimumSteeringRuntimeVersion} or later.`,
     };
   }
-  if (compareRuntimeVersions(current, minimum) < 0) {
+  if (!comparison.supported) {
     return {
       available: false,
-      reason: `${label} ${current.join(".")} cannot steer running work. Update ${label} to ${minimumSteeringRuntimeVersion} or later.`,
+      reason: `${label} ${comparison.version} cannot steer running work. Update ${label} to ${minimumSteeringRuntimeVersion} or later.`,
     };
   }
   return { available: true };
@@ -64,19 +64,3 @@ export const isAgentSessionBlockedOnInput = (session: {
 
 export const BLOCKED_ON_INPUT_REASON =
   "The agent waits for your answer to a pending request. Answer it first.";
-
-type RuntimeVersion = readonly [number, number, number];
-
-const parseRuntimeVersion = (value: string): RuntimeVersion | null => {
-  const match = /(\d+)\.(\d+)\.(\d+)/.exec(value);
-  if (!match) return null;
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
-};
-
-const compareRuntimeVersions = (left: RuntimeVersion, right: RuntimeVersion): number => {
-  for (let index = 0; index < left.length; index += 1) {
-    const difference = (left[index] ?? 0) - (right[index] ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return 0;
-};

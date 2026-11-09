@@ -85,8 +85,8 @@ import { createClaudeAgentSdkSessionStore } from "./claude-agent-sdk-session-sto
 import { parseClaudeTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 import { loadClaudeTodos } from "./claude-agent-sdk-todos";
 import type {
-  ClaudeAgentSdkEvent,
   ClaudeAgentSdkService,
+  ClaudeLiveEvent,
   ClaudeSessionContext,
   ClaudeSessionInput,
   ClaudeSessionStore,
@@ -486,7 +486,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     });
   }
 
-  private emit(session: ClaudeSessionContext, event: ClaudeAgentSdkEvent): void {
+  private emit(session: ClaudeSessionContext, event: ClaudeLiveEvent): void {
     this.input.emit?.(session, event);
   }
 }

@@ -1,4 +1,8 @@
 import {
+  type SessionStartGoalDraft,
+  useSessionStartInstructionDrafts,
+} from "@openducktor/frontend-core/sessions/start/use-session-start-goal-draft";
+import {
   buildSessionStartConfirmDraft,
   resolveSessionStartAvailability,
   type SessionStartModalModel,
@@ -12,12 +16,12 @@ import {
 } from "@openducktor/frontend-core/sessions/start/session-start-display";
 import {
   BLANK_KICKOFF_PROMPT_ERROR,
-  useSessionStartKickoffDraft,
+  type SessionStartKickoffDraft,
 } from "@openducktor/frontend-core/sessions/start/use-session-start-kickoff-draft";
 import { useSessionStartSpeed } from "@openducktor/frontend-core/sessions/start/use-session-start-speed";
 import { type ReactElement, useMemo, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { useCommandBlocked } from "@/host-session/active-session-context";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -187,12 +191,11 @@ export function SessionStartForm({
 }): ReactElement {
   const model = useMemo(() => ({ ...shown, ...reportingChoices(shown, onEdit) }), [onEdit, shown]);
   const speed = useSessionStartSpeed(model);
-  const kickoff = useSessionStartKickoffDraft({
-    requestId: model.requestId,
-    open: model.open,
-    prompt: model.kickoffPrompt,
+  const { goal, kickoff } = useSessionStartInstructionDrafts(model);
+  const availability = resolveSessionStartAvailability(model, {
+    kickoffInvalid: kickoff.invalid,
+    goalError: goal.blockedReason,
   });
-  const availability = resolveSessionStartAvailability(model, { kickoffInvalid: kickoff.invalid });
 
   const sections = startFormSections(model);
   const modes = startModeOptions(model);
@@ -209,6 +212,7 @@ export function SessionStartForm({
         requiresExistingSession: availability.requiresExistingSession,
         speedChange: speed.change,
         kickoffPrompt: kickoff.value,
+        goalObjective: goal.value,
       }),
     });
   };
@@ -300,8 +304,11 @@ export function SessionStartForm({
           </FormField>
         ) : null}
         {model.isKickoffPromptLoading ? <LoadingLine label="Loading first message…" /> : null}
+        <GoalModeField goal={goal} busy={busy} onEdit={onEdit} />
         {kickoff.hasPrompt ? (
-          <KickoffPromptField kickoff={kickoff} busy={busy} onEdit={onEdit} />
+          <Animated.View entering={REVEAL_ENTERING} exiting={REVEAL_EXITING} layout={REVEAL_LAYOUT}>
+            <KickoffPromptField kickoff={kickoff} busy={busy} onEdit={onEdit} />
+          </Animated.View>
         ) : null}
       </FormBody>
     </ActionForm>
@@ -468,7 +475,7 @@ function KickoffPromptField({
   busy,
   onEdit,
 }: {
-  kickoff: ReturnType<typeof useSessionStartKickoffDraft>;
+  kickoff: SessionStartKickoffDraft;
   busy: boolean;
   onEdit: () => void;
 }): ReactElement {
@@ -487,7 +494,7 @@ function KickoffPromptField({
         />
       </View>
       {kickoff.enabled ? (
-        <Animated.View entering={FadeIn.duration(motion.base)}>
+        <Animated.View entering={REVEAL_ENTERING} exiting={REVEAL_EXITING}>
           <TextField
             label="First message"
             value={kickoff.text}
@@ -500,6 +507,75 @@ function KickoffPromptField({
             error={kickoff.invalid ? BLANK_KICKOFF_PROMPT_ERROR : null}
             style={styles.promptInput}
           />
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
+// A field that a switch shows fades in and out, and the fields under it slide to their place.
+const REVEAL_ENTERING = FadeIn.duration(motion.base);
+const REVEAL_EXITING = FadeOut.duration(motion.fast);
+const REVEAL_LAYOUT = LinearTransition.duration(motion.base).easing(motion.easeOutCurve);
+
+/** The Goal mode switch of a launch that offers it, and the goal field while it is on. */
+function GoalModeField({
+  goal,
+  busy,
+  onEdit,
+}: {
+  goal: SessionStartGoalDraft;
+  busy: boolean;
+  onEdit: () => void;
+}): ReactElement | null {
+  if (!goal.offered) return null;
+  return (
+    <View style={styles.kickoff}>
+      <View style={styles.switch}>
+        <SwitchRow
+          label="Goal mode"
+          description={
+            goal.unavailableReason ??
+            "The agent gets a goal instead of a first message, and works until the goal is met."
+          }
+          value={goal.enabled}
+          onValueChange={(enabled) => {
+            onEdit();
+            goal.setEnabled(enabled);
+          }}
+          disabled={busy || goal.unavailableReason !== null}
+        />
+      </View>
+      {goal.enabled ? (
+        <Animated.View entering={REVEAL_ENTERING} exiting={REVEAL_EXITING} style={styles.goalField}>
+          <TextField
+            label="Goal"
+            value={goal.text}
+            onChangeText={(text) => {
+              onEdit();
+              goal.setText(text);
+            }}
+            multiline
+            editable={!busy && !goal.generation.running}
+            error={goal.error ?? goal.generation.error}
+            style={styles.goalInput}
+          />
+          <Button
+            label={goal.generation.running ? "Generating goal…" : "Generate goal"}
+            icon="sparkles"
+            variant="tinted"
+            size="sm"
+            loading={goal.generation.running}
+            disabled={busy || goal.generation.unavailableReason !== null}
+            accessibilityHint={goal.generation.unavailableReason ?? undefined}
+            onPress={() => {
+              onEdit();
+              goal.generation.start();
+            }}
+          />
+          {goal.generation.unavailableReason ? (
+            <Text style={styles.generationNote}>{goal.generation.unavailableReason}</Text>
+          ) : null}
         </Animated.View>
       ) : null}
     </View>
@@ -536,4 +612,7 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
   },
   promptInput: { minHeight: 180, maxHeight: 360, textAlignVertical: "top" },
+  goalInput: { minHeight: 88, maxHeight: 240, textAlignVertical: "top" },
+  goalField: { gap: theme.space.sm, alignItems: "stretch" },
+  generationNote: { fontSize: 13, lineHeight: 18, color: theme.desktop.mutedForeground },
 }));

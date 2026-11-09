@@ -1,4 +1,7 @@
-import type { AgentSessionUserMessagePart } from "@openducktor/contracts";
+import {
+  type AgentSessionUserMessagePart,
+  textAfterLeadingGoalCommand,
+} from "@openducktor/contracts";
 import type { AgentUserMessageDisplayPart } from "@openducktor/core";
 import type { AgentChatMessage } from "../../types/agent-orchestrator";
 
@@ -30,10 +33,30 @@ type DisplayReferencePart = Extract<
 
 export type UserAttachmentPart = Extract<AgentUserMessageDisplayPart, { kind: "attachment" }>;
 
-/** One piece of a user message: plain text, or a reference that shows as a chip. */
+/**
+ * One piece of a user message: plain text, a reference that shows as a chip, or the `/goal` command
+ * that starts a goal message and shows as a goal chip.
+ */
 export type UserMessageContentNode =
   | { kind: "text"; key: string; text: string }
-  | { kind: "reference"; key: string; part: DisplayReferencePart };
+  | { kind: "reference"; key: string; part: DisplayReferencePart }
+  | { kind: "goal_command"; key: string };
+
+/**
+ * Every runtime reports a `/goal` message as text, live and in history, so the chat finds the
+ * command at the start of the text.
+ */
+const withGoalCommandNode = (
+  nodes: UserMessageContentNode[] | null,
+): UserMessageContentNode[] | null => {
+  const first = nodes?.[0];
+  if (!nodes || first?.kind !== "text") return nodes;
+  const objective = textAfterLeadingGoalCommand(first.text);
+  if (objective === null) return nodes;
+  const goal: UserMessageContentNode = { kind: "goal_command", key: "goal-command" };
+  const rest = nodes.slice(1);
+  return objective.length > 0 ? [goal, { ...first, text: objective }, ...rest] : [goal, ...rest];
+};
 
 export type UserMessageContent = {
   /** The text and reference chips in reading order, or null when the message has no text. */
@@ -222,9 +245,11 @@ export const buildUserMessageContent = (
   const text = readRenderableText(allParts, message.content);
   const parts = textEnd === null ? allParts : withVisibleTextEndingAt(allParts, textEnd);
   return {
-    nodes: buildUserMessageContentNodes(
-      textEnd === null ? text : text.slice(0, textEnd).trimEnd(),
-      parts,
+    nodes: withGoalCommandNode(
+      buildUserMessageContentNodes(
+        textEnd === null ? text : text.slice(0, textEnd).trimEnd(),
+        parts,
+      ),
     ),
     attachments: allParts.filter(isAttachmentPart),
     isUnread: meta?.state === "queued",

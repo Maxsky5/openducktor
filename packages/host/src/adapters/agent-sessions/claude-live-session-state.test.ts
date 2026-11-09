@@ -7,7 +7,11 @@ import { handleClaudeSdkMessage } from "../claude/claude-agent-sdk-events";
 import { snapshotForClaudeSession } from "../claude/claude-agent-sdk-session-shape";
 import { emptyClaudeQuery } from "../claude/claude-agent-sdk-session-io.test-support";
 import { claudeSdkMessageFixture } from "../claude/claude-agent-sdk-test-messages";
-import type { ClaudeSession, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type {
+  ClaudeNativeGoal,
+  ClaudeSession,
+  ClaudeSessionContext,
+} from "../claude/claude-agent-sdk-types";
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
 
 const summary = {
@@ -22,6 +26,7 @@ const summary = {
 
 const session: ClaudeSessionContext = {
   acceptedUserMessages: [],
+  transcriptEnvironment: {},
   activeSdkUserTurnCount: 0,
   abortController: new AbortController(),
   activity: "idle",
@@ -64,6 +69,56 @@ const ref = {
 };
 
 describe("Claude host live-session state", () => {
+  test("projects the native goal from the session activity", () => {
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
+    const timestamp = "2026-11-07T10:00:00.000Z";
+    const goal = (value: ClaudeNativeGoal | null) =>
+      state.applyEvent(session, {
+        type: "session_goal_updated",
+        externalSessionId: ref.externalSessionId,
+        timestamp,
+        goal: value,
+      });
+    goal({ objective: "Ship it" });
+    expect(state.listSnapshots()[0]?.goal).toEqual({
+      objective: "Ship it",
+      status: "waiting_for_message",
+    });
+    state.applyEvent(session, {
+      type: "session_status",
+      externalSessionId: ref.externalSessionId,
+      timestamp,
+      status: { type: "busy", message: null },
+    });
+    expect(state.listSnapshots()[0]?.goal).toEqual({ objective: "Ship it", status: "active" });
+    // A control summary rebuilds the snapshot and keeps the goal.
+    state.applyControlSummary("/repo", summary, { keepActivity: true });
+    expect(state.listSnapshots()[0]?.goal?.status).toBe("active");
+    goal({ objective: "Ship it", end: "stopped" });
+    expect(state.listSnapshots()[0]?.goal).toEqual({ objective: "Ship it", status: "ended" });
+    goal(null);
+    expect(state.listSnapshots()[0]?.goal).toBeUndefined();
+  });
+
+  test("keeps a restored goal that arrives before the resume summary", () => {
+    const state = createClaudeLiveSessionState();
+    state.applyControlSummary("/repo", summary);
+    state.removeSession(ref);
+    state.applyEvent(session, {
+      type: "session_goal_updated",
+      externalSessionId: ref.externalSessionId,
+      timestamp: "2026-11-07T10:00:00.000Z",
+      goal: { objective: "Ship it" },
+    });
+    expect(state.listSnapshots()).toEqual([]);
+    state.applyControlSummary("/repo", summary);
+    expect(state.listSnapshots()[0]?.goal).toEqual({
+      objective: "Ship it",
+      status: "waiting_for_message",
+    });
+  });
+
   test("retains permission notices across control summaries until retraction or removal", () => {
     const state = createClaudeLiveSessionState();
     state.applyControlSummary("/repo", summary);

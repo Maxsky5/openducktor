@@ -5,6 +5,7 @@ export * from "./agent-speed-schemas";
 export * from "./agent-runtime-schemas";
 export * from "./agent-session-control-schemas";
 export * from "./agent-session-event-schemas";
+export * from "./agent-session-goal-schemas";
 export * from "./agent-session-live-schemas";
 export * from "./workflow-operation-schemas";
 export {
@@ -66,6 +67,7 @@ export {
 export type * from "./gitlab-schemas";
 export * from "./agent-runtime-query-command-contracts";
 export * from "./claude-tool-catalog-schemas";
+export * from "./agent-text-generation-schemas";
 export * from "./runtime-query-failure-schemas";
 export * from "./runtime-operation-failure-schemas";
 export type * from "./codex-app-server-catalog-schemas";

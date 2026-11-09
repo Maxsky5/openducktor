@@ -1,12 +1,13 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentMessageQueueAction } from "@openducktor/contracts";
+import { type AgentMessageQueueAction, GOAL_SLASH_COMMAND } from "@openducktor/contracts";
 import { act, renderHook } from "@testing-library/react";
 import type { PropsWithChildren, ReactElement } from "react";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
   createComposerAttachment,
+  createSlashCommandSegment,
   createTextSegment,
 } from "../../drafts/agent-chat-composer-draft";
 import type { AttachmentStager } from "../../platform/device-file";
@@ -361,6 +362,27 @@ describe("useAgentChatSend", () => {
       } finally {
         pdfTurn.view.unmount();
         textTurn.view.unmount();
+      }
+    });
+
+    test("keeps a goal command that the session runtime cannot run", async () => {
+      const { view, sendAgentMessage } = renderChatSend({}, { runtimeVersion: "2.0.24" });
+      const goalDraft = {
+        segments: [
+          createSlashCommandSegment({ ...GOAL_SLASH_COMMAND, hints: [] }),
+          createTextSegment(" pause"),
+        ],
+        attachments: [],
+      };
+      try {
+        await act(async () => {
+          await expect(view.result.current.onSend(goalDraft, "default")).rejects.toThrow(
+            "Goals need OpenCode 2.2.1 or later.",
+          );
+        });
+        expect(sendAgentMessage).not.toHaveBeenCalled();
+      } finally {
+        view.unmount();
       }
     });
 

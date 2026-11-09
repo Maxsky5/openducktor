@@ -9,6 +9,7 @@
 @import "./components/layout/sidebar/session-navigation.css";
 @import "./features/session-panels/session-panel-split.css";
 @import "./components/features/agents/agent-chat/agent-chat-message-queue.css";
+@import "./components/features/agents/agent-chat/agent-chat-goal-row.css";
 @import "./components/features/agents/agent-chat/conversation-minimap/conversation-minimap.css";
 @import "./components/features/agents/agent-chat/agent-chat-jump-highlight.css";
 @import "@openducktor/theme/tokens.css";

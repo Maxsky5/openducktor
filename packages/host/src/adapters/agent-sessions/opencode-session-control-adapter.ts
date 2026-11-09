@@ -1,3 +1,4 @@
+import type { AgentTextGenerationPort } from "../../ports/agent-text-generation-port";
 import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
 import {
   type AcceptedAgentInput,
@@ -8,10 +9,11 @@ import {
   acceptedAgentInputSchema,
   agentSessionTranscriptEventSchema,
 } from "@openducktor/contracts";
-import type {
-  AgentSessionSummary,
-  AgentSessionTitleUpdateResult,
-  AgentUserMessagePart,
+import {
+  type AgentSessionSummary,
+  type AgentSessionTitleUpdateResult,
+  type AgentUserMessagePart,
+  GOAL_COMMAND_ACCEPTED,
 } from "@openducktor/core";
 import { Effect } from "effect";
 import {
@@ -73,13 +75,17 @@ const toOpenCodeUserMessagePart = (part: AgentSessionUserMessagePart): AgentUser
   };
 };
 
+type OpenCodeSessionControls = AgentSessionControlAdapterPort & {
+  readonly textGeneration: AgentTextGenerationPort;
+};
+
 export const createOpenCodeSessionControlAdapter = ({
   runtime,
   connection,
   state,
   serializeRuntime,
   commit,
-}: CreateOpenCodeSessionControlAdapterInput): AgentSessionControlAdapterPort => {
+}: CreateOpenCodeSessionControlAdapterInput): OpenCodeSessionControls => {
   const sendGate = createSerialGate();
 
   const runSummary = (
@@ -148,7 +154,32 @@ export const createOpenCodeSessionControlAdapter = ({
       ),
     );
 
-  const controls: AgentSessionControlAdapterPort = {
+  const goalRequest = (
+    input: Parameters<AgentSessionControlAdapterPort["controlGoal"]>[0],
+    assertCurrent: (() => void) | undefined,
+  ): Parameters<typeof connection.controlGoal>[0] => {
+    const request: Parameters<typeof connection.controlGoal>[0] = {
+      ...toSessionRef(input),
+      runtimeKind: "opencode",
+      runtimePolicy: { kind: "opencode" },
+      sessionScope: input.sessionScope,
+      command: input.command,
+      workStartGuard: assertCurrent ? { assertCurrent } : input.workStartGuard,
+      onWorkIssued: input.onWorkIssued,
+      onWorkAccepted: input.onWorkAccepted,
+    };
+    if (input.systemPrompt) request.systemPrompt = input.systemPrompt;
+    return request;
+  };
+
+  const controls: OpenCodeSessionControls = {
+    textGeneration: {
+      generate: (input) =>
+        Effect.tryPromise({
+          try: () => connection.generateText(input),
+          catch: (cause) => toHostOperationError(cause, "opencode-live-session.generate-text"),
+        }),
+    },
     startSession: (input) => {
       const request: Parameters<typeof connection.startSession>[0] = {
         repoPath: input.repoPath,
@@ -319,6 +350,24 @@ export const createOpenCodeSessionControlAdapter = ({
                 ),
           ),
         ),
+      );
+    },
+    controlGoal: (input, options) => {
+      const sessionRef = toSessionRef(input);
+      return sendGate.run(
+        refKey(sessionRef),
+        Effect.tryPromise({
+          try: () =>
+            connection.controlGoal(goalRequest(input, options?.assertCurrent), {
+              onSent: options?.onSent,
+            }),
+          catch: (cause) =>
+            toAgentSessionSendError(cause) ??
+            toHostOperationError(cause, "opencode-live-session.control-goal", {
+              runtimeId: runtime.runtimeId,
+              externalSessionId: input.externalSessionId,
+            }),
+        }).pipe(Effect.as<AcceptedAgentInput>(GOAL_COMMAND_ACCEPTED)),
       );
     },
     updateSessionModel: (input) =>

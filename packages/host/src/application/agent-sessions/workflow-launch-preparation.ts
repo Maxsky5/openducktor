@@ -1,9 +1,10 @@
-import type {
-  AgentSessionModelSelection,
-  AgentSessionLiveRef,
-  RepoConfig,
-  WorkflowLaunchDecision,
-  WorkflowLaunchRequest,
+import {
+  type AgentSessionModelSelection,
+  type AgentSessionLiveRef,
+  goalCommandParts,
+  type RepoConfig,
+  type WorkflowLaunchDecision,
+  type WorkflowLaunchRequest,
 } from "@openducktor/contracts";
 import type {
   WorkflowLaunchAttemptRequest,
@@ -17,6 +18,8 @@ import {
   type TaskWorkflow,
   type TaskWorkflowLaunchAction,
 } from "@openducktor/workflows";
+import { resolveRuntimeGoalAvailability } from "@openducktor/core";
+import { hasForegroundTurn, isGoalDrivingWork } from "./session-foreground-readiness";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import { errorMessage, HostValidationError, toHostOperationError } from "../../effect/host-errors";
@@ -201,6 +204,16 @@ export const prepareWorkflowLaunch = (
           return yield* launchValidationError(
             "The selected session is waiting for an approval or question. Answer or reject it before sending a message.",
           );
+        // A goal set during a turn stops that turn. Only a goal turn may give way to a new goal.
+        if (
+          request.goal &&
+          live.type === "live" &&
+          hasForegroundTurn(live.session) &&
+          !isGoalDrivingWork(live.session)
+        )
+          return yield* launchValidationError(
+            "The selected session is working. Wait until the turn ends, or start a new session.",
+          );
         model = stored.selectedModel ?? undefined;
         if (decision.speed !== undefined) {
           if (!model)
@@ -226,6 +239,21 @@ export const prepareWorkflowLaunch = (
         `Runtime '${runtimeKind}' does not support '${decision.startMode}'. Select a supported launch mode.`,
       );
     yield* deps.registry.requireReady(runtimeKind);
+    if (request.goal) {
+      if (request.policy.kind === "automatic")
+        return yield* launchValidationError("Automatic starts cannot use Goal mode.");
+      if (!action.goal || !workflow.prompts.hasGoalPrompt)
+        return yield* launchValidationError(
+          `Action '${actionId}' does not offer Goal mode. Start it without a goal.`,
+        );
+      if (request.instruction.kind !== "kickoff" || request.instruction.text !== undefined)
+        return yield* launchValidationError(
+          "Goal mode replaces the first message. Start the session without a custom first message.",
+        );
+      const { version } = yield* deps.registry.status(runtimeKind);
+      const goals = resolveRuntimeGoalAvailability(descriptor, version);
+      if (!goals.available) return yield* launchValidationError(goals.reason);
+    }
     // The event commits through the workflow event path, so its host effects run first.
     if (request.beforeStartAction) {
       yield* deps.tasks.applyTaskEvent({
@@ -254,10 +282,11 @@ export const prepareWorkflowLaunch = (
       task: toPromptTask(task),
       overrides,
     }).prompt;
-    const parts =
-      request.instruction.kind === "kickoff"
-        ? [{ kind: "text" as const, text: yield* kickoffText(task) }]
-        : messageParts;
+    let parts = messageParts;
+    // Goal mode sends the goal instead of the kickoff, as a `/goal` message would.
+    if (request.goal) parts = goalCommandParts(request.goal.objective);
+    else if (request.instruction.kind === "kickoff")
+      parts = [{ kind: "text", text: yield* kickoffText(task) }];
     return {
       kind: "prepared" as const,
       action,

@@ -1,3 +1,4 @@
+import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { Effect } from "effect";
 import type {
   PullRequest,
@@ -27,7 +28,7 @@ const taskFixture: TaskCard = {
   priority: 2,
   issueType: "task",
   removeWorktreeOnClose: null,
-  workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+  workflow: specPlanBuildReference(),
   workflowSteps: [],
   availableActions: [],
   labels: [],

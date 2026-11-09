@@ -1,4 +1,11 @@
-import type { AgentQueuedMessage, AgentSessionUserMessagePart } from "@openducktor/contracts";
+import {
+  type AgentQueuedMessage,
+  type AgentSessionUserMessagePart,
+  isGoalSlashCommand,
+} from "@openducktor/contracts";
+import { shouldInsertSyntheticSpaceBeforePart } from "@openducktor/core";
+import { CardIconButton } from "./agent-chat-card-icon-button";
+import { AgentChatGoalChip } from "./agent-chat-goal-chip";
 import {
   AlertCircle,
   AlertTriangle,
@@ -21,7 +28,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Button } from "@/components/ui/button";
 import { CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -298,6 +304,9 @@ const renderInlinePart = (
   if (isUserMessageReferencePart(part)) {
     return renderUserMessageReferenceChip(part, key, "compact");
   }
+  if (part.kind === "slash_command" && isGoalSlashCommand(part.command)) {
+    return <AgentChatGoalChip key={key} size="compact" />;
+  }
   return <span key={key}>{part.kind === "text" ? part.text : `/${part.command.trigger}`}</span>;
 };
 
@@ -312,9 +321,19 @@ function QueuedMessageBody({
   const inline: ReactNode[] = [];
   const attachments: ReactElement[] = [];
   const attachmentNames: string[] = [];
+  let previousInline: AgentSessionUserMessagePart | null = null;
   for (const { key, part } of keyedParts(parts)) {
     if (part.kind !== "attachment") {
+      // A command and its argument read as "/review main", as the runtime reads them. Chips have
+      // their own space around them.
+      if (
+        previousInline?.kind === "slash_command" &&
+        !isGoalSlashCommand(previousInline.command) &&
+        shouldInsertSyntheticSpaceBeforePart(previousInline, part)
+      )
+        inline.push(" ");
       inline.push(renderInlinePart(key, part));
+      previousInline = part;
       continue;
     }
     attachmentNames.push(part.attachment.name);
@@ -439,45 +458,5 @@ function QueuedMessageActions({
         <Trash2 className="size-3.5" aria-hidden="true" />
       </CardIconButton>
     </div>
-  );
-}
-
-/** An icon button whose tooltip names its action. A disabled button explains why. */
-function CardIconButton({
-  label,
-  hint = label,
-  describedBy,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  describedBy?: string | undefined;
-  disabled: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}): ReactElement {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/* A disabled button gets no pointer events, so the wrapper shows the tooltip. */}
-        <span className="inline-flex">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-6 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label={label}
-            aria-describedby={describedBy}
-            disabled={disabled}
-            onClick={onClick}
-          >
-            {children}
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top">{hint}</TooltipContent>
-    </Tooltip>
   );
 }

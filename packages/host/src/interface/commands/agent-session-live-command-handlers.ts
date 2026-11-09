@@ -13,6 +13,8 @@ import {
   agentSessionResumeIntentSchema,
   agentSessionControlStopInputSchema,
   agentSessionControlUpdateModelInputSchema,
+  agentSessionGoalControlInputSchema,
+  type AgentSessionGoalControlInput,
   agentSessionLiveAttachInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
@@ -62,6 +64,7 @@ type AgentSessionCommandService = Omit<AgentSessionLiveStateService, "startSessi
   startWorkflowSession: (
     input: AgentWorkflowSessionStartInput,
   ) => Effect.Effect<AgentSessionControlSummary, HostError | TaskServiceError>;
+  applyGoalAction: (input: AgentSessionGoalControlInput) => Effect.Effect<void, HostError>;
 };
 
 export const createAgentSessionLiveCommandHandlers = (
@@ -110,6 +113,12 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_control_stop",
       ).pipe(Effect.flatMap(service.stopSession)),
+    agent_session_goal_control: (args) =>
+      parseCommandInput(
+        agentSessionGoalControlInputSchema,
+        args,
+        "agent_session_goal_control",
+      ).pipe(Effect.flatMap(service.applyGoalAction)),
     agent_session_control_update_model: (args) =>
       parseCommandInput(
         agentSessionControlUpdateModelInputSchema,

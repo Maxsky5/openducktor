@@ -1,4 +1,4 @@
-import type { RuntimeOperationFailure } from "@openducktor/contracts";
+import type { AgentSessionGoal, RuntimeOperationFailure } from "@openducktor/contracts";
 import type { OpencodeSessionContextUsage } from "./opencode-session-runtime-signals";
 import type {
   AgentEvent,
@@ -13,6 +13,8 @@ export type OpencodeRuntimeSnapshotSource = AgentSessionRuntimeSnapshotSource & 
   sessionAssociation: AgentSessionAssociation;
   queuedMessages?: Extract<AgentEvent, { type: "user_message" }>[];
   contextUsage?: OpencodeSessionContextUsage | null;
+  /** The goal that the read found. Absent: the server has no goals. `null`: no goal. */
+  goal?: AgentSessionGoal | null;
 };
 export type OpencodeRuntimeSnapshotFailure = {
   repoPath: string;

@@ -14,7 +14,10 @@ export type SessionStartKickoffDraft = {
   setText: (text: string) => void;
 };
 
-/** A new request or a new open resets the draft to the resolved prompt. */
+/**
+ * A new request or a new open resets the draft to the resolved prompt. A prompt change keeps the
+ * text, so a launch that hides its prompt for a while, as Goal mode does, gets the text back.
+ */
 export function useSessionStartKickoffDraft({
   requestId,
   open,

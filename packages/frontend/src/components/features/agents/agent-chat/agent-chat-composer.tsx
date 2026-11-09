@@ -20,6 +20,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
+import { AgentChatGoalRow } from "./agent-chat-goal-row";
 import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
 import { CHAT_ATTACHMENT_ACCEPT } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
@@ -118,7 +119,8 @@ export function AgentChatComposer({
     settingsReady,
     steerShortcutLabel: steerShortcutLabel(),
   });
-  const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled || isSubmitting;
+  // A send clears the draft at once, so the user can write the next message while it runs.
+  const attachmentIntakeDisabled = !supportsAttachments || isComposerInputDisabled;
 
   const handleDraftChange = useCallback(
     (nextDraft: AgentChatComposerDraft) => {
@@ -183,7 +185,6 @@ export function AgentChatComposer({
     composerEditorRef,
     displayedSessionKey,
     isComposerInputDisabled,
-    isSubmitting,
   });
 
   const reportSendError = useCallback((failure: ComposerFailure): void => {
@@ -623,6 +624,10 @@ function AgentChatComposerFormView({
       {model.messageQueue && !model.isReadOnly ? (
         <AgentChatMessageQueue model={model.messageQueue} composer={model} />
       ) : null}
+      <AgentChatGoalRow
+        model={model.isReadOnly ? null : model.goalRow}
+        scope={model.goalRowScope}
+      />
       <div
         className={composerCardClassName({
           isWaitingInput,
@@ -655,7 +660,7 @@ function AgentChatComposerFormView({
             onDraftChange={onDraftChange}
             onAddFiles={onAddFiles}
             placeholder={composerPlaceholder}
-            disabled={isComposerInputDisabled || isSubmitting}
+            disabled={isComposerInputDisabled}
             editorRef={composerEditorRef}
             onEditorInput={onComposerEditorInput}
             onSend={onSend}
@@ -706,12 +711,10 @@ function useAgentChatComposerFocus({
   composerEditorRef,
   displayedSessionKey,
   isComposerInputDisabled,
-  isSubmitting,
 }: {
   composerEditorRef: AgentChatComposerModel["composerEditorRef"];
   displayedSessionKey: string | null;
   isComposerInputDisabled: boolean;
-  isSubmitting: boolean;
 }): () => void {
   const composerAutofocusStateRef = useRef<ReturnType<typeof createComposerAutofocusState> | null>(
     null,
@@ -752,7 +755,7 @@ function useAgentChatComposerFocus({
     }
 
     const composerAutofocusState = composerAutofocusStateRef.current;
-    const isComposerInteractive = !isComposerInputDisabled && !isSubmitting;
+    const isComposerInteractive = !isComposerInputDisabled;
     const activeElement = globalThis.document?.activeElement ?? null;
     const focusInsideComposer = isFocusInsideComposer(activeElement);
 
@@ -770,13 +773,7 @@ function useAgentChatComposerFocus({
             waitAnchor: activeElement,
           }
         : autofocusResult.nextState;
-  }, [
-    displayedSessionKey,
-    isComposerInputDisabled,
-    isFocusInsideComposer,
-    isSubmitting,
-    focusComposerEditor,
-  ]);
+  }, [displayedSessionKey, isComposerInputDisabled, isFocusInsideComposer, focusComposerEditor]);
 
   return scheduleComposerFocus;
 }

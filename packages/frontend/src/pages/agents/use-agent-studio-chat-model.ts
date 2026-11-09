@@ -1,3 +1,8 @@
+import {
+  useSessionGoalRow,
+  useSessionGoalRowScope,
+} from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
+import { findRuntimeDefinition } from "@openducktor/frontend-core/lib/agent-runtime";
 import { sessionForkDisabledReason } from "@openducktor/frontend-core/sessions/session-fork-availability";
 import { useTaskSessionFork } from "./use-task-session-fork";
 import { taskWaitsForMergePublication } from "@openducktor/workflows";
@@ -146,6 +151,14 @@ export function useAgentStudioChatModel({
   const selectedSessionState = selectedSession.selectedSession;
   const { sessionReadModelLoadState, reloadSessionReadModel } = useAgentSessionReadModelState();
   const selectedSessionIdentity = selectedSessionState.identity;
+  const goalRow = useSessionGoalRow({
+    repoPath,
+    identity: selectedSessionIdentity,
+    runtimeDescriptor: selectedSessionIdentity
+      ? findRuntimeDefinition(runtimeDefinitions, selectedSessionIdentity.runtimeKind)
+      : null,
+  });
+  const goalRowScope = useSessionGoalRowScope(selectedSessionIdentity);
   const selectedSessionModel = selectedSessionState.selectedModel;
   const selectedSessionRuntimeData = selectedSessionState.runtimeData;
   const rawTranscriptSession = useMemo(
@@ -344,6 +357,8 @@ export function useAgentStudioChatModel({
   const composerConfig = useMemo<AgentChatComposerConfig>(() => {
     const config: AgentChatComposerConfig = {
       ...messageDelivery,
+      goalRow,
+      goalRowScope,
       displayedSessionKey: selectedSessionKey,
       selectedSession: selectedSessionIdentity
         ? {
@@ -459,6 +474,8 @@ export function useAgentStudioChatModel({
     surfaceState.composerReadOnly,
     surfaceState.composerReadOnlyReason,
     sessionActions.canStopSession,
+    goalRow,
+    goalRowScope,
     sessionActions.isResumingSession,
     sessionActions.isSessionWorking,
     sessionActions.isStarting,

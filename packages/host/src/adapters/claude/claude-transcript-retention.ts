@@ -92,7 +92,7 @@ const metadataFields = new Set([
   "parentUuid",
 ]);
 
-export const selectClaudeTranscriptMetadataPath = (path: ClaudeTranscriptPath): boolean =>
+const selectClaudeTranscriptMetadataPath = (path: ClaudeTranscriptPath): boolean =>
   path.length === 0 ||
   (metadataFields.has(String(path[0])) &&
     (path[0] !== "relocated" || path.length === 1 || path[1] === "relocatedCwd"));
@@ -113,7 +113,7 @@ const summaryFields = new Set([
 const summaryMessageFields = new Set(["id", "stop_reason", "content"]);
 const summaryBlockFields = new Set(["type", "id", "tool_use_id", "text"]);
 
-export const selectClaudeTranscriptSummaryPath = (path: ClaudeTranscriptPath): boolean => {
+const selectClaudeTranscriptSummaryPath = (path: ClaudeTranscriptPath): boolean => {
   if (path.length === 0) return true;
   if (summaryFields.has(String(path[0]))) return path.length === 1;
   if (path[0] === "supersedes" || path[0] === "retracted_message_uuids")
@@ -142,6 +142,22 @@ export const selectClaudeTranscriptSummaryPath = (path: ClaudeTranscriptPath): b
   if (path[1] !== "content" || !Number.isInteger(path[2])) return false;
   return path.length === 3 || (path.length === 4 && summaryBlockFields.has(String(path[3])));
 };
+
+const goalFields = new Set(["type", "subtype", "uuid", "parentUuid", "isSidechain"]);
+const goalAttachmentFields = new Set(["type", "met", "failed", "sentinel", "condition"]);
+
+/** Keeps the graph fields and the `goal_status` attachment fields of a record. */
+const selectClaudeTranscriptGoalPath = (path: ClaudeTranscriptPath): boolean => {
+  if (path.length === 0) return true;
+  if (goalFields.has(String(path[0]))) return path.length === 1;
+  return (
+    path[0] === "attachment" &&
+    (path.length === 1 || (path.length === 2 && goalAttachmentFields.has(String(path[1]))))
+  );
+};
+
+/** A read mode other than `history` keeps only some fields of each record. */
+export type ClaudeTranscriptReadMode = "history" | "scope" | "summary" | "goal";
 
 export const isClaudeTranscriptSummaryTextPath = (path: ClaudeTranscriptPath): boolean =>
   path[0] === "message" &&
@@ -187,7 +203,7 @@ const selectContentBlockPath = (path: ClaudeTranscriptPath): boolean => {
   return true;
 };
 
-export const selectClaudeTranscriptPath = (path: ClaudeTranscriptPath): boolean => {
+const selectClaudeTranscriptPath = (path: ClaudeTranscriptPath): boolean => {
   if (path.length === 0) return true;
   if (!rootFields.has(String(path[0]))) return false;
   if (path[0] === "origin") return path.length === 1 || path[1] === "kind";
@@ -207,6 +223,13 @@ export const selectClaudeTranscriptPath = (path: ClaudeTranscriptPath): boolean 
   if (!isMessageBlock(path) || path.length === 3) return true;
   return selectContentBlockPath(path);
 };
+
+export const claudeTranscriptReadModePathSelectors = {
+  history: selectClaudeTranscriptPath,
+  scope: selectClaudeTranscriptMetadataPath,
+  summary: selectClaudeTranscriptSummaryPath,
+  goal: selectClaudeTranscriptGoalPath,
+} satisfies Record<ClaudeTranscriptReadMode, (path: ClaudeTranscriptPath) => boolean>;
 
 export const claudeTranscriptStringLimit = (
   path: ClaudeTranscriptPath,
@@ -283,13 +306,9 @@ export const retainClaudeTranscriptRecord = (
 
 export const retainParsedClaudeTranscriptRecord = (
   record: ClaudeProtocolObject,
-  options: { metadataOnly?: boolean; summaryOnly?: boolean } = {},
+  mode: ClaudeTranscriptReadMode = "history",
 ): ClaudeProtocolObject | null => {
-  const select = options.metadataOnly
-    ? selectClaudeTranscriptMetadataPath
-    : options.summaryOnly
-      ? selectClaudeTranscriptSummaryPath
-      : selectClaudeTranscriptPath;
+  const select = claudeTranscriptReadModePathSelectors[mode];
   const checkDepth = (value: ClaudeProtocolValue, depth: number): void => {
     // eslint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse already validates this JSON value.
     if (value === null || typeof value !== "object") return;
@@ -311,7 +330,7 @@ export const retainParsedClaudeTranscriptRecord = (
     }
     // eslint-disable-next-line anti-slop/no-runtime-typeof -- JSON.parse already validates this JSON value.
     if (typeof value === "string") {
-      if (options.summaryOnly && isClaudeTranscriptSummaryTextPath(path))
+      if (mode === "summary" && isClaudeTranscriptSummaryTextPath(path))
         return value.trim().length > 0 ? "x" : "";
       const limit = claudeTranscriptStringLimit(path, parent);
       if (limit === undefined) return value;
@@ -349,7 +368,5 @@ export const retainParsedClaudeTranscriptRecord = (
   };
   // SAFETY: The selected root is an object, and retention preserves its container kind.
   const retained = retain(record, [], undefined) as ClaudeProtocolObject;
-  return options.metadataOnly || options.summaryOnly
-    ? retained
-    : retainClaudeTranscriptRecord(retained);
+  return mode !== "history" ? retained : retainClaudeTranscriptRecord(retained);
 };

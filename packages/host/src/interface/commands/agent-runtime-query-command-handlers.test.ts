@@ -13,6 +13,8 @@ import {
 import { hostInvokeFailureFromError } from "../router/host-invoke-failure";
 import { createAgentRuntimeQueryCommandHandlers } from "./agent-runtime-query-command-handlers";
 
+const unexpectedTextGeneration = { generate: () => Effect.die("Unexpected text generation") };
+
 test("reads a Claude tool catalog without a repository and rejects extra routing input", async () => {
   const catalog = { runtimeKind: "claude" as const, runtimeId: "claude-1", tools: [] };
   const load = mock(() => Effect.succeed(catalog));
@@ -20,6 +22,7 @@ test("reads a Claude tool catalog without a repository and rejects extra routing
     unexpectedRuntimeQueries,
     () => Effect.die("Unexpected model preview"),
     { load },
+    unexpectedTextGeneration,
   );
   expect(
     await Effect.runPromise(
@@ -60,6 +63,7 @@ const handlers = createAgentRuntimeQueryCommandHandlers(
   },
   () => Effect.succeed(previewCatalog),
   { load: () => Effect.die("Unexpected Claude tool catalog read") },
+  unexpectedTextGeneration,
 );
 
 for (const invalid of [
@@ -127,6 +131,7 @@ test("rejects a catalog describing the wrong runtime", async () => {
     },
     () => Effect.succeed(previewCatalog),
     { load: () => Effect.die("Unexpected Claude tool catalog read") },
+    unexpectedTextGeneration,
   );
   const error = await Effect.runPromise(
     Effect.flip(
@@ -150,6 +155,7 @@ test("rejects a malformed combined catalog response", async () => {
     },
     () => Effect.succeed(previewCatalog),
     { load: () => Effect.die("Unexpected Claude tool catalog read") },
+    unexpectedTextGeneration,
   );
   expect(
     (
@@ -231,6 +237,7 @@ describe("session history tool details", () => {
     },
     () => Effect.succeed(previewCatalog),
     { load: () => Effect.die("Unexpected Claude tool catalog read") },
+    unexpectedTextGeneration,
   );
 
   test("cuts tool details only when the client asks for them on demand", async () => {
@@ -276,5 +283,51 @@ describe("session history tool details", () => {
         detail: "The session history no longer has this tool call. Reload the session.",
       },
     });
+  });
+});
+
+describe("agent_runtime_generate_text", () => {
+  const generationInput = {
+    repoPath: "/repo",
+    model: { runtimeKind: "claude", providerId: "anthropic", modelId: "claude-haiku-5-5" },
+    instructions: "Write one goal.",
+    prompt: "Task: Add goals.",
+  } as const;
+
+  test("returns the trimmed text of the model", async () => {
+    const generate = mock(() => Effect.succeed("  Goal text.\n"));
+    const generation = createAgentRuntimeQueryCommandHandlers(
+      unexpectedRuntimeQueries,
+      () => Effect.die("Unexpected model preview"),
+      { load: () => Effect.die("Unexpected Claude tool catalog read") },
+      { generate },
+    );
+    expect(
+      await Effect.runPromise(generation.agent_runtime_generate_text({ input: generationInput })),
+    ).toEqual({ text: "Goal text." });
+    expect(generate).toHaveBeenCalledWith(generationInput);
+  });
+
+  test("rejects an empty answer and a request without instructions", async () => {
+    const generation = createAgentRuntimeQueryCommandHandlers(
+      unexpectedRuntimeQueries,
+      () => Effect.die("Unexpected model preview"),
+      { load: () => Effect.die("Unexpected Claude tool catalog read") },
+      { generate: () => Effect.succeed(" ") },
+    );
+    expect(
+      await Effect.runPromise(
+        Effect.flip(generation.agent_runtime_generate_text({ input: generationInput })),
+      ),
+    ).toMatchObject({ _tag: "HostValidationError", field: "text" });
+    expect(
+      await Effect.runPromise(
+        Effect.flip(
+          generation.agent_runtime_generate_text({
+            input: { ...generationInput, instructions: " " },
+          }),
+        ),
+      ),
+    ).toMatchObject({ _tag: "HostValidationError", field: "input" });
   });
 });

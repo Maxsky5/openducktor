@@ -1,9 +1,11 @@
 import type { ReusablePrompt } from "@openducktor/contracts";
+import { REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER } from "@openducktor/contracts";
 import {
-  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-  REUSABLE_PROMPT_ARGUMENTS_PLACEHOLDER,
-} from "@openducktor/contracts";
-import type { AgentSlashCommand, AgentUserMessagePart } from "@openducktor/core";
+  type AgentSlashCommand,
+  type AgentUserMessagePart,
+  RESERVED_SYSTEM_SLASH_COMMAND_TRIGGERS,
+  reservedSystemSlashCommandMessage,
+} from "@openducktor/core";
 import {
   type AgentChatComposerDraft,
   type AgentChatComposerSegment,
@@ -68,11 +70,9 @@ export const resolveReusablePromptDraftToUserMessageParts = (
   if (!customSlashSegment) {
     return null;
   }
-  if (
-    customSlashSegment.command.trigger.toLowerCase() ===
-    MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger
-  ) {
-    throw new Error("/compact is reserved for manual session compaction.");
+  const trigger = customSlashSegment.command.trigger.toLowerCase();
+  if (RESERVED_SYSTEM_SLASH_COMMAND_TRIGGERS.has(trigger)) {
+    throw new Error(reservedSystemSlashCommandMessage(trigger));
   }
   if (slashSegments.length !== 1) {
     throw new Error("Reusable prompt messages must contain exactly one slash command.");

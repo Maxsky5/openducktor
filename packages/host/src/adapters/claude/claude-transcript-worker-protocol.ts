@@ -1,7 +1,8 @@
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeTranscriptJsonError } from "./claude-transcript-json";
+import type { ClaudeTranscriptReadMode } from "./claude-transcript-retention";
 
-export type ClaudeTranscriptWorkerOptions = { metadataOnly?: boolean; summaryOnly?: boolean };
+export type ClaudeTranscriptWorkerOptions = { mode: ClaudeTranscriptReadMode };
 
 export type ClaudeTranscriptWorkerRequest = { buffer: ArrayBuffer; byteLength: number };
 

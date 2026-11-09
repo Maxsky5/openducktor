@@ -45,6 +45,7 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - Put the dismissal button first in `DialogFooter` and the main action last. Add `justify-end` when a footer has one action and no dismissal. Do not repeat `justify-between`; the shared footer sets it.
 - Give each modal confirmation button an action icon and a pending spinner. Use the same icon and variant for repeated actions. Close task uses `CircleCheckBig` and `warning`; reset uses `RotateCcw` and `destructive`; delete uses `Trash2` and `destructive`; save uses `Save` and the primary variant.
 - Give `motion="instant"` to `DialogContent` and `useDialogPresence(open, "instant")` for a dialog that users open from a key many times a day. The dialog then shows, hides, and resizes at once.
+- Use `CssPresenceReveal` for form content that a switch shows. Put the space above the content in its `className`. The reveal clips that space with its height, and an animated dialog follows the reveal height in each frame without a second resize animation.
 
 | Purpose                  | Use                                                              |
 | ------------------------ | ---------------------------------------------------------------- |

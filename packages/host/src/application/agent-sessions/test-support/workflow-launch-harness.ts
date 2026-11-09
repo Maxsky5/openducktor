@@ -1,3 +1,4 @@
+import { allowAllGoalCommands } from "../../../test-support/service-test-doubles";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { mock } from "bun:test";
 import { createDefaultGlobalConfig } from "../../../config/global-config";
@@ -46,7 +47,10 @@ import type { AutomaticWorkflowLaunchRequest } from "../workflow-launch-types";
 export type AutomaticLaunchInput = Omit<AutomaticWorkflowLaunchRequest, "policy"> & {
   policy: Omit<AutomaticWorkflowLaunchRequest["policy"], "startCheck">;
 };
-import type { AgentSessionSendOptions } from "../../../ports/agent-session-live-adapter-port";
+import type {
+  AgentSessionControlGoalInput,
+  AgentSessionSendOptions,
+} from "../../../ports/agent-session-live-adapter-port";
 import {
   AgentSessionMessageAcceptedError,
   AgentSessionMessageRejectedError,
@@ -63,6 +67,8 @@ const unexpected = (operation: string) => () =>
 export const createLaunchHarness = async (
   runtimeKind: RuntimeKind = "codex",
   gates: {
+    /** The version that the registry reads from the runtime executable. */
+    runtimeVersion?: string | null;
     holdRelease?: Effect.Effect<void>;
     /** Pauses before the worktree preparation starts. */
     beforePrepare?: Effect.Effect<void>;
@@ -117,6 +123,7 @@ export const createLaunchHarness = async (
     stops: string[] = [];
   const sends: AgentSessionControlSendInput[] = [];
   const sendOptions: Array<AgentSessionSendOptions | undefined> = [];
+  const goalCommands: AgentSessionControlGoalInput[] = [];
   const publications: string[] = [];
   const appliedEvents: string[] = [];
   const removedWorktrees: string[] = [];
@@ -228,6 +235,12 @@ export const createLaunchHarness = async (
               model: input.model ? { ...input.model, runtimeKind } : undefined,
             });
           input.onWorkAccepted?.();
+        }),
+      controlGoal: (input, options) =>
+        Effect.sync(() => {
+          goalCommands.push(input);
+          options?.onSent?.();
+          return { type: "command_accepted" as const, commandName: "goal" };
         }),
       sendUserMessage: (input, options) =>
         Effect.gen(function* () {
@@ -435,6 +448,21 @@ export const createLaunchHarness = async (
   const lifecycle = createTaskSessionLifecycleCoordinator();
   const descriptor = RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind];
   const registry = createRuntimeRegistryPort({
+    status: () =>
+      Effect.succeed({
+        kind: runtimeKind,
+        enabled: true,
+        configuredExecutablePath: runtimeKind,
+        effectiveExecutablePath: runtimeKind,
+        version: gates.runtimeVersion === undefined ? "9.9.9" : gates.runtimeVersion,
+        state: "ready" as const,
+        trigger: null,
+        runtimeId: "runtime",
+        startedAt: timestamp,
+        updatedAt: timestamp,
+        failure: null,
+        revision: 1,
+      }),
     requireReady: () =>
       Effect.succeed({
         runtimeId: "runtime",
@@ -476,6 +504,7 @@ export const createLaunchHarness = async (
   // The first instruction uses the same workflow send policy as a composer message.
   const commands = createAgentSessionCommandService({
     taskWorkflows,
+    goalRules: allowAllGoalCommands,
     turnPreparation: {
       ...commandPreparationFixture,
       context: (target) =>
@@ -716,6 +745,7 @@ export const createLaunchHarness = async (
     stops,
     sends,
     sendOptions,
+    goalCommands,
     publications,
     appliedEvents,
     removedWorktrees,

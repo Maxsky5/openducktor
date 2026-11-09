@@ -1,3 +1,4 @@
+import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { task } from "../application/tasks/sync/task-sync-service.test-support";
 import { describe, expect, test } from "bun:test";
 import type {
@@ -20,7 +21,7 @@ const event = (id: string): Extract<ExternalTaskSyncEvent, { kind: "external_tas
   repoPath: "/repo",
   taskId: `task-${id}`,
   taskSnapshot: {
-    workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+    workflow: specPlanBuildReference(),
     id: `task-${id}`,
     title: "Task",
     status: "open",
@@ -212,7 +213,7 @@ describe("createTaskEventStream", () => {
         type: "change",
         event: {
           taskSnapshot: {
-            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+            workflow: specPlanBuildReference(),
             id: "task-1",
             title: "Task",
             status: "open",
@@ -409,7 +410,7 @@ describe("createTaskEventStream", () => {
         {
           previousStatus: "open",
           task: {
-            workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+            workflow: specPlanBuildReference(),
             id: "task-1",
             title: "Committed title",
             status: "spec_ready",
@@ -418,7 +419,7 @@ describe("createTaskEventStream", () => {
       ],
       taskSnapshots: [
         {
-          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          workflow: specPlanBuildReference(),
           id: "task-1",
           title: "Task 1",
           status: "open",
@@ -445,7 +446,7 @@ describe("createTaskEventStream", () => {
     expect(change.event.taskIds).toEqual(["task-1"]);
     expect(change.event.taskSnapshots).toEqual([
       {
-        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+        workflow: specPlanBuildReference(),
         id: "task-1",
         title: "Task 1",
         status: "open",
@@ -461,7 +462,7 @@ describe("createTaskEventStream", () => {
       {
         previousStatus: "open",
         task: {
-          workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+          workflow: specPlanBuildReference(),
           id: "task-1",
           title: "Committed title",
           status: "spec_ready",
@@ -505,7 +506,7 @@ describe("createTaskEventStream", () => {
       },
       taskId: "task-1",
       taskSnapshot: {
-        workflow: { id: "openducktor-spec-plan-build", revision: 2 },
+        workflow: specPlanBuildReference(),
         id: "task-1",
         title: "Task",
         status: "open",
