@@ -1,4 +1,4 @@
-import { CircleAlert } from "lucide-react";
+import { plural } from "@openducktor/frontend-core/lib/plural";
 import { useId, type ReactElement } from "react";
 import { RepositorySelector } from "@/components/features/repository/repository-selector";
 import type { RepositorySelectorWorkspace } from "@/components/features/repository/repository-selector-model";
@@ -70,14 +70,17 @@ export function SettingsSidebar({
               }
             >
               <span className="inline-flex min-w-0 items-center gap-2">
-                <Icon className="size-4" />
+                {/* The error dot sits on the icon, so it does not take the width of the label. */}
+                <span className="relative shrink-0">
+                  <Icon className="size-4" />
+                  {sectionErrorCount > 0 ? (
+                    <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-destructive">
+                      <span className="sr-only">{plural(sectionErrorCount, "error")}</span>
+                    </span>
+                  ) : null}
+                </span>
                 <span className="truncate">{entry.label}</span>
               </span>
-              {sectionErrorCount > 0 ? (
-                <span className="ml-2 inline-flex items-center gap-1 text-destructive-muted">
-                  <CircleAlert className="size-3.5 shrink-0" aria-hidden="true" />
-                </span>
-              ) : null}
             </Button>
           );
         })}
@@ -152,10 +155,9 @@ export function RepositorySidebar({
             >
               <span>{entry.label}</span>
               {sectionErrorCount > 0 ? (
-                <CircleAlert
-                  className="size-3.5 shrink-0 text-destructive-muted"
-                  aria-hidden="true"
-                />
+                <span className="ml-2 size-1.5 shrink-0 rounded-full bg-destructive">
+                  <span className="sr-only">{plural(sectionErrorCount, "error")}</span>
+                </span>
               ) : null}
             </Button>
           );

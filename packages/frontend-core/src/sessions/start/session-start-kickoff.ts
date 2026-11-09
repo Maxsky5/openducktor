@@ -1,4 +1,8 @@
-import { type ResolvedTaskCard as TaskCard, launchPromptContext } from "@openducktor/workflows";
+import {
+  EMPTY_PROMPT_SETTINGS,
+  launchPromptContext,
+  type ResolvedTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import type { QueryClient } from "@tanstack/react-query";
 import { loadPromptSettings } from "../../queries/prompt-settings";
 import { loadRepoConfigFromQuery } from "../../queries/workspace";
@@ -38,8 +42,8 @@ export const buildSessionStartKickoffPrompt = ({
 }: {
   intent: KickoffPreview;
   task: TaskCard | null;
-  /** The saved prompt layers. Without them, the prompt uses the built-in text. */
-  settings: PromptSettings | undefined;
+  /** The saved prompt layers. */
+  settings: PromptSettings;
   repoDefaultTargetBranch: GitTargetBranch | null;
 }): string => {
   if (!task)
@@ -113,7 +117,7 @@ export const prepareSessionStartInstruction = async ({
         loadRepoConfigFromQuery(queryClient, workspaceId),
         loadPromptSettings(workspaceId, queryClient),
       ])
-    : [null, undefined];
+    : [null, EMPTY_PROMPT_SETTINGS];
   const effectiveTargetBranch = targetBranch ?? task.targetBranch;
   const contextInput: Parameters<typeof resolveSessionStartKickoffPromptContext>[0] = {
     templateId: launch.template.id,

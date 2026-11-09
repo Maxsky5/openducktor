@@ -1,3 +1,4 @@
+import { EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { describe, expect, mock, test } from "bun:test";
 import type { PromptSettings } from "@openducktor/workflows";
 import {
@@ -67,9 +68,7 @@ const createHistoryLoadHarness = (initialSession: AgentSessionState) => {
 };
 
 const createPromptPolicy = (
-  loadPromptSettings = async (): Promise<PromptSettings> => ({
-    global: { overrides: {}, appends: {} },
-  }),
+  loadPromptSettings = async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS,
 ) =>
   createWorkflowSessionHistoryPromptPolicy({
     workspaceId: "workspace-1",
@@ -112,9 +111,7 @@ describe("session history loader scope", () => {
       sessionAssociation: { kind: "unbound" },
     };
     const harness = createHistoryLoadHarness(unboundSession);
-    const loadPromptSettings = mock(async (): Promise<PromptSettings> => ({
-      global: { overrides: {}, appends: {} },
-    }));
+    const loadPromptSettings = mock(async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS);
     const loadSessionHistory = mock(async () => []);
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
@@ -139,9 +136,7 @@ describe("session history loader scope", () => {
   test("loads workflow history from the active workspace", async () => {
     const workflowSession = createSession();
     const harness = createHistoryLoadHarness(workflowSession);
-    const loadPromptSettings = mock(async (): Promise<PromptSettings> => ({
-      global: { overrides: {}, appends: {} },
-    }));
+    const loadPromptSettings = mock(async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS);
     const loadSessionHistory = mock(async () => []);
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
@@ -193,9 +188,7 @@ describe("session history loader scope", () => {
       sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     };
     const harness = createHistoryLoadHarness(repositorySession);
-    const loadPromptSettings = mock(async (): Promise<PromptSettings> => ({
-      global: { overrides: {}, appends: {} },
-    }));
+    const loadPromptSettings = mock(async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS);
     let historyInput:
       | Parameters<
           Parameters<typeof loadSessionHistoryIntoStore>[0]["adapter"]["loadSessionHistory"]

@@ -43,6 +43,12 @@ const createSnapshot = (): SettingsSnapshot =>
             enabled: true,
           },
         },
+        promptAppends: {
+          [specPlanBuildPromptKey("messages.build_start")]: {
+            text: "Compare with {{git.targetBranch}}.",
+            enabled: true,
+          },
+        },
         agentDefaults: {},
       },
       "repo-b": {
@@ -57,6 +63,7 @@ const createSnapshot = (): SettingsSnapshot =>
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
+        promptAppends: {},
         agentDefaults: {},
       },
     },
@@ -93,7 +100,7 @@ describe("useSettingsModalPromptValidation", () => {
     await harness.unmount();
   });
 
-  test("derives global and repo validation counts with tab-level aggregation", async () => {
+  test("counts each prompt with errors once and keeps the error of each layer", async () => {
     const harness = createHookHarness({
       snapshotDraft: createSnapshot(),
       selectedWorkspaceId: "repo-a",
@@ -106,8 +113,6 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.promptValidationState.globalErrorCount).toBe(1);
     expect(latest.promptValidationState.repoErrorCountByWorkspaceId["repo-a"]).toBe(1);
     expect(latest.promptValidationState.totalErrorCount).toBe(2);
-    expect(latest.globalPromptRoleTabErrorCounts["role:spec"]).toBe(1);
-    expect(latest.selectedRepoPromptRoleTabErrorCounts["role:build"]).toBe(1);
     expect(latest.settingsSectionErrorCountById).toEqual({
       general: 0,
       "remote-access": 0,
@@ -125,9 +130,46 @@ describe("useSettingsModalPromptValidation", () => {
     });
     expect(
       latest.selectedRepoPromptValidationErrors[specPlanBuildPromptKey("messages.build_start")],
-    ).toBe("Unsupported placeholder: {{unknown.value}}.");
+    ).toEqual({
+      override: `Unsupported placeholder: {{unknown.value}}.`,
+      append: `This prompt cannot fill {{git.targetBranch}}.`,
+    });
 
     await harness.unmount();
+  });
+
+  test("names the place of the first error: global first, then the open repository", async () => {
+    const snapshot = createSnapshot();
+    const builderKey = specPlanBuildPromptKey("messages.build_start");
+    const harness = createHookHarness({ snapshotDraft: snapshot, selectedWorkspaceId: "repo-b" });
+    await harness.mount();
+    expect(harness.getLatest().promptValidationState.firstErrorPlace).toBe(
+      "Spec Instructions (System prompts)",
+    );
+    await harness.unmount();
+
+    // Without a global error, a repository error names its repository. Repo B, which is open,
+    // comes before Repo A.
+    const repoOnly: SettingsSnapshot = {
+      ...snapshot,
+      globalPromptOverrides: {},
+      workspaces: {
+        ...snapshot.workspaces,
+        "repo-b": {
+          ...snapshot.workspaces["repo-b"]!,
+          promptAppends: { [builderKey]: { text: "Rebase {{git.currentBranch}}.", enabled: true } },
+        },
+      },
+    };
+    const repoHarness = createHookHarness({
+      snapshotDraft: repoOnly,
+      selectedWorkspaceId: "repo-b",
+    });
+    await repoHarness.mount();
+    expect(repoHarness.getLatest().promptValidationState.firstErrorPlace).toBe(
+      "Builder Kickoff (Spec, Plan, Build, Repository prompts of Repo B)",
+    );
+    await repoHarness.unmount();
   });
 
   test("includes required-placeholder validation errors in the aggregated counts", async () => {
@@ -153,7 +195,7 @@ describe("useSettingsModalPromptValidation", () => {
       latest.promptValidationState.globalErrors[
         specPlanBuildPromptKey("messages.build_requested_changes")
       ],
-    ).toBe("Missing required placeholder: {{humanFeedback}}.");
+    ).toEqual({ override: "Missing required placeholder: {{humanFeedback}}." });
     expect(latest.promptValidationState.globalErrorCount).toBe(1);
 
     await harness.unmount();

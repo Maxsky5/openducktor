@@ -1,11 +1,11 @@
 import type {
   AgentRuntimes,
   SettingsRepoConfig,
-  RepoPromptOverrides,
   ReusablePrompt,
   SettingsSnapshot,
 } from "@openducktor/contracts";
 import { useCallback } from "react";
+import type { PromptSettingsLayersUpdater } from "./settings-prompt-layers";
 import type { SettingsModalDraftActions } from "./use-settings-modal-draft-actions";
 
 type UseSettingsModalDirtyDraftActionsArgs = {
@@ -139,19 +139,19 @@ export const useSettingsModalDirtyDraftActions = ({
     [draftActions, runDirtyAction],
   );
 
-  const updateGlobalPromptOverrides = useCallback(
-    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
+  const updateGlobalPromptLayers = useCallback(
+    (updater: PromptSettingsLayersUpdater): void => {
       runDirtyAction(() => {
-        draftActions.updateGlobalPromptOverrides(updater);
+        draftActions.updateGlobalPromptLayers(updater);
       });
     },
     [draftActions, runDirtyAction],
   );
 
-  const updateRepoPromptOverrides = useCallback(
-    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
+  const updateRepoPromptLayers = useCallback(
+    (updater: PromptSettingsLayersUpdater): void => {
       runDirtyAction(() => {
-        draftActions.updateRepoPromptOverrides(updater);
+        draftActions.updateRepoPromptLayers(updater);
       });
     },
     [draftActions, runDirtyAction],
@@ -210,8 +210,8 @@ export const useSettingsModalDirtyDraftActions = ({
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
-    updateGlobalPromptOverrides,
-    updateRepoPromptOverrides,
+    updateGlobalPromptLayers,
+    updateRepoPromptLayers,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
     updateSelectedRepoDefaultModel,

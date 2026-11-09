@@ -1,16 +1,23 @@
-import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
 import {
-  type WorkflowPromptRoleTabId,
-  type WorkflowPromptTemplateId as AgentPromptTemplateId,
-} from "@openducktor/workflows";
+  useWorkflowPromptSettings,
+  type WorkflowPromptSettings,
+} from "@openducktor/frontend-core/queries/workflow-prompt-settings";
 import type { SettingsSnapshot } from "@openducktor/contracts";
+import { globalPromptLayersOf, repoPromptLayersOf } from "@openducktor/workflows";
 import { useMemo } from "react";
-import { buildPromptOverrideValidationErrors } from "@/components/features/settings";
-import { countPromptErrorsByRoleTab, type SettingsSectionId } from "./settings-modal-constants";
+import {
+  REPOSITORY_PROMPTS_TITLE,
+  type SettingsSectionId,
+  SYSTEM_PROMPTS_TITLE,
+} from "./settings-modal-constants";
 import {
   EMPTY_PROMPT_VALIDATION_STATE,
   type PromptValidationState,
 } from "./settings-modal-controller.types";
+import {
+  buildPromptLayerValidationErrors,
+  type PromptValidationErrors,
+} from "./settings-prompt-layers";
 
 type UseSettingsModalPromptValidationArgs = {
   snapshotDraft: SettingsSnapshot | null;
@@ -20,41 +27,58 @@ type UseSettingsModalPromptValidationArgs = {
 type SettingsModalPromptValidation = {
   promptValidationState: PromptValidationState;
   hasPromptValidationErrors: boolean;
-  selectedRepoPromptValidationErrors: Partial<Record<AgentPromptTemplateId, string>>;
+  selectedRepoPromptValidationErrors: PromptValidationErrors;
   selectedRepoPromptValidationErrorCount: number;
-  globalPromptRoleTabErrorCounts: Record<WorkflowPromptRoleTabId, number>;
-  selectedRepoPromptRoleTabErrorCounts: Record<WorkflowPromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
 };
 
+const EMPTY_ERRORS: PromptValidationErrors = {};
+
+type RepoSettings = SettingsSnapshot["workspaces"][string];
+type Templates = WorkflowPromptSettings["templates"];
+const repoErrorsCache = new WeakMap<Templates, WeakMap<RepoSettings, PromptValidationErrors>>();
+
+/**
+ * The errors of the prompt layers of one repository. A draft edit replaces only the configuration
+ * that it changes, so the other repositories keep their errors instead of a new check on each
+ * keystroke.
+ */
+const repoPromptErrors = (repo: RepoSettings, templates: Templates): PromptValidationErrors => {
+  let byRepo = repoErrorsCache.get(templates);
+  if (!byRepo) {
+    byRepo = new WeakMap();
+    repoErrorsCache.set(templates, byRepo);
+  }
+  let errors = byRepo.get(repo);
+  if (!errors) {
+    errors = buildPromptLayerValidationErrors(repoPromptLayersOf(repo), templates);
+    byRepo.set(repo, errors);
+  }
+  return errors;
+};
+
+/** Counts prompts with an error. A prompt counts once for all its layers. */
 export const useSettingsModalPromptValidation = ({
   snapshotDraft,
   selectedWorkspaceId,
 }: UseSettingsModalPromptValidationArgs): SettingsModalPromptValidation => {
-  const workflows = useWorkflowSettings();
+  const prompts = useWorkflowPromptSettings();
   const promptValidationState = useMemo<PromptValidationState>(() => {
-    if (!snapshotDraft || !workflows.data) {
+    if (!snapshotDraft || !prompts.data) {
       return EMPTY_PROMPT_VALIDATION_STATE;
     }
 
-    const globalErrors = buildPromptOverrideValidationErrors(
-      snapshotDraft.globalPromptOverrides,
-      workflows.data.templates,
+    const globalErrors = buildPromptLayerValidationErrors(
+      globalPromptLayersOf(snapshotDraft),
+      prompts.data.templates,
     );
     const globalErrorCount = Object.keys(globalErrors).length;
     let repoTotalErrorCount = 0;
-    let totalErrorCount = globalErrorCount;
 
-    const repoErrorsByWorkspaceId: Record<
-      string,
-      Partial<Record<AgentPromptTemplateId, string>>
-    > = {};
+    const repoErrorsByWorkspaceId: Record<string, PromptValidationErrors> = {};
     const repoErrorCountByWorkspaceId: Record<string, number> = {};
     for (const [workspaceId, repoConfig] of Object.entries(snapshotDraft.workspaces)) {
-      const repoErrors = buildPromptOverrideValidationErrors(
-        repoConfig.promptOverrides,
-        workflows.data.templates,
-      );
+      const repoErrors = repoPromptErrors(repoConfig, prompts.data.templates);
       const repoErrorCount = Object.keys(repoErrors).length;
       if (repoErrorCount === 0) {
         continue;
@@ -62,49 +86,50 @@ export const useSettingsModalPromptValidation = ({
       repoErrorsByWorkspaceId[workspaceId] = repoErrors;
       repoErrorCountByWorkspaceId[workspaceId] = repoErrorCount;
       repoTotalErrorCount += repoErrorCount;
-      totalErrorCount += repoErrorCount;
     }
 
+    const placeOf = (errors: PromptValidationErrors, screen: string): string | null => {
+      const [key] = Object.keys(errors);
+      const template = prompts.data.templates.find((entry) => entry.key === key);
+      if (!template) return null;
+      return template.ownerKind === "workflow"
+        ? `${template.label} (${template.ownerTitle}, ${screen})`
+        : `${template.label} (${screen})`;
+    };
+    // The open repository comes first, so the place matches the screen that the user sees.
+    const repoIds = Object.keys(repoErrorsByWorkspaceId).toSorted(
+      (left, right) => Number(right === selectedWorkspaceId) - Number(left === selectedWorkspaceId),
+    );
+    const firstErrorPlace =
+      placeOf(globalErrors, SYSTEM_PROMPTS_TITLE) ??
+      repoIds
+        .map((id) =>
+          placeOf(
+            repoErrorsByWorkspaceId[id] ?? {},
+            `${REPOSITORY_PROMPTS_TITLE} of ${snapshotDraft.workspaces[id]?.workspaceName ?? id}`,
+          ),
+        )
+        .find((place) => place !== null) ??
+      null;
+
     return {
+      firstErrorPlace,
       globalErrors,
       globalErrorCount,
       repoErrorsByWorkspaceId,
       repoErrorCountByWorkspaceId,
       repoTotalErrorCount,
-      totalErrorCount,
+      totalErrorCount: globalErrorCount + repoTotalErrorCount,
     };
-  }, [snapshotDraft, workflows.data]);
+  }, [snapshotDraft, prompts.data, selectedWorkspaceId]);
 
-  const selectedRepoPromptValidationErrors = useMemo(
-    () =>
-      (selectedWorkspaceId
-        ? promptValidationState.repoErrorsByWorkspaceId[selectedWorkspaceId]
-        : undefined) ?? {},
-    [promptValidationState.repoErrorsByWorkspaceId, selectedWorkspaceId],
-  );
+  const selectedRepoPromptValidationErrors =
+    (selectedWorkspaceId
+      ? promptValidationState.repoErrorsByWorkspaceId[selectedWorkspaceId]
+      : undefined) ?? EMPTY_ERRORS;
   const selectedRepoPromptValidationErrorCount = selectedWorkspaceId
     ? (promptValidationState.repoErrorCountByWorkspaceId[selectedWorkspaceId] ?? 0)
     : 0;
-
-  const hasPromptValidationErrors = promptValidationState.totalErrorCount > 0;
-
-  const globalPromptRoleTabErrorCounts = useMemo(
-    () =>
-      countPromptErrorsByRoleTab(
-        promptValidationState.globalErrors,
-        workflows.data?.promptTabs ?? [],
-      ),
-    [promptValidationState.globalErrors, workflows.data],
-  );
-
-  const selectedRepoPromptRoleTabErrorCounts = useMemo(
-    () =>
-      countPromptErrorsByRoleTab(
-        selectedRepoPromptValidationErrors,
-        workflows.data?.promptTabs ?? [],
-      ),
-    [selectedRepoPromptValidationErrors, workflows.data],
-  );
 
   const settingsSectionErrorCountById = {
     general: 0,
@@ -124,11 +149,9 @@ export const useSettingsModalPromptValidation = ({
 
   return {
     promptValidationState,
-    hasPromptValidationErrors,
+    hasPromptValidationErrors: promptValidationState.totalErrorCount > 0,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
-    globalPromptRoleTabErrorCounts,
-    selectedRepoPromptRoleTabErrorCounts,
     settingsSectionErrorCountById,
   };
 };

@@ -16,7 +16,7 @@ type SharedPromptOptions = {
   taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
   /** The role of the session. The core pull request launch needs it. */
   role?: string;
-  settings?: PromptSettings | undefined;
+  settings: PromptSettings;
   task?: TaskPromptContext;
 };
 

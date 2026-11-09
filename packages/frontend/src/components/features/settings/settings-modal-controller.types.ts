@@ -1,12 +1,15 @@
-import type { WorkflowPromptTemplateId as AgentPromptTemplateId } from "@openducktor/workflows";
+import type { PromptValidationErrors } from "./settings-prompt-layers";
 
+/** Error counts count prompts with an error, not layers. */
 export type PromptValidationState = {
-  globalErrors: Partial<Record<AgentPromptTemplateId, string>>;
+  globalErrors: PromptValidationErrors;
   globalErrorCount: number;
-  repoErrorsByWorkspaceId: Record<string, Partial<Record<AgentPromptTemplateId, string>>>;
+  repoErrorsByWorkspaceId: Record<string, PromptValidationErrors>;
   repoErrorCountByWorkspaceId: Record<string, number>;
   repoTotalErrorCount: number;
   totalErrorCount: number;
+  /** Where the first error is, such as "Fix Kickoff (Bug Triage, System prompts)". */
+  firstErrorPlace: string | null;
 };
 
 export const EMPTY_PROMPT_VALIDATION_STATE: PromptValidationState = {
@@ -16,4 +19,5 @@ export const EMPTY_PROMPT_VALIDATION_STATE: PromptValidationState = {
   repoErrorCountByWorkspaceId: {},
   repoTotalErrorCount: 0,
   totalErrorCount: 0,
+  firstErrorPlace: null,
 };

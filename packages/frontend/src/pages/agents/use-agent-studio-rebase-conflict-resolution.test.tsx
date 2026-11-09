@@ -1,3 +1,4 @@
+import { EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { describe, expect, type Mock, mock, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
@@ -139,7 +140,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     },
     scheduleQueryUpdate: mock(() => {}),
     startSessionRequest: mock(async () => sessionWorkflowResult("build-new-1")),
-    loadPromptSettings: mock(async () => ({ global: { overrides: {}, appends: {} } })),
+    loadPromptSettings: mock(async () => EMPTY_PROMPT_SETTINGS),
     ...overrides,
   };
 };

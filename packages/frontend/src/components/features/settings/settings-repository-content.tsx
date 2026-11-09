@@ -1,4 +1,4 @@
-import type { WorkflowPromptRoleTabId } from "@openducktor/workflows";
+import { repoPromptLayersOf, type PromptSettingsLayers } from "@openducktor/workflows";
 import {
   gitRepositoryKey,
   type GitProviderRepository,
@@ -17,10 +17,10 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repositoryGitProviderContextQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/git-provider-context";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { SettingsContentFocusRequest } from "./settings-deep-link";
-import type { RepositorySectionId } from "./settings-modal-constants";
+import { REPOSITORY_PROMPTS_TITLE, type RepositorySectionId } from "./settings-modal-constants";
 import { RepositorySidebar } from "./settings-modal-sidebars";
-import { buildInheritedPromptPreview } from "./settings-prompt-inheritance";
-import { PromptOverridesSection } from "./settings-prompt-overrides-section";
+import { PromptLayersSection } from "./settings-prompt-layers-section";
+import { PROMPT_HOME_VIEW, type PromptView } from "./settings-prompt-owners";
 import { RepositoryAgentsSection } from "./settings-repository-agents-section";
 import { RepositoryConfigurationSection } from "./settings-repository-configuration-section";
 import { RepositoryGitSection } from "./settings-repository-git-section";
@@ -30,14 +30,13 @@ import type { GitProviderState } from "./use-repository-git-section-model";
 
 type SettingsRepositoryContentProps = {
   repositorySection: RepositorySectionId;
-  repoPromptRoleTab: WorkflowPromptRoleTabId;
+  repoPromptView: PromptView;
+  /** The draft System prompts layers that Repository prompts build on. */
+  globalPromptLayers: PromptSettingsLayers;
   isInteractionDisabled: boolean;
   controller: SettingsModalController;
-  globalPromptOverrides: NonNullable<
-    SettingsModalController["snapshotDraft"]
-  >["globalPromptOverrides"];
   onRepositorySectionChange: (next: RepositorySectionId) => void;
-  onRepoPromptRoleTabChange: (next: WorkflowPromptRoleTabId) => void;
+  onRepoPromptViewChange: (next: PromptView) => void;
   contentFocusRequest?: SettingsContentFocusRequest | null | undefined;
   onContentFocusRequestHandled?: ((request: SettingsContentFocusRequest) => void) | undefined;
 };
@@ -182,12 +181,12 @@ const RepositoryAvailabilityBanner = ({
 
 export function SettingsRepositoryContent({
   repositorySection,
-  repoPromptRoleTab,
+  repoPromptView,
+  globalPromptLayers,
   isInteractionDisabled,
   controller,
-  globalPromptOverrides,
   onRepositorySectionChange,
-  onRepoPromptRoleTabChange,
+  onRepoPromptViewChange,
   contentFocusRequest,
   onContentFocusRequestHandled,
 }: SettingsRepositoryContentProps): ReactElement {
@@ -214,11 +213,10 @@ export function SettingsRepositoryContent({
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
     selectedRepoModelWarnings,
-    selectedRepoPromptRoleTabErrorCounts,
     setSelectedWorkspaceId,
     retrySelectedRepoBranchesLoad,
     updateSelectedRepoConfig,
-    updateRepoPromptOverrides,
+    updateRepoPromptLayers,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
     updateSelectedRepoDefaultModel,
@@ -268,7 +266,11 @@ export function SettingsRepositoryContent({
         disabled={isInteractionDisabled}
         selectedRepoPromptValidationErrorCount={selectedRepoPromptValidationErrorCount}
         repoPromptErrorCountByWorkspaceId={promptValidationState.repoErrorCountByWorkspaceId}
-        onSelectWorkspaceId={setSelectedWorkspaceId}
+        onSelectWorkspaceId={(workspaceId) => {
+          setSelectedWorkspaceId(workspaceId);
+          // Repository prompts start again from the first screen of the other repository.
+          onRepoPromptViewChange(PROMPT_HOME_VIEW);
+        }}
         onSelectSection={onRepositorySectionChange}
       />
 
@@ -340,24 +342,21 @@ export function SettingsRepositoryContent({
         ) : null}
 
         {selectedRepoConfig && repositorySection === "prompts" ? (
-          <PromptOverridesSection
-            title="Repository prompt overrides"
-            description="Repository overrides take precedence over global overrides when enabled."
-            tab={repoPromptRoleTab}
-            errorCountsByTab={selectedRepoPromptRoleTabErrorCounts}
-            overrides={selectedRepoConfig.promptOverrides}
+          // The key also resets the search and the filter of the other repository.
+          <PromptLayersSection
+            key={selectedRepoPath}
+            title={REPOSITORY_PROMPTS_TITLE}
+            description="Changes apply in this repository, on top of the System prompts."
+            scope={{
+              kind: "repository",
+              edited: repoPromptLayersOf(selectedRepoConfig),
+              inherited: globalPromptLayers,
+            }}
             validationErrors={selectedRepoPromptValidationErrors}
+            view={repoPromptView}
             disabled={isInteractionDisabled}
-            onTabChange={onRepoPromptRoleTabChange}
-            onUpdateOverrides={updateRepoPromptOverrides}
-            resolveInheritedPreview={(templateId, builtinTemplate, repoOverride) =>
-              buildInheritedPromptPreview(
-                templateId,
-                repoOverride,
-                globalPromptOverrides,
-                builtinTemplate,
-              )
-            }
+            onViewChange={onRepoPromptViewChange}
+            onUpdateLayers={updateRepoPromptLayers}
           />
         ) : null}
       </div>

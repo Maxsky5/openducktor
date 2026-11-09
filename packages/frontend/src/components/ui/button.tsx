@@ -12,6 +12,10 @@ const buttonVariants = cva(
         secondary: "bg-secondary/70 text-secondary-foreground hover:bg-secondary",
         ghost: "text-foreground hover:bg-accent/60",
         outline: "border border-input bg-card hover:bg-accent",
+        // An on/off button, such as a filter. Set `aria-pressed`: when on, it takes the look of the
+        // accent variant, the selected item of the Settings and sidebar menus.
+        toggle:
+          "border border-input bg-card hover:bg-accent aria-pressed:border-transparent aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground aria-pressed:hover:bg-sidebar-accent/90 aria-pressed:[--foreground:var(--sidebar-accent-foreground)] aria-pressed:[--muted-foreground:var(--sidebar-accent-foreground)]",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         destructiveSoft:
           "border border-destructive-border bg-destructive-surface text-destructive-surface-foreground hover:bg-destructive-surface/80",
@@ -21,7 +25,9 @@ const buttonVariants = cva(
           "border border-warning-border bg-warning-surface text-warning-muted hover:bg-warning-surface/80 hover:text-warning-surface-foreground",
         warningGhost:
           "text-warning-muted hover:border-warning-border/60 hover:bg-warning-surface/70 hover:text-warning-surface-foreground dark:hover:bg-warning-surface/55",
-        accent: "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/90",
+        // Text inside, such as a muted second line or an outline badge, takes the accent foreground.
+        accent:
+          "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/90 [--foreground:var(--sidebar-accent-foreground)] [--muted-foreground:var(--sidebar-accent-foreground)]",
       },
       size: {
         default: "h-9 px-4 py-2",

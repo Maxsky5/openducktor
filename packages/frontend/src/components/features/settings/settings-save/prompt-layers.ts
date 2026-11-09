@@ -1,4 +1,4 @@
-import { type RepoPromptOverrides } from "@openducktor/contracts";
+import type { RepoPromptAppends, RepoPromptOverrides } from "@openducktor/contracts";
 
 const trimPromptTemplate = (template: string): string => template.trim();
 
@@ -20,3 +20,12 @@ export const preparePromptOverridesForSave = (overrides: RepoPromptOverrides) =>
 
   return next;
 };
+
+/** An append with only blank text adds nothing, so Save removes it. */
+export const preparePromptAppendsForSave = (appends: RepoPromptAppends): RepoPromptAppends =>
+  Object.fromEntries(
+    Object.entries(appends).flatMap(([key, append]) => {
+      const text = append.text.trim();
+      return text ? [[key, { text, enabled: append.enabled }] as const] : [];
+    }),
+  );

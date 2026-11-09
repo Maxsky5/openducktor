@@ -1,3 +1,4 @@
+import { EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { AgentRuntimeTestAdapter } from "../../../test-support/agent-runtime-test-adapter";
 import type { AgentEnginePort } from "@openducktor/core";
 import { createAgentMessageQueuesStore } from "../../agent-message-queues-store";
@@ -132,7 +133,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       );
     },
 
-    loadPromptSettings: async () => ({ global: { overrides: {}, appends: {} } }),
+    loadPromptSettings: async () => EMPTY_PROMPT_SETTINGS,
 
     liveSessionHost: {
       agentSessionLiveReplyApproval: async () => {},

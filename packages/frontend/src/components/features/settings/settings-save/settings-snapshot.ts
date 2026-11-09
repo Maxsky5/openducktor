@@ -6,7 +6,7 @@ import {
 import { prepareReusablePromptsForSave } from "@/state/read-models/settings-read-model";
 import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
 import { prepareGlobalGitSettingsForSave } from "./global-git-settings";
-import { preparePromptOverridesForSave } from "./prompt-overrides";
+import { preparePromptAppendsForSave, preparePromptOverridesForSave } from "./prompt-layers";
 import { prepareRepoConfigForSave } from "./repo-config";
 
 /** Normalize editor values, then send only the leaves that changed from its baseline. */
@@ -20,6 +20,7 @@ export const prepareSettingsSnapshotForSave = (
     reusablePrompts: prepareReusablePromptsForSave(snapshot.reusablePrompts),
     autopilot: prepareAutopilotSettingsForSave(snapshot.autopilot),
     globalPromptOverrides: preparePromptOverridesForSave(snapshot.globalPromptOverrides),
+    globalPromptAppends: preparePromptAppendsForSave(snapshot.globalPromptAppends),
     workspaces: Object.fromEntries(
       Object.entries(snapshot.workspaces).map(([id, config]) => [
         id,

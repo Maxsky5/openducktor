@@ -20,6 +20,7 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
+  promptAppends: {},
   agentDefaults: {},
   ...overrides,
 });

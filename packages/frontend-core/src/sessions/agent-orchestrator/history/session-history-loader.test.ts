@@ -1,3 +1,4 @@
+import { EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { describe, expect, mock, test } from "bun:test";
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
 import type { PromptSettings } from "@openducktor/workflows";
@@ -481,9 +482,7 @@ describe("session history loader", () => {
       loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
         workspaceId: "workspace-1",
         taskRef: { current: [createTaskFixture()] },
-        loadPromptSettings: async (): Promise<PromptSettings> => ({
-          global: { overrides: {}, appends: {} },
-        }),
+        loadPromptSettings: async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS,
       }),
       historyReadGeneration,
     });
@@ -513,9 +512,7 @@ describe("session history loader", () => {
       loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
         workspaceId: "workspace-1",
         taskRef: { current: [createTaskFixture()] },
-        loadPromptSettings: async (): Promise<PromptSettings> => ({
-          global: { overrides: {}, appends: {} },
-        }),
+        loadPromptSettings: async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS,
       }),
       historyReadGeneration,
     });

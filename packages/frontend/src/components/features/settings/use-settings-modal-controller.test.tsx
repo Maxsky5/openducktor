@@ -60,6 +60,7 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
+        promptAppends: {},
         agentDefaults: {},
       },
       "repo-two": {
@@ -74,6 +75,7 @@ const createSettingsSnapshot = (): SettingsSnapshot =>
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
+        promptAppends: {},
         agentDefaults: {},
       },
     },

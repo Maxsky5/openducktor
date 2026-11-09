@@ -1,3 +1,4 @@
+import type { CompiledWorkflowCatalog } from "@openducktor/workflows";
 import { useState, type PropsWithChildren } from "react";
 import { ActiveWorkspaceContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -13,14 +14,20 @@ import {
 import { workflowQueryKeys } from "@openducktor/frontend-core/queries/workflows";
 import { taskQueryKeys } from "@openducktor/frontend-core/queries/tasks";
 
-/** A host workflow for component tests that do not exercise metadata loading. */
-export function WorkflowTestProvider({ children }: PropsWithChildren) {
+/**
+ * A host workflow for component tests that do not exercise metadata loading. A test can give
+ * another compiled catalog, such as one with more workflows.
+ */
+export function WorkflowTestProvider({
+  children,
+  catalog = builtinCompiledCatalogFixture,
+}: PropsWithChildren<{ catalog?: CompiledWorkflowCatalog }>) {
   const [connection] = useState(() => {
     const task = createTaskCardFixture({ id: "task-1" });
     const connection = createTestClientConnection({
       client: { tasksListAll: async () => [toWireTaskCard(task)] },
     });
-    connection.queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
+    connection.queryClient.setQueryData(workflowQueryKeys.catalog, catalog);
     connection.queryClient.setQueryData(
       workflowQueryKeys.workspace({ workspaceId: "workspace-1", repoPath: "/repo" }),
       builtinWorkspaceWorkflowsFixture,

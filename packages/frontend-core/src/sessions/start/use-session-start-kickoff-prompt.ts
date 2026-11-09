@@ -1,4 +1,4 @@
-import { promptSettingsOf } from "@openducktor/workflows";
+import { EMPTY_PROMPT_SETTINGS, promptSettingsOf } from "@openducktor/workflows";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { errorMessage } from "../../lib/errors";
@@ -41,7 +41,7 @@ export function useSessionStartKickoffPrompt({
           settings:
             enabled && config.data && settings.data
               ? promptSettingsOf(settings.data, config.data)
-              : undefined,
+              : EMPTY_PROMPT_SETTINGS,
         }),
       };
     } catch (cause) {

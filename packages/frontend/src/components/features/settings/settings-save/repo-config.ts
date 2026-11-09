@@ -3,7 +3,7 @@ import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { prepareModelDefaultsForSave } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 import { dropBlankLines } from "@/state/read-models/settings-read-model";
-import { preparePromptOverridesForSave } from "./prompt-overrides";
+import { preparePromptAppendsForSave, preparePromptOverridesForSave } from "./prompt-layers";
 
 const trimmedNonEmpty = (value: string): string | null => {
   const trimmed = value.trim();
@@ -26,5 +26,6 @@ export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepo
     hooks: { beforeWorktreeRemoval: dropBlankLines(repo.hooks.beforeWorktreeRemoval) },
     worktreeCopyPaths: dropBlankLines(repo.worktreeCopyPaths),
     promptOverrides: preparePromptOverridesForSave(repo.promptOverrides),
+    promptAppends: preparePromptAppendsForSave(repo.promptAppends),
   };
 };
