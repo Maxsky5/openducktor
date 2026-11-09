@@ -262,6 +262,7 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
+    alignContent: "center",
     gap: 6,
     paddingHorizontal: 10,
     borderWidth: 1,

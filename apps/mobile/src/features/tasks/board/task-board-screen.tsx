@@ -122,15 +122,16 @@ function ActiveFilterBar({
   );
 }
 
+function BoardHeaderTitle(): ReactElement {
+  return <WorkspaceHeaderTitle />;
+}
+
 /** The Tasks tab: the board of the selected workspace. */
 export function TaskBoardScreen(): ReactElement {
   const search = useHeaderSearch();
   return (
     <Screen background="grouped">
-      <Stack.Screen options={{ title: "Tasks" }} />
-      <View style={styles.workspace}>
-        <WorkspaceHeaderTitle />
-      </View>
+      <Stack.Screen options={{ title: "Tasks", headerTitle: BoardHeaderTitle }} />
       <SelectedWorkspaceGate>
         {(workspace) => (
           <TaskBoardContent key={workspace.workspaceId} workspace={workspace} search={search} />
@@ -507,7 +508,6 @@ function TaskDetailPane({
 
 const styles = StyleSheet.create((theme) => ({
   root: { flex: 1, flexDirection: "row" },
-  workspace: { paddingHorizontal: theme.layout.screenPadding },
   board: { flex: 1 },
   content: { flex: 1 },
   notice: { paddingHorizontal: theme.space.md, paddingTop: theme.space.sm },
