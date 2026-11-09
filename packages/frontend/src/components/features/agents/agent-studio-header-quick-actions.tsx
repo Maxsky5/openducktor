@@ -1,5 +1,8 @@
+import type { ShortcutActionId } from "@openducktor/contracts";
+import { workflowShortcutActionId } from "@openducktor/contracts";
 import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 import { GitMerge, MessageCirclePlus, Zap } from "lucide-react";
+import { ShortcutHint, ShortcutText } from "@/features/shortcuts/shortcut-controls";
 import type { ReactElement } from "react";
 import {
   Command,
@@ -27,6 +30,7 @@ import {
 } from "./agent-studio-header-quick-actions-availability";
 
 type QuickActionsMenuProps = {
+  workflowId?: string | undefined;
   canOpenActionsMenu: boolean;
   workflowSteps: readonly AgentWorkflowStep[];
   isOpen: boolean;
@@ -42,6 +46,7 @@ type QuickActionsMenuProps = {
 };
 
 type QuickActionCommandItemProps = {
+  shortcutId?: ShortcutActionId | undefined;
   entry: QuickActionMenuEntry;
   disabledReason: string | null;
   onSelect: (entry: QuickActionMenuEntry) => void;
@@ -58,6 +63,16 @@ type QuickActionMenuGroup = {
   key: QuickActionGroupKey;
   entries: QuickActionMenuEntry[];
   label: string;
+};
+
+const quickActionShortcutId = (
+  option: AgentStudioQuickActionOption | null,
+  workflowId: string | undefined,
+): ShortcutActionId | undefined => {
+  if (option?.kind !== "task_action") return undefined;
+  if (option.taskAction.kind === "core")
+    return option.taskAction.action.id === "reset_task" ? "task-reset" : "task-close";
+  return workflowId ? workflowShortcutActionId(workflowId, option.taskAction.action) : undefined;
 };
 
 const quickActionEntryId = (entry: QuickActionMenuEntry): string =>
@@ -138,6 +153,7 @@ const buildQuickActionMenuGroups = (
 };
 
 function QuickActionCommandItem({
+  shortcutId,
   entry,
   disabledReason,
   onSelect,
@@ -164,11 +180,13 @@ function QuickActionCommandItem({
           </p>
         ) : null}
       </div>
+      <ShortcutHint id={shortcutId} available={!isDisabled} />
     </CommandItem>
   );
 }
 
 export function QuickActionsMenu({
+  workflowId,
   canOpenActionsMenu,
   workflowSteps,
   isOpen,
@@ -273,7 +291,12 @@ export function QuickActionsMenu({
           </span>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-64">
-          {primaryActionHint}
+          <ShortcutText
+            id={quickActionShortcutId(primaryAction, workflowId)}
+            available={canRunPrimaryAction}
+          >
+            {primaryActionHint}
+          </ShortcutText>
         </TooltipContent>
       </Tooltip>
       <Popover open={isMenuOpen} onOpenChange={onOpenChange}>
@@ -301,6 +324,11 @@ export function QuickActionsMenu({
                 <CommandGroup key={group.key} heading={group.label}>
                   {group.entries.map((entry) => (
                     <QuickActionCommandItem
+                      shortcutId={
+                        entry.kind === "quick_action"
+                          ? quickActionShortcutId(entry.option, workflowId)
+                          : undefined
+                      }
                       key={quickActionEntryId(entry)}
                       entry={entry}
                       disabledReason={getEntryDisabledReason(

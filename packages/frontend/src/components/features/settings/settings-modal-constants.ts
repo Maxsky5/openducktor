@@ -1,5 +1,6 @@
 import {
   Bell,
+  Keyboard,
   Columns3,
   Cpu,
   FolderGit2,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 
 export type SettingsSectionId =
+  | "keyboard-shortcuts"
   | "general"
   | "remote-access"
   | "git"
@@ -44,6 +46,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   icon: LucideIcon;
 }> = [
   { id: "general", label: "General", icon: SlidersHorizontal },
+  { id: "keyboard-shortcuts", label: "Keyboard shortcuts", icon: Keyboard },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "remote-access", label: "Remote control", icon: Radio },
   { id: "git", label: "Git", icon: FolderGit2 },
@@ -54,7 +57,7 @@ export const SETTINGS_SECTIONS: ReadonlyArray<{
   { id: "custom-agent-roles", label: "Custom agent roles", icon: MessageSquareText },
   { id: "chat", label: "Sessions", icon: MessageSquare },
   { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "kanban", label: "Kanban", icon: Columns3 },
+  { id: "kanban" as const, label: "Kanban", icon: Columns3 },
   { id: "autopilot", label: "Autopilot", icon: Workflow },
 ];
 

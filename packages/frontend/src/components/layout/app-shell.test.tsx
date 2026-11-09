@@ -1,3 +1,4 @@
+import { CommandPaletteRegistryProvider } from "@/features/command-palette/command-palette-registry";
 import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
@@ -385,161 +386,163 @@ function AppShellTestEnvironment({
   return (
     <MemoryRouter initialEntries={[options.initialEntry ?? "/kanban"]} useTransitions={false}>
       <CurrentRoute />
-      <ClientConnectionProvider connection={connection}>
-        <ThemeProvider>
-          <ActiveWorkspaceContext.Provider
-            value={{
-              activeWorkspace: currentActiveWorkspace,
-              setActiveWorkspace: setCurrentActiveWorkspace,
-            }}
-          >
-            <WorkspacePresenceContext.Provider
+      <CommandPaletteRegistryProvider>
+        <ClientConnectionProvider connection={connection}>
+          <ThemeProvider>
+            <ActiveWorkspaceContext.Provider
               value={{
-                hasLoadedWorkspaceList: true,
-                workspaceRecordsAreCurrent: true,
-                isLoadingWorkspaces: false,
-                workspaceLoadError: null,
-                retryWorkspaces: async () => {},
-                ...options.workspacePresence,
-                hasWorkspaces,
+                activeWorkspace: currentActiveWorkspace,
+                setActiveWorkspace: setCurrentActiveWorkspace,
               }}
             >
-              <WorkspaceStateContext.Provider
-                value={createWorkspaceState({
-                  workspaces,
-                  closedWorkspaces: options.closedOnly
-                    ? [{ ...activeWorkspace, isActive: false }]
-                    : (options.closedWorkspaces ?? []),
-                  incompleteRemovals: options.incompleteRemovals ?? [],
-                  activeWorkspace: currentWorkspace,
-                  commitWorkspaceProviderSetup: async (input) => ({
-                    workspace: await createWorkspace(localOnlyWorkspaceDetails(input)),
-                    registrationSaved: true,
-                    settingsSaved: true,
-                    credentialsSaved: true,
-                    phase: "complete",
-                    error: null,
-                  }),
-                  selectWorkspace: async (workspaceId) => {
-                    const selected = workspaces.find(
-                      (workspace) => workspace.workspaceId === workspaceId,
-                    );
-                    if (!selected) throw new Error(`Unknown workspace: ${workspaceId}`);
-                    setWorkspaces((current) =>
-                      current.map((workspace) => ({
-                        ...workspace,
-                        isActive: workspace.workspaceId === workspaceId,
-                      })),
-                    );
-                    setCurrentWorkspace({ ...selected, isActive: true });
-                    setCurrentActiveWorkspace(selected);
-                  },
-                })}
+              <WorkspacePresenceContext.Provider
+                value={{
+                  hasLoadedWorkspaceList: true,
+                  workspaceRecordsAreCurrent: true,
+                  isLoadingWorkspaces: false,
+                  workspaceLoadError: null,
+                  retryWorkspaces: async () => {},
+                  ...options.workspacePresence,
+                  hasWorkspaces,
+                }}
               >
-                <WorkspaceBranchStateContext.Provider
-                  value={createWorkspaceBranchState({ activeWorkspace: currentWorkspace })}
+                <WorkspaceStateContext.Provider
+                  value={createWorkspaceState({
+                    workspaces,
+                    closedWorkspaces: options.closedOnly
+                      ? [{ ...activeWorkspace, isActive: false }]
+                      : (options.closedWorkspaces ?? []),
+                    incompleteRemovals: options.incompleteRemovals ?? [],
+                    activeWorkspace: currentWorkspace,
+                    commitWorkspaceProviderSetup: async (input) => ({
+                      workspace: await createWorkspace(localOnlyWorkspaceDetails(input)),
+                      registrationSaved: true,
+                      settingsSaved: true,
+                      credentialsSaved: true,
+                      phase: "complete",
+                      error: null,
+                    }),
+                    selectWorkspace: async (workspaceId) => {
+                      const selected = workspaces.find(
+                        (workspace) => workspace.workspaceId === workspaceId,
+                      );
+                      if (!selected) throw new Error(`Unknown workspace: ${workspaceId}`);
+                      setWorkspaces((current) =>
+                        current.map((workspace) => ({
+                          ...workspace,
+                          isActive: workspace.workspaceId === workspaceId,
+                        })),
+                      );
+                      setCurrentWorkspace({ ...selected, isActive: true });
+                      setCurrentActiveWorkspace(selected);
+                    },
+                  })}
                 >
-                  <RuntimeDefinitionsContext.Provider
-                    value={{
-                      runtimeDefinitions: [],
-                      availableRuntimeDefinitions: [],
-                      agentRuntimes: settingsSnapshot.agentRuntimes,
-                      isLoadingRuntimeDefinitions: options.isLoadingRuntimeDefinitions ?? false,
-                      runtimeDefinitionsError: options.runtimeDefinitionsError ?? null,
-                      isLoadingRuntimeSettings: false,
-                      runtimeSettingsError: null,
-                      hasRuntimeSettingsSnapshot: true,
-                      refreshRuntimeSettings: async () => {},
-                      refreshRuntimeDefinitions: async () => [],
-                      loadRepoRuntimeCatalog: async () => {
-                        throw new Error("loadRepoRuntimeCatalog is not used in this test");
-                      },
-                      loadRepoRuntimeFileSearch: async () => {
-                        throw new Error("loadRepoRuntimeFileSearch is not used in this test");
-                      },
-                    }}
+                  <WorkspaceBranchStateContext.Provider
+                    value={createWorkspaceBranchState({ activeWorkspace: currentWorkspace })}
                   >
-                    <HostRuntimeStatusContext.Provider
-                      value={createHostRuntimeStatusContextValue({ statusByKind: {} })}
+                    <RuntimeDefinitionsContext.Provider
+                      value={{
+                        runtimeDefinitions: [],
+                        availableRuntimeDefinitions: [],
+                        agentRuntimes: settingsSnapshot.agentRuntimes,
+                        isLoadingRuntimeDefinitions: options.isLoadingRuntimeDefinitions ?? false,
+                        runtimeDefinitionsError: options.runtimeDefinitionsError ?? null,
+                        isLoadingRuntimeSettings: false,
+                        runtimeSettingsError: null,
+                        hasRuntimeSettingsSnapshot: true,
+                        refreshRuntimeSettings: async () => {},
+                        refreshRuntimeDefinitions: async () => [],
+                        loadRepoRuntimeCatalog: async () => {
+                          throw new Error("loadRepoRuntimeCatalog is not used in this test");
+                        },
+                        loadRepoRuntimeFileSearch: async () => {
+                          throw new Error("loadRepoRuntimeFileSearch is not used in this test");
+                        },
+                      }}
                     >
-                      <DiagnosticsAutoOpenProvider>
-                        <ChecksStateContext.Provider value={createChecksState()}>
-                          <TasksStateContext.Provider
-                            value={createTasksState(
-                              options.tasksByRepoPath?.[currentWorkspace?.repoPath ?? ""],
-                            )}
-                          >
-                            <TaskControlContext.Provider value={taskControlValue}>
-                              <AgentSessionsContext.Provider
-                                value={createAgentSessionsStore("/repo")}
-                              >
-                                <NotificationContext.Provider value={notificationContextValue}>
-                                  <WorkspaceActivityContext.Provider
-                                    value={createWorkspaceActivityObserverStub()}
-                                  >
-                                    <WorkspacePreviewTransitionGuardProvider>
-                                      <FeatureTourProvider>
-                                        <SettingsModalProvider>
-                                          <DiagnosticsPanelProvider>
-                                            <TaskWorkflowActionsContext.Provider
-                                              value={createTaskWorkflowActionsFixture(
-                                                options.taskWorkflowActions,
-                                              )}
-                                            >
-                                              <Routes>
-                                                <Route
-                                                  element={
-                                                    <ManualPullRequestSyncProvider>
-                                                      <ManualMergeCheckProvider>
-                                                        <AppShell />
-                                                      </ManualMergeCheckProvider>
-                                                    </ManualPullRequestSyncProvider>
-                                                  }
-                                                >
+                      <HostRuntimeStatusContext.Provider
+                        value={createHostRuntimeStatusContextValue({ statusByKind: {} })}
+                      >
+                        <DiagnosticsAutoOpenProvider>
+                          <ChecksStateContext.Provider value={createChecksState()}>
+                            <TasksStateContext.Provider
+                              value={createTasksState(
+                                options.tasksByRepoPath?.[currentWorkspace?.repoPath ?? ""],
+                              )}
+                            >
+                              <TaskControlContext.Provider value={taskControlValue}>
+                                <AgentSessionsContext.Provider
+                                  value={createAgentSessionsStore("/repo")}
+                                >
+                                  <NotificationContext.Provider value={notificationContextValue}>
+                                    <WorkspaceActivityContext.Provider
+                                      value={createWorkspaceActivityObserverStub()}
+                                    >
+                                      <WorkspacePreviewTransitionGuardProvider>
+                                        <FeatureTourProvider>
+                                          <SettingsModalProvider>
+                                            <DiagnosticsPanelProvider>
+                                              <TaskWorkflowActionsContext.Provider
+                                                value={createTaskWorkflowActionsFixture(
+                                                  options.taskWorkflowActions,
+                                                )}
+                                              >
+                                                <Routes>
                                                   <Route
-                                                    path="/kanban"
-                                                    element={<main>Kanban</main>}
-                                                  />
-                                                  <Route
-                                                    path="/sessions"
                                                     element={
-                                                      options.sessionContent ? (
-                                                        <div key={currentWorkspace?.workspaceId}>
-                                                          {options.sessionContent}
-                                                        </div>
-                                                      ) : (
-                                                        <main>Sessions</main>
-                                                      )
+                                                      <ManualPullRequestSyncProvider>
+                                                        <ManualMergeCheckProvider>
+                                                          <AppShell />
+                                                        </ManualMergeCheckProvider>
+                                                      </ManualPullRequestSyncProvider>
                                                     }
-                                                  />
-                                                  <Route
-                                                    path="/onboarding"
-                                                    element={<Navigate to="/kanban" replace />}
-                                                  />
-                                                </Route>
-                                              </Routes>
-                                              {/* `ApplicationOverlays` mounts the tour host. */}
-                                              <FeatureTourDialogHost />
-                                            </TaskWorkflowActionsContext.Provider>
-                                          </DiagnosticsPanelProvider>
-                                        </SettingsModalProvider>
-                                      </FeatureTourProvider>
-                                    </WorkspacePreviewTransitionGuardProvider>
-                                  </WorkspaceActivityContext.Provider>
-                                </NotificationContext.Provider>
-                              </AgentSessionsContext.Provider>
-                            </TaskControlContext.Provider>
-                          </TasksStateContext.Provider>
-                        </ChecksStateContext.Provider>
-                      </DiagnosticsAutoOpenProvider>
-                    </HostRuntimeStatusContext.Provider>
-                  </RuntimeDefinitionsContext.Provider>
-                </WorkspaceBranchStateContext.Provider>
-              </WorkspaceStateContext.Provider>
-            </WorkspacePresenceContext.Provider>
-          </ActiveWorkspaceContext.Provider>
-        </ThemeProvider>
-      </ClientConnectionProvider>
+                                                  >
+                                                    <Route
+                                                      path="/kanban"
+                                                      element={<main>Kanban</main>}
+                                                    />
+                                                    <Route
+                                                      path="/sessions"
+                                                      element={
+                                                        options.sessionContent ? (
+                                                          <div key={currentWorkspace?.workspaceId}>
+                                                            {options.sessionContent}
+                                                          </div>
+                                                        ) : (
+                                                          <main>Sessions</main>
+                                                        )
+                                                      }
+                                                    />
+                                                    <Route
+                                                      path="/onboarding"
+                                                      element={<Navigate to="/kanban" replace />}
+                                                    />
+                                                  </Route>
+                                                </Routes>
+                                                {/* `ApplicationOverlays` mounts the tour host. */}
+                                                <FeatureTourDialogHost />
+                                              </TaskWorkflowActionsContext.Provider>
+                                            </DiagnosticsPanelProvider>
+                                          </SettingsModalProvider>
+                                        </FeatureTourProvider>
+                                      </WorkspacePreviewTransitionGuardProvider>
+                                    </WorkspaceActivityContext.Provider>
+                                  </NotificationContext.Provider>
+                                </AgentSessionsContext.Provider>
+                              </TaskControlContext.Provider>
+                            </TasksStateContext.Provider>
+                          </ChecksStateContext.Provider>
+                        </DiagnosticsAutoOpenProvider>
+                      </HostRuntimeStatusContext.Provider>
+                    </RuntimeDefinitionsContext.Provider>
+                  </WorkspaceBranchStateContext.Provider>
+                </WorkspaceStateContext.Provider>
+              </WorkspacePresenceContext.Provider>
+            </ActiveWorkspaceContext.Provider>
+          </ThemeProvider>
+        </ClientConnectionProvider>
+      </CommandPaletteRegistryProvider>
     </MemoryRouter>
   );
 }
@@ -554,10 +557,15 @@ const renderAppShellForTest = (
   options: RenderAppShellForTestOptions = {},
 ): ReturnType<typeof render> => {
   const connection = createTestClientConnection({
-    client: { ...localOnlyProviderSetupClient(), ...hostFakes },
+    client: {
+      workspaceGetKeyboardShortcuts: async () => ({ version: 1, overrides: {} }),
+      ...localOnlyProviderSetupClient(),
+      ...hostFakes,
+    },
     ...(options.storage && { storage: options.storage }),
   });
   const { queryClient } = connection;
+  queryClient.setQueryData(["keyboard-shortcuts"], { version: 1, overrides: {} });
   const settingsSnapshot = createSettingsSnapshotFixture();
   queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
   queryClient.setQueryData(
@@ -967,7 +975,7 @@ describe("AppShell", () => {
 
     const collapsedSettingsButton = screen.getByRole("button", { name: "Settings" });
     expect(collapsedSettingsButton.getAttribute("aria-label")).toBe("Settings");
-    expect(collapsedSettingsButton.getAttribute("title")).toBe("Settings");
+    expect(collapsedSettingsButton.getAttribute("title")).toBe("Settings (Ctrl+,)");
     expect(collapsedSettingsButton.textContent?.trim()).toBe("");
   });
 
@@ -2175,7 +2183,7 @@ describe("AppShell command palette", () => {
     const restoreClipboard = replaceNavigatorClipboard(writeText);
     try {
       const { palette, input } = await searchChat();
-      expect(within(palette).getByText("Rename")).toBeTruthy();
+      expect(within(palette).queryByText("Rename")).toBeNull();
 
       fireEvent.keyDown(input, { key: "Tab" });
 
@@ -2203,10 +2211,12 @@ describe("AppShell command palette", () => {
     }
   });
 
-  test("renames a chat with Mod+E and archives it with the existing dialogs", async () => {
-    const { input } = await searchChat();
-
+  test("leaves chat rename unassigned and uses the existing rename and archive dialogs", async () => {
+    const { input, palette: initialPalette } = await searchChat();
     fireEvent.keyDown(input, { key: "e", metaKey: true });
+    expect(screen.queryByRole("dialog", { name: "Rename session" })).toBeNull();
+    fireEvent.keyDown(input, { key: "Tab" });
+    fireEvent.click(within(initialPalette).getByRole("option", { name: "Rename session" }));
     await flushQueryUpdates();
     const rename = await screen.findByRole("dialog", { name: "Rename session" });
     fireEvent.keyDown(rename, { key: "Escape" });
@@ -2268,7 +2278,7 @@ describe("AppShell command palette", () => {
     expect(selectedOption(palette)?.textContent).toContain("Polish the command palette");
   });
 
-  test("edits the highlighted task and runs its next workflow step with the task keys", async () => {
+  test("edits the highlighted task and leaves its workflow action unassigned", async () => {
     const onEdit = mock(() => {});
     const onOpenSession = mock(() => {});
     renderPalette({ taskWorkflowActions: { onEdit, onOpenSession } });
@@ -2278,13 +2288,10 @@ describe("AppShell command palette", () => {
     await waitFor(() => expect(onEdit).toHaveBeenCalledWith("odt-own"));
 
     search(await openPalette(), "polish");
-    expect(screen.getByText("Open Builder")).toBeTruthy();
+    expect(screen.queryByText("Open Builder")).toBeNull();
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter", metaKey: true });
-    await waitFor(() =>
-      expect(onOpenSession).toHaveBeenCalledWith("odt-own", "build", {
-        session: expect.objectContaining({ externalSessionId: "build-1" }),
-      }),
-    );
+    expect(onOpenSession).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Command palette" })).toBeTruthy();
   });
 
   test("creates a task from the query text", async () => {

@@ -15,7 +15,7 @@ import {
 } from "@openducktor/frontend-core/queries/workspace-sessions";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
-import { SessionNavigationList } from "./session-navigation-list";
+import { SessionNavigationList } from "./session-navigation-list.test-view";
 import { SessionNavigationRail } from "./session-navigation-rail";
 import { SessionSelectionContext } from "./session-navigation-selection";
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";

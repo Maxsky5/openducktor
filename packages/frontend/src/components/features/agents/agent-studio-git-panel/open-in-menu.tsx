@@ -1,7 +1,22 @@
+import {
+  ShortcutScope,
+  ShortcutText,
+  ShortcutButton,
+} from "@/features/shortcuts/shortcut-controls";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, FolderOpen, LoaderCircle, RefreshCw } from "lucide-react";
-import { type ReactElement, type ReactNode, useId, useMemo, useState } from "react";
+import {
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+  useRef,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -104,6 +119,18 @@ export function OpenInMenu({
     }
   };
 
+  const shortcutRoot = useRef<HTMLButtonElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    shortcutRoot,
+    [
+      {
+        id: "content-external" as const,
+        run: () => setIsOpen(true),
+        disabledReason: resolvedDisabledReason,
+      },
+    ],
+    "[data-git-view]",
+  );
   const defaultButton = (
     <OpenInDefaultButton
       targetLabel={targetLabel}
@@ -114,7 +141,10 @@ export function OpenInMenu({
       hasMenuTrigger={hasMenuTrigger}
     />
   );
-  const menuTrigger = renderOpenInMenuTriggerButton({ disabled: isTriggerDisabled });
+  const menuTrigger = renderOpenInMenuTriggerButton({
+    disabled: isTriggerDisabled,
+    ref: shortcutRoot,
+  });
   const trigger = hasMenuTrigger ? (
     <OpenInActionGroup>
       {defaultButton}
@@ -218,46 +248,60 @@ export function OpenInMenu({
   };
 
   return (
-    <OpenInActionGroup>
-      {defaultButton}
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverTrigger asChild>{menuTrigger}</PopoverTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Choose a different tool</TooltipContent>
-        </Tooltip>
-        <OpenInMenuBody>
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-xs font-medium text-foreground">Other tools for {targetLabel}</p>
-            <p
-              className="mt-1 truncate text-[11px] text-muted-foreground"
-              title={targetPath ?? undefined}
-            >
-              {targetPath ?? "Select a tool to continue."}
-            </p>
-          </div>
+    <ShortcutScope owners={[shortcutOwner]}>
+      <OpenInActionGroup>
+        {defaultButton}
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>{menuTrigger}</PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <ShortcutText id="content-external" available={!isTriggerDisabled}>
+                Choose a different tool
+              </ShortcutText>
+            </TooltipContent>
+          </Tooltip>
+          <OpenInMenuBody>
+            <div className="border-b border-border px-3 py-2">
+              <p className="text-xs font-medium text-foreground">Other tools for {targetLabel}</p>
+              <p
+                className="mt-1 truncate text-[11px] text-muted-foreground"
+                title={targetPath ?? undefined}
+              >
+                {targetPath ?? "Select a tool to continue."}
+              </p>
+            </div>
 
-          {renderMenuContent()}
-        </OpenInMenuBody>
-      </Popover>
-    </OpenInActionGroup>
+            {renderMenuContent()}
+          </OpenInMenuBody>
+        </Popover>
+      </OpenInActionGroup>
+    </ShortcutScope>
   );
 }
 
-function renderOpenInMenuTriggerButton({ disabled }: { disabled: boolean }): ReactElement {
+function renderOpenInMenuTriggerButton({
+  disabled,
+  ref,
+}: {
+  disabled: boolean;
+  ref: Ref<HTMLButtonElement>;
+}): ReactElement {
   return (
-    <Button
+    <ShortcutButton
+      shortcutId="content-external"
       type="button"
       variant="outline"
       size="sm"
       className="h-7 rounded-l-none border-l-0 px-1.5 text-[11px]"
       data-testid="agent-studio-git-open-in-trigger"
+      ref={ref}
       aria-label="Choose a different tool"
       disabled={disabled}
     >
       <ChevronDown className="size-3" />
-    </Button>
+    </ShortcutButton>
   );
 }
 

@@ -31,6 +31,62 @@ const withTempConfig = async (run: (configPath: string) => Promise<void>): Promi
 };
 
 describe("settings config files", () => {
+  test("shortcut preferences survive host restart and unrelated settings saves without entering shared settings", async () => {
+    await withTempConfig(async (configPath) => {
+      const fixture = await createSharedSettingsFixture({ configPath });
+      try {
+        const service = createWorkspaceSettingsService(
+          fixture.settingsConfig,
+          builtinTaskWorkflows,
+        );
+        const preferences = { version: 1 as const, overrides: { palette: null } };
+        await Effect.runPromise(service.saveKeyboardShortcuts(preferences));
+        await Effect.runPromise(service.setTheme("dark"));
+        const restarted = createWorkspaceSettingsService(
+          createSettingsConfigAdapter({ configPath, sharedSettings: fixture.database }),
+          builtinTaskWorkflows,
+        );
+        expect(await Effect.runPromise(restarted.readKeyboardShortcuts())).toEqual(preferences);
+        expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({
+          keyboardShortcuts: preferences,
+          theme: "dark",
+        });
+        expect(
+          (await Effect.runPromise(fixture.database.readGlobalConfig())).keyboardShortcuts,
+        ).toBeUndefined();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  });
+
+  test("invalid shortcut preferences remain unchanged until an explicit reset", async () => {
+    await withTempConfig(async (configPath) => {
+      const fixture = await createSharedSettingsFixture({ configPath });
+      try {
+        const raw = JSON.parse(await readFile(configPath, "utf8"));
+        await writeFile(
+          configPath,
+          JSON.stringify({ ...raw, keyboardShortcuts: { version: 99, overrides: {} } }),
+        );
+        const service = createWorkspaceSettingsService(
+          fixture.settingsConfig,
+          builtinTaskWorkflows,
+        );
+        const result = await Effect.runPromise(Effect.result(service.readKeyboardShortcuts()));
+        expect(result._tag).toBe("Failure");
+        expect(JSON.parse(await readFile(configPath, "utf8")).keyboardShortcuts.version).toBe(99);
+        await Effect.runPromise(service.saveKeyboardShortcuts({ version: 1, overrides: {} }));
+        expect(await Effect.runPromise(service.readKeyboardShortcuts())).toEqual({
+          version: 1,
+          overrides: {},
+        });
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  });
+
   test("a shared write keeps a preference edit that another host saves during the write", async () => {
     await withTempConfig(async (configPath) => {
       const shared = createDefaultGlobalConfig();

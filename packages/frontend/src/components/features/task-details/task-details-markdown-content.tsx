@@ -1,8 +1,12 @@
+import { ShortcutScope } from "@/features/shortcuts/shortcut-controls";
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import {
   type MouseEvent,
   memo,
   type ReactElement,
+  type RefObject,
+  useRef,
   startTransition,
   useCallback,
   useEffect,
@@ -61,6 +65,7 @@ const TaskDetailsRenderedMarkdown = memo(function TaskDetailsRenderedMarkdown({
 });
 
 type DeferredTaskDetailsMarkdownProps = TaskDetailsRenderedMarkdownProps & {
+  shortcutRoot: RefObject<HTMLDivElement | null>;
   copyableMarkdown: string | undefined;
   copied: boolean;
   onCopy: (e: MouseEvent<HTMLButtonElement>) => void;
@@ -68,6 +73,7 @@ type DeferredTaskDetailsMarkdownProps = TaskDetailsRenderedMarkdownProps & {
 };
 
 function DeferredTaskDetailsMarkdown({
+  shortcutRoot,
   markdown,
   hasLabeledCodeFence,
   stripTaskDescriptionFrontMatter,
@@ -109,7 +115,7 @@ function DeferredTaskDetailsMarkdown({
   }
 
   return (
-    <div className="relative">
+    <div ref={shortcutRoot} className="relative">
       <div className={cn("max-h-84 overflow-y-auto", copyableMarkdown && "pr-9")}>
         <TaskDetailsRenderedMarkdown
           markdown={markdown}
@@ -121,6 +127,7 @@ function DeferredTaskDetailsMarkdown({
       </div>
       {copyableMarkdown ? (
         <CopyIconButton
+          shortcutId="content-copy"
           copied={copied}
           ariaLabel="Copy description content"
           dataTestId="copy-document-content"
@@ -146,54 +153,72 @@ export const TaskDetailsMarkdownContent = memo(function TaskDetailsMarkdownConte
   const hasLabeledCodeFence = LABELED_CODE_FENCE_PATTERN.test(markdown);
   const shouldDeferMarkdown = markdown.length >= LARGE_MARKDOWN_DEFER_THRESHOLD;
 
+  const shortcutRoot = useRef<HTMLDivElement>(null);
+  const copyContent = useCallback(() => {
+    if (copyableMarkdown) void copyToClipboard(copyableMarkdown);
+  }, [copyToClipboard, copyableMarkdown]);
+  const shortcutOwner = useLocalShortcuts(
+    shortcutRoot,
+    [
+      {
+        id: "content-copy" as const,
+        run: copyContent,
+        disabledReason: copyableMarkdown ? null : "There is no description to copy.",
+      },
+    ],
+    '[class~="group/card"]',
+  );
   const handleCopy = useCallback(
     (e: MouseEvent<HTMLButtonElement>): void => {
       e.stopPropagation();
       e.preventDefault();
-      if (!copyableMarkdown) {
-        return;
-      }
-      void copyToClipboard(copyableMarkdown);
+      copyContent();
     },
-    [copyToClipboard, copyableMarkdown],
+    [copyContent],
   );
 
   if (shouldDeferMarkdown) {
     return (
-      <DeferredTaskDetailsMarkdown
-        key={markdown}
-        markdown={markdown}
-        hasLabeledCodeFence={hasLabeledCodeFence}
-        stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
-        copyableMarkdown={copyableMarkdown}
-        copied={copied}
-        onCopy={handleCopy}
-        {...(taskAssetContext ? { taskAssetContext } : {})}
-        {...(issueImageContext ? { issueImageContext } : {})}
-      />
+      <ShortcutScope owners={[shortcutOwner]}>
+        <DeferredTaskDetailsMarkdown
+          shortcutRoot={shortcutRoot}
+          key={markdown}
+          markdown={markdown}
+          hasLabeledCodeFence={hasLabeledCodeFence}
+          stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
+          copyableMarkdown={copyableMarkdown}
+          copied={copied}
+          onCopy={handleCopy}
+          {...(taskAssetContext ? { taskAssetContext } : {})}
+          {...(issueImageContext ? { issueImageContext } : {})}
+        />
+      </ShortcutScope>
     );
   }
 
   return (
-    <div className="relative">
-      <div className={cn("max-h-84 overflow-y-auto", copyableMarkdown && "pr-9")}>
-        <TaskDetailsRenderedMarkdown
-          markdown={markdown}
-          hasLabeledCodeFence={hasLabeledCodeFence}
-          stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-          {...(issueImageContext ? { issueImageContext } : {})}
-        />
+    <ShortcutScope owners={[shortcutOwner]}>
+      <div ref={shortcutRoot} className="relative">
+        <div className={cn("max-h-84 overflow-y-auto", copyableMarkdown && "pr-9")}>
+          <TaskDetailsRenderedMarkdown
+            markdown={markdown}
+            hasLabeledCodeFence={hasLabeledCodeFence}
+            stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
+            {...(taskAssetContext ? { taskAssetContext } : {})}
+            {...(issueImageContext ? { issueImageContext } : {})}
+          />
+        </div>
+        {copyableMarkdown ? (
+          <CopyIconButton
+            shortcutId="content-copy"
+            copied={copied}
+            ariaLabel="Copy description content"
+            dataTestId="copy-document-content"
+            className="absolute top-2 right-2 z-10"
+            onClick={handleCopy}
+          />
+        ) : null}
       </div>
-      {copyableMarkdown ? (
-        <CopyIconButton
-          copied={copied}
-          ariaLabel="Copy description content"
-          dataTestId="copy-document-content"
-          className="absolute top-2 right-2 z-10"
-          onClick={handleCopy}
-        />
-      ) : null}
-    </div>
+    </ShortcutScope>
   );
 });

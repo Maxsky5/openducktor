@@ -4,7 +4,7 @@ import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as cssPresence from "@/components/ui/css-presence";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
-import { SessionNavigationList } from "./session-navigation-list";
+import { SessionNavigationList } from "./session-navigation-list.test-view";
 import {
   alphaWorkspace,
   betaWorkspace,

@@ -20,6 +20,7 @@ import {
 
 /** Cookies of the web runner session. The dev server never gets them. */
 const SESSION_COOKIE_PREFIX = "openducktor_web_session";
+const RESOURCE_QUERY = "__openducktor_resource";
 
 /** Headers of one connection, which a proxy never forwards. */
 const HOP_BY_HOP_HEADERS = [
@@ -120,8 +121,16 @@ export const createBrowserPreviewProxies = (input: {
       sendLeavePage(response, new URL(path, preview.target).searchParams.get("url") ?? "");
       return;
     }
-    const upstream = sendUpstream(preview, request, (upstreamResponse) =>
-      relayResponse(preview, request, upstreamResponse, response),
+    const resourceUrl = new URL(path, preview.target);
+    const rawResource = resourceUrl.searchParams.get(RESOURCE_QUERY) === "1";
+    resourceUrl.searchParams.delete(RESOURCE_QUERY);
+    const resourcePath = rawResource ? resourceUrl.pathname + resourceUrl.search : path;
+    const upstream = sendUpstream(
+      preview,
+      request,
+      (upstreamResponse) =>
+        relayResponse(preview, request, upstreamResponse, response, rawResource, resourcePath),
+      resourcePath,
     );
     // A tab that leaves the page closes the response, so the dev server stops its answer too.
     response.once("close", () => {
@@ -185,6 +194,7 @@ export const createBrowserPreviewProxies = (input: {
     preview: Preview,
     request: IncomingMessage,
     onResponse: (response: IncomingMessage) => void,
+    resourcePath?: string,
   ) => {
     const { target } = preview;
     const upgrade = request.headers.upgrade !== undefined;
@@ -193,7 +203,7 @@ export const createBrowserPreviewProxies = (input: {
       hostname: target.hostname.replace(/^\[|\]$/g, ""),
       port: target.port || (target.protocol === "https:" ? 443 : 80),
       method: request.method,
-      path: request.url,
+      path: resourcePath ?? request.url,
       headers,
     };
     // A dev server on the host often has a self-signed certificate.
@@ -207,8 +217,20 @@ export const createBrowserPreviewProxies = (input: {
     request: IncomingMessage,
     upstream: IncomingMessage,
     response: ServerResponse,
+    rawResource: boolean,
+    requestPath: string,
   ) => {
-    const headers = downstreamHeaders(upstream.headers, preview, request.url);
+    const headers = downstreamHeaders(upstream.headers, preview, requestPath);
+    if (rawResource && upstream.headers.location !== undefined) {
+      const redirected = new URL(String(headers.location), `http://localhost:${preview.port}`);
+      if (
+        isPreviewHost(redirected.host, preview.port) &&
+        redirected.pathname !== BROWSER_PREVIEW_LEAVE_PATH
+      ) {
+        redirected.searchParams.set(RESOURCE_QUERY, "1");
+        headers.location = redirected.pathname + redirected.search;
+      }
+    }
     const status = upstream.statusCode ?? 502;
     // `pipe` does not end the response when the dev server drops its answer.
     upstream.on("error", (cause) => response.destroy(cause));
@@ -218,6 +240,28 @@ export const createBrowserPreviewProxies = (input: {
       status !== 304 &&
       /^text\/html\b/i.test(String(upstream.headers["content-type"] ?? "")) &&
       (upstream.headers["content-encoding"] ?? "identity") === "identity";
+    const resourceContainer =
+      !rawResource &&
+      request.method === "GET" &&
+      status === 200 &&
+      !/^attachment\b/i.test(String(upstream.headers["content-disposition"] ?? "")) &&
+      !/^text\/html\b/i.test(String(upstream.headers["content-type"] ?? "")) &&
+      ["iframe", "document"].includes(String(request.headers["sec-fetch-dest"]));
+    if (resourceContainer) {
+      upstream.destroy();
+      const resourceUrl = new URL(requestPath, preview.target);
+      resourceUrl.searchParams.set(RESOURCE_QUERY, "1");
+      const source = resourceUrl.pathname + resourceUrl.search;
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "content-security-policy": `default-src 'none'; script-src 'self'; frame-src 'self'; style-src 'unsafe-inline'; frame-ancestors ${Array.from(preview.appOrigins).join(" ")}`,
+      });
+      response.end(
+        `<!doctype html><html><head><script src="${BROWSER_PREVIEW_SCRIPT_PATH}"></script><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}iframe{display:block}</style></head><body><iframe title="Resource" src="${escapeHtml(source)}"></iframe></body></html>`,
+      );
+      return;
+    }
     if (!injects) {
       response.writeHead(status, upstream.statusMessage, headers);
       upstream.pipe(response);
@@ -364,7 +408,7 @@ const withFrameAncestors = (
   policy: string | string[] | undefined,
   appOrigins: readonly string[],
 ): string => {
-  const ancestors = `frame-ancestors ${appOrigins.join(" ")}`;
+  const ancestors = `frame-ancestors 'self' ${appOrigins.join(" ")}`;
   const policies = policy === undefined ? [] : Array.isArray(policy) ? policy : [policy];
   if (policies.length === 0) return ancestors;
   return policies

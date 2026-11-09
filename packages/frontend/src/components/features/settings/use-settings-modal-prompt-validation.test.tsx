@@ -82,6 +82,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.hasPromptValidationErrors).toBe(false);
     expect(latest.promptValidationState.totalErrorCount).toBe(0);
     expect(latest.settingsSectionErrorCountById).toEqual({
+      "keyboard-shortcuts": 0,
       general: 0,
       "remote-access": 0,
       git: 0,
@@ -114,6 +115,7 @@ describe("useSettingsModalPromptValidation", () => {
     expect(latest.promptValidationState.repoErrorCountByWorkspaceId["repo-a"]).toBe(1);
     expect(latest.promptValidationState.totalErrorCount).toBe(2);
     expect(latest.settingsSectionErrorCountById).toEqual({
+      "keyboard-shortcuts": 0,
       general: 0,
       "remote-access": 0,
       git: 0,

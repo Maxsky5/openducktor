@@ -10,7 +10,7 @@ import {
 import { createTerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
 import { TerminalActivityContext } from "@/state/terminal-activity-context";
 import { SessionPreviewCommands } from "./session-command-activity";
-import { SessionNavigationList } from "./session-navigation-list";
+import { SessionNavigationList } from "./session-navigation-list.test-view";
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import {
   alphaWorkspace,

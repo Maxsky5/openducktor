@@ -1,3 +1,10 @@
+import {
+  ShortcutScope,
+  ShortcutText,
+  ShortcutButton,
+} from "@/features/shortcuts/shortcut-controls";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import type {
   TerminalRestartRequest,
   TerminalRestartResponse,
@@ -7,7 +14,6 @@ import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { Loader2, RotateCw } from "lucide-react";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 import { DismissButton } from "./terminal-notice";
 import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -43,6 +49,7 @@ export function TerminalRestartButton({
     setError(null);
   });
   const [lastCommand, setLastCommand] = useState(activity?.command);
+  const restartDisabled = pending || !activity?.restartable || state.status !== "ready";
 
   if (activity?.command !== lastCommand) {
     setLastCommand(activity?.command);
@@ -65,59 +72,84 @@ export function TerminalRestartButton({
     }
   };
 
+  const root = useRef<HTMLSpanElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "terminal-restart" as const,
+        run: () => {
+          void restart();
+        },
+        disabledReason: restartDisabled ? "The command cannot restart now." : null,
+      },
+    ],
+    "[data-panel-owner]",
+  );
   if (!activity?.restartable && !pending && error === null) return null;
   const label = pending ? "Restarting command…" : "Restart command";
   return (
-    <Popover
-      open={isVisible && error !== null}
-      onOpenChange={(open) => {
-        if (!open) setError(null);
-      }}
-    >
-      <PopoverAnchor asChild>
-        <span hidden={!isVisible} className={isVisible ? "ml-auto inline-flex shrink-0" : "hidden"}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
-                aria-label={label}
-                aria-busy={pending}
-                disabled={pending || !activity?.restartable || state.status !== "ready"}
-                onClick={() => void restart()}
-              >
-                {pending ? (
-                  <Loader2
-                    className="size-3.5 animate-spin motion-reduce:animate-none"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <RotateCw className="size-3.5" aria-hidden="true" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{label}</TooltipContent>
-          </Tooltip>
-        </span>
-      </PopoverAnchor>
-      <PopoverContent
-        side="bottom"
-        align="end"
-        className="flex w-72 items-start gap-2 p-3"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
+    <ShortcutScope owners={[shortcutOwner]}>
+      <Popover
+        open={isVisible && error !== null}
+        onOpenChange={(open) => {
+          if (!open) setError(null);
+        }}
       >
-        <p role="alert" className="min-w-0 flex-1 text-xs text-destructive">
-          {error}
-        </p>
-        <DismissButton
-          label="Dismiss restart error"
-          className="-mt-1 -mr-1"
-          onClick={() => setError(null)}
-        />
-      </PopoverContent>
-    </Popover>
+        <PopoverAnchor asChild>
+          <span
+            ref={root}
+            hidden={!isVisible}
+            className={isVisible ? "ml-auto inline-flex shrink-0" : "hidden"}
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ShortcutButton
+                  shortcutId="terminal-restart"
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 text-muted-foreground hover:text-foreground"
+                  aria-label={label}
+                  aria-busy={pending}
+                  disabled={restartDisabled}
+                  onClick={() => void restart()}
+                >
+                  {pending ? (
+                    <Loader2
+                      className="size-3.5 animate-spin motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <RotateCw className="size-3.5" aria-hidden="true" />
+                  )}
+                </ShortcutButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <ShortcutText id="terminal-restart" available={!restartDisabled}>
+                  {label}
+                </ShortcutText>
+              </TooltipContent>
+            </Tooltip>
+          </span>
+        </PopoverAnchor>
+        <PopoverContent
+          side="bottom"
+          align="end"
+          className="flex w-72 items-start gap-2 p-3"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <p role="alert" className="min-w-0 flex-1 text-xs text-destructive">
+            {error}
+          </p>
+          <DismissButton
+            label="Dismiss restart error"
+            className="-mt-1 -mr-1"
+            onClick={() => setError(null)}
+          />
+        </PopoverContent>
+      </Popover>
+    </ShortcutScope>
   );
 }

@@ -6,7 +6,7 @@ import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useMemo, useState } from "react";
-import { SessionNavigationList } from "@/components/layout/sidebar/session-navigation-list";
+import { SessionNavigationList } from "@/components/layout/sidebar/session-navigation-list.test-view";
 import { SessionNavigationRail } from "@/components/layout/sidebar/session-navigation-rail";
 import { SessionSelectionContext } from "@/components/layout/sidebar/session-navigation-selection";
 import { SessionMenuProvider } from "@/components/layout/sidebar/session-menu-provider";

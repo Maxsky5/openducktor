@@ -1,3 +1,6 @@
+import { ShortcutScope, ShortcutButton } from "@/features/shortcuts/shortcut-controls";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import type {
   WorkspaceFileScope,
@@ -84,6 +87,7 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
   const [committedSnapshot, setCommittedSnapshot] = useState<CommittedFilePreviewSnapshot | null>(
     null,
   );
+  const root = useRef<HTMLElement>(null);
   const editorRef = useRef<EditorFocus | null>(null);
   const fileScope = useMemo((): WorkspaceFileScope | undefined => {
     // An explicitly opened local file is outside the chat directory.
@@ -188,6 +192,23 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
     onClose,
   });
 
+  const saveState = resolveFilePreviewSaveState({
+    hasSession: hasActiveEditorSession,
+    isSwitchingFiles,
+    isDirty: editor.isDirty,
+    isSaving: editor.isSaving,
+    hasStaleConflict: editor.hasStaleConflict,
+  });
+  const shortcutOwner = useLocalShortcuts(root, [
+    {
+      id: "file-save" as const,
+      ownsInput: true,
+      run: () => {
+        void editor.save();
+      },
+      disabledReason: saveState === "dirty" ? null : "No editable changes to save.",
+    },
+  ]);
   if (!selectedFile) {
     return null;
   }
@@ -198,56 +219,53 @@ export const TaskExecutionSelectedFilePreview = memo(function TaskExecutionSelec
       ? `${displayedFile.rootPath.replace(/\/$/, "")}/${displayedFile.relativePath}`
       : displayedFile.relativePath;
   return (
-    <section
-      className="flex h-full min-h-0 flex-col bg-card"
-      aria-label="Selected file preview"
-      aria-busy={isSwitchingFiles}
-      onKeyDown={handlePreviewShortcut}
-    >
-      <FilePreviewHeader
-        relativePath={displayPath}
-        saveState={resolveFilePreviewSaveState({
-          hasSession: hasActiveEditorSession,
-          isSwitchingFiles,
-          isDirty: editor.isDirty,
-          isSaving: editor.isSaving,
-          hasStaleConflict: editor.hasStaleConflict,
-        })}
-        onSave={() => void editor.save()}
-        onClose={onClose}
-      />
-      <FileErrorBanner
-        saveError={editor.saveError}
-        readError={readError}
-        canReview={editor.canReviewConflict}
-        isReviewingConflict={editor.isReviewingConflict}
-        onReview={() => void editor.reviewLatestVersion()}
-      />
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <FilePreviewBody
-          snapshot={visibleSnapshot}
-          message={message}
-          previewSessionKey={previewSessionKey}
-          editor={editor}
-          editable={hasActiveEditorSession}
-          hasPendingDiscard={hasPendingDiscard}
-          editorRef={editorRef}
+    <ShortcutScope owners={[shortcutOwner]}>
+      <section
+        ref={root}
+        className="flex h-full min-h-0 flex-col bg-card"
+        aria-label="Selected file preview"
+        aria-busy={isSwitchingFiles}
+        onKeyDown={handlePreviewShortcut}
+      >
+        <FilePreviewHeader
+          relativePath={displayPath}
+          saveState={saveState}
+          onSave={() => void editor.save()}
+          onClose={onClose}
         />
-      </div>
-      <FileDiscardDialog
-        open={hasPendingDiscard}
-        isApplyingTransition={isApplyingTransition}
-        onKeepEditing={onKeepEditing}
-        onDiscard={onDiscard}
-        onReturnFocus={() => editorRef.current?.focus({ preventScroll: true })}
-      />
-      <FileConflictReviewDialog
-        result={editor.conflictReview}
-        onClose={editor.closeConflictReview}
-        onAccept={editor.acceptLatestBaseline}
-        onReturnFocus={() => editorRef.current?.focus({ preventScroll: true })}
-      />
-    </section>
+        <FileErrorBanner
+          saveError={editor.saveError}
+          readError={readError}
+          canReview={editor.canReviewConflict}
+          isReviewingConflict={editor.isReviewingConflict}
+          onReview={() => void editor.reviewLatestVersion()}
+        />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <FilePreviewBody
+            snapshot={visibleSnapshot}
+            message={message}
+            previewSessionKey={previewSessionKey}
+            editor={editor}
+            editable={hasActiveEditorSession}
+            hasPendingDiscard={hasPendingDiscard}
+            editorRef={editorRef}
+          />
+        </div>
+        <FileDiscardDialog
+          open={hasPendingDiscard}
+          isApplyingTransition={isApplyingTransition}
+          onKeepEditing={onKeepEditing}
+          onDiscard={onDiscard}
+          onReturnFocus={() => editorRef.current?.focus({ preventScroll: true })}
+        />
+        <FileConflictReviewDialog
+          result={editor.conflictReview}
+          onClose={editor.closeConflictReview}
+          onAccept={editor.acceptLatestBaseline}
+          onReturnFocus={() => editorRef.current?.focus({ preventScroll: true })}
+        />
+      </section>
+    </ShortcutScope>
   );
 });
 
@@ -427,7 +445,8 @@ function FilePreviewHeader({
         ) : null}
       </div>
       {isAvailable ? (
-        <Button
+        <ShortcutButton
+          shortcutId="file-save"
           type="button"
           variant="ghost"
           size="icon"
@@ -440,7 +459,7 @@ function FilePreviewHeader({
           onClick={onSave}
         >
           <Save />
-        </Button>
+        </ShortcutButton>
       ) : null}
       <Button
         type="button"

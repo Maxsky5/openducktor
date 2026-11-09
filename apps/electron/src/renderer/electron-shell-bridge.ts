@@ -55,6 +55,7 @@ export const getElectronApi = (): OpenDucktorElectronApi => {
 export const withElectronDesktopShell = (bridge: ShellBridge): ShellBridge => ({
   ...bridge,
   client: withElectronNativeTheme(bridge.client, (theme) => getElectronApi().setNativeTheme(theme)),
+  shortcuts: getElectronApi().shortcuts,
   getArtifactPreviewEnvironment: () => getElectronApi().getArtifactPreviewEnvironment(),
 });
 
@@ -139,6 +140,7 @@ export const createElectronShellBridge = (): ShellBridge => {
       signal.throwIfAborted();
       return { kind: "url", src: createElectronTaskAssetUrl(context) };
     },
+    shortcuts: electronApi.shortcuts,
     editorClipboard: {
       readText(type) {
         if (type === undefined) return electronApi.editorClipboard.readText();

@@ -2,6 +2,7 @@ import { Columns3 } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
+import { useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
 
 const KANBAN_ROUTE = "/kanban";
 
@@ -37,6 +38,7 @@ export function SidebarNavigation({
   onBeforeNavigate,
 }: SidebarNavigationProps): ReactElement {
   const location = useLocation();
+  const shortcutTitle = useShortcutTitle("kanban", "Kanban");
   const navigate = useNavigate();
 
   const currentPathname = location.pathname;
@@ -71,7 +73,7 @@ export function SidebarNavigation({
     <nav aria-label="Pages">
       <NavLink
         to={KANBAN_ROUTE}
-        title="Kanban"
+        title={shortcutTitle}
         aria-label="Kanban"
         onClick={activateRoute}
         className={({ isActive }) =>

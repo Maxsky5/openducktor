@@ -1,6 +1,14 @@
+import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+import { useCommandPalettePageCommands } from "@/features/command-palette/command-palette-context";
+import {
+  useSessionUnreadKey,
+  useSetSessionUnreadKey,
+} from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { workspaceSessionReadKey } from "@openducktor/frontend-core/sessions/navigation/session-read-keys";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { Archive, Bot, Check, Folder, Pencil } from "lucide-react";
-import { type ReactElement, type ReactNode, useRef, useState } from "react";
+import { type ReactElement, type ReactNode, use, useRef, useState } from "react";
 import {
   SessionActionButton,
   SessionActionMenuTrigger,
@@ -36,6 +44,7 @@ export function WorkspaceSessionHeader({
   onArchive,
   isArchiving,
 }: Props): ReactElement {
+  const shortcutRegistry = use(CommandPaletteRegistryContext);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const renameMounted = useDialogPresence(renaming);
@@ -52,6 +61,19 @@ export function WorkspaceSessionHeader({
   };
   return (
     <>
+      {shortcutRegistry ? (
+        <WorkspaceSessionShortcuts
+          workspace={workspace}
+          record={record}
+          isArchiving={isArchiving}
+          workingDirectory={workingDirectory}
+          onRename={() => {
+            setMenuOpen(false);
+            setRenaming(true);
+          }}
+          onArchive={() => archive(actionsButton.current)}
+        />
+      ) : null}
       <SessionPageHeader
         title={
           <Tooltip>
@@ -212,4 +234,75 @@ function WorkingDirectoryButton({ directory }: { directory: string | null }): Re
       </TooltipContent>
     </Tooltip>
   );
+}
+
+function WorkspaceSessionShortcuts({
+  workspace,
+  record,
+  workingDirectory,
+  isArchiving,
+  onRename,
+  onArchive,
+}: {
+  workspace: ActiveWorkspace;
+  record: WorkspaceSession;
+  workingDirectory: string | null;
+  isArchiving: boolean;
+  onRename(): void;
+  onArchive(): void;
+}): null {
+  const active = useSessionViewActive();
+  const readKey = workspaceSessionReadKey(workspace.workspaceId, record);
+  const unread = useSessionUnreadKey(readKey);
+  const setUnread = useSetSessionUnreadKey();
+  const { copyToClipboard } = useCopyToClipboard();
+  useCommandPalettePageCommands(
+    (active
+      ? [
+          { id: "chat-open" as const, label: "Open session", run: () => {} },
+          {
+            id: "chat-rename" as const,
+            label: "Rename session",
+            disabledReason: () => (isArchiving ? "The session is being archived." : null),
+            run: onRename,
+          },
+          {
+            id: "chat-archive" as const,
+            label: "Archive session",
+            disabledReason: () => (isArchiving ? "The session is being archived." : null),
+            run: onArchive,
+          },
+          {
+            id: unread ? ("chat-read" as const) : ("chat-unread" as const),
+            label: unread ? "Mark as read" : "Mark as unread",
+            run: () => setUnread(readKey, !unread),
+          },
+          {
+            id: "chat-copy-id" as const,
+            label: "Copy external session ID",
+            disabledReason: () =>
+              record.externalSessionId ? null : "No external session ID is available.",
+            run: () => {
+              if (record.externalSessionId) void copyToClipboard(record.externalSessionId);
+            },
+          },
+          {
+            id: "chat-copy-path" as const,
+            label: "Copy working directory",
+            disabledReason: () =>
+              workingDirectory ? null : "The working directory is unavailable.",
+            run: () => {
+              if (workingDirectory) void copyToClipboard(workingDirectory);
+            },
+          },
+        ]
+      : []
+    ).map((command) => ({
+      ...command,
+      icon: Pencil,
+      keywords: [command.label],
+      target: { kind: "chat", key: record.id },
+    })),
+  );
+  return null;
 }

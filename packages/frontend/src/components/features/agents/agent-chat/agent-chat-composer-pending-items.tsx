@@ -1,6 +1,6 @@
+import { ShortcutButton } from "@/features/shortcuts/shortcut-controls";
 import { AlertTriangle, LoaderCircle, SendHorizontal } from "lucide-react";
 import { memo, type ReactElement } from "react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type {
   AgentChatPendingSendGroup,
@@ -29,7 +29,8 @@ export const AgentChatComposerSendControl = memo(function AgentChatComposerSendC
   const pendingGroups = visiblePendingSendGroups(pendingSendItems);
   return (
     <div className="relative">
-      <Button
+      <ShortcutButton
+        shortcutId="session-send"
         type="submit"
         size="icon"
         className="size-8 rounded-lg"
@@ -41,7 +42,7 @@ export const AgentChatComposerSendControl = memo(function AgentChatComposerSendC
         ) : (
           <SendHorizontal className="size-3.5" />
         )}
-      </Button>
+      </ShortcutButton>
       {pendingGroups.length > 0 ? (
         <div className="pointer-events-none absolute -right-2 -top-2 flex gap-0.5">
           {pendingGroups.map((group) => (

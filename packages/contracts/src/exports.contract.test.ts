@@ -2,6 +2,20 @@ import { describe, expect, test } from "bun:test";
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "BUILTIN_SHORTCUT_ACTIONS",
+  "SHORTCUT_POSITIONS",
+  "builtinShortcutActionIdSchema",
+  "shortcutActionIdSchema",
+  "workflowShortcutActionIdSchema",
+  "workflowShortcutActionId",
+  "electronShortcutRulesSchema",
+  "shortcutKeySchema",
+  "shortcutCombinationSchema",
+  "shortcutPreferencesSchema",
+  "shortcutInputSchema",
+  "shortcutRouteSchema",
+  "embeddedShortcutRulesSchema",
+  "embeddedShortcutEventSchema",
   "agentSessionStartupResultSchema",
   "workspaceSessionStartInputSchema",
   "startupOperationContextSchema",
@@ -1024,6 +1038,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "BROWSER_BLANK_URL",
   "BROWSER_FAVICON_MAX_LENGTH",
   "BROWSER_FORWARDED_SHORTCUTS",
+  "BROWSER_FRAME_SHORTCUT_RULES_FIELD",
   "BROWSER_FRAME_COMMAND_FIELD",
   "BROWSER_FRAME_MESSAGE_MARK",
   "BROWSER_PERMISSION_KINDS",

@@ -65,7 +65,10 @@ export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
   z
     .object({
       channel: z.literal("openducktor://run-event"),
-      payload: autopilotRunEventSchema,
+      payload: z.union([
+        autopilotRunEventSchema,
+        z.strictObject({ type: z.literal("keyboard_shortcuts_saved") }),
+      ]),
     })
     .strict(),
   z

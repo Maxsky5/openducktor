@@ -1,8 +1,10 @@
+import { ShortcutScope, ShortcutButton } from "@/features/shortcuts/shortcut-controls";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import type { TaskAssetRenderContext } from "@openducktor/contracts";
 import { Expand } from "lucide-react";
-import { lazy, memo, type ReactElement, Suspense, useCallback, useState } from "react";
+import { lazy, memo, type ReactElement, Suspense, useCallback, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import { MarkdownPreviewModal } from "@/components/ui/markdown-preview-modal";
 import {
   type IssueImageContext,
@@ -65,58 +67,74 @@ export const TaskDetailsDocumentSection = memo(
     }, []);
 
     const hasContent = markdown.trim().length > 0;
+    const shortcutRoot = useRef<HTMLButtonElement>(null);
+    const shortcutOwner = useLocalShortcuts(
+      shortcutRoot,
+      [
+        {
+          id: "content-open" as const,
+          run: openModal,
+          disabledReason: hasContent ? null : "This document is empty.",
+        },
+      ],
+      '[class~="group/card"]',
+    );
 
     return (
-      <>
-        <CollapsibleCard
-          title={title}
-          icon={icon}
-          defaultExpanded={defaultExpanded}
-          headerAction={
-            hasContent ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0"
-                aria-label={`Open ${title} in fullscreen`}
-                data-testid={`expand-${title.toLowerCase().replace(/\s+/g, "-")}`}
-                onClick={openModal}
-              >
-                <Expand className="size-3.5" />
-              </Button>
-            ) : null
-          }
-        >
-          {hasContent ? (
-            <Suspense fallback={MARKDOWN_SKELETON}>
-              <TaskDetailsMarkdownContent
-                markdown={markdown}
-                copyableMarkdown={markdown}
-                stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
-                {...(taskAssetContext ? { taskAssetContext } : {})}
-                {...(issueImageContext ? { issueImageContext } : {})}
-              />
-            </Suspense>
-          ) : (
-            <CollapsibleCardEmpty>{empty}</CollapsibleCardEmpty>
-          )}
-        </CollapsibleCard>
-        {modalSnapshot ? (
-          <MarkdownPreviewModal
-            open
-            onOpenChange={(nextOpen) => {
-              if (!nextOpen) {
-                closeModal();
-              }
-            }}
-            markdown={modalSnapshot.markdown}
-            title={modalSnapshot.title}
-            stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
-            {...(taskAssetContext ? { taskAssetContext } : {})}
-            {...(issueImageComponents ? { components: issueImageComponents } : {})}
-          />
-        ) : null}
-      </>
+      <ShortcutScope owners={[shortcutOwner]}>
+        <>
+          <CollapsibleCard
+            title={title}
+            icon={icon}
+            defaultExpanded={defaultExpanded}
+            headerAction={
+              hasContent ? (
+                <ShortcutButton
+                  shortcutId="content-open"
+                  ref={shortcutRoot}
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0"
+                  aria-label={`Open ${title} in fullscreen`}
+                  data-testid={`expand-${title.toLowerCase().replace(/\s+/g, "-")}`}
+                  onClick={openModal}
+                >
+                  <Expand className="size-3.5" />
+                </ShortcutButton>
+              ) : null
+            }
+          >
+            {hasContent ? (
+              <Suspense fallback={MARKDOWN_SKELETON}>
+                <TaskDetailsMarkdownContent
+                  markdown={markdown}
+                  copyableMarkdown={markdown}
+                  stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
+                  {...(taskAssetContext ? { taskAssetContext } : {})}
+                  {...(issueImageContext ? { issueImageContext } : {})}
+                />
+              </Suspense>
+            ) : (
+              <CollapsibleCardEmpty>{empty}</CollapsibleCardEmpty>
+            )}
+          </CollapsibleCard>
+          {modalSnapshot ? (
+            <MarkdownPreviewModal
+              open
+              onOpenChange={(nextOpen) => {
+                if (!nextOpen) {
+                  closeModal();
+                }
+              }}
+              markdown={modalSnapshot.markdown}
+              title={modalSnapshot.title}
+              stripTaskDescriptionFrontMatter={stripTaskDescriptionFrontMatter}
+              {...(taskAssetContext ? { taskAssetContext } : {})}
+              {...(issueImageComponents ? { components: issueImageComponents } : {})}
+            />
+          ) : null}
+        </>
+      </ShortcutScope>
     );
   },
   (previous, next) =>

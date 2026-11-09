@@ -1,7 +1,7 @@
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import { describe, expect, spyOn, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { SessionNavigationList } from "./session-navigation-list";
+import { SessionNavigationList } from "./session-navigation-list.test-view";
 import { SessionNavigationRail } from "./session-navigation-rail";
 import { NOW, navigationModel, workspaceSessionEntry } from "./session-navigation.test-support";
 

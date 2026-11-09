@@ -1,7 +1,12 @@
 import {
+  embeddedShortcutSources,
+  type EmbeddedShortcutSource,
+} from "../shortcuts/embedded-sources";
+import {
   BROWSER_BLANK_URL,
   BROWSER_FAVICON_MAX_LENGTH,
   BROWSER_FRAME_COMMAND_FIELD,
+  BROWSER_FRAME_SHORTCUT_RULES_FIELD,
   BROWSER_TITLE_MAX_LENGTH,
   type BrowserFrameCommand,
   type BrowserTabFrameStateRequest,
@@ -52,6 +57,58 @@ export const startFrameTabController = ({
   reportState(state: BrowserFrameState): void;
 }): (() => void) => {
   let disposed = false;
+  let releaseShortcutSource: (() => void) | null = null;
+  let shortcutSource: EmbeddedShortcutSource | null = null;
+  let acknowledge: {
+    revision: number;
+    resolve(): void;
+    reject(error: Error): void;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
+  const clearShortcutSource = () => {
+    releaseShortcutSource?.();
+    releaseShortcutSource = null;
+    shortcutSource = null;
+    if (acknowledge) {
+      clearTimeout(acknowledge.timer);
+      acknowledge.reject(
+        new Error("The preview document changed before shortcut routing was ready."),
+      );
+      acknowledge = null;
+    }
+  };
+  const registerShortcutSource = () => {
+    if (shortcutSource || page.kind !== "preview") return;
+    shortcutSource = {
+      tabId,
+      apply: (rules) =>
+        new Promise<void>((resolve, reject) => {
+          if (page.kind !== "preview" || disposed) {
+            reject(new Error("The preview is unavailable."));
+            return;
+          }
+          if (acknowledge) {
+            clearTimeout(acknowledge.timer);
+            acknowledge.reject(new Error("Shortcut routing was replaced."));
+          }
+          const timer = setTimeout(() => {
+            acknowledge = null;
+            reject(
+              new Error(
+                "The preview did not acknowledge shortcut routing. Reload the preview or retry shortcuts.",
+              ),
+            );
+          }, 5000);
+          acknowledge = { revision: rules.revision, resolve, reject, timer };
+          element.contentWindow?.postMessage(
+            { [BROWSER_FRAME_SHORTCUT_RULES_FIELD]: rules },
+            page.origin,
+          );
+        }),
+    };
+    releaseShortcutSource = embeddedShortcutSources.register(shortcutSource);
+  };
+
   let loadId = 0;
   let page: FramePage = { kind: "none" };
   /** The history of the preview page, which its frame script reports. */
@@ -103,6 +160,7 @@ export const startFrameTabController = ({
 
   /** Loads the current history entry. */
   const load = async (): Promise<void> => {
+    clearShortcutSource();
     const id = ++loadId;
     const target = history.urls[history.index] ?? BROWSER_BLANK_URL;
     previewHistory = { canGoBack: false, canGoForward: false };
@@ -184,7 +242,16 @@ export const startFrameTabController = ({
     if (!parsed.success) return;
     const message = parsed.data;
     switch (message.type) {
+      case "shortcut":
+        if (message.event.type === "ready" && acknowledge?.revision === message.event.revision) {
+          clearTimeout(acknowledge.timer);
+          acknowledge.resolve();
+          acknowledge = null;
+        }
+        if (shortcutSource) embeddedShortcutSources.report(shortcutSource, message.event);
+        return;
       case "state": {
+        registerShortcutSource();
         scripted = true;
         reportPending = false;
         pendingUrl = null;
@@ -207,6 +274,7 @@ export const startFrameTabController = ({
       }
       // The current document keeps its script, and Stop, until the new document loads.
       case "loading":
+        clearShortcutSource();
         reportPending = true;
         pendingUrl = limitBrowserUrl(message.url);
         report({ loading: true });
@@ -220,6 +288,8 @@ export const startFrameTabController = ({
     }
   };
   const onLoad = (): void => {
+    // A replacement document can load without a Navigation API loading message.
+    clearShortcutSource();
     // The frame script reports before the load ends, so a silent document has no script.
     if (page.kind === "preview" && reportPending) {
       scripted = false;
@@ -234,6 +304,7 @@ export const startFrameTabController = ({
         return;
       }
     }
+    if (scripted) registerShortcutSource();
     if (state.loading) report({ loading: false });
   };
 
@@ -267,6 +338,7 @@ export const startFrameTabController = ({
   const unregisterFocus = focus.registerPage(tabId, () => element.focus());
   void load();
   return () => {
+    clearShortcutSource();
     disposed = true;
     window.removeEventListener("message", onMessage);
     element.removeEventListener("load", onLoad);

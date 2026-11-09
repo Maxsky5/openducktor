@@ -1,6 +1,6 @@
+import { ShortcutButton, ShortcutText } from "@/features/shortcuts/shortcut-controls";
 import { Settings } from "lucide-react";
 import type { ReactElement } from "react";
-import { Button } from "@/components/ui/button";
 import { DialogTrigger } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -27,7 +27,8 @@ function SettingsButton({
   onClick,
 }: SettingsButtonProps): ReactElement {
   return (
-    <Button
+    <ShortcutButton
+      shortcutId="settings"
       type="button"
       variant="outline"
       size={size}
@@ -38,7 +39,7 @@ function SettingsButton({
     >
       <Settings />
       {iconOnly ? null : label}
-    </Button>
+    </ShortcutButton>
   );
 }
 
@@ -63,7 +64,9 @@ export function SettingsModalTrigger({
           <TooltipTrigger asChild>{button}</TooltipTrigger>
         </DialogTrigger>
         <TooltipContent side="top">
-          <p>{label}</p>
+          <p>
+            <ShortcutText id="settings">{label}</ShortcutText>
+          </p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -94,7 +97,9 @@ export function SettingsModalOpenButton({
       <Tooltip>
         <TooltipTrigger asChild>{button}</TooltipTrigger>
         <TooltipContent side="top">
-          <p>{label}</p>
+          <p>
+            <ShortcutText id="settings">{label}</ShortcutText>
+          </p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

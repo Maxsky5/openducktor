@@ -10,6 +10,7 @@ import type { RoleId } from "../../replicas/vocabulary";
 /** The labels of SETTINGS_SECTIONS in the order of the app. */
 export const SECTION_LABELS = [
   "General",
+  "Keyboard shortcuts",
   "Appearance",
   "Remote control",
   "Git",

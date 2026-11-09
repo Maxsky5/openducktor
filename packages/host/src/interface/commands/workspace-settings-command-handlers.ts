@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { shortcutPreferencesSchema } from "@openducktor/contracts";
 import {
   agentModelFavoritesSchema,
   customAgentRoleInputSchema,
@@ -113,6 +115,8 @@ export const createWorkspaceSettingsCommandHandlers = (
     WorkspaceSettingsService,
     | "getRepoConfig"
     | "getSettingsSnapshot"
+    | "readKeyboardShortcuts"
+    | "saveKeyboardShortcuts"
     | "listWorkspaces"
     | "listCustomAgentRoles"
     | "createCustomAgentRole"
@@ -128,6 +132,7 @@ export const createWorkspaceSettingsCommandHandlers = (
     | "updateSidebarSessionGrouping"
   >,
   hostRuntimeService: Pick<HostRuntimeService, "previewSettings" | "saveSettings">,
+  onKeyboardShortcutsSaved?: () => void,
 ) =>
   ({
     custom_agent_role_list: (args) => {
@@ -201,6 +206,20 @@ export const createWorkspaceSettingsCommandHandlers = (
           "workspaceId",
         ),
       ),
+    workspace_get_keyboard_shortcuts: (args) => {
+      requireNoArgs("workspace_get_keyboard_shortcuts", args);
+      return workspaceSettingsService.readKeyboardShortcuts();
+    },
+    workspace_save_keyboard_shortcuts: (args) =>
+      workspaceSettingsService
+        .saveKeyboardShortcuts(
+          requireParsedInput(
+            shortcutPreferencesSchema,
+            requireObjectArgs("workspace_save_keyboard_shortcuts", args, "preferences"),
+            "preferences",
+          ),
+        )
+        .pipe(Effect.tap(() => Effect.sync(() => onKeyboardShortcutsSaved?.()))),
     workspace_get_settings_snapshot: (args) => {
       requireNoArgs("workspace_get_settings_snapshot", args);
       return workspaceSettingsService.getSettingsSnapshot();

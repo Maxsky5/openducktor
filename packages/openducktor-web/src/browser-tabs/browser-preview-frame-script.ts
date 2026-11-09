@@ -1,4 +1,9 @@
-import { BROWSER_FRAME_COMMAND_FIELD, BROWSER_FRAME_MESSAGE_MARK } from "@openducktor/contracts";
+import { matchesShortcut } from "@openducktor/frontend-core/shortcuts/key-matching";
+import {
+  BROWSER_FRAME_COMMAND_FIELD,
+  BROWSER_FRAME_MESSAGE_MARK,
+  BROWSER_FRAME_SHORTCUT_RULES_FIELD,
+} from "@openducktor/contracts";
 
 /** The path of the frame script in each preview origin. */
 export const BROWSER_PREVIEW_SCRIPT_PATH = "/__openducktor/frame.js";
@@ -29,6 +34,51 @@ export const browserPreviewFrameScript = (input: {
   const appOrigin = APP_ORIGINS.includes(ancestor) ? ancestor : APP_ORIGINS[0];
   const nav = window.navigation;
   const post = (message) => window.parent.postMessage({ [MARK]: 1, ...message }, appOrigin);
+  const matchesShortcut = ${matchesShortcut.toString()};
+  const SHORTCUT_RULES = ${JSON.stringify(BROWSER_FRAME_SHORTCUT_RULES_FIELD)};
+  const platform = /mac|iphone|ipad/i.test(navigator.platform) ? "darwin" : /^win/i.test(navigator.platform) ? "win32" : "linux";
+  let shortcutRules = { revision: 0, routes: [] };
+  const input = (event) => ({ phase: event.type === "keyup" ? "up" : "down", key: event.key, code: event.code, ctrl: event.ctrlKey, meta: event.metaKey, alt: event.altKey, shift: event.shiftKey, composing: event.isComposing, repeat: event.repeat, altGraph: event.getModifierState("AltGraph") });
+  let hintState = false;
+  const key = (event) => {
+    const received = input(event);
+    const showHints = (platform === "darwin" ? received.meta : received.ctrl) && !received.composing;
+    if (hintState !== showHints) {
+      hintState = showHints;
+      post({ type: "shortcut", event: { type: "key-state", input: received } });
+    }
+    const route = shortcutRules.routes.find((route) => matchesShortcut(route.combination, received, platform));
+    if (!route) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    post({ type: "shortcut", event: { type: "invoke", revision: shortcutRules.revision, commandId: route.commandId, input: received } });
+  };
+  const documents = new WeakSet();
+  const frames = new WeakSet();
+  const focused = () => post({ type: "shortcut", event: { type: "focus" } });
+  const attachInput = (doc) => {
+    if (documents.has(doc)) return;
+    documents.add(doc);
+    doc.addEventListener("keydown", key, true); doc.addEventListener("keyup", key, true);
+    doc.defaultView.addEventListener("focus", focused);
+    const attachFrame = (frame) => {
+        const attach = () => { try { if (frame.contentDocument) attachInput(frame.contentDocument); } catch {} };
+        attach();
+        if (!frames.has(frame)) { frames.add(frame); frame.addEventListener("load", attach); }
+    };
+    for (const frame of doc.querySelectorAll("iframe, frame")) attachFrame(frame);
+    const observer = new MutationObserver((records) => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        if (node.matches("iframe, frame")) attachFrame(node);
+        for (const frame of node.querySelectorAll("iframe, frame")) attachFrame(frame);
+      }
+    });
+    observer.observe(doc.documentElement, { childList: true, subtree: true });
+    doc.defaultView.addEventListener("pagehide", () => { doc.removeEventListener("keydown", key, true); doc.removeEventListener("keyup", key, true); doc.defaultView.removeEventListener("focus", focused); observer.disconnect(); documents.delete(doc); doc.defaultView.addEventListener("pageshow", () => attachInput(doc), { once: true }); }, { once: true });
+  };
+  attachInput(document);
+  addEventListener("blur", () => { hintState = false; post({ type: "shortcut", event: { type: "blur" } }); });
+
   const LEAVE_PATH = ${JSON.stringify(BROWSER_PREVIEW_LEAVE_PATH)};
   // The leave page shows the address of the site that the page wanted to open.
   const toTarget = (url) =>
@@ -144,6 +194,13 @@ export const browserPreviewFrameScript = (input: {
 
   addEventListener("message", (event) => {
     if (event.source !== window.parent || !APP_ORIGINS.includes(event.origin)) return;
+    const rules = event.data && event.data[SHORTCUT_RULES];
+    if (rules && Number.isInteger(rules.revision) && Array.isArray(rules.routes)) {
+      if (rules.revision < shortcutRules.revision) return;
+      shortcutRules = rules;
+      post({ type: "shortcut", event: { type: "ready", revision: rules.revision } });
+      return;
+    }
     const command = event.data ? event.data[COMMAND] : undefined;
     if (command === "back" && nav && nav.canGoBack) history.back();
     else if (command === "forward" && nav && nav.canGoForward) history.forward();
@@ -160,6 +217,7 @@ export const browserPreviewFrameScript = (input: {
     if (outside && URL.canParse(outside)) leave(new URL(outside));
   }
   addEventListener("pageshow", () => {
+    attachInput(document);
     last = "";
     schedule();
   });

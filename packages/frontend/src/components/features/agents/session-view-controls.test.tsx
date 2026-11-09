@@ -1,5 +1,7 @@
+import { createShortcutLabelStore } from "@/features/shortcuts/shortcut-label-store";
+import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
 import { expect, mock, test } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import {
   CommandPaletteContext,
@@ -10,7 +12,7 @@ import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigati
 import { SessionViewControls } from "./session-view-controls";
 
 /** A palette that keeps the page commands that are registered now. */
-const recordingPalette = () => {
+const recordingPalette = (shortcutLabel?: (id: string) => string | null) => {
   const commands = new Map<string, CommandPalettePageCommand>();
   const value: CommandPaletteContextValue = {
     open: () => {},
@@ -22,11 +24,57 @@ const recordingPalette = () => {
       };
     },
   };
-  const wrap = (element: ReactElement): ReactElement => (
-    <CommandPaletteContext value={value}>{element}</CommandPaletteContext>
-  );
+
+  const wrap = (element: ReactElement): ReactElement => {
+    const shortcutLabels = createShortcutLabelStore();
+    shortcutLabels.replace(
+      new Map(
+        (["bottom-panel", "right-panel"] as const).flatMap((id) => {
+          const label = shortcutLabel?.(id);
+          return label ? [[id, { label, owner: null }]] : [];
+        }),
+      ),
+    );
+    return (
+      <CommandPaletteRegistryContext
+        value={{
+          pageCommands: [],
+          shortcutLabels,
+          subscribe: () => () => {},
+          invalidatePageCommands: () => {},
+          registerPageCommand: value.registerPageCommand,
+        }}
+      >
+        <CommandPaletteContext value={value}>{element}</CommandPaletteContext>
+      </CommandPaletteRegistryContext>
+    );
+  };
   return { commands, wrap };
 };
+
+test("updates panel toggle tooltips after remap or clear and hides inactive assignments", async () => {
+  let label: string | null = "Ctrl+J";
+  const { wrap } = recordingPalette(() => label);
+  const controls = (available = true) =>
+    wrap(
+      <SessionViewControls
+        bottom={{ isAvailable: available, isOpen: false, onToggle: () => {} }}
+        right={null}
+      />,
+    );
+  const view = render(controls());
+  await act(async () => fireEvent.focus(screen.getByRole("button", { name: "Show bottom panel" })));
+  expect(screen.getByRole("tooltip").textContent).toBe("Show bottom panel Ctrl+J");
+  label = "Ctrl+Shift+J";
+  view.rerender(controls());
+  expect(screen.getByRole("tooltip").textContent).toBe("Show bottom panel Ctrl+Shift+J");
+  label = null;
+  view.rerender(controls());
+  expect(screen.getByRole("tooltip").textContent).toBe("Show bottom panel");
+  label = "Ctrl+J";
+  view.rerender(controls(false));
+  expect(screen.getByRole("tooltip").textContent).toBe("Show bottom panel");
+});
 
 test("toggles the bottom panel and the right panel from the session top bar", () => {
   const onBottomToggle = mock(() => {});

@@ -61,7 +61,7 @@ export function SettingsSidebar({
               key={entry.id}
               type="button"
               variant={section === entry.id ? "accent" : "ghost"}
-              className="shrink-0 justify-between sm:w-full"
+              className="shrink-0 justify-between px-3 sm:w-full"
               disabled={disabled}
               onClick={() => onChange(entry.id)}
               title={

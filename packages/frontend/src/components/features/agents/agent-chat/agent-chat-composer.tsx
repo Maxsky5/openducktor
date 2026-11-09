@@ -1,3 +1,13 @@
+import {
+  ShortcutScope,
+  ShortcutButton,
+  useShortcutTitle,
+} from "@/features/shortcuts/shortcut-controls";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
+import { useCommandPalettePageCommands } from "@/features/command-palette/command-palette-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+import { Command } from "lucide-react";
 import { Bot, BrainCog, Paperclip, Square } from "lucide-react";
 import {
   memo,
@@ -15,7 +25,6 @@ import { toast } from "sonner";
 import { SpeedSelect } from "../speed-select";
 import { ModelPicker } from "@/components/features/agents/model-picker";
 import { BorderRay } from "@/components/ui/border-ray";
-import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import type { AgentChatComposerModel } from "./agent-chat.types";
@@ -209,6 +218,42 @@ export function AgentChatComposer({
   const submitComposerAction = useCallback((): void => {
     void handleSubmit(primaryMode);
   }, [handleSubmit, primaryMode]);
+  const shortcutActive = useSessionViewActive();
+  useCommandPalettePageCommands(
+    shortcutActive
+      ? [
+          {
+            id: "session-send" as const,
+            label: "Send message",
+            icon: Command,
+            keywords: ["submit", "send"],
+            target: { kind: "session", key: model.displayedSessionKey ?? "draft" },
+            disabledReason: () =>
+              defaultSendDisabled ? (sendBlockedReason ?? "Sending is unavailable.") : null,
+            run: submitComposerAction,
+          },
+          {
+            id: "session-stop" as const,
+            label: "Stop run",
+            icon: Command,
+            keywords: ["stop", "interrupt"],
+            target: { kind: "session", key: model.displayedSessionKey ?? "draft" },
+            disabledReason: () => (model.canStopSession ? null : "No run can be stopped."),
+            run: model.onStopSession,
+          },
+          {
+            id: "session-attach" as const,
+            label: "Attach files",
+            icon: Command,
+            keywords: ["files", "attachment"],
+            target: { kind: "session", key: model.displayedSessionKey ?? "draft" },
+            disabledReason: () =>
+              attachmentIntakeDisabled ? "Attachments are unavailable." : null,
+            run: openAttachmentPicker,
+          },
+        ]
+      : [],
+  );
   return (
     <AgentChatComposerFormView
       primaryMode={primaryMode}
@@ -315,134 +360,152 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   pendingSendItems: AgentChatComposerModel["pendingSendItems"];
 }): ReactElement {
   const hasVariantOptions = variantOptions.length > 0;
+  const modelTrigger = useRef<HTMLButtonElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    modelTrigger,
+    [
+      {
+        id: "session-model" as const,
+        run: () => modelTrigger.current?.click(),
+        disabledReason: modelPickerDisabled ? "Model selection is unavailable." : null,
+      },
+    ],
+    "form",
+  );
 
   return (
-    <div className="flex flex-wrap items-end gap-2 px-2 pb-2 pt-1">
-      <div className="flex min-w-0 flex-auto flex-wrap items-center gap-1">
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className={cn("size-7 rounded-lg hover:bg-muted", COMPOSER_QUIET_CONTROL_CLASS_NAME)}
-          aria-label="Add attachment"
-          disabled={attachmentIntakeDisabled}
-          onClick={onPickAttachments}
-        >
-          <Paperclip className="size-3.5" />
-        </Button>
-        {supportsProfiles ? (
-          <div className="relative min-w-0">
-            <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Combobox
-              value={selectedModelSelection?.profileId ?? ""}
-              options={agentOptions}
-              className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
-              placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
-              searchPlaceholder="Search agent..."
-              triggerClassName={cn(
-                COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-                "max-w-[min(15rem,100%)] !pl-7 !pr-2",
-              )}
-              disabled={selectorDisabled}
-              onValueChange={onSelectAgent}
-              onOpenChange={(open) => {
-                if (open) {
-                  onAgentSelectorOpen();
-                }
-              }}
-            />
-          </div>
-        ) : null}
+    <ShortcutScope owners={[shortcutOwner]}>
+      <div className="flex flex-wrap items-end gap-2 px-2 pb-2 pt-1">
+        <div className="flex min-w-0 flex-auto flex-wrap items-center gap-1">
+          <ShortcutButton
+            shortcutId="session-attach"
+            type="button"
+            size="icon"
+            variant="ghost"
+            className={cn("size-7 rounded-lg hover:bg-muted", COMPOSER_QUIET_CONTROL_CLASS_NAME)}
+            aria-label="Add attachment"
+            disabled={attachmentIntakeDisabled}
+            onClick={onPickAttachments}
+          >
+            <Paperclip className="size-3.5" />
+          </ShortcutButton>
+          {supportsProfiles ? (
+            <div className="relative min-w-0">
+              <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Combobox
+                value={selectedModelSelection?.profileId ?? ""}
+                options={agentOptions}
+                className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
+                placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
+                searchPlaceholder="Search agent..."
+                triggerClassName={cn(
+                  COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+                  "max-w-[min(15rem,100%)] !pl-7 !pr-2",
+                )}
+                disabled={selectorDisabled}
+                onValueChange={onSelectAgent}
+                onOpenChange={(open) => {
+                  if (open) {
+                    onAgentSelectorOpen();
+                  }
+                }}
+              />
+            </div>
+          ) : null}
 
-        <ModelPicker
-          popoverSide="top"
-          popoverAvoidCollisions={false}
-          runtimes={modelPicker.runtimes}
-          value={modelPicker.value}
-          favoriteState={modelPicker.favoriteState}
-          selectionPolicy={
-            modelPickerDisabled
-              ? { kind: "read_only", reason: "Model selection is unavailable right now." }
-              : modelPicker.selectionPolicy
-          }
-          placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
-          triggerClassName={cn(
-            COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-            "max-w-[min(19rem,100%)] !px-2",
-          )}
-          onValueChange={modelPicker.onValueChange}
-          onOpenChange={modelPicker.onOpenChange}
-        />
-
-        {hasVariantOptions ? (
-          <div className="relative min-w-0">
-            <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Combobox
-              value={selectedModelSelection?.variant ?? ""}
-              options={variantOptions}
-              className="w-[min(16rem,var(--radix-popover-content-available-width))] max-w-[min(90vw,22rem)] p-0"
-              placeholder="Effort"
-              popoverSide="top"
-              popoverAvoidCollisions={false}
-              searchPlaceholder="Search effort..."
-              triggerClassName={cn(
-                COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-                "max-w-[min(12rem,100%)] !pl-7 !pr-2",
-              )}
-              disabled={selectorDisabled}
-              onValueChange={onSelectVariant}
-              onOpenChange={(open) => {
-                if (open) {
-                  onVariantSelectorOpen();
-                }
-              }}
-            />
-          </div>
-        ) : null}
-        {speed && (
-          <SpeedSelect
+          <ModelPicker
+            shortcutId="session-model"
+            triggerRef={modelTrigger}
             popoverSide="top"
             popoverAvoidCollisions={false}
-            key={speed.key}
-            model={{ ...speed, disabled: speed.disabled || modelPickerDisabled }}
-            compact
-            triggerClassName="hover:bg-muted hover:text-foreground"
+            runtimes={modelPicker.runtimes}
+            value={modelPicker.value}
+            favoriteState={modelPicker.favoriteState}
+            selectionPolicy={
+              modelPickerDisabled
+                ? { kind: "read_only", reason: "Model selection is unavailable right now." }
+                : modelPicker.selectionPolicy
+            }
+            placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
+            triggerClassName={cn(
+              COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+              "max-w-[min(19rem,100%)] !px-2",
+            )}
+            onValueChange={modelPicker.onValueChange}
+            onOpenChange={modelPicker.onOpenChange}
           />
-        )}
-      </div>
 
-      <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1">
-        {contextUsage ? (
-          <AgentContextUsageIndicator
-            className="min-w-0"
-            totalTokens={contextUsage.totalTokens}
-            contextWindow={contextUsage.contextWindow}
-            {...(contextUsage.outputLimit !== undefined
-              ? { outputLimit: contextUsage.outputLimit }
-              : {})}
-          />
-        ) : null}
-        <div className="flex shrink-0 items-center gap-1.5">
-          {canStopSession ? (
-            <Button
-              type="button"
-              size="icon"
-              variant="destructive"
-              className="size-8 rounded-lg"
-              aria-label="Stop session"
-              onClick={onStopSession}
-            >
-              <Square className="size-3 fill-current" />
-            </Button>
+          {hasVariantOptions ? (
+            <div className="relative min-w-0">
+              <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Combobox
+                value={selectedModelSelection?.variant ?? ""}
+                options={variantOptions}
+                className="w-[min(16rem,var(--radix-popover-content-available-width))] max-w-[min(90vw,22rem)] p-0"
+                placeholder="Effort"
+                popoverSide="top"
+                popoverAvoidCollisions={false}
+                searchPlaceholder="Search effort..."
+                triggerClassName={cn(
+                  COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
+                  "max-w-[min(12rem,100%)] !pl-7 !pr-2",
+                )}
+                disabled={selectorDisabled}
+                onValueChange={onSelectVariant}
+                onOpenChange={(open) => {
+                  if (open) {
+                    onVariantSelectorOpen();
+                  }
+                }}
+              />
+            </div>
           ) : null}
-          <AgentChatComposerSendControl
-            sendDisabled={sendDisabled}
-            showSubmittingState={showSubmittingState}
-            pendingSendItems={pendingSendItems}
-          />
+          {speed && (
+            <SpeedSelect
+              popoverSide="top"
+              popoverAvoidCollisions={false}
+              key={speed.key}
+              model={{ ...speed, disabled: speed.disabled || modelPickerDisabled }}
+              compact
+              triggerClassName="hover:bg-muted hover:text-foreground"
+            />
+          )}
+        </div>
+
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          {contextUsage ? (
+            <AgentContextUsageIndicator
+              className="min-w-0"
+              totalTokens={contextUsage.totalTokens}
+              contextWindow={contextUsage.contextWindow}
+              {...(contextUsage.outputLimit !== undefined
+                ? { outputLimit: contextUsage.outputLimit }
+                : {})}
+            />
+          ) : null}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {canStopSession ? (
+              <ShortcutButton
+                shortcutId="session-stop"
+                type="button"
+                size="icon"
+                variant="destructive"
+                className="size-8 rounded-lg"
+                aria-label="Stop session"
+                onClick={onStopSession}
+              >
+                <Square className="size-3 fill-current" />
+              </ShortcutButton>
+            ) : null}
+            <AgentChatComposerSendControl
+              sendDisabled={sendDisabled}
+              showSubmittingState={showSubmittingState}
+              pendingSendItems={pendingSendItems}
+            />
+          </div>
         </div>
       </div>
-    </div>
+    </ShortcutScope>
   );
 });
 
@@ -559,6 +622,11 @@ function AgentChatComposerFormView({
     onComposerEditorInput,
   } = model;
   // One object while the catalogs stay the same, so other model changes skip the editor.
+  const focusComposerTitle = useShortcutTitle(
+    "focus-composer",
+    "Focus composer",
+    !isComposerInputDisabled && !isSubmitting,
+  );
   const editorCatalog = useMemo<AgentChatComposerEditorCatalog>(
     () => ({
       supportsSlashCommands,
@@ -656,6 +724,7 @@ function AgentChatComposerFormView({
             onRemoveAttachment={onRemoveAttachment}
           />
           <MemoizedAgentChatComposerEditor
+            title={focusComposerTitle}
             draft={draft}
             onDraftChange={onDraftChange}
             onAddFiles={onAddFiles}

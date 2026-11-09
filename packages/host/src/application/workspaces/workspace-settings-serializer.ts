@@ -8,6 +8,7 @@ export const withSerializedConfigWrites = (
 
   return {
     ...service,
+    saveKeyboardShortcuts: (preferences) => serialize(service.saveKeyboardShortcuts(preferences)),
     createCustomAgentRole: (input) => serialize(service.createCustomAgentRole(input)),
     updateCustomAgentRole: (id, input) => serialize(service.updateCustomAgentRole(id, input)),
     deleteCustomAgentRole: (id) => serialize(service.deleteCustomAgentRole(id)),

@@ -785,6 +785,8 @@ export const systemSettingsSchema = z.object({
 export type SystemSettings = z.infer<typeof systemSettingsSchema>;
 
 const globalConfigSharedFields = {
+  // Validate shortcut assignments independently so a bad assignment can be reset in Settings.
+  keyboardShortcuts: z.json().optional(),
   system: systemSettingsSchema.default({}),
   customAgentRoles: z
     .array(customAgentRoleSchema)
@@ -879,6 +881,7 @@ export type GlobalConfig = ParsedGlobalConfig;
  * The host database keeps all other settings, which all hosts share.
  */
 export const HOST_PREFERENCE_FIELDS = {
+  keyboardShortcuts: true,
   theme: true,
   system: true,
   general: true,

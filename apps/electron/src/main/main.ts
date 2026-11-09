@@ -1,3 +1,4 @@
+import { registerElectronShortcutIpc } from "./electron-shortcut-ipc";
 import {
   BufferedHostEventBus,
   createRemoteAccessController,
@@ -833,6 +834,7 @@ const registerIpcHandlers = (
       shutdownController.isHostShutdownStarted,
     );
   registerElectronEditorClipboardIpc({ clipboard, ipcMain });
+  registerElectronShortcutIpc(ipcMain, (contents) => BrowserWindow.fromWebContents(contents));
   registerElectronNativeThemeIpc(ipcMain, nativeTheme, shutdownController.isHostShutdownStarted);
   registerElectronHostSelectionIpc(ipcMain, shutdownController.isHostShutdownStarted, () =>
     activeNotificationRuntime?.dispose(),

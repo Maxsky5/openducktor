@@ -115,6 +115,7 @@ const createMockController = (snapshot: SettingsSnapshot) => ({
   selectedRepoPromptValidationErrors: {},
   selectedRepoPromptValidationErrorCount: 0,
   settingsSectionErrorCountById: {
+    "keyboard-shortcuts": 0,
     general: 0,
     "remote-access": 0,
     git: 0,

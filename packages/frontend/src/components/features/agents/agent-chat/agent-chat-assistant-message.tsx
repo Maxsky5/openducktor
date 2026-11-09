@@ -1,6 +1,8 @@
+import { ShortcutScope } from "@/features/shortcuts/shortcut-controls";
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import { type MouseEvent, type ReactElement, useCallback } from "react";
+import { type MouseEvent, type ReactElement, useCallback, useRef } from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
@@ -29,7 +31,10 @@ export const AgentChatAssistantMessage = ({
   const copyable = canCopyAssistantMessage(message, streaming);
   const finalReply = message.meta?.kind === "assistant" && message.meta.isFinal === true;
   return (
-    <div className={cn("group/message relative space-y-2", !finalReply && "pr-9")}>
+    <div
+      data-message-owner
+      className={cn("group/message relative space-y-2", !finalReply && "pr-9")}
+    >
       {copyable && !finalReply ? <AssistantMessageCopyButton markdown={message.content} /> : null}
       <AgentChatMarkdownRenderer
         markdown={message.content}
@@ -94,6 +99,19 @@ function AssistantMessageCopyButton({
     errorLogContext: "AgentChatMessageCardContent",
   });
 
+  const root = useRef<HTMLButtonElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "message-copy" as const,
+        run: () => {
+          void copyToClipboard(markdown);
+        },
+      },
+    ],
+    "[data-message-owner]",
+  );
   const handleCopy = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -104,17 +122,21 @@ function AssistantMessageCopyButton({
   );
 
   return (
-    <CopyIconButton
-      copied={copied}
-      ariaLabel="Copy assistant message content"
-      dataTestId="copy-assistant-message-content"
-      className={cn(
-        "border-0 bg-transparent hover:bg-transparent",
-        footer && "size-6 [&_svg]:size-3",
-        !footer &&
-          "absolute top-0 right-0 z-10 opacity-0 pointer-events-none transition-opacity group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto",
-      )}
-      onClick={handleCopy}
-    />
+    <ShortcutScope owners={[shortcutOwner]}>
+      <CopyIconButton
+        shortcutId="message-copy"
+        ref={root}
+        copied={copied}
+        ariaLabel="Copy assistant message content"
+        dataTestId="copy-assistant-message-content"
+        className={cn(
+          "border-0 bg-transparent hover:bg-transparent",
+          footer && "size-6 [&_svg]:size-3",
+          !footer &&
+            "absolute top-0 right-0 z-10 opacity-0 pointer-events-none transition-opacity group-hover/message:opacity-100 group-hover/message:pointer-events-auto group-focus-within/message:opacity-100 group-focus-within/message:pointer-events-auto focus-visible:opacity-100 focus-visible:pointer-events-auto",
+        )}
+        onClick={handleCopy}
+      />
+    </ShortcutScope>
   );
 }

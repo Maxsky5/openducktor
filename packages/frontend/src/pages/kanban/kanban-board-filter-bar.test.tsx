@@ -1,3 +1,10 @@
+import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
+import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { useShortcutDispatch } from "@/features/shortcuts/use-shortcut-dispatch";
+import { CommandPaletteContext } from "@/features/command-palette/command-palette-context";
+import type { CommandPalettePageCommand } from "@/features/command-palette/command-palette-types";
+import { useCallback, type PropsWithChildren } from "react";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -36,6 +43,38 @@ const renderBar = ({
     configurable: true,
     get: () => navigatorPlatforms[platform],
   });
+  const connection = createTestClientConnection();
+  connection.queryClient.setQueryData(["keyboard-shortcuts"], { version: 1, overrides: {} });
+  function ShortcutOwner({ children }: PropsWithChildren) {
+    const [commands, setCommands] = useState<CommandPalettePageCommand[]>([]);
+    const registerPageCommand = useCallback((command: CommandPalettePageCommand) => {
+      setCommands((current) => [...current, command]);
+      return () => setCommands((current) => current.filter((entry) => entry !== command));
+    }, []);
+    useShortcutDispatch({
+      platform,
+      pageCommands: commands,
+      actions: [],
+      isOpen: false,
+      open: () => {},
+      close: () => {},
+      runAfterClose: (run) => run(),
+    });
+    return (
+      <CommandPaletteRegistryContext
+        value={{
+          pageCommands: commands,
+          subscribe: () => () => {},
+          invalidatePageCommands: () => {},
+          registerPageCommand,
+        }}
+      >
+        <CommandPaletteContext value={{ platform, open: () => {}, registerPageCommand }}>
+          {children}
+        </CommandPaletteContext>
+      </CommandPaletteRegistryContext>
+    );
+  }
   const latest = { filter: EMPTY_KANBAN_BOARD_FILTER };
   function Harness({ initial, labelOptions = [], isDisabled = false }: HarnessProps): ReactElement {
     const [value, setValue] = useState<KanbanBoardFilter>({
@@ -59,9 +98,16 @@ const renderBar = ({
       />
     );
   }
-  render(<Harness {...props} />);
+  render(
+    <ClientConnectionProvider connection={connection}>
+      <ShortcutOwner>
+        <Harness {...props} />
+      </ShortcutOwner>
+    </ClientConnectionProvider>,
+  );
   return {
     latest,
+    queryClient: connection.queryClient,
     search: screen.getByRole<HTMLInputElement>("textbox", { name: "Search tasks" }),
   };
 };
@@ -99,6 +145,39 @@ describe("KanbanBoardFilterBar search", () => {
       expect([search.selectionStart, search.selectionEnd]).toEqual([0, "crash".length]);
     });
   }
+
+  test("uses an edited search assignment and returns its cleared keys to the browser", async () => {
+    const { search, queryClient } = renderBar({
+      platform: "linux",
+      initial: { searchText: "crash" },
+    });
+    await act(async () => {
+      queryClient.setQueryData(["keyboard-shortcuts"], {
+        version: 1,
+        overrides: {
+          "focus-task-search": {
+            key: { kind: "logical", key: "F2" },
+            ctrl: true,
+            meta: false,
+            alt: false,
+            shift: true,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(fireEvent.keyDown(window, { key: "f", ctrlKey: true })).toBe(true);
+    expect(fireEvent.keyDown(window, { key: "F2", ctrlKey: true, shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(search);
+    await act(async () => {
+      queryClient.setQueryData(["keyboard-shortcuts"], {
+        version: 1,
+        overrides: { "focus-task-search": null },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(fireEvent.keyDown(window, { key: "F2", ctrlKey: true, shiftKey: true })).toBe(true);
+  });
 
   test("leaves Mod+F alone with the modifier of the other platform", () => {
     const { search } = renderBar({ platform: "linux" });

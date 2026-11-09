@@ -1,3 +1,4 @@
+import { useRecordCommands } from "../shortcuts/use-record-commands";
 import type { AppPlatform, WorkspaceRecord } from "@openducktor/contracts";
 import { type ReactElement, useRef, useState } from "react";
 import { Command, CommandList } from "@/components/ui/command";
@@ -127,6 +128,14 @@ function CommandPaletteView({
     taskViewOf,
   });
   const rowListOpen = rowList !== null;
+  useRecordCommands(
+    open && highlight.entry && (highlight.entry.kind === "task" || highlight.entry.kind === "chat")
+      ? highlight.entry
+      : null,
+    highlight.taskView,
+    runners,
+    true,
+  );
 
   const bindings = paletteKeyBindings({
     platform,

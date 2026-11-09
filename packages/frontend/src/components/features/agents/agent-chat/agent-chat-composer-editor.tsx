@@ -381,6 +381,7 @@ export type AgentChatComposerEditorCatalog = {
 };
 
 type AgentChatComposerEditorProps = {
+  title?: string | undefined;
   draft: AgentChatComposerDraft;
   onDraftChange: (draft: AgentChatComposerDraft) => void;
   onAddFiles: (files: File[]) => void;
@@ -452,6 +453,7 @@ const resolveActiveComposerPopup = ({
 };
 
 export function AgentChatComposerEditor({
+  title,
   draft,
   onDraftChange,
   onAddFiles,
@@ -667,6 +669,7 @@ export function AgentChatComposerEditor({
       <div
         ref={editorRef}
         data-composer-editor
+        title={title}
         data-composer-content-root
         role="combobox"
         aria-label="Message composer"

@@ -1,3 +1,4 @@
+import { SessionPositionHint } from "@/features/shortcuts/position-hint";
 import { CircleAlert, LoaderCircle } from "lucide-react";
 import { memo, useId, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
@@ -151,7 +152,16 @@ const SessionRailIcon = memo(function SessionRailIcon({
           sessionEntrySurfaceClassName(entry, isSelected),
         )}
       >
-        <Icon className={cn("size-4", sessionEntryIconClassName(entry))} aria-hidden="true" />
+        <span className="shortcut-position-target grid size-4 place-items-center">
+          <Icon
+            className={cn(
+              "shortcut-position-replaced col-start-1 row-start-1 size-4",
+              sessionEntryIconClassName(entry),
+            )}
+            aria-hidden="true"
+          />
+          <SessionPositionHint entryKey={entry.key} className="max-w-8" />
+        </span>
         <SessionEntryStatusDot
           entry={entry}
           unread={unread}

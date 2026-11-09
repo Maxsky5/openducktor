@@ -1,3 +1,5 @@
+import { commandDefinition, commandIdFromPalette } from "../shortcuts/catalogue";
+import type { ShortcutActionId } from "@openducktor/contracts";
 import {
   type KanbanTaskCardView,
   THEME_PREFERENCE_VALUES,
@@ -25,14 +27,13 @@ import {
   ShieldCheck,
   Sun,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useDiagnosticsPanel } from "@/components/features/diagnostics";
 import { useFeatureTour } from "@/features/feature-tour/feature-tour-context";
 import { TASK_CARD_VIEW_OPTIONS } from "@openducktor/frontend-core/tasks/board/task-card-view-options";
 import { TASK_CARD_VIEW_ICONS } from "@/components/features/kanban/task-card-view-options";
 import { SETTINGS_SECTIONS } from "@/components/features/settings/settings-modal-constants";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
-import { THEME_PREFERENCE_LABELS } from "@/components/layout/theme-preference";
 import { useTheme } from "@/components/layout/theme-provider";
 import { useWorkspaceDialogs } from "@/components/layout/workspace-dialogs-context";
 import { WorkspaceTile } from "@/components/layout/workspace-tile";
@@ -76,7 +77,8 @@ const TASK_CARD_VIEW_KEYWORDS = {
   compact: ["kanban", "card view", "dense", "density", "small cards"],
 } satisfies Record<KanbanTaskCardView, readonly string[]>;
 
-type ActionArgs = {
+export type ActionArgs = {
+  shortcutsOnly?: boolean;
   /** The selected workspace of the scope. Without it, workspace actions use the active one. */
   scopeWorkspace: WorkspaceRecord | null;
   query: string;
@@ -94,7 +96,7 @@ export type CommandPaletteActions = {
   createFromQuery: PaletteAction | null;
 };
 
-const icon = (Icon: typeof Plus): ReactNode => <Icon />;
+const renderIcon = (Icon: typeof Plus): ReactNode => <Icon />;
 
 const MERGE_CHECK_KEYWORDS = [
   "merge detection",
@@ -116,6 +118,7 @@ function useMergeCheckDisabledReason(openWorkspaceCount: number): string | null 
 /** Every app action of the palette. Workspace actions run in the target workspace. */
 export function useCommandPaletteActions({
   scopeWorkspace,
+  shortcutsOnly = false,
   openScopeChoice,
   query,
   shell,
@@ -137,268 +140,295 @@ export function useCommandPaletteActions({
   const { openFeatureTour } = useFeatureTour();
   const { openWorkspaceDialog } = useWorkspaceDialogs();
   const repoPath = target?.repoPath ?? null;
-  const taskStoreCheck = useQuery(taskStoreCheckQueryOptionsOrSkip(target));
-  const gitProvider = useQuery(repositoryGitProviderContextQueryOptionsOrSkip(target));
+  const taskStoreCheck = useQuery({
+    ...taskStoreCheckQueryOptionsOrSkip(target),
+    enabled: !shortcutsOnly && target !== null,
+  });
+  const gitProvider = useQuery({
+    ...repositoryGitProviderContextQueryOptionsOrSkip(target),
+    enabled: !shortcutsOnly && target !== null,
+  });
   const mergeCheckDisabledReason = useMergeCheckDisabledReason(workspaces.length);
 
-  const appAction = (
-    key: string,
-    label: string,
-    actionIcon: ReactNode,
-    keywords: readonly string[],
-    run: () => void,
-    options: { suggested?: boolean; checked?: boolean; disabledReason?: string | null } = {},
-  ): PaletteAction => ({
-    key: `action:${key}`,
-    label,
-    workspaceName: null,
-    icon: actionIcon,
-    keywords,
-    suggested: options.suggested ?? false,
-    disabledReason: options.disabledReason ?? null,
-    checked: options.checked ?? false,
-    run,
-  });
-
-  const workspaceActions: PaletteAction[] = [];
-  let createFromQuery: PaletteAction | null = null;
-  if (target) {
-    const blockedReason = taskCreationBlockedReason({
-      data: taskStoreCheck.data ?? null,
-      error: taskStoreCheck.error
-        ? classifyDiagnosticsQueryError(taskStoreCheck.error).message
-        : null,
-    });
-    const importState = toIssueImportState(gitProvider.data, gitProvider.error);
-    const workspaceAction = (
-      key: string,
-      label: string,
+  return useMemo(() => {
+    const icon = (Icon: typeof Plus): ReactNode => (shortcutsOnly ? null : renderIcon(Icon));
+    const appAction = (
+      key:
+        | ShortcutActionId
+        | "new-task-from-query"
+        | `switch:${string}`
+        | `page:${ShortcutActionId}`,
       actionIcon: ReactNode,
       keywords: readonly string[],
-      run: WorkspaceIntent["run"],
-      options: { suggested?: boolean; disabledReason?: string | null } = {},
-    ): PaletteAction => ({
-      ...appAction(
-        key,
+      run: () => void,
+      options: {
+        label?: string;
+        suggested?: boolean;
+        checked?: boolean;
+        disabledReason?: string | null;
+      } = {},
+    ): PaletteAction => {
+      const id = options.label ? undefined : commandIdFromPalette(`action:${key}`);
+      const label = options.label ?? (id ? commandDefinition(id)?.label : undefined);
+      if (!label) throw new Error(`Palette action ${key} has no label.`);
+      return {
+        key: `action:${key}`,
         label,
-        actionIcon,
+        workspaceName: null,
+        icon: actionIcon,
         keywords,
-        () => runIntent({ workspaceId: target.workspaceId, run }),
-        options,
-      ),
-      workspaceName: target.workspaceName,
-    });
+        suggested: options.suggested ?? false,
+        disabledReason: options.disabledReason ?? null,
+        checked: options.checked ?? false,
+        run,
+      };
+    };
 
-    workspaceActions.push(
-      workspaceAction(
-        "new-task",
-        "New task",
-        icon(Plus),
-        ["create task", "add task", "issue", "ticket"],
-        ({ workflow }) => workflow.onCreateTask(),
-        { suggested: true, disabledReason: blockedReason },
-      ),
-      workspaceAction(
-        "new-chat",
-        "New session",
-        icon(MessageCirclePlus),
-        ["create session", "chat", "conversation", "ask"],
-        () => openWorkspaceDialog({ kind: "chat", workspace: target }, previousFocus()),
-        { suggested: true },
-      ),
-      workspaceAction(
-        "import-tasks",
-        issueImportActionLabel(importState),
-        icon(Download),
-        ["import issues", "github", "gitlab", "azure devops", "work items", "provider"],
-        () =>
-          runIssueImport(importState, {
-            openImport: (provider) =>
-              openWorkspaceDialog(
-                { kind: "import_tasks", workspace: target, provider },
-                previousFocus(),
-              ),
-            openSettings: () => openSettings(),
-          }),
-        { suggested: true, disabledReason: blockedReason ?? issueImportBlockedReason(importState) },
-      ),
-      workspaceAction(
-        "import-chat",
-        "Import session from an external runtime",
-        icon(Import),
-        ["import session", "external session", "claude", "codex", "opencode"],
-        () => openWorkspaceDialog({ kind: "import_chat", workspace: target }, previousFocus()),
-        { suggested: true },
-      ),
-      workspaceAction(
-        "archived-chats",
-        "Archived sessions",
-        icon(Archive),
-        ["archive", "history", "old sessions", "restore session", "chat"],
-        () => openWorkspaceDialog({ kind: "archived_chats", workspace: target }, previousFocus()),
-      ),
-      workspaceAction(
-        "refresh-tasks",
-        "Refresh tasks",
-        icon(RefreshCcw),
-        ["reload", "sync", "update tasks"],
-        ({ refreshTasks }) => void refreshTasks(),
-      ),
-      workspaceAction(
-        "kanban",
-        "Go to Kanban",
-        icon(Columns3),
-        ["board", "tasks", "home", "open kanban"],
-        ({ navigate }) => navigate(KANBAN_PATH),
-        { suggested: true },
-      ),
-    );
+    const workspaceActions: PaletteAction[] = [];
+    let createFromQuery: PaletteAction | null = null;
+    if (target) {
+      const blockedReason = taskCreationBlockedReason({
+        data: taskStoreCheck.data ?? null,
+        error: taskStoreCheck.error
+          ? classifyDiagnosticsQueryError(taskStoreCheck.error).message
+          : null,
+      });
+      const importState = toIssueImportState(gitProvider.data, gitProvider.error);
+      const workspaceAction = (
+        key: Parameters<typeof appAction>[0],
+        actionIcon: ReactNode,
+        keywords: readonly string[],
+        run: WorkspaceIntent["run"],
+        options: { label?: string; suggested?: boolean; disabledReason?: string | null } = {},
+      ): PaletteAction => ({
+        ...appAction(
+          key,
+          actionIcon,
+          keywords,
+          () => runIntent({ workspaceId: target.workspaceId, run }),
+          options,
+        ),
+        workspaceName: target.workspaceName,
+      });
 
-    const title = query.trim();
-    if (title) {
-      createFromQuery = workspaceAction(
-        "new-task-from-query",
-        `New task “${title}”`,
-        icon(Plus),
-        [],
-        ({ workflow }) => workflow.onCreateTask({ initialTitle: title }),
-        { disabledReason: blockedReason },
+      workspaceActions.push(
+        workspaceAction(
+          "new-task",
+          icon(Plus),
+          ["create task", "add task", "issue", "ticket"],
+          ({ workflow }) => workflow.onCreateTask(),
+          { suggested: true, disabledReason: blockedReason },
+        ),
+        workspaceAction(
+          "new-chat",
+          icon(MessageCirclePlus),
+          ["create session", "chat", "conversation", "ask"],
+          () => openWorkspaceDialog({ kind: "chat", workspace: target }, previousFocus()),
+          { suggested: true },
+        ),
+        workspaceAction(
+          "import-tasks",
+          icon(Download),
+          ["import issues", "github", "gitlab", "azure devops", "work items", "provider"],
+          () =>
+            runIssueImport(importState, {
+              openImport: (provider) =>
+                openWorkspaceDialog(
+                  { kind: "import_tasks", workspace: target, provider },
+                  previousFocus(),
+                ),
+              openSettings: () => openSettings(),
+            }),
+          {
+            suggested: true,
+            disabledReason: blockedReason ?? issueImportBlockedReason(importState),
+            label: issueImportActionLabel(importState),
+          },
+        ),
+        workspaceAction(
+          "import-chat",
+          icon(Import),
+          ["import session", "external session", "claude", "codex", "opencode"],
+          () => openWorkspaceDialog({ kind: "import_chat", workspace: target }, previousFocus()),
+          { suggested: true },
+        ),
+        workspaceAction(
+          "archived-chats",
+          icon(Archive),
+          ["archive", "history", "old sessions", "restore session", "chat"],
+          () => openWorkspaceDialog({ kind: "archived_chats", workspace: target }, previousFocus()),
+        ),
+        workspaceAction(
+          "refresh-tasks",
+          icon(RefreshCcw),
+          ["reload", "sync", "update tasks"],
+          ({ refreshTasks }) => void refreshTasks(),
+        ),
+        workspaceAction(
+          "kanban",
+          icon(Columns3),
+          ["board", "tasks", "home", "open kanban"],
+          ({ navigate }) => navigate(KANBAN_PATH),
+          { suggested: true },
+        ),
       );
+
+      const title = query.trim();
+      if (title) {
+        createFromQuery = workspaceAction(
+          "new-task-from-query",
+          icon(Plus),
+          [],
+          ({ workflow }) => workflow.onCreateTask({ initialTitle: title }),
+          { disabledReason: blockedReason, label: `New task “${title}”` },
+        );
+      }
     }
-  }
 
-  const settingsActions = SETTINGS_SECTIONS.map((section) =>
-    appAction(
-      `settings:${section.id}`,
-      `Settings: ${section.label}`,
-      icon(section.icon),
-      ["settings", "preferences", "configure"],
-      () =>
-        openSettings({
-          deepLink:
-            section.id === "repositories"
-              ? { kind: "repository-configuration", repositoryPath: repoPath }
-              : { kind: "global", section: section.id },
-        }),
-    ),
-  );
-
-  const workspaceSwitches = workspaces
-    .filter((workspace) => workspace.workspaceId !== activeWorkspace?.workspaceId)
-    .map((workspace) =>
+    const settingsActions = SETTINGS_SECTIONS.map((section) =>
       appAction(
-        `switch:${workspace.workspaceId}`,
-        `Switch to ${workspace.workspaceName}`,
-        <WorkspaceTile workspace={workspace} size="xs" />,
-        ["workspace", "repository", "project", "open workspace"],
-        () => runIntent({ workspaceId: workspace.workspaceId, run: () => {} }),
+        `settings:${section.id}`,
+        icon(section.icon),
+        ["settings", "preferences", "configure"],
+        () =>
+          openSettings({
+            deepLink:
+              section.id === "repositories"
+                ? { kind: "repository-configuration", repositoryPath: repoPath }
+                : { kind: "global", section: section.id },
+          }),
       ),
     );
 
-  const themeActions = THEME_PREFERENCE_VALUES.map((preference) =>
-    appAction(
-      `theme:${preference}`,
-      `Theme: ${THEME_PREFERENCE_LABELS[preference]}`,
-      icon(THEME_ICONS[preference]),
-      THEME_KEYWORDS[preference],
-      () => setThemePreference(preference),
-      { checked: themePreference === preference },
-    ),
-  );
+    const workspaceSwitches = shortcutsOnly
+      ? []
+      : workspaces
+          .filter((workspace) => workspace.workspaceId !== activeWorkspace?.workspaceId)
+          .map((workspace) =>
+            appAction(
+              `switch:${workspace.workspaceId}`,
+              <WorkspaceTile workspace={workspace} size="xs" />,
+              ["workspace", "repository", "project", "open workspace"],
+              () => runIntent({ workspaceId: workspace.workspaceId, run: () => {} }),
+              { label: `Switch to ${workspace.workspaceName}` },
+            ),
+          );
 
-  const taskCardViewActions = TASK_CARD_VIEW_OPTIONS.map((option) =>
-    appAction(
-      `task-cards:${option.value}`,
-      `Task cards: ${option.label}`,
-      icon(TASK_CARD_VIEW_ICONS[option.value]),
-      TASK_CARD_VIEW_KEYWORDS[option.value],
-      () => changeTaskCardView(option.value),
-      {
-        checked: taskCardView === option.value,
-        disabledReason: taskCardView === null ? "Settings are not loaded yet." : null,
-      },
-    ),
-  );
-
-  const actions = [
-    ...workspaceActions,
-    appAction(
-      "sync-pull-requests",
-      "Sync pull requests",
-      icon(RefreshCcw),
-      ["sync pull requests", "refresh pull requests", "sync PRs"],
-      () => openScopeChoice("pull_request_sync", syncTarget),
-      { disabledReason: syncDisabledReason },
-    ),
-    appAction(
-      "check-merged-tasks",
-      "Check merged tasks",
-      icon(GitMerge),
-      MERGE_CHECK_KEYWORDS,
-      () => openScopeChoice("merge_check", syncTarget),
-      { disabledReason: mergeCheckDisabledReason },
-    ),
-    appAction(
-      "settings",
-      "Open settings",
-      icon(Settings),
-      ["preferences", "configure"],
-      () => openSettings(),
-      { suggested: true },
-    ),
-    ...settingsActions,
-    appAction(
-      "diagnostics",
-      "Open diagnostics",
-      icon(ShieldCheck),
-      ["health", "checks"],
-      openDiagnostics,
-    ),
-    appAction(
-      "feature-tour",
-      "Show tour",
-      icon(Compass),
-      ["feature tour", "onboarding", "introduction", "guide", "help", "learn"],
-      () => openFeatureTour(previousFocus()),
-    ),
-    ...workspaceSwitches,
-    appAction(
-      "open-repository",
-      "Open repository",
-      icon(FolderPlus),
-      ["add workspace", "new workspace", "folder", "repo"],
-      () => shell.openRepositoryModal("add"),
-    ),
-    ...(closedWorkspaces.length > 0
-      ? [
-          appAction(
-            "reopen-workspace",
-            "Reopen a workspace",
-            icon(FolderOpen),
-            ["closed workspace", "restore workspace"],
-            () => shell.openRepositoryModal("reopen"),
-          ),
-        ]
-      : []),
-    ...themeActions,
-    ...taskCardViewActions,
-    appAction(
-      "sidebar",
-      shell.isSidebarOpen ? "Hide sidebar" : "Show sidebar",
-      icon(shell.isSidebarOpen ? PanelLeftClose : PanelLeftOpen),
-      ["toggle sidebar", "layout", "collapse", "expand"],
-      () => shell.setSidebarOpen(!shell.isSidebarOpen),
-    ),
-    ...pageCommands.map((command) =>
+    const themeActions = THEME_PREFERENCE_VALUES.map((preference) =>
       appAction(
-        `page:${command.id}`,
-        command.label,
-        icon(command.icon),
-        command.keywords,
-        command.run,
+        `theme:${preference}`,
+        icon(THEME_ICONS[preference]),
+        THEME_KEYWORDS[preference],
+        () => setThemePreference(preference),
+        { checked: themePreference === preference },
       ),
-    ),
-  ];
+    );
 
-  return { actions, createFromQuery };
+    const taskCardViewActions = TASK_CARD_VIEW_OPTIONS.map((option) =>
+      appAction(
+        `task-cards:${option.value}`,
+        icon(TASK_CARD_VIEW_ICONS[option.value]),
+        TASK_CARD_VIEW_KEYWORDS[option.value],
+        () => changeTaskCardView(option.value),
+        {
+          checked: taskCardView === option.value,
+          disabledReason: taskCardView === null ? "Settings are not loaded yet." : null,
+        },
+      ),
+    );
+
+    const actions = [
+      ...workspaceActions,
+      appAction(
+        "sync-pull-requests",
+        icon(RefreshCcw),
+        ["sync pull requests", "refresh pull requests", "sync PRs"],
+        () => openScopeChoice("pull_request_sync", syncTarget),
+        { disabledReason: syncDisabledReason },
+      ),
+      appAction(
+        "check-merged-tasks",
+        icon(GitMerge),
+        MERGE_CHECK_KEYWORDS,
+        () => openScopeChoice("merge_check", syncTarget),
+        { disabledReason: mergeCheckDisabledReason },
+      ),
+      appAction("settings", icon(Settings), ["preferences", "configure"], () => openSettings(), {
+        suggested: true,
+      }),
+      ...settingsActions,
+      appAction("diagnostics", icon(ShieldCheck), ["health", "checks"], openDiagnostics),
+      appAction(
+        "feature-tour",
+        icon(Compass),
+        ["feature tour", "onboarding", "introduction", "guide", "help", "learn"],
+        () => openFeatureTour(previousFocus()),
+      ),
+      ...workspaceSwitches,
+      appAction(
+        "open-repository",
+        icon(FolderPlus),
+        ["add workspace", "new workspace", "folder", "repo"],
+        () => shell.openRepositoryModal("add"),
+      ),
+      ...(closedWorkspaces.length > 0
+        ? [
+            appAction(
+              "reopen-workspace",
+              icon(FolderOpen),
+              ["closed workspace", "restore workspace"],
+              () => shell.openRepositoryModal("reopen"),
+            ),
+          ]
+        : []),
+      ...themeActions,
+      ...taskCardViewActions,
+      appAction(
+        "sidebar",
+        icon(shell.isSidebarOpen ? PanelLeftClose : PanelLeftOpen),
+        ["toggle sidebar", "layout", "collapse", "expand"],
+        () => shell.setSidebarOpen(!shell.isSidebarOpen),
+        { label: shell.isSidebarOpen ? "Hide sidebar" : "Show sidebar" },
+      ),
+      ...pageCommands.map((command) =>
+        appAction(
+          `page:${command.id}`,
+          icon(command.icon),
+          command.keywords,
+          command.resolveRun?.() ?? command.run,
+          { label: command.label },
+        ),
+      ),
+    ];
+
+    return { actions, createFromQuery };
+  }, [
+    shortcutsOnly,
+    target,
+    syncTarget,
+    syncDisabledReason,
+    themePreference,
+    setThemePreference,
+    taskCardView,
+    changeTaskCardView,
+    openSettings,
+    openDiagnostics,
+    openFeatureTour,
+    openWorkspaceDialog,
+    repoPath,
+    taskStoreCheck.data,
+    taskStoreCheck.error,
+    gitProvider.data,
+    gitProvider.error,
+    mergeCheckDisabledReason,
+    openScopeChoice,
+    shell,
+    pageCommands,
+    runIntent,
+    previousFocus,
+    query,
+    workspaces,
+    activeWorkspace?.workspaceId,
+    closedWorkspaces.length,
+  ]);
 }

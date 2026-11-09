@@ -1,3 +1,5 @@
+import { ShortcutScope } from "@/features/shortcuts/shortcut-controls";
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import {
   type AgentQueuedMessage,
   type AgentSessionUserMessagePart,
@@ -427,36 +429,63 @@ function QueuedMessageActions({
 }): ReactElement {
   const { submissionId } = entry;
   const reasonId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "message-edit" as const,
+        run: () => onAction({ kind: "begin_edit", submissionId }),
+        disabledReason: isPending ? "A message action is pending." : null,
+      },
+      {
+        id: "message-remove" as const,
+        run: () => onAction({ kind: "remove", submissionId }),
+        disabledReason: isPending ? "A message action is pending." : null,
+      },
+      {
+        id: "message-steer" as const,
+        run: () => onAction({ kind: "steer", submissionId }),
+        disabledReason: isPending ? "A message action is pending." : steerBlockedReason,
+      },
+    ],
+    ".queued-message-card",
+  );
   return (
-    <div className="queued-message-card-actions -my-0.5 flex items-center gap-0.5">
-      <CardIconButton
-        label="Steer now"
-        hint={steerBlockedReason ?? "Send this message to the running work now"}
-        describedBy={steerBlockedReason ? reasonId : undefined}
-        disabled={isPending || steerBlockedReason !== null}
-        onClick={() => onAction({ kind: "steer", submissionId })}
-      >
-        <Zap className="size-3.5" aria-hidden="true" />
-      </CardIconButton>
-      {steerBlockedReason ? (
-        <span id={reasonId} className="sr-only">
-          {steerBlockedReason}
-        </span>
-      ) : null}
-      <CardIconButton
-        label="Edit queued message"
-        disabled={isPending}
-        onClick={() => onAction({ kind: "begin_edit", submissionId })}
-      >
-        <Pencil className="size-3.5" aria-hidden="true" />
-      </CardIconButton>
-      <CardIconButton
-        label="Remove queued message"
-        disabled={isPending}
-        onClick={() => onAction({ kind: "remove", submissionId })}
-      >
-        <Trash2 className="size-3.5" aria-hidden="true" />
-      </CardIconButton>
-    </div>
+    <ShortcutScope owners={[shortcutOwner]}>
+      <div ref={root} className="queued-message-card-actions -my-0.5 flex items-center gap-0.5">
+        <CardIconButton
+          shortcutId="message-steer"
+          label="Steer now"
+          hint={steerBlockedReason ?? "Send this message to the running work now"}
+          describedBy={steerBlockedReason ? reasonId : undefined}
+          disabled={isPending || steerBlockedReason !== null}
+          onClick={() => onAction({ kind: "steer", submissionId })}
+        >
+          <Zap className="size-3.5" aria-hidden="true" />
+        </CardIconButton>
+        {steerBlockedReason ? (
+          <span id={reasonId} className="sr-only">
+            {steerBlockedReason}
+          </span>
+        ) : null}
+        <CardIconButton
+          shortcutId="message-edit"
+          label="Edit queued message"
+          disabled={isPending}
+          onClick={() => onAction({ kind: "begin_edit", submissionId })}
+        >
+          <Pencil className="size-3.5" aria-hidden="true" />
+        </CardIconButton>
+        <CardIconButton
+          shortcutId="message-remove"
+          label="Remove queued message"
+          disabled={isPending}
+          onClick={() => onAction({ kind: "remove", submissionId })}
+        >
+          <Trash2 className="size-3.5" aria-hidden="true" />
+        </CardIconButton>
+      </div>
+    </ShortcutScope>
   );
 }

@@ -144,6 +144,7 @@ const createElectronApi = () => {
     | Parameters<OpenDucktorElectronApi["appUpdates"]["subscribe"]>[0]
     | undefined;
   const electronApi = {
+    shortcuts: { apply: async () => {}, subscribe: () => () => {}, release: () => {} },
     getArtifactPreviewEnvironment: mock(async () => ({
       bootstrapUrl: "odt-artifact-preview://bootstrap",
       scriptedHtml: { supported: true as const },

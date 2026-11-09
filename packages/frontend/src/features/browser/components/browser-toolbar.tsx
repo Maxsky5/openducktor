@@ -1,4 +1,7 @@
+import type { ShortcutActionId } from "@openducktor/contracts";
+import { ShortcutScope, ShortcutText } from "@/features/shortcuts/shortcut-controls";
 import type { BrowserNavigation, BrowserTabSummary } from "@openducktor/contracts";
+
 import {
   ArrowLeft,
   ArrowRight,
@@ -12,7 +15,8 @@ import {
   SquareDashedMousePointer,
   X,
 } from "lucide-react";
-import { type ReactElement, type ReactNode, useId, useState } from "react";
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
+import { useRef, type ReactElement, type ReactNode, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -96,70 +100,142 @@ export function BrowserToolbar({
     void onNavigate(navigation).catch(showError);
   };
 
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "browser-back" as const,
+        run: () => navigate({ kind: "back" }),
+        disabledReason: tab.canGoBack ? null : "No previous page.",
+      },
+      {
+        id: "browser-forward" as const,
+        run: () => navigate({ kind: "forward" }),
+        disabledReason: tab.canGoForward ? null : "No next page.",
+      },
+      { id: "browser-reload" as const, run: () => navigate({ kind: "reload" }) },
+      {
+        id: "browser-stop" as const,
+        run: () => navigate({ kind: "stop" }),
+        disabledReason: tab.loading ? null : "The page is not loading.",
+      },
+      {
+        id: "browser-address" as const,
+        run: () => root.current?.querySelector<HTMLInputElement>("input")?.focus(),
+      },
+      {
+        id: "browser-devtools" as const,
+        run: () => tools?.onToggleDevTools(),
+        disabledReason: tools?.supportsDevTools ? null : "Developer tools are unavailable.",
+      },
+      {
+        id: "browser-picker" as const,
+        run: () => tools?.onTogglePicker(),
+        disabledReason: tools ? null : "The element picker is unavailable.",
+      },
+      {
+        id: "browser-share" as const,
+        run: () => {
+          void tools?.onSetShared(!tab.shared).catch(showError);
+        },
+        disabledReason: tools ? null : "Sharing is unavailable.",
+      },
+      ...(
+        [
+          ["browser-downloads", "Downloads"],
+          ["browser-permissions", "Site settings"],
+        ] as const
+      ).map(([id, label]) => ({
+        id,
+        label,
+        run: () =>
+          root.current?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.click(),
+        disabledReason: tools ? null : "Browser tools are unavailable.",
+      })),
+    ],
+    '[data-testid="browser-tab-view"]',
+  );
+
   return (
-    <TooltipProvider>
-      <div className="flex shrink-0 flex-col border-b border-border bg-card">
-        <div
-          role="group"
-          aria-label="Browser controls"
-          className="flex h-9 items-center gap-0.5 px-1"
-        >
-          <ToolbarButton
-            icon={ArrowLeft}
-            label="Back"
-            disabled={!tab.canGoBack}
-            onClick={() => navigate({ kind: "back" })}
-          />
-          <ToolbarButton
-            icon={ArrowRight}
-            label="Forward"
-            disabled={!tab.canGoForward}
-            onClick={() => navigate({ kind: "forward" })}
-          />
-          {tab.loading ? (
-            <ToolbarButton icon={X} label="Stop" onClick={() => navigate({ kind: "stop" })} />
-          ) : (
+    <ShortcutScope owners={[shortcutOwner]}>
+      <TooltipProvider>
+        <div ref={root} className="flex shrink-0 flex-col border-b border-border bg-card">
+          <div
+            role="group"
+            aria-label="Browser controls"
+            className="flex h-9 items-center gap-0.5 px-1"
+          >
             <ToolbarButton
-              icon={RotateCw}
-              label="Reload"
-              onClick={() => navigate({ kind: "reload" })}
+              shortcutId="browser-back"
+              icon={ArrowLeft}
+              label="Back"
+              disabled={!tab.canGoBack}
+              onClick={() => navigate({ kind: "back" })}
             />
-          )}
-          {tools ? (
-            <ToolbarPopoverButton icon={SlidersHorizontal} label="Site settings" align="start">
-              {tools.siteMenuContent}
-            </ToolbarPopoverButton>
-          ) : null}
-          <BrowserAddressBar
-            url={tab.url}
-            focusRequest={addressFocusRequest}
-            onFocusPage={onFocusPage}
-            errorId={error ? errorId : null}
-            invalid={error?.invalidAddress ?? false}
-            onError={(message) =>
-              setStoredError(message ? { message, invalidAddress: true, url: tab.url } : null)
-            }
-            onSubmit={(url) => {
-              navigate({ kind: "address", address: url });
-              onAddressLoad();
-            }}
-          />
-          {tools ? (
-            <PageTools
-              tab={tab}
-              tools={tools}
-              onStart={() => setStoredError(null)}
-              onError={showError}
+            <ToolbarButton
+              shortcutId="browser-forward"
+              icon={ArrowRight}
+              label="Forward"
+              disabled={!tab.canGoForward}
+              onClick={() => navigate({ kind: "forward" })}
             />
+            {tab.loading ? (
+              <ToolbarButton
+                shortcutId="browser-stop"
+                icon={X}
+                label="Stop"
+                onClick={() => navigate({ kind: "stop" })}
+              />
+            ) : (
+              <ToolbarButton
+                shortcutId="browser-reload"
+                icon={RotateCw}
+                label="Reload"
+                onClick={() => navigate({ kind: "reload" })}
+              />
+            )}
+            {tools ? (
+              <ToolbarPopoverButton
+                shortcutId="browser-permissions"
+                icon={SlidersHorizontal}
+                label="Site settings"
+                align="start"
+              >
+                {tools.siteMenuContent}
+              </ToolbarPopoverButton>
+            ) : null}
+            <BrowserAddressBar
+              url={tab.url}
+              focusRequest={addressFocusRequest}
+              onFocusPage={onFocusPage}
+              errorId={error ? errorId : null}
+              invalid={error?.invalidAddress ?? false}
+              onError={(message) =>
+                setStoredError(message ? { message, invalidAddress: true, url: tab.url } : null)
+              }
+              onSubmit={(url) => {
+                navigate({ kind: "address", address: url });
+                onAddressLoad();
+              }}
+            />
+            {tools ? (
+              <PageTools
+                tab={tab}
+                tools={tools}
+                onStart={() => setStoredError(null)}
+                onError={showError}
+              />
+            ) : null}
+          </div>
+          {error ? (
+            <p id={errorId} role="alert" className="px-2 pb-1.5 text-xs text-destructive">
+              {error.message}
+            </p>
           ) : null}
         </div>
-        {error ? (
-          <p id={errorId} role="alert" className="px-2 pb-1.5 text-xs text-destructive">
-            {error.message}
-          </p>
-        ) : null}
-      </div>
-    </TooltipProvider>
+      </TooltipProvider>
+    </ShortcutScope>
   );
 }
 
@@ -236,6 +312,7 @@ function PageTools({
   return (
     <>
       <ToolbarButton
+        shortcutId="browser-picker"
         icon={SquareDashedMousePointer}
         label="Annotate"
         tooltip={tools.pickerActive ? "Stop annotating (Esc)" : "Annotate page elements"}
@@ -256,6 +333,7 @@ function PageTools({
       <SharingControl tab={tab} isSharing={isSharing} onToggle={() => void toggleShared()} />
       {tools.supportsDevTools ? (
         <ToolbarButton
+          shortcutId="browser-devtools"
           icon={CodeXml}
           label="DevTools"
           tooltip={tools.devToolsOpen ? "Hide DevTools" : "Show DevTools"}
@@ -265,6 +343,7 @@ function PageTools({
       ) : null}
       {tools.downloadsContent !== null ? (
         <ToolbarPopoverButton
+          shortcutId="browser-downloads"
           icon={Download}
           label="Downloads"
           align="end"
@@ -290,6 +369,7 @@ function SharingControl({
   if (tab.createdBy !== "user") return <AgentBadge />;
   return (
     <ToolbarButton
+      shortcutId="browser-share"
       icon={Bot}
       label="Share with agents"
       tooltip={
@@ -303,6 +383,7 @@ function SharingControl({
 }
 
 function ToolbarButton({
+  shortcutId,
   icon: Icon,
   label,
   tooltip,
@@ -310,6 +391,7 @@ function ToolbarButton({
   disabled,
   onClick,
 }: {
+  shortcutId: ShortcutActionId;
   icon: LucideIcon;
   /** The accessible name. The tooltip shows it unless `tooltip` is set. */
   label: string;
@@ -335,12 +417,17 @@ function ToolbarButton({
           <Icon className="size-4" aria-hidden="true" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="bottom">{tooltip ?? label}</TooltipContent>
+      <TooltipContent side="bottom">
+        <ShortcutText id={shortcutId} available={!disabled}>
+          {tooltip ?? label}
+        </ShortcutText>
+      </TooltipContent>
     </Tooltip>
   );
 }
 
 function ToolbarPopoverButton({
+  shortcutId,
   icon: Icon,
   label,
   align,
@@ -349,6 +436,7 @@ function ToolbarPopoverButton({
   contentClassName,
   children,
 }: {
+  shortcutId?: ShortcutActionId;
   icon: LucideIcon;
   label: string;
   align: "start" | "end";
@@ -389,7 +477,9 @@ function ToolbarPopoverButton({
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent side="bottom">{label}</TooltipContent>
+        <TooltipContent side="bottom">
+          <ShortcutText id={shortcutId}>{label}</ShortcutText>
+        </TooltipContent>
       </Tooltip>
       <PopoverContent
         align={align}

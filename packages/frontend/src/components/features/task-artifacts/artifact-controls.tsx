@@ -1,3 +1,12 @@
+import type { ShortcutActionId } from "@openducktor/contracts";
+import {
+  ShortcutScope,
+  ShortcutButton,
+  ShortcutText,
+} from "@/features/shortcuts/shortcut-controls";
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
+import { useShortcutPortalOwner } from "@/features/shortcuts/shortcut-focus";
+
 import { useArtifactWorkflow } from "./task-artifact-workflow-context";
 import type { FreeTaskArtifact, TaskAssetRenderContext } from "@openducktor/contracts";
 import type { TaskArtifactContent } from "@openducktor/frontend-core/queries/artifacts";
@@ -29,106 +38,143 @@ export function FreeArtifactControls({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const opensDialog = useRef(false);
+  const menuRef = useShortcutPortalOwner(menuTrigger, () => {
+    opensDialog.current = true;
+    setMenuOpen(false);
+  });
   const expandTrigger = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [modalSnapshot, setModalSnapshot] = useState<TaskArtifactContent | null>(null);
   const modalPresence = useDialogPresence(expanded);
+  const contentOwner = useLocalShortcuts(
+    expandTrigger,
+    [
+      {
+        id: "content-open" as const,
+        run: () => {
+          if (content) {
+            setModalSnapshot(content);
+            setExpanded(true);
+          }
+        },
+        disabledReason: content ? null : "Load the artifact first.",
+      },
+    ],
+    "[data-artifact-view]",
+  );
+  const actionOwner = useLocalShortcuts(
+    menuTrigger,
+    (["rename", "replace", "delete"] as const).map((kind) => ({
+      id: `artifact-${kind}`,
+      disabledReason: canManage ? null : "Artifact changes are unavailable.",
+      run: () => {
+        const trigger = menuTrigger.current;
+        if (trigger) onAction({ kind, artifact }, trigger);
+      },
+    })),
+    "[data-artifact-view]",
+  );
   // The panel keeps its state with the kept view, so a switch closes the menu and the preview.
   useOnSessionViewHide(() => {
     setMenuOpen(false);
     setExpanded(false);
   });
   return (
-    <>
-      {content?.artifact.classification === "free" ? (
-        <>
-          <DownloadButton
-            artifact={content.artifact}
-            bytes={content.bytes}
-            disabled={content.artifact.revision !== artifact.revision}
-          />
-          <ToolButton
-            ref={expandTrigger}
-            label="Expand"
-            onClick={() => {
-              setModalSnapshot(content);
-              setExpanded(true);
+    <ShortcutScope owners={[contentOwner, actionOwner]}>
+      <>
+        {content?.artifact.classification === "free" ? (
+          <>
+            <DownloadButton
+              artifact={content.artifact}
+              bytes={content.bytes}
+              disabled={content.artifact.revision !== artifact.revision}
+            />
+            <ToolButton
+              ref={expandTrigger}
+              shortcutId="content-open"
+              label="Expand"
+              onClick={() => {
+                setModalSnapshot(content);
+                setExpanded(true);
+              }}
+            >
+              <Expand aria-hidden="true" />
+            </ToolButton>
+          </>
+        ) : null}
+        {canManage ? (
+          <Popover
+            open={menuOpen}
+            onOpenChange={(open) => {
+              opensDialog.current = false;
+              setMenuOpen(open);
             }}
           >
-            <Expand aria-hidden="true" />
-          </ToolButton>
-        </>
-      ) : null}
-      {canManage ? (
-        <Popover
-          open={menuOpen}
-          onOpenChange={(open) => {
-            opensDialog.current = false;
-            setMenuOpen(open);
-          }}
-        >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <PopoverTrigger asChild>
-                <Button
-                  ref={menuTrigger}
-                  variant="ghost"
-                  size="icon"
-                  className="size-7"
-                  aria-label="Artifact actions"
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
+                  <Button
+                    ref={menuTrigger}
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    aria-label="Artifact actions"
+                  >
+                    <Ellipsis aria-hidden="true" />
+                  </Button>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Artifact actions</TooltipContent>
+            </Tooltip>
+            <PopoverContent
+              ref={menuRef}
+              align="end"
+              aria-label="Artifact actions"
+              className="w-44 p-1.5"
+              onCloseAutoFocus={(event) => {
+                if (opensDialog.current) event.preventDefault();
+              }}
+            >
+              {(
+                [
+                  { kind: "rename", label: "Rename", Icon: Pencil },
+                  { kind: "replace", label: "Replace content", Icon: RefreshCw },
+                  { kind: "delete", label: "Delete", Icon: Trash2 },
+                ] as const
+              ).map(({ kind, label, Icon }) => (
+                <ShortcutButton
+                  shortcutId={`artifact-${kind}`}
+                  key={kind}
+                  type="button"
+                  variant={kind === "delete" ? "destructiveGhost" : "ghost"}
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={(event) => {
+                    opensDialog.current = true;
+                    setMenuOpen(false);
+                    onAction({ kind, artifact }, menuTrigger.current ?? event.currentTarget);
+                  }}
                 >
-                  <Ellipsis aria-hidden="true" />
-                </Button>
-              </PopoverTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">Artifact actions</TooltipContent>
-          </Tooltip>
-          <PopoverContent
-            align="end"
-            aria-label="Artifact actions"
-            className="w-44 p-1.5"
+                  <Icon aria-hidden="true" />
+                  {label}
+                </ShortcutButton>
+              ))}
+            </PopoverContent>
+          </Popover>
+        ) : null}
+        {modalPresence && modalSnapshot ? (
+          <TaskArtifactPreviewDialog
+            content={modalSnapshot}
+            open={expanded}
+            onOpenChange={setExpanded}
             onCloseAutoFocus={(event) => {
-              if (opensDialog.current) event.preventDefault();
+              event.preventDefault();
+              expandTrigger.current?.focus();
             }}
-          >
-            {(
-              [
-                { kind: "rename", label: "Rename", Icon: Pencil },
-                { kind: "replace", label: "Replace content", Icon: RefreshCw },
-                { kind: "delete", label: "Delete", Icon: Trash2 },
-              ] as const
-            ).map(({ kind, label, Icon }) => (
-              <Button
-                key={kind}
-                type="button"
-                variant={kind === "delete" ? "destructiveGhost" : "ghost"}
-                size="sm"
-                className="w-full justify-start"
-                onClick={(event) => {
-                  opensDialog.current = true;
-                  setMenuOpen(false);
-                  onAction({ kind, artifact }, menuTrigger.current ?? event.currentTarget);
-                }}
-              >
-                <Icon aria-hidden="true" />
-                {label}
-              </Button>
-            ))}
-          </PopoverContent>
-        </Popover>
-      ) : null}
-      {modalPresence && modalSnapshot ? (
-        <TaskArtifactPreviewDialog
-          content={modalSnapshot}
-          open={expanded}
-          onOpenChange={setExpanded}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            expandTrigger.current?.focus();
-          }}
-        />
-      ) : null}
-    </>
+          />
+        ) : null}
+      </>
+    </ShortcutScope>
   );
 }
 
@@ -147,6 +193,7 @@ export function WorkflowArtifactControls({
 }): ReactElement {
   const workflowActions = useTaskWorkflowActions();
   const expandTrigger = useRef<HTMLButtonElement>(null);
+  const editTrigger = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [modalSnapshot, setModalSnapshot] = useState<{ title: string; markdown: string } | null>(
     null,
@@ -156,51 +203,85 @@ export function WorkflowArtifactControls({
   useOnSessionViewHide(() => setExpanded(false));
   const taskWorkflow = useArtifactWorkflow();
   const editSection = isEditableWorkflowDocument(workflowCode, taskWorkflow) ? workflowCode : null;
+  const editOwner = useLocalShortcuts(
+    editTrigger,
+    [
+      {
+        id: "artifact-edit" as const,
+        run: () => {
+          if (editSection) workflowActions?.onEdit(taskId, { artifactCode: editSection });
+        },
+        disabledReason: editSection && workflowActions ? null : "This artifact cannot be edited.",
+      },
+    ],
+    "[data-artifact-view]",
+  );
+  const contentOwner = useLocalShortcuts(
+    expandTrigger,
+    [
+      {
+        id: "content-open" as const,
+        run: () => {
+          if (markdown !== undefined) {
+            setModalSnapshot({ title: name, markdown });
+            setExpanded(true);
+          }
+        },
+        disabledReason: markdown === undefined ? "Load the artifact first." : null,
+      },
+    ],
+    "[data-artifact-view]",
+  );
   return (
-    <>
-      {editSection && workflowActions ? (
-        <ToolButton
-          label="Edit"
-          onClick={() => workflowActions.onEdit(taskId, { artifactCode: editSection })}
-        >
-          <Pencil aria-hidden="true" />
-        </ToolButton>
-      ) : null}
-      {markdown !== undefined ? (
-        <>
-          <DocumentCopyButton
-            markdown={markdown}
-            dataTestId="copy-artifact-content"
-            errorLogContext="TaskArtifacts"
-            tooltipSide="bottom"
-            className="border-transparent bg-transparent text-foreground hover:bg-accent/60"
-          />
+    <ShortcutScope owners={[editOwner, contentOwner]}>
+      <>
+        {editSection && workflowActions ? (
           <ToolButton
-            ref={expandTrigger}
-            label="Expand"
-            onClick={() => {
-              setModalSnapshot({ title: name, markdown });
-              setExpanded(true);
-            }}
+            ref={editTrigger}
+            shortcutId="artifact-edit"
+            label="Edit"
+            onClick={() => workflowActions.onEdit(taskId, { artifactCode: editSection })}
           >
-            <Expand aria-hidden="true" />
+            <Pencil aria-hidden="true" />
           </ToolButton>
-        </>
-      ) : null}
-      {modalPresence && modalSnapshot ? (
-        <MarkdownPreviewModal
-          open={expanded}
-          onOpenChange={setExpanded}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            expandTrigger.current?.focus();
-          }}
-          title={modalSnapshot.title}
-          markdown={modalSnapshot.markdown}
-          {...(taskAssetContext ? { taskAssetContext } : {})}
-        />
-      ) : null}
-    </>
+        ) : null}
+        {markdown !== undefined ? (
+          <>
+            <DocumentCopyButton
+              markdown={markdown}
+              dataTestId="copy-artifact-content"
+              errorLogContext="TaskArtifacts"
+              tooltipSide="bottom"
+              className="border-transparent bg-transparent text-foreground hover:bg-accent/60"
+            />
+            <ToolButton
+              ref={expandTrigger}
+              shortcutId="content-open"
+              label="Expand"
+              onClick={() => {
+                setModalSnapshot({ title: name, markdown });
+                setExpanded(true);
+              }}
+            >
+              <Expand aria-hidden="true" />
+            </ToolButton>
+          </>
+        ) : null}
+        {modalPresence && modalSnapshot ? (
+          <MarkdownPreviewModal
+            open={expanded}
+            onOpenChange={setExpanded}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              expandTrigger.current?.focus();
+            }}
+            title={modalSnapshot.title}
+            markdown={modalSnapshot.markdown}
+            {...(taskAssetContext ? { taskAssetContext } : {})}
+          />
+        ) : null}
+      </>
+    </ShortcutScope>
   );
 }
 
@@ -227,32 +308,52 @@ function DownloadButton({
   }, [artifact.mediaType, bytes]);
   const url =
     source?.bytes === bytes && source.mediaType === artifact.mediaType ? source.url : null;
+  const root = useRef<HTMLAnchorElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "content-download" as const,
+        run: () => root.current?.click(),
+        disabledReason: disabled || !url ? "Download is unavailable." : null,
+      },
+    ],
+    "[data-artifact-view]",
+  );
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-7" asChild>
-          <a
-            href={!disabled && url ? url : undefined}
-            download={artifact.fileName}
-            aria-disabled={disabled || !url}
-            aria-label="Download"
-            onClick={(event) => {
-              if (disabled || !url) event.preventDefault();
-            }}
-          >
-            <Download aria-hidden="true" />
-          </a>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">Download {artifact.fileName}</TooltipContent>
-    </Tooltip>
+    <ShortcutScope owners={[shortcutOwner]}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-7" asChild>
+            <a
+              ref={root}
+              href={!disabled && url ? url : undefined}
+              download={artifact.fileName}
+              aria-disabled={disabled || !url}
+              aria-label="Download"
+              onClick={(event) => {
+                if (disabled || !url) event.preventDefault();
+              }}
+            >
+              <Download aria-hidden="true" />
+            </a>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          <ShortcutText id="content-download" available={!disabled && Boolean(url)}>
+            Download {artifact.fileName}
+          </ShortcutText>
+        </TooltipContent>
+      </Tooltip>
+    </ShortcutScope>
   );
 }
 
 function ToolButton({
   label,
+  shortcutId,
   ...props
-}: ComponentProps<typeof Button> & { label: string }): ReactElement {
+}: ComponentProps<typeof Button> & { label: string; shortcutId: ShortcutActionId }): ReactElement {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -265,7 +366,11 @@ function ToolButton({
           {...props}
         />
       </TooltipTrigger>
-      <TooltipContent side="bottom">{label}</TooltipContent>
+      <TooltipContent side="bottom">
+        <ShortcutText id={shortcutId} available={!props.disabled}>
+          {label}
+        </ShortcutText>
+      </TooltipContent>
     </Tooltip>
   );
 }

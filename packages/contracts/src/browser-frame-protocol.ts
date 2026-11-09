@@ -1,3 +1,4 @@
+import { embeddedShortcutEventSchema } from "./keyboard-shortcut-schemas";
 import { z } from "zod";
 import { browserTabUrlSchema } from "./browser-tab-schemas";
 import { parseBrowserUrl } from "./browser-url-rules";
@@ -8,6 +9,7 @@ import { parseBrowserUrl } from "./browser-url-rules";
  */
 export const BROWSER_FRAME_MESSAGE_MARK = "openducktorFrame";
 /** The field of an app message that names a command for the frame script. */
+export const BROWSER_FRAME_SHORTCUT_RULES_FIELD = "openducktorShortcutRules";
 export const BROWSER_FRAME_COMMAND_FIELD = "openducktorFrameCommand";
 
 const BROWSER_FRAME_COMMANDS = ["back", "forward", "reload", "stop"] as const;
@@ -16,6 +18,7 @@ export type BrowserFrameCommand = (typeof BROWSER_FRAME_COMMANDS)[number];
 const frameMark = { [BROWSER_FRAME_MESSAGE_MARK]: z.literal(1) };
 
 export const browserFrameMessageSchema = z.discriminatedUnion("type", [
+  z.strictObject({ ...frameMark, type: z.literal("shortcut"), event: embeddedShortcutEventSchema }),
   /** The page state after each change. URLs name the dev server, not the preview proxy. */
   z.strictObject({
     ...frameMark,

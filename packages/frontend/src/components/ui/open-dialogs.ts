@@ -1,13 +1,26 @@
 /** Every open `Dialog` and `Sheet` root, so a global shortcut can leave an open dialog alone. */
 const openDialogRoots = new Set<symbol>();
+const listeners = new Set<() => void>();
+export const subscribeOpenDialogs = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+export const openDialogCount = (): number => openDialogRoots.size;
+const changed = () => {
+  for (const listener of listeners) listener();
+};
 
 export const hasOpenDialog = (): boolean => openDialogRoots.size > 0;
 
 /** Counts a dialog root as open until the returned cleanup runs. */
 export const trackOpenDialog = (root: symbol): (() => void) => {
   openDialogRoots.add(root);
+  changed();
   return () => {
     openDialogRoots.delete(root);
+    changed();
   };
 };
 

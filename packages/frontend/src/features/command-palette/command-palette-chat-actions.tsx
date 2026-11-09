@@ -2,6 +2,14 @@ import { Archive, Copy, Folder, Mail, MailOpen, MessagesSquare, Pencil } from "l
 import type { ReactElement } from "react";
 import type { PaletteChat, PaletteRowAction } from "./command-palette-types";
 
+type PaletteChatActionKey =
+  | "open"
+  | "read-state"
+  | "rename"
+  | "archive"
+  | "copy-working-directory"
+  | "copy-external-session-id";
+
 export type PaletteChatHandlers = {
   open: () => void;
   setUnread: (unread: boolean) => void;
@@ -15,7 +23,7 @@ export const paletteChatActions = (
   chat: PaletteChat,
   unread: boolean,
   handlers: PaletteChatHandlers,
-): PaletteRowAction[] => {
+): (PaletteRowAction & { key: PaletteChatActionKey })[] => {
   const { session } = chat;
   return [
     chatAction("open", "Open session", <MessagesSquare />, ["resume", "go to"], handlers.open),
@@ -57,22 +65,30 @@ export const paletteChatActions = (
 };
 
 const chatAction = (
-  key: string,
+  key: PaletteChatActionKey,
   label: string,
   icon: ReactElement,
   keywords: readonly string[],
   run: () => void,
-): PaletteRowAction => ({ key, label, keywords, icon, destructive: false, disabled: false, run });
+): PaletteRowAction & { key: PaletteChatActionKey } => ({
+  key,
+  label,
+  keywords,
+  icon,
+  destructive: false,
+  disabled: false,
+  run,
+});
 
 /** A copy action. A chat without the value shows it disabled, as the sidebar menu does. */
 const copyAction = (
-  key: string,
+  key: PaletteChatActionKey,
   label: string,
   icon: ReactElement,
   keywords: readonly string[],
   value: string | null,
   copy: (value: string) => void,
-): PaletteRowAction => ({
+): PaletteRowAction & { key: PaletteChatActionKey } => ({
   ...chatAction(key, label, icon, keywords, () => {
     if (value !== null) copy(value);
   }),

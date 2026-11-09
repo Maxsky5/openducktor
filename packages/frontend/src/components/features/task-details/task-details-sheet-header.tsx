@@ -1,10 +1,12 @@
+import { ShortcutScope, ShortcutButton } from "@/features/shortcuts/shortcut-controls";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import type { RepositoryGitProviderContext } from "@openducktor/contracts";
 import { Link2, Sparkles, Unlink } from "lucide-react";
-import type { ReactElement } from "react";
+import { useRef, type ReactElement } from "react";
 import { TaskHeaderBadges } from "@/components/features/tasks/task-header-badges";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import {
@@ -41,50 +43,76 @@ function TaskPullRequestActions({
   onDetect?: () => void;
   onUnlink?: () => void;
 }): ReactElement {
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "task-detect-pr" as const,
+        run: () => onDetect?.(),
+        disabledReason: !onDetect || isDetecting ? "Detection is unavailable." : disabledReason,
+        localOnly: true,
+      },
+      {
+        id: "task-unlink-pr" as const,
+        run: () => onUnlink?.(),
+        disabledReason: !onUnlink || isUnlinking ? "Unlink is unavailable." : null,
+        localOnly: true,
+      },
+    ],
+    '[role="dialog"]',
+  );
   const errorId = disabledReason ? "task-details-detect-pr-error" : undefined;
   return (
-    <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto">
-      {onDetect ? (
-        <div className="flex flex-col items-end gap-1">
-          <Button
+    <ShortcutScope owners={[shortcutOwner]}>
+      <div
+        ref={root}
+        className="ml-auto flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto"
+      >
+        {onDetect ? (
+          <div className="flex flex-col items-end gap-1">
+            <ShortcutButton
+              shortcutId="task-detect-pr"
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="font-semibold text-muted-foreground hover:text-foreground"
+              onClick={onDetect}
+              disabled={isDetecting || disabledReason !== null}
+              aria-describedby={errorId}
+              data-testid="task-details-detect-pr-button"
+            >
+              <Link2 data-icon="inline-start" />
+              {isDetecting
+                ? TASK_PULL_REQUEST_ACTION_LABELS.detecting
+                : TASK_PULL_REQUEST_ACTION_LABELS.detect}
+            </ShortcutButton>
+            {disabledReason ? (
+              <p id={errorId} className="max-w-72 text-right text-xs text-destructive">
+                <InlineCodeText text={disabledReason} />
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {onUnlink ? (
+          <ShortcutButton
+            shortcutId="task-unlink-pr"
             type="button"
             variant="ghost"
             size="sm"
             className="font-semibold text-muted-foreground hover:text-foreground"
-            onClick={onDetect}
-            disabled={isDetecting || disabledReason !== null}
-            aria-describedby={errorId}
-            data-testid="task-details-detect-pr-button"
+            onClick={onUnlink}
+            disabled={isUnlinking}
+            data-testid="task-details-unlink-pr-button"
           >
-            <Link2 data-icon="inline-start" />
-            {isDetecting
-              ? TASK_PULL_REQUEST_ACTION_LABELS.detecting
-              : TASK_PULL_REQUEST_ACTION_LABELS.detect}
-          </Button>
-          {disabledReason ? (
-            <p id={errorId} className="max-w-72 text-right text-xs text-destructive">
-              <InlineCodeText text={disabledReason} />
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      {onUnlink ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="font-semibold text-muted-foreground hover:text-foreground"
-          onClick={onUnlink}
-          disabled={isUnlinking}
-          data-testid="task-details-unlink-pr-button"
-        >
-          <Unlink data-icon="inline-start" />
-          {isUnlinking
-            ? TASK_PULL_REQUEST_ACTION_LABELS.unlinking
-            : TASK_PULL_REQUEST_ACTION_LABELS.unlink}
-        </Button>
-      ) : null}
-    </div>
+            <Unlink data-icon="inline-start" />
+            {isUnlinking
+              ? TASK_PULL_REQUEST_ACTION_LABELS.unlinking
+              : TASK_PULL_REQUEST_ACTION_LABELS.unlink}
+          </ShortcutButton>
+        ) : null}
+      </div>
+    </ShortcutScope>
   );
 }
 

@@ -1,3 +1,6 @@
+import { ShortcutButton, ShortcutScope } from "@/features/shortcuts/shortcut-controls";
+import { useTaskDetailsShortcuts } from "./use-task-details-shortcuts";
+import { useRef } from "react";
 import {
   type TaskWorkflowAction,
   type WorkflowRoleId as AgentRole,
@@ -45,19 +48,22 @@ const deleteMenuActions = (onDeleteSelect: (() => void) | undefined) =>
 
 // The footer maps each host workflow action and session state to one button set.
 // react-doctor-disable-next-line react-doctor/no-high-complexity-react-function
-export function TaskDetailsSheetFooter({
-  task,
-  onOpenChange,
-  onEdit,
-  includeActions,
-  hasActiveSession = false,
-  activeSessionRole,
-  historicalSessionRoles,
-  onWorkflowAction,
-  onCoreTaskAction,
-  onRemoveWorktreeSelect,
-  onDeleteSelect,
-}: TaskDetailsSheetFooterProps): ReactElement {
+export function TaskDetailsSheetFooter(props: TaskDetailsSheetFooterProps): ReactElement {
+  const {
+    task,
+    onOpenChange,
+    onEdit,
+    includeActions,
+    hasActiveSession = false,
+    activeSessionRole,
+    historicalSessionRoles,
+    onWorkflowAction,
+    onCoreTaskAction,
+    onRemoveWorktreeSelect,
+    onDeleteSelect,
+  } = props;
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutOwner = useTaskDetailsShortcuts(root, props);
   const extraMenuActions = [
     ...(onCoreTaskAction
       ? coreTaskActions(task).map((action) =>
@@ -71,35 +77,46 @@ export function TaskDetailsSheetFooter({
   ];
 
   return (
-    <div className="mt-0 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-          Close
-        </Button>
-        {onEdit ? (
-          <Button type="button" variant="outline" onClick={() => onEdit(task.id)}>
-            <PencilLine className="size-4" />
-            Edit
+    <ShortcutScope owners={[shortcutOwner]}>
+      <div
+        ref={root}
+        className="mt-0 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Close
           </Button>
+          {onEdit ? (
+            <ShortcutButton
+              shortcutId="task-edit"
+              type="button"
+              variant="outline"
+              onClick={() => onEdit(task.id)}
+            >
+              <PencilLine className="size-4" />
+              Edit
+            </ShortcutButton>
+          ) : null}
+        </div>
+
+        {includeActions && onWorkflowAction ? (
+          <TaskWorkflowActionGroup
+            shortcutsAvailable
+            task={task}
+            includeActions={includeActions}
+            hasActiveSession={hasActiveSession}
+            {...(activeSessionRole ? { activeSessionRole } : {})}
+            {...(historicalSessionRoles ? { historicalSessionRoles } : {})}
+            onAction={onWorkflowAction}
+            menuAlign="end"
+            className="min-w-[240px] justify-end"
+            primaryClassName="font-semibold"
+            emptyLabel="No available workflow action"
+            hideWhenEmpty
+            {...(extraMenuActions.length > 0 ? { extraMenuActions } : {})}
+          />
         ) : null}
       </div>
-
-      {includeActions && onWorkflowAction ? (
-        <TaskWorkflowActionGroup
-          task={task}
-          includeActions={includeActions}
-          hasActiveSession={hasActiveSession}
-          {...(activeSessionRole ? { activeSessionRole } : {})}
-          {...(historicalSessionRoles ? { historicalSessionRoles } : {})}
-          onAction={onWorkflowAction}
-          menuAlign="end"
-          className="min-w-[240px] justify-end"
-          primaryClassName="font-semibold"
-          emptyLabel="No available workflow action"
-          hideWhenEmpty
-          {...(extraMenuActions.length > 0 ? { extraMenuActions } : {})}
-        />
-      ) : null}
-    </div>
+    </ShortcutScope>
   );
 }

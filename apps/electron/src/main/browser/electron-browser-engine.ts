@@ -1,3 +1,4 @@
+import { bindShortcutGuest } from "../electron-shortcut-ipc";
 import { BROWSER_BLANK_URL, type BrowserServerMessage } from "@openducktor/contracts";
 import {
   answerOnce,
@@ -327,7 +328,17 @@ export const createElectronBrowserEngine = (
         return false;
       }
       releaseBinding(tab);
-      tab.binding = binding;
+      const releaseShortcut = bindShortcutGuest(guest.id, () => ({
+        windowId: tab.viewWindowId,
+        tabId: tab.tabId,
+      }));
+      tab.binding = {
+        ...binding,
+        release: () => {
+          releaseShortcut();
+          binding.release();
+        },
+      };
       tabByGuest.set(guest.id, tab.tabId);
       emit({ type: "tab_attached", tabId: tab.tabId });
       return true;

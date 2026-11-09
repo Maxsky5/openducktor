@@ -56,7 +56,7 @@ export type PaletteTaskView = {
   open: Extract<PaletteTaskCommand, { kind: "open_session" | "details" }> | null;
   /** Why the session actions and the next step are missing, or null when they are shown. */
   sessionsNote: string | null;
-  /** The main action of the Kanban card, or null when Mod+Enter has nothing to run. */
+  /** The main workflow action of the Kanban card, or null when none is available. */
   nextStep: TaskWorkflowAction | null;
   /** The task action list. */
   actions: PaletteTaskAction[];
@@ -64,7 +64,7 @@ export type PaletteTaskView = {
   sessionOptionsByRole: Partial<Record<AgentRole, SessionTargetOptions>>;
 };
 
-/** What a task row does: the target of Enter, the step of Mod+Enter, and its action list. */
+/** The target of Enter, the current workflow step, and the action list of a task row. */
 export const buildPaletteTaskView = ({
   task,
   sessions,

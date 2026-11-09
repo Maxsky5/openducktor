@@ -1,4 +1,8 @@
 import { QueryProvider } from "@/test-utils/query-provider";
+import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
+import type { CommandPalettePageCommand } from "@/features/command-palette/command-palette-types";
+import { resolvePageCommand } from "@/features/shortcuts/command-resolution";
+import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { ReactNode } from "react";
 import { describe, expect, jest, mock, spyOn, test } from "bun:test";
 import type { AgentMessageQueueSnapshot, AgentQueuedMessage } from "@openducktor/contracts";
@@ -289,6 +293,71 @@ describe("AgentChatMessageQueue", () => {
     fireEvent.click(screen.getByRole("button", { name: /Resume queue/ }));
 
     await waitFor(() => expect(onAction).toHaveBeenCalledWith({ kind: "resume" }));
+  });
+
+  test("resumes through the visible queue command with pending and failure behavior", async () => {
+    const commands = new Map<string, CommandPalettePageCommand>();
+    const registry = {
+      pageCommands: [],
+      subscribe: () => () => {},
+      invalidatePageCommands: () => {},
+      registerPageCommand: (command: CommandPalettePageCommand) => {
+        commands.set(command.id, command);
+        return () => {
+          commands.delete(command.id);
+        };
+      },
+    };
+    const resumed = Promise.withResolvers<void>();
+    const onAction = mock(() => resumed.promise);
+    const failure = spyOn(toast, "error").mockImplementation(() => "error");
+    const queue = queueOf([entry("s-1", "First")], { message: "You stopped the agent." });
+    const notice = (isActive: boolean, paused = true) => (
+      <CommandPaletteRegistryContext value={registry}>
+        <SessionViewContext value={{ id: "session-1", isActive }}>
+          <AgentChatMessageQueuePauseNotice
+            model={{
+              queue: paused ? queue : { ...queue, pause: null },
+              onAction,
+              onSaveEdit: async () => {},
+            }}
+          />
+        </SessionViewContext>
+      </CommandPaletteRegistryContext>
+    );
+    const view = render(notice(true));
+    const button = screen.getByRole("button", { name: /Resume queue/ });
+    const rects = spyOn(button, "getClientRects").mockReturnValue({
+      0: new DOMRect(),
+      length: 1,
+      item: () => new DOMRect(),
+      [Symbol.iterator]: () => [new DOMRect()][Symbol.iterator](),
+    });
+    const command = () =>
+      resolvePageCommand([...commands.values()], "session-resume-queue", button, false);
+    try {
+      expect(command()).not.toBeNull();
+      act(() => command()!.run());
+      expect(onAction).toHaveBeenCalledWith({ kind: "resume" });
+      expect(button.hasAttribute("disabled")).toBe(true);
+      expect(command()).toBeNull();
+      await act(async () => {
+        resumed.reject(new Error("Runtime disconnected."));
+        await resumed.promise.catch(() => {});
+      });
+      expect(failure).toHaveBeenCalledWith("Could not resume the queue", {
+        description: "Runtime disconnected.",
+      });
+      expect(command()).not.toBeNull();
+      view.rerender(notice(false));
+      expect(commands.size).toBe(0);
+      view.rerender(notice(true, false));
+      expect(commands.size).toBe(0);
+    } finally {
+      view.unmount();
+      rects.mockRestore();
+      failure.mockRestore();
+    }
   });
 
   test("edits a queued message in its card and saves the new draft", async () => {

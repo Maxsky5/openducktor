@@ -228,6 +228,17 @@ describe("useSessionPanels", () => {
     ]);
   });
 
+  test("reveals and reuses the bottom New tab chooser without starting a tool", () => {
+    const view = renderPanels(newTaskOwner(), {});
+    act(() => view.result.current.bottom.onAddTab());
+    expect(view.result.current.bottom.isVisible).toBe(true);
+    expect(view.result.current.bottom.selectedTabId).toBe("new_tab:bottom");
+    act(() => view.result.current.bottom.onAddTab());
+    expect(view.result.current.bottom.tabs.filter((tab) => tab.kind === "new_tab")).toHaveLength(1);
+    expect(view.starts).toEqual([]);
+    view.unmount();
+  });
+
   test("starts a terminal in place of the right panel New tab and focuses it", () => {
     const view = renderPanels(newTaskOwner(), {});
 
@@ -424,7 +435,7 @@ describe("useSessionPanels", () => {
     const view = renderPanels(newTaskOwner(), { isLoading: true, isSynced: false });
 
     act(() => {
-      fireEvent.keyDown(window, { key: "`", ctrlKey: true });
+      view.result.current.bottomToggle.onToggle();
     });
     expect(view.result.current.bottom.isVisible).toBe(true);
     expect(view.starts).toEqual([]);
@@ -558,7 +569,7 @@ describe("useSessionPanels", () => {
   });
 
   test.each([true, false])(
-    "honors the bottom panel keyboard shortcut when enabled=%s",
+    "ignores the removed Control+backtick shortcut when enabled=%s",
     (shortcutsEnabled) => {
       const view = renderPanels(
         newTaskOwner(),
@@ -570,7 +581,7 @@ describe("useSessionPanels", () => {
       act(() => {
         fireEvent.keyDown(window, { key: "`", ctrlKey: true });
       });
-      expect(view.result.current.bottom.presence).toBe(shortcutsEnabled ? "closed" : "open");
+      expect(view.result.current.bottom.presence).toBe("open");
       act(() => {
         fireEvent.keyDown(window, { key: "`", ctrlKey: true });
       });

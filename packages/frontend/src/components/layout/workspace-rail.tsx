@@ -1,3 +1,7 @@
+import { SHORTCUT_POSITIONS } from "@openducktor/contracts";
+import { ShortcutButton, ShortcutMenuItem } from "@/features/shortcuts/shortcut-controls";
+import { useCommandPalettePageCommands } from "@/features/command-palette/command-palette-context";
+import { PositionHint } from "@/features/shortcuts/position-hint";
 import {
   closestCenter,
   DndContext,
@@ -27,12 +31,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import { useWorkspaceActivity } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
@@ -61,6 +60,7 @@ const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void
 
 type WorkspaceRailButtonShellProps = {
   workspace: WorkspaceRecord;
+  position?: number;
   dragListeners?: ReturnType<typeof useSortable>["listeners"];
   shellRef?: RefCallback<HTMLDivElement>;
   style?: CSSProperties;
@@ -77,6 +77,7 @@ type WorkspaceRailButtonShellProps = {
 
 function WorkspaceRailButtonShell({
   workspace,
+  position,
   dragListeners,
   shellRef,
   style,
@@ -146,6 +147,13 @@ function WorkspaceRailButtonShell({
         }}
       >
         <WorkspaceTile workspace={workspace} size="lg" active={isActiveWorkspace} />
+        {position ? (
+          <PositionHint
+            family="workspace"
+            position={position}
+            className="absolute -bottom-1 left-1/2 max-w-12 -translate-x-1/2 shadow-sm"
+          />
+        ) : null}
         <WorkspaceRailActivityBadges badges={activityBadges} describedById={activityBadgesId} />
       </Button>
     </div>
@@ -154,6 +162,7 @@ function WorkspaceRailButtonShell({
 
 function SortableWorkspaceRailButton({
   workspace,
+  position,
   isActiveDrag,
   shouldSuppressSelection,
   isSwitchingWorkspace,
@@ -162,6 +171,7 @@ function SortableWorkspaceRailButton({
   onRequestRemoveWorkspace,
 }: {
   workspace: WorkspaceRecord;
+  position: number;
   isActiveDrag: boolean;
   shouldSuppressSelection: boolean;
   isSwitchingWorkspace: boolean;
@@ -183,6 +193,7 @@ function SortableWorkspaceRailButton({
       <ContextMenuTrigger className="block">
         <WorkspaceRailButtonShell
           workspace={workspace}
+          position={position}
           shellRef={setNodeRef}
           dragListeners={isSwitchingWorkspace ? undefined : listeners}
           dragState={{
@@ -198,21 +209,23 @@ function SortableWorkspaceRailButton({
         />
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
-        <ContextMenuItem
+        <ShortcutMenuItem
+          shortcutId={workspace.isActive ? "close-workspace" : undefined}
           className="cursor-pointer"
           onSelect={() => onRequestCloseWorkspace(workspace)}
         >
           <EyeOff />
           Close workspace
-        </ContextMenuItem>
-        <ContextMenuItem
+        </ShortcutMenuItem>
+        <ShortcutMenuItem
+          shortcutId={workspace.isActive ? "remove-workspace" : undefined}
           className="cursor-pointer"
           variant="destructive"
           onSelect={() => onRequestRemoveWorkspace(workspace)}
         >
           <Trash2 />
           Remove workspace
-        </ContextMenuItem>
+        </ShortcutMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -293,6 +306,74 @@ export function WorkspaceRail({
     });
   };
 
+  const selectShortcutWorkspace = (workspaceId: string) => {
+    if (workspaceId === activeWorkspace?.workspaceId) return;
+    guardWorkspaceChange(
+      async () => {
+        try {
+          await selectWorkspace(workspaceId);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      undefined,
+      { waitForSuccess: true },
+    );
+  };
+  useCommandPalettePageCommands([
+    ...(activeWorkspace
+      ? [
+          {
+            id: "close-workspace" as const,
+            label: "Close workspace",
+            icon: Plus,
+            keywords: ["close", "workspace"],
+            target: { kind: "workspace" as const, key: activeWorkspace.workspaceId },
+            run: () => setLifecycleRequest({ action: "close", workspace: activeWorkspace }),
+          },
+          {
+            id: "remove-workspace" as const,
+            label: "Remove workspace",
+            icon: Plus,
+            keywords: ["remove", "workspace"],
+            target: { kind: "workspace" as const, key: activeWorkspace.workspaceId },
+            run: () => setLifecycleRequest({ action: "remove", workspace: activeWorkspace }),
+          },
+        ]
+      : []),
+    ...SHORTCUT_POSITIONS.map((position, index) => ({
+      id: `workspace-position-${position}` as const,
+      label: `Select workspace at position ${index + 1}`,
+      icon: Plus,
+      keywords: ["workspace", "position"],
+      target: { kind: "app" as const, key: "workspace-rail" },
+      run: () => {
+        const workspace = workspaces[index];
+        if (workspace) selectShortcutWorkspace(workspace.workspaceId);
+      },
+    })),
+    ...(["previous", "next"] as const).map((direction) => ({
+      id: `workspace-${direction}` as const,
+      label: `${direction} workspace`,
+      icon: Plus,
+      keywords: ["navigate", "workspace"],
+      target: { kind: "app" as const, key: "workspace-rail" },
+      run: () => {
+        const index = workspaces.findIndex(
+          (workspace) => workspace.workspaceId === activeWorkspace?.workspaceId,
+        );
+        const position =
+          index < 0
+            ? direction === "next"
+              ? 0
+              : workspaces.length - 1
+            : (index + (direction === "next" ? 1 : -1) + workspaces.length) % workspaces.length;
+        const workspace = workspaces[position];
+        if (workspace) selectShortcutWorkspace(workspace.workspaceId);
+      },
+    })),
+  ]);
   return (
     <>
       <aside className="workspace-rail flex h-full w-14 shrink-0 flex-col bg-workspace-rail">
@@ -313,37 +394,39 @@ export function WorkspaceRail({
             >
               <SortableContext items={workspaceIds} strategy={verticalListSortingStrategy}>
                 <div className="flex flex-col">
-                  {workspaces.map((workspace) => (
-                    <SortableWorkspaceRailButton
-                      key={workspace.workspaceId}
-                      workspace={workspace}
-                      isActiveDrag={activeWorkspaceId === workspace.workspaceId}
-                      shouldSuppressSelection={
-                        suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
-                      }
-                      isSwitchingWorkspace={isSwitchingWorkspace}
-                      onSelectWorkspace={(workspaceId) => {
-                        if (workspaceId === activeWorkspace?.workspaceId) return;
-                        guardWorkspaceChange(
-                          async () => {
-                            try {
-                              await selectWorkspace(workspaceId);
-                              return true;
-                            } catch {
-                              return false;
-                            }
-                          },
-                          undefined,
-                          { waitForSuccess: true },
-                        );
-                      }}
-                      onRequestCloseWorkspace={(workspace) =>
-                        setLifecycleRequest({ action: "close", workspace })
-                      }
-                      onRequestRemoveWorkspace={(workspace) =>
-                        setLifecycleRequest({ action: "remove", workspace })
-                      }
-                    />
+                  {workspaces.map((workspace, index) => (
+                    <div key={workspace.workspaceId} className="relative">
+                      <SortableWorkspaceRailButton
+                        workspace={workspace}
+                        position={index + 1}
+                        isActiveDrag={activeWorkspaceId === workspace.workspaceId}
+                        shouldSuppressSelection={
+                          suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
+                        }
+                        isSwitchingWorkspace={isSwitchingWorkspace}
+                        onSelectWorkspace={(workspaceId) => {
+                          if (workspaceId === activeWorkspace?.workspaceId) return;
+                          guardWorkspaceChange(
+                            async () => {
+                              try {
+                                await selectWorkspace(workspaceId);
+                                return true;
+                              } catch {
+                                return false;
+                              }
+                            },
+                            undefined,
+                            { waitForSuccess: true },
+                          );
+                        }}
+                        onRequestCloseWorkspace={(workspace) =>
+                          setLifecycleRequest({ action: "close", workspace })
+                        }
+                        onRequestRemoveWorkspace={(workspace) =>
+                          setLifecycleRequest({ action: "remove", workspace })
+                        }
+                      />
+                    </div>
                   ))}
                 </div>
               </SortableContext>
@@ -382,7 +465,8 @@ export function WorkspaceRail({
               </Button>
             ))}
 
-            <Button
+            <ShortcutButton
+              shortcutId="open-repository"
               type="button"
               size="icon"
               variant="ghost"
@@ -392,7 +476,7 @@ export function WorkspaceRail({
               onClick={onOpenRepositoryModal}
             >
               <Plus className="size-5" />
-            </Button>
+            </ShortcutButton>
           </div>
         </div>
         <div className="flex shrink-0 justify-center px-2 py-2">

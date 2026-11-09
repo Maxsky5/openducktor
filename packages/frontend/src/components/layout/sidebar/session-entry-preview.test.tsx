@@ -26,7 +26,7 @@ import {
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
-import { SessionNavigationList } from "./session-navigation-list";
+import { SessionNavigationList } from "./session-navigation-list.test-view";
 import { SessionSelectionContext } from "./session-navigation-selection";
 import { SessionMenuProvider } from "./session-menu-provider";
 import {

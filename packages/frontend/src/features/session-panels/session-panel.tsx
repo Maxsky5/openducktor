@@ -1,24 +1,32 @@
+import { ShortcutScope, ShortcutMenuItem, ShortcutButton } from "../shortcuts/shortcut-controls";
+import { hasOpenDialog, openDialogCount, subscribeOpenDialogs } from "@/components/ui/open-dialogs";
+import {
+  CommandPaletteContext,
+  useCommandPalettePageCommands,
+} from "@/features/command-palette/command-palette-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Loader2, type LucideIcon, Plus, X } from "lucide-react";
 import {
   memo,
+  use,
+  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
   type RefObject,
-  use,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useCallback,
 } from "react";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
@@ -51,6 +59,9 @@ import { SessionTerminalSurface } from "./session-terminal-host";
 import { SessionViewShownActivity } from "../session-navigation/session-view-visibility";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
 import { MOTION_EASE_OUT } from "@/components/ui/motion";
+import { useShortcutLabel } from "../shortcuts/use-shortcut-label";
+
+import { useShortcutPortalOwner } from "../shortcuts/shortcut-focus";
 
 /** The content and tab decorations that a page gives for one tool tab kind. */
 export type ToolTabView = {
@@ -88,23 +99,100 @@ export const SessionPanel = memo(function SessionPanel({
   );
   // The content stays mounted with its kept view and hides with it, so a switch paints the panel
   // without a mount. A dialog that stays open closes when its view hides.
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutActive = useSessionViewActive();
+  const dialogCount = useSyncExternalStore(subscribeOpenDialogs, openDialogCount, openDialogCount);
+  const pendingShortcutClose = useRef<string | null>(null);
+  const runPageCommand = use(CommandPaletteContext)?.runPageCommand;
+  useOnSessionViewHide(() => {
+    pendingShortcutClose.current = null;
+  });
+  useEffect(() => {
+    if (
+      !pendingShortcutClose.current ||
+      model.tabs.some((tab) => tab.id === pendingShortcutClose.current)
+    )
+      return;
+    const frame = requestAnimationFrame(() => {
+      if (!shortcutActive || hasOpenDialog()) return;
+      pendingShortcutClose.current = null;
+      const focus = Array.from(
+        root.current?.querySelectorAll<HTMLElement>(
+          '[role="tab"][aria-selected="true"], [aria-label="Open a tab"] button:not([disabled])',
+        ) ?? [],
+      ).find((element) => element.getClientRects().length > 0);
+      if (focus) focus.focus();
+      else runPageCommand?.("focus-composer");
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [model.tabs, shortcutActive, runPageCommand, dialogCount]);
+  const moves = useSessionPanelMoves();
+  const focusedCommands =
+    shortcutActive && isShown
+      ? [
+          {
+            id: "close-panel-tab" as const,
+            label: "Close current panel tab",
+            icon: X,
+            keywords: ["close", "tab"],
+            target: { kind: "panel" as const, key: model.tabIdBase },
+            focusRoot: () => root.current,
+            disabledReason: () => (model.selectedTabId ? null : "Focus a panel tab."),
+            run: () => {
+              if (!model.selectedTabId) return;
+              pendingShortcutClose.current = model.selectedTabId;
+              model.onClose(model.selectedTabId);
+            },
+          },
+          {
+            id: "move-panel-tab" as const,
+            label: "Move tab to other panel",
+            icon: Plus,
+            keywords: ["move", "tab"],
+            target: { kind: "panel" as const, key: model.tabIdBase },
+            focusRoot: () => root.current,
+            disabledReason: () =>
+              model.selectedTabId && moves.canMove(model.selectedTabId, OTHER_PANEL[model.panel])
+                ? null
+                : "This tab cannot move.",
+            run: () => {
+              if (model.selectedTabId) moves.onMove(model.selectedTabId, OTHER_PANEL[model.panel]);
+            },
+          },
+          ...model.launcher.map((entry) => ({
+            id: `panel:${entry.kind}` as const,
+            label: `Open ${PANEL_TAB_KIND_RULES[entry.kind].label}`,
+            icon: Plus,
+            keywords: ["tool", "tab"],
+            target: { kind: "panel" as const, key: model.tabIdBase },
+            focusRoot: () => root.current,
+            disabledReason: () => entry.disabledReason,
+            run: () => model.onPick(entry.kind),
+          })),
+        ]
+      : [];
+  useCommandPalettePageCommands(focusedCommands);
   const hasTerminalTabs = model.tabs.some((tab) => tab.kind === "terminal");
   const showsTerminalStatus = model.panel === "bottom" || hasTerminalTabs;
   return (
-    <TooltipProvider>
-      <Tabs
-        value={model.selectedTabId ?? ""}
-        onValueChange={model.onSelect}
-        data-testid={`session-panel-${model.panel}`}
-        className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-card"
-      >
-        <SessionViewShownActivity>
-          {isShown && <SessionPanelTabStrip model={model} toolTabs={toolTabs} />}
-        </SessionViewShownActivity>
-        {showsTerminalStatus ? <TerminalStatusMessages terminals={model.terminals} /> : null}
-        <SessionPanelBody model={model} toolTabs={toolTabs} isShown={isShown} />
-      </Tabs>
-    </TooltipProvider>
+    <ShortcutScope owners={[model.tabIdBase]}>
+      <TooltipProvider>
+        <Tabs
+          ref={root}
+          data-panel-owner={model.tabIdBase}
+          value={model.selectedTabId ?? ""}
+          onValueChange={model.onSelect}
+          data-testid={`session-panel-${model.panel}`}
+          className="flex h-full min-h-0 flex-col gap-0 overflow-hidden bg-card"
+        >
+          <SessionViewShownActivity>
+            {isShown && <SessionPanelTabStrip model={model} toolTabs={toolTabs} />}
+          </SessionViewShownActivity>
+          {showsTerminalStatus ? <TerminalStatusMessages terminals={model.terminals} /> : null}
+          <SessionPanelBody model={model} toolTabs={toolTabs} isShown={isShown} />
+        </Tabs>
+      </TooltipProvider>
+    </ShortcutScope>
   );
 });
 
@@ -206,6 +294,8 @@ const addressFocusRequestOf = (model: SessionPanelModel, tab: ResolvedPanelTab):
     : 0;
 
 function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElement {
+  const shortcut = useShortcutLabel(model.panel === "bottom" ? "new-bottom-tab" : "new-right-tab");
+  const shortcutActive = useSessionViewActive();
   const hostClient = useHostClient();
   const stripData: PanelDragData = { type: "strip", panel: model.panel };
   const { setNodeRef } = useDroppable({ id: `strip:${model.panel}`, data: stripData });
@@ -302,7 +392,15 @@ function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElem
             <Plus className="size-4" aria-hidden="true" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="bottom">New tab</TooltipContent>
+        <TooltipContent side="bottom">
+          New tab
+          {shortcutActive && shortcut ? (
+            <>
+              {" "}
+              <span className="ml-1 font-mono text-xs opacity-75">{shortcut}</span>
+            </>
+          ) : null}
+        </TooltipContent>
       </Tooltip>
       {controller &&
         model.tabs.map((tab) =>
@@ -382,6 +480,19 @@ function useDropGaps(panel: PanelId, tabs: readonly ResolvedPanelTab[]): readonl
   return tabs.map((_tab, index) => (index >= insertIndex ? width + 4 : 0));
 }
 
+const tabViewPresentation = (
+  tab: ResolvedPanelTab,
+  view: ToolTabView | undefined,
+): PanelTabPresentation => {
+  const presentation = panelTabPresentation(tab);
+  return {
+    ...presentation,
+    label: view?.label ?? presentation.label,
+    icon: view?.icon ?? presentation.icon,
+    ariaLabel: view?.label ?? presentation.ariaLabel,
+  };
+};
+
 function SessionPanelTab({
   tab,
   panel,
@@ -403,13 +514,16 @@ function SessionPanelTab({
     data: tabData,
     transition: horizontalTabSortTransition,
   });
-  const kindPresentation = panelTabPresentation(tab);
-  const presentation: PanelTabPresentation = {
-    ...kindPresentation,
-    label: view?.label ?? kindPresentation.label,
-    icon: view?.icon ?? kindPresentation.icon,
-    ariaLabel: view?.label ?? kindPresentation.ariaLabel,
-  };
+  const presentation = tabViewPresentation(tab, view);
+  const shortcutOwner = useRef<HTMLDivElement>(null);
+  const menuRef = useShortcutPortalOwner(shortcutOwner, () => setMenuOpen(false));
+  const setTabRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      shortcutOwner.current = isSelected ? element : null;
+      setNodeRef(element);
+    },
+    [setNodeRef, isSelected],
+  );
   const otherPanel = OTHER_PANEL[panel];
   const moves = useSessionPanelMoves();
   const canMoveToOtherPanel = moves.canMove(tab.id, otherPanel);
@@ -421,7 +535,7 @@ function SessionPanelTab({
     <ContextMenu open={isMenuOpen} onOpenChange={setMenuOpen}>
       <ContextMenuTrigger asChild>
         <div
-          ref={setNodeRef}
+          ref={setTabRef}
           data-panel-tab
           data-selected={isSelected ? "true" : "false"}
           data-dragging={isDragging ? "true" : "false"}
@@ -457,16 +571,24 @@ function SessionPanelTab({
           />
         </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent ref={menuRef}>
         {canMoveToOtherPanel ? (
           <>
-            <ContextMenuItem onSelect={() => moves.onMove(tab.id, otherPanel)}>
+            <ShortcutMenuItem
+              shortcutId={isSelected ? "move-panel-tab" : undefined}
+              onSelect={() => moves.onMove(tab.id, otherPanel)}
+            >
               Move to {PANEL_NAMES[otherPanel]}
-            </ContextMenuItem>
+            </ShortcutMenuItem>
             <ContextMenuSeparator />
           </>
         ) : null}
-        <ContextMenuItem onSelect={() => model.onClose(tab.id)}>Close tab</ContextMenuItem>
+        <ShortcutMenuItem
+          shortcutId={isSelected ? "close-panel-tab" : undefined}
+          onSelect={() => model.onClose(tab.id)}
+        >
+          Close tab
+        </ShortcutMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
@@ -545,7 +667,8 @@ function SessionPanelTabCloseButton({
   onClose: () => void;
 }): ReactElement {
   return (
-    <Button
+    <ShortcutButton
+      shortcutId={isSelected ? "close-panel-tab" : undefined}
       type="button"
       size="icon"
       variant="ghost"
@@ -569,6 +692,6 @@ function SessionPanelTabCloseButton({
       ) : (
         <X className="size-3" aria-hidden="true" />
       )}
-    </Button>
+    </ShortcutButton>
   );
 }

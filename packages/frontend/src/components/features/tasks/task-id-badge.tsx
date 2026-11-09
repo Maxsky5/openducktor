@@ -1,4 +1,5 @@
 import { Check, Copy } from "lucide-react";
+import { ShortcutText } from "@/features/shortcuts/shortcut-controls";
 import { memo, type ReactElement, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,6 +11,7 @@ type TaskIdBadgeProps = {
   className?: string;
   iconSize?: number;
   iconOnly?: boolean;
+  shortcutAvailable?: boolean;
 };
 
 const getTaskIdDescription = (value: string): string => value;
@@ -19,6 +21,7 @@ function TaskIdBadgeComponent({
   className,
   iconSize = 12,
   iconOnly = false,
+  shortcutAvailable = false,
 }: TaskIdBadgeProps): ReactElement {
   const { copied, copyToClipboard } = useCopyToClipboard({
     getSuccessDescription: getTaskIdDescription,
@@ -67,7 +70,11 @@ function TaskIdBadgeComponent({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p>{iconOnly ? (copied ? "Copied" : "Copy task ID") : "Copy"}</p>
+            <p>
+              <ShortcutText id="task-copy-id" available={shortcutAvailable}>
+                {iconOnly ? (copied ? "Copied" : "Copy task ID") : "Copy"}
+              </ShortcutText>
+            </p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

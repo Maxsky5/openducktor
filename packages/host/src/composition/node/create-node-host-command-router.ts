@@ -465,7 +465,12 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createTerminalCommandHandlers(terminalService),
     ...createBrowserCommandHandlers(browserService),
     ...createRepoActionCommandHandlers(repoActionService),
-    ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService),
+    ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService, () =>
+      eventBus?.publish({
+        channel: "openducktor://run-event",
+        payload: { type: "keyboard_shortcuts_saved" },
+      }),
+    ),
     ...createWorkspaceLifecycleCommandHandlers(workspaceSettingsService, workspaceLifecycleService),
   };
   const router = createEffectHostCommandRouter({

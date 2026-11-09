@@ -1,3 +1,6 @@
+import { ShortcutScope, ShortcutButton } from "@/features/shortcuts/shortcut-controls";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import { TaskArtifactWorkflowScope, useArtifactWorkflow } from "./task-artifact-workflow-context";
 import type {
   TaskArtifact,
@@ -349,15 +352,32 @@ function AddArtifactButton({
   size: "xs" | "sm";
   onAction: (action: ArtifactAction, trigger: HTMLElement) => void;
 }): ReactElement {
+  const root = useRef<HTMLButtonElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "artifact-add" as const,
+        run: () => {
+          if (root.current) onAction({ kind: "create" }, root.current);
+        },
+      },
+    ],
+    '[aria-label="Task artifacts"]',
+  );
   return (
-    <Button
-      variant="ghost"
-      size={size}
-      onClick={(event) => onAction({ kind: "create" }, event.currentTarget)}
-    >
-      <Plus aria-hidden="true" />
-      Add artifact
-    </Button>
+    <ShortcutScope owners={[shortcutOwner]}>
+      <ShortcutButton
+        shortcutId="artifact-add"
+        ref={root}
+        variant="ghost"
+        size={size}
+        onClick={(event) => onAction({ kind: "create" }, event.currentTarget)}
+      >
+        <Plus aria-hidden="true" />
+        Add artifact
+      </ShortcutButton>
+    </ShortcutScope>
   );
 }
 
@@ -678,7 +698,7 @@ function ArtifactContentView({
   children: ReactNode;
 }): ReactElement {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div data-artifact-view className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
         <BackButton onClick={onBack} />
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{name}</h2>

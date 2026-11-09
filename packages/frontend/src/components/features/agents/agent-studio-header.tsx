@@ -1,5 +1,6 @@
 import { type ReactElement, type ReactNode, useCallback, useState } from "react";
 import { ArrowUpRightFromSquare } from "lucide-react";
+import { ShortcutText } from "@/features/shortcuts/shortcut-controls";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,9 @@ export function AgentStudioHeaderTitle({
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start" className="max-w-96">
               <p className="font-medium">{title}</p>
-              <p className="text-xs opacity-75">Open task details · {id}</p>
+              <p className="text-xs opacity-75">
+                <ShortcutText id="task-details">Open task details · {id}</ShortcutText>
+              </p>
             </TooltipContent>
           </Tooltip>
         ) : (
@@ -57,6 +60,7 @@ export function AgentStudioHeaderTitle({
       </h2>
       {id ? (
         <TaskIdBadge
+          shortcutAvailable
           taskId={id}
           className="shrink-0 [&_button]:size-7 @max-[1000px]/session-header:[&>span]:hidden @max-[480px]/session-header:hidden"
         />
@@ -84,6 +88,7 @@ function AgentStudioQuickActionsMenu({
 
   return (
     <QuickActionsMenu
+      workflowId={model.taskWorkflowId}
       canOpenActionsMenu={canOpenActionsMenu}
       workflowSteps={model.workflowSteps}
       isOpen={effectiveQuickActionsMenuOpen}

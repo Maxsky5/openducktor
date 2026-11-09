@@ -1,3 +1,5 @@
+import { ShortcutScope } from "@/features/shortcuts/shortcut-controls";
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import type { WorkspaceFileTreeEntry } from "@openducktor/contracts";
 import type { TreeThemeInput } from "@pierre/trees";
 import { prepareFileTreeInput, themeToTreeStyles } from "@pierre/trees";
@@ -180,33 +182,47 @@ function FileExplorerRootPathHeader({ rootPath }: { rootPath: string }): ReactEl
     errorLogContext: "TaskExecutionFileExplorerPanel.copyWorkingDirectory",
   });
 
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutOwner = useLocalShortcuts(root, [
+    {
+      id: "file-copy-path" as const,
+      run: () => {
+        void copyToClipboard(rootPath);
+      },
+    },
+  ]);
   const copyWorkingDirectory = useCallback(() => {
     void copyToClipboard(rootPath);
   }, [copyToClipboard, rootPath]);
 
   return (
-    <div className="border-b border-border px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-medium leading-3 text-muted-foreground">Working dir</div>
-          <code
-            className="block min-w-0 truncate font-mono text-[11px] leading-4 text-foreground"
-            title={rootPath}
-            data-testid="task-execution-file-explorer-root-path"
-          >
-            {rootPath}
-          </code>
+    <ShortcutScope owners={[shortcutOwner]}>
+      <div ref={root} className="border-b border-border px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-medium leading-3 text-muted-foreground">
+              Working dir
+            </div>
+            <code
+              className="block min-w-0 truncate font-mono text-[11px] leading-4 text-foreground"
+              title={rootPath}
+              data-testid="task-execution-file-explorer-root-path"
+            >
+              {rootPath}
+            </code>
+          </div>
+          <CopyIconButton
+            shortcutId="file-copy-path"
+            copied={copied}
+            ariaLabel="Copy working directory"
+            tooltipLabel={copied ? "Copied" : "Copy working directory"}
+            dataTestId="task-execution-file-explorer-copy-root-path"
+            className="size-6 shrink-0 border-transparent bg-transparent hover:bg-muted"
+            onClick={copyWorkingDirectory}
+          />
         </div>
-        <CopyIconButton
-          copied={copied}
-          ariaLabel="Copy working directory"
-          tooltipLabel={copied ? "Copied" : "Copy working directory"}
-          dataTestId="task-execution-file-explorer-copy-root-path"
-          className="size-6 shrink-0 border-transparent bg-transparent hover:bg-muted"
-          onClick={copyWorkingDirectory}
-        />
       </div>
-    </div>
+    </ShortcutScope>
   );
 }
 

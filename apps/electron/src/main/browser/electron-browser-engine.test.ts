@@ -367,7 +367,7 @@ describe("Electron browser engine page events", () => {
     expect(eventTypes(harness.events).filter((type) => type === "scheme_refused")).toHaveLength(1);
   });
 
-  test("forwards OpenDucktor shortcuts to the window and leaves other keys to the page", async () => {
+  test("leaves app shortcuts to installed window rules and leaves other keys to the page", async () => {
     const harness = createEngineHarness();
     await createTab(harness);
     await Effect.runPromise(harness.engine.setSurface(MAIN_WINDOW_ID, TAB_ID, surface(true)));
@@ -384,12 +384,10 @@ describe("Electron browser engine page events", () => {
       });
       return event.prevented;
     };
-    expect(key("k", true)).toBe(true);
+    expect(key("k", true)).toBe(false);
     expect(key("k", false)).toBe(false);
     expect(key("c", true)).toBe(false);
-    expect(harness.rendererMessages).toEqual([
-      { hostId: MAIN_WINDOW_ID, message: { type: "shortcut", shortcut: "command_palette" } },
-    ]);
+    expect(harness.rendererMessages).toEqual([]);
   });
 
   test("reloads a focused page on its own reload keys, not the window", async () => {

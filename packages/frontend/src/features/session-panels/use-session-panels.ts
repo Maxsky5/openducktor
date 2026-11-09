@@ -10,11 +10,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
-import {
-  isTerminalToggleShortcut,
-  type MountedTerminal,
-  type TerminalCloseDialogModel,
-} from "@/features/terminals";
+import { type MountedTerminal, type TerminalCloseDialogModel } from "@/features/terminals";
 import type { TerminalSessionsModel } from "@openducktor/frontend-core/terminals/use-terminals";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import {
@@ -84,7 +80,7 @@ export type { PanelPresence } from "./use-session-panel-visibility";
 export type PanelLauncherRecovery = { label: string; disabled: boolean; onRun: () => void };
 
 export type PanelLauncherEntry = {
-  kind: PanelTabKind;
+  kind: ToolTabKind | HostTabKind;
   disabledReason: string | null;
   recovery?: PanelLauncherRecovery;
 };
@@ -363,7 +359,6 @@ export function useSessionPanels({
   defaultRightSelection,
   unavailableKinds = NO_UNAVAILABLE_KINDS,
   terminals,
-  shortcutsEnabled = true,
   browser = null,
   toolCallTab = null,
 }: SessionPanelsInput): SessionPanelsModel {
@@ -540,18 +535,6 @@ export function useSessionPanels({
   );
   const toggleBottom = useCallback((): void => toggleBottomWith("slide"), [toggleBottomWith]);
 
-  useEffect(() => {
-    if (!isActive || !shortcutsEnabled) return;
-    const handleShortcut = (event: KeyboardEvent): void => {
-      if (!isTerminalToggleShortcut(event)) return;
-      event.preventDefault();
-      // A keyboard shortcut toggles the panel at once, as users press it many times a day.
-      toggleBottomWith("instant");
-    };
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [isActive, shortcutsEnabled, toggleBottomWith]);
-
   const hideBottom = useCallback((): void => {
     pendingBottomOpen.current = null;
     setBottomOpen(false);
@@ -588,8 +571,13 @@ export function useSessionPanels({
     [hostTabActions, update],
   );
   const addTab = useCallback(
-    (panel: PanelId): void => update((current, ctx) => addNewPanelTab(current, ctx, panel)),
-    [update],
+    (panel: PanelId): void => {
+      pendingBottomOpen.current = null;
+      update((current, ctx) => addNewPanelTab(current, ctx, panel));
+      if (panel === "bottom") setBottomOpen(true);
+      else showRight();
+    },
+    [setBottomOpen, showRight, update],
   );
   const pickKind = useCallback(
     (panel: PanelId, kind: PanelTabKind): void => {

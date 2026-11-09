@@ -1,3 +1,4 @@
+import { shortcutPreferencesSchema, type ShortcutPreferences } from "@openducktor/contracts";
 import type { WorkspaceRef } from "@openducktor/contracts";
 import {
   type LocalImageReadInput,
@@ -491,6 +492,18 @@ export class HostWorkspaceClient {
     return workspaceUpdateAgentModelFavorites(this.invokeFn, favorites);
   }
 
+  async workspaceGetKeyboardShortcuts(): Promise<ShortcutPreferences> {
+    return this.invokeFn("workspace_get_keyboard_shortcuts", undefined, shortcutPreferencesSchema);
+  }
+  async workspaceSaveKeyboardShortcuts(
+    preferences: ShortcutPreferences,
+  ): Promise<ShortcutPreferences> {
+    return this.invokeFn(
+      "workspace_save_keyboard_shortcuts",
+      { preferences },
+      shortcutPreferencesSchema,
+    );
+  }
   async workspaceUpdateKanbanTaskCardView(
     taskCardView: KanbanTaskCardView,
   ): Promise<KanbanTaskCardView> {

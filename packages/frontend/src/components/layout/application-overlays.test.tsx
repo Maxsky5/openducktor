@@ -1,3 +1,4 @@
+import { CommandPaletteRegistryProvider } from "@/features/command-palette/command-palette-registry";
 import { describe, expect, spyOn, test } from "bun:test";
 import { knownRuntimeKindValues, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
@@ -213,10 +214,13 @@ describe("ApplicationOverlays", () => {
     expect(containsElementByType(dialogHost, TaskWorkflowActionsProvider)).toBe(false);
   });
 
-  test("mounts the feature tour around all overlays", () => {
+  test("shares one command registry with the tour and workflow overlays", () => {
     const overlays = ApplicationOverlays({ children: null });
-
-    expect(isValidElement(overlays) && overlays.type === FeatureTourProvider).toBe(true);
+    const registry = findElementByType(overlays, CommandPaletteRegistryProvider);
+    const tour = findElementByType(registry, FeatureTourProvider);
+    expect(registry).not.toBeNull();
+    expect(containsElementByType(tour, TaskWorkflowActionsProvider)).toBe(true);
+    expect(containsElementByType(tour, AgentSessionTranscriptDialogHost)).toBe(true);
   });
 
   test("keeps the app and the tour in one diff worker pool", () => {

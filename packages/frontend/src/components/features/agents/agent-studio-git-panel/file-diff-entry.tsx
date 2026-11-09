@@ -1,3 +1,13 @@
+import type { ShortcutActionId } from "@openducktor/contracts";
+import {
+  ShortcutScope,
+  ShortcutMenuItem,
+  ShortcutButton,
+  useShortcutTitle,
+} from "@/features/shortcuts/shortcut-controls";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
+import { useShortcutPortalOwner } from "@/features/shortcuts/shortcut-focus";
 import type { GitFileDiff } from "@openducktor/contracts";
 import {
   AlertTriangle,
@@ -17,6 +27,7 @@ import {
   memo,
   type ReactElement,
   type RefCallback,
+  type RefObject,
   useCallback,
   useMemo,
   useRef,
@@ -27,11 +38,9 @@ import type {
   PierreHunkAction,
 } from "@/components/features/agents/pierre-diff-viewer";
 import { PierreDiffViewer } from "@/components/features/agents/pierre-diff-viewer";
-import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
@@ -160,6 +169,7 @@ type RowStatus = {
 };
 
 function RowActionButton({
+  shortcutId,
   label,
   icon: Icon,
   isPending,
@@ -168,6 +178,7 @@ function RowActionButton({
   destructive = false,
   onClick,
 }: {
+  shortcutId?: ShortcutActionId;
   label: string;
   icon: LucideIcon;
   isPending: boolean;
@@ -177,7 +188,8 @@ function RowActionButton({
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
 }): ReactElement {
   return (
-    <Button
+    <ShortcutButton
+      shortcutId={shortcutId}
       type="button"
       variant="ghost"
       size="icon"
@@ -194,17 +206,21 @@ function RowActionButton({
       ) : (
         <Icon className={cn("size-3.5", destructive && "text-destructive")} />
       )}
-    </Button>
+    </ShortcutButton>
   );
 }
 
 function FileRowMenu({
+  shortcutOwner,
+  onShortcut,
   filePath,
   isDeleted,
   rowActions,
   discardUnavailable,
   onViewFile,
 }: {
+  shortcutOwner: RefObject<HTMLElement | null>;
+  onShortcut: () => void;
   filePath: string;
   /** A deleted file has no content to preview. */
   isDeleted: boolean;
@@ -214,15 +230,20 @@ function FileRowMenu({
   onViewFile: ((filePath: string) => void) | null;
 }): ReactElement {
   const { copyToClipboard } = useCopyToClipboard({ successMessage: "Path copied" });
+  const menuRef = useShortcutPortalOwner(shortcutOwner, onShortcut);
   const disabled = rowActions?.disabledReason != null;
   const canView = onViewFile !== null && !isDeleted;
   return (
-    <ContextMenuContent className="w-60" data-testid="agent-studio-git-file-menu">
+    <ContextMenuContent ref={menuRef} className="w-60" data-testid="agent-studio-git-file-menu">
       {canView ? (
-        <ContextMenuItem className="cursor-pointer" onSelect={() => onViewFile?.(filePath)}>
+        <ShortcutMenuItem
+          shortcutId="git-open-file"
+          className="cursor-pointer"
+          onSelect={() => onViewFile?.(filePath)}
+        >
           <Eye />
           View file
-        </ContextMenuItem>
+        </ShortcutMenuItem>
       ) : null}
       {rowActions ? (
         <>
@@ -233,7 +254,8 @@ function FileRowMenu({
           {discardUnavailable ? (
             <p className="px-2 py-1 text-xs text-muted-foreground">{discardUnavailable}</p>
           ) : null}
-          <ContextMenuItem
+          <ShortcutMenuItem
+            shortcutId="git-discard"
             className="cursor-pointer"
             variant="destructive"
             disabled={disabled || discardUnavailable !== null}
@@ -241,14 +263,18 @@ function FileRowMenu({
           >
             <Undo2 />
             {discardFileLabel(rowActions.group)}
-          </ContextMenuItem>
+          </ShortcutMenuItem>
         </>
       ) : null}
       {canView || rowActions ? <ContextMenuSeparator /> : null}
-      <ContextMenuItem className="cursor-pointer" onSelect={() => void copyToClipboard(filePath)}>
+      <ShortcutMenuItem
+        shortcutId="git-copy-path"
+        className="cursor-pointer"
+        onSelect={() => void copyToClipboard(filePath)}
+      >
         <Copy />
         Copy path
-      </ContextMenuItem>
+      </ShortcutMenuItem>
     </ContextMenuContent>
   );
 }
@@ -264,14 +290,15 @@ function GroupToggleMenuItem({
 }): ReactElement {
   const { action, label, icon: Icon } = GROUP_TOGGLE[rowActions.group];
   return (
-    <ContextMenuItem
+    <ShortcutMenuItem
+      shortcutId={`git-${action}`}
       className="cursor-pointer"
       disabled={disabled}
       onSelect={() => rowActions.onChange(fileIntent(rowActions, action, filePath))}
     >
       <Icon />
       {label} file
-    </ContextMenuItem>
+    </ShortcutMenuItem>
   );
 }
 
@@ -304,6 +331,7 @@ function FileRowActionBar({
       {rowActions ? (
         <>
           <RowActionButton
+            shortcutId="git-discard"
             label={discardFileLabel(rowActions.group)}
             icon={Undo2}
             destructive
@@ -313,6 +341,7 @@ function FileRowActionBar({
             onClick={() => rowActions.onChange(fileIntent(rowActions, "discard", filePath))}
           />
           <RowActionButton
+            shortcutId={`git-${toggle.action}`}
             label={`${toggle.label} file`}
             icon={toggle.icon}
             isPending={pending(toggle.action)}
@@ -354,6 +383,44 @@ function FileDiffEntryHeader({
   const { diff } = row;
   const { fileCommentCount, isConflicted, isExpanded, reserveConflictSlot, statusColor } = status;
   const triggerRef = useRef<HTMLDivElement>(null);
+  const { copyToClipboard } = useCopyToClipboard({ successMessage: "Path copied" });
+  const shortcutOwner = useLocalShortcuts(triggerRef, [
+    {
+      id: "git-copy-path" as const,
+      run: () => {
+        void copyToClipboard(diff.file);
+      },
+    },
+    {
+      id: "git-open-file" as const,
+      run: () => onViewFile?.(diff.file),
+      disabledReason: onViewFile && diff.type !== "deleted" ? null : "File preview is unavailable.",
+    },
+    {
+      id: "git-open-diff" as const,
+      run: () => {
+        if (!isExpanded) onToggle(diff.file);
+      },
+    },
+    ...(["stage", "unstage", "discard"] as const).map((action) => ({
+      id: `git-${action}` as const,
+      run: () => rowActions?.onChange(fileIntent(rowActions, action, diff.file)),
+      disabledReason: !rowActions
+        ? "No working tree action is available."
+        : (rowActions.disabledReason ??
+          (action === "discard"
+            ? discardUnavailableReason(diff)
+            : GROUP_TOGGLE[rowActions.group].action === action
+              ? null
+              : "This action does not apply to the file.")),
+    })),
+  ]);
+  const diffTitle = useShortcutTitle(
+    "git-open-diff",
+    `Open diff for ${diff.file}`,
+    !status.isExpanded,
+    shortcutOwner,
+  );
   // A menu must not act on content that changed after it opened, so a change closes it.
   const [menu, setMenu] = useState({ open: false, content: diff.diff, generation: 0 });
   // The menu stays mounted with its kept view, so a switch closes it.
@@ -376,104 +443,109 @@ function FileDiffEntryHeader({
   };
 
   return (
-    <ContextMenu
-      key={menu.generation}
-      open={menu.open}
-      onOpenChange={(open) => setMenu((current) => ({ ...current, open, content: diff.diff }))}
-    >
-      <ContextMenuTrigger asChild>
-        <div
-          ref={triggerRef}
-          className="group/file-row relative flex min-w-0 items-center hover:bg-muted/50"
-        >
-          {/* The button covers the whole row, so a click on the counts also toggles the diff. */}
-          <button
-            type="button"
-            className={cn(
-              FILE_LIST_ROW_CLASS_NAME,
-              "w-auto flex-1 overflow-hidden pr-2 after:absolute after:inset-0",
-            )}
-            style={fileListRowStyle(viewMode, row.depth)}
-            aria-label={`Toggle diff for ${diff.file}`}
-            aria-expanded={isExpanded}
-            data-testid="agent-studio-git-file-toggle-button"
-            onClick={() => onToggle(diff.file)}
+    <ShortcutScope owners={[shortcutOwner]}>
+      <ContextMenu
+        key={menu.generation}
+        open={menu.open}
+        onOpenChange={(open) => setMenu((current) => ({ ...current, open, content: diff.diff }))}
+      >
+        <ContextMenuTrigger asChild>
+          <div
+            ref={triggerRef}
+            className="group/file-row relative flex min-w-0 items-center hover:bg-muted/50"
           >
-            {isExpanded ? (
-              <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
-            )}
-            {diff.type === "submodule" ? (
-              <FolderGit2 className={cn("size-3.5 shrink-0", statusColor)} />
-            ) : (
-              <FileTypeIcon filePath={diff.file} className="text-muted-foreground" />
-            )}
-            {isConflicted ? (
-              <AlertTriangle
-                className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
-                aria-label="Unresolved conflict"
-                data-testid="agent-studio-git-file-conflict-indicator"
-              />
-            ) : reserveConflictSlot ? (
-              <span
-                className="inline-flex size-3.5 shrink-0 items-center justify-center"
-                data-testid="agent-studio-git-file-conflict-slot"
-              />
-            ) : null}
-            <FileDiffEntryLabel row={row} />
-          </button>
-          <FileRowActionBar
-            filePath={diff.file}
-            rowActions={rowActions}
-            runningAction={runningAction}
-            discardUnavailable={discardUnavailableReason(diff)}
-            onOpenMenu={openMenu}
-          />
-          <span
-            className="ml-1 flex shrink-0 items-center justify-end gap-2 pr-3"
-            data-testid="agent-studio-git-file-stats"
-          >
-            {fileCommentCount > 0 ? (
-              <span
-                className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground"
-                data-testid="agent-studio-git-file-comment-count"
-              >
-                <MessageSquare className="size-3" />
-                <span>{fileCommentCount}</span>
-              </span>
-            ) : null}
-            <span className="flex shrink-0 items-center justify-end gap-1 font-mono text-[10px] whitespace-nowrap tabular-nums">
-              {FILE_STATUS_LETTER.has(diff.type) ? (
+            {/* The button covers the whole row, so a click on the counts also toggles the diff. */}
+            <button
+              type="button"
+              className={cn(
+                FILE_LIST_ROW_CLASS_NAME,
+                "w-auto flex-1 overflow-hidden pr-2 after:absolute after:inset-0",
+              )}
+              style={fileListRowStyle(viewMode, row.depth)}
+              aria-label={`Toggle diff for ${diff.file}`}
+              title={diffTitle}
+              aria-expanded={isExpanded}
+              data-testid="agent-studio-git-file-toggle-button"
+              onClick={() => onToggle(diff.file)}
+            >
+              {isExpanded ? (
+                <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
+              )}
+              {diff.type === "submodule" ? (
+                <FolderGit2 className={cn("size-3.5 shrink-0", statusColor)} />
+              ) : (
+                <FileTypeIcon filePath={diff.file} className="text-muted-foreground" />
+              )}
+              {isConflicted ? (
+                <AlertTriangle
+                  className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                  aria-label="Unresolved conflict"
+                  data-testid="agent-studio-git-file-conflict-indicator"
+                />
+              ) : reserveConflictSlot ? (
                 <span
-                  className={cn("font-semibold", statusColor)}
-                  title={diff.type}
-                  data-testid="agent-studio-git-file-status-letter"
+                  className="inline-flex size-3.5 shrink-0 items-center justify-center"
+                  data-testid="agent-studio-git-file-conflict-slot"
+                />
+              ) : null}
+              <FileDiffEntryLabel row={row} />
+            </button>
+            <FileRowActionBar
+              filePath={diff.file}
+              rowActions={rowActions}
+              runningAction={runningAction}
+              discardUnavailable={discardUnavailableReason(diff)}
+              onOpenMenu={openMenu}
+            />
+            <span
+              className="ml-1 flex shrink-0 items-center justify-end gap-2 pr-3"
+              data-testid="agent-studio-git-file-stats"
+            >
+              {fileCommentCount > 0 ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground"
+                  data-testid="agent-studio-git-file-comment-count"
                 >
-                  {FILE_STATUS_LETTER.get(diff.type)}
+                  <MessageSquare className="size-3" />
+                  <span>{fileCommentCount}</span>
                 </span>
               ) : null}
-              {diff.additions > 0 ? (
-                <span className="text-green-600 dark:text-green-400">+{diff.additions}</span>
-              ) : null}
-              {diff.deletions > 0 ? (
-                <span className="text-red-600 dark:text-red-400">-{diff.deletions}</span>
-              ) : null}
+              <span className="flex shrink-0 items-center justify-end gap-1 font-mono text-[10px] whitespace-nowrap tabular-nums">
+                {FILE_STATUS_LETTER.has(diff.type) ? (
+                  <span
+                    className={cn("font-semibold", statusColor)}
+                    title={diff.type}
+                    data-testid="agent-studio-git-file-status-letter"
+                  >
+                    {FILE_STATUS_LETTER.get(diff.type)}
+                  </span>
+                ) : null}
+                {diff.additions > 0 ? (
+                  <span className="text-green-600 dark:text-green-400">+{diff.additions}</span>
+                ) : null}
+                {diff.deletions > 0 ? (
+                  <span className="text-red-600 dark:text-red-400">-{diff.deletions}</span>
+                ) : null}
+              </span>
             </span>
-          </span>
-        </div>
-      </ContextMenuTrigger>
-      {/* A closed menu still mounts its content parts, which doubles the cost of a long list. */}
-      {menu.open ? (
-        <FileRowMenu
-          filePath={diff.file}
-          isDeleted={diff.type === "deleted"}
-          rowActions={rowActions}
-          discardUnavailable={discardUnavailableReason(diff)}
-          onViewFile={onViewFile}
-        />
-      ) : null}
-    </ContextMenu>
+          </div>
+        </ContextMenuTrigger>
+        {/* A closed menu still mounts its content parts, which doubles the cost of a long list. */}
+        {menu.open ? (
+          <FileRowMenu
+            shortcutOwner={triggerRef}
+            onShortcut={() => setMenu((current) => ({ ...current, open: false }))}
+            filePath={diff.file}
+            isDeleted={diff.type === "deleted"}
+            rowActions={rowActions}
+            discardUnavailable={discardUnavailableReason(diff)}
+            onViewFile={onViewFile}
+          />
+        ) : null}
+      </ContextMenu>
+    </ShortcutScope>
   );
 }
 

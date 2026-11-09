@@ -46,6 +46,7 @@ export type AgentSessionCreateOption = {
 };
 
 export type AgentStudioHeaderModel = {
+  taskWorkflowId?: string | undefined;
   taskTitle: string | null;
   taskId: string | null;
   /** The pull request linked to the task, shown in the top bar. */

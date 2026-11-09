@@ -31,7 +31,7 @@ import type { SettingsContentFocusRequest, SettingsDeepLink } from "./settings-d
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import { SettingsModalContent } from "./settings-modal-content";
 import { SettingsModalFooter } from "./settings-modal-footer";
-import { isSettingsInteractionDisabled } from "./settings-modal-model";
+import { isSettingsInteractionDisabled, settingsSectionPresentation } from "./settings-modal-model";
 import { INITIAL_NAVIGATION, getOpenState, type Navigation } from "./settings-modal-open-state";
 import { SettingsSidebar } from "./settings-modal-sidebars";
 import { SettingsModalOpenButton, SettingsModalTrigger } from "./settings-modal-trigger";
@@ -217,6 +217,12 @@ function SettingsDialog({
   const isPreparing = open && controller.isLoadingSettings && controller.snapshotDraft === null;
   const isInteractionDisabled = isSettingsInteractionDisabled(controller);
   const { runtimeReview } = controller;
+  const sectionPresentation = settingsSectionPresentation(
+    navigation.section,
+    isPreparing,
+    isInteractionDisabled,
+    controller.settingsError,
+  );
 
   const handleSectionChange = (section: SettingsSectionId): void => {
     setNavigation((current) => ({ ...current, section }));
@@ -283,7 +289,7 @@ function SettingsDialog({
       {children}
 
       <DialogContent
-        loading={isPreparing}
+        loading={sectionPresentation.loading}
         loadingLabel="Loading settings…"
         // The dialog and its body clip instead of scroll, so `scrollIntoView` moves only the pane
         // of the open section, never the dialog itself.
@@ -308,7 +314,7 @@ function SettingsDialog({
           <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[minmax(13.75rem,max-content)_minmax(0,1fr)] md:grid-rows-1">
             <SettingsSidebar
               section={navigation.section}
-              disabled={isInteractionDisabled}
+              disabled={sectionPresentation.sidebarDisabled}
               errorCountById={controller.settingsSectionErrorCountById}
               onChange={handleSectionChange}
             />
