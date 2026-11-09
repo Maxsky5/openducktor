@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { createHash, type Hash } from "node:crypto";
 import { none, type Many } from "stream-chain/defs.js";
 import * as StreamJson from "stream-json/core/parser.js";
-import type { ParserOptions, Token } from "stream-json/core/parser.js";
+import type { Token } from "stream-json/core/parser.js";
 import type { ClaudeProtocolObject, ClaudeProtocolValue } from "./claude-agent-sdk-ingress-schemas";
 import {
   claudeTranscriptStringLimit,
@@ -175,13 +175,11 @@ const createStreamingClaudeTranscriptJsonReader = (
   mode: ClaudeTranscriptReadMode = "history",
   hints: { collect?: TypeHints; known?: ReadonlyMap<number, ClaudeProtocolValue | undefined> } = {},
 ) => {
-  // SAFETY: stream-json 3.6.0 exports this synchronous tokenizer; its declaration only lists the async wrapper.
-  const { jsonParser } = StreamJson as typeof StreamJson & {
-    jsonParser: (
-      options: ParserOptions,
-    ) => (input: string | typeof none) => Many<Token> | typeof none;
-  };
-  const tokenize = jsonParser({ packValues: false });
+  // SAFETY: stream-json types the tokenizer as Flushable<string>, but the tokenizer
+  // reads `none` to flush its last token.
+  const tokenize = StreamJson.jsonParser({ packValues: false }) as (
+    input: string | typeof none,
+  ) => Many<Token> | typeof none;
   const checkLexical = createJsonLexicalCheck();
   const selectPath = claudeTranscriptReadModePathSelectors[mode];
   const stack: Frame[] = [];

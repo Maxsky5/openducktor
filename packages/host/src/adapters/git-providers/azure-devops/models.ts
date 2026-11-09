@@ -149,10 +149,7 @@ const requireTimestamp = (value: AzureDevOpsJson | undefined, field: string): st
   return parsed.data;
 };
 
-const optionalTimestamp = (
-  value: AzureDevOpsJson | undefined,
-  field: string,
-): string | undefined =>
+const optionalTimestamp = (value: AzureDevOpsJson | undefined, field: string): string | undefined =>
   value === undefined || value === null ? undefined : requireTimestamp(value, field);
 
 const azurePullRequestState = (status: string, draft: boolean): PullRequest["state"] => {

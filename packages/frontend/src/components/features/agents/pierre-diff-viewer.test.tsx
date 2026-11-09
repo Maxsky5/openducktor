@@ -186,7 +186,7 @@ beforeEach(async () => {
                       key={`${annotation.side}:${annotation.lineNumber}`}
                       data-testid="pierre-line-annotation"
                     >
-                      {props.renderAnnotation?.(annotation)}
+                      {props.renderAnnotation?.(annotation, props.fileDiff)}
                     </div>
                   ))}
                 </div>

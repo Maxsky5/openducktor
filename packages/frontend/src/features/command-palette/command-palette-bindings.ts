@@ -108,9 +108,8 @@ export const mainListEnterHint = ({
   }
 };
 
-export const rowListEnterHint = (
-  action: PaletteRowAction | undefined,
-): CommandPaletteHint | null => (action ? enterHint("Run", action.run) : null);
+export const rowListEnterHint = (action: PaletteRowAction | undefined): CommandPaletteHint | null =>
+  action ? enterHint("Run", action.run) : null;
 
 /** The footer hints. Escape returns from a row action list and closes the main list. */
 export const paletteFooterHints = ({
