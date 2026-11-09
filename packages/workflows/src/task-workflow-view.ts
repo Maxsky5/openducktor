@@ -27,8 +27,6 @@ export type WorkflowRoleId = string;
 export type WorkflowIssueTypeId = IssueType;
 export type WorkflowLaunchActionId = string;
 export type WorkflowDocumentCode = string;
-export type WorkflowPromptRoleTabId = string;
-export type WorkflowPromptTemplateId = string;
 
 export const taskWorkflowInput = (
   task: Pick<ResolvedTaskCard, "workflow" | "status" | "issueType" | "artifactSummary">,

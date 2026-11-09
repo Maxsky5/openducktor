@@ -29,6 +29,7 @@ const createRepoConfig = (agentStudioState: WorkspaceAgentStudioState): RepoConf
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
+  promptAppends: {},
   agentDefaults: {},
   agentStudioState,
 });

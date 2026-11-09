@@ -446,7 +446,6 @@ export const listenToAgentSessionEvents = (
           Promise.resolve(
             buildReadOnlyPermissionRejectionMessage({
               role: builtinRoleId(role),
-              overrides: {},
             }),
           )),
       readOnlyApprovalAutoRejectSafe:

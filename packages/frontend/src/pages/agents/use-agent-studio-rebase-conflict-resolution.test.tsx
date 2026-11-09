@@ -139,7 +139,7 @@ const createBaseArgs = (overrides: Partial<HookArgs> = {}): HookArgs => {
     },
     scheduleQueryUpdate: mock(() => {}),
     startSessionRequest: mock(async () => sessionWorkflowResult("build-new-1")),
-    loadPromptOverrides: mock(async () => ({})),
+    loadPromptSettings: mock(async () => ({ global: { overrides: {}, appends: {} } })),
     ...overrides,
   };
 };

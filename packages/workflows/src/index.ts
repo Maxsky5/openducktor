@@ -37,10 +37,31 @@ export {
   type TransitionCause,
 } from "./task-workflow/task-workflow";
 export type { TaskFacts } from "./task-workflow/task-input";
-export { requirePullRequestTarget } from "./task-workflow/task-prompts";
+export { BASE_PROMPT_PLACEHOLDERS, requirePullRequestTarget } from "./task-workflow/task-prompts";
 export { launchGoalObjective } from "./task-workflow/launch-goal";
 export { goalTaskMaterial } from "./task-workflow/goal-writer";
+export {
+  appendAddsText,
+  composePromptLayers,
+  EMPTY_PROMPT_SETTINGS,
+  globalPromptLayersOf,
+  isPromptOverrideOn,
+  isPromptOverrideOutdated,
+  PROMPT_LAYER_LABELS,
+  promptBase,
+  promptScopeLayerProblems,
+  promptSettingsOf,
+  repoPromptLayersOf,
+  withGlobalPromptLayers,
+  withRepoPromptLayers,
+} from "./task-workflow/prompt-layers";
 export { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./task-workflow/pull-request-launch";
+export type {
+  PromptLayerPart,
+  PromptLayerProblems,
+  PromptSettings,
+  PromptSettingsLayers,
+} from "./task-workflow/prompt-layers";
 export type {
   PromptTemplate as TaskPromptTemplate,
   TaskPrompts,

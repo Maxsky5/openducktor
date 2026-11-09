@@ -1,18 +1,29 @@
 import {
   isOdtBrowserToolName,
-  PULL_REQUEST_LAUNCH_ID,
   promptOverrideKey,
   ROLE_INSTRUCTIONS_PROMPT_ID,
-  validatePromptTemplatePlaceholders,
   WORKFLOW_MESSAGE_PROMPT_PREFIX,
   WORKFLOW_PROMPT_IDS,
   type AgentPromptPlaceholder,
   type AgentToolName,
   type CompiledAgentRoleDefinition,
   type CompiledWorkflowDefinition,
+  extractPromptTemplatePlaceholders,
+  type WorkflowLaunchActionDefinition,
   type GitTargetBranch,
-  type RepoPromptOverrides,
 } from "@openducktor/contracts";
+import {
+  composePromptLayers,
+  fillablePlaceholdersHint,
+  isPromptOverrideOutdated,
+  joinPromptLayers,
+  placeholderProblem,
+  promptBase,
+  promptScopeLayerProblems,
+  type PromptPlaceholderRules,
+  type PromptSettings,
+  type PromptSettingsLayers,
+} from "./prompt-layers";
 import { formatOdtToolArgs } from "./prompt-tool-args";
 import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
 
@@ -95,7 +106,7 @@ export type BuiltAgentPrompt = {
 export type SystemPromptInput = {
   role: string;
   task: PromptTaskContext;
-  overrides?: RepoPromptOverrides | undefined;
+  settings: PromptSettings;
 };
 
 export type KickoffPromptInput = {
@@ -105,7 +116,7 @@ export type KickoffPromptInput = {
   task: PromptTaskContext;
   humanFeedback?: string | undefined;
   targetBranch?: GitTargetBranch | undefined;
-  overrides?: RepoPromptOverrides | undefined;
+  settings: PromptSettings;
 };
 
 /** The instructions that tell a model how to write the goal of a Goal mode launch. */
@@ -113,7 +124,7 @@ export type GoalPromptInput = {
   launchActionId: string;
   task: PromptTaskContext;
   humanFeedback?: string | undefined;
-  overrides?: RepoPromptOverrides | undefined;
+  settings: PromptSettings;
 };
 
 export type MessagePromptInput = {
@@ -124,12 +135,7 @@ export type MessagePromptInput = {
   git?: AgentPromptGitContext | undefined;
   humanFeedback?: string | undefined;
   targetBranch?: GitTargetBranch | undefined;
-  overrides?: RepoPromptOverrides | undefined;
-};
-
-export type MergePromptOverridesInput = {
-  globalOverrides?: RepoPromptOverrides | undefined;
-  repoOverrides?: RepoPromptOverrides | undefined;
+  settings: PromptSettings;
 };
 
 /** The prompts of a task workflow and of its roles, and the prompts that they build. */
@@ -144,14 +150,19 @@ export type TaskPrompts = {
   readonly hasGoalPrompt: boolean;
   /** The goal prompt of the workflow, which tells a model how to write the goal of a launch. */
   goalPrompt(input: GoalPromptInput): BuiltAgentPrompt;
-  readOnlyRejection(input: { role: string; overrides?: RepoPromptOverrides | undefined }): string;
-  /** The enabled repository override wins over the enabled global override. */
-  mergeOverrides(input: MergePromptOverridesInput): RepoPromptOverrides;
+  readOnlyRejection(input: { role: string; settings: PromptSettings }): string;
+  /** The placeholders that OpenDucktor supplies when it builds the prompt of this settings key. */
+  placeholdersOf(key: string): readonly AgentPromptPlaceholder[];
   /**
-   * The first problem of an enabled override, with its fix. Settings reject new invalid overrides,
-   * so a problem comes from an override that an earlier version saved.
+   * The first placeholder problem of the saved layers of the prompts that a session of the role
+   * builds: its system prompt and, for a launch, the prompt of the launch action. A problem in
+   * another prompt blocks only the action that builds it. Settings reject new invalid layers, so a
+   * problem comes from a layer that an earlier version saved.
    */
-  findOverrideProblem(overrides: RepoPromptOverrides | undefined): string | undefined;
+  findLayerProblem(
+    settings: PromptSettings,
+    session: { role: string; launchActionId?: string | undefined },
+  ): string | undefined;
 };
 
 type LaunchTemplate = { templateId: string; kind: "kickoff" | "message" };
@@ -178,7 +189,29 @@ export const fillPromptPlaceholders = (
   values: ReadonlyMap<string, string>,
 ): string =>
   template.replace(PLACEHOLDER_PATTERN, (_match, token: string) => values.get(token) ?? "");
-const OVERRIDE_FIX = "Edit or disable this prompt override in Settings.";
+/**
+ * The placeholders that every prompt can fill. Role instructions and the base workflow prompts
+ * fill exactly these.
+ */
+export const BASE_PROMPT_PLACEHOLDERS: readonly AgentPromptPlaceholder[] = [
+  "role",
+  "role.allowedTools",
+  "task.id",
+  "task.title",
+  "task.issueType",
+  "task.status",
+  "task.description",
+];
+/** The placeholders of a launch that collects human feedback. */
+export const HUMAN_FEEDBACK_PLACEHOLDERS: readonly AgentPromptPlaceholder[] = ["humanFeedback"];
+/** The placeholders of the pull request launch and of Git conflict launches. */
+export const GIT_PLACEHOLDERS: readonly AgentPromptPlaceholder[] = [
+  "git.operationLabel",
+  "git.currentBranch",
+  "git.targetBranch",
+  "git.conflictedFiles",
+  "git.conflictOutput",
+];
 
 const compact = (value: string | undefined): string => {
   const trimmed = value?.trim();
@@ -207,23 +240,6 @@ export const requirePullRequestTarget = (
     );
   }
   return branch;
-};
-
-type PlaceholderValidation = ReturnType<typeof validatePromptTemplatePlaceholders>;
-
-/** The first unsupported or missing placeholder of a prompt, as an error message. */
-const placeholderProblem = (
-  name: string,
-  { unsupportedPlaceholders, missingRequiredPlaceholders }: PlaceholderValidation,
-): string | undefined => {
-  const unsupported = unsupportedPlaceholders[0];
-  if (unsupported !== undefined) {
-    return `The ${name} uses unsupported placeholder "${unsupported}".`;
-  }
-  const missing = missingRequiredPlaceholders[0];
-  return missing === undefined
-    ? undefined
-    : `The ${name} is missing required placeholder "${missing}".`;
 };
 
 /**
@@ -302,20 +318,16 @@ export const createTaskPrompts = (
   const templates = [...workflowTemplatesById.values(), ...roleTemplates];
   const templatesByKey = new Map(templates.map((template) => [template.key, template]));
   const rolesById = new Map(roles.map((role) => [role.id, role]));
-  const launchTemplates = new Map<string, LaunchTemplate>([
-    ...definition.steps.flatMap((step) =>
-      step.kind === "agent"
-        ? step.launchActions.map(
-            (launch) =>
-              [launch.id, { templateId: launch.template.id, kind: launch.template.kind }] as const,
-          )
-        : [],
-    ),
-    [
-      PULL_REQUEST_LAUNCH_ID,
-      { templateId: PULL_REQUEST_LAUNCH.template.id, kind: PULL_REQUEST_LAUNCH.template.kind },
-    ],
-  ]);
+  const launchActions = [
+    ...definition.steps.flatMap((step) => (step.kind === "agent" ? step.launchActions : [])),
+    PULL_REQUEST_LAUNCH,
+  ];
+  const launchTemplates = new Map<string, LaunchTemplate>(
+    launchActions.map((launch) => [
+      launch.id,
+      { templateId: launch.template.id, kind: launch.template.kind },
+    ]),
+  );
   const createsPullRequest = (roleId: string) =>
     rolesById.has(roleId) &&
     (definition.pullRequestRoles.length === 0 || definition.pullRequestRoles.includes(roleId));
@@ -346,13 +358,79 @@ export const createTaskPrompts = (
   );
   const nameOf = (entry: OwnedPromptTemplate) =>
     promptName(entry, templateRolesByKey.get(entry.key)!);
+  /** The placeholder values that a launch action supplies to its prompt. */
+  const launchPlaceholders = (
+    launch: Pick<WorkflowLaunchActionDefinition, "id" | "context" | "surface">,
+  ): AgentPromptPlaceholder[] => [
+    ...BASE_PROMPT_PLACEHOLDERS,
+    ...(launch.context === "human_feedback" ? HUMAN_FEEDBACK_PLACEHOLDERS : []),
+    ...(isPullRequestLaunch(launch.id) || launch.surface === "git_conflict"
+      ? GIT_PLACEHOLDERS
+      : []),
+  ];
+  // A prompt that no launch action sends, such as the role instructions, fills the base set. A
+  // prompt that more than one launch action sends can fill only what each of them supplies.
+  const fillableByKey = new Map<string, readonly AgentPromptPlaceholder[]>(
+    templates.map((entry) => {
+      const sets =
+        entry.ownerKind === "role"
+          ? []
+          : launchActions
+              .filter((launch) => launch.template.id === entry.id)
+              .map(launchPlaceholders);
+      const [first = BASE_PROMPT_PLACEHOLDERS, ...rest] = sets;
+      return [
+        entry.key,
+        first.filter((placeholder) => rest.every((set) => set.includes(placeholder))),
+      ];
+    }),
+  );
+  const placeholdersOf = (key: string): readonly AgentPromptPlaceholder[] => {
+    const fillable = fillableByKey.get(key);
+    if (!fillable) throw new Error(`Task workflow "${definition.id}" has no prompt "${key}".`);
+    return fillable;
+  };
+  const rulesOf = (entry: OwnedPromptTemplate): PromptPlaceholderRules => ({
+    requiredPlaceholders: entry.requiredPlaceholders ?? [],
+    fillablePlaceholders: placeholdersOf(entry.key),
+  });
   for (const entry of templates) {
-    const problem = placeholderProblem(
-      nameOf(entry),
-      validatePromptTemplatePlaceholders(entry.template, entry.requiredPlaceholders),
-    );
-    if (problem !== undefined) throw new Error(problem);
+    const { requiredPlaceholders, fillablePlaceholders } = rulesOf(entry);
+    const problem = placeholderProblem(entry.template, requiredPlaceholders, fillablePlaceholders);
+    if (problem !== undefined)
+      throw new Error(
+        `The built-in text of ${nameOf(entry)} has a placeholder problem. ${problem} ${fillablePlaceholdersHint(fillablePlaceholders)}`,
+      );
   }
+  /**
+   * The first placeholder problem of a saved layer of one prompt that goes into its final text,
+   * with its fix. An override that a repository override hides does not go into the text, so it is
+   * not checked here. Settings still shows its problem.
+   */
+  const savedLayerProblem = (
+    entry: OwnedPromptTemplate,
+    settings: PromptSettings,
+  ): string | undefined => {
+    const base = promptBase(settings, entry.key).source;
+    const scopeProblem = (
+      scope: "global" | "repository",
+      layers: PromptSettingsLayers | undefined,
+      overrideIsBase: boolean,
+    ): string | undefined => {
+      if (!layers) return undefined;
+      const problems = promptScopeLayerProblems(layers, entry.key, rulesOf(entry));
+      const [layer, problem] =
+        overrideIsBase && problems.override !== undefined
+          ? ["override", problems.override]
+          : ["append", problems.append];
+      if (problem === undefined) return undefined;
+      return `The ${scope} ${layer} of ${nameOf(entry)} has a placeholder problem. ${problem} ${fillablePlaceholdersHint(placeholdersOf(entry.key))} Edit or turn off this ${layer} in Settings.`;
+    };
+    return (
+      scopeProblem("global", settings.global, base === "global_override") ??
+      scopeProblem("repository", settings.repository, base === "repository_override")
+    );
+  };
 
   const template = (key: string): OwnedPromptTemplate => {
     const found = templatesByKey.get(key);
@@ -430,20 +508,17 @@ export const createTaskPrompts = (
   const resolveTemplate = (
     key: string,
     values: ReadonlyMap<string, string>,
-    overrides: RepoPromptOverrides | undefined,
+    settings: PromptSettings,
   ): ResolvedAgentPromptTemplate => {
     const definitionTemplate = template(key);
     const name = nameOf(definitionTemplate);
-    const overrideEntry = overrides?.[key];
-    const override = overrideEntry && overrideEntry.enabled !== false ? overrideEntry : undefined;
-    const text = (override?.template ?? definitionTemplate.template).trim();
-    const validation = validatePromptTemplatePlaceholders(
-      text,
-      definitionTemplate.requiredPlaceholders,
+    const problem = savedLayerProblem(definitionTemplate, settings);
+    if (problem !== undefined) throw new Error(problem);
+    const { parts, override } = composePromptLayers(definitionTemplate.template, settings, key);
+    const text = joinPromptLayers(parts);
+    const missingValue = extractPromptTemplatePlaceholders(text).find(
+      (token) => !values.has(token),
     );
-    const problem = placeholderProblem(name, validation);
-    if (problem !== undefined) throw new Error(override ? `${problem} ${OVERRIDE_FIX}` : problem);
-    const missingValue = validation.placeholders.find((token) => !values.has(token));
     if (missingValue !== undefined) {
       throw new Error(`The ${name} is missing placeholder value "${missingValue}".`);
     }
@@ -452,9 +527,7 @@ export const createTaskPrompts = (
       purpose: definitionTemplate.purpose,
       source: override ? "override" : "builtin",
       builtinVersion: definitionTemplate.builtinVersion,
-      hasStaleOverride: Boolean(
-        override && override.baseVersion !== definitionTemplate.builtinVersion,
-      ),
+      hasStaleOverride: isPromptOverrideOutdated(override, definitionTemplate.builtinVersion),
       content: fillPromptPlaceholders(text, values),
     };
     if (override) resolved.overrideBaseVersion = override.baseVersion;
@@ -464,9 +537,9 @@ export const createTaskPrompts = (
   const buildPrompt = (
     keys: readonly string[],
     values: ReadonlyMap<string, string>,
-    overrides: RepoPromptOverrides | undefined,
+    settings: PromptSettings,
   ): BuiltAgentPrompt => {
-    const resolved = keys.map((key) => resolveTemplate(key, values, overrides));
+    const resolved = keys.map((key) => resolveTemplate(key, values, settings));
     return {
       prompt: resolved
         .map((entry) => entry.content.trim())
@@ -513,13 +586,13 @@ export const createTaskPrompts = (
   return {
     templates,
     templateRoles: (id) => templateRolesByKey.get(template(workflowKey(id)).key)!,
-    systemPrompt: ({ role, task, overrides }) =>
+    systemPrompt: ({ role, task, settings }) =>
       buildPrompt(
         [systemTemplateOf(role), ...SYSTEM_PROMPT_IDS.map(workflowKey)],
         placeholderValues({ role, task }),
-        overrides,
+        settings,
       ),
-    kickoffPrompt: ({ launchActionId, role, task, humanFeedback, targetBranch, overrides }) => {
+    kickoffPrompt: ({ launchActionId, role, task, humanFeedback, targetBranch, settings }) => {
       const launch = launchTemplate(launchActionId, "kickoff");
       const pullRequestTarget = isPullRequestLaunch(launchActionId)
         ? requirePullRequestTarget(launch.templateId, targetBranch)
@@ -532,18 +605,10 @@ export const createTaskPrompts = (
           humanFeedback,
           pullRequestTarget,
         }),
-        overrides,
+        settings,
       );
     },
-    messagePrompt: ({
-      launchActionId,
-      role,
-      task,
-      git,
-      humanFeedback,
-      targetBranch,
-      overrides,
-    }) => {
+    messagePrompt: ({ launchActionId, role, task, git, humanFeedback, targetBranch, settings }) => {
       const launch = launchTemplate(launchActionId, "message");
       if (git && !git.operationLabel?.trim()) {
         throw new Error(
@@ -561,45 +626,36 @@ export const createTaskPrompts = (
             ? requirePullRequestTarget(launch.templateId, targetBranch)
             : undefined,
         }),
-        overrides,
+        settings,
       );
     },
     hasGoalPrompt: workflowTemplatesById.has(WORKFLOW_PROMPT_IDS.goal),
-    goalPrompt: ({ launchActionId, task, humanFeedback, overrides }) => {
+    goalPrompt: ({ launchActionId, task, humanFeedback, settings }) => {
       if (!workflowTemplatesById.has(WORKFLOW_PROMPT_IDS.goal))
         throw new Error(`Task workflow "${definition.id}" has no goal prompt.`);
       return buildPrompt(
         [workflowKey(WORKFLOW_PROMPT_IDS.goal)],
         placeholderValues({ role: roleOfLaunch(launchActionId, undefined), task, humanFeedback }),
-        overrides,
+        settings,
       );
     },
-    readOnlyRejection: ({ role, overrides }) =>
+    readOnlyRejection: ({ role, settings }) =>
       buildPrompt(
         [workflowKey(WORKFLOW_PROMPT_IDS.readOnlyRejection)],
         placeholderValues({ role, task: { taskId: "permission-policy" } }),
-        overrides,
+        settings,
       ).prompt,
-    mergeOverrides: ({ globalOverrides, repoOverrides }) =>
-      Object.fromEntries(
-        templates.flatMap(({ key }) => {
-          const repoOverride = repoOverrides?.[key];
-          if (repoOverride && repoOverride.enabled !== false) return [[key, repoOverride] as const];
-          const globalOverride = globalOverrides?.[key];
-          return globalOverride && globalOverride.enabled !== false
-            ? [[key, globalOverride] as const]
-            : [];
-        }),
-      ),
-    findOverrideProblem: (overrides) => {
-      for (const entry of templates) {
-        const override = overrides?.[entry.key];
-        if (!override || override.enabled === false) continue;
-        const problem = placeholderProblem(
-          nameOf(entry),
-          validatePromptTemplatePlaceholders(override.template.trim(), entry.requiredPlaceholders),
-        );
-        if (problem !== undefined) return `${problem} ${OVERRIDE_FIX}`;
+    placeholdersOf,
+    findLayerProblem: (settings, { role, launchActionId }) => {
+      const launch = launchActionId === undefined ? undefined : launchTemplates.get(launchActionId);
+      const keys = [
+        systemTemplateOf(role),
+        ...SYSTEM_PROMPT_IDS.map(workflowKey),
+        ...(launch ? [workflowKey(launch.templateId)] : []),
+      ];
+      for (const key of keys) {
+        const problem = savedLayerProblem(template(key), settings);
+        if (problem !== undefined) return problem;
       }
       return undefined;
     },

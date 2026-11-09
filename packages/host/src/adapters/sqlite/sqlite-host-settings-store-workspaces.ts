@@ -6,7 +6,11 @@ import { HostValidationError } from "../../effect/host-errors";
 import type { HostDatabaseSession } from "./sqlite-host-database-schema";
 import * as schema from "./sqlite-host-settings-schema";
 import { settingsKeyChanges, settingsRowBatches } from "./sqlite-host-settings-store-validation";
-import { promptOverrideColumns, promptOverrideKeysMatch } from "./sqlite-prompt-override-keys";
+import {
+  promptKeyColumns,
+  promptKeysMatch,
+  writePromptLayerRows,
+} from "./sqlite-prompt-layer-rows";
 
 const operation = "hostSettings.workspace";
 export const saveWorkspace = (
@@ -158,30 +162,28 @@ export const saveWorkspace = (
           operation,
         );
     }
-    const prompts = settingsKeyChanges(previous?.promptOverrides, config.promptOverrides);
-    for (const keys of settingsRowBatches(prompts.removed))
-      yield* session.execute(
-        (db) =>
+    yield* writePromptLayerRows(
+      session,
+      operation,
+      previous?.promptOverrides,
+      config.promptOverrides,
+      {
+        remove: (keys) => (db) =>
           db
             .delete(schema.workspacePromptOverrides)
             .where(
               and(
                 eq(schema.workspacePromptOverrides.workspaceId, workspaceId),
-                promptOverrideKeysMatch(schema.workspacePromptOverrides, keys),
+                promptKeysMatch(schema.workspacePromptOverrides, keys),
               ),
             ),
-        operation,
-      );
-    for (const rows of settingsRowBatches(
-      prompts.changed.map(([key, prompt]) => ({
-        workspaceId,
-        ...promptOverrideColumns(key),
-        ...prompt,
-        enabled: prompt.enabled ?? null,
-      })),
-    ))
-      yield* session.execute(
-        (db) =>
+        row: (key, prompt) => ({
+          workspaceId,
+          ...promptKeyColumns(key),
+          ...prompt,
+          enabled: prompt.enabled ?? null,
+        }),
+        upsert: (rows) => (db) =>
           db
             .insert(schema.workspacePromptOverrides)
             .values(rows)
@@ -198,8 +200,33 @@ export const saveWorkspace = (
                 enabled: sql`excluded.enabled`,
               },
             }),
-        operation,
-      );
+      },
+    );
+    yield* writePromptLayerRows(session, operation, previous?.promptAppends, config.promptAppends, {
+      remove: (keys) => (db) =>
+        db
+          .delete(schema.workspacePromptAppends)
+          .where(
+            and(
+              eq(schema.workspacePromptAppends.workspaceId, workspaceId),
+              promptKeysMatch(schema.workspacePromptAppends, keys),
+            ),
+          ),
+      row: (key, append) => ({ workspaceId, ...promptKeyColumns(key), ...append }),
+      upsert: (rows) => (db) =>
+        db
+          .insert(schema.workspacePromptAppends)
+          .values(rows)
+          .onConflictDoUpdate({
+            target: [
+              schema.workspacePromptAppends.workspaceId,
+              schema.workspacePromptAppends.ownerKind,
+              schema.workspacePromptAppends.ownerId,
+              schema.workspacePromptAppends.promptId,
+            ],
+            set: { text: sql`excluded.text`, enabled: sql`excluded.enabled` },
+          }),
+    });
     const removal = config.removal;
     if (!jsonValuesEqual(previous?.removal, removal)) {
       if (previous?.removal)

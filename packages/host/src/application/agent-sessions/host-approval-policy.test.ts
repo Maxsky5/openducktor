@@ -1,4 +1,4 @@
-import { specPlanBuildWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import {
   RUNTIME_DESCRIPTORS_BY_KIND,
@@ -100,7 +100,7 @@ describe("host workflow approval policy", () => {
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
       preparation: {
         taskWorkflow: () => Effect.succeed(specPlanBuildWorkflow),
-        promptOverrides: () =>
+        promptSettings: () =>
           Effect.suspend(() => {
             promptReads += 1;
             return promptReads === 1
@@ -110,7 +110,7 @@ describe("host workflow approval policy", () => {
                     message: "Prompt settings unavailable",
                   }),
                 )
-              : Effect.succeed({});
+              : Effect.succeed(EMPTY_PROMPT_SETTINGS);
           }),
       },
       reportFailure: () => Effect.void,
@@ -179,7 +179,7 @@ describe("host workflow approval policy", () => {
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
       preparation: {
         taskWorkflow: () => Effect.succeed(specPlanBuildWorkflow),
-        promptOverrides: () => Effect.succeed({}),
+        promptSettings: () => Effect.succeed(EMPTY_PROMPT_SETTINGS),
       },
       reportFailure: () => Effect.void,
     });
@@ -204,6 +204,46 @@ describe("host workflow approval policy", () => {
     }
   });
 
+  test("reports a saved read-only rejection layer with a placeholder problem", async () => {
+    const reported = Deferred.makeUnsafe<string>();
+    const calls: unknown[] = [];
+    const key = specPlanBuildWorkflow.prompts.templates.find(
+      ({ id }) => id === "workflow.read_only_rejection",
+    )!.key;
+    const policy = createHostApprovalPolicy({
+      live: {
+        resolvePendingApproval: () =>
+          Effect.succeed({ owner: child, root, request, runtimeId: "generation-1" }),
+        list: () => Effect.succeed([snapshot(), snapshot(root, undefined)]),
+        replyApproval: (input) => Effect.sync(() => void calls.push(input)),
+        reportApprovalPolicyFailure: (_ref, message) =>
+          message ? Deferred.succeed(reported, message).pipe(Effect.asVoid) : Effect.void,
+      },
+      readRoots: () => Effect.succeed([root]),
+      definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
+      preparation: {
+        taskWorkflow: () => Effect.succeed(specPlanBuildWorkflow),
+        promptSettings: () =>
+          Effect.succeed({
+            global: {
+              overrides: { [key]: { template: "No {{git.currentBranch}}", baseVersion: 1 } },
+              appends: {},
+            },
+          }),
+      },
+      reportFailure: () => Effect.void,
+    });
+    try {
+      policy.observe({ type: "session_upsert", session: snapshot() });
+      const message = await Effect.runPromise(Deferred.await(reported));
+      expect(message).toContain("Workflow approval policy failed");
+      expect(message).toContain("This prompt cannot fill {{git.currentBranch}}.");
+      expect(calls).toEqual([]);
+    } finally {
+      await Effect.runPromise(policy.shutdown());
+    }
+  });
+
   test("keeps an issued uncertain reply reserved across repeated clients", async () => {
     let calls = 0;
     const policy = createHostApprovalPolicy({
@@ -223,7 +263,7 @@ describe("host workflow approval policy", () => {
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
       preparation: {
         taskWorkflow: () => Effect.succeed(specPlanBuildWorkflow),
-        promptOverrides: () => Effect.succeed({}),
+        promptSettings: () => Effect.succeed(EMPTY_PROMPT_SETTINGS),
       },
       reportFailure: () => Effect.void,
     });
@@ -271,7 +311,7 @@ describe("host workflow approval policy", () => {
       definitions: { listRuntimeDefinitions: () => [RUNTIME_DESCRIPTORS_BY_KIND.codex] },
       preparation: {
         taskWorkflow: () => Effect.succeed(specPlanBuildWorkflow),
-        promptOverrides: () => Effect.succeed({}),
+        promptSettings: () => Effect.succeed(EMPTY_PROMPT_SETTINGS),
       },
       reportFailure: () => Effect.void,
     });

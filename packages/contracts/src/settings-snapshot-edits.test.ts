@@ -46,6 +46,13 @@ describe("settings snapshot edits", () => {
         promptId: "messages.spec_start",
       })]: { template: "Spec", baseVersion: 1, enabled: true },
     };
+    after.globalPromptAppends = {
+      [promptOverrideKey({
+        ownerKind: "workflow",
+        ownerId: "rpi",
+        promptId: "workflow.rules",
+      })]: { text: "Also check docs.", enabled: true },
+    };
     after.customAgentRoles = [{ id: "reviewer", name: "Reviewer", systemPrompt: "Review" }];
     after.autopilot = {
       alwaysStartQaReviewsFresh: true,
@@ -88,6 +95,13 @@ describe("settings snapshot edits", () => {
           ownerId: "qa",
           promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
         })]: { template: "QA", baseVersion: 2, enabled: false },
+      },
+      promptAppends: {
+        [promptOverrideKey({
+          ownerKind: "role",
+          ownerId: "build",
+          promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
+        })]: { text: "Run the linter.", enabled: false },
       },
       agentDefaults: { build: model },
     };

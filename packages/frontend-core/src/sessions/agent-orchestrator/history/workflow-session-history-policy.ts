@@ -13,11 +13,11 @@ export type LoadSessionHistorySystemPromptContext = (
 export const createWorkflowSessionHistoryPromptPolicy = ({
   workspaceId,
   taskRef,
-  loadRepoPromptOverrides,
+  loadPromptSettings,
 }: {
   workspaceId: string | null;
   taskRef: { current: TaskCard[] };
-  loadRepoPromptOverrides: LoadSessionPromptContextInput["loadRepoPromptOverrides"];
+  loadPromptSettings: LoadSessionPromptContextInput["loadPromptSettings"];
 }): LoadSessionHistorySystemPromptContext => {
   return async (session): Promise<AgentSessionHistorySystemPromptContext | undefined> => {
     if (session.sessionAssociation.kind === "repository") {
@@ -44,7 +44,7 @@ export const createWorkflowSessionHistoryPromptPolicy = ({
       workspaceId,
       role,
       task,
-      loadRepoPromptOverrides,
+      loadPromptSettings,
     });
     return { systemPrompt, startedAt: session.startedAt };
   };

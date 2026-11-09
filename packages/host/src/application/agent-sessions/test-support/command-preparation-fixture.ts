@@ -1,4 +1,4 @@
-import { specPlanBuildWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { Effect } from "effect";
 import type { createSessionTurnPreparation } from "../session-turn-preparation";
 
@@ -7,6 +7,6 @@ export const commandPreparationFixture: ReturnType<typeof createSessionTurnPrepa
   context: (target) =>
     Effect.succeed(target.sessionScope.kind === "workflow" ? "Current host context" : undefined),
   taskWorkflow: () => Effect.succeed(specPlanBuildWorkflow),
-  promptOverrides: () => Effect.succeed({}),
+  promptSettings: () => Effect.succeed(EMPTY_PROMPT_SETTINGS),
   model: (_target, selection) => Effect.succeed(selection),
 };

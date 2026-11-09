@@ -4,15 +4,14 @@ import {
   type IssueType,
   type GitConflictOperation,
   type GitTargetBranch,
-  type RepoPromptOverrides,
 } from "@openducktor/contracts";
 import {
   requirePullRequestTarget,
   type AgentPromptGitContext,
   type BuiltAgentPrompt,
-  type MergePromptOverridesInput,
   type OwnedPromptTemplate,
 } from "../../task-workflow/task-prompts";
+import type { PromptSettings } from "../../task-workflow/prompt-layers";
 import { GIT_CONFLICT_INSTRUCTIONS } from "./prompt-templates";
 import { specPlanBuildWorkflow } from "./workflow";
 import type { BuiltinRoleId } from "../roles/ids";
@@ -22,9 +21,9 @@ export type {
   AgentPromptGitContext,
   AgentPromptWarning,
   BuiltAgentPrompt,
-  MergePromptOverridesInput,
   ResolvedAgentPromptTemplate,
 } from "../../task-workflow/task-prompts";
+export type { PromptSettings } from "../../task-workflow/prompt-layers";
 
 export type AgentPromptTaskContext = {
   taskId: string;
@@ -37,7 +36,7 @@ export type AgentPromptTaskContext = {
 export type BuildAgentPromptInput = {
   role: BuiltinRoleId;
   task: AgentPromptTaskContext;
-  overrides?: RepoPromptOverrides;
+  settings: PromptSettings;
 };
 
 /** The prompt of the Spec, Plan, Build workflow that a launch sends into a running session. */
@@ -60,7 +59,7 @@ export type BuildAgentKickoffPromptInput = {
   };
   extraPlaceholders?: Partial<Record<"humanFeedback", string>>;
   git?: AgentKickoffPromptGitContext;
-  overrides?: RepoPromptOverrides;
+  settings: PromptSettings;
 };
 
 export type AgentKickoffPromptGitContext = {
@@ -81,12 +80,12 @@ export type BuildAgentMessagePromptInput = {
   templateId: AgentMessageTemplateId;
   task: BuildAgentKickoffPromptInput["task"];
   git?: AgentPromptGitContext;
-  overrides?: RepoPromptOverrides;
+  settings: PromptSettings;
 };
 
 export type BuildReadOnlyPermissionRejectionMessageInput = {
   role: BuiltinRoleId;
-  overrides?: RepoPromptOverrides;
+  settings: PromptSettings;
 };
 
 const prompts = specPlanBuildWorkflow.prompts;
@@ -176,7 +175,7 @@ export const buildAgentKickoffPromptBundle = (
     task: input.task,
     humanFeedback: input.extraPlaceholders?.humanFeedback,
     targetBranch: input.git?.targetBranch,
-    overrides: input.overrides,
+    settings: input.settings,
   });
 
 export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): string =>
@@ -189,7 +188,7 @@ export const buildAgentMessagePromptBundle = (
     launchActionId: launchActionOf(input.templateId),
     task: input.task,
     git: input.git ?? {},
-    overrides: input.overrides,
+    settings: input.settings,
   });
 
 export const buildAgentMessagePrompt = (input: BuildAgentMessagePromptInput): string =>
@@ -198,9 +197,6 @@ export const buildAgentMessagePrompt = (input: BuildAgentMessagePromptInput): st
 export const buildReadOnlyPermissionRejectionMessage = (
   input: BuildReadOnlyPermissionRejectionMessageInput,
 ): string => prompts.readOnlyRejection(input);
-
-export const mergePromptOverrides = (input: MergePromptOverridesInput): RepoPromptOverrides =>
-  prompts.mergeOverrides(input);
 
 const GIT_CONFLICT_OPERATION_LABELS = {
   rebase: "rebase",

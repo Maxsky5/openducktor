@@ -50,7 +50,7 @@ describe("agent-orchestrator/handlers/session-actions send scope", () => {
         workspaceRepoPath: "/tmp/active-workspace",
         currentWorkspaceRepoPathRef: { current: "/tmp/active-workspace" },
         taskRef: { current: [] },
-        loadRepoPromptOverrides: async () => {
+        loadPromptSettings: async () => {
           throw new Error("repository sends must not load workflow prompts");
         },
         refreshTaskData: async () => {

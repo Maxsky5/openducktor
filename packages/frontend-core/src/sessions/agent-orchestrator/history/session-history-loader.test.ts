@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentImageGenerationPart, RepoPromptOverrides } from "@openducktor/contracts";
+import type { AgentImageGenerationPart } from "@openducktor/contracts";
+import type { PromptSettings } from "@openducktor/workflows";
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import {
@@ -480,7 +481,9 @@ describe("session history loader", () => {
       loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
         workspaceId: "workspace-1",
         taskRef: { current: [createTaskFixture()] },
-        loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+        loadPromptSettings: async (): Promise<PromptSettings> => ({
+          global: { overrides: {}, appends: {} },
+        }),
       }),
       historyReadGeneration,
     });
@@ -510,7 +513,9 @@ describe("session history loader", () => {
       loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
         workspaceId: "workspace-1",
         taskRef: { current: [createTaskFixture()] },
-        loadRepoPromptOverrides: async (): Promise<RepoPromptOverrides> => ({}),
+        loadPromptSettings: async (): Promise<PromptSettings> => ({
+          global: { overrides: {}, appends: {} },
+        }),
       }),
       historyReadGeneration,
     });

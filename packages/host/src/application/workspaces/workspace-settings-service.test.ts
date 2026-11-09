@@ -65,6 +65,7 @@ const repoConfig = (workspaceId: string, repoPath: string): RepoConfig => ({
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
+  promptAppends: {},
   agentDefaults: {},
   agentStudioState: { openTaskIds: [] },
 });
@@ -131,6 +132,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   workspaceOrder: [],
   recentWorkspaces: [],
   globalPromptOverrides: {},
+  globalPromptAppends: {},
   ...overrides,
 });
 const createFakeSettingsConfig = ({

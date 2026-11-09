@@ -1,6 +1,6 @@
-import type { RepoPromptOverrides } from "@openducktor/contracts";
 import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import {
+  type PromptSettings,
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
@@ -14,7 +14,7 @@ export type SessionPromptTask = Pick<
 type SessionPromptInput = {
   role: AgentRole;
   task: SessionPromptTask;
-  promptOverrides: RepoPromptOverrides;
+  promptSettings: PromptSettings;
 };
 
 type SessionPromptContext = {
@@ -30,11 +30,8 @@ type SessionHeaderInput = {
 
 export type LoadSessionPromptContextInput = Pick<SessionPromptInput, "role" | "task"> & {
   workspaceId: string;
-  /** The effective overrides, merged through the exact workflow of the task. */
-  loadRepoPromptOverrides: (
-    workspaceId: string,
-    workflow: import("@openducktor/workflows").TaskWorkflow,
-  ) => Promise<RepoPromptOverrides>;
+  /** The saved prompt layers of the global settings and of the repository of the workspace. */
+  loadPromptSettings: (workspaceId: string) => Promise<PromptSettings>;
 };
 
 export const SYSTEM_PROMPT_PREFIX = AGENT_SESSION_SYSTEM_PROMPT_PREFIX;
@@ -45,7 +42,7 @@ export const isSessionSystemPromptMessage = (message: AgentChatMessage): boolean
   (message.id.startsWith(SYSTEM_PROMPT_MESSAGE_ID_PREFIX) ||
     message.content.startsWith(SYSTEM_PROMPT_PREFIX));
 
-const buildSessionSystemPrompt = ({ role, task, promptOverrides }: SessionPromptInput): string =>
+const buildSessionSystemPrompt = ({ role, task, promptSettings }: SessionPromptInput): string =>
   task.taskWorkflow.prompts.systemPrompt({
     role,
     task: {
@@ -55,22 +52,22 @@ const buildSessionSystemPrompt = ({ role, task, promptOverrides }: SessionPrompt
       status: task.status,
       description: task.description,
     },
-    overrides: promptOverrides,
+    settings: promptSettings,
   }).prompt;
 
 export const loadSessionPromptContext = async ({
   workspaceId,
   role,
   task,
-  loadRepoPromptOverrides,
+  loadPromptSettings,
 }: LoadSessionPromptContextInput): Promise<SessionPromptContext> => {
-  const promptOverrides = await loadRepoPromptOverrides(workspaceId, task.taskWorkflow);
+  const promptSettings = await loadPromptSettings(workspaceId);
 
   return {
     systemPrompt: buildSessionSystemPrompt({
       role,
       task,
-      promptOverrides,
+      promptSettings,
     }),
   };
 };

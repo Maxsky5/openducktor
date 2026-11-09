@@ -1,3 +1,4 @@
+import { promptSettingsOf } from "@openducktor/workflows";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { errorMessage } from "../../lib/errors";
@@ -37,12 +38,10 @@ export function useSessionStartKickoffPrompt({
           intent,
           task: kickoff.task,
           repoDefaultTargetBranch: enabled ? (config.data?.defaultTargetBranch ?? null) : null,
-          overrides: enabled
-            ? kickoff.task.taskWorkflow.prompts.mergeOverrides({
-                globalOverrides: settings.data?.globalPromptOverrides ?? {},
-                repoOverrides: config.data?.promptOverrides ?? {},
-              })
-            : {},
+          settings:
+            enabled && config.data && settings.data
+              ? promptSettingsOf(settings.data, config.data)
+              : undefined,
         }),
       };
     } catch (cause) {

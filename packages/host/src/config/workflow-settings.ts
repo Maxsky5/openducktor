@@ -86,6 +86,12 @@ export const applyGlobalTaskWorkflowSettings = (
     "globalPromptOverrides",
     "prompt",
   );
+  requireKnownKeys(
+    Object.keys(config.globalPromptAppends),
+    host.templates,
+    "globalPromptAppends",
+    "prompt",
+  );
 
   const notificationKinds = new Set<string>([
     ...AGENT_NOTIFICATION_KIND_VALUES,
@@ -169,6 +175,12 @@ export const validateRepoTaskWorkflowSettings = (
     Object.keys(workspace.promptOverrides),
     host.templates,
     `${field}.promptOverrides`,
+    "prompt",
+  );
+  requireKnownKeys(
+    Object.keys(workspace.promptAppends),
+    host.templates,
+    `${field}.promptAppends`,
     "prompt",
   );
   const activeRole = workspace.agentStudioState.activeTask?.role;

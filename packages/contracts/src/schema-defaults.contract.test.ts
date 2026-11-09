@@ -10,6 +10,7 @@ describe("contract schema defaults", () => {
       },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(parsedSnapshot.chat.showThinkingMessages).toBe(false);
@@ -26,6 +27,7 @@ describe("contract schema defaults", () => {
         },
         workspaces: {},
         globalPromptOverrides: {},
+        globalPromptAppends: {},
       }),
     ).toThrow();
   });

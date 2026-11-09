@@ -1,6 +1,6 @@
-import type { RepoPromptOverrides } from "@openducktor/contracts";
 import {
   type BuildAgentKickoffPromptInput,
+  type PromptSettings,
   type WorkflowIssueTypeId as IssueType,
   type WorkflowLaunchActionId as SessionLaunchActionId,
 } from "@openducktor/workflows";
@@ -16,7 +16,7 @@ type SharedPromptOptions = {
   taskWorkflow: import("@openducktor/workflows").TaskWorkflow;
   /** The role of the session. The core pull request launch needs it. */
   role?: string;
-  overrides?: RepoPromptOverrides;
+  settings?: PromptSettings | undefined;
   task?: TaskPromptContext;
 };
 
@@ -25,7 +25,7 @@ type SessionStartKickoffPromptOptions = SharedPromptOptions & {
   extraPlaceholders?: BuildAgentKickoffPromptInput["extraPlaceholders"];
 };
 
-/** The kickoff prompt of a launch action, with the effective prompt overrides. */
+/** The kickoff prompt of a launch action, with the saved prompt layers. */
 export const kickoffPromptForLaunchAction = (
   launchActionId: SessionLaunchActionId,
   taskId: string,
@@ -35,7 +35,7 @@ export const kickoffPromptForLaunchAction = (
     launchActionId,
     role: options.role,
     task: { taskId, ...options.task },
-    overrides: options.overrides,
+    settings: options.settings,
     humanFeedback: options.extraPlaceholders?.humanFeedback,
     targetBranch: options.git?.targetBranch,
   }).prompt;

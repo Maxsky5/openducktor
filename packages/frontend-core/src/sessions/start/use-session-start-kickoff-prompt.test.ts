@@ -87,6 +87,30 @@ describe("useSessionStartKickoffPrompt", () => {
     }
   });
 
+  test("adds the global and repository appends to the preview", async () => {
+    const connection = createTestClientConnection();
+    const key = specPlanBuildPromptKey("messages.spec_start");
+    connection.queryClient.setQueryData(workspaceQueryKeys.repoConfig("a"), {
+      ...configFor(),
+      promptAppends: { [key]: { text: "Repo extra", enabled: true } },
+    });
+    connection.queryClient.setQueryData(
+      workspaceQueryKeys.settingsSnapshot(),
+      createSettingsSnapshotFixture({
+        globalPromptAppends: { [key]: { text: "Global extra {{task.id}}", enabled: true } },
+      }),
+    );
+    const harness = renderPrompt(inputFor(), connection);
+    try {
+      await harness.mount();
+      expect(harness.getLatest().kickoffPrompt).toBe(
+        "Repo TASK-1\n\nGlobal extra TASK-1\n\nRepo extra",
+      );
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("waits for missing settings and config before showing the preview", async () => {
     const config = createDeferred<RepoConfig>();
     const settings = createDeferred<SettingsSnapshot>();

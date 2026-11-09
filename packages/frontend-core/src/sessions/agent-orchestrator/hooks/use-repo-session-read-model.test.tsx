@@ -78,6 +78,7 @@ const createReadOnlyRepoConfig = (): RepoConfig => ({
       enabled: true,
     },
   },
+  promptAppends: {},
   worktreeCopyPaths: [],
   agentStudioState: { openTaskIds: [] },
   agentDefaults: {},

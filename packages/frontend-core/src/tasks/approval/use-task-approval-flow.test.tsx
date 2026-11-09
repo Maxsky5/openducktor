@@ -200,6 +200,7 @@ const registerDependencySpies = (): void => {
       hooks: { beforeWorktreeRemoval: [] },
       actions: { items: [], defaultActionId: null },
       promptOverrides: {},
+      promptAppends: {},
       worktreeCopyPaths: [],
       agentStudioState: { openTaskIds: [] },
       agentDefaults: {},

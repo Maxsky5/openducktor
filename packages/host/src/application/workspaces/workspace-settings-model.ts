@@ -219,6 +219,7 @@ export const toSettingsSnapshot = (config: LoadedGlobalConfig): SettingsSnapshot
       ),
     ),
     globalPromptOverrides: config.globalPromptOverrides,
+    globalPromptAppends: config.globalPromptAppends,
   });
 export const validateGitRepoPath = (settingsConfig: SettingsConfigPort, repoPath: string) =>
   Effect.gen(function* () {

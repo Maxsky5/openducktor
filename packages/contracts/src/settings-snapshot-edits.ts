@@ -214,6 +214,7 @@ const globalRule = object(
       object(),
     ),
     globalPromptOverrides: keyed(promptRule),
+    globalPromptAppends: keyed(object()),
   },
   null,
 );
@@ -234,6 +235,7 @@ const workspaceRule = object({
   hooks: object(),
   actions: "replace",
   promptOverrides: keyed(promptRule),
+  promptAppends: keyed(object()),
   agentDefaults: keyed(modelRule),
 });
 const rolesRule = keyed(object());

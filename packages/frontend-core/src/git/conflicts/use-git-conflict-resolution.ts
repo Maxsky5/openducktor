@@ -1,5 +1,8 @@
-import type { RepoPromptOverrides } from "@openducktor/contracts";
-import { taskGitConflictLaunch, type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import {
+  taskGitConflictLaunch,
+  type PromptSettings,
+  type ResolvedTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import { useCallback } from "react";
 import type { GitConflict } from "../contracts";
 import { SessionStartWorkflowError } from "../../sessions/start/session-start-orchestration";
@@ -9,7 +12,7 @@ import type { SessionStartFlowRequest } from "../../sessions/start/session-start
 import { toAgentSessionIdentity } from "../../lib/agent-session-identity";
 import { normalizeWorkingDirectory } from "../../lib/working-directory";
 import type { AgentSessionSummary } from "../../sessions/agent-sessions-store";
-import { loadEffectivePromptOverrides } from "../../queries/prompt-overrides";
+import { loadPromptSettings } from "../../queries/prompt-settings";
 import type { AgentMessageSendOptions, AgentSessionIdentity } from "../../types/agent-orchestrator";
 import {
   buildTaskConflictPrompt,
@@ -78,7 +81,7 @@ type UseGitConflictResolutionArgs = {
   startConflictResolutionSession: (
     input: StartGitConflictResolutionSessionInput,
   ) => Promise<SessionStartWorkflowResult | undefined>;
-  loadPromptOverrides?: ((workspaceId: string) => Promise<RepoPromptOverrides>) | undefined;
+  loadPromptSettings?: ((workspaceId: string) => Promise<PromptSettings>) | undefined;
 };
 
 type UseGitConflictResolutionResult = {
@@ -93,15 +96,15 @@ type UseGitConflictResolutionResult = {
 export function useGitConflictResolution({
   workspaceId,
   startConflictResolutionSession,
-  loadPromptOverrides: suppliedLoadPromptOverrides,
+  loadPromptSettings: suppliedLoadPromptSettings,
 }: UseGitConflictResolutionArgs): UseGitConflictResolutionResult {
   const queryClient = useQueryClient();
-  const loadPromptOverrides = useCallback(
-    (id: string, task: TaskCard) =>
-      suppliedLoadPromptOverrides
-        ? suppliedLoadPromptOverrides(id)
-        : loadEffectivePromptOverrides(id, queryClient, task.taskWorkflow),
-    [queryClient, suppliedLoadPromptOverrides],
+  const loadSettings = useCallback(
+    (id: string) =>
+      suppliedLoadPromptSettings
+        ? suppliedLoadPromptSettings(id)
+        : loadPromptSettings(id, queryClient),
+    [queryClient, suppliedLoadPromptSettings],
   );
   const handleResolveGitConflict = useCallback(
     async (
@@ -132,14 +135,14 @@ export function useGitConflictResolution({
         taskContext.currentViewSession,
       );
 
-      const promptOverrides = await loadPromptOverrides(workspaceId, task);
+      const promptSettings = await loadSettings(workspaceId);
       assertCurrent?.();
       const git = conflictRequestContext(conflict);
       const message = buildTaskConflictPrompt({
         conflict,
         taskId: taskContext.taskId,
         task: taskContext.task,
-        overrides: promptOverrides,
+        settings: promptSettings,
       });
 
       const session = await startConflictResolutionSession({
@@ -183,7 +186,7 @@ export function useGitConflictResolution({
         );
       return session.postStartMessageReceipt;
     },
-    [loadPromptOverrides, startConflictResolutionSession, workspaceId],
+    [loadSettings, startConflictResolutionSession, workspaceId],
   );
 
   return {

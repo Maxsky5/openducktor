@@ -12,7 +12,6 @@ import { getSessionHistoryFreshnessTracker } from "../../queries/agent-session-h
 import { updateSessionTodosQueryData } from "../../queries/agent-session-todos";
 import { invalidateRepoTaskQueries } from "../../queries/tasks";
 import { loadTaskWorkflowRole } from "../../queries/task-workflow-context";
-import type { TaskWorkflow } from "@openducktor/workflows";
 import { loadSettingsSnapshotFromQuery } from "../../queries/workspace";
 import type {
   ActiveWorkspace,
@@ -29,7 +28,7 @@ import { createSessionHistoryReadGeneration } from "./history/session-history-re
 import { createWorkflowSessionHistoryPromptPolicy } from "./history/workflow-session-history-policy";
 import { useOrchestratorSessionState } from "./hooks/use-orchestrator-session-state";
 import { useRepoSessionReadModel } from "./hooks/use-repo-session-read-model";
-import { loadEffectivePromptOverrides } from "../../queries/prompt-overrides";
+import { loadPromptSettings } from "../../queries/prompt-settings";
 import {
   closeProjectedBackgroundQuestions,
   toContextUsage,
@@ -121,9 +120,8 @@ export function useAgentOrchestratorOperations({
     },
     [sessionStore],
   );
-  const queryBackedPromptOverrides = useCallback(
-    (workspaceId: string, workflow: TaskWorkflow) =>
-      loadEffectivePromptOverrides(workspaceId, queryClient, workflow),
+  const queryBackedPromptSettings = useCallback(
+    (workspaceId: string) => loadPromptSettings(workspaceId, queryClient),
     [queryClient],
   );
   const transcriptEvents = useMemo(
@@ -164,7 +162,7 @@ export function useAgentOrchestratorOperations({
       loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
         workspaceId,
         taskRef,
-        loadRepoPromptOverrides: queryBackedPromptOverrides,
+        loadPromptSettings: queryBackedPromptSettings,
       }),
       loadSettingsSnapshot: () => loadSettingsSnapshotFromQuery(queryClient),
       loadWorkflowRole: async (taskId: string, roleId: string) => {
@@ -187,7 +185,7 @@ export function useAgentOrchestratorOperations({
     agentEngine,
     currentWorkspaceRepoPathRef,
     historyReadGeneration,
-    queryBackedPromptOverrides,
+    queryBackedPromptSettings,
     queryClient,
     repoEpochRef,
     sessionStore,
@@ -228,7 +226,7 @@ export function useAgentOrchestratorOperations({
         sessionTurnState,
         updateSession,
         closeBackgroundQuestions,
-        loadRepoPromptOverrides: queryBackedPromptOverrides,
+        loadPromptSettings: queryBackedPromptSettings,
         liveSessionHost: liveSessionHostPort,
         refreshTaskData,
         invalidateSessionStopQueries,
@@ -240,7 +238,7 @@ export function useAgentOrchestratorOperations({
       closeBackgroundQuestions,
       messageQueues,
       invalidateSessionStopQueries,
-      queryBackedPromptOverrides,
+      queryBackedPromptSettings,
       repoEpochRef,
       refreshTaskData,
       liveSessionHostPort,

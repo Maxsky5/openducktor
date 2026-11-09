@@ -39,6 +39,7 @@ const repoConfig: RepoConfig = {
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
+  promptAppends: {},
   agentDefaults: {},
   agentStudioState: { openTaskIds: [] },
 };

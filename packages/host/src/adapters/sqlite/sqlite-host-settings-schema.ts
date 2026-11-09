@@ -13,11 +13,11 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { runtimeSettingsSchema } from "./sqlite-runtime-settings-schema";
+import { globalPromptSchema, PROMPT_OWNER_KINDS } from "./sqlite-global-prompt-schema";
 import { booleanCheck, column, enumCheck } from "./sqlite-schema-sql";
 
-/** A prompt override belongs to the prompt of one role or one workflow. */
-const PROMPT_OWNER_KINDS = ["role", "workflow"] as const;
 export * from "./sqlite-runtime-settings-schema";
+export * from "./sqlite-global-prompt-schema";
 
 export const workspaces = sqliteTable(
   "workspaces",
@@ -159,6 +159,30 @@ export const workspacePromptOverrides = sqliteTable(
     ),
     check("chk_workspace_prompt_overrides_base_version", sql`${column(table.baseVersion)} >= 1`),
     check("chk_workspace_prompt_overrides_enabled", booleanCheck(table.enabled)),
+  ],
+);
+
+export const workspacePromptAppends = sqliteTable(
+  "workspace_prompt_appends",
+  {
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.workspaceId, { onDelete: "cascade" }),
+    ownerKind: text("owner_kind", { enum: PROMPT_OWNER_KINDS }).notNull(),
+    ownerId: text("owner_id").notNull(),
+    promptId: text("prompt_id").notNull(),
+    text: text("text").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.workspaceId, table.ownerKind, table.ownerId, table.promptId],
+    }),
+    check(
+      "chk_workspace_prompt_appends_owner_kind",
+      enumCheck(table.ownerKind, PROMPT_OWNER_KINDS),
+    ),
+    check("chk_workspace_prompt_appends_enabled", booleanCheck(table.enabled)),
   ],
 );
 
@@ -367,24 +391,6 @@ export const customAgentRoles = sqliteTable(
   ],
 );
 
-export const globalPromptOverrides = sqliteTable(
-  "global_prompt_overrides",
-  {
-    ownerKind: text("owner_kind", { enum: PROMPT_OWNER_KINDS }).notNull(),
-    ownerId: text("owner_id").notNull(),
-    promptId: text("prompt_id").notNull(),
-    template: text("template").notNull(),
-    baseVersion: integer("base_version").notNull(),
-    enabled: integer("enabled", { mode: "boolean" }),
-  },
-  (table) => [
-    primaryKey({ columns: [table.ownerKind, table.ownerId, table.promptId] }),
-    check("chk_global_prompt_overrides_owner_kind", enumCheck(table.ownerKind, PROMPT_OWNER_KINDS)),
-    check("chk_global_prompt_overrides_base_version", sql`${column(table.baseVersion)} >= 1`),
-    check("chk_global_prompt_overrides_enabled", booleanCheck(table.enabled)),
-  ],
-);
-
 export const remoteAccessListener = sqliteTable(
   "remote_access_listener",
   {
@@ -452,6 +458,7 @@ export const autopilotRuleActions = sqliteTable(
 
 export const hostSettingsSchema = {
   ...runtimeSettingsSchema,
+  ...globalPromptSchema,
   workspaces,
   workspaceDefaultModels,
   workspaceRoleDefaults,
@@ -459,6 +466,7 @@ export const hostSettingsSchema = {
   workspaceActions,
   workspaceCopyPaths,
   workspacePromptOverrides,
+  workspacePromptAppends,
   workspaceRemovals,
   workspaceGitConfig,
   workspaceRepositoryIdentity,
@@ -467,7 +475,6 @@ export const hostSettingsSchema = {
   workspaceGitlabConfig,
   hostSettings,
   customAgentRoles,
-  globalPromptOverrides,
   remoteAccessListener,
   remoteAccessWebOrigins,
   autopilotRules,

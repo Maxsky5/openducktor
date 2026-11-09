@@ -289,6 +289,7 @@ export const createSettingsSnapshotFixture = (
     agentModelFavorites: [],
     workspaces: {},
     globalPromptOverrides: {},
+    globalPromptAppends: {},
     ...snapshotOverrides,
   } satisfies SettingsSnapshot;
 

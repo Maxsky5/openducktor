@@ -223,6 +223,7 @@ const createRepoConfigFixture = (): RepoConfig => ({
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
+  promptAppends: {},
   agentStudioState: { openTaskIds: [] },
   agentDefaults: {
     spec: undefined,

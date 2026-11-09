@@ -345,6 +345,7 @@ const settingsSnapshot = (repoPaths: string[]): SettingsSnapshot =>
           actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: {},
+          promptAppends: {},
           agentDefaults: {},
         },
       ]),

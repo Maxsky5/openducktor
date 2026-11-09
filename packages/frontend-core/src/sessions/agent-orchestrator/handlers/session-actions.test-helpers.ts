@@ -132,7 +132,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
       );
     },
 
-    loadRepoPromptOverrides: async () => ({}),
+    loadPromptSettings: async () => ({ global: { overrides: {}, appends: {} } }),
 
     liveSessionHost: {
       agentSessionLiveReplyApproval: async () => {},

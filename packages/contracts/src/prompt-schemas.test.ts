@@ -1,6 +1,7 @@
 // @ts-expect-error
 import { describe, expect, test } from "bun:test";
 import {
+  agentPromptPlaceholderValues,
   extractPromptTemplatePlaceholders,
   parsePromptOverrideKey,
   promptOverrideKey,
@@ -24,7 +25,7 @@ describe("prompt placeholder validation", () => {
 
   test("reports unsupported placeholders", () => {
     const template = "Bad {{task.foo}} and {{unknown.value}} with {{task.id}}";
-    const result = validatePromptTemplatePlaceholders(template);
+    const result = validatePromptTemplatePlaceholders(template, [], agentPromptPlaceholderValues);
 
     expect(result.placeholders).toEqual(["task.foo", "unknown.value", "task.id"]);
     expect(result.unsupportedPlaceholders).toEqual(["task.foo", "unknown.value"]);
@@ -33,20 +34,32 @@ describe("prompt placeholder validation", () => {
 
   test("accepts templates that only use known placeholders", () => {
     const template = "Task {{task.id}} / {{task.description}} / {{humanFeedback}}";
-    const result = validatePromptTemplatePlaceholders(template);
+    const result = validatePromptTemplatePlaceholders(template, [], agentPromptPlaceholderValues);
 
     expect(result.unsupportedPlaceholders).toEqual([]);
     expect(result.missingRequiredPlaceholders).toEqual([]);
   });
 
   test("reports the required placeholders that the template omits", () => {
-    const result = validatePromptTemplatePlaceholders("Review {{task.id}} before editing.", [
-      "humanFeedback",
-      "task.id",
-    ]);
+    const result = validatePromptTemplatePlaceholders(
+      "Review {{task.id}} before editing.",
+      ["humanFeedback", "task.id"],
+      agentPromptPlaceholderValues,
+    );
 
     expect(result.unsupportedPlaceholders).toEqual([]);
     expect(result.missingRequiredPlaceholders).toEqual(["humanFeedback"]);
+  });
+
+  test("reports supported placeholders that the prompt cannot fill", () => {
+    const result = validatePromptTemplatePlaceholders(
+      "Rebase {{git.currentBranch}} for {{task.id}} with {{task.foo}}",
+      [],
+      ["task.id"],
+    );
+
+    expect(result.unsupportedPlaceholders).toEqual(["task.foo"]);
+    expect(result.unfillablePlaceholders).toEqual(["git.currentBranch"]);
   });
 });
 

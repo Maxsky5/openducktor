@@ -1,5 +1,4 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
 import type { AgentEnginePort } from "@openducktor/core";
 import type { ClientFeedback } from "../../../platform/client-feedback";
 import type { AgentMessageQueuesStore } from "../../agent-message-queues-store";
@@ -29,10 +28,9 @@ type SessionActionsDependencies = {
   sessionTurnState: SessionTurnState;
   updateSession: UpdateSession;
   closeBackgroundQuestions: PendingInputActionDependencies["closeBackgroundQuestions"];
-  loadRepoPromptOverrides: (
+  loadPromptSettings: (
     workspaceId: string,
-    workflow: import("@openducktor/workflows").TaskWorkflow,
-  ) => Promise<RepoPromptOverrides>;
+  ) => Promise<import("@openducktor/workflows").PromptSettings>;
   liveSessionHost: PendingInputActionDependencies["liveSessionHost"];
   refreshTaskData: (scope: WorkspaceRef, taskIdOrIds?: string | string[]) => Promise<void>;
   invalidateSessionStopQueries: (input: {

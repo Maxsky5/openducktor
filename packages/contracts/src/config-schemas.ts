@@ -25,7 +25,12 @@ import {
   createDefaultNotificationSettings,
   notificationSettingsSchema,
 } from "./notification-schemas";
-import { agentPromptOverrideSchema, repoPromptOverridesSchema } from "./prompt-schemas";
+import {
+  agentPromptAppendSchema,
+  agentPromptOverrideSchema,
+  repoPromptAppendsSchema,
+  repoPromptOverridesSchema,
+} from "./prompt-schemas";
 import {
   workspaceAgentStudioActiveTaskSchema,
   workspaceAgentStudioStateSchema,
@@ -531,6 +536,7 @@ export const repoConfigSchema = z.object({
   actions: repoActionsSchema.default(createEmptyRepoActions),
   worktreeCopyPaths: z.array(z.string()).default([]),
   promptOverrides: repoPromptOverridesSchema.default({}),
+  promptAppends: repoPromptAppendsSchema,
   agentDefaults: repoAgentDefaultsSchema.default({}),
   agentStudioState: workspaceAgentStudioStateSchema,
   closed: z.boolean().optional(),
@@ -809,6 +815,7 @@ const globalConfigSharedFields = {
   agentModelFavorites: agentModelFavoritesSchema,
   workspaces: z.record(workspaceIdSchema, repoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
+  globalPromptAppends: repoPromptAppendsSchema,
   workspaceOrder: z.array(workspaceIdSchema).default([]),
   recentWorkspaces: z.array(workspaceIdSchema).default([]),
   /** Not read. Older releases saved a host ID here; the approval store now owns the host identity. */
@@ -898,6 +905,7 @@ export const settingsSnapshotSchema = z.object({
   agentModelFavorites: agentModelFavoritesSchema,
   workspaces: z.record(workspaceIdSchema, settingsRepoConfigSchema).default({}),
   globalPromptOverrides: repoPromptOverridesSchema.default({}),
+  globalPromptAppends: repoPromptAppendsSchema,
 });
 type ParsedSettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 export type SettingsSnapshot = ParsedSettingsSnapshot;
@@ -907,12 +915,18 @@ const workspaceEditableFieldsSchema = settingsRepoConfigSchema.omit({
   workspaceId: true,
   defaultModel: true,
   promptOverrides: true,
+  promptAppends: true,
   agentDefaults: true,
 });
 export const promptOverridePatchSchema = settingsFieldsPatchSchema(agentPromptOverrideSchema);
 export const promptOverrideEditsSchema = keyedSettingsEditsSchema(
   agentPromptOverrideSchema.strict(),
   promptOverridePatchSchema,
+);
+export const promptAppendPatchSchema = settingsFieldsPatchSchema(agentPromptAppendSchema);
+export const promptAppendEditsSchema = keyedSettingsEditsSchema(
+  agentPromptAppendSchema.strict(),
+  promptAppendPatchSchema,
 );
 export const codexRolePatchSchema = settingsFieldsPatchSchema(codexRoleOverrideSchema);
 export const claudePolicyPatchSchema = settingsFieldsPatchSchema(claudePolicyFieldsSchema);
@@ -965,6 +979,7 @@ export const workspaceSettingsPatchSchema = z.strictObject({
   actions: repoActionsSchema.optional(),
   defaultModel: setOrClearSchema(modelDefaultPatchSchema).optional(),
   promptOverrides: promptOverrideEditsSchema.optional(),
+  promptAppends: promptAppendEditsSchema.optional(),
   agentDefaults: keyedSettingsEditsSchema(
     agentModelDefaultSchema,
     modelDefaultPatchSchema,
@@ -983,6 +998,7 @@ export const globalSettingsPatchSchema = z.strictObject({
   notifications: settingsFieldsPatchSchema(notificationSettingsSchema.removeDefault()).optional(),
   agentRuntimes: agentRuntimesPatchSchema.optional(),
   globalPromptOverrides: promptOverrideEditsSchema.optional(),
+  globalPromptAppends: promptAppendEditsSchema.optional(),
 });
 type KnownRuntimePatches = Pick<
   z.infer<typeof agentRuntimesPatchSchema>,

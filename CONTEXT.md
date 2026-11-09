@@ -361,8 +361,12 @@ A configurable template for system, kickoff, message, or permission prompts used
 _Avoid_: User Message Draft, User Message, Specification
 
 **Prompt Override**:
-A repository-level replacement or customization for a **Prompt Template**. **Prompt Overrides** change how OpenDucktor prompts agents; they are not user chat messages.
+A global or repository-level replacement for a **Prompt Template**. A **Prompt Override** does not get the updates of the built-in text. **Prompt Overrides** change how OpenDucktor prompts agents; they are not user chat messages.
 _Avoid_: User Message, Reusable Prompt, Task Artifact
+
+**Prompt Append**:
+Global or repository-level text that OpenDucktor adds after a **Prompt Template**, so the built-in text keeps its updates. The global append comes first, then the repository append.
+_Avoid_: Prompt Override, Reusable Prompt, User Message
 
 **Kickoff Prompt**:
 The initial prompt generated for a **Workflow Action** when OpenDucktor starts an **Agent Session**, such as initial implementation, QA Review, or **Pull Request Generation**.

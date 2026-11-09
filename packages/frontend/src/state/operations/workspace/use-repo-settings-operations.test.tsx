@@ -259,6 +259,7 @@ const createRepoConfig = (): Awaited<ReturnType<typeof host.workspaceGetRepoConf
   actions: createRepoActions(),
   worktreeCopyPaths: [],
   promptOverrides: {},
+  promptAppends: {},
   agentStudioState: { openTaskIds: [] },
   agentDefaults: {
     spec: { runtimeKind: "opencode" as const, providerId: "openai", modelId: "gpt-5" },
@@ -1329,6 +1330,7 @@ describe("use-repo-settings-operations", () => {
           actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: repoPromptOverrides,
+          promptAppends: {},
           agentDefaults: {},
         },
       },

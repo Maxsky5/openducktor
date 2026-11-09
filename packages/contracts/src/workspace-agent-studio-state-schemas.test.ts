@@ -66,6 +66,7 @@ describe("workspace Agent Studio state schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: { repo: repoConfig },
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const saveInput = settingsSnapshotSaveInputSchema.parse({
       workspaces: { repo: { expectedRepoPath: "/repo", branchPrefix: "new" } },

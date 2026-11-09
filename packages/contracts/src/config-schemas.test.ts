@@ -141,6 +141,7 @@ describe("config-schemas", () => {
         },
         workspaces: {},
         globalPromptOverrides: {},
+        globalPromptAppends: {},
       }).success,
     ).toBe(false);
   });
@@ -170,12 +171,14 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const globalConfig = globalConfigSchema.parse({
       version: 4,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const favorites = agentModelFavoritesSchema.parse([
       { runtimeKind: "opencode", providerId: " openai ", modelId: " gpt-5 " },
@@ -492,6 +495,7 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(parsed.kanban.doneVisibleDays).toBe(1);
@@ -505,6 +509,7 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(parsed.general.openAgentStudioTabOnBackgroundSessionStart).toBe(true);
@@ -516,12 +521,14 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const globalConfig = globalConfigSchema.parse({
       version: 4,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(snapshot.appearance).toEqual(DEFAULT_APPEARANCE_SETTINGS);
@@ -583,12 +590,14 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const globalConfig = globalConfigSchema.parse({
       version: 4,
       theme: "light",
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(snapshot.agentRuntimes).toEqual(DEFAULT_AGENT_RUNTIMES);
@@ -607,6 +616,7 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const enabledOnly = settingsSnapshotSchema.parse({
       theme: "light",
@@ -614,6 +624,7 @@ describe("config-schemas", () => {
       agentRuntimes: { codex: { enabled: true, executablePath: "/bin/codex" } },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(missing.agentRuntimes.codex).toEqual({
@@ -640,6 +651,7 @@ describe("config-schemas", () => {
       },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(parsed.agentRuntimes.opencode).toEqual({
@@ -792,12 +804,14 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const secondSnapshot = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(first.defaults).toEqual(DEFAULT_CODEX_RUNTIME_POLICY);
@@ -847,6 +861,7 @@ describe("config-schemas", () => {
       general: { openAgentStudioTabOnBackgroundSessionStart: false },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(parsed.general.openAgentStudioTabOnBackgroundSessionStart).toBe(false);
@@ -874,6 +889,7 @@ describe("config-schemas", () => {
       chat: { showThinkingMessages: true },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const parsedGlobalConfig = globalConfigSchema.parse({
       version: 4,
@@ -881,6 +897,7 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(chatSettingsSchema.parse({})).toEqual(expectedDefaultChatSettings);
@@ -908,6 +925,7 @@ describe("config-schemas", () => {
       },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const parsedGlobalConfig = globalConfigSchema.parse({
       version: 4,
@@ -925,6 +943,7 @@ describe("config-schemas", () => {
       },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(parsedSnapshot.chat).toEqual({
@@ -1001,6 +1020,7 @@ describe("config-schemas", () => {
       chat: { showThinkingMessages: true },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(parsed.reusablePrompts).toEqual([]);
@@ -1124,6 +1144,7 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(parsed.autopilot.rules).toEqual([]);
@@ -1136,6 +1157,7 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
       autopilot: {
         alwaysStartQaReviewsFresh: true,
         rules: [],
@@ -1162,12 +1184,14 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const second = settingsSnapshotSchema.parse({
       theme: "light",
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(first.autopilot).not.toBe(second.autopilot);
@@ -1180,6 +1204,7 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
       autopilot: {
         rules: [
           {
@@ -1216,6 +1241,7 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
       autopilot: {
         rules: [
           {
@@ -1246,6 +1272,7 @@ describe("config-schemas", () => {
       git: { defaultMergeMethod: "merge_commit" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
 
     expect(config.notifications).toEqual(createDefaultNotificationSettings());

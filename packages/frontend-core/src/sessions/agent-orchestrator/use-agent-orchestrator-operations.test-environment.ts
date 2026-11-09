@@ -26,6 +26,7 @@ export const setupOrchestratorOperationsTestEnvironment =
       actions: { items: [], defaultActionId: null },
       worktreeCopyPaths: [],
       promptOverrides: {},
+      promptAppends: {},
       agentStudioState: { openTaskIds: [] },
       agentDefaults: {},
     };

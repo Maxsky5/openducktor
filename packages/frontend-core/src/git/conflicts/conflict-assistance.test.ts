@@ -82,7 +82,7 @@ describe("conflict assistance", () => {
       conflict,
       taskId: "task-1",
       task: createTaskCardFixture({ id: "task-1", title: "Resolve the parser conflict" }),
-      overrides: {},
+      settings: { global: { overrides: {}, appends: {} } },
     });
     expect(prompt).toContain("src/conflict.ts");
     expect(prompt).toContain("Use taskId task-1");
@@ -91,7 +91,7 @@ describe("conflict assistance", () => {
         conflict: { ...conflict, operation: null },
         taskId: "task-1",
         task: createTaskCardFixture({ id: "task-1" }),
-        overrides: {},
+        settings: { global: { overrides: {}, appends: {} } },
       }),
     ).toThrow("Restore the Git conflict operation and working directory");
   });

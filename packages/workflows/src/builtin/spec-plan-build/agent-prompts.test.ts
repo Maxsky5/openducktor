@@ -1,4 +1,4 @@
-import { ODT_BROWSER_TOOL_NAMES } from "@openducktor/contracts";
+import { agentPromptPlaceholderValues, ODT_BROWSER_TOOL_NAMES } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import {
   buildAgentKickoffPrompt,
@@ -9,12 +9,25 @@ import {
   buildAgentSystemPromptBundle,
   buildReadOnlyPermissionRejectionMessage,
   listSpecPlanBuildPromptTemplates,
-  mergePromptOverrides,
 } from "./agent-prompts";
+import { EMPTY_PROMPT_SETTINGS, type PromptSettings } from "../../task-workflow/prompt-layers";
+import {
+  BASE_PROMPT_PLACEHOLDERS,
+  GIT_PLACEHOLDERS,
+  HUMAN_FEEDBACK_PLACEHOLDERS,
+} from "../../task-workflow/task-prompts";
+import { PULL_REQUEST_LAUNCH } from "../../task-workflow/pull-request-launch";
 import { specPlanBuildWorkflow } from "./workflow";
 import { specPlanBuildPromptKey, rolePromptKey } from "../../../test-support/spec-plan-build";
 
-const findPromptOverrideProblem = specPlanBuildWorkflow.prompts.findOverrideProblem;
+/** The layer problems of the prompts that a Spec session builds. */
+const findLayerProblem = (
+  settings: Parameters<typeof specPlanBuildWorkflow.prompts.findLayerProblem>[0],
+) => specPlanBuildWorkflow.prompts.findLayerProblem(settings, { role: "spec" });
+
+const withOverrides = (overrides: PromptSettings["global"]["overrides"]): PromptSettings => ({
+  global: { overrides, appends: {} },
+});
 
 const taskContext = {
   taskId: "task-42",
@@ -46,7 +59,11 @@ describe("buildAgentSystemPrompt", () => {
     ["build", "spec, plan"],
     ["qa", "qaReport"],
   ] as const)("shows %s workflow code access beside the shared artifact setter", (role, codes) => {
-    const prompt = buildAgentSystemPrompt({ role, task: taskContext });
+    const prompt = buildAgentSystemPrompt({
+      role,
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
 
     expect(prompt).toContain("- odt_set_task_artifact(");
     expect(prompt).toContain(
@@ -63,6 +80,7 @@ describe("buildAgentSystemPrompt", () => {
     const prompt = buildAgentSystemPrompt({
       role: "planner",
       task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
     });
 
     expectPromptToContainAll(prompt, [
@@ -126,7 +144,11 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("spec defines outcomes and leaves delivery methods to Builder and QA", () => {
-    const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
+    const prompt = buildAgentSystemPrompt({
+      role: "spec",
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
 
     expectPromptToContainAll(prompt, [
       "Planner owns the technical design",
@@ -139,7 +161,11 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("spec asks users for product decisions and follows their dependencies", () => {
-    const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
+    const prompt = buildAgentSystemPrompt({
+      role: "spec",
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
 
     expectPromptToContainAll(prompt, [
       "The user owns product decisions",
@@ -159,7 +185,11 @@ describe("buildAgentSystemPrompt", () => {
   test.each(["spec", "planner"] as const)(
     "%s saves ready artifacts without an extra approval round",
     (role) => {
-      const prompt = buildAgentSystemPrompt({ role, task: taskContext });
+      const prompt = buildAgentSystemPrompt({
+        role,
+        task: taskContext,
+        settings: EMPTY_PROMPT_SETTINGS,
+      });
 
       expectPromptToContainAll(prompt, [
         "Saving the artifact is part of your assignment",
@@ -176,7 +206,11 @@ describe("buildAgentSystemPrompt", () => {
   );
 
   test("spec keeps observable outcomes in the requirements without a second checklist", () => {
-    const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
+    const prompt = buildAgentSystemPrompt({
+      role: "spec",
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
 
     expectPromptToContainAll(prompt, [
       "When the user delegates a choice, make it and record the assumption",
@@ -195,7 +229,11 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("spec separates product behavior from design while preserving fixed scope and external contracts", () => {
-    const prompt = buildAgentSystemPrompt({ role: "spec", task: taskContext });
+    const prompt = buildAgentSystemPrompt({
+      role: "spec",
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
 
     expectPromptToContainAll(prompt, [
       "Describe behavior as users or external systems experience it",
@@ -213,7 +251,11 @@ describe("buildAgentSystemPrompt", () => {
   test.each(["spec", "planner", "build", "qa"] as const)(
     "%s receives shared Markdown rules for persisted artifacts",
     (role) => {
-      const prompt = buildAgentSystemPrompt({ role, task: taskContext });
+      const prompt = buildAgentSystemPrompt({
+        role,
+        task: taskContext,
+        settings: EMPTY_PROMPT_SETTINGS,
+      });
 
       expectPromptToContainAll(prompt, [
         "Artifact format:",
@@ -235,7 +277,11 @@ describe("buildAgentSystemPrompt", () => {
   );
 
   test("shared artifact rules stay general while Builder owns execution choices", () => {
-    const result = buildAgentSystemPromptBundle({ role: "build", task: taskContext });
+    const result = buildAgentSystemPromptBundle({
+      role: "build",
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
     const shared = result.templates.find(
       (entry) => entry.key === specPlanBuildPromptKey("workflow.rules"),
     );
@@ -249,7 +295,11 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("planner defines design contracts and gives Builder control of implementation", () => {
-    const prompt = buildAgentSystemPrompt({ role: "planner", task: taskContext });
+    const prompt = buildAgentSystemPrompt({
+      role: "planner",
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
 
     expectPromptToContainAll(prompt, [
       "required design decisions separate from suggestions",
@@ -294,6 +344,7 @@ describe("buildAgentSystemPrompt", () => {
           status: "open",
           description: "If an export fails, retain the selection and show the reason.",
         },
+        settings: EMPTY_PROMPT_SETTINGS,
       });
 
       expectPromptToContainAll(prompt, [
@@ -311,7 +362,11 @@ describe("buildAgentSystemPrompt", () => {
   );
 
   test("builder owns execution and verification within the approved design", () => {
-    const prompt = buildAgentSystemPrompt({ role: "build", task: taskContext });
+    const prompt = buildAgentSystemPrompt({
+      role: "build",
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
 
     expectPromptToContainAll(prompt, [
       "Choose implementation details, work order, and verification methods",
@@ -352,7 +407,11 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("QA reviews outcomes and contracts without enforcing implementation recipes", () => {
-    const prompt = buildAgentSystemPrompt({ role: "qa", task: taskContext });
+    const prompt = buildAgentSystemPrompt({
+      role: "qa",
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
 
     expectPromptToContainAll(prompt, [
       "Inspect the implementation and its wiring directly",
@@ -375,12 +434,12 @@ describe("buildAgentSystemPrompt", () => {
     const result = buildAgentSystemPromptBundle({
       role: "spec",
       task: taskContext,
-      overrides: {
+      settings: withOverrides({
         [rolePromptKey("spec")]: {
           template: "Custom spec prompt for {{task.id}}",
           baseVersion: 999,
         },
-      },
+      }),
     });
 
     expect(result.prompt).toContain("Custom spec prompt for task-42");
@@ -429,9 +488,13 @@ describe("buildAgentSystemPrompt", () => {
             task: taskContext,
             extraPlaceholders: { humanFeedback: "feedback" },
             git: { targetBranch: { branch: "main" } },
-            overrides,
+            settings: withOverrides(overrides),
           })
-        : buildAgentSystemPromptBundle({ role, task: taskContext, overrides });
+        : buildAgentSystemPromptBundle({
+            role,
+            task: taskContext,
+            settings: withOverrides(overrides),
+          });
 
       expect(result.templates.find((entry) => entry.key === key)?.source).toBe("override");
       expect(result.prompt).toContain("Custom task-42");
@@ -451,15 +514,15 @@ describe("buildAgentSystemPrompt", () => {
       buildAgentSystemPrompt({
         role: "spec",
         task: taskContext,
-        overrides: {
+        settings: withOverrides({
           [rolePromptKey("spec")]: {
             template: "Custom {{unknown.placeholder}}",
             baseVersion: 1,
           },
-        },
+        }),
       }),
     ).toThrow(
-      'The prompt "spec.instructions" uses unsupported placeholder "unknown.placeholder". Edit or disable this prompt override in Settings.',
+      'The global override of prompt "spec.instructions" has a placeholder problem. Unsupported placeholder: {{unknown.placeholder}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}. Edit or turn off this override in Settings.',
     );
   });
 
@@ -467,13 +530,13 @@ describe("buildAgentSystemPrompt", () => {
     const result = buildAgentSystemPromptBundle({
       role: "spec",
       task: taskContext,
-      overrides: {
+      settings: withOverrides({
         [specPlanBuildPromptKey("workflow.rules")]: {
           template: "",
           baseVersion: 3,
           enabled: true,
         },
-      },
+      }),
     });
 
     const workflowGuardsTemplate = result.templates.find(
@@ -491,6 +554,7 @@ describe("kickoff and permission prompts", () => {
       role: "build",
       templateId: "messages.build_start",
       task: { taskId: "task-1" },
+      settings: EMPTY_PROMPT_SETTINGS,
     });
 
     expectPromptToContainAll(prompt, [
@@ -507,6 +571,7 @@ describe("kickoff and permission prompts", () => {
       role: "build",
       templateId: "messages.build_after_qa_rejection",
       task: { taskId: "task-1" },
+      settings: EMPTY_PROMPT_SETTINGS,
     });
 
     expectPromptToContainAll(prompt, [
@@ -528,6 +593,7 @@ describe("kickoff and permission prompts", () => {
       extraPlaceholders: {
         humanFeedback: "Update the task summary and rerun the desktop tests.",
       },
+      settings: EMPTY_PROMPT_SETTINGS,
     });
 
     expectPromptToContainAll(prompt, [
@@ -545,7 +611,12 @@ describe("kickoff and permission prompts", () => {
   ] as const)(
     "%s kickoff requests the artifact and leaves policy to the system prompt",
     (role, templateId, artifact, code) => {
-      const prompt = buildAgentKickoffPrompt({ role, templateId, task: { taskId: "task-1" } });
+      const prompt = buildAgentKickoffPrompt({
+        role,
+        templateId,
+        task: { taskId: "task-1" },
+        settings: EMPTY_PROMPT_SETTINGS,
+      });
 
       expectPromptToContainAll(prompt, [
         `Write the ${artifact}`,
@@ -566,6 +637,7 @@ describe("kickoff and permission prompts", () => {
       task: {
         taskId: "task-1",
       },
+      settings: EMPTY_PROMPT_SETTINGS,
     });
 
     expectPromptToContainAll(qaPrompt, [
@@ -583,13 +655,13 @@ describe("kickoff and permission prompts", () => {
         taskId: "task-2",
         description: "desc",
       },
-      overrides: {
+      settings: withOverrides({
         [specPlanBuildPromptKey("messages.plan_start")]: {
           template: "Planner kickoff {{task.id}} / {{task.description}}",
           baseVersion: 2,
           enabled: true,
         },
-      },
+      }),
     });
 
     expect(result.prompt).toBe("Planner kickoff task-2 / desc");
@@ -607,16 +679,16 @@ describe("kickoff and permission prompts", () => {
         extraPlaceholders: {
           humanFeedback: "Tighten the validation copy.",
         },
-        overrides: {
+        settings: withOverrides({
           [specPlanBuildPromptKey("messages.build_requested_changes")]: {
             template: "Review {{task.id}} before editing.",
             baseVersion: 3,
             enabled: true,
           },
-        },
+        }),
       }),
     ).toThrow(
-      'The prompt "messages.build_requested_changes" is missing required placeholder "humanFeedback". Edit or disable this prompt override in Settings.',
+      'The global override of prompt "messages.build_requested_changes" has a placeholder problem. Missing required placeholder: {{humanFeedback}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}, {{humanFeedback}}. Edit or turn off this override in Settings.',
     );
   });
 
@@ -631,6 +703,7 @@ describe("kickoff and permission prompts", () => {
         extraPlaceholders: {
           humanFeedback: "   ",
         },
+        settings: EMPTY_PROMPT_SETTINGS,
       }),
     ).toThrow('Prompt placeholder "humanFeedback" must not be empty.');
   });
@@ -648,6 +721,7 @@ describe("kickoff and permission prompts", () => {
           branch: "release/2026.04",
         },
       },
+      settings: EMPTY_PROMPT_SETTINGS,
     });
     const prompt = result.prompt;
 
@@ -683,6 +757,7 @@ describe("kickoff and permission prompts", () => {
         task: {
           taskId: "task-1",
         },
+        settings: EMPTY_PROMPT_SETTINGS,
       }),
     ).toThrow('Missing required git context for "messages.pull_request": targetBranch.');
   });
@@ -700,6 +775,7 @@ describe("kickoff and permission prompts", () => {
             branch: "@{upstream}",
           },
         },
+        settings: EMPTY_PROMPT_SETTINGS,
       }),
     ).toThrow(
       "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a pull request base branch.",
@@ -713,13 +789,13 @@ describe("kickoff and permission prompts", () => {
       task: {
         taskId: "task-2",
       },
-      overrides: {
+      settings: withOverrides({
         [specPlanBuildPromptKey("messages.plan_start")]: {
           template: "",
           baseVersion: 2,
           enabled: true,
         },
-      },
+      }),
     });
 
     expect(result.prompt).toBe("");
@@ -734,13 +810,13 @@ describe("kickoff and permission prompts", () => {
       task: {
         taskId: "task-2",
       },
-      overrides: {
+      settings: withOverrides({
         [specPlanBuildPromptKey("messages.plan_start")]: {
           template: "Disabled custom kickoff",
           baseVersion: 2,
           enabled: false,
         },
-      },
+      }),
     });
 
     expect(prompt).toBe(
@@ -748,6 +824,7 @@ describe("kickoff and permission prompts", () => {
         role: "planner",
         templateId: "messages.plan_start",
         task: { taskId: "task-2" },
+        settings: EMPTY_PROMPT_SETTINGS,
       }),
     );
     expect(prompt).not.toContain("Disabled custom kickoff");
@@ -762,6 +839,7 @@ describe("kickoff and permission prompts", () => {
         task: {
           taskId: "task-2",
         },
+        settings: EMPTY_PROMPT_SETTINGS,
       }),
     ).toThrow('Unknown prompt template id "kickoff.build_rebase_conflict_resolution".');
   });
@@ -770,6 +848,7 @@ describe("kickoff and permission prompts", () => {
     expect(
       buildReadOnlyPermissionRejectionMessage({
         role: "qa",
+        settings: EMPTY_PROMPT_SETTINGS,
       }),
     ).toBe(
       "Rejected by OpenDucktor qa read-only policy: this role cannot use mutating tools in this session.",
@@ -790,6 +869,7 @@ describe("kickoff and permission prompts", () => {
         conflictedFiles: ["src/main.ts", "src/lib.ts"],
         conflictOutput: "CONFLICT (content): Merge conflict in src/main.ts",
       },
+      settings: EMPTY_PROMPT_SETTINGS,
     });
 
     expectPromptToContainAll(prompt, [
@@ -829,6 +909,7 @@ describe("kickoff and permission prompts", () => {
           conflictedFiles: ["src/conflict-a.ts", "src/conflict-b.ts"],
           conflictOutput,
         },
+        settings: EMPTY_PROMPT_SETTINGS,
       });
     const smallPrompt = buildPrompt("SMALL_OUTPUT_SENTINEL");
     const largePrompt = buildPrompt(`LARGE_OUTPUT_SENTINEL_${"x".repeat(10_000)}`);
@@ -864,14 +945,14 @@ describe("kickoff and permission prompts", () => {
         conflictedFiles: ["OVERRIDE_FILE_SENTINEL.ts"],
         conflictOutput: "OVERRIDE_OUTPUT_SENTINEL",
       },
-      overrides: {
+      settings: withOverrides({
         [specPlanBuildPromptKey("messages.build_git_conflict")]: {
           template:
             "{{git.operationLabel}}\n{{git.currentBranch}}\n{{git.targetBranch}}\n{{git.conflictedFiles}}\n{{git.conflictOutput}}\n{{task.id}}",
           baseVersion: 2,
           enabled: true,
         },
-      },
+      }),
     });
 
     expectPromptToContainAll(result.prompt, [
@@ -905,6 +986,7 @@ describe("kickoff and permission prompts", () => {
           targetBranch: "origin/main",
           conflictedFiles: ["src/main.ts"],
         },
+        settings: EMPTY_PROMPT_SETTINGS,
       }),
     ).toThrow(
       'Missing required git conflict context for "messages.build_git_conflict": operationLabel.',
@@ -919,16 +1001,16 @@ describe("kickoff and permission prompts", () => {
         task: {
           taskId: "task-2",
         },
-        overrides: {
+        settings: withOverrides({
           [specPlanBuildPromptKey("messages.plan_start")]: {
             template: "Planner kickoff {{git.conflictOutput}}",
             baseVersion: 2,
             enabled: true,
           },
-        },
+        }),
       }),
     ).toThrow(
-      'The prompt "messages.plan_start" is missing placeholder value "git.conflictOutput".',
+      'The global override of prompt "messages.plan_start" has a placeholder problem. This prompt cannot fill {{git.conflictOutput}}.',
     );
   });
 });
@@ -946,69 +1028,254 @@ describe("listSpecPlanBuildPromptTemplates", () => {
   });
 });
 
-describe("mergePromptOverrides", () => {
-  test("resolves repo overrides over global overrides", () => {
-    const merged = mergePromptOverrides({
-      globalOverrides: {
-        [specPlanBuildPromptKey("messages.spec_start")]: {
-          template: "global",
-          baseVersion: 1,
-          enabled: true,
-        },
-      },
-      repoOverrides: {
-        [specPlanBuildPromptKey("messages.spec_start")]: {
-          template: "repo",
-          baseVersion: 1,
-          enabled: true,
-        },
-      },
+describe("prompt layers", () => {
+  const specStart = specPlanBuildPromptKey("messages.spec_start");
+  const kickoff = (settings: PromptSettings) =>
+    buildAgentKickoffPrompt({
+      role: "spec",
+      templateId: "messages.spec_start",
+      task: { taskId: "task-7" },
+      settings,
     });
 
-    expect(merged[specPlanBuildPromptKey("messages.spec_start")]?.template).toBe("repo");
+  test("uses the repository override over the global override", () => {
+    expect(
+      kickoff({
+        global: {
+          overrides: { [specStart]: { template: "global", baseVersion: 1, enabled: true } },
+          appends: {},
+        },
+        repository: {
+          overrides: { [specStart]: { template: "repo", baseVersion: 1, enabled: true } },
+          appends: {},
+        },
+      }),
+    ).toBe("repo");
   });
 
-  test("falls back to global override when repo override is disabled", () => {
-    const merged = mergePromptOverrides({
-      globalOverrides: {
-        [specPlanBuildPromptKey("messages.spec_start")]: {
-          template: "global",
-          baseVersion: 1,
-          enabled: true,
+  test("uses the global override when the repository override is off", () => {
+    expect(
+      kickoff({
+        global: {
+          overrides: { [specStart]: { template: "global", baseVersion: 1, enabled: true } },
+          appends: {},
         },
-      },
-      repoOverrides: {
-        [specPlanBuildPromptKey("messages.spec_start")]: {
-          template: "repo-disabled",
-          baseVersion: 1,
-          enabled: false,
+        repository: {
+          overrides: { [specStart]: { template: "repo", baseVersion: 1, enabled: false } },
+          appends: {},
+        },
+      }),
+    ).toBe("global");
+  });
+
+  test("adds the global then the repository append after any base", () => {
+    expect(
+      kickoff({
+        global: {
+          overrides: {},
+          appends: { [specStart]: { text: "Global {{task.id}}", enabled: true } },
+        },
+        repository: {
+          overrides: { [specStart]: { template: "Repo base", baseVersion: 1, enabled: true } },
+          appends: { [specStart]: { text: "  Repo extra  ", enabled: true } },
+        },
+      }),
+    ).toBe("Repo base\n\nGlobal task-7\n\nRepo extra");
+  });
+
+  test("ignores an append that is off or blank", () => {
+    const builtin = kickoff(EMPTY_PROMPT_SETTINGS);
+    expect(
+      kickoff({
+        global: { overrides: {}, appends: { [specStart]: { text: "Off", enabled: false } } },
+        repository: { overrides: {}, appends: { [specStart]: { text: "  ", enabled: true } } },
+      }),
+    ).toBe(builtin);
+  });
+
+  test("puts the role append after the role instructions and before the workflow rules", () => {
+    const prompt = buildAgentSystemPrompt({
+      role: "spec",
+      task: taskContext,
+      settings: {
+        global: {
+          overrides: {},
+          appends: { [rolePromptKey("spec")]: { text: "ROLE_APPEND_SENTINEL", enabled: true } },
         },
       },
     });
+    const builtin = buildAgentSystemPrompt({
+      role: "spec",
+      task: taskContext,
+      settings: EMPTY_PROMPT_SETTINGS,
+    });
+    const rulesStart = builtin.indexOf("Workflow constraints you must obey:");
 
-    expect(merged[specPlanBuildPromptKey("messages.spec_start")]?.template).toBe("global");
+    expect(prompt).toBe(
+      `${builtin.slice(0, rulesStart).trimEnd()}\n\nROLE_APPEND_SENTINEL\n\n${builtin.slice(rulesStart)}`,
+    );
+  });
+
+  test("rejects an append placeholder that the prompt cannot fill", () => {
+    expect(() =>
+      kickoff({
+        global: { overrides: {}, appends: {} },
+        repository: {
+          overrides: {},
+          appends: { [specStart]: { text: "On {{git.currentBranch}}", enabled: true } },
+        },
+      }),
+    ).toThrow(
+      'The repository append of prompt "messages.spec_start" has a placeholder problem. This prompt cannot fill {{git.currentBranch}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}. Edit or turn off this append in Settings.',
+    );
   });
 });
 
-describe("prompts.findOverrideProblem", () => {
-  test("names the first enabled override that an earlier version saved with a removed placeholder", () => {
+describe("prompts.placeholdersOf", () => {
+  const base = [
+    "role",
+    "role.allowedTools",
+    "task.id",
+    "task.title",
+    "task.issueType",
+    "task.status",
+    "task.description",
+  ];
+  const git = [
+    "git.operationLabel",
+    "git.currentBranch",
+    "git.targetBranch",
+    "git.conflictedFiles",
+    "git.conflictOutput",
+  ];
+  const { placeholdersOf } = specPlanBuildWorkflow.prompts;
+
+  test.each([
+    [rolePromptKey("build"), base],
+    [specPlanBuildPromptKey("workflow.rules"), base],
+    [specPlanBuildPromptKey("workflow.read_only_rejection"), base],
+    [specPlanBuildPromptKey("messages.spec_start"), base],
+    [specPlanBuildPromptKey("messages.build_requested_changes"), [...base, "humanFeedback"]],
+    [specPlanBuildPromptKey("messages.build_git_conflict"), [...base, ...git]],
+    [specPlanBuildPromptKey("messages.pull_request"), [...base, ...git]],
+  ])("lists the placeholders that %s can fill", (key, expected) => {
+    expect(placeholdersOf(key)).toEqual(expected);
+  });
+});
+
+describe("prompts.findLayerProblem", () => {
+  const taskContextKey = specPlanBuildPromptKey("workflow.task_context");
+
+  test("names the prompt, scope, and layer of a saved layer that is on", () => {
     const template = "QA required: {{task.qaRequired}}";
     expect(
-      findPromptOverrideProblem({
-        [specPlanBuildPromptKey("workflow.task_context")]: { template, baseVersion: 1 },
-      }),
+      findLayerProblem(withOverrides({ [taskContextKey]: { template, baseVersion: 1 } })),
     ).toBe(
-      'The prompt "workflow.task_context" uses unsupported placeholder "task.qaRequired". Edit or disable this prompt override in Settings.',
+      'The global override of prompt "workflow.task_context" has a placeholder problem. Unsupported placeholder: {{task.qaRequired}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}. Edit or turn off this override in Settings.',
     );
     expect(
-      findPromptOverrideProblem({
-        [specPlanBuildPromptKey("workflow.task_context")]: {
-          template,
-          baseVersion: 1,
-          enabled: false,
+      findLayerProblem(
+        withOverrides({ [taskContextKey]: { template, baseVersion: 1, enabled: false } }),
+      ),
+    ).toBeUndefined();
+    expect(findLayerProblem(EMPTY_PROMPT_SETTINGS)).toBeUndefined();
+  });
+
+  test("does not check an override that a repository override hides", () => {
+    expect(
+      findLayerProblem({
+        global: {
+          overrides: {
+            [taskContextKey]: { template: "{{git.targetBranch}}", baseVersion: 1, enabled: true },
+          },
+          appends: {},
+        },
+        repository: {
+          overrides: { [taskContextKey]: { template: "Repo", baseVersion: 1, enabled: true } },
+          appends: { [taskContextKey]: { text: "Off {{nope}}", enabled: false } },
         },
       }),
     ).toBeUndefined();
-    expect(findPromptOverrideProblem(undefined)).toBeUndefined();
+  });
+
+  test("checks only the prompts that the session builds", () => {
+    const goalKey = specPlanBuildPromptKey("workflow.goal");
+    const qaKickoffKey = specPlanBuildPromptKey("messages.qa_review");
+    const settings = withOverrides({
+      [goalKey]: { template: "Goal for {{humanFeedback}}", baseVersion: 1 },
+      [qaKickoffKey]: { template: "Review {{git.targetBranch}}", baseVersion: 1 },
+    });
+    // A bad goal or kickoff override does not block a session that does not build it.
+    expect(findLayerProblem(settings)).toBeUndefined();
+    expect(
+      specPlanBuildWorkflow.prompts.findLayerProblem(settings, {
+        role: "qa",
+        launchActionId: "qa_review",
+      }),
+    ).toContain('The global override of prompt "messages.qa_review" has a placeholder problem.');
+  });
+
+  test("names the repository append", () => {
+    expect(
+      findLayerProblem({
+        global: { overrides: {}, appends: {} },
+        repository: {
+          overrides: {},
+          appends: { [taskContextKey]: { text: "{{humanFeedback}}", enabled: true } },
+        },
+      }),
+    ).toContain("The repository append of prompt");
+  });
+});
+
+describe("placeholder groups", () => {
+  test("hold each supported placeholder exactly once", () => {
+    expect(
+      [...BASE_PROMPT_PLACEHOLDERS, ...HUMAN_FEEDBACK_PLACEHOLDERS, ...GIT_PLACEHOLDERS].toSorted(),
+    ).toEqual([...agentPromptPlaceholderValues].toSorted());
+  });
+
+  // A placeholder that Settings accepts but the launch does not fill would fail a session start.
+  test("every launch fills each placeholder that its prompt can fill", () => {
+    const { prompts, definition } = specPlanBuildWorkflow;
+    const launches = [
+      ...definition.steps.flatMap((step) =>
+        step.kind === "agent"
+          ? step.launchActions.map((launch) => ({ launch, role: step.roleId }))
+          : [],
+      ),
+      { launch: PULL_REQUEST_LAUNCH, role: "build" },
+    ];
+    expect(launches.length).toBeGreaterThan(1);
+    for (const { launch, role } of launches) {
+      const key = specPlanBuildPromptKey(launch.template.id);
+      const settings: PromptSettings = {
+        global: {
+          overrides: {},
+          appends: {
+            [key]: {
+              text: prompts
+                .placeholdersOf(key)
+                .map((placeholder) => `{{${placeholder}}}`)
+                .join(" "),
+              enabled: true,
+            },
+          },
+        },
+      };
+      const input = {
+        launchActionId: launch.id,
+        role,
+        task: taskContext,
+        humanFeedback: launch.context === "human_feedback" ? "Fix it." : undefined,
+        targetBranch: { remote: "origin", branch: "main" },
+        settings,
+      };
+      const build = () =>
+        launch.template.kind === "kickoff"
+          ? prompts.kickoffPrompt(input)
+          : prompts.messagePrompt({ ...input, git: { operationLabel: "rebase" } });
+      expect(build, launch.id).not.toThrow();
+    }
   });
 });

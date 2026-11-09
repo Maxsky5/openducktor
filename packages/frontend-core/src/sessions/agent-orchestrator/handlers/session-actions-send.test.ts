@@ -688,7 +688,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
     const actions = createSessionActions({
       adapter,
       sessionsRef,
-      loadRepoPromptOverrides: async () => {
+      loadPromptSettings: async () => {
         throw new Error("runtime unavailable");
       },
     });
@@ -1129,7 +1129,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
           readTurnUserMessageStartedAtMs: () => 1234,
         },
       },
-      loadRepoPromptOverrides: async () => {
+      loadPromptSettings: async () => {
         throw new Error("running sessions must send without preparation");
       },
     });
@@ -1193,7 +1193,7 @@ describe("agent-orchestrator/handlers/session-actions send", () => {
           readTurnUserMessageStartedAtMs: () => 1234,
         },
       },
-      loadRepoPromptOverrides: async () => {
+      loadPromptSettings: async () => {
         throw new Error("running sessions must send without preparation");
       },
     });
