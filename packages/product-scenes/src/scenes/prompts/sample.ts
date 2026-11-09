@@ -1,8 +1,11 @@
 // Prompt samples from packages/workflows/src/builtin/spec-plan-build/agent-prompts.ts.
-// The line that the visitor adds is a sample. Sources: settings-prompt-overrides-section.tsx,
-// settings-modal-prompt-components.tsx, and settings-modal-constants.ts in
-// packages/frontend/src/components/features/settings, and workflow-settings.ts in
-// packages/frontend-core/src/queries. src/copied-settings.test.ts compares the labels with the app.
+// The append text that the visitor types is a sample. Sources: settings-prompt-home.tsx,
+// settings-prompt-workflow-page.tsx, settings-prompt-layer-editor.tsx, settings-prompt-layers.ts,
+// and settings-modal-constants.ts in packages/frontend/src/components/features/settings, and
+// workflow-prompt-settings.ts in packages/frontend-core/src/queries. src/copied-settings.test.ts
+// compares the labels with the app.
+
+import type { RoleId } from "../../replicas/vocabulary";
 
 /** The labels of SETTINGS_SECTIONS in the order of the app. */
 export const SECTION_LABELS = [
@@ -26,70 +29,181 @@ export type SectionLabel = (typeof SECTION_LABELS)[number];
 /** The section that the scene shows. */
 export const ACTIVE_SECTION: SectionLabel = "System prompts";
 
-/** The prompt tabs of the built-in roles. */
-export const PROMPT_TABS = ["Shared", "Spec", "Planner", "Builder", "QA"] as const;
+/** A workflow prompt: what it does, and the roles that get it. */
+type PromptRow = { label: string; description: string; roles: readonly RoleId[] };
 
-/** The prompt tab that the scene shows. */
-export const ACTIVE_TAB = "QA";
+/** The prompts of a workflow that the agent gets at the same moment. */
+export type PromptGroup = { title: string; description: string; rows: readonly PromptRow[] };
 
-/** The QA Role Base card: its title, owner, and description. */
-export const QA_BASE_CARD = {
-  label: "QA Role Base",
-  owner: "Role: QA",
+/** The instructions of one role, which start each session of the role. */
+type RolePrompt = { role: RoleId; description: string };
+
+/** The role instructions of the first screen, as the app lists them. */
+export const ROLE_PROMPTS: readonly RolePrompt[] = [
+  {
+    role: "spec",
+    description:
+      "Resolves product decisions with the user and defines scope, required behavior, and constraints.",
+  },
+  {
+    role: "planner",
+    description:
+      "Defines architecture, module responsibilities, interfaces, and contracts. Leaves implementation order and verification to Builder.",
+  },
+  {
+    role: "build",
+    description:
+      "Completes the approved outcomes and design contracts with control over implementation, work order, and verification.",
+  },
+  {
+    role: "qa",
+    description:
+      "Reviews required outcomes, design contracts, correctness, and maintainability with checks based on risk.",
+  },
+];
+
+/** The prompts of one workflow, by when the agent gets them. */
+type WorkflowPrompts = { title: string; description: string; groups: readonly PromptGroup[] };
+
+/** The page of the Spec, Plan, Build workflow. */
+export const WORKFLOW_SECTION: WorkflowPrompts = {
+  title: "Spec, Plan, Build",
   description:
-    "Reviews required outcomes, design contracts, correctness, and maintainability with checks based on risk.",
+    "The prompts that this workflow uses in its steps. A change applies to every task of this workflow.",
+  groups: [
+    {
+      title: "Rules for every session",
+      description: "Added to the system prompt of each session, after the role instructions.",
+      rows: [
+        {
+          label: "Workflow Guards",
+          description: "Shared lifecycle rules, canonical task documents, and repo guidance.",
+          roles: [],
+        },
+        {
+          label: "Tool Protocol",
+          description:
+            "Shared ODT tool permissions, task lock, artifact reads, and clarification rules.",
+          roles: [],
+        },
+        {
+          label: "Task Context",
+          description: "Task snapshot and access rules for current workflow documents.",
+          roles: [],
+        },
+      ],
+    },
+    {
+      title: "Messages to agents",
+      description: "Sent to an agent to start a step or to continue its work.",
+      rows: [
+        {
+          label: "Spec Kickoff",
+          description:
+            "Requests a saved specification. Asks questions only for unresolved product decisions.",
+          roles: ["spec"],
+        },
+        {
+          label: "Planner Kickoff",
+          description: "Requests a saved implementation plan.",
+          roles: ["planner"],
+        },
+        {
+          label: "Builder Kickoff",
+          description:
+            "Starts implementation with control over work order and checks within the approved design.",
+          roles: ["build"],
+        },
+        {
+          label: "Builder Kickoff After QA Rejection",
+          description:
+            "Starts review of QA findings, root-cause fixes, and checks for the affected behavior.",
+          roles: ["build"],
+        },
+        {
+          label: "Builder Kickoff After Human Changes",
+          description:
+            "Starts work on the requested changes while preserving required outcomes and design contracts.",
+          roles: ["build"],
+        },
+        {
+          label: "Pull Request Generation Kickoff",
+          description:
+            "Starts pull request creation or updates with required checks and task association.",
+          roles: ["build"],
+        },
+        {
+          label: "QA Kickoff",
+          description: "Starts review of required outcomes, contracts, and material risks.",
+          roles: ["qa"],
+        },
+        {
+          label: "Builder Git Conflict Message",
+          description:
+            "Reusable in-session message sent to Builder when a git operation stops on conflicts and must be resolved safely.",
+          roles: ["build"],
+        },
+      ],
+    },
+    {
+      title: "Goal mode",
+      description: "Tells a model how to write the goal when you start a step in Goal mode.",
+      rows: [
+        {
+          label: "Goal Writer",
+          description:
+            "Tells a model how to write the goal of a Goal mode launch from the task material.",
+          roles: [],
+        },
+      ],
+    },
+    {
+      title: "Replies to agents",
+      description: "Sent back to an agent when OpenDucktor refuses one of its actions.",
+      rows: [
+        {
+          label: "Read-Only Permission Rejection",
+          description:
+            "Template used to reject mutating tool requests from read-only roles (spec, planner, qa).",
+          roles: [],
+        },
+      ],
+    },
+  ],
 };
 
-/** The QA Kickoff card: its title, owner, and description. */
+/** The QA Kickoff prompt: its label, owner, when the agent gets it, and description. */
 export const QA_KICKOFF_CARD = {
   label: "QA Kickoff",
-  owner: "Workflow: Spec, Plan, Build",
+  owner: "Spec, Plan, Build",
+  usage: "First message to the QA agent",
   description: "Starts review of required outcomes, contracts, and material risks.",
 };
 
-/** The QA role system prompt up to the new line. */
-export const QA_BASE_BEFORE =
-  "You are the QA Agent for OpenDucktor. Decide whether the implementation meets the task requirements and is ready for human review.\n\nReview:";
+/** The placeholders that the QA Kickoff prompt can fill. */
+export const QA_KICKOFF_PLACEHOLDERS = [
+  "role",
+  "role.allowedTools",
+  "task.id",
+  "task.title",
+  "task.issueType",
+  "task.status",
+  "task.description",
+] as const;
 
-/** The rest of the QA Role Base prompt, after the new line. */
-export const QA_BASE_AFTER = [
-  "",
-  "- Read the task, available spec and plan, latest QA report, repo guidance, and relevant code. A task or bug can omit the spec and plan.",
-  "- Inspect the implementation and its wiring directly. Check required outcomes, design contracts, failure paths, regression risks, and maintainability. Use completion summaries and tests as inputs, not proof of correctness.",
-  "- Check whether each new abstraction, option, dependency, alternate path, or test seam serves a current requirement or shown risk. Compare it with reuse of existing code and platform features. Count required validation, error handling, security, data protection, and accessibility as needed work.",
-  "- Treat material excess complexity as a defect when it adds maintenance work or hides the main path. Name the extra code, its cost, and a simpler viable path. Do not reject on line count or style alone.",
-  "- Choose checks based on the changed behavior and risk. Follow repo-required checks and investigate gaps in Builder verification. Avoid repeating checks without a reason or requiring live verification or smoke tests for every task.",
-  "- Do not reject valid work for a different implementation order or method when it preserves required outcomes and design contracts. Judge suggestions as suggestions. Do not create new scope or demand a test recipe in the spec or plan.",
-  "",
-  "QA report:",
-  "- Use the following sections as the report's structure.",
-  "- ## Verdict: State approved or rejected and the main reason in one or two sentences.",
-  "- ## Findings: Start with a table that gives each material finding its severity, location such as `path:line`, and one-line summary. Omit this section when there are no findings.",
-  "- Explain each finding under its own ### subheading. Give its impact, the concrete correction, and the code or check results that support it. Quote the relevant code in a short fenced block when it makes the defect clear. Mark optional improvements as optional.",
-  "- ## Verification: Show the checks you ran and their results in a table, then state any limits. Do not add an exhaustive evidence checklist.",
-  "",
-  "Completion:",
-  "- Reject when unmet requirements, correctness or contract defects, material excess complexity, or verification gaps prevent approval. Explain what must change and why; do not prescribe a coding sequence.",
-  "- Approve when the required outcomes and contracts hold and verification supports the risk of the change.",
-  "- Call odt_set_task_artifact exactly once per review pass with code qaReport, verdict approved or rejected, and the complete QA report in content.",
-  "- You operate in read-only mode for repository mutation. Never modify files, git state, or environment.",
-].join("\n");
+/** The status badges that the scene shows, as PROMPT_STATUS_LABELS names them. */
+export const STATUS_LABELS = { appended: "Appended" } as const;
 
-/**
- * The line that the visitor adds after "Review:". The first key is not a placeholder of
- * OpenDucktor, so the dialog shows an error until the visitor types the correct key.
- */
-export const ADDED_LINE = {
-  lead: "\n- This task is a {{task.",
-  wrongKey: "type",
-  key: "issueType",
-  close: "}}",
-  tail: ". For a bug, first check that a test reproduces the reported case.",
-};
-
-/** The error of the settings model for an unsupported placeholder. */
-export const unsupported = (key: string): string => `Unsupported placeholder: {{task.${key}}}.`;
+/** The labels of the final text parts, as PROMPT_LAYER_LABELS names them. */
+export const LAYER_LABELS = {
+  builtin: "Built-in",
+  global_append: "Append · all repositories",
+} as const;
 
 /** The QA Kickoff prompt (messages.qa_review). */
 export const QA_KICKOFF =
   "Review this task's implementation and submit one QA report with exactly one odt_set_task_artifact call using code qaReport and verdict approved or rejected. Use taskId {{task.id}} for every task-bound odt_* tool call.";
+
+/** The append instructions that the visitor types. */
+export const APPEND_TEXT =
+  "Also check that the user docs match the change. List each doc that you read under ## Verification.";

@@ -43,12 +43,13 @@ import "./Features.css";
       <FeatureTile
         id="feature-prompts"
         label="Prompts"
-        title="Read and replace every built-in prompt."
+        title="Add to any built-in prompt and keep its updates."
         size="half"
       >
-        The settings show each built-in prompt that OpenDucktor sends to an agent. Replace a prompt
-        for all repositories or for one repository. OpenDucktor checks the placeholders of each
-        active override, and it does not save until they are valid.
+        The settings show each built-in prompt that OpenDucktor sends to an agent and the final text
+        that the agent gets. Append instructions to a prompt for all repositories or for one
+        repository, and the built-in text still gets each update. You can also replace a prompt.
+        OpenDucktor checks the placeholders, and it does not save until they are valid.
         <Scene name="prompts" slot="view" />
       </FeatureTile>
       <FeatureTile

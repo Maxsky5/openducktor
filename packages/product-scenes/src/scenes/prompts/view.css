@@ -1,9 +1,9 @@
 @layer views {
   :where(.stage) {
     /*
-     * Prompts: the Settings dialog on the global prompt overrides. Sources: settings-modal.tsx and
-     * settings-modal-prompt-components.tsx. Margins replace the grid gaps of the product, so a row
-     * that grows or shrinks moves its neighbors without a jump.
+     * Prompts: the Settings dialog on System prompts. Sources: settings-modal.tsx,
+     * settings-prompt-home.tsx, and settings-prompt-layer-editor.tsx. Margins replace the grid
+     * gaps of the product, so a part that grows moves its neighbors without a jump.
      */
     .prompts-dialog {
       --design-width: 480;
@@ -14,10 +14,6 @@
       flex-direction: column;
       height: auto;
       min-height: calc(680 * var(--u));
-    }
-    .prompts-dialog:not([data-invalid]) [data-alert],
-    .prompts-dialog:not([data-invalid]) [data-message] {
-      display: none;
     }
     .pd-header {
       position: relative;
@@ -82,75 +78,91 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .pd-alert {
-      margin-left: calc(8 * var(--u));
-      color: var(--destructive-muted);
-    }
+    /* The overview or the editor of the open prompt fills the content pane. */
     .pd-content {
+      display: flex;
+      flex-direction: column;
       min-height: 0;
       overflow: hidden;
-      padding: calc(16 * var(--u));
     }
-    .pd-content > * + * {
-      margin-top: calc(16 * var(--u));
+    .pd-editor[hidden] {
+      display: none;
     }
-    .pd-cards > * + *,
-    .pd-card > * + * {
-      margin-top: calc(12 * var(--u));
-    }
-    .pd-editor > * + * {
-      margin-top: calc(8 * var(--u));
-    }
-    .pd-heading {
-      display: grid;
-      gap: calc(8 * var(--u));
-    }
-    .pd-heading strong,
-    .pd-card-head strong {
-      font-size: calc(14 * var(--u));
-      font-weight: 600;
-      line-height: calc(20 * var(--u));
-    }
-    .pd-heading p,
-    .pd-card-head p {
-      color: var(--muted-foreground);
-      font-size: calc(12 * var(--u));
-      line-height: calc(16 * var(--u));
-      text-wrap: pretty;
-    }
-    /* The role tabs: the label and the error icon. */
-    .pd-tab {
-      gap: calc(6 * var(--u));
-      line-height: calc(16 * var(--u));
-    }
-    .pd-banner {
-      padding: calc(12 * var(--u));
-      border: calc(1 * var(--u)) solid color-mix(in oklch, var(--destructive) 40%, transparent);
-      border-radius: calc(10 * var(--u));
-      background: color-mix(in oklch, var(--destructive) 10%, transparent);
-      color: var(--destructive);
-      font-size: calc(12 * var(--u));
-      line-height: calc(16 * var(--u));
-    }
-    .pd-card {
-      padding: calc(16 * var(--u));
-      border: calc(1 * var(--u)) solid var(--border);
-      border-radius: calc(12 * var(--u));
-      background: var(--card);
-    }
-    .pd-card-head {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: start;
-      gap: calc(12 * var(--u));
-    }
+    .pd-title,
     .pd-card-head > div {
       display: grid;
       gap: calc(4 * var(--u));
       min-width: 0;
     }
-    .pd-card-head .pd-owner {
+    /* The editor pane scrolls to its end: the content then ends at the bottom of the pane. */
+    .pd-editor {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      padding: calc(16 * var(--u));
+    }
+    .pd-editor[data-scrolled] {
+      justify-content: flex-end;
+    }
+    .pd-editor-inner {
+      flex: 0 0 auto;
+    }
+    .pd-editor-inner > * + *,
+    .pd-final > * + * {
+      margin-top: calc(12 * var(--u));
+    }
+    .pd-card > * + * {
+      margin-top: calc(8 * var(--u));
+    }
+    .pd-title strong {
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .pd-title p,
+    .pd-card p,
+    .pd-final > p {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      text-wrap: pretty;
+    }
+    .pd-title .pd-owner {
       font-weight: 500;
+    }
+    .pd-title code,
+    .pd-textarea pre,
+    .pd-part pre {
+      font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+        monospace;
+    }
+    .pd-card {
+      display: block;
+      padding: calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+    }
+    .pd-card strong,
+    .pd-final strong {
+      display: block;
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    /* The controls go below the text when the card is too narrow for both. */
+    .pd-card-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: calc(8 * var(--u)) calc(12 * var(--u));
+    }
+    .pd-card-head > div {
+      flex: 1 1 calc(240 * var(--u));
     }
     .pd-enable {
       display: flex;
@@ -161,34 +173,78 @@
       line-height: calc(16 * var(--u));
       white-space: nowrap;
     }
-    .pd-inherited {
-      display: flex;
+    .pd-enable[hidden] {
+      display: none;
+    }
+    /* The ghost Remove append button: Trash2 and text-muted-foreground. */
+    .pd-remove {
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      gap: calc(8 * var(--u));
-      padding: calc(8 * var(--u)) calc(12 * var(--u));
-      border: calc(1 * var(--u)) solid var(--border);
-      border-radius: calc(10 * var(--u));
-      background: color-mix(in oklch, var(--muted) 60%, transparent);
-    }
-    .pd-inherited p {
-      font-size: calc(12 * var(--u));
-      font-weight: 500;
-      line-height: calc(16 * var(--u));
-    }
-    .pd-inherited .lucide {
+      gap: calc(6 * var(--u));
+      margin-left: calc(8 * var(--u));
       color: var(--muted-foreground);
     }
-    .pd-label {
-      display: block;
+    /* The placeholder buttons of settings-prompt-text-field.tsx. */
+    .pd-chips {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      color: var(--muted-foreground);
       font-size: calc(12 * var(--u));
-      font-weight: 500;
       line-height: calc(16 * var(--u));
     }
-    /* Textarea with seven rows of font-mono text-xs. The scene scrolls it to keep the caret in view. */
+    /* The placeholder buttons: Button outline size xs with font-mono and no shadow. */
+    .pd-chip {
+      height: calc(24 * var(--u));
+      box-shadow: none;
+      padding: 0 calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-weight: 400;
+      font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+        monospace;
+      font-size: calc(12 * var(--u));
+    }
+    /* Replace the whole prompt, without an override: a card with its button. */
+    /* The editor of the scene is narrow, so the button goes below the text, as in the app. */
+    .pd-replace {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: calc(12 * var(--u));
+      padding: calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+    }
+    .pd-replace strong {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .pd-replace p {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* The user's own text in the final text, and the marked placeholders. */
+    .pd-part[data-user] {
+      border-left: calc(2 * var(--u)) solid var(--input);
+      background: var(--muted);
+    }
+    .pd-mark {
+      padding: 0 calc(2 * var(--u));
+      border-radius: calc(2 * var(--u));
+      background: var(--muted);
+      box-shadow: inset 0 0 0 calc(1 * var(--u)) var(--border);
+      color: var(--foreground);
+      font-weight: 500;
+    }
+    /* Textarea with four rows of font-mono text-xs. */
     .pd-textarea {
       position: relative;
-      height: calc(130 * var(--u));
+      height: calc(80 * var(--u));
       overflow: hidden;
       padding: calc(8 * var(--u)) calc(12 * var(--u));
       border: calc(1 * var(--u)) solid var(--input);
@@ -201,19 +257,22 @@
         0 0 0 calc(2 * var(--u)) color-mix(in oklch, var(--ring) 40%, transparent),
         var(--shadow-sm);
     }
-    .pd-textarea pre {
+    .pd-textarea pre,
+    .pd-part pre {
       margin: 0;
       color: var(--foreground);
-      font-family:
-        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-        monospace;
       font-size: calc(12 * var(--u));
       line-height: calc(16 * var(--u));
       white-space: pre-wrap;
       overflow-wrap: break-word;
     }
-    .pd-textarea [data-selected] {
-      background: var(--selected-surface);
+    .pd-placeholder {
+      position: absolute;
+      top: calc(8 * var(--u));
+      left: calc(12 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
     }
     .pd-caret {
       display: inline-block;
@@ -231,19 +290,22 @@
     .pd-textarea[data-typing] .pd-caret {
       animation: none;
     }
-    .pd-textarea[data-selecting] .pd-caret {
-      visibility: hidden;
+    .pd-parts {
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
     }
-    .pd-error {
-      color: var(--destructive-muted);
-      font-size: calc(12 * var(--u));
-      line-height: calc(16 * var(--u));
-    }
-    .pd-actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
+    .pd-part {
+      display: grid;
       gap: calc(8 * var(--u));
+      padding: calc(12 * var(--u));
+    }
+    .pd-part + .pd-part {
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    .pd-placeholder[hidden],
+    .pd-part[hidden] {
+      display: none;
     }
     .pd-save {
       border: 0;
@@ -255,10 +317,6 @@
     }
     .pd-save[data-saving] .pd-saving-icon {
       display: block;
-    }
-    /* Save settings is disabled while a prompt has an error. */
-    .prompts-dialog[data-invalid] .pd-save {
-      opacity: 0.5;
     }
     .pd-footer {
       display: flex;
@@ -278,23 +336,17 @@
       font-size: calc(14 * var(--u));
       line-height: calc(20 * var(--u));
     }
-    /* A phone shows the card header in one column, as the product does below 640px. */
+    /* A phone shows the dialog at a smaller design width. */
     @container stage (width <= 439px) {
       .prompts-dialog {
         --design-width: 400;
-        min-height: calc(764 * var(--u));
-      }
-      .pd-card-head {
-        grid-template-columns: minmax(0, 1fr);
-      }
-      .pd-tab {
-        padding: 0 calc(8 * var(--u));
+        min-height: calc(820 * var(--u));
       }
     }
     /* A wide stage shows the sections of the dialog at the size of the app. */
     @container stage (width >= 620px) {
       .prompts-dialog {
-        --design-width: 760;
+        --design-width: 820;
         min-height: calc(704 * var(--u));
       }
       .pd-body {

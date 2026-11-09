@@ -1,0 +1,28 @@
+@layer product {
+  :where(.stage) {
+    /* Badge: inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium. The
+       outline variant has border-input text-foreground. The replicas use the px-1.5 text-[10px]
+       size of the prompt list. */
+    .ui-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-self: start;
+      padding: calc(2 * var(--u)) calc(6 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: 999px;
+      color: var(--foreground);
+      font-size: calc(10 * var(--u));
+      font-weight: 500;
+      line-height: calc(14 * var(--u));
+    }
+    /* The success variant: border-transparent bg-success-surface text-success-surface-foreground. */
+    .ui-badge[data-variant="success"] {
+      border-color: transparent;
+      background: var(--success-surface);
+      color: var(--success-surface-foreground);
+    }
+    .ui-badge[hidden] {
+      display: none;
+    }
+  }
+}
