@@ -1,6 +1,6 @@
 @layer site {
   .privacy {
-    padding-block: calc(var(--header-height) + 48px) var(--section-space);
+    padding-block: 32px var(--section-space);
   }
   .privacy article {
     max-width: 760px;
