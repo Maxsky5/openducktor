@@ -15,7 +15,7 @@ export const FAQS = [
   {
     question: "Where do my tasks and code go?",
     answer:
-      "Tasks and their documents stay in a SQLite database on your computer. Your coding agent sends prompts and code to the model provider that you set up. OpenDucktor has no analytics or telemetry. The app loads its fonts from Google Fonts. The desktop app checks GitHub for new releases. It asks before it downloads or installs one.",
+      "Tasks and their documents stay in a SQLite database on your computer. Your coding agent sends prompts and code to the model provider that you set up. The mobile app connects to that computer. Its Android QR scanner uses Google ML Kit, which collects diagnostics and usage analytics. Read the mobile privacy policy for details.",
   },
   {
     question: "Can agents merge code without me?",

@@ -1,0 +1,118 @@
+---
+import SiteLayout from "../layouts/SiteLayout.astro";
+import Header from "../sections/Header.astro";
+import Footer from "../sections/Footer.astro";
+import "./privacy.css";
+---
+
+<SiteLayout
+  title="Mobile privacy policy | OpenDucktor"
+  description="How OpenDucktor mobile handles host connections, local data, attachments, and Android QR scanner diagnostics."
+  indexable={true}
+>
+  <Header />
+  <main id="main" class="privacy wrap" tabindex="-1">
+    <article>
+      <header>
+        <h1>OpenDucktor mobile privacy policy</h1>
+        <p class="privacy-date">Last updated: <time datetime="2026-11-09">9 November 2026</time></p>
+        <p>
+          This policy covers the OpenDucktor app for iOS and Android. Maxime Ribera publishes the
+          app. Contact <a class="text-link" href="mailto:contact@openducktor.dev"
+            >contact@openducktor.dev</a
+          > with questions about this policy or the app's handling of data.
+        </p>
+      </header>
+
+      <section aria-labelledby="privacy-host">
+        <h2 id="privacy-host">Your computer and your providers</h2>
+        <p>
+          The mobile app connects directly to the OpenDucktor computer that you add. We do not
+          provide a hosted project service. You do not need an OpenDucktor cloud account.
+        </p>
+        <p>
+          The app sends your instructions, task changes, permission responses, terminal input, and
+          selected attachments to that computer. Your computer keeps the project files, tasks, and
+          agent sessions. Your coding agent can send prompts, code, and attachments to the model
+          provider that you set up. That provider's terms and privacy policy apply to its service.
+        </p>
+      </section>
+
+      <section aria-labelledby="privacy-device">
+        <h2 id="privacy-device">Data on your phone or tablet</h2>
+        <p>
+          The app saves the host addresses and names that you add. It also saves drafts, the
+          selected workspace, and interface settings on your device. Pairing credentials use the
+          operating system's secure storage. Files opened from a host can be stored temporarily on
+          your device.
+        </p>
+        <p>
+          The app uses the camera to scan a host pairing QR code. The app does not record audio.
+          When you select a photo or file to attach, the app sends that item to the connected
+          computer. It does not upload your photo library. Saving or sharing an item uses the
+          operating system's controls and the destination that you choose.
+        </p>
+        <p>
+          Your operating system may include app files in device backups, according to its backup
+          settings.
+        </p>
+      </section>
+
+      <section aria-labelledby="privacy-android">
+        <h2 id="privacy-android">Android QR scanner diagnostics</h2>
+        <p>
+          The Android QR scanner uses Google ML Kit. Google's SDK collects device and app
+          information, an installation identifier, performance measurements, scanner events, API
+          settings, input and output sizes, and error codes for diagnostics and usage analytics.
+          Google states that this data uses HTTPS in transit. These diagnostics are separate from
+          the projects and messages sent to your OpenDucktor computer.
+        </p>
+        <p>
+          Read <a
+            class="text-link"
+            href="https://developers.google.com/ml-kit/android-data-disclosure"
+            >Google's ML Kit data disclosure</a
+          > and <a class="text-link" href="https://policies.google.com/privacy"
+            >Google's privacy policy</a
+          > for details about Google's handling of this data. OpenDucktor does not include ads or an advertising
+          SDK.
+        </p>
+      </section>
+
+      <section aria-labelledby="privacy-control">
+        <h2 id="privacy-control">Connections, retention, and deletion</h2>
+        <p>
+          Use HTTPS or an encrypted private network to connect to a remote computer. The app also
+          supports HTTP for hosts on a protected network. HTTP alone does not encrypt your traffic.
+          A pairing code authorizes access; it does not encrypt the connection.
+        </p>
+        <p>
+          Removing a saved host clears its pairing credentials and its local drafts and settings.
+          This does not delete the projects or tasks on that computer. The computer's operator
+          controls those records and can revoke a paired device's access. Model providers and Google
+          control the retention of data that their services receive under their own policies.
+        </p>
+        <p>
+          For questions or requests about data that the publisher holds, email <a
+            class="text-link"
+            href="mailto:contact@openducktor.dev">contact@openducktor.dev</a
+          >. For records on a host or in a model provider's service, use that host's or provider's
+          data controls.
+        </p>
+      </section>
+
+      <section aria-labelledby="privacy-audience">
+        <h2 id="privacy-audience">Audience and changes</h2>
+        <p>
+          OpenDucktor mobile is intended for adults aged 18 and over. We do not market it to
+          children.
+        </p>
+        <p>
+          We will update this page when the app's data practices change. The date above identifies
+          the current policy.
+        </p>
+      </section>
+    </article>
+  </main>
+  <Footer />
+</SiteLayout>
