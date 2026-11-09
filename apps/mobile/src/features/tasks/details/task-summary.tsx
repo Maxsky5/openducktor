@@ -226,7 +226,7 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.space.md,
     marginTop: -6,
   },
-  id: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 1 },
+  id: { flex: 1, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5 },
   idText: { flexShrink: 1, color: theme.desktop.mutedForeground },
   // The pull request controls stay at the end of the first badge line when the badges wrap.
   badgeRow: { flexDirection: "row", alignItems: "flex-start", gap: theme.space.md },

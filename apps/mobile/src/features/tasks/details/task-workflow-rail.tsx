@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { Fragment, memo, type ReactElement } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { routes, sessionParams } from "@/navigation/routes";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -31,7 +31,14 @@ export const TaskWorkflowRail = memo(function TaskWorkflowRail({
   const router = useRouter();
   const theme = useAppTheme();
   return (
-    <View style={styles.rail} accessibilityLabel="Task workflow">
+    <ScrollView
+      horizontal
+      style={styles.viewport}
+      contentContainerStyle={styles.rail}
+      accessibilityLabel="Task workflow"
+    >
+      {/* The few workflow stages form one connected rail with natural-width pills. */}
+      {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
       {steps.map((step, index) => {
         const { session } = step;
         const colors = workflowToneColors(theme, step.state.tone);
@@ -51,7 +58,6 @@ export const TaskWorkflowRail = memo(function TaskWorkflowRail({
             <Text
               variant="caption1"
               weight="semibold"
-              numberOfLines={1}
               style={[styles.pillLabel, { color: colors.text }]}
             >
               {step.label}
@@ -100,26 +106,28 @@ export const TaskWorkflowRail = memo(function TaskWorkflowRail({
           </Fragment>
         );
       })}
-    </View>
+    </ScrollView>
   );
 });
 
 const styles = StyleSheet.create((theme) => ({
-  rail: { flexDirection: "row", alignItems: "center" },
-  step: { flex: 1, minWidth: 0 },
+  viewport: { flexGrow: 0 },
+  rail: { flexGrow: 1, flexDirection: "row", alignItems: "center" },
+  step: { flexGrow: 1, flexShrink: 0 },
   pill: {
-    height: 30,
+    minHeight: 30,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
     paddingHorizontal: 6,
+    paddingVertical: 6,
     borderRadius: theme.radius.sm,
     borderCurve: "continuous",
     borderWidth: 1,
   },
   dashed: { borderStyle: "dashed" },
-  pillLabel: { flexShrink: 1 },
+  pillLabel: { flexShrink: 0 },
   spinner: { width: 12, height: 12, transform: [{ scale: 0.6 }] },
   connector: { width: 14, height: 30, alignItems: "center", justifyContent: "center" },
 }));

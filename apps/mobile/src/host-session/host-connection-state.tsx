@@ -1,6 +1,6 @@
-import { useRouter } from "expo-router";
+import { useRouter, useSegments } from "expo-router";
 import { type ReactElement, useCallback } from "react";
-import { View, type ViewStyle } from "react-native";
+import { ScrollView, View, type ViewStyle } from "react-native";
 import Animated, { type CSSStyle } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import type { SavedHost } from "@/device-data/device-records";
@@ -8,9 +8,11 @@ import { useAppTheme } from "@/theme/app-theme-context";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { calloutColors } from "@/ui/callout-colors";
 import { routes } from "@/navigation/routes";
+import { useTabBarSpace } from "@/navigation/tab-bar/tab-bar-metrics";
 import { Button } from "@/ui/button";
 import { Icon } from "@/ui/icon";
 import { Text } from "@/ui/text";
+import { useScreenEndSpace } from "@/ui/screen";
 import { usePendingAction } from "@/ui/use-pending-action";
 import { useShake } from "@/ui/use-shake";
 import { useActiveSession, useCommandGate } from "./active-session-context";
@@ -55,7 +57,11 @@ const hostAddress = (label: string, endpoint: string): { title: string; detail: 
  */
 export function HostConnectionState(): ReactElement {
   const router = useRouter();
+  const segments = useSegments();
   const theme = useAppTheme();
+  const tabBarSpace = useTabBarSpace({ automaticInsets: true });
+  const screenEndSpace = useScreenEndSpace(theme.space.huge);
+  const bottomSpace = segments.includes("(tabs)") ? tabBarSpace + theme.space.huge : screenEndSpace;
   const { host, remote } = useActiveSession();
   const { phase } = useCommandGate();
   useClaimConnectionStatus();
@@ -76,69 +82,74 @@ export function HostConnectionState(): ReactElement {
 
   return (
     <Animated.View style={[styles.root, phase.kind === "connecting" ? DELAYED_FADE_IN : FADE_IN]}>
-      <Animated.View style={[styles.card, shake.style]}>
-        <View style={styles.header}>
-          <View
-            style={[
-              styles.stateIcon,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            {busy ? (
-              <LoaderSpinner size={18} color={colors.muted} />
-            ) : (
-              <Icon
-                name={phase.kind === "offline" ? "wifi-off" : "cloud-off"}
-                size={18}
-                colorValue={colors.muted}
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[styles.content, { paddingBottom: bottomSpace }]}
+      >
+        <Animated.View style={[styles.card, shake.style]}>
+          <View style={styles.header}>
+            <View
+              style={[
+                styles.stateIcon,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              {busy ? (
+                <LoaderSpinner size={18} color={colors.muted} />
+              ) : (
+                <Icon
+                  name={phase.kind === "offline" ? "wifi-off" : "cloud-off"}
+                  size={18}
+                  colorValue={colors.muted}
+                />
+              )}
+            </View>
+            <Text variant="title2" accessibilityRole="header" style={styles.title}>
+              {copy.title}
+            </Text>
+            <HostLine shell={host.shell} label={host.label} endpoint={host.endpoint} />
+          </View>
+
+          <View style={styles.body}>
+            {copy.message ? (
+              <Text variant="subhead" tone="tertiary" selectable>
+                {copy.message}
+              </Text>
+            ) : null}
+            <View style={styles.status} accessibilityLiveRegion="polite">
+              {busy ? (
+                <LoaderSpinner size={13} color={theme.desktop.mutedForeground} />
+              ) : (
+                <View style={[styles.dot, { backgroundColor: colors.muted }]} />
+              )}
+              <Text variant="subhead" tone="secondary" style={styles.shrink}>
+                {statusLabel}
+              </Text>
+            </View>
+            {copy.checks.length > 0 ? <ConnectionChecks checks={copy.checks} /> : null}
+          </View>
+
+          <View style={styles.footer}>
+            {copy.canRetry ? (
+              <Button
+                label={attempt.pending ? "Retrying…" : "Retry connection"}
+                icon={attempt.pending ? undefined : "refresh"}
+                size="lg"
+                fill
+                loading={attempt.pending}
+                onPress={attempt.run}
               />
-            )}
-          </View>
-          <Text variant="title2" accessibilityRole="header" style={styles.title}>
-            {copy.title}
-          </Text>
-          <HostLine shell={host.shell} label={host.label} endpoint={host.endpoint} />
-        </View>
-
-        <View style={styles.body}>
-          {copy.message ? (
-            <Text variant="subhead" tone="tertiary" selectable>
-              {copy.message}
-            </Text>
-          ) : null}
-          <View style={styles.status} accessibilityLiveRegion="polite">
-            {busy ? (
-              <LoaderSpinner size={13} color={theme.desktop.mutedForeground} />
-            ) : (
-              <View style={[styles.dot, { backgroundColor: colors.muted }]} />
-            )}
-            <Text variant="subhead" tone="secondary" style={styles.shrink}>
-              {statusLabel}
-            </Text>
-          </View>
-          {copy.checks.length > 0 ? <ConnectionChecks checks={copy.checks} /> : null}
-        </View>
-
-        <View style={styles.footer}>
-          {copy.canRetry ? (
+            ) : null}
             <Button
-              label={attempt.pending ? "Retrying…" : "Retry connection"}
-              icon={attempt.pending ? undefined : "refresh"}
+              label="Choose another host"
+              variant="outline"
               size="lg"
               fill
-              loading={attempt.pending}
-              onPress={attempt.run}
+              onPress={() => router.push(routes.hosts())}
             />
-          ) : null}
-          <Button
-            label="Choose another host"
-            variant="outline"
-            size="lg"
-            fill
-            onPress={() => router.push(routes.hosts())}
-          />
-        </View>
-      </Animated.View>
+          </View>
+        </Animated.View>
+      </ScrollView>
     </Animated.View>
   );
 }
@@ -199,14 +210,15 @@ function ConnectionChecks({ checks }: { checks: readonly string[] }): ReactEleme
 }
 
 const styles = StyleSheet.create((theme) => ({
-  root: {
-    flex: 1,
+  root: { flex: 1 },
+  content: {
+    flexGrow: 1,
     justifyContent: "center",
     width: "100%",
     maxWidth: 480,
     alignSelf: "center",
     paddingHorizontal: theme.layout.screenPadding,
-    paddingBottom: theme.space.huge,
+    paddingTop: theme.space.lg,
   },
   card: {
     borderWidth: 1,
@@ -243,8 +255,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   check: { flexDirection: "row", alignItems: "center", gap: theme.space.md },
   step: {
-    width: 22,
-    height: 22,
+    minWidth: 22,
+    minHeight: 22,
+    paddingHorizontal: theme.space.xs,
+    paddingVertical: 2,
     borderRadius: theme.radius.sm,
     borderCurve: "continuous",
     borderWidth: 1,

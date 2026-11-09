@@ -10,8 +10,8 @@ import {
   type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
-import { memo, type ReactElement, use, useCallback, useMemo, useRef } from "react";
-import { type DimensionValue, View } from "react-native";
+import { memo, type ReactElement, type RefObject, use, useCallback, useMemo, useRef } from "react";
+import { type DimensionValue, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
@@ -169,8 +169,6 @@ export const TaskCard = memo(function TaskCard({
 
   const { primary, liveSession } = model;
   const primaryShowsSession = primary !== null && primary.activeSession !== null;
-  const hasWorkflowMenu = model.menu.length > 0 || model.shortcuts.length > 0;
-  const paint = issueTypePaint(taskIssueType(task));
   return (
     <View style={[styles.card, frame]}>
       {/* The press layer fills the card under its content, so the action controls stay apart. */}
@@ -232,46 +230,85 @@ export const TaskCard = memo(function TaskCard({
             </Text>
           </View>
         ) : null}
-        <View pointerEvents="box-none" style={styles.footer}>
-          <View
-            pointerEvents="none"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            style={styles.meta}
-          >
-            <IssueTypeMark hint={taskIssueType(task).icon} icon={paint.icon} />
-            {/* The ID gives way first, so the priority always reads. */}
-            <View style={styles.fixed}>
-              <PriorityBadge priority={task.priority} size="sm" />
-            </View>
-            <Text variant="monoSmall" numberOfLines={1} style={styles.id}>
-              {model.taskId}
-            </Text>
-          </View>
-          {primary ? (
-            <CardPrimaryAction
-              primary={primary}
-              taskTitle={task.title}
-              onPress={() => onAction(task, primary.action, model.sessionOptionsByRole)}
-            />
-          ) : null}
-          {/* Without workflow actions the menu has only Copy Task ID, so a long press opens it from
-              an anchor outside the row flow and the card shows no control. */}
-          <View pointerEvents="box-none" style={hasWorkflowMenu ? null : styles.anchorSlot}>
-            <ActionMenu title={task.title} items={items} onSelect={selectMenu} menuRef={menuRef}>
-              {hasWorkflowMenu ? (
-                <CardMenuButton accessibilityLabel={`More actions for ${task.title}`} />
-              ) : (
-                <View style={styles.anchor} />
-              )}
-            </ActionMenu>
-          </View>
-        </View>
+        <TaskCardFooter
+          task={task}
+          model={model}
+          items={items}
+          menuRef={menuRef}
+          onSelectMenu={selectMenu}
+          onAction={onAction}
+        />
       </View>
       {running ? <RunningRay /> : null}
     </View>
   );
 }, sameCardProps);
+
+/** The task metadata and workflow actions share a row until enlarged text needs two rows. */
+function TaskCardFooter({
+  task,
+  model,
+  items,
+  menuRef,
+  onSelectMenu,
+  onAction,
+}: {
+  task: TaskCardData;
+  model: TaskCardModel;
+  items: ActionMenuItem[];
+  menuRef: RefObject<ActionMenuHandle | null>;
+  onSelectMenu: (id: string) => void;
+  onAction: TaskCardHandlers["onAction"];
+}): ReactElement {
+  const { fontScale } = useWindowDimensions();
+  const enlarged = fontScale > 1;
+  const { primary } = model;
+  const hasWorkflowMenu = model.menu.length > 0 || model.shortcuts.length > 0;
+  const paint = issueTypePaint(taskIssueType(task));
+  return (
+    <View pointerEvents="box-none" style={[styles.footer, enlarged && styles.enlargedFooter]}>
+      <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={[styles.meta, enlarged && styles.enlargedMeta]}
+      >
+        <IssueTypeMark hint={taskIssueType(task).icon} icon={paint.icon} />
+        {/* The ID gives way first, so the priority always reads. */}
+        <View style={styles.fixed}>
+          <PriorityBadge priority={task.priority} size="sm" />
+        </View>
+        <Text variant="monoSmall" numberOfLines={1} style={styles.id}>
+          {model.taskId}
+        </Text>
+      </View>
+      <View
+        pointerEvents="box-none"
+        style={[styles.actions, !primary && !hasWorkflowMenu && styles.anchorSlot]}
+      >
+        {primary ? (
+          <CardPrimaryAction
+            primary={primary}
+            taskTitle={task.title}
+            expanded={enlarged}
+            onPress={() => onAction(task, primary.action, model.sessionOptionsByRole)}
+          />
+        ) : null}
+        {/* Without workflow actions the menu has only Copy Task ID, so a long press opens it from
+            an anchor outside the row flow and the card shows no control. */}
+        <View pointerEvents="box-none" style={hasWorkflowMenu ? null : styles.anchorSlot}>
+          <ActionMenu title={task.title} items={items} onSelect={onSelectMenu} menuRef={menuRef}>
+            {hasWorkflowMenu ? (
+              <CardMenuButton accessibilityLabel={`More actions for ${task.title}`} />
+            ) : (
+              <View style={styles.anchor} />
+            )}
+          </ActionMenu>
+        </View>
+      </View>
+    </View>
+  );
+}
 
 /**
  * The light around a working card, while its screen has focus. A theme change or a focus change
@@ -328,17 +365,21 @@ const CARD_RADIUS = 12;
  * its exact place.
  */
 export function TaskCardPlaceholder({ titleWidth }: { titleWidth: DimensionValue }): ReactElement {
+  const { fontScale } = useWindowDimensions();
+  const enlarged = fontScale > 1;
   return (
     <View style={[styles.card, styles.idleFrame]}>
       <View style={styles.content}>
         <TextPlaceholder variant="headline" width={titleWidth} />
-        <View style={styles.footer}>
-          <View style={styles.meta}>
+        <View style={[styles.footer, enlarged && styles.enlargedFooter]}>
+          <View style={[styles.meta, enlarged && styles.enlargedMeta]}>
             <View style={styles.placeholderMark} />
             <BadgePlaceholder width={44} />
             <TextPlaceholder variant="monoSmall" width={72} />
           </View>
-          <CardActionsPlaceholder />
+          <View style={styles.actions}>
+            <CardActionsPlaceholder />
+          </View>
         </View>
       </View>
     </View>
@@ -390,12 +431,22 @@ const styles = StyleSheet.create((theme) => ({
     gap: CONTROL_GAP,
     minHeight: 32,
   },
+  enlargedFooter: { flexDirection: "column", alignItems: "stretch" },
   meta: {
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  enlargedMeta: { flex: 0 },
+  actions: {
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: CONTROL_GAP,
   },
   fixed: { flexShrink: 0 },
   labels: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 },

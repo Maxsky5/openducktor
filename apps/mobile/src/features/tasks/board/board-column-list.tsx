@@ -23,6 +23,8 @@ export type BoardColumnListProps = TaskCardHandlers & {
   onRefresh: () => void;
   /** Opens New Task from an empty Backlog. Null when the workspace cannot create tasks now. */
   onNewTask: (() => void) | null;
+  /** Board information that scrolls above the lane's tasks or empty state. */
+  header?: ReactElement | null;
 };
 
 const keyOf = (task: TaskCardData): string => task.id;
@@ -45,6 +47,7 @@ export const BoardColumnList = memo(function BoardColumnList({
   isRefreshing,
   onRefresh,
   onNewTask,
+  header,
   onOpenDetails,
   onAction,
   onOpenSession,
@@ -91,6 +94,7 @@ export const BoardColumnList = memo(function BoardColumnList({
         ]}
         accessibilityLabel={`${column.title} tasks`}
         refreshControl={<ListRefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+        ListHeaderComponent={header}
         ListEmptyComponent={<LaneEmpty column={column} onNewTask={onNewTask} />}
       />
     </LaneShownContext>

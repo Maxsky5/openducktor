@@ -91,11 +91,12 @@ export function RuntimeRail({
 const styles = StyleSheet.create((theme) => ({
   rail: { gap: 6, paddingHorizontal: theme.layout.screenPadding },
   tab: {
-    height: 40,
+    minHeight: 40,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 12,
+    paddingVertical: theme.space.xs,
     borderRadius: theme.radius.md,
     borderCurve: "continuous",
     borderWidth: 1,

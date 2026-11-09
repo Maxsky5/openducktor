@@ -19,10 +19,11 @@ import { useOpenWorkspaceChat } from "@/features/new-chat/use-open-workspace-cha
 import { useTerminalBridge } from "@/features/terminals/use-terminal-bridge";
 import { NoOpenWorkspaceState } from "@/features/workspaces/no-open-workspace";
 import { useCommandGate } from "@/host-session/active-session-context";
+import { ConnectionBanner } from "@/host-session/connection-banner";
 import { HostConnectionState, useHostUnavailable } from "@/host-session/host-connection-state";
 import { routes } from "@/navigation/routes";
 import { useTabBarSpace } from "@/navigation/tab-bar/tab-bar-metrics";
-import { useSearchBarColors } from "@/navigation/stack-theme";
+import { useHeaderSearchOptions } from "@/navigation/stack-theme";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { Button } from "@/ui/button";
 import { SegmentedControl } from "@/ui/fields";
@@ -266,11 +267,12 @@ export function SessionsScreen(): ReactElement {
 
   const grouped = grouping.grouping === "task";
   const { changeGrouping, disabled: groupingDisabled } = grouping;
-  const searchColors = useSearchBarColors();
+  const searchOptions = useHeaderSearchOptions();
   const options = useMemo(
     (): NativeStackNavigationOptions => ({
       title: "Sessions",
       headerLargeTitleEnabled: Platform.OS === "ios",
+      headerTransparent: Platform.OS === "ios",
       headerRight: () => (
         <SessionsHeaderActions
           workspace={selectedWorkspace}
@@ -280,14 +282,14 @@ export function SessionsScreen(): ReactElement {
         />
       ),
       headerSearchBarOptions: {
-        ...searchColors,
+        ...searchOptions,
         placeholder: "Search sessions",
         autoCapitalize: "none",
         onChangeText: (event) => setQuery(event.nativeEvent.text),
         onCancelButtonPress: () => setQuery(""),
       },
     }),
-    [changeGrouping, grouped, groupingDisabled, searchColors, selectedWorkspace],
+    [changeGrouping, grouped, groupingDisabled, searchOptions, selectedWorkspace],
   );
 
   const scopeOptions = useMemo(
@@ -302,17 +304,21 @@ export function SessionsScreen(): ReactElement {
     [selectedWorkspace],
   );
   const header = useMemo(
-    () =>
-      workspaces.length > 1 ? (
-        <View style={styles.scope}>
-          <SegmentedControl
-            label="Session list scope"
-            options={scopeOptions}
-            value={scope}
-            onChange={setScope}
-          />
-        </View>
-      ) : null,
+    () => (
+      <>
+        <ConnectionBanner />
+        {workspaces.length > 1 ? (
+          <View style={styles.scope}>
+            <SegmentedControl
+              label="Session list scope"
+              options={scopeOptions}
+              value={scope}
+              onChange={setScope}
+            />
+          </View>
+        ) : null}
+      </>
+    ),
     [scope, scopeOptions, workspaces.length],
   );
 
@@ -325,7 +331,7 @@ export function SessionsScreen(): ReactElement {
   });
   const searching = query.trim().length > 0;
   return (
-    <Screen background="sidebar">
+    <Screen background="sidebar" banner={false}>
       <Stack.Screen options={options} />
       <SessionCommandsContext value={terminalController}>
         {/* A wide window, such as a phone in landscape, keeps the rows at a readable width. */}
@@ -402,14 +408,19 @@ function SessionsScreenStateView({
     case "loading":
       return <SessionListSkeleton header={header} />;
     case "no_workspace":
-      return workspacesError ? (
-        <ErrorState
-          title="Workspaces did not load"
-          message={workspacesError}
-          onRetry={onRetryWorkspaces}
-        />
-      ) : (
-        <NoOpenWorkspaceState />
+      return (
+        <ScrollView contentContainerStyle={styles.grow} contentInsetAdjustmentBehavior="automatic">
+          {header}
+          {workspacesError ? (
+            <ErrorState
+              title="Workspaces did not load"
+              message={workspacesError}
+              onRetry={onRetryWorkspaces}
+            />
+          ) : (
+            <NoOpenWorkspaceState />
+          )}
+        </ScrollView>
       );
     case "no_sessions":
       return <NoSessionsState header={header} workspaceId={workspaceId} refresh={refresh} />;

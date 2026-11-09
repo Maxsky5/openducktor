@@ -87,7 +87,6 @@ export const ScopeTabs = memo(function ScopeTabs({
             <Text
               variant="subhead"
               weight={selected ? "semibold" : "medium"}
-              numberOfLines={1}
               style={selected ? styles.tabSelected : styles.tabLabel}
             >
               {option.label}
@@ -306,9 +305,10 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     gap: 6,
     paddingHorizontal: theme.space.sm,
+    paddingVertical: theme.space.xs,
   },
-  tabLabel: { flexShrink: 1, color: theme.desktop.mutedForeground },
-  tabSelected: { flexShrink: 1, color: theme.desktop.foreground },
+  tabLabel: { flexShrink: 1, textAlign: "center", color: theme.desktop.mutedForeground },
+  tabSelected: { flexShrink: 1, textAlign: "center", color: theme.desktop.foreground },
   tabCount: {
     minWidth: 18,
     paddingHorizontal: 6,

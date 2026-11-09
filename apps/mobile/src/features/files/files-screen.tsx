@@ -11,14 +11,14 @@ import {
   useRouter,
 } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
-import { type DimensionValue, ScrollView, View } from "react-native";
+import { type DimensionValue, Platform, ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { WorkOwner } from "@/features/work-owner/work-owner-context";
 import { toWorkOwnerParams } from "@/features/work-owner/work-owner-params";
 import { WorkOwnerScreen } from "@/features/work-owner/work-owner-screen";
 import { useCommandGate } from "@/host-session/active-session-context";
 import { routes } from "@/navigation/routes";
-import { useSearchBarColors } from "@/navigation/stack-theme";
+import { useHeaderSearchOptions } from "@/navigation/stack-theme";
 import { useClipboardCopy } from "@/platform/use-clipboard-copy";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { IconButton } from "@/ui/icon-button";
@@ -26,6 +26,7 @@ import { SkeletonFrame } from "@/ui/placeholders";
 import { EmptyState, ErrorState } from "@/ui/states";
 import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
+import { SearchField } from "@/ui/search-field";
 import { ListRefreshControl } from "@/ui/refresh-control";
 import { useScreenEndSpace } from "@/ui/screen";
 import { usePullRefresh } from "@/ui/use-pull-refresh";
@@ -123,7 +124,10 @@ function FilesContent({ owner, directory }: { owner: WorkOwner; directory: strin
   // The pull gesture shows its own progress. Reads that start on focus show none.
   const { pulling, pull: pullRefresh } = usePullRefresh(refetch);
   const loaded = tree.data !== undefined;
-  const searchColors = useSearchBarColors();
+  const searchOptions = useHeaderSearchOptions();
+  const searchPlaceholder = directory
+    ? `Search in ${nameOf(directory)}`
+    : `Search ${index.fileCount} Files`;
   const options = useMemo(() => {
     const next: NativeStackNavigationOptions = {
       title: directory ? nameOf(directory) : "Files",
@@ -137,19 +141,17 @@ function FilesContent({ owner, directory }: { owner: WorkOwner; directory: strin
         />
       ),
     };
-    if (loaded) {
+    if (loaded && Platform.OS !== "ios") {
       next.headerSearchBarOptions = {
-        ...searchColors,
-        placeholder: directory
-          ? `Search in ${nameOf(directory)}`
-          : `Search ${index.fileCount} Files`,
+        ...searchOptions,
+        placeholder: searchPlaceholder,
         autoCapitalize: "none",
         onChangeText: (event) => setQuery(event.nativeEvent.text),
         onCancelButtonPress: () => setQuery(""),
       };
     }
     return next;
-  }, [directory, index.fileCount, isFetching, loaded, refresh, searchColors, workingDirectory]);
+  }, [directory, isFetching, loaded, refresh, searchOptions, searchPlaceholder, workingDirectory]);
   const renderItem = useCallback<ListRenderItem<FileTreeRow>>(
     ({ item }) => (
       <FileTreeRowView
@@ -190,9 +192,13 @@ function FilesContent({ owner, directory }: { owner: WorkOwner; directory: strin
           ) : undefined
         }
         ListHeaderComponent={
-          <FilesListHeader
-            rootPath={directory === "" && !searching ? view.rootPath : null}
+          <LoadedFilesHeader
+            directory={directory}
+            rootPath={view.rootPath}
             refreshError={tree.error}
+            query={query}
+            placeholder={searchPlaceholder}
+            onSearch={setQuery}
           />
         }
         ListEmptyComponent={<FilesListEmpty query={searching ? query.trim() : null} />}
@@ -263,6 +269,42 @@ function FilesStatus({
         />
       );
   }
+}
+
+/** Search and directory context stay mounted while the loaded list changes its results. */
+function LoadedFilesHeader({
+  directory,
+  rootPath,
+  refreshError,
+  query,
+  placeholder,
+  onSearch,
+}: {
+  directory: string;
+  rootPath: string;
+  refreshError: Error | null;
+  query: string;
+  placeholder: string;
+  onSearch: (query: string) => void;
+}): ReactElement {
+  return (
+    <>
+      {Platform.OS === "ios" ? (
+        <View style={styles.header}>
+          <SearchField
+            value={query}
+            onChangeText={onSearch}
+            placeholder={placeholder}
+            accessibilityLabel="Search files"
+          />
+        </View>
+      ) : null}
+      <FilesListHeader
+        rootPath={directory === "" && query.trim().length === 0 ? rootPath : null}
+        refreshError={refreshError}
+      />
+    </>
+  );
 }
 
 /** The working directory of the top folder, and a refresh that failed after the first read. */

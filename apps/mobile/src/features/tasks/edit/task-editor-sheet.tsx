@@ -24,11 +24,13 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { View } from "react-native";
+import type { KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
 import { StyleSheet } from "react-native-unistyles";
 import { useCommandGate } from "@/host-session/active-session-context";
 import { SheetScreen } from "@/navigation/sheet-screen";
@@ -251,7 +253,11 @@ export function TaskEditorSheet({
     revokePreviewUrl: releasePickedImagePreview,
     collectAssetIds: collectDescriptionAssetIds,
   });
-  const { mode, editSection, isFormDisabled, isBusy } = controller;
+  const { mode, editSection, step, isFormDisabled, isBusy } = controller;
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
+  useLayoutEffect(() => {
+    if (mode === "create") scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [mode, step]);
   useDiscardConfirmation(controller, confirmDiscard);
   const images = useDescriptionImages(controller);
   const requestClose = useEditorClose(controller, confirmDiscard, allowRemovalRef);
@@ -273,6 +279,7 @@ export function TaskEditorSheet({
     >
       <Screen background="sheet">
         <ActionForm
+          scrollRef={scrollRef}
           note={editorNote({ shown: primaryLabel !== null, commandsOpen: gate.open, titleMissing })}
           primary={
             primaryLabel ? <EditorSaveButton controller={controller} label={primaryLabel} /> : null

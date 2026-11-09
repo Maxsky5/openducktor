@@ -19,7 +19,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useNavigation } from "expo-router";
 import { type ReactElement, useState } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { SheetFrame } from "@/navigation/sheet-frame";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -206,6 +206,8 @@ function ArchiveChatForm({
 }): ReactElement {
   const { workspace, record } = target;
   const navigation = useNavigation();
+  const { fontScale } = useWindowDimensions();
+  const enlarged = fontScale > 1.3;
   // Worktree removal starts turned on, as on desktop.
   const [wantsWorktreeRemoval, setWantsWorktreeRemoval] = useState(true);
   const preview = useQuery({
@@ -253,13 +255,13 @@ function ArchiveChatForm({
           warnings={form.warnings}
           archiveError={archive.error}
         />
-        <View style={styles.actions}>
+        <View style={[styles.actions, enlarged && styles.stackedActions]}>
           <Button
             label="Cancel"
             variant="outline"
             size="lg"
             fill
-            style={styles.action}
+            style={[styles.action, enlarged && styles.stackedAction]}
             disabled={archive.isPending}
             onPress={() => closeScreen(navigation)}
           />
@@ -269,7 +271,7 @@ function ArchiveChatForm({
             size="lg"
             icon="archive"
             fill
-            style={styles.action}
+            style={[styles.action, enlarged && styles.stackedAction]}
             command
             loading={archive.isPending}
             disabled={!form.canArchive}
@@ -358,5 +360,7 @@ const styles = StyleSheet.create((theme) => ({
   warning: { flexDirection: "row", gap: theme.space.sm, alignItems: "flex-start" },
   warningText: { flex: 1, color: theme.desktop.destructiveMuted },
   actions: { flexDirection: "row", gap: theme.space.md },
+  stackedActions: { flexDirection: "column" },
   action: { flex: 1, flexBasis: 0, minWidth: 0 },
+  stackedAction: { flex: 0, flexBasis: "auto" },
 }));
