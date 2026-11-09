@@ -27,6 +27,7 @@ import {
 } from "./menu-columns";
 import { Text } from "./text";
 import { Touchable } from "./touchable";
+import { POPOVER_EDGE } from "./popover-placement";
 
 export type ActionMenuItem = {
   id: string;
@@ -132,13 +133,16 @@ const menuLayout = (
     Math.max(MENU_ITEM_HEIGHT, TITLE_LINE * scale + 10) + (item.detail ? DETAIL_LINE * scale : 0);
   const headingHeight = title ? HEADING_LINE * scale + 18 : 0;
   const ordered = orderMenuItems(items);
+  const window = {
+    width: screen.width - insets.left - insets.right,
+    height: screen.height - insets.top - insets.bottom,
+  };
+  const columnWidth = Math.min(MENU_COLUMN_WIDTH * scale, window.width - 2 * POPOVER_EDGE);
   const columnCount = menuColumnCount({
     itemsHeight: ordered.reduce((sum, item) => sum + itemHeight(item), 0),
     headingHeight,
-    window: {
-      width: screen.width - insets.left - insets.right,
-      height: screen.height - insets.top - insets.bottom,
-    },
+    window,
+    columnWidth,
   });
   const columns = splitMenuColumns(ordered, columnCount);
   const tallestColumn = Math.max(
@@ -147,7 +151,7 @@ const menuLayout = (
   return {
     columns,
     size: {
-      width: MENU_COLUMN_WIDTH * columns.length,
+      width: columnWidth * columns.length,
       height: tallestColumn + headingHeight + 2 * MENU_CARD_PADDING,
     },
   };

@@ -24,5 +24,13 @@ class OpenDucktorKeyboardModule : Module() {
         view.reportsHardwareEnter = enabled
       }
     }
+
+    View(ModalStatusBarView::class) {
+      Name("ModalStatusBar")
+
+      Prop("darkIcons") { view: ModalStatusBarView, darkIcons: Boolean ->
+        view.darkIcons = darkIcons
+      }
+    }
   }
 }

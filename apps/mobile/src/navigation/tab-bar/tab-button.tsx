@@ -189,7 +189,6 @@ const styles = StyleSheet.create((theme) => ({
     height: 46,
     minWidth: 60,
     maxWidth: "92%",
-    paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
     gap: 1,

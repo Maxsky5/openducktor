@@ -7,7 +7,7 @@ import {
   useContext,
   useState,
 } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewRef,
@@ -33,14 +33,17 @@ type FormFooterProps = {
   secondary?: ReactNode;
 };
 
+/** Larger text puts the actions in the form scroll, so a tall footer leaves room for the fields. */
+export const useScrollableFormFooter = (): boolean => useWindowDimensions().fontScale > 1.3;
+
 /**
  * The footer of a workflow form, as the desktop dialog footer: a top rule, the reason why the
  * primary action is disabled, then equally wide actions in a row. In a sheet, Cancel is the
  * close control, so the sheet header shows only its title. The forms show in
  * full sheets, which the keyboard does not resize on iOS or Android, so the footer moves up with
- * the keyboard. A low window, such as a phone in landscape, puts the reason and the actions in one
- * row, so the fields keep the height. `onHeight` reports the footer height, so the content can
- * scroll above it.
+ * the keyboard. A low window puts the reason and actions in one row at normal text size.
+ * Larger text stacks the actions in the form scroll. `onHeight` reports a fixed footer's height,
+ * so the content can scroll above it.
  */
 export function FormFooter({
   note,
@@ -52,6 +55,7 @@ export function FormFooter({
   const insets = useSafeAreaInsets();
   const sheet = useSheetClose();
   const compact = useCompactHeight();
+  const scrollable = useScrollableFormFooter();
   const claimFooter = sheet?.claimFooter;
   const loading = useContext(ModalLoadingContext);
   // Before the first paint, so the header never shows its own close control for a frame.
@@ -71,21 +75,26 @@ export function FormFooter({
       fill
     />
   ) : null;
-  const Bar = compact ? OneRowFooterBar : StackedFooterBar;
+  const Bar = compact && !scrollable ? OneRowFooterBar : StackedFooterBar;
+  const bar = (
+    <Bar
+      note={note}
+      primary={primary}
+      secondary={secondary}
+      cancel={cancel}
+      inSheet={sheet !== null}
+      bottom={bottom}
+      onHeight={onHeight}
+      stacked={scrollable}
+    />
+  );
+  if (scrollable) return bar;
   return (
     <KeyboardStickyView
       // The safe area padding goes under the keyboard, so a small gap stays above it.
       offset={{ closed: 0, opened: bottom - theme.space.md }}
     >
-      <Bar
-        note={note}
-        primary={primary}
-        secondary={secondary}
-        cancel={cancel}
-        inSheet={sheet !== null}
-        bottom={bottom}
-        onHeight={onHeight}
-      />
+      {bar}
     </KeyboardStickyView>
   );
 }
@@ -96,6 +105,7 @@ type FooterBarProps = FormFooterProps & {
   inSheet: boolean;
   bottom: number;
   onHeight: ((height: number) => void) | undefined;
+  stacked: boolean;
 };
 
 /** The reason on its own line, then the third action, then Cancel and the primary action. */
@@ -107,6 +117,7 @@ function StackedFooterBar({
   inSheet,
   bottom,
   onHeight,
+  stacked,
 }: FooterBarProps): ReactElement {
   return (
     <View
@@ -124,9 +135,11 @@ function StackedFooterBar({
         </Text>
       ) : null}
       {inSheet && secondary ? <View style={styles.actions}>{secondary}</View> : null}
-      <View style={styles.actions}>
-        {cancel || secondary ? <View style={styles.action}>{cancel ?? secondary}</View> : null}
-        {primary ? <View style={styles.action}>{primary}</View> : null}
+      <View style={[styles.actions, stacked && styles.stackedActions]}>
+        {cancel || secondary ? (
+          <View style={stacked ? undefined : styles.action}>{cancel ?? secondary}</View>
+        ) : null}
+        {primary ? <View style={stacked ? undefined : styles.action}>{primary}</View> : null}
       </View>
     </View>
   );
@@ -183,6 +196,7 @@ export function ActionForm({
   }
 >): ReactElement {
   const [footerHeight, setFooterHeight] = useState(0);
+  const scrollableFooter = useScrollableFormFooter();
   return (
     <View style={styles.root}>
       <KeyboardAwareScrollView
@@ -190,11 +204,21 @@ export function ActionForm({
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
-        bottomOffset={footerHeight}
+        bottomOffset={scrollableFooter ? 0 : footerHeight}
       >
         {children}
+        {scrollableFooter ? (
+          <FormFooter note={note} primary={primary} secondary={secondary} />
+        ) : null}
       </KeyboardAwareScrollView>
-      <FormFooter note={note} primary={primary} secondary={secondary} onHeight={setFooterHeight} />
+      {scrollableFooter ? null : (
+        <FormFooter
+          note={note}
+          primary={primary}
+          secondary={secondary}
+          onHeight={setFooterHeight}
+        />
+      )}
     </View>
   );
 }
@@ -212,6 +236,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   note: { textAlign: "center" },
   actions: { flexDirection: "row", gap: theme.space.sm },
+  stackedActions: { flexDirection: "column" },
   action: { flex: 1, flexBasis: 0, minWidth: 0 },
   compactBar: { flexDirection: "row", alignItems: "center", paddingTop: theme.space.sm },
   compactNote: { flex: 1, minWidth: 0 },

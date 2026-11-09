@@ -15,6 +15,8 @@ export const useNativeStackTheme = (
   const theme = useAppTheme();
   const color = background === "grouped" ? theme.colors.groupedBackground : theme.colors.background;
   return {
+    // Composite screens own fixed controls above their scroll views. Keep those below the bar.
+    headerTransparent: false,
     headerStyle: { backgroundColor: color },
     headerTintColor: theme.colors.label,
     headerTitleStyle: { ...sansWeight("semibold"), fontSize: 17, color: theme.colors.label },
@@ -33,17 +35,20 @@ export const useNativeStackTheme = (
 /** A root screen of a tab: a large title on iOS that collapses on scroll. */
 export const rootScreenOptions: NativeStackNavigationOptions = {
   headerLargeTitleEnabled: Platform.OS === "ios",
+  headerTransparent: Platform.OS === "ios",
 };
 
 /**
- * The colors of a native header search bar from the theme, so its icons, text, and hint follow
- * light and dark mode on both platforms.
+ * A stable iOS header search button keeps enlarged text clear of fixed workspace controls.
+ * Toolbar integration stays off so the custom bottom navigation cannot cover search.
  */
-export const useSearchBarColors = () => {
+export const useHeaderSearchOptions = () => {
   const theme = useAppTheme();
   const { label, tertiaryLabel, tint, surface } = theme.colors;
-  return useMemo(
+  return useMemo<NonNullable<NativeStackNavigationOptions["headerSearchBarOptions"]>>(
     () => ({
+      placement: Platform.OS === "ios" ? "integratedButton" : "stacked",
+      allowToolbarIntegration: false,
       headerIconColor: label,
       textColor: label,
       hintTextColor: tertiaryLabel,

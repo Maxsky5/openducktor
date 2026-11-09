@@ -258,7 +258,9 @@ export function SegmentedControl<Value extends string>({
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
     >
       {width > 0 ? (
-        <Animated.View style={[styles.thumb, thumbPosition(segmentWidth, index)]} />
+        <Animated.View style={[styles.thumb, thumbPosition(segmentWidth, index)]}>
+          <View pointerEvents="none" style={styles.thumbSurface} />
+        </Animated.View>
       ) : null}
       {options.map((option) => {
         const selected = option.value === value;
@@ -274,12 +276,7 @@ export function SegmentedControl<Value extends string>({
             style={[styles.segment, option.disabled && styles.segmentDisabled]}
           >
             {option.leading}
-            <Text
-              variant="subhead"
-              weight="medium"
-              numberOfLines={1}
-              style={styles.segmentLabel(selected)}
-            >
+            <Text variant="subhead" weight="medium" style={styles.segmentLabel(selected)}>
               {option.label}
             </Text>
           </Pressable>
@@ -372,6 +369,9 @@ const styles = StyleSheet.create((theme) => ({
     top: 3,
     bottom: 3,
     left: 3,
+  },
+  thumbSurface: {
+    ...StyleSheet.absoluteFillObject,
     borderRadius: theme.radius.md,
     borderCurve: "continuous",
     boxShadow: theme.shadows.card,
@@ -387,9 +387,12 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: theme.space.sm,
+    paddingVertical: theme.space.xs,
   },
   segmentDisabled: { opacity: 0.35 },
   segmentLabel: (selected: boolean) => ({
+    flexShrink: 1,
+    textAlign: "center",
     color: selected ? theme.desktop.foreground : theme.desktop.mutedForeground,
   }),
 }));

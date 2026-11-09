@@ -31,7 +31,9 @@ import { type EdgeInsets, useSafeAreaInsets } from "react-native-safe-area-conte
 import { StyleSheet } from "react-native-unistyles";
 import { scheduleOnRN } from "react-native-worklets";
 import { useMenuCoversToasts } from "@/feedback/feedback-host";
+import { useAppTheme } from "@/theme/app-theme-context";
 import { motion } from "@/theme/tokens";
+import { ModalSystemBars } from "./app-system-bars";
 import { type PopoverPlacement, placePopover } from "./popover-placement";
 
 /** The place of an open card on the screen, and its width. */
@@ -79,9 +81,6 @@ export const useAnchoredPopover = (cardSize: PopoverCardSize): AnchoredPopoverSt
   const screen = useWindowDimensions();
   // The card size and the window are read when the card opens, so `show` keeps its identity.
   const latest = useRef({ cardSize, screen });
-  useLayoutEffect(() => {
-    latest.current = { cardSize, screen };
-  });
   const show = useCallback(() => {
     trigger.current?.measureInWindow((x, y, triggerWidth, height) => {
       const { cardSize: sizeOf, screen } = latest.current;
@@ -117,6 +116,15 @@ export const useAnchoredPopover = (cardSize: PopoverCardSize): AnchoredPopoverSt
     },
     [hide, progress],
   );
+  useLayoutEffect(() => {
+    const previous = latest.current.screen;
+    const changed =
+      previous.width !== screen.width ||
+      previous.height !== screen.height ||
+      previous.fontScale !== screen.fontScale;
+    latest.current = { cardSize, screen };
+    if (changed && placement !== null) close();
+  });
   const view = useMemo(
     () => ({ placement, progress, close, dismissed }),
     [close, dismissed, placement, progress],
@@ -142,6 +150,7 @@ export function AnchoredPopover({
   return (
     <Modal
       visible={placement !== null}
+      supportedOrientations={["portrait", "portrait-upside-down", "landscape"]}
       transparent
       animationType="none"
       statusBarTranslucent
@@ -166,6 +175,7 @@ function PopoverCard({
   accessibilityLabel,
   children,
 }: CardProps & { popover: PopoverView; placement: OpenPlacement }): ReactElement {
+  const theme = useAppTheme();
   useMenuCoversToasts(true);
   const { progress, close } = popover;
   const reducedMotion = useReducedMotion();
@@ -180,6 +190,7 @@ function PopoverCard({
   return (
     // A modal is its own native window, so its touches need their own gesture root.
     <GestureHandlerRootView style={styles.root}>
+      <ModalSystemBars icons={theme.scheme === "dark" ? "light" : "dark"} />
       <Pressable
         style={styles.backdrop}
         onPress={() => close()}

@@ -131,9 +131,7 @@ export function Button({
           variant={variant}
           foreground={foreground}
         />
-        <Text numberOfLines={1} style={[styles.label, styles[LABELS[size]], foreground]}>
-          {label}
-        </Text>
+        <Text style={[styles.label, styles[LABELS[size]], foreground]}>{label}</Text>
         {trailingIcon && !loading ? (
           <Icon name={trailingIcon} size={iconSize} colorStyle={foreground} />
         ) : null}
@@ -194,13 +192,14 @@ export function ButtonPlaceholder({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  hug: { alignSelf: "flex-start" },
-  fill: { alignSelf: "stretch", flexGrow: 1 },
+  hug: { alignSelf: "flex-start", maxWidth: "100%" },
+  fill: { alignSelf: "stretch", flexGrow: 1, flexShrink: 1, minWidth: 0 },
   button: {
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "transparent",
+    paddingVertical: theme.space.xs,
   },
   filled: { backgroundColor: theme.colors.tintFill, boxShadow: theme.shadows.primary },
   // The desktop outline button: the card color inside the input border.
@@ -221,10 +220,10 @@ const styles = StyleSheet.create((theme) => ({
   sm: { minHeight: HEIGHTS.sm, paddingHorizontal: 12 },
   md: { minHeight: HEIGHTS.md, paddingHorizontal: 16 },
   lg: { minHeight: HEIGHTS.lg, paddingHorizontal: 20 },
-  content: { flexDirection: "row", alignItems: "center", gap: 6 },
+  content: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: "100%" },
   placeholder: (size: "sm" | "md" | "lg", width: number, fontScale: number) => ({
     width,
-    height: Math.max(HEIGHTS[size], LABEL_LINE_HEIGHTS[size] * fontScale + 2),
+    height: Math.max(HEIGHTS[size], LABEL_LINE_HEIGHTS[size] * fontScale + 2 * theme.space.xs + 2),
     borderRadius: size === "lg" ? radius.lg : radius.md,
     borderCurve: "continuous",
     backgroundColor: theme.colors.fill,
@@ -234,6 +233,8 @@ const styles = StyleSheet.create((theme) => ({
     ...theme.type.headline,
     fontFamily: theme.fonts.sans.medium,
     fontWeight: "500",
+    flexShrink: 1,
+    textAlign: "center",
   },
   labelSm: { fontSize: 13, lineHeight: LABEL_LINE_HEIGHTS.sm },
   labelMd: { fontSize: 14, lineHeight: LABEL_LINE_HEIGHTS.md },

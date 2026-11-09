@@ -1,3 +1,4 @@
+import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import { createContext, type PropsWithChildren, type ReactElement, use, useMemo } from "react";
 // The one place that follows the theme with `useUnistyles`.
 // oxlint-disable-next-line no-restricted-imports
@@ -10,12 +11,17 @@ const AppThemeContext = createContext<AppTheme | null>(null);
  * Gives the current theme to the views that need theme values outside styles, such as the
  * underlay color of a control or the color of a spinner. Only this provider follows the theme
  * with `useUnistyles`, so a list row reads the theme from context and adds no Unistyles listener.
- * It follows the resolved scheme, so system theme changes also update React consumers.
+ * It follows the resolved scheme, so system theme changes also update React consumers and native
+ * navigation controls.
  */
 export function AppThemeProvider({ children }: PropsWithChildren): ReactElement {
   const { scheme } = useUnistyles().theme;
   const theme = useMemo(() => UnistylesRuntime.getTheme(scheme), [scheme]);
-  return <AppThemeContext value={theme}>{children}</AppThemeContext>;
+  return (
+    <AppThemeContext value={theme}>
+      <ThemeProvider value={scheme === "dark" ? DarkTheme : DefaultTheme}>{children}</ThemeProvider>
+    </AppThemeContext>
+  );
 }
 
 /** The current theme, for values outside styles. Styles read the theme in `StyleSheet.create`. */

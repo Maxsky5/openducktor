@@ -4,6 +4,10 @@ This local Expo module reports hardware keyboard Enter presses with their Shift 
 React Native key events do not include the Shift state.
 Expo autolinking finds the module in `apps/mobile/modules`.
 
+On Android, the `ModalStatusBar` native view applies its `darkIcons` prop to the status bar of its own window because the keyboard controller styles only the activity window.
+
+`ui/app-system-bars.tsx` mounts this view in each Android modal.
+
 ## API
 
 `index.ts` exports `HardwareKeyboardView`.

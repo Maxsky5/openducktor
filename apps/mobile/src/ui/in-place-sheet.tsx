@@ -88,46 +88,19 @@ export function InPlaceSheet({
           style={styles.fill}
           edges={ios ? ["bottom", "left", "right"] : ["top", "bottom", "left", "right"]}
         >
-          <View style={styles.header}>
-            {ios ? <View style={styles.headerSide} /> : null}
-            <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
-              {title}
-            </Text>
-            {ios ? (
-              <View style={[styles.headerSide, styles.headerEnd]}>
-                {showCloseControl ? (
-                  <Touchable
-                    feedback="opacity"
-                    onPress={onClose}
-                    disabled={!dismissible}
-                    hitSlop={12}
-                    accessibilityRole="button"
-                    accessibilityLabel="Done"
-                  >
-                    <Text variant="headline" tone="tint">
-                      Done
-                    </Text>
-                  </Touchable>
-                ) : null}
-              </View>
-            ) : null}
-            {!ios && showCloseControl ? (
-              <IconButton
-                icon="x"
-                variant="filled"
-                accessibilityLabel="Close"
-                onPress={onClose}
-                disabled={!dismissible}
-              />
-            ) : null}
-          </View>
+          <InPlaceSheetHeader
+            ios={ios}
+            title={title}
+            onClose={onClose}
+            dismissible={dismissible}
+            showCloseControl={showCloseControl}
+          />
           {intro ? <View style={styles.intro}>{intro}</View> : null}
-          {/* An iOS page sheet starts below the screen top, so the view reads its screen position.
-                The body moves with a transform and changes its size once, so a list in it does not
-                lay out again on each keyboard frame. The clip keeps it under the sheet header. */}
+          {/* Measure the page sheet's screen position. On iOS, padding keeps focused fields
+              below the fixed header instead of translating the body behind it. */}
           <View style={styles.keyboardClip}>
             <KeyboardAvoidingView
-              behavior="translate-with-padding"
+              behavior={ios ? "padding" : "translate-with-padding"}
               automaticOffset
               style={styles.body}
             >
@@ -154,6 +127,61 @@ export function InPlaceSheet({
   );
 }
 
+/** The platform title bar and its guarded close control. */
+function InPlaceSheetHeader({
+  ios,
+  title,
+  onClose,
+  dismissible,
+  showCloseControl,
+}: Pick<InPlaceSheetProps, "title" | "onClose"> & {
+  ios: boolean;
+  dismissible: boolean;
+  showCloseControl: boolean;
+}): ReactElement {
+  return (
+    <View style={styles.header}>
+      {ios ? <View style={styles.headerSide} /> : null}
+      <Text
+        variant={ios ? "headline" : "title2"}
+        style={[styles.title, ios && styles.centeredTitle]}
+        accessibilityRole="header"
+        numberOfLines={1}
+      >
+        {title}
+      </Text>
+      {ios ? (
+        <View style={[styles.headerSide, styles.headerEnd]}>
+          {showCloseControl ? (
+            <Touchable
+              feedback="opacity"
+              onPress={onClose}
+              disabled={!dismissible}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Done"
+              style={styles.done}
+            >
+              <Text variant="headline" tone="tint">
+                Done
+              </Text>
+            </Touchable>
+          ) : null}
+        </View>
+      ) : null}
+      {!ios && showCloseControl ? (
+        <IconButton
+          icon="x"
+          variant="filled"
+          accessibilityLabel="Close"
+          onPress={onClose}
+          disabled={!dismissible}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
   fill: { flex: 1 },
   root: { flex: 1 },
@@ -167,12 +195,16 @@ const styles = StyleSheet.create((theme) => ({
     paddingLeft: Platform.select({ ios: theme.layout.screenPadding, default: theme.space.xl }),
     paddingRight: Platform.select({ ios: theme.layout.screenPadding, default: theme.space.lg }),
   },
-  headerSide: { width: 72 },
+  headerSide: { minWidth: theme.touchTarget },
   headerEnd: { alignItems: "flex-end" },
-  title: Platform.select({
-    ios: { ...theme.type.headline, flex: 1, textAlign: "center", color: theme.colors.label },
-    default: { ...theme.type.title2, flex: 1, color: theme.colors.label },
-  }),
+  done: {
+    minWidth: theme.touchTarget,
+    minHeight: theme.touchTarget,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  title: { flex: 1 },
+  centeredTitle: { textAlign: "center" },
   body: { flex: 1 },
   intro: {
     paddingHorizontal: theme.layout.screenPadding,

@@ -23,7 +23,7 @@ export const sheetOptions = (title: string): NativeStackNavigationOptions => ({
 export const choiceSheetOptions = (title: string): NativeStackNavigationOptions =>
   Platform.OS === "android"
     ? { ...sheetOptions(title), sheetAllowedDetents: [0.6] }
-    : sheetOptions(title);
+    : { ...sheetOptions(title), headerTransparent: true };
 
 /**
  * A full-height form with long content, such as task editing. iOS shows a form sheet, which asks
