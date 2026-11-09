@@ -15,6 +15,7 @@ import {
 import { Effect } from "effect";
 import { spawn } from "node-pty";
 import { createSerialLane } from "../../effect/serial-gate";
+import { createPtyOutputCoalescer } from "./pty-output-coalescer";
 import { prepareTerminalShell } from "./terminal-shell-integration";
 import { prepareWindowsBatch } from "./terminal-windows-batch";
 
@@ -96,13 +97,12 @@ export const createNodePtyPort = ({
               name: "xterm-256color",
               rows: plan.grid.rows,
             });
+            const output = createPtyOutputCoalescer({ deliver: handlers.onOutput });
             const dataSubscription = pty.onData((value) => {
               // Windows node-pty decodes its ConPTY socket as UTF-8 even with encoding: null.
               const data = Buffer.isBuffer(value) ? value : Buffer.from(value, "utf8");
               receivedOutput ||= data.byteLength > 0;
-              handlers.onOutput(
-                new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice(),
-              );
+              output.push(data);
             });
             const exitSubscription = pty.onExit(({ exitCode, signal }) => {
               if (closed) return;
@@ -181,6 +181,8 @@ export const createNodePtyPort = ({
             const publishExit = (): void => {
               if (exitPublished || !nativeExit) return;
               exitPublished = true;
+              // node-pty reports its last output before its exit, so the exit follows that output.
+              output.flush();
               dataSubscription.dispose();
               exitSubscription.dispose();
               handlers.onExit(nativeExit);

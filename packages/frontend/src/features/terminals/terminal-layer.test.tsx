@@ -35,7 +35,7 @@ test("offers Retry and Dismiss for a discovery failure and Dismiss for a transpo
   expect(markup).toContain('aria-label="Dismiss terminal transport error"');
 });
 
-test("keeps a read-only terminal's screen-reader DOM and removes it while hidden", async () => {
+test("detaches a hidden terminal and catches it up when it shows again", async () => {
   const terminalId = "read-only-terminal";
   const tab: TerminalTab = {
     tabId: terminalId,
@@ -112,38 +112,17 @@ test("keeps a read-only terminal's screen-reader DOM and removes it while hidden
   const view = render(content(true));
   try {
     await waitFor(() => {
-      expect(view.container.querySelectorAll(".xterm-accessibility")).toHaveLength(1);
       expect(view.getByRole("application").classList.contains("invisible")).toBe(false);
     });
     const screen = view.container.querySelector(".xterm-screen");
     expect(view.container.querySelectorAll(".xterm-screen")).toHaveLength(1);
 
-    act(() => {
-      const descriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
-      try {
-        Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
-        document.dispatchEvent(new Event("visibilitychange"));
-        expect(view.container.querySelectorAll(".xterm-accessibility")).toHaveLength(0);
-        Object.defineProperty(document, "visibilityState", {
-          configurable: true,
-          value: "visible",
-        });
-        document.dispatchEvent(new Event("visibilitychange"));
-        expect(view.container.querySelectorAll(".xterm-accessibility")).toHaveLength(1);
-      } finally {
-        if (descriptor) Object.defineProperty(document, "visibilityState", descriptor);
-        else Reflect.deleteProperty(document, "visibilityState");
-        document.dispatchEvent(new Event("visibilitychange"));
-      }
-    });
-    expect(view.container.querySelector(".xterm-screen") === screen).toBe(true);
-
     view.rerender(content(false));
-    expect(view.container.querySelectorAll(".xterm-accessibility")).toHaveLength(0);
     expect(view.container.querySelector(".xterm-screen") === screen).toBe(true);
+    await waitFor(() => expect(sentTypes).toContain("detach"));
 
-    const payload = new TextEncoder().encode("output received while hidden");
-    await act(async () => {
+    const payload = new TextEncoder().encode("output after the reveal");
+    const sendOutput = () =>
       receive(
         encodeTerminalProtocolFrame({
           message: {
@@ -157,24 +136,19 @@ test("keeps a read-only terminal's screen-reader DOM and removes it while hidden
           payload,
         }),
       );
-    });
-    await waitFor(() => expect(sentTypes).toContain("ack"));
-    expect(view.container.querySelectorAll(".xterm-accessibility")).toHaveLength(0);
+    // A hidden terminal takes no output, so it parses and acknowledges nothing.
+    await act(async () => sendOutput());
+    expect(sentTypes).not.toContain("ack");
 
     view.rerender(content(true));
-    await waitFor(() =>
-      expect(view.container.querySelector(".xterm-accessibility-tree")?.textContent).toContain(
-        "output received while hidden",
-      ),
-    );
+    await waitFor(() => expect(sentTypes).toEqual(["attach", "detach", "attach"]));
+    await act(async () => sendOutput());
+    await waitFor(() => expect(sentTypes).toContain("ack"));
     expect(view.container.querySelector(".xterm-screen") === screen).toBe(true);
-    expect(sentTypes.filter((type) => type === "attach")).toHaveLength(1);
-    expect(sentTypes).not.toContain("detach");
     expect(view.container.contains(document.activeElement)).toBe(false);
   } finally {
     view.unmount();
     await controller.dispose();
     await connection.dispose();
   }
-  // Restored xterm accessibility rows use a native one-second debounce.
-}, 3_000);
+});

@@ -124,9 +124,6 @@ export const createTerminalTransportController = (
     operation: () => Promise<void>,
   ): Promise<void> => terminalChannels.enqueue(terminalId, operation);
 
-  // The last grid of each attached terminal. After a reconnect, the host can have another grid,
-  // and a resize during the disconnection did not reach it, so each re-attach sends it again.
-  const grids = new Map<string, { columns: number; rows: number }>();
   const sendResize = (terminalId: string, columns: number, rows: number): Promise<void> =>
     enqueueTerminalOperation(terminalId, () =>
       send({
@@ -148,6 +145,12 @@ export const createTerminalTransportController = (
         lastConsumedSequence: terminalChannels.lastConsumedSequence(terminalId),
       }),
     );
+  };
+  /** Attaches a terminal and sends its last grid again. */
+  const attachWithGrid = (terminalId: string): Promise<void>[] => {
+    const attached = attach(terminalId);
+    const grid = terminalChannels.grid(terminalId);
+    return grid ? [attached, sendResize(terminalId, grid.columns, grid.rows)] : [attached];
   };
   const handleFrame = (frame: Uint8Array): void => {
     const decoded = decodeTerminalProtocolFrame(frame);
@@ -182,10 +185,18 @@ export const createTerminalTransportController = (
       transitionToDisconnected({ failure: decoded.message.failure });
       return;
     }
-    for (const listener of terminalChannels.listeners(decoded.message.terminalId ?? "")) {
+    const terminalId = decoded.message.terminalId ?? "";
+    // After a detach and a new attach, output of the earlier attachment can arrive before the new
+    // snapshot. The new attachment replays from the last ACK, so that output is not needed.
+    if (
+      recoveries.get(terminalId)?.boundary === null &&
+      (decoded.message.type === "output" || decoded.message.type === "screen_restore")
+    )
+      return;
+    for (const listener of terminalChannels.listeners(terminalId)) {
       listener(decoded.message, decoded.payload);
     }
-    const recovery = recoveries.get(decoded.message.terminalId ?? "");
+    const recovery = recoveries.get(terminalId);
     if (recovery) {
       if (decoded.message.type === "snapshot")
         recovery.boundary = decoded.message.snapshotSequenceEnd;
@@ -296,11 +307,7 @@ export const createTerminalTransportController = (
       return;
     }
     connectionState = { status: "connected", generation, connection: connected };
-    const attachments = terminalChannels.activeTerminalIds().flatMap((terminalId) => {
-      const attached = attach(terminalId);
-      const grid = grids.get(terminalId);
-      return grid ? [attached, sendResize(terminalId, grid.columns, grid.rows)] : [attached];
-    });
+    const attachments = terminalChannels.activeTerminalIds().flatMap(attachWithGrid);
     if (activityListeners.size > 0)
       attachments.push(send({ version: TERMINAL_PROTOCOL_VERSION, type: "observe_activity" }));
     for (const [subscriptionId, list] of lists) {
@@ -447,14 +454,13 @@ export const createTerminalTransportController = (
     subscribe(terminalId: string, listener: TerminalFrameListener): () => void {
       const shouldAttach = terminalChannels.addListener(terminalId, listener);
       if (shouldAttach && connectionState.status === "connected")
-        void attach(terminalId).catch(reportTransportFailure);
+        void Promise.all(attachWithGrid(terminalId)).catch(reportTransportFailure);
       return () => {
         const { lastListenerRemoved, wasClosing } = terminalChannels.removeListener(
           terminalId,
           listener,
         );
         if (lastListenerRemoved) {
-          grids.delete(terminalId);
           recoveries.delete(terminalId);
           notifyRecovery();
         }
@@ -483,7 +489,7 @@ export const createTerminalTransportController = (
       }),
     resize: (terminalId: string, columns: number, rows: number): Promise<void> => {
       if (terminalChannels.listeners(terminalId).size > 0) {
-        grids.set(terminalId, { columns, rows });
+        terminalChannels.setGrid(terminalId, { columns, rows });
         // The reconnect attaches the terminal again and then sends this grid.
         if (connectionState.status === "disconnected") return Promise.resolve();
       }
@@ -531,7 +537,6 @@ export const createTerminalTransportController = (
       connectionState = { status: "disposed" };
       notifyRecovery();
       recoveries.clear();
-      grids.clear();
       terminalChannels.clear();
       activity.clear();
       activityListeners.clear();

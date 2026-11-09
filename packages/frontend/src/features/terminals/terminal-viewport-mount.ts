@@ -30,7 +30,11 @@ import { createTerminalOutputSequencer } from "@openducktor/frontend-core/termin
 
 export type TerminalViewportMount = {
   activate(focus: boolean): void;
-  setVisible(visible: boolean): void;
+  /**
+   * A hidden terminal takes no output after its first screen, so it costs no work while other
+   * content shows. When it shows again, it attaches again and catches up from its last ACK.
+   */
+  setShown(shown: boolean): void;
   dispose(): void;
 };
 
@@ -39,7 +43,7 @@ type MountTerminalViewportInput = {
   terminalId: string;
   controller: TerminalTransportController;
   isActive: () => boolean;
-  isVisible: () => boolean;
+  isShown: () => boolean;
   getPlatform: () => AppPlatform | undefined;
   stageFile: (file: File) => Promise<string>;
   preparePathInput: (paths: readonly string[]) => Promise<string>;
@@ -58,7 +62,7 @@ export const mountTerminalViewport = ({
   terminalId,
   controller,
   isActive,
-  isVisible,
+  isShown,
   getPlatform,
   stageFile,
   preparePathInput,
@@ -72,12 +76,15 @@ export const mountTerminalViewport = ({
   onInteractionFailure,
 }: MountTerminalViewportInput): TerminalViewportMount => {
   let disposed = false;
+  let shown = isShown();
+  let hydrated = false;
+  let detachOutput: (() => void) | null = null;
   const reportFailure = (title: string, cause: unknown): void => {
     if (!disposed) onInteractionFailure(title, cause);
   };
   const binding = createTerminalBinding(
     container,
-    createTerminalOptions(container, { cursorBlink: true, screenReaderMode: isVisible() }),
+    createTerminalOptions(container, { cursorBlink: true }),
     (cause) => reportFailure("Terminal renderer failed", cause),
   );
   const { fitAddon, terminal } = binding;
@@ -126,7 +133,10 @@ export const mountTerminalViewport = ({
         .catch((cause) => reportFailure("Terminal output sync failed", cause));
     },
     onHydrated: () => {
-      if (!disposed) onHydrated();
+      if (disposed) return;
+      hydrated = true;
+      onHydrated();
+      syncAttachment();
     },
   });
   const resizeScheduler = createLatestResizeScheduler((columns, rows) => {
@@ -276,13 +286,32 @@ export const mountTerminalViewport = ({
       .enqueue(message, payload)
       .catch((cause) => reportFailure("Terminal output failed", cause));
   };
-  const unsubscribe = controller.subscribe(terminalId, handleFrame);
+  // A terminal reads its first screen while hidden, so it shows at once. After that, only a
+  // shown terminal takes output.
+  const syncAttachment = (): void => {
+    if (disposed) return;
+    const takesOutput = shown || !hydrated;
+    if (takesOutput && !detachOutput) {
+      detachOutput = controller.subscribe(terminalId, handleFrame);
+      return;
+    }
+    if (!takesOutput && detachOutput) {
+      // The ACK of the parsed output goes out before the detach frame.
+      outputSequencer.detach();
+      detachOutput();
+      detachOutput = null;
+    }
+  };
+  syncAttachment();
   const observer = new ResizeObserver(() => fitScheduler.schedule());
   observer.observe(container);
   if (isActive()) fitViewport();
 
   return {
-    setVisible: binding.setVisible,
+    setShown: (nextShown) => {
+      shown = nextShown;
+      syncAttachment();
+    },
     activate: (focus) => {
       binding.resetLinkState();
       activateViewport(focus ? () => terminal.focus() : null);
@@ -295,7 +324,8 @@ export const mountTerminalViewport = ({
       releaseInput = null;
       inputGate = null;
       controller.releaseEmulator(terminalId);
-      unsubscribe();
+      detachOutput?.();
+      detachOutput = null;
       observer.disconnect();
       fitScheduler.dispose();
       container.removeEventListener("paste", handleImagePaste, true);

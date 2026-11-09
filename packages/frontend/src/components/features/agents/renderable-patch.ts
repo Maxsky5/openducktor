@@ -5,8 +5,14 @@ const CLASSIC_DIFF_HEADER = /^Index: /m;
 const UNIFIED_MULTI_FILE_HEADER = /^--- .+\n\+\+\+ .+/m;
 const APPLY_PATCH_FILE_HEADER = /^\*\*\* (?:Add|Update|Delete) File: /m;
 
+/**
+ * Removes the blank text around a patch. A diff writes an empty context line as one space, so the
+ * spaces of the last line stay and the last hunk keeps the line count that its header declares.
+ */
+const trimPatch = (value: string): string => value.trimStart().replace(/[\r\n]+$/, "");
+
 function applyPatchFileContentDiff(candidate: string, filePath: string): string | null {
-  const lines = candidate.trim().split("\n");
+  const lines = trimPatch(candidate).split("\n");
   const header = lines[0] ?? "";
   const isAdd = header.startsWith("*** Add File: ");
   const isDelete = header.startsWith("*** Delete File: ");
@@ -30,7 +36,7 @@ function applyPatchFileContentDiff(candidate: string, filePath: string): string 
 }
 
 export function normalizePatchCandidate(candidate: string, filePath: string): string {
-  const trimmed = candidate.trim();
+  const trimmed = trimPatch(candidate);
   if (trimmed.length === 0) {
     return "";
   }
@@ -50,7 +56,7 @@ export function normalizePatchCandidate(candidate: string, filePath: string): st
   );
   const relevantLines =
     endPatchIndex >= 0 ? rawRelevantLines.slice(0, endPatchIndex) : rawRelevantLines;
-  const normalized = relevantLines.join("\n").trim();
+  const normalized = trimPatch(relevantLines.join("\n"));
 
   if (normalized.startsWith("@@")) {
     return `--- a/${filePath}\n+++ b/${filePath}\n${normalized}\n`;
@@ -61,7 +67,7 @@ export function normalizePatchCandidate(candidate: string, filePath: string): st
 
 function splitTrimmedNonEmpty(value: string, separator: RegExp): string[] {
   return value.split(separator).reduce<string[]>((chunks, chunk) => {
-    const trimmed = chunk.trim();
+    const trimmed = trimPatch(chunk);
     if (trimmed.length > 0) {
       chunks.push(trimmed);
     }
@@ -70,7 +76,7 @@ function splitTrimmedNonEmpty(value: string, separator: RegExp): string[] {
 }
 
 export function splitPatchCandidates(rawDiff: string): string[] {
-  const trimmed = rawDiff.trim();
+  const trimmed = trimPatch(rawDiff);
   if (trimmed.length === 0) {
     return [];
   }

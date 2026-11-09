@@ -1,8 +1,8 @@
 import {
   type CSSProperties,
+  memo,
   type ReactElement,
-  useCallback,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -14,7 +14,7 @@ import {
   BORDER_RAY_DEFAULT_STROKE_WIDTH,
   BORDER_RAY_DEFAULT_TURN_DURATION_MS,
   type BorderRaySize,
-  computeBorderRayLength,
+  computeBorderRayGeometry,
   DEFAULT_BORDER_RAY_SIZE,
 } from "@/components/ui/border-ray-model";
 import { cn } from "@/lib/utils";
@@ -30,13 +30,9 @@ type BorderRayProps = {
   rayLengthMax?: number;
 };
 
-type BorderRayCssVariables = {
-  "--odt-border-ray-color"?: string;
-  "--odt-border-ray-length": string;
-  "--odt-border-ray-perimeter": string;
-  "--odt-border-ray-stroke-width": string;
-  "--odt-border-ray-turn-duration": string;
-};
+type BorderRayStyle = CSSProperties & { "--odt-border-ray-color"?: string };
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 function parseCssLength(
   rawValue: string,
@@ -69,18 +65,13 @@ function parseCssLength(
 }
 
 function readBorderRaySize(host: HTMLElement): BorderRaySize {
-  // The layout size ignores the transforms of the ancestors. The non-scaling stroke draws its
-  // dashes in the layout pixels of the SVG, so a scaled size would repeat the ray.
+  // The layout size ignores the transforms of the ancestors, so a scaled ancestor keeps the ray
+  // on the border.
   const width = Math.max(host.offsetWidth, 1);
   const height = Math.max(host.offsetHeight, 1);
-  const radius = Math.max(
-    parseCssLength(getComputedStyle(host).borderTopLeftRadius, host, width, height, 12),
-    0,
-  );
-  const borderWidth = Math.max(
-    parseCssLength(getComputedStyle(host).borderTopWidth, host, width, height, 1),
-    0,
-  );
+  const style = getComputedStyle(host);
+  const radius = Math.max(parseCssLength(style.borderTopLeftRadius, host, width, height, 12), 0);
+  const borderWidth = Math.max(parseCssLength(style.borderTopWidth, host, width, height, 1), 0);
 
   return { width, height, radius, borderWidth };
 }
@@ -94,7 +85,11 @@ function areBorderRaySizesClose(left: BorderRaySize, right: BorderRaySize): bool
   );
 }
 
-export function BorderRay({
+/**
+ * A ray that runs around the border of its parent. Each edge band moves one bar with a transform
+ * animation, so the ray keeps running while the main thread is busy.
+ */
+export const BorderRay = memo(function BorderRay({
   className,
   color,
   insetOffset = -1,
@@ -104,132 +99,119 @@ export function BorderRay({
   rayLengthMin = BORDER_RAY_DEFAULT_LENGTH_MIN,
   rayLengthMax = BORDER_RAY_DEFAULT_LENGTH_MAX,
 }: BorderRayProps): ReactElement {
-  const hostRef = useRef<HTMLElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const animationsRef = useRef<Animation[]>([]);
   const [size, setSize] = useState<BorderRaySize>(DEFAULT_BORDER_RAY_SIZE);
 
-  const updateFromHost = useCallback((host: HTMLElement): void => {
-    const nextSize = readBorderRaySize(host);
-    setSize((current) => (areBorderRaySizesClose(current, nextSize) ? current : nextSize));
-  }, []);
-
-  const setSvgNode = useCallback(
-    (node: SVGSVGElement | null): void => {
-      const host = node?.parentElement ?? null;
-      hostRef.current = host instanceof HTMLElement ? host : null;
-      if (hostRef.current) {
-        updateFromHost(hostRef.current);
-      }
-    },
-    [updateFromHost],
-  );
-
-  useEffect(() => {
-    const host = hostRef.current;
+  useLayoutEffect(() => {
+    const host = rootRef.current?.parentElement;
     if (!host) {
       return;
     }
-
-    const syncRect = (): void => {
-      updateFromHost(host);
+    const updateFromHost = (): void => {
+      const nextSize = readBorderRaySize(host);
+      setSize((current) => (areBorderRaySizesClose(current, nextSize) ? current : nextSize));
     };
+    // Measure before the first paint, so the ray never shows at the default size.
+    updateFromHost();
+    const observer = new ResizeObserver(updateFromHost);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
 
-    if (globalThis.ResizeObserver === undefined) {
-      window.addEventListener("resize", syncRect);
-      return () => {
-        window.removeEventListener("resize", syncRect);
-      };
+  const geometry = useMemo(
+    () =>
+      computeBorderRayGeometry(size, {
+        insetOffset,
+        strokeWidth,
+        rayLengthRatio,
+        rayLengthMin,
+        rayLengthMax,
+      }),
+    [insetOffset, rayLengthMax, rayLengthMin, rayLengthRatio, size, strokeWidth],
+  );
+
+  // The bars share one turn. The animations start before the first paint, so no bar shows at its
+  // resting place. A hidden <Activity> runs the cleanup, and the animations pause: a hidden view
+  // has no layout box, so the main thread would run them. The next run reuses them.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) {
+      return;
     }
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) {
+    if (animationsRef.current.length === 0) {
+      animationsRef.current = Array.from(
+        root.querySelectorAll<HTMLElement>(".odt-border-ray-bar"),
+        (bar) => bar.animate(null, { iterations: Infinity, easing: "linear" }),
+      );
+    }
+    const animations = animationsRef.current;
+    const reducedMotion = window.matchMedia(REDUCED_MOTION_QUERY);
+    const holdStill = (): void => {
+      for (const animation of animations) {
+        animation.pause();
+        animation.currentTime = 0;
+      }
+    };
+    const applyMotion = (): void => {
+      if (reducedMotion.matches) {
+        holdStill();
         return;
       }
-      updateFromHost(host);
-    });
-    observer.observe(host);
+      const turnStart = document.timeline.currentTime;
+      for (const animation of animations) {
+        animation.play();
+        animation.startTime = turnStart;
+      }
+    };
+    applyMotion();
+    reducedMotion.addEventListener("change", applyMotion);
     return () => {
-      observer.disconnect();
+      reducedMotion.removeEventListener("change", applyMotion);
+      holdStill();
     };
-  }, [updateFromHost]);
+  }, []);
 
-  const measuredSize = size;
-  const rayGeometry = useMemo(() => {
-    const inset = Math.max(measuredSize.borderWidth / 2, 0.5) + insetOffset;
-    const width = Math.max(measuredSize.width, 1);
-    const height = Math.max(measuredSize.height, 1);
-    const drawWidth = Math.max(width - inset * 2, 1);
-    const drawHeight = Math.max(height - inset * 2, 1);
-    const radius = Math.max(
-      0,
-      Math.min(measuredSize.radius - inset, drawWidth / 2, drawHeight / 2),
-    );
+  // A new size changes the path of each bar and keeps its place in the turn.
+  useLayoutEffect(() => {
+    const duration = Math.max(turnDurationMs, 1);
+    animationsRef.current.forEach((animation, index) => {
+      // SAFETY: Element.animate creates its animation with a KeyframeEffect.
+      const effect = animation.effect as KeyframeEffect;
+      effect.setKeyframes(geometry.segments[index]?.keyframes ?? []);
+      effect.updateTiming({ duration });
+    });
+  }, [geometry, turnDurationMs]);
 
-    const left = inset;
-    const top = inset;
-    const right = left + drawWidth;
-    const bottom = top + drawHeight;
-
-    const path = [
-      `M ${left + radius} ${top}`,
-      `H ${right - radius}`,
-      `A ${radius} ${radius} 0 0 1 ${right} ${top + radius}`,
-      `V ${bottom - radius}`,
-      `A ${radius} ${radius} 0 0 1 ${right - radius} ${bottom}`,
-      `H ${left + radius}`,
-      `A ${radius} ${radius} 0 0 1 ${left} ${bottom - radius}`,
-      `V ${top + radius}`,
-      `A ${radius} ${radius} 0 0 1 ${left + radius} ${top}`,
-      "Z",
-    ].join(" ");
-
-    const perimeter = Math.max(1, 2 * (drawWidth + drawHeight - 4 * radius) + 2 * Math.PI * radius);
-    const rayLength = computeBorderRayLength(perimeter, rayLengthRatio, rayLengthMin, rayLengthMax);
-
-    return {
-      path,
-      width,
-      height,
-      perimeter,
-      rayLength,
-    };
-  }, [
-    insetOffset,
-    measuredSize.borderWidth,
-    measuredSize.height,
-    measuredSize.radius,
-    measuredSize.width,
-    rayLengthMax,
-    rayLengthMin,
-    rayLengthRatio,
-  ]);
-
-  const rayStyle: CSSProperties & BorderRayCssVariables = {
-    position: "absolute",
-    inset: 0,
-    width: "100%",
-    height: "100%",
-    pointerEvents: "none",
-    zIndex: 2,
-    "--odt-border-ray-turn-duration": `${Math.max(turnDurationMs, 1)}ms`,
-    "--odt-border-ray-perimeter": `${rayGeometry.perimeter}px`,
-    "--odt-border-ray-length": `${rayGeometry.rayLength}px`,
-    "--odt-border-ray-stroke-width": `${Math.max(strokeWidth, 0.5)}`,
+  const rootStyle: BorderRayStyle = {
+    left: -geometry.margin,
+    top: -geometry.margin,
+    width: geometry.width,
+    height: geometry.height,
   };
   if (color) {
-    rayStyle["--odt-border-ray-color"] = color;
+    rootStyle["--odt-border-ray-color"] = color;
   }
 
   return (
-    <svg
-      ref={setSvgNode}
+    <div
+      ref={rootRef}
       aria-hidden="true"
       className={cn("odt-border-ray", className)}
-      viewBox={`0 0 ${rayGeometry.width} ${rayGeometry.height}`}
-      preserveAspectRatio="none"
-      style={rayStyle}
+      style={rootStyle}
     >
-      <path className="odt-border-ray-segment" d={rayGeometry.path} />
-    </svg>
+      {geometry.segments.map((segment) => (
+        <div
+          key={segment.edge}
+          className="odt-border-ray-segment"
+          style={{ clipPath: segment.clipPath }}
+        >
+          <span
+            className="odt-border-ray-bar"
+            style={{ width: segment.barWidth, height: segment.barHeight }}
+          />
+        </div>
+      ))}
+    </div>
   );
-}
+});

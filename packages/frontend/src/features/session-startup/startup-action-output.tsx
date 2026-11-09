@@ -50,7 +50,6 @@ export function StartupActionOutput({
         createTerminalOptions(element, {
           disableStdin: true,
           cursorBlink: false,
-          screenReaderMode: false,
           scrollOnUserInput: false,
         }),
         report,

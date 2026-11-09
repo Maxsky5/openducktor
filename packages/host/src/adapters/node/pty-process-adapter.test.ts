@@ -3,9 +3,70 @@ import { existsSync, readFileSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { assertTerminalPtyConformance } from "../../testing/terminal-pty-conformance";
 import { Effect } from "effect";
+import { PTY_OUTPUT_WINDOW_MS } from "./pty-output-coalescer";
 import { createNodePtyPort } from "./pty-process-adapter";
 
+/** Waits until output that the adapter holds for its coalescing window goes out. */
+const waitForOutputWindow = (): Promise<void> => Bun.sleep(PTY_OUTPUT_WINDOW_MS + 2);
+
+const startScriptedPty = async () => {
+  let dataListener: (data: Buffer) => void = () => undefined;
+  let exitListener: (event: { exitCode: number; signal: number }) => void = () => undefined;
+  const events: string[] = [];
+  const port = createNodePtyPort({
+    processTreeTerminator: () => Effect.void,
+    nodePty: {
+      spawn: () => ({
+        pid: 42,
+        onData: (listener) => {
+          dataListener = listener;
+          return { dispose: () => undefined };
+        },
+        onExit: (listener) => {
+          exitListener = listener;
+          return { dispose: () => undefined };
+        },
+        write: () => undefined,
+        resize: () => undefined,
+        pause: () => undefined,
+        resume: () => undefined,
+      }),
+    },
+  });
+  const exited = Promise.withResolvers<void>();
+  await Effect.runPromise(
+    port.start(
+      { shell: "/bin/zsh", args: [], cwd: "/repo", env: {}, grid: { columns: 80, rows: 24 } },
+      {
+        onOutput: (data) => events.push(`output:${new TextDecoder().decode(data)}`),
+        onFailure: (failure) => events.push(`failure:${failure.message}`),
+        onExit: () => {
+          events.push("exit");
+          exited.resolve();
+        },
+      },
+    ),
+  );
+  return {
+    events,
+    exited: exited.promise,
+    emit: (data: string) => dataListener(Buffer.from(data)),
+    exit: () => exitListener({ exitCode: 0, signal: 0 }),
+  };
+};
+
 describe("createNodePtyPort", () => {
+  test("sends held output before the exit", async () => {
+    const pty = await startScriptedPty();
+
+    pty.emit("first");
+    pty.emit("last");
+    pty.exit();
+    await pty.exited;
+
+    expect(pty.events).toEqual(["output:first", "output:last", "exit"]);
+  });
+
   test("removes command hook files when native spawn fails", async () => {
     let root: string | undefined;
     const port = createNodePtyPort({
@@ -529,6 +590,7 @@ describe("createNodePtyPort", () => {
 
       if (!ackDuringClose) await Effect.runPromise(handle.resumeOutput());
       emitOutput("after ACK");
+      await waitForOutputWindow();
       expect(output.at(-1)).toEqual(new TextEncoder().encode("after ACK"));
       await Effect.runPromise(handle.terminate());
       expect(stopAttempts).toBe(2);

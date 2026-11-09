@@ -39,6 +39,19 @@ export const createTerminalOutputSequencer = ({
     });
   };
 
+  /**
+   * Ends the current attachment. Output that xterm parsed already sends its ACK now, before the
+   * detach frame. Output that xterm parses later sends no ACK, because the host forgets the
+   * attachment. The next attachment replays from the last ACK, and the sequencer acknowledges the
+   * bytes that xterm has already.
+   */
+  const detach = (): void => {
+    const ack = pendingAck;
+    pendingAck = null;
+    if (!disposed && !failure && ack?.epoch === epoch) onConsumed(ack.sequence);
+    epoch += 1;
+  };
+
   const submit = (
     frame: { sequenceStart: number; sequenceEnd: number },
     payload: Uint8Array,
@@ -46,7 +59,15 @@ export const createTerminalOutputSequencer = ({
   ): Promise<void> => {
     if (disposed || writeEpoch !== epoch) return Promise.resolve();
     if (failure) return Promise.reject(failure);
-    if (frame.sequenceEnd <= submittedSequence) return lastWrite;
+    if (frame.sequenceEnd <= submittedSequence) {
+      // xterm has these bytes from an earlier attachment. Acknowledge them after xterm parses them.
+      return lastWrite.then(() => {
+        if (disposed || writeEpoch !== epoch || failure) return;
+        if (frame.sequenceEnd <= consumedSequence) return;
+        consumedSequence = frame.sequenceEnd;
+        acknowledge();
+      });
+    }
     if (frame.sequenceStart > submittedSequence) {
       return Promise.reject(
         fail(
@@ -99,12 +120,16 @@ export const createTerminalOutputSequencer = ({
       finish: (completed: boolean) => void,
     ): Promise<void> {
       const restoreEpoch = ++epoch;
-      submittedSequence = sequence;
       const restored = lastWrite
         .then(async () => {
-          if (disposed || restoreEpoch !== epoch) return;
+          // A detach or a later restore can replace this restore before it starts. The caller
+          // still gets one finish call, so it can admit input again.
           let completed = false;
           try {
+            if (disposed || restoreEpoch !== epoch) return;
+            // Later output waits for this restore, so xterm holds the bytes up to `sequence` only
+            // when the restore runs.
+            submittedSequence = sequence;
             prepare();
             await new Promise<void>((resolve) => write(payload, resolve));
             completed = !disposed && restoreEpoch === epoch;
@@ -126,10 +151,10 @@ export const createTerminalOutputSequencer = ({
       lastWrite = restored;
       return restored;
     },
+    detach,
     dispose(): void {
       disposed = true;
-      epoch += 1;
-      pendingAck = null;
+      detach();
     },
   };
 };

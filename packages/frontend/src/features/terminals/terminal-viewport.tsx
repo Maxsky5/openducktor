@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
 import type { TerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import { documentVisibility } from "@/features/session-navigation/document-visibility";
 
 type TerminalViewportProps = {
   terminalId: string;
@@ -50,7 +49,7 @@ export function TerminalViewport({
   const [isImageDragActive, setIsImageDragActive] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
   const isActive = useEffectEvent(() => active);
-  const isVisible = useEffectEvent(() => shown && !documentVisibility.isHidden());
+  const isShown = useEffectEvent(() => shown);
 
   useEffect(() => {
     platformRef.current = platform;
@@ -74,7 +73,7 @@ export function TerminalViewport({
         terminalId,
         controller,
         isActive,
-        isVisible,
+        isShown,
         getPlatform: () => platformRef.current,
         stageFile: stageAttachment,
         preparePathInput: async (paths) => {
@@ -107,19 +106,7 @@ export function TerminalViewport({
   }, [controller, host, stageAttachment, terminalId]);
 
   useLayoutEffect(() => {
-    const updateVisibility = (): void => {
-      const mount = mountRef.current;
-      if (!mount) return;
-      try {
-        mount.setVisible(isVisible());
-      } catch (cause) {
-        mount.dispose();
-        mountRef.current = null;
-        setMountError(errorMessage(cause));
-      }
-    };
-    updateVisibility();
-    return documentVisibility.subscribe(updateVisibility);
+    mountRef.current?.setShown(shown);
   }, [shown]);
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { processPatch } from "@pierre/diffs";
 import { normalizePatchCandidate, selectRenderableDiff } from "./renderable-patch";
 
 describe("selectRenderableDiff", () => {
@@ -30,6 +31,21 @@ describe("selectRenderableDiff", () => {
     expect(selectRenderableDiff(diff, "src/target.ts")).toBe(
       "diff --git a/src/target.ts b/src/target.ts\n--- a/src/target.ts\n+++ b/src/target.ts\n@@ -1 +1 @@\n-old\n+new\n",
     );
+  });
+  test("keeps an empty context line at the end of the last hunk", () => {
+    // Git writes an empty context line as one space.
+    const hunk = "@@ -1,3 +1,4 @@\n+// header\n import a;\n import b;\n \n";
+    const diff =
+      "diff --git a/src/first.ts b/src/first.ts\n--- a/src/first.ts\n+++ b/src/first.ts\n@@ -1 +1 @@\n-old\n+new\n" +
+      `diff --git a/src/target.ts b/src/target.ts\n--- a/src/target.ts\n+++ b/src/target.ts\n${hunk}`;
+
+    const patch = selectRenderableDiff(diff, "src/target.ts");
+
+    expect(patch).toBe(
+      `diff --git a/src/target.ts b/src/target.ts\n--- a/src/target.ts\n+++ b/src/target.ts\n${hunk}`,
+    );
+    // A strict parse fails when a hunk has fewer lines than its header declares.
+    expect(() => processPatch(patch ?? "", undefined, true)).not.toThrow();
   });
 });
 
