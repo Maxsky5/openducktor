@@ -266,6 +266,40 @@ Automated tests cannot measure frame timing, input latency, memory, or accessibi
 
 Measure frames with the Android GPU rendering profile (`adb shell dumpsys gfxinfo com.openducktor.mobile`) and the Xcode Instruments Animation Hitches template. Measure memory with Android Studio Memory Profiler and the Instruments Allocations template. Record the device, OS version, build number, and the results in the release pull request.
 
+### Native layout smoke check
+
+Use `test:native-layout` for task headers, task actions, search, filters, details, rotation, workspace changes, foreground return, and composer keyboard layout.
+The check runs on an installed Release build against a development host, in both themes, both orientations, and normal and accessibility-large text.
+It checks native control geometry and interactions, and saves local PNGs for visual review.
+It does not approve visual QA or measure performance.
+
+1. Install `agent-device` 0.21.36 and the platform tools, and boot an isolated iOS simulator or Android emulator.
+2. Install a Release build, pair it with the development host, and create two QA workspaces through the host UI.
+3. In the first workspace, create a Backlog Bug with a short title, a Feature with a long title, and an idle workspace session with an empty message draft; keep the second workspace empty.
+4. Close any earlier automation session to restore its real keyboard, then run the command below from `apps/mobile` with a fresh session name and output directory.
+5. Read every PNG for clipped text, button alignment, contrast, safe areas, and keyboard overlap before accepting the result; keep captures local and put only a concise result in the task.
+
+```sh
+bun run test:native-layout \
+  --platform android --device emulator-5554 --session mobile-layout-android \
+  --workspace mobile-layout-qa --empty-workspace mobile-layout-empty \
+  --task-title 'Mobile QA short bug' --chat-title 'Mobile layout keyboard QA' \
+  --output /tmp/mobile-layout-android
+```
+
+For iOS, set `--platform ios` and use the simulator UDID for `--device`.
+To repeat one profile, add `--profile light-large-portrait` or another combination of `light|dark`, `large|accessibility-large`, and `portrait|landscape-left`.
+Here, `large` is the normal iOS text category; Android uses the corresponding scale.
+The check selects Bug in the filter, opens details, types and clears an unsent draft, and switches only between the supplied QA workspaces.
+It requires a real visible keyboard and checks Android action-text centering from native child bounds.
+On iOS, enable the predictive keyboard.
+The check bounds the settled message field below the header, checks the space above the keyboard, and taps an on-screen key to confirm that resizing keeps the selection.
+Android text entry uses ADB because `agent-device` 0.21.36 `fill` re-enables auto-rotation; each captured PNG must match the requested orientation.
+An Android keyboard can use its native full-screen editor in landscape; the check verifies text entry there, dismisses it, and then checks the app content and cleared draft.
+It leaves the automation session open for inspection and restores light appearance, normal text, and portrait orientation on exit.
+After review, run `agent-device close --session <name>`.
+The ordinary Bun suites exclude `native-tests`, since they do not load React Native components.
+
 ## Release
 
 [The release process](../../docs/release-process.md#build-the-mobile-app) builds the store binaries and lists the secrets.
