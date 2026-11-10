@@ -1929,6 +1929,8 @@ test.each([true, false])(
       content.mockRestore();
     }
   },
+  // Full page render flow through the archive dialog, like the other archive tests.
+  5_000,
 );
 
 test("an archive in flight disables repeat actions until the host succeeds", async () => {

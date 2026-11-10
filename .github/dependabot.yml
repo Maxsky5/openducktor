@@ -15,6 +15,9 @@ updates:
       prefix: "chore(deps)"
     ignore:
       - dependency-name: "bun-types"
+      # 45.2.3 rejects canvas font strings with a leading space (electron/electron#55616).
+      - dependency-name: "electron"
+        versions: ["45.2.3"]
     groups:
       bun-non-major:
         patterns:

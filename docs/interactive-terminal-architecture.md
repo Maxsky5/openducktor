@@ -196,6 +196,8 @@ Drag and drop accepts at most eight images, 20 MiB each, and 40 MiB total. An in
 
 Desktop terminals and startup output use the official WebGL addon through the shared xterm binding. With GPU rendering active, the binding splits binary output into 16 KiB parser writes. Only the final write receives the parsed callback, so restore barriers and output acknowledgements keep their existing order. Standard rendering keeps one write per payload because splitting its writes increases intermediate screen redraws.
 
+`apps/electron/package.json` pins `electron` to `45.2.2`, and `.github/dependabot.yml` ignores `45.2.3`. Electron 45.2.3 rejects a canvas font string with a leading space ([electron/electron#55616](https://github.com/electron/electron/issues/55616)). The WebGL addon builds such strings, so all regular glyphs show in `10px sans-serif`. The pin also removes the upstream security backports of 45.2.3 ([electron/electron#55592](https://github.com/electron/electron/pull/55592)). The project owner accepted this risk until a fixed Electron release is available. Remove the pin when an Electron release has the fix.
+
 A GPU initialization failure shows an actionable error and keeps output available with the standard renderer. Before the binding admits output, it releases the partial GPU context and replaces the failed emulator with one clean standard emulator. It does not retry GPU initialization. A later GPU context loss shows an error and returns the same emulator to standard rendering, preserving its output and transport. Binding disposal releases the GPU context through public DOM APIs.
 
 ### Screen-reader mode
