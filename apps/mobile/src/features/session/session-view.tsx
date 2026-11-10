@@ -1,7 +1,7 @@
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useRouter } from "expo-router";
-import { memo, type ReactElement, useCallback, useState } from "react";
-import { View } from "react-native";
+import { type ComponentRef, memo, type ReactElement, useCallback, useRef, useState } from "react";
+import { ScrollView, TextInput, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { SessionComposer } from "@/features/composer/session-composer";
 import { routes, sessionParams } from "@/navigation/routes";
@@ -23,6 +23,8 @@ import { PublishVisibleSession } from "./publish-visible-session";
 import { useSessionFork } from "./fork/session-fork";
 import { useStartupAttempt } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
 import { StartupTrace } from "@/features/session-startup/startup-trace";
+
+const MAX_INPUT_AREA_HEIGHT_SHARE = 0.62;
 
 /**
  * The session view. The navigation bar carries the session identity, status, and the work views,
@@ -47,6 +49,7 @@ export const SessionView = memo(function SessionView(): ReactElement {
   const compact = useCompactHeight();
   const side = wide || compact;
   const [latestSignal] = useState(createJumpToLatestSignal);
+  const [availableHeight, setAvailableHeight] = useState(0);
   const { workspaceId } = workspace;
   const openSubagent = useCallback(
     (identity: AgentSessionIdentity) =>
@@ -74,15 +77,27 @@ export const SessionView = memo(function SessionView(): ReactElement {
             bottomSafeArea={readOnly}
             barSafeArea={!readOnly}
           >
-            <View style={styles.transcript}>
-              <Transcript latestSignal={latestSignal} onOpenSubagent={openSubagent} />
+            <View
+              style={styles.column}
+              onLayout={(event) => setAvailableHeight(event.nativeEvent.layout.height)}
+            >
+              <View style={styles.transcript}>
+                <Transcript latestSignal={latestSignal} onOpenSubagent={openSubagent} />
+              </View>
+              {readOnly ? (
+                <>
+                  <SessionRuntimeStatus />
+                  {side ? null : <SessionTodosPanel variant="inline" />}
+                </>
+              ) : (
+                <SessionInputArea
+                  side={side}
+                  availableHeight={availableHeight}
+                  focusPendingInput={focusPendingInput}
+                  onSent={onSent}
+                />
+              )}
             </View>
-            {readOnly ? null : <SessionResumeNotice />}
-            {readOnly ? null : <SessionPendingInput focus={focusPendingInput} />}
-            {readOnly ? null : <SessionLoaders />}
-            <SessionRuntimeStatus />
-            {side ? null : <SessionTodosPanel variant="inline" />}
-            {readOnly ? null : <SessionComposer onSent={onSent} />}
           </KeyboardInsetView>
         </View>
         {side ? <SessionSidePanel compact={compact} /> : null}
@@ -91,10 +106,77 @@ export const SessionView = memo(function SessionView(): ReactElement {
   );
 });
 
+/** The bottom stack scrolls as one unit when the keyboard leaves little room above it. */
+function SessionInputArea({
+  side,
+  availableHeight,
+  focusPendingInput,
+  onSent,
+}: {
+  side: boolean;
+  availableHeight: number;
+  focusPendingInput: boolean;
+  onSent: () => void;
+}): ReactElement {
+  const { height } = useWindowDimensions();
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const focusedField = useRef<ReturnType<typeof TextInput.State.currentlyFocusedInput>>(null);
+  const viewportHeight = useRef(0);
+  const scrollY = useRef(0);
+  const revealFocusedField = useCallback(() => {
+    const field = focusedField.current;
+    const scroll = scrollRef.current;
+    const content = scroll?.getInnerViewRef();
+    if (!field || !scroll || !content || viewportHeight.current === 0) return;
+    field.measureLayout(content, (_x, y, _width, fieldHeight) => {
+      if (field !== focusedField.current) return;
+      const bottom = y + fieldHeight;
+      // A fitting field stays fully visible. A taller field keeps the visible part in place.
+      const start = Math.min(y, bottom - viewportHeight.current);
+      const end = Math.max(y, bottom - viewportHeight.current);
+      const nextY = Math.max(0, Math.min(Math.max(scrollY.current, start), end));
+      if (nextY !== scrollY.current) {
+        scroll.scrollTo({ y: nextY, animated: false });
+      }
+    });
+  }, []);
+  return (
+    <ScrollView
+      ref={scrollRef}
+      style={[styles.inputArea, { maxHeight: Math.round(height * MAX_INPUT_AREA_HEIGHT_SHARE) }]}
+      keyboardShouldPersistTaps="handled"
+      onLayout={(event) => {
+        viewportHeight.current = event.nativeEvent.layout.height;
+        revealFocusedField();
+      }}
+      onFocus={() => {
+        focusedField.current = TextInput.State.currentlyFocusedInput();
+        revealFocusedField();
+      }}
+      onBlur={() => {
+        focusedField.current = null;
+      }}
+      onContentSizeChange={revealFocusedField}
+      onScroll={(event) => {
+        scrollY.current = event.nativeEvent.contentOffset.y;
+      }}
+      scrollEventThrottle={16}
+    >
+      <SessionResumeNotice />
+      <SessionPendingInput focus={focusPendingInput} scrollRef={scrollRef} />
+      <SessionLoaders />
+      <SessionRuntimeStatus />
+      {side ? null : <SessionTodosPanel variant="inline" />}
+      <SessionComposer onSent={onSent} availableHeight={availableHeight} />
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
   row: { flex: 1, flexDirection: "row" },
   main: { flex: 1, minWidth: 0 },
   column: { flex: 1 },
   transcript: { flex: 1 },
+  inputArea: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   startup: { maxHeight: 280 },
 });

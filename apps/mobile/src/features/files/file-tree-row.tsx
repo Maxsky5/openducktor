@@ -38,8 +38,8 @@ const rowLabel = (row: FileTreeRow): string => {
 
 /**
  * One row of the desktop file tree: a folder chevron or a colored file icon, the name, and the
- * Git lane. A changed entry takes the color of its Git status and shows its status letter. A
- * folder that holds changes shows a dot. A search result names its folder under the name.
+ * Git lane. A changed entry keeps a colored icon and a readable status letter. A folder that
+ * holds changes shows a dot. A search result names its folder under the name.
  */
 export const FileTreeRowView = memo(function FileTreeRowView({
   row,
@@ -81,11 +81,7 @@ export const FileTreeRowView = memo(function FileTreeRowView({
         )}
       </View>
       <View style={styles.body}>
-        <Text
-          numberOfLines={1}
-          ellipsizeMode="middle"
-          style={statusColor ? { color: statusColor } : null}
-        >
+        <Text numberOfLines={1} ellipsizeMode="middle">
           {row.name}
         </Text>
         {result ? (
@@ -94,7 +90,7 @@ export const FileTreeRowView = memo(function FileTreeRowView({
           </Text>
         ) : null}
       </View>
-      <GitLane row={row} statusColor={statusColor} dotColor={colors.gitStatus.modified} />
+      <GitLane row={row} dotColor={colors.gitStatus.modified} />
     </Touchable>
   );
 });
@@ -120,20 +116,12 @@ export function FileTreeRowPlaceholder({ nameWidth }: { nameWidth: DimensionValu
 }
 
 /** The Git lane: the status letter of a changed entry, or a dot for a folder that holds changes. */
-function GitLane({
-  row,
-  statusColor,
-  dotColor,
-}: {
-  row: FileTreeRow;
-  statusColor: string | null;
-  dotColor: string;
-}): ReactElement {
+function GitLane({ row, dotColor }: { row: FileTreeRow; dotColor: string }): ReactElement {
   const letter = row.gitStatus ? FILE_GIT_STATUS_PRESENTATION[row.gitStatus].letter : null;
   return (
     <View style={styles.gitLane}>
-      {letter && statusColor ? (
-        <Text variant="footnote" weight="semibold" style={{ color: statusColor }}>
+      {letter ? (
+        <Text variant="footnote" weight="semibold">
           {letter}
         </Text>
       ) : row.changed ? (

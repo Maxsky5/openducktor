@@ -31,6 +31,7 @@ import { LaneCount, LaneCountPlaceholder } from "./board-lane";
 /** The inset of the lane cells in the rail, so the selection pill has room for its shadow. */
 const RAIL_INSET = 8;
 const CELL_HEIGHT = 50;
+const MIN_CELL_WIDTH = 96;
 /**
  * The largest text scale of the rail counts and the lane titles. The selection pill and the
  * stacked titles need rows of fixed height.
@@ -100,9 +101,7 @@ const LaneCell = memo(function LaneCell({
       <View style={[styles.cellBar, { backgroundColor: lane.accent }, count === 0 && styles.dim]} />
       <Text
         numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.8}
-        allowFontScaling={false}
+        maxFontSizeMultiplier={MAX_TEXT_SCALE}
         style={[styles.cellLabel, selected && styles.cellLabelSelected]}
       >
         {column.shortLabel}
@@ -202,7 +201,7 @@ export const BoardLaneSwitcher = memo(function BoardLaneSwitcher({
   const theme = useAppTheme();
   const railScroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
-  const contentWidth = Math.max(viewportWidth, columns.length * theme.touchTarget + RAIL_INSET * 2);
+  const contentWidth = Math.max(viewportWidth, columns.length * MIN_CELL_WIDTH + RAIL_INSET * 2);
   const railWidth = useSharedValue(0);
   useEffect(() => {
     if (viewportWidth === 0 || columns.length === 0) return;

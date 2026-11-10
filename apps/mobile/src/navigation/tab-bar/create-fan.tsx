@@ -4,7 +4,9 @@ import { type ReactElement, useEffect, useEffectEvent } from "react";
 import {
   BackHandler,
   Pressable,
+  ScrollView,
   StyleSheet as NativeStyleSheet,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
@@ -28,7 +30,7 @@ import {
   useRunCreateAction,
   useWorkspaceCreateActions,
 } from "@/features/tasks/create-actions";
-import { createButtonCenter, railCreateCenter } from "./tab-bar-geometry";
+import { createButtonCenter, railCreateCenter, TAB_BAR } from "./tab-bar-geometry";
 import type { TabPlacement } from "./tab-button";
 import { withAlpha } from "@/theme/color-alpha";
 
@@ -187,6 +189,54 @@ function Actions({
   onClose: () => void;
 }): ReactElement {
   const run = useRunCreateAction(workspaceId, onClose);
+  const theme = useAppTheme();
+  const { fontScale } = useWindowDimensions();
+  const opacity = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.get(), [0, 1], [0, 1], Extrapolation.CLAMP),
+  }));
+  // Enlarged labels need more room than the arc leaves between its fixed action boxes.
+  if (fontScale > 1) {
+    return (
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          styles.listSlot,
+          placement === "bottom" ? styles.bottomListSlot : styles.railListSlot,
+          opacity,
+        ]}
+      >
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          accessibilityRole="menu"
+          accessibilityLabel="Create"
+          bounces={false}
+        >
+          {/* The menu always contains the three actions from workspaceActions. */}
+          {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
+          {actions.map((action) => {
+            const blocked = action.blockedReason !== null;
+            return (
+              <Touchable
+                key={action.id}
+                feedback="highlight"
+                radius={theme.radius.md}
+                onPress={() => run(action)}
+                accessibilityRole="menuitem"
+                accessibilityLabel={action.accessibilityLabel}
+                accessibilityHint={action.blockedReason ?? undefined}
+                accessibilityState={{ disabled: blocked }}
+                style={[styles.listAction, blocked ? styles.blocked : null]}
+              >
+                <Icon name={action.icon} size={24} colorValue={theme.colors.tint} />
+                <Text style={styles.listLabel}>{action.label}</Text>
+              </Touchable>
+            );
+          })}
+        </ScrollView>
+      </Animated.View>
+    );
+  }
   return (
     <>
       {actions.map((action, index) => (
@@ -270,7 +320,7 @@ function FanAction({
   );
 }
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   scrim: {
     position: "absolute",
     top: 0,
@@ -316,4 +366,42 @@ const styles = StyleSheet.create((theme) => ({
     ...theme.type.caption1,
     color: theme.colors.label,
   },
+  listSlot: {
+    position: "absolute",
+    top: rt.insets.top + theme.space.md,
+    right: rt.insets.right + theme.space.md,
+  },
+  bottomListSlot: {
+    left: rt.insets.left + theme.space.md,
+    bottom: createButtonCenter(rt.insets.bottom) + TAB_BAR.createSize / 2 + theme.space.md,
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  railListSlot: {
+    left: railCreateCenter(rt.insets.left) + TAB_BAR.createSize / 2 + theme.space.md,
+    bottom: rt.insets.bottom + theme.space.md,
+    justifyContent: "center",
+    alignItems: "flex-start",
+  },
+  list: {
+    flexGrow: 0,
+    flexShrink: 1,
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: theme.radius.lg,
+    borderCurve: "continuous",
+    borderWidth: theme.hairline,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    boxShadow: theme.shadows.overlay,
+  },
+  listContent: { padding: theme.space.sm, gap: theme.space.xs },
+  listAction: {
+    minHeight: theme.touchTarget,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.space.md,
+    padding: theme.space.md,
+  },
+  listLabel: { flex: 1, minWidth: 0 },
 }));

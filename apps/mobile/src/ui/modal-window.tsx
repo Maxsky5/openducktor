@@ -1,11 +1,14 @@
 import { memo, type ReactElement, useMemo } from "react";
 import { Modal, type ModalProps, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import Animated, { FadeIn, FadeOut, ReduceMotion } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { scheduleOnRN } from "react-native-worklets";
 import { ModalFeedbackHost } from "@/feedback/feedback-host";
+import { useAppTheme } from "@/theme/app-theme-context";
 import { motion } from "@/theme/tokens";
+import { ModalSystemBars } from "./app-system-bars";
 import { useModalPresence } from "./use-modal-presence";
 
 type ModalWindowProps = Omit<ModalProps, "visible" | "onShow"> & {
@@ -17,11 +20,13 @@ type ModalWindowProps = Omit<ModalProps, "visible" | "onShow"> & {
 export function ModalWindow(props: ModalWindowProps): ReactElement {
   if (Platform.OS !== "ios") return <AndroidModalWindow {...props} />;
   return (
-    <Modal {...props}>
-      <GestureHandlerRootView style={styles.fill}>
-        <ModalContent visible={props.visible}>{props.children}</ModalContent>
-        {props.visible ? <ModalFeedbackHost /> : null}
-      </GestureHandlerRootView>
+    <Modal supportedOrientations={["portrait", "portrait-upside-down", "landscape"]} {...props}>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={styles.fill}>
+          <ModalContent visible={props.visible}>{props.children}</ModalContent>
+          {props.visible ? <ModalFeedbackHost /> : null}
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
@@ -33,6 +38,7 @@ function AndroidModalWindow({
   children,
   ...props
 }: ModalWindowProps): ReactElement {
+  const theme = useAppTheme();
   const { mounted, cycle, entered, exited } = useModalPresence(visible, { onShow, onDismiss });
   const entering = useMemo(
     () =>
@@ -59,6 +65,7 @@ function AndroidModalWindow({
   return (
     <Modal {...props} visible={mounted} animationType="none">
       <GestureHandlerRootView style={styles.fill}>
+        <ModalSystemBars icons={theme.scheme === "dark" ? "light" : "dark"} />
         {/* Android drops a hidden Modal's views before its window closes. Keep the window until
             Reanimated has faded the last native content, including a form the caller has cleared. */}
         {visible ? (

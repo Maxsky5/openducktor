@@ -14,12 +14,13 @@ import type {
 import {
   type ComponentRef,
   type ReactElement,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
   useRef,
 } from "react";
-import { AccessibilityInfo, ScrollView, useWindowDimensions, type View } from "react-native";
+import { AccessibilityInfo, type ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useCommandGate } from "@/host-session/active-session-context";
 import { useSessionScreen, useSessionTarget } from "../session-target";
@@ -27,8 +28,10 @@ import { PermissionPromptCard } from "./permission-prompt-card";
 import { StructuredQuestionCard } from "./structured-question-card";
 import { useReplyFailures } from "./use-reply-failures";
 
-/** The pending input takes at most this share of the screen, so the composer stays in view. */
-const MAX_HEIGHT_SHARE = 0.62;
+type PendingInputProps = {
+  focus: boolean;
+  scrollRef: RefObject<ComponentRef<typeof ScrollView> | null>;
+};
 
 /**
  * The Structured Questions and Permission Prompts of the session, as raised cards above the
@@ -36,20 +39,19 @@ const MAX_HEIGHT_SHARE = 0.62;
  * host confirms the reply. `focus` brings the first request into view and moves the screen
  * reader to it.
  */
-export function SessionPendingInput({ focus }: { focus: boolean }): ReactElement | null {
+export function SessionPendingInput({ focus, scrollRef }: PendingInputProps): ReactElement | null {
   const target = useSessionTarget();
   if (target.readOnly) return null;
-  return <PendingInputList focus={focus} />;
+  return <PendingInputList focus={focus} scrollRef={scrollRef} />;
 }
 
-function PendingInputList({ focus }: { focus: boolean }): ReactElement | null {
+function PendingInputList({ focus, scrollRef }: PendingInputProps): ReactElement | null {
   const { target, interaction } = useSessionScreen();
   const { identity, sessionKey, sessionScope } = target;
   const { pendingApprovals, pendingQuestions } = useAgentSessionVisiblePendingInput(identity);
   const { replyAgentApproval, answerAgentQuestion } = useAgentOperationsContext();
   const { allRuntimeDefinitions } = useRuntimeAvailabilityContext();
   const gate = useCommandGate();
-  const { height } = useWindowDimensions();
   const canReply = interaction.canInteract && gate.open;
   const blockedReason = canReply ? null : interaction.blockedReason;
 
@@ -106,7 +108,6 @@ function PendingInputList({ focus }: { focus: boolean }): ReactElement | null {
     [onReplyApproval],
   );
 
-  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const firstCardRef = useRef<ComponentRef<typeof View>>(null);
   const firstRequest = pendingQuestions[0] ?? pendingApprovals[0] ?? null;
   const firstRequestKey = firstRequest ? pendingInputIdentity(firstRequest) : null;
@@ -114,24 +115,21 @@ function PendingInputList({ focus }: { focus: boolean }): ReactElement | null {
   useEffect(() => {
     if (!focus || firstRequestKey === null || focusedKey.current === firstRequestKey) return;
     focusedKey.current = firstRequestKey;
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
     const card = firstCardRef.current;
-    if (card) AccessibilityInfo.sendAccessibilityEvent(card, "focus");
-  }, [firstRequestKey, focus]);
+    const scroll = scrollRef.current;
+    const content = scroll?.getInnerViewRef();
+    if (card && scroll && content) {
+      card.measureLayout(content, (_x, y) => scroll.scrollTo({ y, animated: false }));
+      AccessibilityInfo.sendAccessibilityEvent(card, "focus");
+    }
+  }, [firstRequestKey, focus, scrollRef]);
 
   if (!firstRequest) return null;
   const firstIsQuestion = pendingQuestions.length > 0;
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      style={[styles.list, { maxHeight: Math.round(height * MAX_HEIGHT_SHARE) }]}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      accessibilityLabel="Pending input"
-    >
+    <View style={styles.content} accessibilityLabel="Pending input">
       {/* A session has few pending requests, and each card keeps the answers that the user typed. */}
-      {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
       {pendingQuestions.map((request, index) => (
         <StructuredQuestionCard
           key={buildQuestionCardKey(sessionKey, request)}
@@ -156,12 +154,11 @@ function PendingInputList({ focus }: { focus: boolean }): ReactElement | null {
           cardRef={index === 0 && !firstIsQuestion ? firstCardRef : undefined}
         />
       ))}
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  list: { flexGrow: 0 },
   // The side and bottom space lets the raised cards show their shadow.
   content: {
     gap: theme.space.sm,

@@ -346,12 +346,7 @@ export function SessionHeader({
         ) : null}
         {menuItems.length > 0 ? (
           <ActionMenu title={menuTitle} items={menuItems} onSelect={selectMenuItem}>
-            <IconButton
-              icon="more"
-              variant="outline"
-              accessibilityLabel="Session actions"
-              onPress={() => {}}
-            />
+            <IconButton icon="more" accessibilityLabel="Session actions" onPress={() => {}} />
           </ActionMenu>
         ) : null}
       </View>
@@ -411,7 +406,7 @@ function HeaderMenu({
 }): ReactElement {
   return (
     <ActionMenu title={title} items={items} onSelect={onSelect}>
-      <IconButton icon={icon} variant="outline" accessibilityLabel={label} onPress={() => {}} />
+      <IconButton icon={icon} accessibilityLabel={label} onPress={() => {}} />
     </ActionMenu>
   );
 }

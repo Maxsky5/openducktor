@@ -2,7 +2,7 @@ import { Modal, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native-unistyles";
-import { AppSystemBars } from "@/ui/app-system-bars";
+import { AppSystemBars, ModalSystemBars } from "@/ui/app-system-bars";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { usePathname } from "expo-router";
 import { routes } from "@/navigation/routes";
@@ -62,6 +62,7 @@ function PairingModal({ remote }: { remote: ActiveHostSession["remote"]["remote"
   return (
     <Modal
       visible={pairing}
+      supportedOrientations={["portrait", "portrait-upside-down", "landscape"]}
       onRequestClose={() => {
         void remote.disconnect();
       }}
@@ -70,6 +71,7 @@ function PairingModal({ remote }: { remote: ActiveHostSession["remote"]["remote"
         <View style={styles.pairing}>
           <SafeAreaView style={styles.fill}>
             <AppSystemBars icons={theme.scheme === "dark" ? "light" : "dark"} />
+            <ModalSystemBars icons={theme.scheme === "dark" ? "light" : "dark"} />
             {pairing ? <HostPairingForm /> : null}
             {pairing ? <ModalFeedbackHost /> : null}
           </SafeAreaView>

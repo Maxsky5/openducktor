@@ -15,6 +15,7 @@ import {
 } from "react";
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-screens/experimental";
 import { StyleSheet } from "react-native-unistyles";
 import { useFeedbackStore } from "@/app-shell/app-services";
 import { IconButton } from "@/ui/icon-button";
@@ -169,9 +170,10 @@ export function SheetScreen({
   if (Platform.OS === "ios") {
     return (
       <SheetCloseContext value={sheetClose}>
-        <View style={styles.root}>
+        {/* Keep the background with its children; Screens treats a flattened sibling as a header. */}
+        <View style={styles.root} collapsable={false}>
           <Stack.Screen options={options} />
-          {content}
+          <SafeAreaView edges={{ left: true, right: true }}>{content}</SafeAreaView>
         </View>
       </SheetCloseContext>
     );

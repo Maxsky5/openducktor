@@ -1,6 +1,13 @@
+import { requireNativeView } from "expo";
 import type { ReactElement } from "react";
-import { StatusBar } from "react-native";
+import { Platform, StatusBar, type ViewProps } from "react-native";
 import { SystemBars } from "react-native-edge-to-edge";
+import { StyleSheet } from "react-native-unistyles";
+
+const ModalStatusBar =
+  Platform.OS === "android"
+    ? requireNativeView<ViewProps & { darkIcons: boolean }>("OpenDucktorKeyboard", "ModalStatusBar")
+    : null;
 
 /** `SystemBars` entries that set only the navigation buttons. */
 const NAVIGATION_BARS = {
@@ -18,10 +25,8 @@ const HIDDEN_BARS = { navigationBar: true } as const;
  * The system bar `icons`: `light` over a dark screen, `dark` over a light screen. The last mounted
  * entry wins, as with `SystemBars`.
  *
- * React Native `StatusBar` sets the status bar, because it also styles the window of each open
- * `Modal`. On Android, a modal is a dialog window that copies the status bar only when it opens,
- * and `SystemBars` styles only the activity window. A theme change during an open sheet then kept
- * the old status bar. `SystemBars` sets the Android navigation buttons, which `StatusBar` cannot.
+ * The keyboard controller's Android `StatusBar` module and `SystemBars` style the activity window.
+ * Each Android modal uses `ModalSystemBars` to style its own dialog window.
  */
 export function AppSystemBars({ icons }: { icons: "light" | "dark" }): ReactElement {
   return (
@@ -31,3 +36,20 @@ export function AppSystemBars({ icons }: { icons: "light" | "dark" }): ReactElem
     </>
   );
 }
+
+/** Keeps an Android dialog's status bar in sync without changing the activity or other dialogs. */
+export function ModalSystemBars({ icons }: { icons: "light" | "dark" }): ReactElement | null {
+  if (!ModalStatusBar) return null;
+  return (
+    <ModalStatusBar
+      darkIcons={icons === "dark"}
+      pointerEvents="none"
+      accessible={false}
+      style={styles.controller}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  controller: { position: "absolute", width: 0, height: 0 },
+});

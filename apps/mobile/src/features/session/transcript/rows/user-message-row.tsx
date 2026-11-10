@@ -121,7 +121,11 @@ function MessageMeta({
           <Text style={styles.unreadText}>Unread</Text>
         </View>
       ) : null}
-      {timeLabel.length > 0 ? <Text style={styles.time}>{timeLabel}</Text> : null}
+      {timeLabel.length > 0 ? (
+        <Text tone="tertiary" style={styles.time}>
+          {timeLabel}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -154,7 +158,6 @@ const styles = StyleSheet.create((theme, rt) => ({
     ...sansWeight("regular"),
     fontSize: 15,
     lineHeight: 24,
-    color: theme.desktop.foreground,
   },
   reference: { marginHorizontal: theme.space.xs },
   /** The goal chip starts the message, so it has space only after it. */
@@ -197,7 +200,6 @@ const styles = StyleSheet.create((theme, rt) => ({
     ...sansWeight("medium"),
     fontSize: 11.5,
     lineHeight: 16,
-    color: theme.desktop.mutedForeground,
     fontVariant: ["tabular-nums"],
   },
 }));

@@ -40,6 +40,7 @@ import { useLocalSearchParams, useNavigation } from "expo-router";
 import {
   Fragment,
   type ReactElement,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -57,7 +58,7 @@ import {
 import { useCommandGate } from "@/host-session/active-session-context";
 import { SheetScreen } from "@/navigation/sheet-screen";
 import { useAppTheme } from "@/theme/app-theme-context";
-import { FormFooter } from "@/ui/action-form";
+import { FormFooter, useScrollableFormFooter } from "@/ui/action-form";
 import { Button } from "@/ui/button";
 import { useLinkOpener } from "@/rich-content/links/use-link-opener";
 import { withAlpha } from "@/theme/color-alpha";
@@ -107,21 +108,33 @@ function ImportIssuesContent({ workspace }: { workspace: WorkspaceRecord }): Rea
     case "read_failed":
       return (
         <GroupedSheet title={SHEET_TITLE}>
-          <ErrorState
-            title="Could not load the Git provider"
-            message={state.reason}
-            onRetry={() => void providerQuery.refetch()}
-          />
+          <ScrollView
+            style={styles.fill}
+            contentContainerStyle={styles.scrollContent}
+            contentInsetAdjustmentBehavior="automatic"
+          >
+            <ErrorState
+              title="Could not load the Git provider"
+              message={state.reason}
+              onRetry={() => void providerQuery.refetch()}
+            />
+          </ScrollView>
         </GroupedSheet>
       );
     case "setup_missing":
       return (
         <GroupedSheet title={SHEET_TITLE}>
-          <EmptyState
-            icon="settings"
-            title="No issue provider"
-            message={`Turn on GitHub, GitLab, or Azure DevOps with issue access in the repository settings. Then open Import Issues again. ${SETTINGS_ELSEWHERE}`}
-          />
+          <ScrollView
+            style={styles.fill}
+            contentContainerStyle={styles.scrollContent}
+            contentInsetAdjustmentBehavior="automatic"
+          >
+            <EmptyState
+              icon="settings"
+              title="No issue provider"
+              message={`Turn on GitHub, GitLab, or Azure DevOps with issue access in the repository settings. Then open Import Issues again. ${SETTINGS_ELSEWHERE}`}
+            />
+          </ScrollView>
         </GroupedSheet>
       );
     case "ready":
@@ -193,17 +206,23 @@ function IssueImportFlow({
       />
     ) : null;
   const background = step === "select" ? "plain" : "grouped";
+  const scrollableFooter = useScrollableFormFooter();
+  const footer = <FormFooter primary={primary} />;
+  const inlineFooter = scrollableFooter ? footer : null;
 
   let content: ReactElement;
   if (unavailableReason) {
     content = (
-      <View style={styles.padded}>
-        <Callout
-          tone="warning"
-          title={`${issueImportSourceLabel(provider.config.id)} are not available`}
-          message={`${unavailableReason} ${SETTINGS_ELSEWHERE}`}
-        />
-      </View>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.padded}>
+          <Callout
+            tone="warning"
+            title={`${issueImportSourceLabel(provider.config.id)} are not available`}
+            message={`${unavailableReason} ${SETTINGS_ELSEWHERE}`}
+          />
+        </View>
+        {inlineFooter}
+      </ScrollView>
     );
   } else if (step === "select") {
     content = (
@@ -216,6 +235,7 @@ function IssueImportFlow({
         selectedIds={selection.selected}
         onToggle={toggleItem}
         onOpen={(item) => openLink(item.url)}
+        footer={inlineFooter}
       />
     );
   } else {
@@ -230,6 +250,7 @@ function IssueImportFlow({
         onBack={() => setStep("select")}
         onOpen={(item) => openLink(item.url)}
         onRemove={removeItem}
+        footer={inlineFooter}
       />
     );
   }
@@ -242,7 +263,7 @@ function IssueImportFlow({
     >
       <Screen background={background}>
         <View style={styles.fill}>{content}</View>
-        <FormFooter primary={primary} />
+        {scrollableFooter ? null : footer}
       </Screen>
     </SheetScreen>
   );
@@ -303,6 +324,7 @@ function ReviewStep({
   onBack,
   onOpen,
   onRemove,
+  footer,
 }: {
   selectedItems: SourceIssue[];
   selection: ReturnType<typeof useIssueSelectionState>;
@@ -313,6 +335,7 @@ function ReviewStep({
   onBack: () => void;
   onOpen: (item: SourceIssue) => void;
   onRemove: (sourceId: string) => void;
+  footer: ReactNode;
 }): ReactElement {
   return (
     <KeyboardAwareScrollView
@@ -367,6 +390,7 @@ function ReviewStep({
           Import is available when the host connection is live.
         </Text>
       )}
+      {footer}
     </KeyboardAwareScrollView>
   );
 }
@@ -384,6 +408,7 @@ function SelectStep({
   selectedIds,
   onToggle,
   onOpen,
+  footer,
 }: {
   provider: IssueImportProvider;
   search: ReturnType<typeof useIssueImportSearch>;
@@ -393,6 +418,7 @@ function SelectStep({
   selectedIds: ReadonlyMap<string, SourceIssue>;
   onToggle: (item: SourceIssue) => void;
   onOpen: (item: SourceIssue) => void;
+  footer: ReactNode;
 }): ReactElement {
   const [onlySelected, setOnlySelected] = useState(false);
   const searchField = issueImportSearchField(provider);
@@ -468,6 +494,7 @@ function SelectStep({
         showsPages={!showSelected}
         loading={loading}
         renderItem={renderItem}
+        footer={footer}
       />
     </View>
   );
@@ -483,6 +510,7 @@ function IssueList({
   showsPages,
   loading,
   renderItem,
+  footer,
 }: {
   state: ReturnType<typeof issueListState>;
   query: UseQueryResult<IssueItemsListResult>;
@@ -493,26 +521,31 @@ function IssueList({
   showsPages: boolean;
   loading: boolean;
   renderItem: ListRenderItem<SourceIssue>;
+  footer: ReactNode;
 }): ReactElement {
+  let content: ReactElement;
   switch (state) {
     case "failed":
-      return (
+      content = (
         <ErrorState
           title="Could not load items"
           message={errorMessage(query.error)}
           onRetry={() => void query.refetch()}
         />
       );
+      break;
     case "loading":
-      return <IssueListSkeleton />;
+      content = <IssueListSkeleton />;
+      break;
     case "empty":
-      return (
+      content = (
         <EmptyState
           icon="search-x"
           title="No open items"
           message={issueImportEmptyText(search.searchText)}
         />
       );
+      break;
     case "list":
       return (
         <FlashList
@@ -529,19 +562,30 @@ function IssueList({
             ) : null
           }
           ListFooterComponent={
-            showsPages ? (
-              <IssueListPages
-                search={search}
-                itemCount={pageItemCount}
-                nextCursor={query.data?.nextCursor}
-                incomplete={query.data?.incompleteResults === true}
-                loading={loading}
-              />
-            ) : null
+            <>
+              {showsPages ? (
+                <IssueListPages
+                  search={search}
+                  itemCount={pageItemCount}
+                  nextCursor={query.data?.nextCursor}
+                  incomplete={query.data?.incompleteResults === true}
+                  loading={loading}
+                />
+              ) : null}
+              {footer}
+            </>
           }
         />
       );
   }
+  return footer ? (
+    <ScrollView contentContainerStyle={styles.scrollContent}>
+      {content}
+      {footer}
+    </ScrollView>
+  ) : (
+    content
+  );
 }
 
 /** The page list before its first answer: a failure, a load, no open item, or the rows. */
@@ -692,6 +736,7 @@ const reviewLabelSuggestions = (
 
 const styles = StyleSheet.create((theme) => ({
   fill: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
   flex: { flex: 1 },
   center: { textAlign: "center" },
   padded: { padding: theme.layout.screenPadding },

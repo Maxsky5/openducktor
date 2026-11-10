@@ -55,6 +55,6 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.space.sm,
     maxWidth: 240,
   },
-  titleBox: { flexShrink: 1 },
+  titleBox: { flexShrink: 1, minWidth: 0 },
   title: { color: theme.desktop.foreground },
 }));

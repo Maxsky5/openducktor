@@ -14,7 +14,7 @@ import { SelectedWorkspaceGate } from "@/features/workspaces/no-open-workspace";
 import { WorkspaceHeaderTitle } from "@/features/workspaces/workspace-header-title";
 import { HostConnectionState, useHostUnavailable } from "@/host-session/host-connection-state";
 import { routes } from "@/navigation/routes";
-import { useSearchBarColors } from "@/navigation/stack-theme";
+import { useHeaderSearchOptions } from "@/navigation/stack-theme";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { ActionMenu } from "@/ui/action-menu";
 import { Button } from "@/ui/button";
@@ -122,12 +122,16 @@ function ActiveFilterBar({
   );
 }
 
+function BoardHeaderTitle(): ReactElement {
+  return <WorkspaceHeaderTitle />;
+}
+
 /** The Tasks tab: the board of the selected workspace. */
 export function TaskBoardScreen(): ReactElement {
   const search = useHeaderSearch();
   return (
     <Screen background="grouped">
-      <Stack.Screen options={{ title: "Tasks", headerTitle: () => <WorkspaceHeaderTitle /> }} />
+      <Stack.Screen options={{ title: "Tasks", headerTitle: BoardHeaderTitle }} />
       <SelectedWorkspaceGate>
         {(workspace) => (
           <TaskBoardContent key={workspace.workspaceId} workspace={workspace} search={search} />
@@ -192,6 +196,20 @@ function TaskBoardContent({
     () => (canCreate ? () => router.push(routes.newTask(workspace.workspaceId)) : null),
     [canCreate, router, workspace.workspaceId],
   );
+  const emptyNotice = useMemo(
+    () =>
+      board.allTasks.length === 0 ? (
+        <Text
+          variant="footnote"
+          tone="secondary"
+          accessibilityLiveRegion="polite"
+          style={wide ? styles.notice : styles.emptyNotice}
+        >
+          No tasks yet. Create a task or import issues from your Git provider.
+        </Text>
+      ) : null,
+    [board.allTasks.length, wide],
+  );
 
   const listProps = useMemo(
     () => ({
@@ -203,8 +221,20 @@ function TaskBoardContent({
       onOpenDetails,
       onAction,
       onOpenSession: openSession,
+      header: wide ? null : emptyNotice,
     }),
-    [board.sessions, onAction, onNewTask, onOpenDetails, onPull, openSession, pulling, shownTaskId],
+    [
+      board.sessions,
+      emptyNotice,
+      onAction,
+      onNewTask,
+      onOpenDetails,
+      onPull,
+      openSession,
+      pulling,
+      shownTaskId,
+      wide,
+    ],
   );
 
   const ready = board.state.status === "ready";
@@ -218,12 +248,12 @@ function TaskBoardContent({
     () => <BoardFilterButton filter={filter.value} onPress={openFilters} />,
     [filter.value, openFilters],
   );
-  const searchColors = useSearchBarColors();
+  const searchOptions = useHeaderSearchOptions();
   const screenOptions = useMemo(() => {
     const options: NativeStackNavigationOptions = { headerRight };
     if (ready) {
       options.headerSearchBarOptions = {
-        ...searchColors,
+        ...searchOptions,
         placeholder: "Search tasks",
         hideWhenScrolling: false,
         autoCapitalize: "none",
@@ -233,7 +263,7 @@ function TaskBoardContent({
       };
     }
     return options;
-  }, [headerRight, onSearchText, ready, search.barRef, searchColors]);
+  }, [headerRight, onSearchText, ready, search.barRef, searchOptions]);
 
   const view = taskBoardView({
     state: board.state,
@@ -259,16 +289,7 @@ function TaskBoardContent({
             onClear={filter.onClear}
           />
         ) : null}
-        {view.kind === "board" && board.allTasks.length === 0 ? (
-          <Text
-            variant="footnote"
-            tone="secondary"
-            accessibilityLiveRegion="polite"
-            style={styles.notice}
-          >
-            No tasks yet. Create a task or import issues from your Git provider.
-          </Text>
-        ) : null}
+        {view.kind === "board" && wide ? emptyNotice : null}
         <View style={styles.content}>
           {view.kind === "board" ? (
             <BoardLanes
@@ -490,6 +511,7 @@ const styles = StyleSheet.create((theme) => ({
   board: { flex: 1 },
   content: { flex: 1 },
   notice: { paddingHorizontal: theme.space.md, paddingTop: theme.space.sm },
+  emptyNotice: { paddingBottom: theme.space.md },
   filterBar: {
     flexDirection: "row",
     alignItems: "center",

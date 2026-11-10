@@ -5,7 +5,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
@@ -135,23 +135,28 @@ export function SettingsRow({
   accessibilityLabel?: string | undefined;
   accessibilityHint?: string | undefined;
 }>): ReactElement {
+  const { fontScale } = useWindowDimensions();
   const content = (
     <>
-      <View style={styles.rowLine}>
-        {leading}
-        <View style={styles.rowText}>
-          <Text weight="medium" numberOfLines={1}>
-            {title}
-          </Text>
-          {description ? (
-            <Text variant="subhead" tone="tertiary">
-              {description}
-            </Text>
-          ) : null}
-          {detail}
+      <View style={[styles.rowLine, styles.wrappingRow]}>
+        <View style={[styles.rowIdentity, { flexBasis: MIN_ROW_IDENTITY_WIDTH * fontScale }]}>
+          {leading}
+          <View style={styles.rowText}>
+            <Text weight="medium">{title}</Text>
+            {description ? (
+              <Text variant="subhead" tone="tertiary">
+                {description}
+              </Text>
+            ) : null}
+            {detail}
+          </View>
         </View>
-        {trailing}
-        {onPress ? <Icon name="chevron-right" size={16} color="tertiaryLabel" /> : null}
+        {trailing || onPress ? (
+          <View style={styles.rowTrailing}>
+            {trailing}
+            {onPress ? <Icon name="chevron-right" size={16} color="tertiaryLabel" /> : null}
+          </View>
+        ) : null}
       </View>
       {children}
     </>
@@ -237,6 +242,7 @@ export function AppVersionFooter({ version }: { version: string }): ReactElement
 }
 
 const TILE = 36;
+const MIN_ROW_IDENTITY_WIDTH = 180;
 
 const styles = StyleSheet.create((theme) => ({
   flex: { flex: 1, gap: theme.space.xxs },
@@ -291,5 +297,20 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.space.md,
   },
   rowText: { flex: 1, minWidth: 0, gap: theme.space.xxs },
+  wrappingRow: { flexWrap: "wrap" },
+  rowIdentity: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.space.md,
+  },
+  rowTrailing: {
+    marginLeft: "auto",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.space.md,
+  },
   footer: { textAlign: "center", paddingTop: theme.space.sm },
 }));

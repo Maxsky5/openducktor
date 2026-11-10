@@ -20,15 +20,17 @@ export const menuColumnCount = ({
   itemsHeight,
   headingHeight,
   window,
+  columnWidth,
 }: {
   itemsHeight: number;
   headingHeight: number;
   /** The window without its safe areas. */
   window: { width: number; height: number };
+  columnWidth: number;
 }): number => {
   const columnRoom =
     window.height - 2 * POPOVER_EDGE - HEADER_ALLOWANCE - headingHeight - 2 * MENU_CARD_PADDING;
-  const fitting = Math.floor((window.width - 2 * POPOVER_EDGE) / MENU_COLUMN_WIDTH);
+  const fitting = Math.floor((window.width - 2 * POPOVER_EDGE) / columnWidth);
   const needed = Math.ceil(itemsHeight / Math.max(columnRoom, MENU_ITEM_HEIGHT));
   return Math.max(1, Math.min(needed, fitting, MAX_COLUMNS));
 };

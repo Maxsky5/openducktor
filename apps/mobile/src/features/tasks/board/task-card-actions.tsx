@@ -74,14 +74,21 @@ const liveStyles = themeStyleCache((theme, waiting: boolean) => {
 export function CardPrimaryAction({
   primary,
   taskTitle,
+  expanded,
   onPress,
 }: {
   primary: TaskCardPrimary;
   taskTitle: string;
+  expanded: boolean;
   onPress: () => void;
 }): ReactElement {
   const { appearance } = primary;
-  const control = [styles.control, styles[CONTROL_STYLES[appearance]]];
+  const control = [
+    styles.control,
+    !expanded && styles.compactControl,
+    styles[CONTROL_STYLES[appearance]],
+  ];
+  const container = [styles.primary, expanded && styles.expandedPrimary];
   const foreground = foregroundStyles(useAppTheme(), appearance);
   // A start, an approval, or a change needs the live host. Opening a session does not.
   const blockedByConnection = useCommandBlocked(primary.command, primary.label);
@@ -98,23 +105,17 @@ export function CardPrimaryAction({
         accessibilityRole="button"
         accessibilityLabel={`${primary.label}, ${session.roleLabel} ${session.statusLabel}`}
         accessibilityState={{ disabled }}
-        containerStyle={styles.shrink}
+        containerStyle={container}
         style={control}
       >
         {/* The desktop chip: a play mark in the chip text color in both states. */}
         <Icon name="play-circle" size={14} colorStyle={foreground} />
-        <Text
-          variant="subhead"
-          weight="semibold"
-          numberOfLines={1}
-          style={[styles.label, foreground]}
-        >
+        <Text variant="subhead" weight="semibold" style={[styles.label, foreground]}>
           {session.roleLabel}
         </Text>
         <Text
           variant="caption2"
           weight="medium"
-          numberOfLines={1}
           style={[
             styles.status,
             appearance === "running" ? styles.runningStatus : styles.waitingStatus,
@@ -137,7 +138,7 @@ export function CardPrimaryAction({
       accessibilityLabel={`${primary.label} for ${taskTitle}`}
       accessibilityHint={primaryHint(primary.disabled, blockedByConnection)}
       accessibilityState={{ disabled }}
-      containerStyle={styles.shrink}
+      containerStyle={container}
       style={control}
     >
       {role ? (
@@ -145,12 +146,7 @@ export function CardPrimaryAction({
       ) : (
         <Icon name={primary.icon} size={14} colorStyle={foreground} />
       )}
-      <Text
-        variant="subhead"
-        weight="semibold"
-        numberOfLines={1}
-        style={[styles.label, foreground]}
-      >
+      <Text variant="subhead" weight="semibold" style={[styles.label, foreground]}>
         {primary.label}
       </Text>
     </Touchable>
@@ -202,7 +198,7 @@ export function LiveSessionChip({ session }: { session: TaskCardLiveSession }): 
       style={[styles.live, live.chip]}
     >
       <LiveRoleIcon role={session.iconHint} waiting={waiting} />
-      <Text variant="caption2" numberOfLines={1} style={[styles.shrink, live.text]}>
+      <Text variant="caption2" style={[styles.shrink, live.text]}>
         {session.label}
       </Text>
       {waiting ? (
@@ -258,11 +254,15 @@ export function CardActionsPlaceholder(): ReactElement {
 
 const styles = StyleSheet.create((theme) => ({
   shrink: { flexShrink: 1 },
+  primary: { flexShrink: 1 },
+  expandedPrimary: { flex: 1, minWidth: 0 },
+  compactControl: { maxWidth: 210 },
   control: {
     minHeight: CONTROL_HEIGHT,
-    maxWidth: 210,
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
+    alignContent: "center",
     gap: 6,
     paddingHorizontal: 10,
     borderWidth: 1,
@@ -290,7 +290,7 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: theme.desktop.warningBorder,
   },
   label: { flexShrink: 1 },
-  status: { flexShrink: 0 },
+  status: { flexShrink: 1 },
   runningStatus: { color: theme.desktop.statusRunning },
   waitingStatus: { color: theme.desktop.warningSurfaceForeground },
   menuIcon: { color: theme.desktop.foreground },

@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { Text as NativeText, type TextProps as NativeTextProps, Platform } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { MONO_TYPE, monoWeight, sansWeight } from "@/theme/tokens";
+import { useNativeParagraphKey } from "./use-native-paragraph-key";
 
 export type TextVariant =
   | "largeTitle"
@@ -61,11 +62,13 @@ export function Text({
   selectable,
   ...props
 }: TextProps): ReactElement {
+  const paragraphKey = useNativeParagraphKey();
   const mono = variant === "mono" || variant === "monoSmall";
   // Android draws selectable text without its ellipsis, so one truncated line would clip.
   const truncatedLine = Platform.OS === "android" && props.numberOfLines === 1;
   return (
     <NativeText
+      key={paragraphKey}
       {...props}
       selectable={selectable && !truncatedLine}
       style={[

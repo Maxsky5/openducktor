@@ -35,7 +35,7 @@ export function FormField({
   return (
     <View style={styles.field}>
       <View style={styles.labelRow}>
-        <Text variant="callout" weight="medium" style={styles.grow} numberOfLines={1}>
+        <Text variant="callout" weight="medium" style={styles.grow}>
           {required ? `${label} *` : label}
         </Text>
         {trailing}
@@ -202,8 +202,14 @@ export function ViewSwitch<Value extends string>({
 
 const styles = StyleSheet.create((theme) => ({
   field: { gap: theme.space.sm },
-  labelRow: { flexDirection: "row", alignItems: "center", gap: theme.space.sm, minHeight: 20 },
-  grow: { flex: 1 },
+  labelRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.space.sm,
+    minHeight: 20,
+  },
+  grow: { flexGrow: 1, flexShrink: 0, maxWidth: "100%" },
   box: {
     borderRadius: theme.radius.md,
     borderCurve: "continuous",

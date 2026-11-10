@@ -99,6 +99,5 @@ const styles = StyleSheet.create((theme) => ({
     ...sansWeight("semibold"),
     fontSize: 15,
     lineHeight: 20,
-    color: theme.desktop.foreground,
   },
 }));

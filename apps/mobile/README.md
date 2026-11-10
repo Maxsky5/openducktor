@@ -46,6 +46,9 @@ flowchart TD
 - A `StyleSheet.create` function returns its styles object directly, and each style reads its `theme` and `rt` values itself. The Unistyles Babel plugin finds style dependencies only there, so a style that reads a local copy or a helper does not update when the theme or the font scale changes. The `unistyles/no-stylesheet-dependency-aliases` lint rule enforces this.
 - Unistyles updates styles on its own only on React Native and Reanimated views. A component of another package, such as `FlashList`, gets copies of its styles, so a theme color on it keeps the old theme. Put that color on a wrapping React Native view. When the ref of the component is its native view, as for the Gesture Handler button, wrap it with `createUnistylesElement`, as `Touchable` does. The `unistyles/no-themed-colors-on-unbound-components` lint rule enforces this.
 - A value outside styles, such as the color of a spinner or an SVG, comes from `useAppTheme` of `src/theme/app-theme-context.tsx`. Only `AppThemeProvider` calls `useUnistyles`, because each call adds a native listener and builds new proxies on each render. The `no-restricted-imports` lint rule rejects `useUnistyles` and `withUnistyles` in other files.
+- `TranscriptList` reads the system font scale once and provides it through `NativeParagraphKeyContext` in `src/ui/use-native-paragraph-key.ts` to its transcript lists. Shared text and native Markdown read this context and key only their underlying iOS text leaves, where Unistyles binds their styles. Shared text and native Markdown outside the transcript keep an undefined context key, as do Android text leaves. Native font props, rows, list state and editable controls stay unchanged; native text selection and leaf accessibility focus can reset on that system change.
+- `ComposerTextField` measures its empty placeholder in non-compact windows to set the minimum input height. Its hidden measuring iOS text uses a font-scale key to refresh that measurement after a system text-size change. The actual input, draft, selection and focus stay mounted; compact windows keep their existing height bound.
+- The keyed native Markdown text functions use `"use no memo"` to read current Unistyles values when a text leaf mounts again. React Compiler can retain scalar style snapshots from an earlier theme. Shared `Text` reads its semantic tone on each render. Callers use that tone instead of a duplicate color so a cached caller style cannot override it with an earlier theme.
 - A list view with many color variants, such as a badge tone or a task chip paint, takes plain styles from `themeStyleCache` of `src/theme/theme-style-cache.ts` and the theme of `useAppTheme`. A stylesheet function runs native code on each call, so a list row calls none.
 - Each screen copies its desktop component. The first tab, Sessions, is the session list of the desktop sidebar.
 - `scripts/desktop-theme-tokens.ts` generates `src/theme/desktop-colors.ts` from the desktop theme tokens in `packages/theme/src/tokens.css`. It reads the theme blocks with `@openducktor/theme/blocks` and resolves each color to sRGB with `@openducktor/theme/colors`. A test fails when the two differ.
@@ -64,11 +67,15 @@ flowchart TD
   - The board shows one lane, with its cards in two columns.
   - Task details show the summary in a pane beside the sections.
   - A session shows its workflow rail and todos in a right panel.
-  - Form footers put their actions in one row.
-  - A menu taller than the window puts its items in up to three columns, so all items show without a scroll.
+  - Form footers put their actions in one row at normal text size. Above the 1.3 text scale, actions stack in the form's scroll view so they stay readable and reachable with the keyboard.
+  - A menu uses up to three columns when the scaled columns fit the window. Its content scrolls when needed.
 - `useWideLayout` is true only on a window with room in both directions, such as a tablet. A phone in landscape uses the low window layouts above, not the two-pane tablet layouts.
 - Every copy action uses `useClipboardCopy` of `src/platform/use-clipboard-copy.ts`. Android 13 and later shows its own preview of the copied content, so a copy there shows no success toast. A failed copy always shows its reason.
 - The app draws edge to edge. A scroll view that ends at the bottom edge of a pushed screen pads its end with `useScreenEndSpace` of `src/ui/screen.tsx`, so its last rows scroll clear of the Android navigation buttons. A tab screen uses `useTabBarSpace`.
+- Stack headers are opaque by default, so fixed controls and composite screens stay below them. A root screen with a collapsing large title opts into a transparent header and gives its scroll view `contentInsetAdjustmentBehavior="automatic"`. Tasks and Sessions use a stable native search button on iOS so a growing search field cannot cover fixed controls. Files places its iOS search field in the scrolling list header. `useHeaderSearchOptions` disables toolbar integration so the custom bottom navigation cannot cover search.
+- Tasks uses its workspace picker as the native header on both platforms, with no extra page title or workspace row. Task-card actions center their wrapped rows within their minimum height.
+- Empty and error content stays in the screen's bounded scroll view so text and actions remain reachable at large text sizes.
+- Pending requests and the composer share one bounded input scroll view. The transcript keeps its own virtualized list, and the input scroll reveals focused fields within the keyboard viewport.
 - `src/ui/haptics.ts` gives one haptic for each user action. A haptic never carries meaning alone.
 
 ### Host connections
@@ -212,7 +219,7 @@ Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun 
 | Area | Library |
 |---|---|
 | Navigation | `expo-router` (native stack, JavaScript tabs with the app tab bar in `src/navigation/tab-bar`), `react-native-screens`. The swipe back of `src/navigation/swipe-back-detector.tsx` reads a source module and the Fabric fields of `react-native-screens`, so `package.json` pins its exact version. Test the swipe back before you change it. |
-| Styles | `react-native-unistyles` v3 with `react-native-nitro-modules`. `AppSystemBars` in `src/ui/app-system-bars.tsx` sets the system bar icons: the React Native `StatusBar` for the status bar, because it also reaches open modals, and `react-native-edge-to-edge` for the Android navigation buttons. |
+| Styles | `react-native-unistyles` v3 with `react-native-nitro-modules`. `AppSystemBars` in `src/ui/app-system-bars.tsx` sets the system bar icons: the React Native `StatusBar` for the activity status bar and `react-native-edge-to-edge` for Android navigation buttons. `AndroidModalWindow` applies icon styles to each Android modal window. |
 | Lists | `@shopify/flash-list` v2, with `patches/@shopify%2Fflash-list@2.3.3.patch`. The patch applies the guard of the open upstream pull request [Shopify/flash-list#2293](https://github.com/Shopify/flash-list/pull/2293): a cell layout event that arrives after the list data shrank no longer stops the app. It also changes the anchor of an inverted list. See [Transcript list](#transcript-list). Remove each part when a release has it. |
 | Motion and gestures | `react-native-reanimated` 4, `react-native-worklets`, `react-native-gesture-handler` |
 | Keyboard | `react-native-keyboard-controller`, `modules/openducktor-keyboard` |
@@ -258,6 +265,40 @@ Automated tests cannot measure frame timing, input latency, memory, or accessibi
 | VoiceOver and TalkBack, large text, rotation, light and dark themes | Every control has a label and a usable size. |
 
 Measure frames with the Android GPU rendering profile (`adb shell dumpsys gfxinfo com.openducktor.mobile`) and the Xcode Instruments Animation Hitches template. Measure memory with Android Studio Memory Profiler and the Instruments Allocations template. Record the device, OS version, build number, and the results in the release pull request.
+
+### Native layout smoke check
+
+Use `test:native-layout` for task headers, task actions, search, filters, details, rotation, workspace changes, foreground return, and composer keyboard layout.
+The check runs on an installed Release build against a development host, in both themes, both orientations, and normal and accessibility-large text.
+It checks native control geometry and interactions, and saves local PNGs for visual review.
+It does not approve visual QA or measure performance.
+
+1. Install `agent-device` 0.21.36 and the platform tools, and boot an isolated iOS simulator or Android emulator.
+2. Install a Release build, pair it with the development host, and create two QA workspaces through the host UI.
+3. In the first workspace, create a Backlog Bug with a short title, a Feature with a long title, and an idle workspace session with an empty message draft; keep the second workspace empty.
+4. Close any earlier automation session to restore its real keyboard, then run the command below from `apps/mobile` with a fresh session name and output directory.
+5. Read every PNG for clipped text, button alignment, contrast, safe areas, and keyboard overlap before accepting the result; keep captures local and put only a concise result in the task.
+
+```sh
+bun run test:native-layout \
+  --platform android --device emulator-5554 --session mobile-layout-android \
+  --workspace mobile-layout-qa --empty-workspace mobile-layout-empty \
+  --task-title 'Mobile QA short bug' --chat-title 'Mobile layout keyboard QA' \
+  --output /tmp/mobile-layout-android
+```
+
+For iOS, set `--platform ios` and use the simulator UDID for `--device`.
+To repeat one profile, add `--profile light-large-portrait` or another combination of `light|dark`, `large|accessibility-large`, and `portrait|landscape-left`.
+Here, `large` is the normal iOS text category; Android uses the corresponding scale.
+The check selects Bug in the filter, opens details, types and clears an unsent draft, and switches only between the supplied QA workspaces.
+It requires a real visible keyboard and checks Android action-text centering from native child bounds.
+On iOS, enable the predictive keyboard.
+The check bounds the settled message field below the header, checks the space above the keyboard, and taps an on-screen key to confirm that resizing keeps the selection.
+Android text entry uses ADB because `agent-device` 0.21.36 `fill` re-enables auto-rotation; each captured PNG must match the requested orientation.
+An Android keyboard can use its native full-screen editor in landscape; the check verifies text entry there, dismisses it, and then checks the app content and cleared draft.
+It leaves the automation session open for inspection and restores light appearance, normal text, and portrait orientation on exit.
+After review, run `agent-device close --session <name>`.
+The ordinary Bun suites exclude `native-tests`, since they do not load React Native components.
 
 ## Release
 

@@ -6,7 +6,14 @@ import type {
   AgentSessionState,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useRouter } from "expo-router";
-import { memo, type ReactElement, useCallback, useMemo, useState } from "react";
+import {
+  memo,
+  type PropsWithChildren,
+  type ReactElement,
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
@@ -19,6 +26,7 @@ import { BorderRay } from "@/ui/border-ray";
 import { useBottomEdgePadding } from "@/ui/keyboard-inset-view";
 import { blurFocusedField } from "@/ui/keyboard-dismiss";
 import { Text } from "@/ui/text";
+import { useCompactHeight } from "@/ui/use-wide-layout";
 import { useSessionSelector } from "@/features/session/use-session-selector";
 import { withAlpha } from "@/theme/color-alpha";
 import { RuntimeIcon } from "@/ui/brand-icons";
@@ -84,16 +92,28 @@ const CARD_RADIUS = 16;
  * The session view lifts the composer with the keyboard. The composer keeps the bottom safe area
  * while the keyboard is closed and gives it up as the keyboard opens, frame by frame.
  */
-export function SessionComposer({ onSent }: { onSent: () => void }): ReactElement | null {
+export function SessionComposer({
+  onSent,
+  availableHeight,
+}: {
+  onSent: () => void;
+  availableHeight: number;
+}): ReactElement | null {
   const composer = useSessionComposer({ onSent });
   if (composer.target.readOnly) return null;
-  return <SessionComposerView composer={composer} />;
+  return <SessionComposerView composer={composer} availableHeight={availableHeight} />;
 }
 
-function SessionComposerView({ composer }: { composer: SessionComposerModel }): ReactElement {
+function SessionComposerView({
+  composer,
+  availableHeight,
+}: {
+  composer: SessionComposerModel;
+  availableHeight: number;
+}): ReactElement {
   const theme = useAppTheme();
-  const { target, draft, editor, policy, fieldText, primaryMode, submit, delivery, gateOpen } =
-    composer;
+  const compact = useCompactHeight();
+  const { target, draft, editor, policy, primaryMode, submit, delivery, gateOpen } = composer;
   const [focused, setFocused] = useState(false);
   const stop = useSessionStop();
   const { noteFocus } = editor;
@@ -202,7 +222,7 @@ function SessionComposerView({ composer }: { composer: SessionComposerModel }): 
         {composer.goalRow ? (
           <GoalRow model={composer.goalRow} commandsOpen={gateOpen && composer.canInteract} />
         ) : null}
-        <View style={cardStyleOf(cardState)}>
+        <View style={[styles.card, cardStyleOf(cardState)]}>
           {composer.isWorking && !composer.isWaitingInput ? (
             <BorderRay
               color={runtimeAccentColor(theme, target.identity.runtimeKind)}
@@ -228,35 +248,79 @@ function SessionComposerView({ composer }: { composer: SessionComposerModel }): 
               Remove attachments before running a slash command.
             </Text>
           ) : null}
-          <HardwareKeyboardView enabled={focused} onHardwareEnter={onHardwareEnter}>
-            <ComposerTextField
-              layout={editor.layout}
-              editable={editable}
-              placeholder={fieldText.placeholder}
-              accessibilityLabel="Message"
-              accessibilityHint={fieldText.hint}
-              maxHeight={INPUT_MAX_HEIGHT}
-              selectionRequest={editor.selectionRequest}
-              onChangeText={editor.changeText}
-              onSelectionChange={editor.select}
-              onFocusChange={onFocusChange}
-            />
-          </HardwareKeyboardView>
-          {policy.sendBlockedReason ? (
-            <Text variant="footnote" style={styles.sendNotice} accessibilityRole="text">
-              {policy.sendBlockedReason}
-            </Text>
-          ) : null}
-          <ComposerControls
+          <ComposerEditor
             composer={composer}
-            stop={stop}
-            pickers={pickers}
-            attachmentPickers={attachmentPickers}
-            onSend={send}
-          />
+            focused={focused}
+            compact={compact}
+            maxHeight={
+              availableHeight > 0
+                ? Math.max(0, availableHeight - theme.space.xs - keyboardPadding.paddingBottom)
+                : undefined
+            }
+            onHardwareEnter={onHardwareEnter}
+            onFocusChange={onFocusChange}
+          >
+            <ComposerControls
+              composer={composer}
+              stop={stop}
+              pickers={pickers}
+              attachmentPickers={attachmentPickers}
+              onSend={send}
+            />
+          </ComposerEditor>
         </View>
       </View>
     </Animated.View>
+  );
+}
+
+/** The draft field and its action area share a row in a low window. */
+function ComposerEditor({
+  composer,
+  focused,
+  compact,
+  maxHeight,
+  onHardwareEnter,
+  onFocusChange,
+  children,
+}: PropsWithChildren<{
+  composer: SessionComposerModel;
+  focused: boolean;
+  compact: boolean;
+  maxHeight: number | undefined;
+  onHardwareEnter: (event: { nativeEvent: { shift: boolean } }) => void;
+  onFocusChange: (focused: boolean) => void;
+}>): ReactElement {
+  const { editor, policy, fieldText } = composer;
+  return (
+    <View style={[styles.editor, compact && styles.inlineEditor, { maxHeight }]}>
+      <HardwareKeyboardView
+        enabled={focused}
+        onHardwareEnter={onHardwareEnter}
+        style={[styles.field, compact && styles.inlineField]}
+      >
+        <ComposerTextField
+          layout={editor.layout}
+          editable={!policy.isComposerInputDisabled}
+          placeholder={composer.isWaitingInput ? "Waiting" : fieldText.placeholder}
+          accessibilityLabel="Message"
+          accessibilityHint={fieldText.hint}
+          maxHeight={INPUT_MAX_HEIGHT}
+          selectionRequest={editor.selectionRequest}
+          onChangeText={editor.changeText}
+          onSelectionChange={editor.select}
+          onFocusChange={onFocusChange}
+        />
+      </HardwareKeyboardView>
+      <View style={[styles.actions, compact && styles.inlineActions]}>
+        {policy.sendBlockedReason ? (
+          <Text variant="footnote" style={styles.sendNotice} accessibilityRole="text">
+            {policy.sendBlockedReason}
+          </Text>
+        ) : null}
+        {children}
+      </View>
+    </View>
   );
 }
 
@@ -362,6 +426,7 @@ function ComposerControls({
   onSend: (mode: AgentMessageSubmitMode) => void;
 }): ReactElement {
   const router = useRouter();
+  const compact = useCompactHeight();
   const { target, policy, draft, primaryMode, secondaryMode } = composer;
   const sessionContextUsage = useSessionSelector(target.identity, selectContextUsage, Object.is);
   const contextUsage = useContextUsage({
@@ -398,8 +463,8 @@ function ComposerControls({
     busy: policy.isSubmitting,
   });
   return (
-    <View style={styles.controls}>
-      <View style={styles.controlsStart}>
+    <View style={[styles.controls, compact && styles.inlineControls]}>
+      <View style={[styles.controlsStart, compact && styles.inlineControlsStart]}>
         <ComposerAttachButton pickers={pickers} picking={attachmentPickers} />
         <QuietSelector
           leading={<RuntimeIcon runtimeKind={runtimeKind} size={16} />}
@@ -486,16 +551,24 @@ const cardStyleOf = (state: ReturnType<typeof composerCardState>) => {
 };
 
 const styles = StyleSheet.create((theme) => ({
-  // The composer shrinks when the screen has no room for it: the suggestion list and the queue
-  // give up height, and the card keeps its height, so the field and Send stay above the keyboard.
+  // The field gives up height before the controls, so its text scrolls above the keyboard.
   container: {
     flexShrink: 1,
+    minHeight: 0,
     gap: theme.space.sm,
     paddingHorizontal: theme.space.md,
     paddingTop: theme.space.xs,
     backgroundColor: theme.colors.background,
   },
-  queueAndCard: { flexShrink: 1 },
+  queueAndCard: { flexShrink: 1, minHeight: 0 },
+  card: { flexShrink: 1, minHeight: 0 },
+  editor: { flexShrink: 1, minHeight: 0 },
+  field: { flexShrink: 1, minHeight: 0, minWidth: 0 },
+  actions: { flexShrink: 0 },
+  // A low window keeps a full scaled input line beside the controls instead of stacking them.
+  inlineEditor: { flexDirection: "row", alignItems: "stretch" },
+  inlineField: { flex: 1 },
+  inlineActions: { flex: 1, minWidth: 0, justifyContent: "flex-end" },
   // The desktop card has no border: its chat surface and shadow set it apart from the transcript.
   // While the session waits for input, it has the warning outline and glow. While input is off,
   // its surface fades.
@@ -541,14 +614,25 @@ const styles = StyleSheet.create((theme) => ({
   },
   controlsStart: {
     flex: 1,
+    // Yoga's positive flex grows but does not shrink; the model yields to the fixed actions.
+    flexShrink: 1,
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: touchSlop(28),
     minHeight: 32,
   },
+  inlineControls: {
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    rowGap: 2 * touchSlop(32),
+    paddingTop: 0,
+    paddingBottom: 0,
+  },
+  inlineControlsStart: { flexBasis: "100%" },
   contextUsage: { marginRight: touchSlop(28) - touchSlop(32) },
   controlsEnd: {
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 2 * touchSlop(32),

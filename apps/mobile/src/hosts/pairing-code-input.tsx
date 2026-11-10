@@ -154,7 +154,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   input: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.01,
     color: "transparent",
     backgroundColor: "transparent",
     fontSize: 26,

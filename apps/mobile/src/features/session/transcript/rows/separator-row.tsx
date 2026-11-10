@@ -23,7 +23,7 @@ export const SeparatorRow = memo(function SeparatorRow({
       accessibilityLabel={accessibilityLabel ?? label}
     >
       <View style={styles.line} />
-      <Text numberOfLines={1} style={styles.label}>
+      <Text tone="tertiary" numberOfLines={1} style={styles.label}>
         {label}
       </Text>
       <View style={styles.line} />
@@ -48,7 +48,6 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: 12.5,
     lineHeight: 17,
     letterSpacing: 0.3,
-    color: theme.desktop.mutedForeground,
     fontVariant: ["tabular-nums"],
   },
 }));

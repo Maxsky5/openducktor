@@ -13,11 +13,11 @@ import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { type NativeStackNavigationOptions, Stack } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
-import { View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { SelectedWorkspaceGate } from "@/features/workspaces/no-open-workspace";
 import { WorkspaceHeaderTitle } from "@/features/workspaces/workspace-header-title";
-import { useSearchBarColors } from "@/navigation/stack-theme";
+import { useHeaderSearchOptions } from "@/navigation/stack-theme";
 import { Button } from "@/ui/button";
 import { Screen } from "@/ui/screen";
 import { EmptyState, ErrorState } from "@/ui/states";
@@ -139,7 +139,13 @@ function ArchivedChatList({
   ) : null;
   if (records.length === 0) {
     return (
-      <View style={styles.fill}>
+      <ScrollView
+        style={styles.fill}
+        contentContainerStyle={[styles.emptyContent, { paddingBottom: tabBarSpace }]}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
         {notice}
         <ListWorkspace />
         {archived.data.length === 0 ? (
@@ -155,7 +161,7 @@ function ArchivedChatList({
             message={`No archived session of ${workspace.workspaceName} matches “${filter.trim()}”.`}
           />
         )}
-      </View>
+      </ScrollView>
     );
   }
   return (
@@ -211,19 +217,19 @@ function ListWorkspace(): ReactElement {
  */
 export function ArchivedChatsScreen(): ReactElement {
   const [filter, setFilter] = useState("");
-  const searchColors = useSearchBarColors();
+  const searchOptions = useHeaderSearchOptions();
   const options = useMemo(
     (): NativeStackNavigationOptions => ({
       title: "Archived sessions",
       headerSearchBarOptions: {
-        ...searchColors,
+        ...searchOptions,
         placeholder: "Search archived sessions",
         autoCapitalize: "none",
         onChangeText: (event) => setFilter(event.nativeEvent.text),
         onCancelButtonPress: () => setFilter(""),
       },
     }),
-    [searchColors],
+    [searchOptions],
   );
   return (
     <Screen>
@@ -239,6 +245,7 @@ export function ArchivedChatsScreen(): ReactElement {
 
 const styles = StyleSheet.create((theme) => ({
   fill: { flex: 1 },
+  emptyContent: { flexGrow: 1 },
   notice: { paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space.md },
   workspace: {
     alignItems: "flex-start",

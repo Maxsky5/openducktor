@@ -8,7 +8,7 @@ import type {
   DiagnosticsWorkspaceModel,
 } from "@openducktor/frontend-core/diagnostics/diagnostics-panel-model";
 import type { PropsWithChildren, ReactElement, ReactNode } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
@@ -162,7 +162,7 @@ function DiagnosticsGroup({
         >
           {title}
         </Text>
-        <Text variant="footnote" tone="tertiary" numberOfLines={1} style={styles.groupDescription}>
+        <Text variant="footnote" tone="tertiary" style={styles.groupDescription}>
           {description}
         </Text>
       </View>
@@ -213,7 +213,7 @@ function DiagnosticsDetail({ detail }: { detail: DiagnosticsDetailModel }): Reac
 function RowTitle({ title, value }: { title: string; value: string | null }): ReactElement {
   return (
     <View style={styles.rowTitle}>
-      <Text weight="medium" numberOfLines={1} style={styles.shrink}>
+      <Text weight="medium" style={styles.shrink}>
         {title}
       </Text>
       {value ? (
@@ -252,31 +252,36 @@ function EarlierResult({ notice }: { notice: string }): ReactElement {
 /** One shared runtime: its identity, executable, state, progress, and last failure. */
 function RuntimeRow({ entry }: { entry: DiagnosticsRuntimeEntryModel }): ReactElement {
   const theme = useAppTheme();
+  const { fontScale } = useWindowDimensions();
   const executable = runtimeExecutableText(entry);
   return (
     <View style={styles.row}>
       <View style={styles.rowLine}>
-        <SettingsIconTile muted={entry.status.health === "neutral"}>
-          <RuntimeIcon runtimeKind={entry.kind} size={18} />
-        </SettingsIconTile>
-        <View style={styles.rowText}>
-          <RowTitle title={entry.label} value={entry.version} />
-          <Text
-            variant={executable.isPath ? "monoSmall" : "footnote"}
-            tone="tertiary"
-            numberOfLines={1}
-            ellipsizeMode="middle"
-            selectable
-          >
-            {executable.text}
-          </Text>
-          {entry.effectiveExecutablePath ? (
-            <DiagnosticsDetail
-              detail={{ label: "In use", value: entry.effectiveExecutablePath, isPath: true }}
-            />
-          ) : null}
+        <View style={[styles.rowIdentity, { flexBasis: MIN_IDENTITY_WIDTH * fontScale }]}>
+          <SettingsIconTile muted={entry.status.health === "neutral"}>
+            <RuntimeIcon runtimeKind={entry.kind} size={18} />
+          </SettingsIconTile>
+          <View style={styles.rowText}>
+            <RowTitle title={entry.label} value={entry.version} />
+            <Text
+              variant={executable.isPath ? "monoSmall" : "footnote"}
+              tone="tertiary"
+              numberOfLines={1}
+              ellipsizeMode="middle"
+              selectable
+            >
+              {executable.text}
+            </Text>
+            {entry.effectiveExecutablePath ? (
+              <DiagnosticsDetail
+                detail={{ label: "In use", value: entry.effectiveExecutablePath, isPath: true }}
+              />
+            ) : null}
+          </View>
         </View>
-        <DiagnosticsStatusPill subject={`${entry.label} runtime`} status={entry.status} />
+        <View style={styles.rowStatus}>
+          <DiagnosticsStatusPill subject={`${entry.label} runtime`} status={entry.status} />
+        </View>
       </View>
       {entry.progress || entry.failure ? (
         <RowFootnotes>
@@ -304,18 +309,23 @@ function RuntimeRow({ entry }: { entry: DiagnosticsRuntimeEntryModel }): ReactEl
 
 /** One check: its icon, the title and result, its details, and any failure. */
 function CheckRow({ check }: { check: DiagnosticsCheckModel }): ReactElement {
+  const { fontScale } = useWindowDimensions();
   const errorTone = diagnosticsCheckErrorTone(check);
   return (
     <View style={styles.row}>
       <View style={styles.rowLine}>
-        <SettingsIconTile icon={CHECK_ICONS[check.key]} />
-        <View style={styles.rowText}>
-          <RowTitle title={check.title} value={check.value} />
-          {check.details.map((detail) => (
-            <DiagnosticsDetail key={detail.label} detail={detail} />
-          ))}
+        <View style={[styles.rowIdentity, { flexBasis: MIN_IDENTITY_WIDTH * fontScale }]}>
+          <SettingsIconTile icon={CHECK_ICONS[check.key]} />
+          <View style={styles.rowText}>
+            <RowTitle title={check.title} value={check.value} />
+            {check.details.map((detail) => (
+              <DiagnosticsDetail key={detail.label} detail={detail} />
+            ))}
+          </View>
         </View>
-        <DiagnosticsStatusPill subject={check.title} status={check.status} />
+        <View style={styles.rowStatus}>
+          <DiagnosticsStatusPill subject={check.title} status={check.status} />
+        </View>
       </View>
       {check.notice !== null || check.errors.length > 0 ? (
         <RowFootnotes>
@@ -407,6 +417,7 @@ export function DiagnosticsWorkspaceGroup({
 }
 
 const TILE = 36;
+const MIN_IDENTITY_WIDTH = 180;
 
 const styles = StyleSheet.create((theme) => ({
   flexText: { flex: 1, minWidth: 0 },
@@ -453,9 +464,23 @@ const styles = StyleSheet.create((theme) => ({
   },
   cardNotice: { paddingHorizontal: theme.space.lg, paddingVertical: theme.space.md },
   row: { gap: 10, paddingHorizontal: theme.space.lg, paddingVertical: theme.space.md },
-  rowLine: { flexDirection: "row", alignItems: "center", gap: theme.space.md },
+  rowLine: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: theme.space.md },
+  rowIdentity: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.space.md,
+  },
+  rowStatus: { marginLeft: "auto" },
   rowText: { flex: 1, minWidth: 0, gap: theme.space.xxs },
-  rowTitle: { flexDirection: "row", alignItems: "baseline", gap: theme.space.sm },
+  rowTitle: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    gap: theme.space.sm,
+  },
   detail: { flexDirection: "row", alignItems: "baseline", gap: 6 },
   footnotes: { gap: theme.space.sm, paddingLeft: TILE + theme.space.md },
   earlier: { flexDirection: "row", alignItems: "center", gap: 6 },

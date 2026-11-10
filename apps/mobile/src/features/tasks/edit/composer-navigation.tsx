@@ -181,7 +181,9 @@ export function EditSectionSwitcher({
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
     >
       {width > 0 ? (
-        <Animated.View style={[styles.thumb, thumbPosition(segmentWidth, index)]} />
+        <Animated.View style={[styles.thumb, thumbPosition(segmentWidth, index)]}>
+          <View pointerEvents="none" style={styles.thumbSurface} />
+        </Animated.View>
       ) : null}
       {items.map((item) => {
         const selected = item.id === selectedId;
@@ -268,6 +270,9 @@ const styles = StyleSheet.create((theme) => ({
     top: 2,
     bottom: 2,
     left: 2,
+  },
+  thumbSurface: {
+    ...StyleSheet.absoluteFillObject,
     borderRadius: theme.radius.sm,
     borderCurve: "continuous",
     backgroundColor: theme.desktop.segmentedSelected,
