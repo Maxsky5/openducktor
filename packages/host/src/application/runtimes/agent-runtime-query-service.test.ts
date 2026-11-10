@@ -568,7 +568,9 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
         },
       },
     );
-    controller.client.event.subscribe = ({ signal } = {}) => ({
+    // SAFETY: The test stream yields every event. The client type narrows the
+    // stream by the requested event types, and the test stream does not filter.
+    controller.client.event.subscribe = (({ signal } = {}) => ({
       async *[Symbol.asyncIterator]() {
         const stopped = Promise.withResolvers<void>();
         const stop = () => stopped.resolve();
@@ -580,7 +582,7 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
           signal?.removeEventListener("abort", stop);
         }
       },
-    });
+    })) as typeof controller.client.event.subscribe;
     const prepareRuntime = createPrepareOpencodeSessionRuntime({
       ...controller.options,
       createClient: () => controller.client,

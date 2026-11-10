@@ -125,7 +125,9 @@ export const eventChannel = () => {
       events.push(event);
       wake?.();
     },
-    subscribe: ({ signal }: { signal?: AbortSignal } = {}) => ({
+    // SAFETY: The test channel yields every event. The client type narrows the
+    // stream by the requested event types, and the test channel does not filter.
+    subscribe: (({ signal }: { signal?: AbortSignal } = {}) => ({
       async *[Symbol.asyncIterator]() {
         const onAbort = () => wake?.();
         signal?.addEventListener("abort", onAbort);
@@ -142,6 +144,6 @@ export const eventChannel = () => {
           signal?.removeEventListener("abort", onAbort);
         }
       },
-    }),
+    })) as OpenCodeClient["event"]["subscribe"],
   };
 };

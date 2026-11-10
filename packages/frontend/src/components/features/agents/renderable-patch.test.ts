@@ -45,7 +45,7 @@ describe("selectRenderableDiff", () => {
       `diff --git a/src/target.ts b/src/target.ts\n--- a/src/target.ts\n+++ b/src/target.ts\n${hunk}`,
     );
     // A strict parse fails when a hunk has fewer lines than its header declares.
-    expect(() => processPatch(patch ?? "", undefined, true)).not.toThrow();
+    expect(() => processPatch(patch ?? "", { throwOnError: true })).not.toThrow();
   });
 });
 
