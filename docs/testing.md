@@ -54,12 +54,12 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 ## Parallel runs
 
 - [test-shard.ts](../scripts/test-shard.ts) runs every workspace suite and the root script suite in sequence with `bun test --shard`, so it runs a part of the files of each suite. A suite with another test runner, such as the Node runner of the oxlint rules, runs all its files in the first shard. It runs every suite before it reports the failed ones.
-- The root `bun run test` runs the only shard, `1/1`. CI splits the tests of each platform into shards. The matrix of each `Tests` job in `ci.yml` sets the shard count. macOS has fewer shards, because GitHub runs at most five macOS jobs of the repository at the same time.
+- The root `bun run test` runs the only shard, `1/1`. CI splits the tests of each platform into shards. The matrix of each `Tests` job in `ci.yml` sets the shard count. Linux and macOS use three shards, and Windows uses four. The macOS test jobs, the Checks job, and the Build job fit within the limit of five concurrent macOS jobs.
 - The `TypeScript Workspace Quality` job of a platform is its required check. It runs also when a run is cancelled, and it passes only when the `Checks`, `Build`, and `Tests` jobs of that platform pass.
 - On Windows, CI puts `TMP` and `TEMP` on the `D:` drive, because temp trees there are faster than on `C:`.
-- `packages/frontend` and `packages/host` run with `bun test --parallel --no-isolate`.
+- `packages/frontend` runs in one process with `bun test --isolate --bail=1`. Each file gets a fresh DOM, global object, and module registry. Bun does not cancel the async body of a timed-out test. Stopping at the first failure prevents that body from changing the DOM, React state, or mocks of a later test. The shard runner still runs the other workspace suites and reports the failed suite.
+- `packages/host` runs with `bun test --parallel=2 --no-isolate`. Two workers limit process load on Windows CI.
 - `packages/frontend-core` runs with `bun test --parallel`, so each file has its own global. Its tests run without DOM globals. A test file that renders React or reads browser APIs imports `test-support/dom-environment` first. Keep pure tests without it, so they prove that the package runs without a DOM.
-- The host suite uses two workers to limit process load on Windows CI.
 - The host worker bundle test runs under Node, Bun, and Electron. It uses the Electron runtime from `apps/electron` and downloads it on first use when it is missing. The `Tests` jobs install that runtime before the suite.
 - The SQLite task-store test helper uses disposable files with WAL and foreign keys. It disables synchronous disk flushes before running production migrations. Tests that check production connection setup use `openHostDatabaseConnection` directly.
 - `packages/openducktor-mcp` runs with `bun test --parallel`, so each test file gets an isolated worker process.
