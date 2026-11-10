@@ -28,7 +28,7 @@
   "dependencies": {
     "@openducktor/theme": "workspace:*",
     "gsap": "^3.15.1",
-    "lucide-react": "1.59.0"
+    "lucide-react": "1.70.0"
   },
   "devDependencies": {
     "@fontsource-variable/space-grotesk": "^5.3.0",

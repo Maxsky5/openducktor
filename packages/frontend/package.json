@@ -68,7 +68,7 @@
     "dompurify": "^3.4.16",
     "hast-util-to-jsx-runtime": "^2.3.7",
     "katex": "^0.19.1",
-    "lucide-react": "^0.577.0",
+    "lucide-react": "^1.70.0",
     "mdast-util-to-hast": "^13.2.1",
     "mermaid": "^12.3.0",
     "motion": "^14.9.1",
