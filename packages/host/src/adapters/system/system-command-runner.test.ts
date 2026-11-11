@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { ChildProcess } from "node:child_process";
+import { ChildProcess, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,87 +22,153 @@ const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> 
   }
 };
 
+type CommandChildFixture = {
+  args: string[];
+  ready: Promise<void>;
+  readonly child: ChildProcess | undefined;
+  readonly closed: boolean;
+};
+
+const withCommandChild = async (
+  failTermination: boolean,
+  run: (fixture: CommandChildFixture) => Promise<void>,
+): Promise<void> => {
+  const marker = randomUUID();
+  const originalEmit = ChildProcess.prototype.emit;
+  let child: ChildProcess | undefined;
+  let closed = false;
+  let onReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    onReady = resolve;
+  });
+  let resolveClose!: () => void;
+  const closure = new Promise<void>((resolve) => {
+    resolveClose = resolve;
+  });
+  const onClose = () => {
+    closed = true;
+    resolveClose();
+  };
+  const spy = spyOn(ChildProcess.prototype, "emit").mockImplementation(function (
+    this: ChildProcess,
+    event: string | symbol,
+    ...args: unknown[]
+  ) {
+    const result = originalEmit.call(this, event, ...args);
+    if (event !== "spawn" || this.spawnargs.at(-1) !== marker) return result;
+    // Capture only the child launched with this fixture's unique argument.
+    // oxlint-disable-next-line typescript/no-this-alias
+    child = this;
+    this.once("close", onClose);
+    this.stdout?.once("data", onReady);
+    if (failTermination) this.kill = () => false;
+    return result;
+  });
+  let teardownTimeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await run({
+      args: [
+        "-e",
+        "process.on('SIGTERM',()=>{});process.stdout.write('ready');setInterval(()=>{process.stdout.write('x');process.stderr.write('y')},10);setTimeout(()=>process.exit(0),4000)",
+        marker,
+      ],
+      ready,
+      get child() {
+        return child;
+      },
+      get closed() {
+        return closed;
+      },
+    });
+  } finally {
+    try {
+      if (child && !closed) {
+        ChildProcess.prototype.kill.call(child, "SIGKILL");
+        await Promise.race([
+          closure,
+          new Promise<never>((_, reject) => {
+            teardownTimeout = setTimeout(
+              () => reject(new Error(`Test child ${child?.pid} did not close after SIGKILL.`)),
+              1000,
+            );
+          }),
+        ]);
+      }
+    } finally {
+      clearTimeout(teardownTimeout);
+      child?.stdout?.off("data", onReady);
+      child?.off("close", onClose);
+      spy.mockRestore();
+    }
+  }
+};
+
 describe("createSystemCommandRunner", () => {
-  for (const path of ["timeout", "interruption", "overflow"] as const) {
-    test(`awaits process and stream closure after ${path}`, async () => {
-      const originalEmit = ChildProcess.prototype.emit;
-      let child: ChildProcess | undefined;
-      let closed = false;
-      let ready!: () => void;
-      const readiness = new Promise<void>((resolve) => {
-        ready = resolve;
+  test("isolates termination failure and awaits emergency child closure", async () => {
+    let ownedPid: number | undefined;
+    await withCommandChild(true, async (fixture) => {
+      const unrelated = spawn(process.execPath, ["-e", "setTimeout(()=>process.exit(0),4000)"], {
+        stdio: "ignore",
       });
-      const script =
-        "process.on('SIGTERM',()=>{});process.stdout.write('ready');setInterval(()=>{process.stdout.write('x');process.stderr.write('y')},10);setTimeout(()=>process.exit(0),4000)";
-      const spy = spyOn(ChildProcess.prototype, "emit").mockImplementation(function (
-        this: ChildProcess,
-        event: string | symbol,
-        ...args: unknown[]
-      ) {
-        const result = originalEmit.call(this, event, ...args);
-        if (event !== "spawn") return result;
-        // Capture the native child for process-death assertions and emergency teardown.
-        // oxlint-disable-next-line typescript/no-this-alias
-        child = this;
-        this.once("close", () => {
-          closed = true;
-        });
-        this.stdout?.once("data", () => ready());
-        return result;
-      });
-      const options: SystemCommandRunOptions = { timeoutMs: path === "timeout" ? 300 : 3000 };
-      if (path === "overflow") options.maxStdoutBytes = 8;
-      const fiber = Effect.runFork(
-        createSystemCommandRunner().runCommandAllowFailure(
-          process.execPath,
-          ["-e", script],
-          options,
-        ),
+      const unrelatedClosed = new Promise<void>((resolve) =>
+        unrelated.once("close", () => resolve()),
       );
       try {
-        await readiness;
-        if (path === "interruption") await Effect.runPromise(Fiber.interrupt(fiber));
-        const exit = await Effect.runPromise(Fiber.await(fiber));
-        expect(Exit.isFailure(exit)).toBe(true);
-        expect(closed).toBe(true);
-        expect(child?.stdout?.destroyed).toBe(true);
-        expect(child?.stderr?.destroyed).toBe(true);
-        expect(child?.stdout?.listenerCount("data")).toBe(0);
-        expect(child?.stderr?.listenerCount("data")).toBe(0);
-        expect(child?.listenerCount("error")).toBe(0);
-        expect(child?.listenerCount("close")).toBe(0);
-        expect(() => process.kill(child!.pid!, 0)).toThrow();
+        await new Promise<void>((resolve) => unrelated.once("spawn", () => resolve()));
+        expect(unrelated.kill("SIGKILL")).toBe(true);
       } finally {
-        child?.kill("SIGKILL");
-        await Effect.runPromise(Fiber.interrupt(fiber));
-        spy.mockRestore();
+        ChildProcess.prototype.kill.call(unrelated, "SIGKILL");
+        await unrelatedClosed;
       }
+      const exit = await Effect.runPromiseExit(
+        createSystemCommandRunner().runCommandAllowFailure(process.execPath, fixture.args, {
+          maxStdoutBytes: 8,
+        }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      ownedPid = fixture.child?.pid;
+      expect(ownedPid).toBeDefined();
+      expect(() => process.kill(ownedPid!, 0)).not.toThrow();
+    });
+    expect(() => process.kill(ownedPid!, 0)).toThrow();
+  });
+
+  for (const path of ["timeout", "interruption", "overflow"] as const) {
+    test(`awaits process and stream closure after ${path}`, async () => {
+      await withCommandChild(false, async (fixture) => {
+        const options: SystemCommandRunOptions = { timeoutMs: path === "timeout" ? 300 : 3000 };
+        if (path === "overflow") options.maxStdoutBytes = 8;
+        const fiber = Effect.runFork(
+          createSystemCommandRunner().runCommandAllowFailure(
+            process.execPath,
+            fixture.args,
+            options,
+          ),
+        );
+        try {
+          await fixture.ready;
+          const { child } = fixture;
+          if (path === "interruption") await Effect.runPromise(Fiber.interrupt(fiber));
+          const exit = await Effect.runPromise(Fiber.await(fiber));
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(fixture.closed).toBe(true);
+          expect(child?.stdout?.destroyed).toBe(true);
+          expect(child?.stderr?.destroyed).toBe(true);
+          expect(child?.stdout?.listenerCount("data")).toBe(0);
+          expect(child?.stderr?.listenerCount("data")).toBe(0);
+          expect(child?.listenerCount("error")).toBe(0);
+          expect(child?.listenerCount("close")).toBe(0);
+          expect(() => process.kill(child!.pid!, 0)).toThrow();
+        } finally {
+          await Effect.runPromise(Fiber.interrupt(fiber));
+        }
+      });
     });
   }
 
   for (const failurePath of ["timeout", "overflow", "interruption"] as const) {
     test(`reports ${failurePath} and cleanup failure to the host caller`, async () => {
-      const originalEmit = ChildProcess.prototype.emit;
-      let child: ChildProcess | undefined;
-      let ready!: () => void;
-      const readiness = new Promise<void>((resolve) => {
-        ready = resolve;
-      });
-      const spy = spyOn(ChildProcess.prototype, "emit").mockImplementation(function (
-        this: ChildProcess,
-        event: string | symbol,
-        ...args: unknown[]
-      ) {
-        const result = originalEmit.call(this, event, ...args);
-        if (event !== "spawn") return result;
-        // Capture the native child for process-death assertions and emergency teardown.
-        // oxlint-disable-next-line typescript/no-this-alias
-        child = this;
-        this.kill = () => false;
-        this.stdout?.once("data", () => ready());
-        return result;
-      });
-      try {
+      await withCommandChild(true, async (fixture) => {
         const options: SystemCommandRunOptions = {
           timeoutMs: failurePath === "timeout" ? 100 : 3000,
         };
@@ -110,21 +177,14 @@ describe("createSystemCommandRunner", () => {
           handlers: {
             system_get_platform: () =>
               createSystemCommandRunner()
-                .runCommandAllowFailure(
-                  process.execPath,
-                  [
-                    "-e",
-                    "process.stdout.write('ready');setInterval(()=>{process.stdout.write('x');process.stderr.write('y')},10);setTimeout(()=>process.exit(0),4000)",
-                  ],
-                  options,
-                )
+                .runCommandAllowFailure(process.execPath, fixture.args, options)
                 .pipe(Effect.as("darwin")),
           },
         });
         let error: unknown;
         if (failurePath === "interruption") {
           const fiber = Effect.runFork(effectRouter.invoke("system_get_platform"));
-          await readiness;
+          await fixture.ready;
           await Effect.runPromise(Fiber.interrupt(fiber));
           const exit = await Effect.runPromise(Fiber.await(fiber));
           expect(Exit.isFailure(exit)).toBe(true);
@@ -156,13 +216,11 @@ describe("createSystemCommandRunner", () => {
             expect(error.details).toMatchObject({ timeoutMs: 100 });
           }
         }
+        const { child } = fixture;
         expect(child?.stdout?.destroyed).toBe(true);
         expect(child?.stderr?.destroyed).toBe(true);
         expect(child?.stderr?.listenerCount("data")).toBe(0);
-      } finally {
-        if (child) ChildProcess.prototype.kill.call(child, "SIGKILL");
-        spy.mockRestore();
-      }
+      });
     });
   }
 
