@@ -8,6 +8,11 @@ import type { GitPort } from "../../../ports/git-port";
 import { AzureDevOpsProviderAdapter } from "./provider-adapter";
 import { createAzureDevOpsRestClient } from "./rest-client";
 import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
+import {
+  createStalledProviderResponse,
+  interruptStalledRequest,
+  timeoutStalledRequest,
+} from "../stalled-provider-response.test-support";
 
 const repository = azureDevOpsRepositorySchema.parse({
   providerId: "azure_devops",
@@ -136,5 +141,82 @@ describe("Azure DevOps REST client", () => {
         expect(signal?.aborted).toBe(true);
       }).pipe(Effect.provide(TestClock.layer())),
     );
+  });
+
+  test("times out a success response that stalls after its headers", async () => {
+    const probe = createStalledProviderResponse();
+    try {
+      const client = createAzureDevOpsRestClient({
+        connection,
+        fetchImplementation: probe.fetch,
+      });
+
+      const result = await timeoutStalledRequest(
+        probe,
+        client.request(repoConfig, repository, {
+          operation: "read repository",
+          path: "git/repositories/app",
+        }),
+      );
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure.message).toContain("timed out after 30 seconds");
+      }
+      await probe.responseClosed;
+      expect((await probe.requestSignal).aborted).toBe(true);
+    } finally {
+      await probe.close();
+    }
+  });
+
+  test("times out an error response that stalls after its headers", async () => {
+    const probe = createStalledProviderResponse({ status: 401 });
+    try {
+      const client = createAzureDevOpsRestClient({
+        connection,
+        fetchImplementation: probe.fetch,
+      });
+
+      const result = await timeoutStalledRequest(
+        probe,
+        client.request(repoConfig, repository, {
+          operation: "read repository",
+          path: "git/repositories/app",
+        }),
+      );
+
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(result.failure.message).toContain("timed out after 30 seconds");
+      }
+      await probe.responseClosed;
+      expect((await probe.requestSignal).aborted).toBe(true);
+    } finally {
+      await probe.close();
+    }
+  });
+
+  test("aborts a stalled response body when the request is interrupted", async () => {
+    const probe = createStalledProviderResponse();
+    try {
+      const client = createAzureDevOpsRestClient({
+        connection,
+        fetchImplementation: probe.fetch,
+      });
+
+      await interruptStalledRequest(
+        probe,
+        client.request(repoConfig, repository, {
+          operation: "read repository",
+          path: "git/repositories/app",
+        }),
+      );
+
+      await probe.responseClosed;
+      expect((await probe.requestSignal).aborted).toBe(true);
+    } finally {
+      await probe.close();
+    }
   });
 });

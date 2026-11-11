@@ -3,7 +3,7 @@ import { azureDevOpsCollectionUrl } from "@openducktor/core";
 import { Effect } from "effect";
 import { type HostError, HostOperationError } from "../../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
-import type { GitProviderFetch } from "../git-provider-fetch";
+import { type GitProviderFetch, withAbortableResponse } from "../git-provider-fetch";
 import { azureDevOpsJsonListSchema, azureDevOpsJsonSchema, type AzureDevOpsJson } from "./json";
 import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
 
@@ -67,19 +67,69 @@ export const createAzureDevOpsRestClient = ({
         requestInit.headers = { ...headers, "Content-Type": "application/json" };
         requestInit.body = JSON.stringify(input.body);
       }
-      const response = yield* Effect.tryPromise({
-        try: (signal) =>
-          fetchImplementation(url, {
-            ...requestInit,
-            signal,
+      return yield* withAbortableResponse(
+        (signal) =>
+          Effect.tryPromise({
+            try: () =>
+              fetchImplementation(url, {
+                ...requestInit,
+                signal,
+              }),
+            catch: (cause) =>
+              new HostOperationError({
+                operation: input.operation,
+                message: `Azure DevOps ${input.operation} failed before the server returned a response. Check the server address, network, and TLS certificate.`,
+                cause,
+              }),
           }),
-        catch: (cause) =>
-          new HostOperationError({
-            operation: input.operation,
-            message: `Azure DevOps ${input.operation} failed before the server returned a response. Check the server address, network, and TLS certificate.`,
-            cause,
+        (response) =>
+          Effect.gen(function* () {
+            if (response.status >= 300 && response.status < 400) {
+              return yield* Effect.fail(
+                new HostOperationError({
+                  operation: input.operation,
+                  message: `Azure DevOps ${input.operation} returned an unexpected redirect. Check the configured service address.`,
+                  details: { status: response.status },
+                }),
+              );
+            }
+            if (!response.ok) {
+              const detail = (yield* readErrorDetail(response)).slice(0, 1_000);
+              const guidance = failureGuidance(response.status);
+              return yield* Effect.fail(
+                new HostOperationError({
+                  operation: input.operation,
+                  message: `Azure DevOps ${input.operation} failed with HTTP ${response.status}. ${guidance}${detail ? ` Server response: ${detail}` : ""}`,
+                  details: { status: response.status },
+                }),
+              );
+            }
+            const text = yield* Effect.tryPromise({
+              try: () => response.text(),
+              catch: (cause) =>
+                new HostOperationError({
+                  operation: input.operation,
+                  message: `Azure DevOps ${input.operation} returned an unreadable response.`,
+                  cause,
+                }),
+            });
+            const body: AzureDevOpsJson = text
+              ? yield* Effect.try({
+                  try: () => azureDevOpsJsonSchema.parse(JSON.parse(text)),
+                  catch: (cause) =>
+                    new HostOperationError({
+                      operation: input.operation,
+                      message: `Azure DevOps ${input.operation} returned invalid JSON.`,
+                      cause,
+                    }),
+                })
+              : null;
+            return {
+              body,
+              continuationToken: response.headers.get("x-ms-continuationtoken"),
+            };
           }),
-      }).pipe(
+      ).pipe(
         Effect.timeoutOrElse({
           duration: REQUEST_TIMEOUT,
           orElse: () =>
@@ -91,50 +141,6 @@ export const createAzureDevOpsRestClient = ({
             ),
         }),
       );
-      if (response.status >= 300 && response.status < 400) {
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: input.operation,
-            message: `Azure DevOps ${input.operation} returned an unexpected redirect. Check the configured service address.`,
-            details: { status: response.status },
-          }),
-        );
-      }
-      if (!response.ok) {
-        const detail = (yield* readErrorDetail(response)).slice(0, 1_000);
-        const guidance = failureGuidance(response.status);
-        return yield* Effect.fail(
-          new HostOperationError({
-            operation: input.operation,
-            message: `Azure DevOps ${input.operation} failed with HTTP ${response.status}. ${guidance}${detail ? ` Server response: ${detail}` : ""}`,
-            details: { status: response.status },
-          }),
-        );
-      }
-      const text = yield* Effect.tryPromise({
-        try: () => response.text(),
-        catch: (cause) =>
-          new HostOperationError({
-            operation: input.operation,
-            message: `Azure DevOps ${input.operation} returned an unreadable response.`,
-            cause,
-          }),
-      });
-      const body: AzureDevOpsJson = text
-        ? yield* Effect.try({
-            try: () => azureDevOpsJsonSchema.parse(JSON.parse(text)),
-            catch: (cause) =>
-              new HostOperationError({
-                operation: input.operation,
-                message: `Azure DevOps ${input.operation} returned invalid JSON.`,
-                cause,
-              }),
-          })
-        : null;
-      return {
-        body,
-        continuationToken: response.headers.get("x-ms-continuationtoken"),
-      };
     });
 
   return {

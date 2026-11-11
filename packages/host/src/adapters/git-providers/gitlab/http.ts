@@ -2,7 +2,7 @@ import { type GitlabProblem, gitlabProblemSchema } from "@openducktor/contracts"
 import { Effect } from "effect";
 import { z } from "zod";
 import { type HostError, HostOperationError } from "../../../effect/host-errors";
-import type { GitProviderFetch } from "../git-provider-fetch";
+import { type GitProviderFetch, withAbortableResponse } from "../git-provider-fetch";
 
 const REQUEST_TIMEOUT = "30 seconds";
 
@@ -166,31 +166,108 @@ export const createGitlabHttp = (fetchImplementation: GitProviderFetch = fetch):
         body = new URLSearchParams(request.form).toString();
       }
       const instance = request.instanceUrl;
-      const response = yield* Effect.tryPromise({
-        try: (signal) =>
-          fetchImplementation(url, {
-            method: request.method ?? "GET",
-            headers,
-            body,
-            // A secret goes only to its own instance, so a redirect never runs.
-            redirect: "manual",
-            signal,
+      return yield* withAbortableResponse(
+        (signal) =>
+          Effect.tryPromise({
+            try: () =>
+              fetchImplementation(url, {
+                method: request.method ?? "GET",
+                headers,
+                body,
+                // A secret goes only to its own instance, so a redirect never runs.
+                redirect: "manual",
+                signal,
+              }),
+            catch: (cause) =>
+              isTlsFailure(fetchFailureSchema.safeParse(cause).data)
+                ? gitlabFailure(
+                    request.operation,
+                    "tls_untrusted",
+                    `The operating system does not trust the TLS certificate of ${instance}. Add the certificate to the OS trust store, then retry.`,
+                    { cause },
+                  )
+                : gitlabFailure(
+                    request.operation,
+                    "instance_unreachable",
+                    `${instance} could not be reached: ${cause instanceof Error ? cause.message : String(cause)}. Check the instance URL and the network, then retry.`,
+                    { cause },
+                  ),
           }),
-        catch: (cause) =>
-          isTlsFailure(fetchFailureSchema.safeParse(cause).data)
-            ? gitlabFailure(
+        (response) =>
+          Effect.gen(function* () {
+            const responseBody = yield* Effect.tryPromise({
+              try: () => response.arrayBuffer(),
+              catch: (cause) =>
+                gitlabFailure(
+                  request.operation,
+                  "instance_unreachable",
+                  `${instance} returned an unreadable response. Retry.`,
+                  { cause, status: response.status },
+                ),
+            });
+            const status = response.status;
+            if (status >= 200 && status < 300)
+              return { status, headers: response.headers, body: responseBody };
+            if (status === 0 || (status >= 300 && status < 400))
+              return yield* Effect.fail(
+                gitlabFailure(
+                  request.operation,
+                  "not_gitlab",
+                  `${instance} answered with a redirect, so it did not answer as a GitLab instance. Check the instance URL.`,
+                  { status },
+                ),
+              );
+            if (status === 429) {
+              const retryAfter = retryAfterOf(response.headers);
+              return yield* Effect.fail(
+                gitlabFailure(
+                  request.operation,
+                  "rate_limited",
+                  `GitLab limited the request rate. Retry ${retryAfter ? `after ${new Date(retryAfter).toLocaleTimeString()}` : "in a minute"}.`,
+                  { status, retryAfter },
+                ),
+              );
+            }
+            if (allowClientErrors && status >= 400 && status < 500)
+              return { status, headers: response.headers, body: responseBody };
+            const detail = readErrorText(responseBody);
+            if (status === 401)
+              return yield* Effect.fail(
+                gitlabFailure(
+                  request.operation,
+                  "access_revoked",
+                  `GitLab rejected the credential (HTTP 401${detail ? `: ${detail}` : ""}). Replace the token or sign in again.`,
+                  { status },
+                ),
+              );
+            if (status === 403 && /insufficient_scope/iu.test(detail))
+              return yield* Effect.fail(
+                gitlabFailure(
+                  request.operation,
+                  "missing_scope",
+                  "The GitLab token lacks the api scope. Create a token with the api scope.",
+                  { status },
+                ),
+              );
+            if (status === 403 || status === 404)
+              return yield* Effect.fail(
+                gitlabFailure(
+                  request.operation,
+                  "project_unreachable",
+                  `GitLab denied ${request.operation} (HTTP ${status}${detail ? `: ${detail}` : ""}). Check that the account can reach the project, or use another account.`,
+                  { status },
+                ),
+              );
+            return yield* Effect.fail(
+              gitlabFailure(
                 request.operation,
-                "tls_untrusted",
-                `The operating system does not trust the TLS certificate of ${instance}. Add the certificate to the OS trust store, then retry.`,
-                { cause },
-              )
-            : gitlabFailure(
-                request.operation,
-                "instance_unreachable",
-                `${instance} could not be reached: ${cause instanceof Error ? cause.message : String(cause)}. Check the instance URL and the network, then retry.`,
-                { cause },
+                "gitlab_error",
+                `GitLab answered ${request.operation} with HTTP ${status}${detail ? `: ${detail}` : ""}. Retry. If it keeps failing, check the GitLab status or ask the instance administrator.`,
+                { status },
               ),
-      }).pipe(
+            );
+          }),
+      ).pipe(
         Effect.timeoutOrElse({
           duration: REQUEST_TIMEOUT,
           orElse: () =>
@@ -202,77 +279,6 @@ export const createGitlabHttp = (fetchImplementation: GitProviderFetch = fetch):
               ),
             ),
         }),
-      );
-      const responseBody = yield* Effect.tryPromise({
-        try: () => response.arrayBuffer(),
-        catch: (cause) =>
-          gitlabFailure(
-            request.operation,
-            "instance_unreachable",
-            `${instance} returned an unreadable response. Retry.`,
-            { cause, status: response.status },
-          ),
-      });
-      const status = response.status;
-      if (status >= 200 && status < 300)
-        return { status, headers: response.headers, body: responseBody };
-      if (status === 0 || (status >= 300 && status < 400))
-        return yield* Effect.fail(
-          gitlabFailure(
-            request.operation,
-            "not_gitlab",
-            `${instance} answered with a redirect, so it did not answer as a GitLab instance. Check the instance URL.`,
-            { status },
-          ),
-        );
-      if (status === 429) {
-        const retryAfter = retryAfterOf(response.headers);
-        return yield* Effect.fail(
-          gitlabFailure(
-            request.operation,
-            "rate_limited",
-            `GitLab limited the request rate. Retry ${retryAfter ? `after ${new Date(retryAfter).toLocaleTimeString()}` : "in a minute"}.`,
-            { status, retryAfter },
-          ),
-        );
-      }
-      if (allowClientErrors && status >= 400 && status < 500)
-        return { status, headers: response.headers, body: responseBody };
-      const detail = readErrorText(responseBody);
-      if (status === 401)
-        return yield* Effect.fail(
-          gitlabFailure(
-            request.operation,
-            "access_revoked",
-            `GitLab rejected the credential (HTTP 401${detail ? `: ${detail}` : ""}). Replace the token or sign in again.`,
-            { status },
-          ),
-        );
-      if (status === 403 && /insufficient_scope/iu.test(detail))
-        return yield* Effect.fail(
-          gitlabFailure(
-            request.operation,
-            "missing_scope",
-            "The GitLab token lacks the api scope. Create a token with the api scope.",
-            { status },
-          ),
-        );
-      if (status === 403 || status === 404)
-        return yield* Effect.fail(
-          gitlabFailure(
-            request.operation,
-            "project_unreachable",
-            `GitLab denied ${request.operation} (HTTP ${status}${detail ? `: ${detail}` : ""}). Check that the account can reach the project, or use another account.`,
-            { status },
-          ),
-        );
-      return yield* Effect.fail(
-        gitlabFailure(
-          request.operation,
-          "gitlab_error",
-          `GitLab answered ${request.operation} with HTTP ${status}${detail ? `: ${detail}` : ""}. Retry. If it keeps failing, check the GitLab status or ask the instance administrator.`,
-          { status },
-        ),
       );
     });
   return {
