@@ -259,11 +259,15 @@ export const createSystemCommandRunner = ({
             const original = Exit.isFailure(operationExit)
               ? Cause.findErrorOption(operationExit.cause)
               : Option.none();
+            const cleanupMessage = `Cleanup failed: ${causeMessage(cleanupExit.cause)}`;
+            const message = Exit.isFailure(operationExit)
+              ? `${causeMessage(operationExit.cause)}\n${cleanupMessage}`
+              : cleanupMessage;
             const error = new HostOperationError<object>({
               operation: Option.isSome(original)
                 ? original.value.operation
                 : "systemCommand.runCommandAllowFailure.cleanup",
-              message: `${Exit.isFailure(operationExit) ? `${causeMessage(operationExit.cause)}\n` : ""}Cleanup failed: ${causeMessage(cleanupExit.cause)}`,
+              message,
               details: {
                 ...(Option.isSome(original) ? original.value.details : { command, args }),
               },
