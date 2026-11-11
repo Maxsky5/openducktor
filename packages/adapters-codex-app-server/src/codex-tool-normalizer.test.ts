@@ -826,6 +826,67 @@ function AuthConsumer() {}
     );
   });
 
+  test("gives the whole script, the exit code, and the recorded times of a command", () => {
+    const part = toStreamPart(
+      {
+        type: "commandExecution",
+        id: "cmd-1",
+        command: `/bin/zsh -lc "sed -n '1,40p' src/a.ts; rg -n foo src | head -5"`,
+        cwd: "/repo",
+        status: "failed",
+        commandActions: [
+          {
+            type: "read",
+            command: "sed -n '1,40p' src/a.ts",
+            name: "a.ts",
+            path: "/repo/src/a.ts",
+          },
+          { type: "search", command: "rg -n foo src", query: "foo", path: "src" },
+        ],
+        aggregatedOutput: "missing",
+        exitCode: 2,
+        durationMs: 300,
+        startedAtMs: 1_000,
+        completedAtMs: 1_300,
+      },
+      "message-history",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({
+        tool: "read",
+        input: expect.objectContaining({
+          command: "sed -n '1,40p' src/a.ts; rg -n foo src | head -5",
+          path: "/repo/src/a.ts",
+        }),
+        metadata: expect.objectContaining({ exit: 2 }),
+        startedAtMs: 1_000,
+        endedAtMs: 1_300,
+      }),
+    );
+  });
+
+  test("says that a declined command never ran", () => {
+    const part = toStreamPart(
+      {
+        type: "commandExecution",
+        id: "cmd-1",
+        command: "rm -rf build",
+        cwd: "/repo",
+        status: "declined",
+        commandActions: [],
+        aggregatedOutput: null,
+        exitCode: null,
+        durationMs: null,
+      },
+      "message-history",
+    )[0];
+
+    expect(part).toEqual(
+      expect.objectContaining({ status: "error", error: "The command was declined." }),
+    );
+  });
+
   test("keeps start-only timing only when the live start path opts in", () => {
     const item = {
       type: "commandExecution",

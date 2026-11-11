@@ -155,6 +155,7 @@
       "supportsFileStatus": true,
       "supportsMcpStatus": true,
       "supportsImageGeneration": false,
+      "supportsRunningCommandOutput": false,
       "supportsSubagents": true,
       "supportedSubagentExecutionModes": ["foreground", "background"]
     },

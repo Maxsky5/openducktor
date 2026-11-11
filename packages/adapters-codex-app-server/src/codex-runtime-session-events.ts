@@ -1,3 +1,4 @@
+import { CodexLiveCommandOutputs } from "./codex-live-command-output";
 import {
   CodexImageGenerationState,
   type CodexImageGenerationEnd,
@@ -205,6 +206,9 @@ export class CodexRuntimeSessionEvents {
   >();
   private readonly contextUsage: CodexContextUsageTracker;
   private readonly goalState = new CodexGoalState();
+  private readonly liveCommandOutputs = new CodexLiveCommandOutputs((runtimeId, update) =>
+    this.enqueueLiveCommandUpdate(runtimeId, update),
+  );
   /** The answers of text generation threads, which have no session. */
   readonly textAnswers = new CodexTextAnswers();
   /** The goal reads of the adapter. Only Codex goal notifications change a goal. */
@@ -266,6 +270,7 @@ export class CodexRuntimeSessionEvents {
   }
 
   clearRuntime(runtimeId: string): void {
+    this.liveCommandOutputs.finishAll(runtimeId);
     this.goalState.clearRuntime(runtimeId);
     this.textAnswers.clearRuntime(runtimeId);
     this.turnMessageIdsByRuntimeId.delete(runtimeId);
@@ -322,42 +327,98 @@ export class CodexRuntimeSessionEvents {
     generation: symbol,
     onRuntimeEventQueueFailure: CodexRuntimeEventQueueFailureHandler,
   ): void {
-    const previous =
-      this.runtimeEventProcessingByRuntimeId.get(event.runtimeId) ?? Promise.resolve();
+    this.enqueueRuntimeWork(
+      event.runtimeId,
+      generation,
+      () => this.processRuntimeStreamEventMutation(event, generation),
+      onRuntimeEventQueueFailure,
+    );
+  }
+
+  /**
+   * Runs a running output update that a timer started, after the runtime events before it. Its
+   * events reach the host in their own update, as the events of a runtime event do. A runtime
+   * without a generation was cleared, and its commands ended with it.
+   */
+  private enqueueLiveCommandUpdate(runtimeId: string, update: () => void): void {
+    const { onRuntimeEventQueueFailure } = this.deps;
+    const generation = this.runtimeEventGenerationByRuntimeId.get(runtimeId);
+    if (!onRuntimeEventQueueFailure || !generation) return;
+    this.enqueueRuntimeWork(
+      runtimeId,
+      generation,
+      () => this.processLiveCommandUpdate(runtimeId, update),
+      onRuntimeEventQueueFailure,
+    );
+  }
+
+  /** Runs the work of a runtime in order, and drops it when the runtime is cleared before it. */
+  private enqueueRuntimeWork(
+    runtimeId: string,
+    generation: symbol,
+    work: () => Promise<void>,
+    onRuntimeEventQueueFailure: CodexRuntimeEventQueueFailureHandler,
+  ): void {
+    const previous = this.runtimeEventProcessingByRuntimeId.get(runtimeId) ?? Promise.resolve();
     const processing = previous.then(() => {
-      if (this.runtimeEventGenerationByRuntimeId.get(event.runtimeId) !== generation) {
+      if (this.runtimeEventGenerationByRuntimeId.get(runtimeId) !== generation) {
         return;
       }
-      return this.processRuntimeStreamEventMutation(event, generation);
+      return work();
     });
     const cleanup = processing.then(
       () => undefined,
       (error) => {
-        onRuntimeEventQueueFailure({ runtimeId: event.runtimeId, error });
+        onRuntimeEventQueueFailure({ runtimeId, error });
         return undefined;
       },
     );
-    this.runtimeEventProcessingByRuntimeId.set(event.runtimeId, cleanup);
+    this.runtimeEventProcessingByRuntimeId.set(runtimeId, cleanup);
     void cleanup.then(() => {
-      if (this.runtimeEventProcessingByRuntimeId.get(event.runtimeId) === cleanup) {
-        this.runtimeEventProcessingByRuntimeId.delete(event.runtimeId);
+      if (this.runtimeEventProcessingByRuntimeId.get(runtimeId) === cleanup) {
+        this.runtimeEventProcessingByRuntimeId.delete(runtimeId);
       }
     });
   }
 
-  private async processRuntimeStreamEventMutation(
-    event: CodexRuntimeStreamEvent,
-    generation: symbol,
+  /**
+   * Gives the events that `run` emits for a runtime to a new mutation, and forgets the mutation
+   * when `run` ends.
+   */
+  private async withActiveMutation(
+    runtimeId: string,
+    run: (mutation: CodexRuntimeLiveSessionMutation) => Promise<void>,
   ): Promise<void> {
     const mutation: CodexRuntimeLiveSessionMutation = {
-      runtimeId: event.runtimeId,
+      runtimeId,
       transcriptEvents: [],
       changedSessionIds: new Set(),
       catalogInvalidated: false,
     };
-    this.activeMutationByRuntimeId.set(event.runtimeId, mutation);
-    let owner: CodexRuntimeStreamEventSessionOwner | undefined;
+    this.activeMutationByRuntimeId.set(runtimeId, mutation);
     try {
+      await run(mutation);
+    } finally {
+      if (this.activeMutationByRuntimeId.get(runtimeId) === mutation) {
+        this.activeMutationByRuntimeId.delete(runtimeId);
+      }
+    }
+  }
+
+  private processLiveCommandUpdate(runtimeId: string, update: () => void): Promise<void> {
+    return this.withActiveMutation(runtimeId, async (mutation) => {
+      update();
+      if (mutation.transcriptEvents.length === 0 && mutation.changedSessionIds.size === 0) return;
+      await this.deps.onLiveSessionMutation?.(mutation);
+    });
+  }
+
+  private processRuntimeStreamEventMutation(
+    event: CodexRuntimeStreamEvent,
+    generation: symbol,
+  ): Promise<void> {
+    return this.withActiveMutation(event.runtimeId, async (mutation) => {
+      let owner: CodexRuntimeStreamEventSessionOwner | undefined;
       try {
         owner = this.prepareRuntimeStreamEvent(event);
         if (event.kind === "fault") {
@@ -414,11 +475,7 @@ export class CodexRuntimeSessionEvents {
         );
         throw aggregate;
       }
-    } finally {
-      if (this.activeMutationByRuntimeId.get(event.runtimeId) === mutation) {
-        this.activeMutationByRuntimeId.delete(event.runtimeId);
-      }
-    }
+    });
   }
 
   latestTodos(externalSessionId: string): AgentSessionTodoItem[] | undefined {
@@ -462,10 +519,12 @@ export class CodexRuntimeSessionEvents {
     this.subagentLifecycle.clearSession(externalSessionId, runtimeId);
     if (runtimeId !== undefined) {
       this.clearStartedItemTimestampsForSession(runtimeId, externalSessionId);
+      this.liveCommandOutputs.finishAll(runtimeId, externalSessionId);
       for (const threadId of routedDescendantThreadIds) {
         this.liveImages.cancel(runtimeId, threadId);
         this.imageGenerations.clearSession(threadId, runtimeId);
         this.clearStartedItemTimestampsForSession(runtimeId, threadId);
+        this.liveCommandOutputs.finishAll(runtimeId, threadId);
       }
     }
     this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
@@ -1142,6 +1201,7 @@ export class CodexRuntimeSessionEvents {
 
   private streamingContext(scopedSession?: CodexSessionState): CodexStreamingContext {
     return {
+      liveCommandOutputs: this.liveCommandOutputs,
       activeTurnsBySessionId: this.deps.activeTurnsBySessionId,
       syntheticUserMessageEchoesByThreadId: this.syntheticUserMessageEchoesByThreadId,
       completedAgentMessagesByTurnKey: this.completedAgentMessagesByTurnKey,

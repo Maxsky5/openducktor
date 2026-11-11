@@ -41,6 +41,7 @@ import {
   parseCodexAsyncQuestionSkipIds,
 } from "./codex-async-questions";
 import { toCodexTurnInputList } from "./codex-user-inputs";
+import { LIVE_COMMAND_OUTPUT_INTERVAL_MS } from "./codex-live-command-output";
 
 const observeSessionState = async (
   adapter: CodexAppServerAdapter,
@@ -1215,7 +1216,7 @@ describe("CodexAppServerAdapter streaming", () => {
     },
   );
 
-  test("ignores known unconsumed notifications without emitting a session error", async () => {
+  test("shows the output of a running command before the command ends", async () => {
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const { adapter } = createHarness({ subscribeEvents });
 
@@ -1228,17 +1229,139 @@ describe("CodexAppServerAdapter streaming", () => {
     await flushCodexAdapterWork();
 
     emitNotification({
+      method: "item/started",
+      params: {
+        threadId: "thread/start-runtime-live",
+        turnId: "turn-live",
+        startedAtMs: 1_783_196_401_000,
+        item: codexCommandExecutionItemFixture({
+          id: "command-1",
+          status: "inProgress",
+          exitCode: null,
+          aggregatedOutput: null,
+        }),
+      },
+    });
+    emitNotification({
       method: "item/commandExecution/outputDelta",
       params: {
         threadId: "thread/start-runtime-live",
         turnId: "turn-live",
         itemId: "command-1",
-        delta: "command output",
+        delta: "first line\n",
       },
     });
     await flushCodexAdapterWork();
 
+    const commandParts = events.flatMap((event) =>
+      event.type === "assistant_part" &&
+      event.part.kind === "tool" &&
+      event.part.callId === "command-1"
+        ? [event.part]
+        : [],
+    );
+    expect(commandParts.at(-1)).toMatchObject({ status: "running", output: "first line\n" });
     expect(events).not.toContainEqual(expect.objectContaining({ type: "session_error" }));
+    unsubscribe();
+  });
+
+  test("sends the running output that waited for the interval to the host", async () => {
+    const ref = codexSessionRuntimeRef("thread/start-runtime-live");
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const hostEvents: AgentEvent[] = [];
+    const { adapter } = createHarness({
+      subscribeEvents,
+      onLiveSessionMutation: (mutation) => hostEvents.push(...mutation.transcriptEvents),
+    });
+    await adapter.startSession(codexStartSessionInput());
+    await flushCodexAdapterWork();
+
+    emitNotification({
+      method: "item/started",
+      params: {
+        threadId: ref.externalSessionId,
+        turnId: "turn-live",
+        startedAtMs: 1_783_196_401_000,
+        item: codexCommandExecutionItemFixture({
+          id: "command-1",
+          status: "inProgress",
+          exitCode: null,
+          aggregatedOutput: null,
+        }),
+      },
+    });
+    for (const delta of ["one\n", "two\n", "three\n"]) {
+      emitNotification({
+        method: "item/commandExecution/outputDelta",
+        params: {
+          threadId: ref.externalSessionId,
+          turnId: "turn-live",
+          itemId: "command-1",
+          delta,
+        },
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, LIVE_COMMAND_OUTPUT_INTERVAL_MS + 50));
+    await flushCodexAdapterWork();
+
+    const outputs = hostEvents.flatMap((event) =>
+      event.type === "assistant_part" &&
+      event.part.kind === "tool" &&
+      event.part.callId === "command-1"
+        ? [event.part.output ?? null]
+        : [],
+    );
+    expect(outputs.at(-1)).toBe("one\ntwo\nthree\n");
+  });
+
+  test("shows no running output of a command that runs on after its turn", async () => {
+    const ref = codexSessionRuntimeRef("thread/start-runtime-live");
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter } = createHarness({ subscribeEvents });
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(ref, (event) => events.push(event));
+    await flushCodexAdapterWork();
+
+    emitNotification({
+      method: "item/started",
+      params: {
+        threadId: ref.externalSessionId,
+        turnId: "turn-live",
+        startedAtMs: 1_783_196_401_000,
+        item: codexCommandExecutionItemFixture({
+          id: "command-1",
+          status: "inProgress",
+          exitCode: null,
+          aggregatedOutput: null,
+        }),
+      },
+    });
+    emitNotification({
+      method: "turn/completed",
+      params: {
+        threadId: ref.externalSessionId,
+        turn: codexTurnFixture({ id: "turn-live", items: [], status: "completed" }),
+      },
+    });
+    await flushCodexAdapterWork();
+    const turnEndIndex = events.length;
+
+    emitNotification({
+      method: "item/commandExecution/outputDelta",
+      params: {
+        threadId: ref.externalSessionId,
+        turnId: "turn-live",
+        itemId: "command-1",
+        delta: "finished\n",
+      },
+    });
+    await flushCodexAdapterWork();
+
+    // A running command update after the turn would show the session as working again.
+    expect(events.slice(turnEndIndex)).not.toContainEqual(
+      expect.objectContaining({ type: "assistant_part" }),
+    );
     unsubscribe();
   });
 

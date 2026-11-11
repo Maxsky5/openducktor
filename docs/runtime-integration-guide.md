@@ -263,6 +263,7 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 | `optionalSurfaces.supportsFileStatus` | Runtime provides file status |
 | `optionalSurfaces.supportsMcpStatus` | Runtime provides MCP connection state |
 | `optionalSurfaces.supportsImageGeneration` | OpenDucktor can display native generated images |
+| `optionalSurfaces.supportsRunningCommandOutput` | The runtime sends the output of a shell command while the command runs |
 | `optionalSurfaces.supportsSubagents` | OpenDucktor can observe native subagent work |
 | `optionalSurfaces.supportedSubagentExecutionModes` | Supports `foreground` or `background` subagents |
 
@@ -360,6 +361,10 @@ Feed thin native live and history readers into one projector. Use the public SDK
 Use native fields to classify tool-result wrappers, synthetic messages, queue operations, command output, compaction, and child delivery. Do not classify them by displayed text or a regular expression.
 
 Use stable native IDs when present. Deduplicate by ID and lifecycle, not message text. Keep tool proposal, queue, execution, progress, and completion separate. Measure duration from native execution start. If history omits that point, omit duration.
+
+Report a shell call that exits with an error code as failed, with the exit code in its error. Codex and Claude report it as failed. OpenCode reports it as completed, so the `opencode` adapter reads the exit code. Report a call that the user or a policy declined as cancelled, not as failed.
+
+Codex sends the output of a running command in `item/commandExecution/outputDelta`. The Codex adapter shows it on the running command at most once each 250 ms and keeps only the last 64 KB. It stops at the end of the turn, because a running update after the turn shows the session as working again. The completed item gives all of the output. Codex starts to send output after the command starts, so the running output can miss the first lines. OpenCode V2 writes running shell output to a file and sends no running output. The Claude Agent SDK sends only the run time of a running tool in `tool_progress`, so a running Claude command has no output. `optionalSurfaces.supportsRunningCommandOutput` of each runtime descriptor says whether the runtime sends running output. The tool details show the `Live` label only for such a runtime.
 
 Keep the original tool ID and reason for success, failure, and denial. Read applied file edits from structured results or supported hooks. Keep previews from tool input separate from confirmed file changes. Do not reconstruct applied changes from private transcripts.
 

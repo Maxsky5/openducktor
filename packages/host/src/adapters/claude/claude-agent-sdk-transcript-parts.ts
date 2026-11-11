@@ -92,6 +92,29 @@ export const createClaudeFinishStepPart = ({
   reason,
 });
 
+// Claude gives a failed shell command as `Exit code N`, then the output of the command.
+const CLAUDE_EXIT_CODE_LINE = /^Exit code (\d+)(?:\r?\n|$)/;
+
+/**
+ * The error of a failed call. A failed shell command gives its exit code as metadata and its
+ * output as both its output and its error, as other runtimes give them.
+ */
+const applyClaudeToolError = (part: ClaudeToolPart, text: string): void => {
+  const exit = part.toolType === "bash" ? CLAUDE_EXIT_CODE_LINE.exec(text) : null;
+  if (!exit) {
+    part.error = text;
+    return;
+  }
+  part.metadata = { ...part.metadata, exit: Number(exit[1]) };
+  const output = text.slice(exit[0].length);
+  if (output.trim().length === 0) {
+    part.error = text;
+    return;
+  }
+  part.output = output;
+  part.error = output;
+};
+
 export const createClaudeCompletedToolPart = ({
   callId,
   endedAtMs,
@@ -147,7 +170,7 @@ export const createClaudeCompletedToolPart = ({
     part.startedAtMs = startedAtMs;
   }
   if (isError) {
-    part.error = text;
+    applyClaudeToolError(part, text);
   } else {
     part.output = text;
   }

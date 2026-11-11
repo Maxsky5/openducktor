@@ -94,15 +94,13 @@ export const projectShellPart = (
   if (message.status !== "running") {
     const cancelled = message.status === "killed";
     const failed =
-      message.status === "timeout" ||
-      signal !== undefined ||
-      (message.exit !== undefined && message.exit !== 0);
+      message.status === "timeout" || signal !== undefined || isFailedShellExit(message.exit);
     tool.status = cancelled || failed ? "error" : "completed";
     tool.metadata.backgroundTaskStatus = taskStatus(cancelled, failed);
     if (cancelled) tool.error = "Shell command cancelled.";
     else if (message.status === "timeout") tool.error = "Shell command timed out.";
     else if (signal !== undefined) tool.error = `Shell command was killed by ${signal}.`;
-    else if (failed) tool.error = `Shell command exited with code ${message.exit}.`;
+    else if (failed) tool.error = shellExitError(message.exit);
   }
   if (message.exit !== undefined) tool.metadata.exit = message.exit;
   if (message.time.completed !== undefined) tool.endedAtMs = message.time.completed;
@@ -160,7 +158,7 @@ const parseResult = (message: SessionMessageSynthetic): Result => {
     metadata.state === "error" ||
     metadata.timeout === true ||
     metadata.signal !== undefined ||
-    (metadata.exit !== undefined && metadata.exit !== 0);
+    isFailedShellExit(metadata.exit);
   const cancelled = metadata.state === "cancelled";
   const result: Result = {
     noticeId: message.id,
@@ -179,7 +177,7 @@ const parseResult = (message: SessionMessageSynthetic): Result => {
   else if (metadata.timeout) result.error = "Shell command timed out.";
   else if (metadata.signal !== undefined)
     result.error = `Shell command was killed by ${metadata.signal}.`;
-  else if (failed) result.error = `Shell command exited with code ${metadata.exit}.`;
+  else if (failed) result.error = shellExitError(metadata.exit);
   return result;
 };
 
@@ -191,6 +189,14 @@ const setResult = (tool: ToolPart, result: Result): void => {
   tool.metadata = { ...tool.metadata, ...result.metadata };
   if (result.error !== undefined) tool.error = result.error;
 };
+
+/** A shell command that exits with an error code failed. */
+export const isFailedShellExit = (exit: number | string | undefined): boolean =>
+  exit !== undefined && exit !== 0;
+
+/** The error of a shell command that exited with an error code. */
+export const shellExitError = (exit: number | string | undefined): string =>
+  `Shell command exited with code ${exit}.`;
 
 const taskStatus = (cancelled: boolean, failed: boolean): "stopped" | "failed" | "completed" => {
   if (cancelled) return "stopped";

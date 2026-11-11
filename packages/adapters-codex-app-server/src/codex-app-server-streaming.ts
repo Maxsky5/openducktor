@@ -1,3 +1,4 @@
+import type { CodexLiveCommandOutputs } from "./codex-live-command-output";
 import type { CodexImageGenerationEnd } from "./codex-image-generation-state";
 import type {
   AgentImageGenerationPart,
@@ -81,6 +82,8 @@ export type CodexExpectedEcho = {
 
 export type CodexStreamingContext = {
   subagentRole?: string;
+  /** The output of running commands, which Codex streams before the command ends. */
+  liveCommandOutputs: CodexLiveCommandOutputs;
   activeTurnsBySessionId: Map<string, ActiveCodexTurn>;
   syntheticUserMessageEchoesByThreadId: Map<string, CodexUserMessageEcho[]>;
   completedAgentMessagesByTurnKey: Map<string, CompletedAgentMessage>;
@@ -268,7 +271,7 @@ const recordStartedItemTimestamp = (
   session: CodexSessionState,
   item: CodexTimedThreadItem,
 ): void => {
-  if (item.startedAtMs !== undefined) {
+  if (item.startedAtMs !== undefined && item.startedAtMs !== null) {
     context.recordStartedItemTimestamp(
       session.runtimeId,
       session.threadId,
@@ -288,7 +291,7 @@ const withRecordedStartedItemTimestamp = (
     session.threadId,
     item.id,
   );
-  if (startedAtMs === undefined || item.startedAtMs !== undefined) {
+  if (startedAtMs === undefined || (item.startedAtMs !== undefined && item.startedAtMs !== null)) {
     return item;
   }
   return { ...item, startedAtMs };
@@ -684,6 +687,9 @@ export const handleCodexPendingNotifications = async (
       );
     }
     const timestamp = timestampFromCodexNotification(notification);
+    context.liveCommandOutputs.follow(session, notification, (item, turnId) =>
+      emitStartedItem(context, session, item, timestamp, turnId),
+    );
     const notificationTurnId = codexNotificationTurnId(notification);
     const activeTurn = context.activeTurnsBySessionId.get(session.threadId);
     if (notificationTurnId && activeTurn) {
