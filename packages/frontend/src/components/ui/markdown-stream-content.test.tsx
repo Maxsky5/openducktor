@@ -133,6 +133,22 @@ describe("describeMarkdown", () => {
   });
 
   test.each([
+    ["LF", "\n"],
+    ["CRLF", "\r\n"],
+    ["CR", "\r"],
+  ])("keeps list items in order with %s line endings", (_, lineEnding) => {
+    for (const indent of ["", "  "]) {
+      const markdown = ["- one", "- two", "- three", "- four", "- five"]
+        .map((line) => `${indent}${line}`)
+        .join(lineEnding);
+
+      for (const described of describeWhileStreaming(markdown, 1)) {
+        expect(renderBlocks(described)).toBe(renderWholeText(described.markdown));
+      }
+    }
+  });
+
+  test.each([
     "Intro\n\n- one\n- two\n- three\n- four\n- five\n- six\n\nAfter",
     "- one\n\n- two\n- three\n- four\n\n- five\n  - nested\n\n    continuation\n- six\n\nAfter",
     "  3) one\n  4) two\n  5) three\n  6) four\n  7) five\n  8) six\n\n  9) seven\n\nEnd",

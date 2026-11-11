@@ -174,7 +174,13 @@ const parseTail = (
         if (item) {
           const itemStart = readOffsets(item, prefix.length).start;
           listTails.set(block, {
-            start: tailStart + tail.lastIndexOf("\n", itemStart - 1) + 1,
+            start:
+              tailStart +
+              Math.max(
+                tail.lastIndexOf("\n", itemStart - 1),
+                tail.lastIndexOf("\r", itemStart - 1),
+              ) +
+              1,
             itemIndex,
           });
         }
