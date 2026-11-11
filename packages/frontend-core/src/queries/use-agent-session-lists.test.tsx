@@ -111,6 +111,7 @@ describe("useAgentSessionLists", () => {
       await harness.mount();
       expect(harness.getLatest()).toEqual({
         data: { "task-1": [] },
+        loadedTaskIds: [],
         error: null,
         isPending: true,
       });
@@ -133,6 +134,7 @@ describe("useAgentSessionLists", () => {
       await harness.mount();
       expect(harness.getLatest()).toEqual({
         data: { "task-1": [] },
+        loadedTaskIds: [],
         error: null,
         isPending: true,
       });

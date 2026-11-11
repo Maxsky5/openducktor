@@ -2154,6 +2154,10 @@ describe("useRepoSessionReadModel", () => {
       });
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
       expect(state.getStoredSession(workspaceRef)?.status).toBe("running");
+      // Task 1 has its record. Task 2 still loads, but it does not hold back task 1.
+      await state.harness.waitFor(() => state.getSession() !== null);
+      expect(state.getSession()).toMatchObject({ livePresence: "present", status: "running" });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
 
       await state.harness.run(async () => {
         task2Hydration.resolve([{ taskId: "task-2", agentSessions: [] }]);

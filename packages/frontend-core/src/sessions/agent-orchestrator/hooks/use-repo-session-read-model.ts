@@ -328,8 +328,11 @@ export const useRepoSessionReadModel = ({
     },
     [sessionFaults, workspaceRepoPath],
   );
+  // A partial pass applies the lists that were read while other lists of the task set
+  // `partialOf` still load or failed. It shows those sessions at once, but only a complete
+  // pass makes the task records ready.
   const applyTaskRecords = useCallback(
-    (repoPath: string, records: TaskSessionRecords): boolean => {
+    (repoPath: string, records: TaskSessionRecords, partialOf?: string): boolean => {
       try {
         commitSessionCollection((current) => ({
           collection: withUnplacedLiveSnapshots(
@@ -342,6 +345,9 @@ export const useRepoSessionReadModel = ({
           ),
           result: undefined,
         }));
+        if (partialOf !== undefined) {
+          return true;
+        }
         taskRecordApplyRef.current = {
           kind: "ready",
           workspaceId: records.workspaceId,
@@ -356,7 +362,7 @@ export const useRepoSessionReadModel = ({
           kind: "failed",
           workspaceId: records.workspaceId,
           repoPath,
-          taskIdsKey: taskIdsScopeKey(records.taskIds),
+          taskIdsKey: partialOf ?? taskIdsScopeKey(records.taskIds),
           failedAt: "apply",
           message,
         };
@@ -507,6 +513,12 @@ export const useRepoSessionReadModel = ({
   useEffect(() => {
     if (!workspaceRepoPath || !workspaceId) {
       return;
+    }
+    if (taskRecords.kind !== "ready" && taskRecords.loaded) {
+      // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
+      if (!applyTaskRecords(workspaceRepoPath, taskRecords.loaded, readCurrentTaskIdsKey())) {
+        return;
+      }
     }
     if (taskRecords.kind === "loading") {
       if (observedScopeKeyRef.current !== scopeKey) {

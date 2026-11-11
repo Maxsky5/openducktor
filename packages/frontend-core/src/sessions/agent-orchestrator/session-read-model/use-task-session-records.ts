@@ -4,9 +4,13 @@ import type { AgentSessionReadPort } from "../../../queries/agent-sessions";
 import { useAgentSessionLists } from "../../../queries/use-agent-session-lists";
 import { type TaskSessionRecords, toTaskSessionRecords } from "./task-session-records";
 
+/**
+ * `loaded` holds the record lists that were read while other lists still load or failed. Only
+ * these tasks can prove that a session record disappeared.
+ */
 export type TaskSessionRecordsState =
-  | { kind: "loading" }
-  | { kind: "failed"; error: unknown }
+  | { kind: "loading"; loaded: TaskSessionRecords | null }
+  | { kind: "failed"; error: unknown; loaded: TaskSessionRecords | null }
   | { kind: "ready"; records: TaskSessionRecords };
 
 type UseTaskSessionRecordsArgs = {
@@ -35,16 +39,33 @@ export const useTaskSessionRecords = ({
     readPort,
   });
   return useMemo((): TaskSessionRecordsState => {
-    if (workspaceId === null || sessionLists.isPending) {
-      return { kind: "loading" };
+    if (workspaceId === null) {
+      return { kind: "loading", loaded: null };
+    }
+    const loaded =
+      sessionLists.loadedTaskIds.length === 0
+        ? null
+        : toTaskSessionRecords(
+            sessionLists.loadedTaskIds.map((id) => ({ id })),
+            sessionLists.data,
+            workspaceId,
+          );
+    if (sessionLists.isPending) {
+      return { kind: "loading", loaded };
     }
     if (sessionLists.error) {
-      return { kind: "failed", error: sessionLists.error };
+      return { kind: "failed", error: sessionLists.error, loaded };
     }
     const taskSessionTargets = Object.keys(sessionLists.data).map((id) => ({ id }));
     return {
       kind: "ready",
       records: toTaskSessionRecords(taskSessionTargets, sessionLists.data, workspaceId),
     };
-  }, [workspaceId, sessionLists.data, sessionLists.error, sessionLists.isPending]);
+  }, [
+    workspaceId,
+    sessionLists.data,
+    sessionLists.error,
+    sessionLists.isPending,
+    sessionLists.loadedTaskIds,
+  ]);
 };

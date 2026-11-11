@@ -63,7 +63,7 @@ Rules:
 - A later connection snapshot can follow missed `task_session_records_updated` envelopes. It makes the cached task session lists of its repository read again.
 - Treat each later snapshot as a full collection reset.
 - Commit a snapshot once so rows, activity, pending input, context, and counters use the same state.
-- Per-task session-list queries own workflow records. Workspace session-list queries own repository records. Live observation starts without waiting for these reads. A record pass that adds a root applies the kept snapshot of that root. A workspace record failure blocks workspace session actions, not healthy task sessions.
+- Per-task session-list queries own workflow records. Workspace session-list queries own repository records. Live observation starts without waiting for these reads. Each task list applies as soon as it is read, also while other lists load or after they fail. Only a read list can prove that a record disappeared. A record pass that adds a root applies the kept snapshot of that root. A workspace record failure blocks workspace session actions, not healthy task sessions.
 - Use `session-read-model/agent-session-workflow-records.ts` to project durable ownership into the collection. The host workflow launch service resolves source records when it prepares a launch.
 
 This owner does not load catalogs, file status, diff, selected history, or page navigation. It does not select a native runtime protocol.
