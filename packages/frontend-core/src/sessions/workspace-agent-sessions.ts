@@ -56,6 +56,7 @@ export const createWorkspaceAgentSessions = (): WorkspaceAgentSessions => {
       updateSession: (identity, updater) => requireStore().updateSession(identity, updater),
       applyLiveSessionEnvelope: (envelope) => requireStore().applyLiveSessionEnvelope(envelope),
       recordHistoryEnvelope: (envelope) => requireStore().recordHistoryEnvelope(envelope),
+      listObservedLiveSnapshots: () => requireStore().listObservedLiveSnapshots(),
       listSessionTaskIds,
       removeTaskSessions,
     };

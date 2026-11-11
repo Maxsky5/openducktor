@@ -204,6 +204,7 @@ export function useAgentOrchestratorOperations({
     commitSessionCollection: sessionStore.commitSessionCollection,
     applyLiveSessionEnvelope: sessionStore.applyLiveSessionEnvelope,
     recordHistoryEnvelope: sessionStore.recordHistoryEnvelope,
+    listObservedLiveSnapshots: sessionStore.listObservedLiveSnapshots,
     messageQueues,
     liveSessionPort: liveSessionHostPort,
     transcriptEvents,

@@ -97,6 +97,8 @@ export type AgentSessionsStore = {
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
   applyLiveSessionEnvelope: (envelope: LiveSessionStateEnvelope) => void;
   recordHistoryEnvelope: (envelope: AgentSessionLiveEnvelope) => void;
+  /** The newest live snapshot of each session, including sessions that have no record yet. */
+  listObservedLiveSnapshots: () => AgentSessionLiveSnapshot[];
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   replaceSession: (session: AgentSessionState) => void;
   removeSession: (identity: AgentSessionIdentity) => void;
@@ -383,6 +385,7 @@ export const createAgentSessionsStore = (
     },
     commitSessionCollection,
     recordHistoryEnvelope: (envelope) => historyProgress?.recordEvent(envelope),
+    listObservedLiveSnapshots: () => [...observedActivity.values()],
     applyLiveSessionEnvelope: (envelope) => {
       switch (envelope.type) {
         case "snapshot": {

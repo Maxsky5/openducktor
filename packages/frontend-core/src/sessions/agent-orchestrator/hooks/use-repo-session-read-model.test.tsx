@@ -204,6 +204,7 @@ const createState = (
     commitSessionCollection: sessionStore.commitSessionCollection,
     applyLiveSessionEnvelope: sessionStore.applyLiveSessionEnvelope,
     recordHistoryEnvelope: sessionStore.recordHistoryEnvelope,
+    listObservedLiveSnapshots: sessionStore.listObservedLiveSnapshots,
     messageQueues,
     liveSessionPort,
     transcriptEvents,
@@ -2040,6 +2041,96 @@ describe("useRepoSessionReadModel", () => {
       releaseSnapshot.resolve();
       task2Hydration.resolve([]);
       await state.harness.unmount();
+    }
+  });
+
+  test("applies a snapshot that came before its session record when the record loads", async () => {
+    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
+    const releaseSnapshot = createDeferred<void>();
+    const lateRecord: AgentSessionRecord = { ...record, externalSessionId: "late", role: "qa" };
+    const lateRef = { ...snapshot().ref, externalSessionId: lateRecord.externalSessionId };
+    const lateSnapshot = snapshot({
+      ref: lateRef,
+      activity: "waiting_for_question",
+      pendingQuestions: [{ requestId: "question", questions: [] }],
+      contextUsage: { totalTokens: 1200 },
+      goal: { objective: "Ship the feature", status: "active" },
+    });
+    const state = createState(
+      (emit) => {
+        void releaseSnapshot.promise.then(() => {
+          emit(
+            createLiveSnapshotEnvelope({
+              sessions: [snapshot({ activity: "running" }), lateSnapshot],
+            }),
+          );
+        });
+      },
+      record,
+      { agentSessionsListForTasks: () => task2Hydration.promise },
+    );
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      // A new task appears while observation runs, so its record loads after the snapshot.
+      await state.harness.update({ ...state.props, taskIds: ["task-1", "task-2"] });
+      await state.harness.run(async () => {
+        releaseSnapshot.resolve();
+        await releaseSnapshot.promise;
+      });
+
+      // The late record does not hold back the fields of a session that the store already has.
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+      expect(state.getSession()).toMatchObject({ livePresence: "present", status: "running" });
+      expect(state.getStoredSession(lateRef)).toBeNull();
+
+      await state.harness.run(async () => {
+        task2Hydration.resolve([{ taskId: "task-2", agentSessions: [lateRecord] }]);
+        await task2Hydration.promise;
+      });
+      await state.harness.waitFor(() => state.getStoredSession(lateRef) !== null);
+      const late = state.getStoredSession(lateRef)!;
+      expect(getAgentSessionActivityStateFromSession(late)).toBe("waiting_input");
+      expect(late).toMatchObject({
+        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
+        livePresence: "present",
+        pendingQuestions: [{ requestId: "question", questions: [] }],
+        contextUsage: { totalTokens: 1200 },
+        goal: { objective: "Ship the feature", status: "active" },
+      });
+    } finally {
+      releaseSnapshot.resolve();
+      task2Hydration.resolve([]);
+      await state.harness.unmount();
+    }
+  });
+
+  test("applies an update that came before the ownership event of a new task session", async () => {
+    const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
+    const saved = { ...record, externalSessionId: "new-thread" };
+    const ref = { ...snapshot().ref, externalSessionId: saved.externalSessionId };
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit({ type: "session_upsert", session: snapshot({ ref, activity: "running" }) });
+        state.emit({
+          type: "task_session_records_updated",
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          agentSessions: [saved],
+        });
+      });
+      expect(state.getStoredSession(ref)).toMatchObject({
+        sessionAssociation: { kind: "workflow", taskId: "task-1" },
+        livePresence: "present",
+        status: "running",
+      });
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
     }
   });
 

@@ -25,6 +25,7 @@ import { createAgentSessionFixture } from "../../../test-support/shared-test-fix
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
+  applyUnplacedLiveSnapshots,
   buildAgentSessionLiveCollection,
   projectSessionSnapshotActivity,
   rebuildProjectedPendingInput,
@@ -193,6 +194,55 @@ describe("projectSessionSnapshotActivity", () => {
       });
     },
   );
+});
+
+describe("applyUnplacedLiveSnapshots", () => {
+  test("applies kept snapshots to a session that records added, and to its child", () => {
+    const root = createAgentSessionFixture({
+      ...identity("root"),
+      sessionAssociation: workflowAssociation(),
+      livePresence: "absent",
+    });
+    const placed = createAgentSessionFixture({ ...identity("placed"), status: "running" });
+    const previous = replaceAgentSession(emptyAgentSessionCollection(), placed);
+    const recorded = replaceAgentSession(previous, root);
+
+    const next = applyUnplacedLiveSnapshots({
+      previous,
+      current: recorded,
+      snapshots: [
+        snapshot("child", {
+          parentExternalSessionId: "root",
+          activity: "waiting_for_permission",
+          pendingApprovals: [
+            { requestId: "approve", requestType: "command_execution", title: "Run" },
+          ],
+        }),
+        snapshot("root", { activity: "running", goal: { objective: "Ship", status: "active" } }),
+        snapshot("placed"),
+        snapshot("orphan", { parentExternalSessionId: "missing" }),
+      ],
+    });
+
+    expect(getAgentSession(next, identity("root"))).toMatchObject({
+      livePresence: "present",
+      status: "running",
+      goal: { objective: "Ship", status: "active" },
+      pendingApprovals: [{ requestId: "approve" }],
+    });
+    expect(getAgentSession(next, identity("child"))?.livePresence).toBe("present");
+    // A session that the live projection already holds keeps its newer state.
+    expect(getAgentSession(next, identity("placed"))).toBe(placed);
+    expect(getAgentSession(next, identity("orphan"))).toBeNull();
+  });
+
+  test("returns the same collection when every snapshot is placed", () => {
+    const placed = createAgentSessionFixture(identity("placed"));
+    const current = replaceAgentSession(emptyAgentSessionCollection(), placed);
+    expect(
+      applyUnplacedLiveSnapshots({ previous: current, current, snapshots: [snapshot("placed")] }),
+    ).toBe(current);
+  });
 });
 
 describe("agent session live projection", () => {

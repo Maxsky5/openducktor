@@ -602,7 +602,39 @@ export const buildAgentSessionLiveCollection = ({
       resetSessionLiveStateForSnapshot(settled, liveSnapshot !== undefined),
     );
   }
+  return rebuildProjectedPendingInput(placeLiveSnapshots(collection, snapshots));
+};
 
+/**
+ * Applies the newest live snapshot of each session that `previous` does not hold.
+ *
+ * A snapshot that arrives before the record of its session finds no session, so the record
+ * pass that adds the session applies the snapshot. Child sessions follow their new parent.
+ */
+export const applyUnplacedLiveSnapshots = ({
+  previous,
+  current,
+  snapshots,
+}: {
+  previous: AgentSessionCollection;
+  current: AgentSessionCollection;
+  snapshots: readonly AgentSessionLiveSnapshot[];
+}): AgentSessionCollection => {
+  const unplaced = snapshots.filter(
+    (snapshot) => !getAgentSession(previous, toSessionIdentity(snapshot.ref)),
+  );
+  if (unplaced.length === 0) {
+    return current;
+  }
+  const collection = placeLiveSnapshots(current, unplaced);
+  return collection === current ? current : rebuildProjectedPendingInput(collection);
+};
+
+const placeLiveSnapshots = (
+  current: AgentSessionCollection,
+  snapshots: readonly AgentSessionLiveSnapshot[],
+): AgentSessionCollection => {
+  let collection = current;
   let remaining = [...snapshots];
   while (remaining.length > 0) {
     const deferred: AgentSessionLiveSnapshot[] = [];
@@ -632,7 +664,7 @@ export const buildAgentSessionLiveCollection = ({
     }
     remaining = deferred;
   }
-  return rebuildProjectedPendingInput(collection);
+  return collection;
 };
 
 export const applyAgentSessionLiveDelta = ({

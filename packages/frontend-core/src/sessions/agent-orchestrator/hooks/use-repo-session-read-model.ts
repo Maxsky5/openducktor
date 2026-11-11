@@ -56,6 +56,7 @@ import {
 } from "../history/session-history-freshness";
 import {
   applyAgentSessionLiveDelta,
+  applyUnplacedLiveSnapshots,
   buildAgentSessionLiveCollection,
   isSettlingLiveSessionSnapshot,
 } from "../session-read-model/agent-session-live-projection";
@@ -96,6 +97,7 @@ type UseRepoSessionReadModelArgs = {
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   applyLiveSessionEnvelope: AgentSessionsStore["applyLiveSessionEnvelope"];
   recordHistoryEnvelope: AgentSessionsStore["recordHistoryEnvelope"];
+  listObservedLiveSnapshots: AgentSessionsStore["listObservedLiveSnapshots"];
   messageQueues: Pick<
     AgentMessageQueuesStore,
     "replaceRepository" | "apply" | "removeAccepted" | "getQueue"
@@ -173,6 +175,7 @@ export const useRepoSessionReadModel = ({
   commitSessionCollection,
   applyLiveSessionEnvelope,
   recordHistoryEnvelope,
+  listObservedLiveSnapshots,
   messageQueues,
   liveSessionPort,
   transcriptEvents,
@@ -182,6 +185,13 @@ export const useRepoSessionReadModel = ({
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [reloadGeneration, setReloadGeneration] = useState(0);
   const workspaceRecords = useWorkspaceSessionRecords(workspaceId, queryClient, reloadGeneration);
+  // A snapshot can come before the record of its session. A record pass that adds the session
+  // applies the kept snapshot, so the live fields do not wait for a later update.
+  const withUnplacedLiveSnapshots = useCallback(
+    (previous: AgentSessionCollection, current: AgentSessionCollection) =>
+      applyUnplacedLiveSnapshots({ previous, current, snapshots: listObservedLiveSnapshots() }),
+    [listObservedLiveSnapshots],
+  );
   const [sessionFaults, setSessionFaults] = useState<
     ReadonlyMap<string, AgentSessionTransientFault>
   >(() => new Map());
@@ -218,7 +228,10 @@ export const useRepoSessionReadModel = ({
     )
       return;
     const collection = commitSessionCollection((current) => {
-      const next = applyWorkspaceSessionRecords(current, records, workspaceId);
+      const next = withUnplacedLiveSnapshots(
+        current,
+        applyWorkspaceSessionRecords(current, records, workspaceId),
+      );
       return { collection: next, result: next };
     });
     // Check durable target identity after the shared store commit, not during render.
@@ -227,6 +240,7 @@ export const useRepoSessionReadModel = ({
   }, [
     commitSessionCollection,
     currentWorkspaceRepoPathRef,
+    withUnplacedLiveSnapshots,
     workspaceRecords.records.data,
     workspaceRepoPath,
     workspaceId,
@@ -317,11 +331,14 @@ export const useRepoSessionReadModel = ({
     (repoPath: string, records: TaskSessionRecords): boolean => {
       try {
         commitSessionCollection((current) => ({
-          collection: applyWorkflowSessionRecords({
-            projected: current,
-            records: toLoadedWorkflowSessionRecords(records),
-            associationEvidence: current,
-          }),
+          collection: withUnplacedLiveSnapshots(
+            current,
+            applyWorkflowSessionRecords({
+              projected: current,
+              records: toLoadedWorkflowSessionRecords(records),
+              associationEvidence: current,
+            }),
+          ),
           result: undefined,
         }));
         taskRecordApplyRef.current = {
@@ -348,7 +365,7 @@ export const useRepoSessionReadModel = ({
         return false;
       }
     },
-    [commitSessionCollection],
+    [commitSessionCollection, withUnplacedLiveSnapshots],
   );
   const reloadSessionReadModel = useCallback(() => {
     const retryId = retryIdRef.current + 1;
@@ -966,7 +983,7 @@ export const useRepoSessionReadModel = ({
                 current: owned,
                 envelope: { type: "session_upsert", session: envelope.liveSession },
               })
-            : owned;
+            : withUnplacedLiveSnapshots(current, owned);
         });
         return;
       }
@@ -1127,6 +1144,7 @@ export const useRepoSessionReadModel = ({
     clearSessionFault,
     clearSessionFaults,
     recordSessionFault,
+    withUnplacedLiveSnapshots,
     workspaceRepoPath,
     workspaceId,
     scopeKey,
