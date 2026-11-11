@@ -328,51 +328,61 @@ export const useRepoSessionReadModel = ({
     },
     [sessionFaults, workspaceRepoPath],
   );
-  // A partial pass applies the lists that were read while other lists of the task set
-  // `partialOf` still load or failed. It shows those sessions at once, but only a complete
-  // pass makes the task records ready.
-  const applyTaskRecords = useCallback(
-    (repoPath: string, records: TaskSessionRecords, partialOf?: string): boolean => {
-      try {
-        commitSessionCollection((current) => ({
-          collection: withUnplacedLiveSnapshots(
-            current,
-            applyWorkflowSessionRecords({
-              projected: current,
-              records: toLoadedWorkflowSessionRecords(records),
-              associationEvidence: current,
-            }),
-          ),
-          result: undefined,
-        }));
-        if (partialOf !== undefined) {
-          return true;
-        }
-        taskRecordApplyRef.current = {
-          kind: "ready",
-          workspaceId: records.workspaceId,
-          repoPath,
-          taskIdsKey: taskIdsScopeKey(records.taskIds),
-          records,
-        };
-        return true;
-      } catch (error: unknown) {
-        const message = `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(error)}`;
-        taskRecordApplyRef.current = {
-          kind: "failed",
-          workspaceId: records.workspaceId,
-          repoPath,
-          taskIdsKey: partialOf ?? taskIdsScopeKey(records.taskIds),
-          failedAt: "apply",
-          message,
-        };
-        setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(repoPath, message, "task-records"),
-        );
-        return false;
-      }
+  // Commits task records and the kept snapshots of the sessions that they add. It throws when a
+  // record conflicts with a known session association.
+  const commitTaskRecords = useCallback(
+    (records: TaskSessionRecords): void => {
+      commitSessionCollection((current) => ({
+        collection: withUnplacedLiveSnapshots(
+          current,
+          applyWorkflowSessionRecords({
+            projected: current,
+            records: toLoadedWorkflowSessionRecords(records),
+            associationEvidence: current,
+          }),
+        ),
+        result: undefined,
+      }));
     },
     [commitSessionCollection, withUnplacedLiveSnapshots],
+  );
+  const failTaskRecordApply = useCallback(
+    (repoPath: string, workspaceId: string, taskIdsKey: string, cause: unknown): void => {
+      const message = `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(cause)}`;
+      taskRecordApplyRef.current = {
+        kind: "failed",
+        workspaceId,
+        repoPath,
+        taskIdsKey,
+        failedAt: "apply",
+        message,
+      };
+      setSessionReadModelLoadState(
+        failedAgentSessionReadModelLoadState(repoPath, message, "task-records"),
+      );
+    },
+    [],
+  );
+  // Applies the records of every task in the current set, so the task records become ready.
+  const applyTaskRecords = useCallback(
+    (repoPath: string, records: TaskSessionRecords): boolean => {
+      const taskIdsKey = taskIdsScopeKey(records.taskIds);
+      try {
+        commitTaskRecords(records);
+      } catch (error: unknown) {
+        failTaskRecordApply(repoPath, records.workspaceId, taskIdsKey, error);
+        return false;
+      }
+      taskRecordApplyRef.current = {
+        kind: "ready",
+        workspaceId: records.workspaceId,
+        repoPath,
+        taskIdsKey,
+        records,
+      };
+      return true;
+    },
+    [commitTaskRecords, failTaskRecordApply],
   );
   const reloadSessionReadModel = useCallback(() => {
     const retryId = retryIdRef.current + 1;
@@ -514,9 +524,14 @@ export const useRepoSessionReadModel = ({
     if (!workspaceRepoPath || !workspaceId) {
       return;
     }
+    // Lists that were read show their sessions while other lists load or after they fail. Only
+    // the complete set makes the task records ready.
     if (taskRecords.kind !== "ready" && taskRecords.loaded) {
-      // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
-      if (!applyTaskRecords(workspaceRepoPath, taskRecords.loaded, readCurrentTaskIdsKey())) {
+      try {
+        // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
+        commitTaskRecords(taskRecords.loaded);
+      } catch (error: unknown) {
+        failTaskRecordApply(workspaceRepoPath, workspaceId, readCurrentTaskIdsKey(), error);
         return;
       }
     }
@@ -609,7 +624,9 @@ export const useRepoSessionReadModel = ({
     });
   }, [
     applyTaskRecords,
+    commitTaskRecords,
     currentWorkspaceRepoPathRef,
+    failTaskRecordApply,
     repoEpochRef,
     taskRecords,
     scopeKey,

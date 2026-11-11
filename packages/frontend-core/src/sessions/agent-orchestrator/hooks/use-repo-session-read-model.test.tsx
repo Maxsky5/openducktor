@@ -2173,6 +2173,25 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("stays loading while the task list loads, and becomes ready for a workspace without tasks", async () => {
+    const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })));
+    try {
+      state.props.isLoadingTasks = true;
+      state.props.taskIds = [];
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      // The empty task list of a loading read proves nothing about task records.
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+
+      await state.harness.update({ ...state.props, isLoadingTasks: false, taskIds: [] });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
   test("applies an update that came before the ownership event of a new task session", async () => {
     const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
     const saved = { ...record, externalSessionId: "new-thread" };
