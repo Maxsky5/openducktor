@@ -325,7 +325,8 @@ describe("AgentChatMarkdownRenderer", () => {
   // A math block can load the KaTeX module first, which can take more than 1 s in a full test run.
   test("keeps a diagram mounted when math first appears in its block", async () => {
     const diagramSpy = await spyOnDiagramRender();
-    const list = "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Value";
+    const list =
+      "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Two\n3. Three\n4. Four\n5. Value";
     const rendered = render(chatMarkdown(list, true));
 
     try {
@@ -423,8 +424,9 @@ describe("AgentChatMarkdownRenderer", () => {
   ])("draws a diagram once when its list joins the next item %s", async (_, drawFirst) => {
     const pendingSvg = Promise.withResolvers<string>();
     const diagramSpy = await spyOnDiagramRender(pendingSvg.promise);
-    const list = "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```";
-    const rendered = render(chatMarkdown(`${list}\n2`, true));
+    const list =
+      "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Two\n3. Three\n4. Four";
+    const rendered = render(chatMarkdown(`${list}\n5`, true));
 
     try {
       await waitFor(() => expect(diagramSpy).toHaveBeenCalledTimes(1), { timeout: 500 });
@@ -434,7 +436,7 @@ describe("AgentChatMarkdownRenderer", () => {
         await waitForDiagram(rendered.container);
       }
 
-      for (const suffix of ["2. Next item", "2. Next item\n\nAfter"]) {
+      for (const suffix of ["5. Next item", "5. Next item\n\nAfter"]) {
         rendered.rerender(chatMarkdown(`${list}\n${suffix}`, true));
       }
       await act(async () => {

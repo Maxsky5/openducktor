@@ -133,6 +133,14 @@ describe("describeMarkdown", () => {
   });
 
   test.each([
+    "Intro\n\n- one\n- two\n- three\n- four\n- five\n- six\n\nAfter",
+    "- one\n\n- two\n- three\n- four\n\n- five\n  - nested\n\n    continuation\n- six\n\nAfter",
+    "  3) one\n  4) two\n  5) three\n  6) four\n  7) five\n  8) six\n\n  9) seven\n\nEnd",
+    "- one\n- two\n- three\n- four\n- five\n\n-\n--\n\n+ other marker",
+    "- one\n- two\n- three\n- four\n- five\n\n* other list\n* more",
+    "Before [r] and[^n].\n\n- one [r]\n- two\n- three[^n]\n- four\n- five\n\n[r]: /docs\n\n[^n]: A note.\n\nAfter[^n].",
+    "- [ ] $$\n  x = 1\n  $$\n- two\n- three\n- four\n- five\n- [x] $$\n  y = 2\n  $$\n\n  > [r]: /docs\n\n  See [r].",
+    "- one\n- two\n- three\n- four\n- five\n\n  ```ts\n  code\n\n  ```\n- six\n\nEnd",
     "Intro with **bold**.\n\n```mermaid\ngraph TD\n  A --> B\n```\n\n1. one\n2. two\n\n3. three\n\nEnd",
     "- item\n\n  ```ts\n  code\n\n```\n\n> quote\nlazy\n\nfoo\n===\n\n    indented\n\n    code\n\npara",
     "| a | b |\n| - | - |\n| 1 | 2 |\nrow\n\n<!--\ncomment\n\nstill comment\n-->\n\nvisible",
