@@ -606,27 +606,42 @@ export const buildAgentSessionLiveCollection = ({
 };
 
 /**
- * Applies the newest live snapshot of each session that `previous` does not hold.
+ * Applies kept live snapshots to the sessions that `current` adds to `previous`.
  *
- * A snapshot that arrives before the record of its session finds no session, so the record
- * pass that adds the session applies the snapshot. Child sessions follow their new parent.
+ * A snapshot that arrives before the record of its session finds no session, so the commit
+ * that adds the session applies it. A missing child follows a parent that the commit added.
+ * A session that `current` already reports as live keeps its state.
  */
-export const applyUnplacedLiveSnapshots = ({
+export const applyLiveSnapshotsToAddedSessions = ({
   previous,
   current,
   snapshots,
 }: {
   previous: AgentSessionCollection;
   current: AgentSessionCollection;
-  snapshots: readonly AgentSessionLiveSnapshot[];
+  snapshots: Iterable<AgentSessionLiveSnapshot>;
 }): AgentSessionCollection => {
-  const unplaced = snapshots.filter(
-    (snapshot) => !getAgentSession(previous, toSessionIdentity(snapshot.ref)),
-  );
-  if (unplaced.length === 0) {
+  const added: AgentSessionLiveSnapshot[] = [];
+  for (const snapshot of snapshots) {
+    const identity = toSessionIdentity(snapshot.ref);
+    if (getAgentSession(previous, identity)) {
+      continue;
+    }
+    const session = getAgentSession(current, identity);
+    const parentAdded =
+      snapshot.parentExternalSessionId !== undefined &&
+      !getAgentSession(previous, {
+        ...identity,
+        externalSessionId: snapshot.parentExternalSessionId,
+      });
+    if (session ? session.livePresence !== "present" : parentAdded) {
+      added.push(snapshot);
+    }
+  }
+  if (added.length === 0) {
     return current;
   }
-  const collection = placeLiveSnapshots(current, unplaced);
+  const collection = placeLiveSnapshots(current, added);
   return collection === current ? current : rebuildProjectedPendingInput(collection);
 };
 

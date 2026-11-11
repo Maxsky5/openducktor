@@ -56,7 +56,6 @@ import {
 } from "../history/session-history-freshness";
 import {
   applyAgentSessionLiveDelta,
-  applyUnplacedLiveSnapshots,
   buildAgentSessionLiveCollection,
   isSettlingLiveSessionSnapshot,
 } from "../session-read-model/agent-session-live-projection";
@@ -97,7 +96,6 @@ type UseRepoSessionReadModelArgs = {
   commitSessionCollection: AgentSessionsStore["commitSessionCollection"];
   applyLiveSessionEnvelope: AgentSessionsStore["applyLiveSessionEnvelope"];
   recordHistoryEnvelope: AgentSessionsStore["recordHistoryEnvelope"];
-  listObservedLiveSnapshots: AgentSessionsStore["listObservedLiveSnapshots"];
   messageQueues: Pick<
     AgentMessageQueuesStore,
     "replaceRepository" | "apply" | "removeAccepted" | "getQueue"
@@ -175,7 +173,6 @@ export const useRepoSessionReadModel = ({
   commitSessionCollection,
   applyLiveSessionEnvelope,
   recordHistoryEnvelope,
-  listObservedLiveSnapshots,
   messageQueues,
   liveSessionPort,
   transcriptEvents,
@@ -185,13 +182,6 @@ export const useRepoSessionReadModel = ({
 }: UseRepoSessionReadModelArgs): RepoSessionReadModelState => {
   const [reloadGeneration, setReloadGeneration] = useState(0);
   const workspaceRecords = useWorkspaceSessionRecords(workspaceId, queryClient, reloadGeneration);
-  // A snapshot can come before the record of its session. A record pass that adds the session
-  // applies the kept snapshot, so the live fields do not wait for a later update.
-  const withUnplacedLiveSnapshots = useCallback(
-    (previous: AgentSessionCollection, current: AgentSessionCollection) =>
-      applyUnplacedLiveSnapshots({ previous, current, snapshots: listObservedLiveSnapshots() }),
-    [listObservedLiveSnapshots],
-  );
   const [sessionFaults, setSessionFaults] = useState<
     ReadonlyMap<string, AgentSessionTransientFault>
   >(() => new Map());
@@ -228,10 +218,7 @@ export const useRepoSessionReadModel = ({
     )
       return;
     const collection = commitSessionCollection((current) => {
-      const next = withUnplacedLiveSnapshots(
-        current,
-        applyWorkspaceSessionRecords(current, records, workspaceId),
-      );
+      const next = applyWorkspaceSessionRecords(current, records, workspaceId);
       return { collection: next, result: next };
     });
     // Check durable target identity after the shared store commit, not during render.
@@ -240,7 +227,6 @@ export const useRepoSessionReadModel = ({
   }, [
     commitSessionCollection,
     currentWorkspaceRepoPathRef,
-    withUnplacedLiveSnapshots,
     workspaceRecords.records.data,
     workspaceRepoPath,
     workspaceId,
@@ -328,30 +314,26 @@ export const useRepoSessionReadModel = ({
     },
     [sessionFaults, workspaceRepoPath],
   );
-  // Commits task records and the kept snapshots of the sessions that they add. It throws when a
-  // record conflicts with a known session association.
+  // Commits task records. It throws when a record conflicts with a known session association.
   const commitTaskRecords = useCallback(
     (records: TaskSessionRecords): void => {
       commitSessionCollection((current) => ({
-        collection: withUnplacedLiveSnapshots(
-          current,
-          applyWorkflowSessionRecords({
-            projected: current,
-            records: toLoadedWorkflowSessionRecords(records),
-            associationEvidence: current,
-          }),
-        ),
+        collection: applyWorkflowSessionRecords({
+          projected: current,
+          records: toLoadedWorkflowSessionRecords(records),
+          associationEvidence: current,
+        }),
         result: undefined,
       }));
     },
-    [commitSessionCollection, withUnplacedLiveSnapshots],
+    [commitSessionCollection],
   );
   const failTaskRecordApply = useCallback(
-    (repoPath: string, workspaceId: string, taskIdsKey: string, cause: unknown): void => {
+    (repoPath: string, recordsWorkspaceId: string, taskIdsKey: string, cause: unknown): void => {
       const message = `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(cause)}`;
       taskRecordApplyRef.current = {
         kind: "failed",
-        workspaceId,
+        workspaceId: recordsWorkspaceId,
         repoPath,
         taskIdsKey,
         failedAt: "apply",
@@ -515,8 +497,6 @@ export const useRepoSessionReadModel = ({
     queryClient,
     readPort: sessionReadPort,
   });
-  const observedScopeKeyRef = useRef<string | null>(null);
-  const scopeKey = JSON.stringify([workspaceId, workspaceRepoPath]);
 
   // Synchronizes an async query lifecycle with the parent-owned session read model.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
@@ -524,8 +504,7 @@ export const useRepoSessionReadModel = ({
     if (!workspaceRepoPath || !workspaceId) {
       return;
     }
-    // Lists that were read show their sessions while other lists load or after they fail. Only
-    // the complete set makes the task records ready.
+    // Only the complete set makes the task records ready.
     if (taskRecords.kind !== "ready" && taskRecords.loaded) {
       try {
         // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
@@ -536,24 +515,20 @@ export const useRepoSessionReadModel = ({
       }
     }
     if (taskRecords.kind === "loading") {
-      if (observedScopeKeyRef.current !== scopeKey) {
-        // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
+      // The observation effect opens the loading window of a new scope. A prior task set's
+      // failure must not describe a hydrating one. Reload-driven loading windows keep their
+      // own lifecycle.
+      const appliedRecords = taskRecordApplyRef.current;
+      const staleScopeFailure =
+        appliedRecords &&
+        appliedRecords.repoPath === workspaceRepoPath &&
+        appliedRecords.workspaceId === workspaceId &&
+        appliedRecords.kind === "failed" &&
+        appliedRecords.taskIdsKey !== readCurrentTaskIdsKey();
+      if (staleScopeFailure) {
+        demotedStaleFailureRef.current = true;
+        // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
         setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
-      } else {
-        // A prior task set's failure must not describe a hydrating one.
-        // Reload-driven loading windows keep their own lifecycle.
-        const appliedRecords = taskRecordApplyRef.current;
-        const staleScopeFailure =
-          appliedRecords &&
-          appliedRecords.repoPath === workspaceRepoPath &&
-          appliedRecords.workspaceId === workspaceId &&
-          appliedRecords.kind === "failed" &&
-          appliedRecords.taskIdsKey !== readCurrentTaskIdsKey();
-        if (staleScopeFailure) {
-          demotedStaleFailureRef.current = true;
-          // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
-          setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
-        }
       }
       return;
     }
@@ -629,7 +604,6 @@ export const useRepoSessionReadModel = ({
     failTaskRecordApply,
     repoEpochRef,
     taskRecords,
-    scopeKey,
     workspaceRepoPath,
     workspaceId,
   ]);
@@ -697,7 +671,6 @@ export const useRepoSessionReadModel = ({
     taskIdsKey,
     recordRetryResult,
     taskRecords,
-    scopeKey,
     workspaceRepoPath,
     workspaceId,
   ]);
@@ -720,7 +693,7 @@ export const useRepoSessionReadModel = ({
 
   // Owns the async stream lifecycle; its loading state is not render-derived.
   // Observation starts without waiting for record reads, so live fields show as soon as the
-  // snapshot arrives. A record pass applies the kept snapshot of each session that it adds.
+  // snapshot arrives.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
     if (!workspaceRepoPath || !workspaceId) {
@@ -1014,7 +987,7 @@ export const useRepoSessionReadModel = ({
                 current: owned,
                 envelope: { type: "session_upsert", session: envelope.liveSession },
               })
-            : withUnplacedLiveSnapshots(current, owned);
+            : owned;
         });
         return;
       }
@@ -1119,7 +1092,6 @@ export const useRepoSessionReadModel = ({
       );
     };
 
-    observedScopeKeyRef.current = scopeKey;
     demotedStaleFailureRef.current = false;
     recoveredLiveFailureRef.current = false;
     snapshotAwaitsRecordsRef.current = false;
@@ -1152,9 +1124,6 @@ export const useRepoSessionReadModel = ({
 
     return () => {
       cancelled = true;
-      if (observedScopeKeyRef.current === scopeKey) {
-        observedScopeKeyRef.current = null;
-      }
       liveStreamFailureRef.current = null;
       demotedStaleFailureRef.current = false;
       recoveredLiveFailureRef.current = false;
@@ -1174,10 +1143,8 @@ export const useRepoSessionReadModel = ({
     clearSessionFault,
     clearSessionFaults,
     recordSessionFault,
-    withUnplacedLiveSnapshots,
     workspaceRepoPath,
     workspaceId,
-    scopeKey,
   ]);
 
   return useMemo(

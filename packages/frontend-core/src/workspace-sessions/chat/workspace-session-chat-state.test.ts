@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkspaceSession } from "@openducktor/contracts";
 import { createAgentSessionFixture } from "../../test-support/shared-test-fixtures";
+import { workspaceSessionRecord } from "../../test-support/workspace-session-fixtures";
 import {
   failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
@@ -14,20 +14,11 @@ const identity = {
   workingDirectory: "/repo",
 };
 
-const record: WorkspaceSession = {
-  id: "workspace-session",
+const record = workspaceSessionRecord("workspace-session", {
   runtimeKind: identity.runtimeKind,
   externalSessionId: identity.externalSessionId,
   executionTarget: { kind: "local_repo_root", workingDirectory: identity.workingDirectory },
-  roleSnapshot: null,
-  selectedModel: null,
-  generatedTitle: null,
-  manualTitle: null,
-  targetBranch: null,
-  createdAt: 1000,
-  updatedAt: 1000,
-  archivedAt: null,
-};
+});
 
 const project = (
   livePresence: "present" | "unobserved",

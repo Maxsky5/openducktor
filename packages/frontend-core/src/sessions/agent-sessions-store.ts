@@ -1,4 +1,7 @@
-import { projectSessionSnapshotActivity } from "./agent-orchestrator/session-read-model/agent-session-live-projection";
+import {
+  applyLiveSnapshotsToAddedSessions,
+  projectSessionSnapshotActivity,
+} from "./agent-orchestrator/session-read-model/agent-session-live-projection";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveSnapshot,
@@ -97,8 +100,6 @@ export type AgentSessionsStore = {
   commitSessionCollection: <Result>(commit: AgentSessionCollectionCommit<Result>) => Result;
   applyLiveSessionEnvelope: (envelope: LiveSessionStateEnvelope) => void;
   recordHistoryEnvelope: (envelope: AgentSessionLiveEnvelope) => void;
-  /** The newest live snapshot of each session, including sessions that have no record yet. */
-  listObservedLiveSnapshots: () => AgentSessionLiveSnapshot[];
   setSessionCollection: (updater: AgentSessionCollectionUpdater) => void;
   replaceSession: (session: AgentSessionState) => void;
   removeSession: (identity: AgentSessionIdentity) => void;
@@ -320,7 +321,17 @@ export const createAgentSessionsStore = (
     commit: AgentSessionCollectionCommit<Result>,
   ): Result => {
     const { collection, result } = commit(sessionCollection);
-    const nextCollection = projectLiveNotices(collection);
+    // A snapshot can come before the record of its session, so a commit that adds the session
+    // applies the kept snapshot.
+    const nextCollection = projectLiveNotices(
+      collection === sessionCollection
+        ? collection
+        : applyLiveSnapshotsToAddedSessions({
+            previous: sessionCollection,
+            current: collection,
+            snapshots: observedActivity.values(),
+          }),
+    );
     noticeUpdates.clear();
     if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
       return result;
@@ -385,7 +396,6 @@ export const createAgentSessionsStore = (
     },
     commitSessionCollection,
     recordHistoryEnvelope: (envelope) => historyProgress?.recordEvent(envelope),
-    listObservedLiveSnapshots: () => [...observedActivity.values()],
     applyLiveSessionEnvelope: (envelope) => {
       switch (envelope.type) {
         case "snapshot": {

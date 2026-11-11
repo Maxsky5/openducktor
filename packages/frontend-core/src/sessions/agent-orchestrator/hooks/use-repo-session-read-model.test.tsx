@@ -204,7 +204,6 @@ const createState = (
     commitSessionCollection: sessionStore.commitSessionCollection,
     applyLiveSessionEnvelope: sessionStore.applyLiveSessionEnvelope,
     recordHistoryEnvelope: sessionStore.recordHistoryEnvelope,
-    listObservedLiveSnapshots: sessionStore.listObservedLiveSnapshots,
     messageQueues,
     liveSessionPort,
     transcriptEvents,
@@ -2010,45 +2009,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("becomes ready when a grown task set hydrates after the initial snapshot", async () => {
-    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
-    const releaseSnapshot = createDeferred<void>();
-    const state = createState(
-      (emit) => {
-        void releaseSnapshot.promise.then(() => {
-          emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
-        });
-      },
-      record,
-      { agentSessionsListForTasks: () => task2Hydration.promise },
-    );
-
-    try {
-      await state.harness.mount();
-      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
-
-      // The task list grows while the first snapshot is on its way, as on a slow network.
-      await state.harness.update({ ...state.props, taskIds: ["task-1", "task-2"] });
-      await state.harness.run(async () => {
-        releaseSnapshot.resolve();
-        await releaseSnapshot.promise;
-      });
-      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
-
-      await state.harness.run(async () => {
-        task2Hydration.resolve([{ taskId: "task-2", agentSessions: [] }]);
-        await task2Hydration.promise;
-      });
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      expect(state.getSession()).not.toBeNull();
-    } finally {
-      releaseSnapshot.resolve();
-      task2Hydration.resolve([]);
-      await state.harness.unmount();
-    }
-  });
-
-  test("applies a snapshot that came before its session record when the record loads", async () => {
+  test("applies a snapshot that came before its session record when a grown task set hydrates", async () => {
     const task2Hydration = createDeferred<TaskSessionRecordBatch>();
     const releaseSnapshot = createDeferred<void>();
     const lateRecord: AgentSessionRecord = { ...record, externalSessionId: "late", role: "qa" };
@@ -2077,7 +2038,8 @@ describe("useRepoSessionReadModel", () => {
     try {
       await state.harness.mount();
       await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
-      // A new task appears while observation runs, so its record loads after the snapshot.
+      // The task list grows while the first snapshot is on its way, as on a slow network, so
+      // the new task's record loads after the snapshot.
       await state.harness.update({ ...state.props, taskIds: ["task-1", "task-2"] });
       await state.harness.run(async () => {
         releaseSnapshot.resolve();
@@ -2093,7 +2055,7 @@ describe("useRepoSessionReadModel", () => {
         task2Hydration.resolve([{ taskId: "task-2", agentSessions: [lateRecord] }]);
         await task2Hydration.promise;
       });
-      await state.harness.waitFor(() => state.getStoredSession(lateRef) !== null);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
       const late = state.getStoredSession(lateRef)!;
       expect(getAgentSessionActivityStateFromSession(late)).toBe("waiting_input");
       expect(late).toMatchObject({

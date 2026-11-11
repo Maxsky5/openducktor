@@ -42,25 +42,20 @@ export const useTaskSessionRecords = ({
     if (workspaceId === null) {
       return { kind: "loading", loaded: null };
     }
-    const loaded =
-      sessionLists.loadedTaskIds.length === 0
-        ? null
-        : toTaskSessionRecords(
-            sessionLists.loadedTaskIds.map((id) => ({ id })),
-            sessionLists.data,
-            workspaceId,
-          );
+    // Each list that was read, in task order. When every list is read, these are all records.
+    const records = toTaskSessionRecords(
+      sessionLists.loadedTaskIds.map((id) => ({ id })),
+      sessionLists.data,
+      workspaceId,
+    );
+    const loaded = records.taskIds.length === 0 ? null : records;
     if (sessionLists.isPending) {
       return { kind: "loading", loaded };
     }
     if (sessionLists.error) {
       return { kind: "failed", error: sessionLists.error, loaded };
     }
-    const taskSessionTargets = Object.keys(sessionLists.data).map((id) => ({ id }));
-    return {
-      kind: "ready",
-      records: toTaskSessionRecords(taskSessionTargets, sessionLists.data, workspaceId),
-    };
+    return { kind: "ready", records };
   }, [
     workspaceId,
     sessionLists.data,

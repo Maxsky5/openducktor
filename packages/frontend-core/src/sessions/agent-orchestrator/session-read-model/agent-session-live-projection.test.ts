@@ -25,7 +25,7 @@ import { createAgentSessionFixture } from "../../../test-support/shared-test-fix
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
-  applyUnplacedLiveSnapshots,
+  applyLiveSnapshotsToAddedSessions,
   buildAgentSessionLiveCollection,
   projectSessionSnapshotActivity,
   rebuildProjectedPendingInput,
@@ -196,8 +196,8 @@ describe("projectSessionSnapshotActivity", () => {
   );
 });
 
-describe("applyUnplacedLiveSnapshots", () => {
-  test("applies kept snapshots to a session that records added, and to its child", () => {
+describe("applyLiveSnapshotsToAddedSessions", () => {
+  test("applies kept snapshots to a session that a commit added, and to its child", () => {
     const root = createAgentSessionFixture({
       ...identity("root"),
       sessionAssociation: workflowAssociation(),
@@ -207,7 +207,7 @@ describe("applyUnplacedLiveSnapshots", () => {
     const previous = replaceAgentSession(emptyAgentSessionCollection(), placed);
     const recorded = replaceAgentSession(previous, root);
 
-    const next = applyUnplacedLiveSnapshots({
+    const next = applyLiveSnapshotsToAddedSessions({
       previous,
       current: recorded,
       snapshots: [
@@ -231,16 +231,27 @@ describe("applyUnplacedLiveSnapshots", () => {
       pendingApprovals: [{ requestId: "approve" }],
     });
     expect(getAgentSession(next, identity("child"))?.livePresence).toBe("present");
-    // A session that the live projection already holds keeps its newer state.
+    // A session that the projection already holds keeps its newer state.
     expect(getAgentSession(next, identity("placed"))).toBe(placed);
     expect(getAgentSession(next, identity("orphan"))).toBeNull();
   });
 
-  test("returns the same collection when every snapshot is placed", () => {
-    const placed = createAgentSessionFixture(identity("placed"));
-    const current = replaceAgentSession(emptyAgentSessionCollection(), placed);
+  test("keeps a commit that adds no session or adds a live one", () => {
+    const repositoryScope = { kind: "repository", workspaceId: "workspace-1" } as const;
+    const live = createAgentSessionFixture({ ...identity("live"), livePresence: "present" });
+    const removed = createAgentSessionFixture(identity("removed"));
+    const previous = replaceAgentSession(emptyAgentSessionCollection(), removed);
+    const current = replaceAgentSession(emptyAgentSessionCollection(), live);
+    // A removal must not bring a session back from its kept snapshot.
     expect(
-      applyUnplacedLiveSnapshots({ previous: current, current, snapshots: [snapshot("placed")] }),
+      applyLiveSnapshotsToAddedSessions({
+        previous,
+        current,
+        snapshots: [
+          snapshot("removed", { repositoryScope }),
+          snapshot("live", { activity: "running" }),
+        ],
+      }),
     ).toBe(current);
   });
 });
