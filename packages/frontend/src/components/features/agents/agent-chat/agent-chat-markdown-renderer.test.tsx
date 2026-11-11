@@ -68,6 +68,41 @@ describe("AgentChatMarkdownRenderer", () => {
     }
   });
 
+  test.each([
+    ["tight", "- one\n- two\n- three\n- four\n\n-", 0],
+    ["loose prefix", "- one\n\n- two\n- three\n- four\n- five\n- six\n\n-", 6],
+    ["loose boundary", "- one\n- two\n- three\n\n- four\n\n-", 4],
+    ["loose item", "- one\n- two\n\n  Continuation.\n- three\n- four\n\n-", 5],
+  ])("keeps %s list spacing when an empty tail item becomes a rule", (_, source, paragraphs) => {
+    for (const lineEnding of ["\n", "\r\n", "\r"]) {
+      const before = source.replaceAll("\n", lineEnding);
+      const complete = `${before}--`;
+      const rendered = render(chatMarkdown(before.slice(0, before.indexOf("- four")), true));
+      const fresh = render(chatMarkdown(complete));
+
+      try {
+        expect(fresh.container.querySelectorAll("li > p")).toHaveLength(paragraphs);
+        rendered.rerender(chatMarkdown(before, true));
+        for (const [markdown, streaming] of [
+          [complete, true],
+          [complete, false],
+          [`${complete}${lineEnding}${lineEnding}After`, true],
+          [`${complete}${lineEnding}${lineEnding}After`, false],
+        ] as const) {
+          rendered.rerender(chatMarkdown(markdown, streaming));
+
+          expect(rendered.container.querySelector("ul")?.outerHTML).toBe(
+            fresh.container.querySelector("ul")?.outerHTML,
+          );
+          expect(rendered.container.querySelector("hr")).not.toBeNull();
+        }
+      } finally {
+        rendered.unmount();
+        fresh.unmount();
+      }
+    }
+  });
+
   test("renders an in-progress fenced code block as code while streaming", async () => {
     const rendered = render(chatMarkdown("```ts\nconst value = 1;", true));
 

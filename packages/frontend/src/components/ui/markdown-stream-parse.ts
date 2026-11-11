@@ -2,7 +2,7 @@
  * Parses Markdown into top-level blocks. Streamed text grows at its end, so each update parses
  * only the last two blocks, or the last two items of a list, again. New text can join them.
  */
-import type { Definition, FootnoteDefinition, Nodes, RootContent } from "mdast";
+import type { Definition, FootnoteDefinition, List, Nodes, RootContent } from "mdast";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { SKIP, visit } from "unist-util-visit";
@@ -77,15 +77,16 @@ export const parseMarkdown = (
 const markdownParser = unified().use(remarkParse).use(MATH_REMARK_PLUGINS);
 
 // Offsets belong to the parse that made each node. Keep restart offsets in whole-text coordinates.
-const listTailStarts = new WeakMap<ParsedBlock, number>();
+type ListTail = { start: number; prefixSpread: boolean };
+const listTails = new WeakMap<ParsedBlock, ListTail>();
 
 /** A list can join a following partial item, so consider either of the last two blocks. */
 const parseListTail = (markdown: string, previous: ParsedMarkdown): ParsedMarkdown | null => {
   const lastIndex = previous.blocks.length - 1;
   const lastBlock = previous.blocks[lastIndex];
-  const blockIndex = lastBlock && listTailStarts.has(lastBlock) ? lastIndex : lastIndex - 1;
+  const blockIndex = lastBlock && listTails.has(lastBlock) ? lastIndex : lastIndex - 1;
   const block = previous.blocks[blockIndex];
-  const restart = block && listTailStarts.get(block);
+  const restart = block && listTails.get(block);
   if (
     !block ||
     block.node.type !== "list" ||
@@ -101,13 +102,13 @@ const parseListTail = (markdown: string, previous: ParsedMarkdown): ParsedMarkdo
     return null;
   }
 
-  const tail = parseTail(markdown, restart, previous.definitions);
+  const tail = parseTail(markdown, restart.start, previous.definitions);
   const first = tail.blocks[0];
   if (!first || first.node.type !== "list") {
     return null;
   }
   const definitions = [
-    ...previous.definitions.filter(({ start }) => start < restart),
+    ...previous.definitions.filter(({ start }) => start < restart.start),
     ...tail.definitions,
   ];
   if (
@@ -119,8 +120,7 @@ const parseListTail = (markdown: string, previous: ParsedMarkdown): ParsedMarkdo
 
   const node: typeof block.node = {
     ...block.node,
-    // Appending text cannot remove the blank lines between earlier items.
-    spread: block.node.spread || first.node.spread,
+    spread: restart.prefixSpread || first.node.spread,
     children: [...block.node.children.slice(0, itemIndex), ...first.node.children],
   };
   const joined: ParsedBlock = {
@@ -130,9 +130,12 @@ const parseListTail = (markdown: string, previous: ParsedMarkdown): ParsedMarkdo
     node,
     ...readBlockFacts(node),
   };
-  const nextRestart = listTailStarts.get(first);
-  if (nextRestart !== undefined) {
-    listTailStarts.set(joined, nextRestart);
+  const nextRestart = listTails.get(first);
+  if (nextRestart) {
+    listTails.set(joined, {
+      ...nextRestart,
+      prefixSpread: restart.prefixSpread || nextRestart.prefixSpread,
+    });
   }
   return {
     markdown,
@@ -140,6 +143,17 @@ const parseListTail = (markdown: string, previous: ParsedMarkdown): ParsedMarkdo
     definitions,
   };
 };
+
+/** Includes the fixed gap before the second-last item, where the next parse starts. */
+const listPrefixSpread = (list: List): boolean =>
+  list.children.slice(1, -1).some((item, index) => {
+    const previousEnd = list.children[index]?.position?.end.line;
+    const itemStart = item.position?.start.line;
+    if (previousEnd === undefined || itemStart === undefined) {
+      throw new Error("remark-parse returned a list item without source lines.");
+    }
+    return itemStart > previousEnd + 1;
+  });
 
 /**
  * Parses the text from `tailStart` on. Stub definitions for the identifiers in `definitions` come
@@ -172,14 +186,15 @@ const parseTail = (
         openFenceCode: index === nodes.length - 1 ? readOpenFenceCode(node, blockText) : null,
       };
       const item = node.type === "list" ? node.children.at(-2) : undefined;
-      if (item) {
+      if (node.type === "list" && item) {
         const itemStart = readOffsets(item, prefix.length).start;
-        listTailStarts.set(
-          block,
-          tailStart +
+        listTails.set(block, {
+          start:
+            tailStart +
             Math.max(tail.lastIndexOf("\n", itemStart - 1), tail.lastIndexOf("\r", itemStart - 1)) +
             1,
-        );
+          prefixSpread: listPrefixSpread(node),
+        });
       }
       return block;
     }),
