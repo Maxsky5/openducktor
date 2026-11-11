@@ -37,6 +37,19 @@ export const PROMPT_STATUS_LABELS = {
   globalChanges: "Global changes",
 } satisfies Record<keyof PromptStatus, string>;
 
+/** The order of the badges. */
+const BADGE_ORDER: readonly (keyof PromptStatus)[] = [
+  "appended",
+  "overridden",
+  "outdated",
+  "error",
+  "globalChanges",
+];
+
+/** The states of a prompt that show a badge, in badge order. */
+export const promptStatusMarks = (status: PromptStatus): (keyof PromptStatus)[] =>
+  BADGE_ORDER.filter((key) => status[key]);
+
 /** The layers of this screen change the prompt. Changes of the global settings do not count. */
 export const isPromptChanged = (status: PromptStatus): boolean =>
   status.appended || status.overridden;

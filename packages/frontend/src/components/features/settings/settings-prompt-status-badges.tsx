@@ -1,6 +1,10 @@
 import type { ComponentProps, ReactElement } from "react";
 import { Badge } from "@/components/ui/badge";
-import { PROMPT_STATUS_LABELS, type PromptStatus } from "./settings-prompt-layers";
+import {
+  PROMPT_STATUS_LABELS,
+  promptStatusMarks,
+  type PromptStatus,
+} from "./settings-prompt-layers";
 
 const BADGE_VARIANTS = {
   appended: "success",
@@ -9,19 +13,6 @@ const BADGE_VARIANTS = {
   error: "danger",
   globalChanges: "outline",
 } as const satisfies Record<keyof PromptStatus, ComponentProps<typeof Badge>["variant"]>;
-
-/** The order of the badges. */
-const BADGE_ORDER: readonly (keyof PromptStatus)[] = [
-  "appended",
-  "overridden",
-  "outdated",
-  "error",
-  "globalChanges",
-];
-
-/** The states of a prompt that show a badge, in badge order. */
-export const promptStatusMarks = (status: PromptStatus): (keyof PromptStatus)[] =>
-  BADGE_ORDER.filter((key) => status[key]);
 
 /** The status badges of one prompt. An unchanged prompt has none, so changed prompts stand out. */
 export function PromptStatusBadges({

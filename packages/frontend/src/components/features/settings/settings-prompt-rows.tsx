@@ -4,7 +4,8 @@ import { type ReactElement, type RefObject, useId, useLayoutEffect } from "react
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { PromptRowData, PromptWorkflow } from "./settings-prompt-owners";
-import { PromptStatusBadges, promptStatusMarks } from "./settings-prompt-status-badges";
+import { promptStatusMarks } from "./settings-prompt-layers";
+import { PromptStatusBadges } from "./settings-prompt-status-badges";
 
 /**
  * The row of the item that the user just left gets the focus again, so the user keeps the place.
