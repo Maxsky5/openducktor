@@ -4,6 +4,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Effect, Exit, Fiber } from "effect";
+import {
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../../interface/router/host-command-router";
+import { causeToHostBoundaryError, HostOperationError } from "../../effect/host-errors";
 import type { SystemCommandRunOptions } from "../../ports/system-command-port";
 import { createSystemCommandRunner } from "./system-command-runner";
 
@@ -74,49 +79,92 @@ describe("createSystemCommandRunner", () => {
     });
   }
 
-  test("keeps the operation error and reports bounded termination failure", async () => {
-    const originalEmit = ChildProcess.prototype.emit;
-    let child: ChildProcess | undefined;
-    const spy = spyOn(ChildProcess.prototype, "emit").mockImplementation(function (
-      this: ChildProcess,
-      event: string | symbol,
-      ...args: unknown[]
-    ) {
-      const result = originalEmit.call(this, event, ...args);
-      if (event !== "spawn") return result;
-      // Capture the native child for process-death assertions and emergency teardown.
-      // oxlint-disable-next-line typescript/no-this-alias
-      child = this;
-      this.kill = () => false;
-      return result;
-    });
-    try {
-      const exit = await Effect.runPromise(
-        Effect.exit(
-          createSystemCommandRunner().runCommandAllowFailure(
-            process.execPath,
-            [
-              "-e",
-              "setInterval(()=>process.stderr.write('x'),10);setTimeout(()=>process.exit(0),4000)",
-            ],
-            { timeoutMs: 100 },
-          ),
-        ),
-      );
-      expect(Exit.isFailure(exit)).toBe(true);
-      if (Exit.isFailure(exit)) {
-        const errors = Cause.pretty(exit.cause);
-        expect(errors).toContain("Timed out running");
-        expect(errors).toContain("Failed to stop command");
+  for (const failurePath of ["timeout", "overflow", "interruption"] as const) {
+    test(`reports ${failurePath} and cleanup failure to the host caller`, async () => {
+      const originalEmit = ChildProcess.prototype.emit;
+      let child: ChildProcess | undefined;
+      let ready!: () => void;
+      const readiness = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      const spy = spyOn(ChildProcess.prototype, "emit").mockImplementation(function (
+        this: ChildProcess,
+        event: string | symbol,
+        ...args: unknown[]
+      ) {
+        const result = originalEmit.call(this, event, ...args);
+        if (event !== "spawn") return result;
+        // Capture the native child for process-death assertions and emergency teardown.
+        // oxlint-disable-next-line typescript/no-this-alias
+        child = this;
+        this.kill = () => false;
+        this.stdout?.once("data", () => ready());
+        return result;
+      });
+      try {
+        const options: SystemCommandRunOptions = {
+          timeoutMs: failurePath === "timeout" ? 100 : 3000,
+        };
+        if (failurePath === "overflow") options.maxStdoutBytes = 8;
+        const effectRouter = createEffectHostCommandRouter({
+          handlers: {
+            system_get_platform: () =>
+              createSystemCommandRunner()
+                .runCommandAllowFailure(
+                  process.execPath,
+                  [
+                    "-e",
+                    "process.stdout.write('ready');setInterval(()=>{process.stdout.write('x');process.stderr.write('y')},10);setTimeout(()=>process.exit(0),4000)",
+                  ],
+                  options,
+                )
+                .pipe(Effect.as("darwin")),
+          },
+        });
+        let error: unknown;
+        if (failurePath === "interruption") {
+          const fiber = Effect.runFork(effectRouter.invoke("system_get_platform"));
+          await readiness;
+          await Effect.runPromise(Fiber.interrupt(fiber));
+          const exit = await Effect.runPromise(Fiber.await(fiber));
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+            error = causeToHostBoundaryError(exit.cause);
+          }
+        } else {
+          error = await toPromiseHostCommandRouter(effectRouter)
+            .invoke("system_get_platform")
+            .then(
+              () => null,
+              (cause: unknown) => cause,
+            );
+        }
+        expect(error).toBeInstanceOf(HostOperationError);
+        if (error instanceof HostOperationError) {
+          const expected =
+            failurePath === "timeout"
+              ? "Timed out running"
+              : failurePath === "overflow"
+                ? "more than 8 bytes"
+                : "interrupted";
+          expect(error.message).toContain(expected);
+          expect(error.message).toContain("Failed to stop command");
+          expect(error.details).toMatchObject({ command: process.execPath });
+          if (failurePath === "timeout") {
+            expect(error.operation).toBe("systemCommand.runCommandAllowFailure");
+            expect(error.details).toMatchObject({ timeoutMs: 100 });
+          }
+        }
+        expect(child?.stdout?.destroyed).toBe(true);
+        expect(child?.stderr?.destroyed).toBe(true);
+        expect(child?.stderr?.listenerCount("data")).toBe(0);
+      } finally {
+        if (child) ChildProcess.prototype.kill.call(child, "SIGKILL");
+        spy.mockRestore();
       }
-      expect(child?.stdout?.destroyed).toBe(true);
-      expect(child?.stderr?.destroyed).toBe(true);
-      expect(child?.stderr?.listenerCount("data")).toBe(0);
-    } finally {
-      if (child) ChildProcess.prototype.kill.call(child, "SIGKILL");
-      spy.mockRestore();
-    }
-  });
+    });
+  }
 
   test("returns binary stdout as base64 and stops oversized output", async () => {
     const port = createSystemCommandRunner({
