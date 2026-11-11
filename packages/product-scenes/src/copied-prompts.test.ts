@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { KICKOFF, TASK_ID } from "./sample/studio";
-import { QA_BASE_AFTER, QA_BASE_BEFORE, QA_KICKOFF } from "./scenes/prompts/sample";
+import { QA_KICKOFF } from "./scenes/prompts/sample";
 
 type BuiltinPrompt = {
   id: string;
   ownerKind: "role" | "workflow";
-  roleIds?: string[];
   template: string;
 };
 
@@ -27,15 +26,6 @@ function template(id: string): string {
   return prompt.template;
 }
 
-/** The system prompt of a built-in role. */
-function rolePrompt(role: string): string {
-  const prompt = prompts.find(
-    (entry) => entry.ownerKind === "role" && entry.roleIds?.includes(role) === true,
-  );
-  if (prompt === undefined) throw new Error(`The product has no built-in role ${role}.`);
-  return prompt.template;
-}
-
 /** The built-in prompt with the placeholder values of the sample task. */
 function builtin(id: string): string {
   return template(id)
@@ -53,8 +43,7 @@ describe("prompts copied from the product", () => {
     expect(KICKOFF.pullRequest).toBe(builtin("messages.pull_request"));
   });
 
-  test("the prompt override view shows the built-in QA prompts", () => {
-    expect(QA_BASE_BEFORE + QA_BASE_AFTER).toBe(rolePrompt("qa"));
+  test("the prompts view shows the built-in QA Kickoff prompt", () => {
     expect(QA_KICKOFF).toBe(template("messages.qa_review"));
   });
 });

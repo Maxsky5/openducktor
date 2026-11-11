@@ -1,8 +1,4 @@
 import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
-import type {
-  WorkflowPromptRoleTabId,
-  WorkflowPromptTemplateId as AgentPromptTemplateId,
-} from "@openducktor/workflows";
 import { useSettingsModalClaudePolicy } from "./use-settings-modal-claude-policy";
 import { validateOpenCodePermissions } from "./opencode-permission-validation";
 import type {
@@ -11,7 +7,6 @@ import type {
   GitProviderConfig,
   GitProviderRepository,
   SettingsRepoConfig,
-  RepoPromptOverrides,
   ReusablePrompt,
   RuntimeDescriptor,
   RuntimeKind,
@@ -40,12 +35,14 @@ import { buildNewCodexDangerousSelectionKey } from "./settings-codex-risk-policy
 import { validateGitProviderDrafts } from "./settings-modal-save-policy";
 import type { SettingsSectionId } from "./settings-modal-constants";
 import type { PromptValidationState } from "./settings-modal-controller.types";
+import type { PromptValidationErrors } from "./settings-prompt-layers";
 import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 import { useSettingsModalBranchesState } from "./use-settings-modal-branches-state";
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
 import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
 import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
 import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
+import type { PromptSettingsLayersUpdater } from "./settings-prompt-layers";
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
 import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
 import type { ReusablePromptValidationState } from "./use-settings-modal-reusable-prompt-validation";
@@ -103,10 +100,8 @@ export type SettingsModalController = {
   promptValidationState: PromptValidationState;
   openCodePermissionErrorCount: number;
   hasPromptValidationErrors: boolean;
-  selectedRepoPromptValidationErrors: Partial<Record<AgentPromptTemplateId, string>>;
+  selectedRepoPromptValidationErrors: PromptValidationErrors;
   selectedRepoPromptValidationErrorCount: number;
-  globalPromptRoleTabErrorCounts: Record<WorkflowPromptRoleTabId, number>;
-  selectedRepoPromptRoleTabErrorCounts: Record<WorkflowPromptRoleTabId, number>;
   settingsSectionErrorCountById: Record<SettingsSectionId, number>;
   reusablePromptValidationState: ReusablePromptValidationState;
   hasReusablePromptValidationErrors: boolean;
@@ -157,12 +152,8 @@ export type SettingsModalController = {
   ) => void;
   /** The saved Autopilot rules could not load, so the shown rules can be old. */
   savedAutopilotError: string | null;
-  updateGlobalPromptOverrides: (
-    updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
-  ) => void;
-  updateRepoPromptOverrides: (
-    updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
-  ) => void;
+  updateGlobalPromptLayers: (updater: PromptSettingsLayersUpdater) => void;
+  updateRepoPromptLayers: (updater: PromptSettingsLayersUpdater) => void;
   updateSelectedRepoAgentDefault: (
     role: string,
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
@@ -303,8 +294,6 @@ export const useSettingsModalController = ({
     hasPromptValidationErrors,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
-    globalPromptRoleTabErrorCounts,
-    selectedRepoPromptRoleTabErrorCounts,
     settingsSectionErrorCountById,
   } = useSettingsModalPromptValidation({
     snapshotDraft,
@@ -351,8 +340,8 @@ export const useSettingsModalController = ({
     updateCustomAgentRoles: applyCustomAgentRolesUpdate,
     updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
     updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
-    updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
-    updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
+    updateGlobalPromptLayers: applyGlobalPromptLayersUpdate,
+    updateRepoPromptLayers: applyRepoPromptLayersUpdate,
     updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
     clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
     updateSelectedRepoDefaultModel: applySelectedRepoDefaultModelUpdate,
@@ -463,8 +452,8 @@ export const useSettingsModalController = ({
       updateCustomAgentRoles: applyCustomAgentRolesUpdate,
       updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
       updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
-      updateGlobalPromptOverrides: applyGlobalPromptOverridesUpdate,
-      updateRepoPromptOverrides: applyRepoPromptOverridesUpdate,
+      updateGlobalPromptLayers: applyGlobalPromptLayersUpdate,
+      updateRepoPromptLayers: applyRepoPromptLayersUpdate,
       updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
       clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
       updateSelectedRepoDefaultModel: applySelectedRepoDefaultModelUpdate,
@@ -483,8 +472,8 @@ export const useSettingsModalController = ({
       applyCustomAgentRolesUpdate,
       applyGlobalKanbanSettingsUpdate,
       applyGlobalAutopilotSettingsUpdate,
-      applyGlobalPromptOverridesUpdate,
-      applyRepoPromptOverridesUpdate,
+      applyGlobalPromptLayersUpdate,
+      applyRepoPromptLayersUpdate,
       applySelectedRepoAgentDefaultUpdate,
       applyClearSelectedRepoAgentDefault,
       applySelectedRepoDefaultModelUpdate,
@@ -504,8 +493,8 @@ export const useSettingsModalController = ({
     updateCustomAgentRoles,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
-    updateGlobalPromptOverrides,
-    updateRepoPromptOverrides,
+    updateGlobalPromptLayers,
+    updateRepoPromptLayers,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
     updateSelectedRepoDefaultModel,
@@ -570,8 +559,6 @@ export const useSettingsModalController = ({
     hasPromptValidationErrors,
     selectedRepoPromptValidationErrors,
     selectedRepoPromptValidationErrorCount,
-    globalPromptRoleTabErrorCounts,
-    selectedRepoPromptRoleTabErrorCounts,
     settingsSectionErrorCountById: settingsSectionErrorCountByIdWithValidation,
     reusablePromptValidationState,
     hasReusablePromptValidationErrors,
@@ -605,8 +592,8 @@ export const useSettingsModalController = ({
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     savedAutopilotError,
-    updateGlobalPromptOverrides,
-    updateRepoPromptOverrides,
+    updateGlobalPromptLayers,
+    updateRepoPromptLayers,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
     updateSelectedRepoDefaultModel,

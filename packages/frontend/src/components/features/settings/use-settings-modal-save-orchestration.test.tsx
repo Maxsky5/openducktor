@@ -46,6 +46,7 @@ const createSnapshot = (): SettingsSnapshot =>
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
+        promptAppends: {},
         agentDefaults: {},
       },
     },

@@ -31,6 +31,7 @@ const createSnapshot = (): SettingsSnapshot =>
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
+        promptAppends: {},
         agentDefaults: {},
       },
     },
@@ -126,12 +127,18 @@ describe("useSettingsModalDirtyDraftActions", () => {
     await harness.mount();
 
     await harness.run((state) => {
-      state.updateRepoPromptOverrides((overrides) => ({
-        ...overrides,
-        [specPlanBuildPromptKey("messages.spec_start")]: {
-          template: "custom",
-          baseVersion: 1,
-          enabled: true,
+      state.updateRepoPromptLayers((layers) => ({
+        overrides: {
+          ...layers.overrides,
+          [specPlanBuildPromptKey("messages.spec_start")]: {
+            template: "custom",
+            baseVersion: 1,
+            enabled: true,
+          },
+        },
+        appends: {
+          ...layers.appends,
+          [specPlanBuildPromptKey("messages.spec_start")]: { text: "extra", enabled: true },
         },
       }));
       state.updateSelectedRepoAgentDefault("build", "profileId", "builder");
@@ -142,6 +149,11 @@ describe("useSettingsModalDirtyDraftActions", () => {
         specPlanBuildPromptKey("messages.spec_start")
       ]?.template,
     ).toBe("custom");
+    expect(
+      harness.getLatest().snapshotDraft?.workspaces.repo?.promptAppends[
+        specPlanBuildPromptKey("messages.spec_start")
+      ],
+    ).toEqual({ text: "extra", enabled: true });
     expect(harness.getLatest().snapshotDraft?.workspaces.repo?.agentDefaults.build?.profileId).toBe(
       "builder",
     );

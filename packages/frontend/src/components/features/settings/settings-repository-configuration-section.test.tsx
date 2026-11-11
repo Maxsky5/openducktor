@@ -58,6 +58,7 @@ const repoConfig: SettingsRepoConfig = {
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [".env"],
   promptOverrides: {},
+  promptAppends: {},
   agentDefaults: {},
 };
 

@@ -1,3 +1,4 @@
+import { EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { createAgentMessageSendReceipt } from "../../test-support/agent-message-send-fixture";
@@ -82,7 +83,7 @@ describe("conflict assistance", () => {
       conflict,
       taskId: "task-1",
       task: createTaskCardFixture({ id: "task-1", title: "Resolve the parser conflict" }),
-      overrides: {},
+      settings: EMPTY_PROMPT_SETTINGS,
     });
     expect(prompt).toContain("src/conflict.ts");
     expect(prompt).toContain("Use taskId task-1");
@@ -91,7 +92,7 @@ describe("conflict assistance", () => {
         conflict: { ...conflict, operation: null },
         taskId: "task-1",
         task: createTaskCardFixture({ id: "task-1" }),
-        overrides: {},
+        settings: EMPTY_PROMPT_SETTINGS,
       }),
     ).toThrow("Restore the Git conflict operation and working directory");
   });

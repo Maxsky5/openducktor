@@ -1,0 +1,135 @@
+@layer views {
+  :where(.stage) {
+    /* The prompt overview of settings-prompt-overview.tsx: gap-4 p-4. */
+    .po {
+      display: flex;
+      flex: 1 1 0;
+      flex-direction: column;
+      gap: calc(16 * var(--u));
+      min-height: 0;
+      overflow: hidden;
+      padding: calc(16 * var(--u));
+    }
+    .po[hidden],
+    .po [hidden] {
+      display: none;
+    }
+    .po-head strong {
+      display: block;
+      margin-bottom: calc(8 * var(--u));
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .po-head p,
+    .po-group-head span,
+    .po-detail {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* A screen of the prompts: the first screen or the workflow page, gap-4. */
+    .po-screen {
+      display: flex;
+      flex: 0 0 auto;
+      flex-direction: column;
+      gap: calc(16 * var(--u));
+    }
+    .po-head .pc-crumbs {
+      margin-bottom: calc(8 * var(--u));
+    }
+    /* The Changed only filter is off: the toggle variant of Button, an outline when off. */
+    .po-filter {
+      flex-shrink: 0;
+    }
+    .po-toolbar {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      font-size: calc(13 * var(--u));
+    }
+    /* The empty search field of search-field.tsx, at size lg. */
+    .po-search {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(36 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+    }
+    .po-group {
+      display: flex;
+      flex-direction: column;
+      gap: calc(6 * var(--u));
+    }
+    .po-group-head {
+      display: grid;
+      gap: calc(2 * var(--u));
+    }
+    .po-group-head strong {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .po-rows {
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+    }
+    /* A row: px-4 py-3 gap-3, with a bare icon. */
+    .po-row {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+    }
+    .po-row > .lucide:first-child {
+      flex-shrink: 0;
+      color: var(--muted-foreground);
+    }
+    .po-row + .po-row {
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    .po-row[data-hover] {
+      background: var(--accent);
+    }
+    .po-text {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+    }
+    .po-label {
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .po-label,
+    .po-detail {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .po-chip {
+      flex-shrink: 0;
+      gap: calc(4 * var(--u));
+      border-color: var(--border);
+      color: var(--muted-foreground);
+    }
+    .po-chevron {
+      flex-shrink: 0;
+      color: var(--muted-foreground);
+    }
+    /* A narrow stage hides the role chips. */
+    @container stage (width < 620px) {
+      .po-chip {
+        display: none;
+      }
+    }
+  }
+}

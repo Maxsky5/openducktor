@@ -1,5 +1,5 @@
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
-import { specPlanBuildWorkflow } from "@openducktor/workflows";
+import { specPlanBuildWorkflow, EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import type {
@@ -84,7 +84,7 @@ const createAgentSessionCommandService = ({
     turnPreparation: {
       context: () => Effect.succeed("Current host context"),
       taskWorkflow: () => Effect.succeed(specPlanBuildWorkflow),
-      promptOverrides: () => Effect.succeed({}),
+      promptSettings: () => Effect.succeed(EMPTY_PROMPT_SETTINGS),
       model: (_target, selection) => Effect.succeed(selection),
     },
     approvalPolicy: { reply: () => Effect.die(new Error("unexpected approval reply")) },

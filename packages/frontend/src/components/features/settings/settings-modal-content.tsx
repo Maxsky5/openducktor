@@ -1,4 +1,4 @@
-import type { WorkflowPromptRoleTabId } from "@openducktor/workflows";
+import { globalPromptLayersOf } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,13 @@ import { GeneralSettingsSection } from "./settings-general-section";
 import { SettingsGitSection } from "./settings-git-section";
 import { SettingsKanbanSection } from "./settings-kanban-section";
 import { SettingsNotificationsSection } from "./settings-notifications-section";
-import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
-import { PromptOverridesSection } from "./settings-prompt-overrides-section";
+import {
+  type RepositorySectionId,
+  type SettingsSectionId,
+  SYSTEM_PROMPTS_TITLE,
+} from "./settings-modal-constants";
+import { PromptLayersSection } from "./settings-prompt-layers-section";
+import type { PromptView } from "./settings-prompt-owners";
 import { SettingsRepositoryContent } from "./settings-repository-content";
 import { SettingsReusablePromptsSection } from "./settings-reusable-prompts-section";
 import type { SettingsModalController } from "./use-settings-modal-controller";
@@ -22,16 +27,16 @@ import { SettingsCustomAgentRolesSection } from "./settings-custom-agent-roles-s
 type SettingsModalContentProps = {
   section: SettingsSectionId;
   repositorySection: RepositorySectionId;
-  globalPromptRoleTab: WorkflowPromptRoleTabId;
-  repoPromptRoleTab: WorkflowPromptRoleTabId;
+  globalPromptView: PromptView;
+  repoPromptView: PromptView;
   selectedReusablePromptId: string | null;
   selectedCustomAgentRoleId: string | null;
   onSelectedCustomAgentRoleIdChange: (next: string | null) => void;
   isInteractionDisabled: boolean;
   controller: SettingsModalController;
   onRepositorySectionChange: (next: RepositorySectionId) => void;
-  onGlobalPromptRoleTabChange: (next: WorkflowPromptRoleTabId) => void;
-  onRepoPromptRoleTabChange: (next: WorkflowPromptRoleTabId) => void;
+  onGlobalPromptViewChange: (next: PromptView) => void;
+  onRepoPromptViewChange: (next: PromptView) => void;
   onSelectedReusablePromptIdChange: (next: string | null) => void;
   contentFocusRequest?: SettingsContentFocusRequest | null;
   onContentFocusRequestHandled?: (request: SettingsContentFocusRequest) => void;
@@ -42,16 +47,16 @@ type SettingsModalContentProps = {
 export function SettingsModalContent({
   section,
   repositorySection,
-  globalPromptRoleTab,
-  repoPromptRoleTab,
+  globalPromptView,
+  repoPromptView,
   selectedReusablePromptId,
   selectedCustomAgentRoleId,
   onSelectedCustomAgentRoleIdChange,
   isInteractionDisabled,
   controller,
   onRepositorySectionChange,
-  onGlobalPromptRoleTabChange,
-  onRepoPromptRoleTabChange,
+  onGlobalPromptViewChange,
+  onRepoPromptViewChange,
   onSelectedReusablePromptIdChange,
   contentFocusRequest,
   onContentFocusRequestHandled,
@@ -72,7 +77,6 @@ export function SettingsModalContent({
     isCodexDangerAcknowledged,
     promptValidationState,
     reusablePromptValidationState,
-    globalPromptRoleTabErrorCounts,
     updateAgentRuntimes,
     setCodexDangerAcknowledged,
     updateGlobalGitConfig,
@@ -83,7 +87,7 @@ export function SettingsModalContent({
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
     savedAutopilotError,
-    updateGlobalPromptOverrides,
+    updateGlobalPromptLayers,
   } = controller;
 
   if (settingsError && !snapshotDraft) {
@@ -132,24 +136,15 @@ export function SettingsModalContent({
 
   if (section === "prompts") {
     return (
-      <PromptOverridesSection
-        title="Global prompt overrides"
-        description="These prompts apply to every repository. An enabled repository override takes priority."
-        tab={globalPromptRoleTab}
-        errorCountsByTab={globalPromptRoleTabErrorCounts}
-        overrides={snapshotDraft.globalPromptOverrides}
+      <PromptLayersSection
+        title={SYSTEM_PROMPTS_TITLE}
+        description="Changes apply in every repository. Repository prompts add to them."
+        scope={{ kind: "global", edited: globalPromptLayersOf(snapshotDraft) }}
         validationErrors={promptValidationState.globalErrors}
+        view={globalPromptView}
         disabled={isInteractionDisabled}
-        onTabChange={onGlobalPromptRoleTabChange}
-        onUpdateOverrides={updateGlobalPromptOverrides}
-        resolveInheritedPreview={(_templateId, builtinTemplate, override) =>
-          override && override.enabled !== false
-            ? undefined
-            : {
-                sourceLabel: "Built-in prompt",
-                template: builtinTemplate,
-              }
-        }
+        onViewChange={onGlobalPromptViewChange}
+        onUpdateLayers={updateGlobalPromptLayers}
       />
     );
   }
@@ -261,12 +256,12 @@ export function SettingsModalContent({
   return (
     <SettingsRepositoryContent
       repositorySection={repositorySection}
-      repoPromptRoleTab={repoPromptRoleTab}
+      repoPromptView={repoPromptView}
+      globalPromptLayers={globalPromptLayersOf(snapshotDraft)}
       isInteractionDisabled={isInteractionDisabled}
       controller={controller}
-      globalPromptOverrides={snapshotDraft.globalPromptOverrides}
       onRepositorySectionChange={onRepositorySectionChange}
-      onRepoPromptRoleTabChange={onRepoPromptRoleTabChange}
+      onRepoPromptViewChange={onRepoPromptViewChange}
       contentFocusRequest={contentFocusRequest}
       onContentFocusRequestHandled={onContentFocusRequestHandled}
     />

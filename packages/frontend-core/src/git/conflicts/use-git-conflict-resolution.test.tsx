@@ -1,3 +1,4 @@
+import { EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { createAgentMessageSendReceipt } from "../../test-support/agent-message-send-fixture";
 import { describe, expect, mock, test } from "bun:test";
@@ -95,7 +96,7 @@ describe("useGitConflictResolution", () => {
         {
           workspaceId: "workspace-repo",
           startConflictResolutionSession,
-          loadPromptOverrides: async () => ({}),
+          loadPromptSettings: async () => EMPTY_PROMPT_SETTINGS,
         },
         { wrapper: IsolatedQueryWrapper },
       );
@@ -129,7 +130,7 @@ describe("useGitConflictResolution", () => {
       {
         workspaceId: "workspace-repo",
         startConflictResolutionSession,
-        loadPromptOverrides: async () => ({}),
+        loadPromptSettings: async () => EMPTY_PROMPT_SETTINGS,
       },
       { wrapper: IsolatedQueryWrapper },
     );
@@ -196,7 +197,7 @@ describe("useGitConflictResolution", () => {
       {
         workspaceId: "workspace-repo",
         startConflictResolutionSession,
-        loadPromptOverrides: async () => ({}),
+        loadPromptSettings: async () => EMPTY_PROMPT_SETTINGS,
       },
       { wrapper: IsolatedQueryWrapper },
     );
@@ -244,7 +245,7 @@ describe("useGitConflictResolution", () => {
       {
         workspaceId: "workspace-repo",
         startConflictResolutionSession,
-        loadPromptOverrides: async () => ({}),
+        loadPromptSettings: async () => EMPTY_PROMPT_SETTINGS,
       },
       { wrapper: IsolatedQueryWrapper },
     );
@@ -276,13 +277,13 @@ describe("useGitConflictResolution", () => {
 
   test("loads prompt overrides with the workspace id", async () => {
     const startConflictResolutionSession = mock(async () => sessionIdentity("build-new"));
-    const loadPromptOverrides = mock(async () => ({}));
+    const loadPromptSettings = mock(async () => EMPTY_PROMPT_SETTINGS);
     const harness = createHookHarness(
       useGitConflictResolution,
       {
         workspaceId: "workspace-repo",
         startConflictResolutionSession,
-        loadPromptOverrides,
+        loadPromptSettings,
       },
       { wrapper: IsolatedQueryWrapper },
     );
@@ -301,7 +302,7 @@ describe("useGitConflictResolution", () => {
       expect(resolved).toEqual(
         expect.objectContaining({ acceptedMessage: expect.objectContaining({ state: "read" }) }),
       );
-      expect(loadPromptOverrides).toHaveBeenCalledWith("workspace-repo");
+      expect(loadPromptSettings).toHaveBeenCalledWith("workspace-repo");
     } finally {
       await harness.unmount();
     }
@@ -314,7 +315,7 @@ describe("useGitConflictResolution", () => {
       {
         workspaceId: "workspace-repo",
         startConflictResolutionSession,
-        loadPromptOverrides: async () => ({}),
+        loadPromptSettings: async () => EMPTY_PROMPT_SETTINGS,
       },
       { wrapper: IsolatedQueryWrapper },
     );

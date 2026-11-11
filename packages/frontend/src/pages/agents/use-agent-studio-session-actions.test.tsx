@@ -221,6 +221,7 @@ const createSessionActionsHostClient = (): Partial<HostClient> => ({
   workspaceGetRepoConfig: async () =>
     repoConfigFixture({
       promptOverrides: {},
+      promptAppends: {},
     }),
   workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture(),
 });

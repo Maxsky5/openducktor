@@ -9,14 +9,17 @@ import { Effect } from "effect";
 import type { HostDatabaseSession } from "./sqlite-host-database-schema";
 import * as schema from "./sqlite-host-settings-schema";
 import { writeAutopilotRules } from "./sqlite-host-settings-store-autopilot";
-import { promptOverrideColumns, promptOverrideKeysMatch } from "./sqlite-prompt-override-keys";
+import {
+  promptKeyColumns,
+  promptKeysMatch,
+  writePromptLayerRows,
+} from "./sqlite-prompt-layer-rows";
 import { replaceRuntimeSettings } from "./sqlite-host-settings-store-policies";
 import { writeRemoteAccessListener } from "./sqlite-host-settings-store-remote-access";
 import {
   type HostSettingsChanges,
   type HostSettingsWriter,
   settingsGroupChanged,
-  settingsKeyChanges,
   settingsRowBatches,
   settingsWriteOperation as operation,
   validateHostSettings,
@@ -95,24 +98,22 @@ const writeCustomRoles: HostSettingsWriter = (session, current, next) =>
 
 const writeGlobalPrompts: HostSettingsWriter = (session, current, next) =>
   Effect.gen(function* () {
-    const prompts = settingsKeyChanges(current?.globalPromptOverrides, next.globalPromptOverrides);
-    for (const keys of settingsRowBatches(prompts.removed))
-      yield* session.execute(
-        (db) =>
+    const overrides = yield* writePromptLayerRows(
+      session,
+      operation,
+      current?.globalPromptOverrides,
+      next.globalPromptOverrides,
+      {
+        remove: (keys) => (db) =>
           db
             .delete(schema.globalPromptOverrides)
-            .where(promptOverrideKeysMatch(schema.globalPromptOverrides, keys)),
-        operation,
-      );
-    for (const rows of settingsRowBatches(
-      prompts.changed.map(([key, prompt]) => ({
-        ...promptOverrideColumns(key),
-        ...prompt,
-        enabled: prompt.enabled ?? null,
-      })),
-    ))
-      yield* session.execute(
-        (db) =>
+            .where(promptKeysMatch(schema.globalPromptOverrides, keys)),
+        row: (key, prompt) => ({
+          ...promptKeyColumns(key),
+          ...prompt,
+          enabled: prompt.enabled ?? null,
+        }),
+        upsert: (rows) => (db) =>
           db
             .insert(schema.globalPromptOverrides)
             .values(rows)
@@ -128,9 +129,34 @@ const writeGlobalPrompts: HostSettingsWriter = (session, current, next) =>
                 enabled: sql`excluded.enabled`,
               },
             }),
-        operation,
-      );
-    return settingsGroupChanged(prompts.removed.length > 0 || prompts.changed.length > 0);
+      },
+    );
+    const appends = yield* writePromptLayerRows(
+      session,
+      operation,
+      current?.globalPromptAppends,
+      next.globalPromptAppends,
+      {
+        remove: (keys) => (db) =>
+          db
+            .delete(schema.globalPromptAppends)
+            .where(promptKeysMatch(schema.globalPromptAppends, keys)),
+        row: (key, append) => ({ ...promptKeyColumns(key), ...append }),
+        upsert: (rows) => (db) =>
+          db
+            .insert(schema.globalPromptAppends)
+            .values(rows)
+            .onConflictDoUpdate({
+              target: [
+                schema.globalPromptAppends.ownerKind,
+                schema.globalPromptAppends.ownerId,
+                schema.globalPromptAppends.promptId,
+              ],
+              set: { text: sql`excluded.text`, enabled: sql`excluded.enabled` },
+            }),
+      },
+    );
+    return settingsGroupChanged(overrides || appends);
   });
 
 const writeRuntimes: HostSettingsWriter = (session, current, next) =>

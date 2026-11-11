@@ -1,0 +1,27 @@
+@layer views {
+  :where(.stage) {
+    /* PromptPageHeader of settings-prompt-rows.tsx: the back link, a chevron, the title, and its
+       marks in one row. */
+    .pc-crumbs {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .pc-crumbs > strong {
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .pc-back {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      font-weight: 500;
+    }
+  }
+}

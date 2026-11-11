@@ -11,7 +11,7 @@ export type DirtySections = {
   agentRuntimes?: boolean;
   kanban: boolean;
   autopilot: boolean;
-  globalPromptOverrides: boolean;
+  globalPrompts: boolean;
   repoSettings: boolean;
 };
 
@@ -26,7 +26,7 @@ export const EMPTY_DIRTY_SECTIONS: DirtySections = {
   agentRuntimes: false,
   kanban: false,
   autopilot: false,
-  globalPromptOverrides: false,
+  globalPrompts: false,
   repoSettings: false,
 };
 
@@ -58,10 +58,9 @@ export const useSettingsModalDirtyState = ({
           agentRuntimes: different(baseline.agentRuntimes, draft.agentRuntimes),
           kanban: different(baseline.kanban, draft.kanban),
           autopilot: different(baseline.autopilot, draft.autopilot),
-          globalPromptOverrides: different(
-            baseline.globalPromptOverrides,
-            draft.globalPromptOverrides,
-          ),
+          globalPrompts:
+            different(baseline.globalPromptOverrides, draft.globalPromptOverrides) ||
+            different(baseline.globalPromptAppends, draft.globalPromptAppends),
           repoSettings: different(baseline.workspaces, draft.workspaces),
         };
   return { dirtySections };

@@ -1,5 +1,6 @@
 import { allowAllGoalCommands } from "../../../test-support/service-test-doubles";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
+import { promptSettingsOf } from "@openducktor/workflows";
 import { mock } from "bun:test";
 import { createDefaultGlobalConfig } from "../../../config/global-config";
 import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
@@ -519,10 +520,7 @@ export const createLaunchHarness = async (
               status: task.status,
               description: task.description,
             },
-            overrides: workflow.prompts.mergeOverrides({
-              globalOverrides: settings.globalPromptOverrides,
-              repoOverrides: config.promptOverrides,
-            }),
+            settings: promptSettingsOf(settings, config),
           }).prompt;
         }),
     },
@@ -767,6 +765,9 @@ export const createLaunchHarness = async (
     },
     setPromptOverrides: (value: typeof config.promptOverrides) => {
       config = { ...config, promptOverrides: value };
+    },
+    setPromptAppends: (value: typeof config.promptAppends) => {
+      config = { ...config, promptAppends: value };
     },
     setSendFailure: (value: typeof sendFailure) => {
       sendFailure = value;

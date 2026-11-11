@@ -1028,10 +1028,12 @@ describe("HostClient", () => {
               hooks: { beforeWorktreeRemoval: [] },
               worktreeCopyPaths: [],
               promptOverrides: {},
+              promptAppends: {},
               agentDefaults: {},
             },
           },
           globalPromptOverrides: {},
+          globalPromptAppends: {},
         };
       }
       throw new Error(`Unexpected command: ${command}`);

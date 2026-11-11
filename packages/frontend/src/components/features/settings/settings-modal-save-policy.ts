@@ -17,7 +17,7 @@ const DIRTY_SECTION_KEYS = [
   "agentRuntimes",
   "kanban",
   "autopilot",
-  "globalPromptOverrides",
+  "globalPrompts",
   "repoSettings",
 ] as const satisfies readonly (keyof DirtySections)[];
 

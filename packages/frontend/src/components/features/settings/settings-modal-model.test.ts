@@ -1,30 +1,19 @@
-import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
-import { workflowSettingsData } from "@openducktor/frontend-core/queries/workflow-settings";
-import { builtinCompiledCatalogFixture } from "@openducktor/frontend-core/test-support/workflow-fixtures";
-
 import { describe, expect, test } from "bun:test";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
   type SettingsRepoConfig,
-  type RepoPromptOverrides,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
-  buildPromptOverrideValidationErrors,
-  canClearPromptOverride,
-  clearPromptOverride,
   clearRoleDefault,
   ensureDraftAgentDefault,
   findCatalogModel,
   getNeededCatalogRuntimeKinds,
   isSettingsInteractionDisabled,
-  resolvePromptOverrideFallbackTemplate,
   resolveRepoAgentDefaultRuntimeKind,
   selectedModelKeyForRole,
-  togglePromptOverrideEnabled,
   toRoleVariantOptions,
-  updatePromptOverrideTemplate,
   updateRepoDefaultModel,
   updateRoleDefault,
 } from "./settings-modal-model";
@@ -83,11 +72,10 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
+  promptAppends: {},
   agentDefaults: {},
   ...overrides,
 });
-
-const builtinSettingsTemplates = workflowSettingsData(builtinCompiledCatalogFixture).templates;
 
 describe("settings-modal-model", () => {
   test("keeps settings interactive while runtime executables are checked", () => {
@@ -278,184 +266,5 @@ describe("settings-modal-model", () => {
         [CODEX_DESCRIPTOR],
       ),
     ).toEqual(["opencode"]);
-  });
-
-  test("clears prompt override by removing only the stored value", () => {
-    const overrides = {
-      [specPlanBuildPromptKey("messages.spec_start")]: {
-        template: "custom",
-        baseVersion: 2,
-        enabled: false,
-      },
-      [specPlanBuildPromptKey("messages.plan_start")]: {
-        template: "planner custom",
-        baseVersion: 3,
-        enabled: true,
-      },
-    } satisfies RepoPromptOverrides;
-
-    const unchanged = clearPromptOverride(overrides, specPlanBuildPromptKey("messages.qa_review"));
-    expect(unchanged).toBe(overrides);
-
-    const cleared = clearPromptOverride(overrides, specPlanBuildPromptKey("messages.spec_start"));
-    expect(cleared[specPlanBuildPromptKey("messages.spec_start")]).toBeUndefined();
-    expect(cleared[specPlanBuildPromptKey("messages.plan_start")]).toEqual(
-      overrides[specPlanBuildPromptKey("messages.plan_start")],
-    );
-  });
-
-  test("enables clearing whenever a stored prompt override exists", () => {
-    expect(canClearPromptOverride(undefined)).toBe(false);
-    expect(
-      canClearPromptOverride({
-        template: "builtin\r\n",
-        baseVersion: 1,
-        enabled: true,
-      }),
-    ).toBe(true);
-    expect(
-      canClearPromptOverride({
-        template: "reusable prompt",
-        baseVersion: 1,
-        enabled: false,
-      }),
-    ).toBe(true);
-  });
-
-  test("validates unsupported placeholders in prompt overrides", () => {
-    const overrides = {
-      [specPlanBuildPromptKey("messages.spec_start")]: {
-        template: "Good {{task.id}}",
-        baseVersion: 1,
-        enabled: true,
-      },
-      [specPlanBuildPromptKey("messages.pull_request")]: {
-        template:
-          "Bad {{task.foo}} and {{unknown.value}} with {{git.targetBranch}} and {{git.pullRequestBaseBranch}}",
-        baseVersion: 1,
-        enabled: true,
-      },
-    } satisfies RepoPromptOverrides;
-
-    expect(buildPromptOverrideValidationErrors(overrides, builtinSettingsTemplates)).toEqual({
-      [specPlanBuildPromptKey("messages.pull_request")]:
-        "Unsupported placeholders: {{task.foo}}, {{unknown.value}}, {{git.pullRequestBaseBranch}}.",
-    });
-  });
-
-  test("validates required placeholders in human-review kickoff overrides", () => {
-    const overrides = {
-      [specPlanBuildPromptKey("messages.build_requested_changes")]: {
-        template: "Review {{task.id}} before editing.",
-        baseVersion: 3,
-        enabled: true,
-      },
-    } satisfies RepoPromptOverrides;
-
-    expect(buildPromptOverrideValidationErrors(overrides, builtinSettingsTemplates)).toEqual({
-      [specPlanBuildPromptKey("messages.build_requested_changes")]:
-        "Missing required placeholder: {{humanFeedback}}.",
-    });
-  });
-
-  test("ignores validation errors in disabled prompt overrides", () => {
-    const overrides = {
-      [specPlanBuildPromptKey("messages.pull_request")]: {
-        template: "Publish the pull request.",
-        baseVersion: 4,
-        enabled: false,
-      },
-      [specPlanBuildPromptKey("messages.spec_start")]: {
-        template: "Unsupported {{task.foo}}",
-        baseVersion: 1,
-        enabled: false,
-      },
-    } satisfies RepoPromptOverrides;
-
-    expect(buildPromptOverrideValidationErrors(overrides, builtinSettingsTemplates)).toEqual({});
-  });
-
-  test("enables prompt override and creates missing entries from fallback values", () => {
-    const emptyOverrides: RepoPromptOverrides = {};
-    const created = togglePromptOverrideEnabled(
-      emptyOverrides,
-      specPlanBuildPromptKey("messages.spec_start"),
-      true,
-      "builtin",
-      2,
-    );
-    expect(created[specPlanBuildPromptKey("messages.spec_start")]).toEqual({
-      template: "builtin",
-      baseVersion: 2,
-      enabled: true,
-    });
-
-    const disabled = togglePromptOverrideEnabled(
-      created,
-      specPlanBuildPromptKey("messages.spec_start"),
-      false,
-      "builtin",
-      2,
-    );
-    expect(disabled[specPlanBuildPromptKey("messages.spec_start")]).toEqual({
-      template: "builtin",
-      baseVersion: 2,
-      enabled: false,
-    });
-  });
-
-  test("uses inherited template as fallback when creating a newly enabled override", () => {
-    const emptyOverrides: RepoPromptOverrides = {};
-    const created = togglePromptOverrideEnabled(
-      emptyOverrides,
-      specPlanBuildPromptKey("workflow.rules"),
-      true,
-      resolvePromptOverrideFallbackTemplate("global workflow guards", "builtin workflow guards"),
-      1,
-    );
-
-    expect(created[specPlanBuildPromptKey("workflow.rules")]).toEqual({
-      template: "global workflow guards",
-      baseVersion: 1,
-      enabled: true,
-    });
-  });
-
-  test("falls back to builtin template when inherited template is unavailable", () => {
-    expect(resolvePromptOverrideFallbackTemplate(undefined, "builtin")).toBe("builtin");
-  });
-
-  test("updates prompt override template without auto-enabling entries", () => {
-    const emptyOverrides: RepoPromptOverrides = {};
-    const created = updatePromptOverrideTemplate(
-      emptyOverrides,
-      specPlanBuildPromptKey("messages.spec_start"),
-      "custom",
-      9,
-    );
-    expect(created[specPlanBuildPromptKey("messages.spec_start")]).toEqual({
-      template: "custom",
-      baseVersion: 9,
-      enabled: false,
-    });
-
-    const enabledOverrides = {
-      [specPlanBuildPromptKey("messages.spec_start")]: {
-        template: "old",
-        baseVersion: 2,
-        enabled: true,
-      },
-    } satisfies RepoPromptOverrides;
-    const updated = updatePromptOverrideTemplate(
-      enabledOverrides,
-      specPlanBuildPromptKey("messages.spec_start"),
-      "new",
-      10,
-    );
-    expect(updated[specPlanBuildPromptKey("messages.spec_start")]).toEqual({
-      template: "new",
-      baseVersion: 2,
-      enabled: true,
-    });
   });
 });

@@ -240,6 +240,47 @@ describe("shared host settings", () => {
     });
   });
 
+  test("stores, edits, and removes prompt appends of each scope", async () => {
+    await withDatabase(async ({ session }) => {
+      const config = createDefaultGlobalConfig();
+      const appends = {
+        [rolePromptKey("build")]: { text: "Run the linter.", enabled: true },
+        [specPlanBuildPromptKey("messages.qa_review")]: { text: "Check docs.", enabled: false },
+      };
+      config.globalPromptAppends = appends;
+      config.workspaces.one = repoConfigFixture({
+        workspaceId: "one",
+        workspaceName: "One",
+        repoPath: "/one",
+        promptAppends: appends,
+      });
+      await Effect.runPromise(
+        session.transaction("test.import", (transaction) =>
+          importHostSharedConfig(
+            transaction,
+            applyTaskWorkflowSettings(config, builtinTaskWorkflows),
+          ),
+        ),
+      );
+      const stored = await Effect.runPromise(readHostSharedConfig(session));
+      expect(stored.globalPromptAppends).toEqual(appends);
+      expect(stored.workspaces.one?.promptAppends).toEqual(appends);
+      expect(stored.globalPromptOverrides).toEqual({});
+
+      const key = rolePromptKey("build");
+      await measureSettingsEdits(session, (next) => {
+        next.globalPromptAppends[key] = { text: "Edited", enabled: false };
+        delete next.workspaces.one!.promptAppends[key];
+        return next;
+      });
+      const edited = await Effect.runPromise(readHostSharedConfig(session));
+      expect(edited.globalPromptAppends[key]).toEqual({ text: "Edited", enabled: false });
+      expect(Object.keys(edited.workspaces.one?.promptAppends ?? {})).toEqual([
+        specPlanBuildPromptKey("messages.qa_review"),
+      ]);
+    });
+  });
+
   test("batches large keyed maps during import, mixed edits, and removal", async () => {
     await withDatabase(async ({ session }) => {
       const config = createDefaultGlobalConfig();

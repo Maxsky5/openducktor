@@ -1,8 +1,13 @@
-import { type ResolvedTaskCard as TaskCard, launchPromptContext } from "@openducktor/workflows";
+import {
+  EMPTY_PROMPT_SETTINGS,
+  launchPromptContext,
+  type ResolvedTaskCard as TaskCard,
+} from "@openducktor/workflows";
 import type { QueryClient } from "@tanstack/react-query";
-import { loadEffectivePromptOverrides } from "../../queries/prompt-overrides";
+import { loadPromptSettings } from "../../queries/prompt-settings";
 import { loadRepoConfigFromQuery } from "../../queries/workspace";
-import type { GitTargetBranch, RepoPromptOverrides } from "@openducktor/contracts";
+import type { GitTargetBranch } from "@openducktor/contracts";
+import type { PromptSettings } from "@openducktor/workflows";
 import { resolveSessionStartKickoffPromptContext } from "./session-start-prompt-context";
 import { kickoffPromptForLaunchAction } from "./session-start-prompts";
 import type { SessionStartFlowRequest, ResolvedSessionStartDecision } from "./session-start-types";
@@ -32,12 +37,13 @@ export const sessionLaunchTask = (
 export const buildSessionStartKickoffPrompt = ({
   intent,
   task,
-  overrides,
+  settings,
   repoDefaultTargetBranch,
 }: {
   intent: KickoffPreview;
   task: TaskCard | null;
-  overrides: RepoPromptOverrides;
+  /** The saved prompt layers. */
+  settings: PromptSettings;
   repoDefaultTargetBranch: GitTargetBranch | null;
 }): string => {
   if (!task)
@@ -70,7 +76,7 @@ export const buildSessionStartKickoffPrompt = ({
   const launchTask = sessionLaunchTask(task, intent.beforeStartAction);
 
   return kickoffPromptForLaunchAction(intent.launchActionId, intent.taskId, {
-    overrides,
+    settings,
     role: intent.role,
     taskWorkflow: task.taskWorkflow,
     ...promptContext,
@@ -106,12 +112,12 @@ export const prepareSessionStartInstruction = async ({
   )
     return request;
   const workflow = task.taskWorkflow;
-  const [repoConfig, overrides] = workspaceId
+  const [repoConfig, settings] = workspaceId
     ? await Promise.all([
         loadRepoConfigFromQuery(queryClient, workspaceId),
-        loadEffectivePromptOverrides(workspaceId, queryClient, workflow),
+        loadPromptSettings(workspaceId, queryClient),
       ])
-    : [null, {}];
+    : [null, EMPTY_PROMPT_SETTINGS];
   const effectiveTargetBranch = targetBranch ?? task.targetBranch;
   const contextInput: Parameters<typeof resolveSessionStartKickoffPromptContext>[0] = {
     templateId: launch.template.id,
@@ -134,7 +140,7 @@ export const prepareSessionStartInstruction = async ({
     },
     humanFeedback: context.extraPlaceholders?.humanFeedback,
     targetBranch: context.git?.targetBranch,
-    overrides,
+    settings,
   }).prompt;
   if (!message.trim())
     throw new Error(`Message prompt for launch "${launch.id}" must not be blank.`);

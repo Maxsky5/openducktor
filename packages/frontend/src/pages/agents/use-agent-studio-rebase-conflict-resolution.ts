@@ -1,5 +1,4 @@
-import { taskGitConflictLaunch } from "@openducktor/workflows";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
+import { taskGitConflictLaunch, type PromptSettings } from "@openducktor/workflows";
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
 import {
@@ -52,7 +51,7 @@ type UseAgentStudioRebaseConflictResolutionArgs = {
       initialSourceSession?: AgentSessionIdentity | null;
     },
   ) => Promise<SessionStartWorkflowResult | undefined>;
-  loadPromptOverrides?: ((workspaceId: string) => Promise<RepoPromptOverrides>) | undefined;
+  loadPromptSettings?: ((workspaceId: string) => Promise<PromptSettings>) | undefined;
 };
 
 type UseAgentStudioRebaseConflictResolutionResult = {
@@ -65,7 +64,7 @@ export function useAgentStudioRebaseConflictResolution({
   selection,
   scheduleQueryUpdate,
   startSessionRequest,
-  loadPromptOverrides,
+  loadPromptSettings,
 }: UseAgentStudioRebaseConflictResolutionArgs): UseAgentStudioRebaseConflictResolutionResult {
   const startConflictResolutionSession = useCallback(
     (request: StartGitConflictResolutionSessionInput) =>
@@ -76,7 +75,7 @@ export function useAgentStudioRebaseConflictResolution({
   const { handleResolveGitConflict } = useGitConflictResolution({
     workspaceId,
     startConflictResolutionSession,
-    loadPromptOverrides,
+    loadPromptSettings,
   });
   const { view } = selection;
   const selectionKey = JSON.stringify([workspaceId, view.taskId, view.selectedSession.identity]);

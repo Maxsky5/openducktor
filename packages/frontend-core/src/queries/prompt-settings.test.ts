@@ -1,11 +1,10 @@
-import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, SettingsSnapshot } from "@openducktor/contracts";
 import type { ClientConnection } from "../connection/client-connection";
 import { createTestClientConnection } from "../test-support/test-client-connection";
 import { createSettingsSnapshotFixture } from "../test-support/shared-test-fixtures";
-import { loadEffectivePromptOverrides } from "./prompt-overrides";
+import { loadPromptSettings } from "./prompt-settings";
 
 const createRepoConfig = (): RepoConfig => ({
   workspaceId: "repo",
@@ -25,6 +24,9 @@ const createRepoConfig = (): RepoConfig => ({
       baseVersion: 1,
       enabled: true,
     },
+  },
+  promptAppends: {
+    [specPlanBuildPromptKey("messages.plan_start")]: { text: "repo append", enabled: true },
   },
   worktreeCopyPaths: [],
   agentStudioState: { openTaskIds: [] },
@@ -84,7 +86,7 @@ afterEach(async () => {
   await connection.dispose();
 });
 
-describe("loadEffectivePromptOverrides", () => {
+describe("loadPromptSettings", () => {
   test("deduplicates concurrent loads for the same workspace", async () => {
     const repoDeferred = Promise.withResolvers<RepoConfig>();
     const settingsDeferred = Promise.withResolvers<SettingsSnapshot>();
@@ -92,16 +94,8 @@ describe("loadEffectivePromptOverrides", () => {
     workspaceGetRepoConfigMock.mockImplementationOnce(async () => repoDeferred.promise);
     workspaceGetSettingsSnapshotMock.mockImplementationOnce(async () => settingsDeferred.promise);
 
-    const firstLoad = loadEffectivePromptOverrides(
-      "repo",
-      connection.queryClient,
-      specPlanBuildWorkflow,
-    );
-    const secondLoad = loadEffectivePromptOverrides(
-      "repo",
-      connection.queryClient,
-      specPlanBuildWorkflow,
-    );
+    const firstLoad = loadPromptSettings("repo", connection.queryClient);
+    const secondLoad = loadPromptSettings("repo", connection.queryClient);
 
     repoDeferred.resolve(createRepoConfig());
     settingsDeferred.resolve(createSettingsSnapshot());
@@ -112,18 +106,22 @@ describe("loadEffectivePromptOverrides", () => {
     expect(workspaceListMock).not.toHaveBeenCalled();
     expect(workspaceGetSettingsSnapshotMock).toHaveBeenCalledTimes(1);
     expect(firstResult).toEqual(secondResult);
-    expect(firstResult[specPlanBuildPromptKey("messages.spec_start")]?.template).toBe(
-      "global kickoff {{task.id}}",
-    );
-    expect(firstResult[specPlanBuildPromptKey("messages.plan_start")]?.template).toBe(
-      "repo planner {{task.id}}",
-    );
+    expect(firstResult).toEqual({
+      global: {
+        overrides: createSettingsSnapshot().globalPromptOverrides,
+        appends: {},
+      },
+      repository: {
+        overrides: createRepoConfig().promptOverrides,
+        appends: createRepoConfig().promptAppends,
+      },
+    });
   });
 
   test("normalizes workspace ids before deduplicating concurrent loads", async () => {
     const [firstResult, secondResult] = await Promise.all([
-      loadEffectivePromptOverrides("repo", connection.queryClient, specPlanBuildWorkflow),
-      loadEffectivePromptOverrides(" repo ", connection.queryClient, specPlanBuildWorkflow),
+      loadPromptSettings("repo", connection.queryClient),
+      loadPromptSettings(" repo ", connection.queryClient),
     ]);
 
     expect(workspaceGetRepoConfigMock).toHaveBeenCalledTimes(1);

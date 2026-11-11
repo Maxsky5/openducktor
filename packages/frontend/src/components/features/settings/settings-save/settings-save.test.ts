@@ -8,7 +8,7 @@ import {
 } from "@openducktor/contracts";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { prepareAutopilotSettingsForSave } from "./autopilot-settings";
-import { preparePromptOverridesForSave } from "./prompt-overrides";
+import { preparePromptOverridesForSave } from "./prompt-layers";
 import { prepareRepoConfigForSave } from "./repo-config";
 import { prepareSettingsSnapshotForSave } from "./settings-snapshot";
 import {
@@ -59,6 +59,10 @@ const createRepoConfig = (overrides: Partial<SettingsRepoConfig> = {}): Settings
       baseVersion: 2,
       enabled: true,
     },
+  },
+  promptAppends: {
+    [specPlanBuildPromptKey("messages.spec_start")]: { text: " extra rule ", enabled: false },
+    [specPlanBuildPromptKey("messages.qa_review")]: { text: "  ", enabled: true },
   },
   agentDefaults: {
     spec: {
@@ -214,6 +218,9 @@ describe("settings save transforms", () => {
         baseVersion: 2,
         enabled: true,
       },
+    });
+    expect(saveReady.promptAppends).toEqual({
+      [specPlanBuildPromptKey("messages.spec_start")]: { text: "extra rule", enabled: false },
     });
     expect(saveReady.agentDefaults).toEqual({
       spec: {

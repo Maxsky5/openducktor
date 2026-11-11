@@ -88,6 +88,10 @@ export const readHostGlobalConfig = (session: HostDatabaseSession) =>
           json_object('template', template, 'baseVersion', base_version),
           json_object('enabled', json(case enabled when 1 then 'true' when 0 then 'false' else 'null' end))
         )) from global_prompt_overrides)`.mapWith(JSON.parse),
+            appends:
+              sql<string>`(select json_group_object(json_array(owner_kind, owner_id, prompt_id),
+          json_object('text', text, 'enabled', json(case enabled when 1 then 'true' else 'false' end))
+        ) from global_prompt_appends)`.mapWith(JSON.parse),
             origins: sql<string>`(select json_group_array(origin) from (
           select origin from remote_access_web_origins order by position
         ))`.mapWith(JSON.parse),
@@ -115,6 +119,7 @@ export const readHostGlobalConfig = (session: HostDatabaseSession) =>
           agentRuntimes: runtimes,
           customAgentRoles: row.roles,
           globalPromptOverrides: row.prompts,
+          globalPromptAppends: row.appends,
           autopilot: {
             alwaysStartQaReviewsFresh: host.alwaysStartQaReviewsFresh,
             rules: row.rules,
@@ -225,6 +230,11 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
   )) from workspace_prompt_overrides where workspace_id = ${schema.workspaces.workspaceId})`.mapWith(
           JSON.parse,
         ),
+      appends: sql<string>`(select json_group_object(json_array(owner_kind, owner_id, prompt_id),
+    json_object('text', text, 'enabled', json(case enabled when 1 then 'true' else 'false' end))
+  ) from workspace_prompt_appends where workspace_id = ${schema.workspaces.workspaceId})`.mapWith(
+        JSON.parse,
+      ),
     })
     .from(schema.workspaces)
     .leftJoin(
@@ -339,6 +349,7 @@ const mapWorkspace = ({
           actions: { items: collections.actions, defaultActionId: row.defaultActionId },
           worktreeCopyPaths: collections.paths,
           promptOverrides: collections.prompts,
+          promptAppends: collections.appends,
           git,
           removal: removal ?? undefined,
         }),

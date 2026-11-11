@@ -49,6 +49,7 @@ const repoConfig = (workspaceId: string): RepoConfig => ({
   hooks: { beforeWorktreeRemoval: [] },
   actions: { items: [], defaultActionId: null },
   promptOverrides: {},
+  promptAppends: {},
   worktreeCopyPaths: [],
   agentStudioState: { openTaskIds: [] },
   agentDefaults: {},

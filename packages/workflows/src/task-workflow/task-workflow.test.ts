@@ -11,6 +11,7 @@ import { SPEC_PLAN_BUILD_DEFINITION } from "../builtin/spec-plan-build/definitio
 import { specPlanBuildWorkflow } from "../builtin/spec-plan-build/workflow";
 import type { TaskFacts } from "./task-input";
 import { launchGoalObjective } from "./launch-goal";
+import { EMPTY_PROMPT_SETTINGS } from "./prompt-layers";
 import { createTaskWorkflow } from "./task-workflow";
 
 const review = createReviewTaskWorkflow();
@@ -117,6 +118,7 @@ describe("createTaskWorkflow", () => {
       withoutPrompt.prompts.goalPrompt({
         launchActionId: "any",
         task: { taskId: "task-1", title: "Review" },
+        settings: EMPTY_PROMPT_SETTINGS,
       }),
     ).toThrow("has no goal prompt");
     const workflow = goalOn("with goal prompt")();
@@ -128,6 +130,7 @@ describe("createTaskWorkflow", () => {
       workflow.prompts.goalPrompt({
         launchActionId: launchId,
         task: { taskId: "task-1", title: "Review" },
+        settings: EMPTY_PROMPT_SETTINGS,
       }).prompt,
     ).toBe("Write the goal of the review.");
     const goalTemplate = workflow.prompts.templates.find(({ id }) => id === "workflow.goal");
@@ -136,11 +139,16 @@ describe("createTaskWorkflow", () => {
       workflow.prompts.goalPrompt({
         launchActionId: launchId,
         task: { taskId: "task-1", title: "Review" },
-        overrides: {
-          [goalTemplate!.key]: {
-            template: "Write a short goal for {{task.id}}.",
-            baseVersion: 1,
-            enabled: true,
+        settings: {
+          global: {
+            overrides: {
+              [goalTemplate!.key]: {
+                template: "Write a short goal for {{task.id}}.",
+                baseVersion: 1,
+                enabled: true,
+              },
+            },
+            appends: {},
           },
         },
       }).prompt,
@@ -314,6 +322,21 @@ describe("createTaskWorkflow", () => {
     expect(review.prompts.templateRoles("messages.pull_request")).toEqual(["writer", "editor"]);
   });
 
+  test("fills only the placeholders that every sender of the pull request prompt supplies", () => {
+    const definition = reviewTaskDefinition();
+    const write = definition.steps.find((step) => step.id === "write")!;
+    if (write.kind !== "agent") throw new Error("Expected the write step.");
+    write.launchActions[0]!.template = { kind: "kickoff", id: "messages.pull_request" };
+
+    expect(() =>
+      createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles),
+    ).toThrow("This prompt cannot fill {{git.targetBranch}}.");
+    const pullRequestKey = review.prompts.templates.find(
+      ({ id }) => id === "messages.pull_request",
+    )!.key;
+    expect(review.prompts.placeholdersOf(pullRequestKey)).toContain("git.targetBranch");
+  });
+
   test("limits the pull request launch to the declared pull request roles", () => {
     const workflow = withChange((definition) => {
       definition.pullRequestRoles = ["writer"];
@@ -329,6 +352,7 @@ describe("createTaskWorkflow", () => {
       role: "writer",
       task: { taskId: "task-1" },
       targetBranch: { remote: "origin", branch: "main" },
+      settings: EMPTY_PROMPT_SETTINGS,
     }).prompt;
     expect(prompt).toBe("Publish the pull request of task-1 against main.");
   });
@@ -392,6 +416,7 @@ describe("createTaskWorkflow", () => {
     const system = review.prompts.systemPrompt({
       role: "editor",
       task: { taskId: "task-1", title: "Essay", issueType: "feature", status: "reviewing" },
+      settings: EMPTY_PROMPT_SETTINGS,
     }).prompt;
 
     expect(system).toContain("You review task task-1 as editor.");
@@ -399,20 +424,33 @@ describe("createTaskWorkflow", () => {
     expect(system).toContain("Allowed workflow codes for odt_set_task_artifact: review.");
     expect(system).toContain("Task task-1: Essay (feature, reviewing)");
     expect(
-      review.prompts.kickoffPrompt({ launchActionId: "edit_review", task: { taskId: "task-1" } })
-        .prompt,
+      review.prompts.kickoffPrompt({
+        launchActionId: "edit_review",
+        task: { taskId: "task-1" },
+        settings: EMPTY_PROMPT_SETTINGS,
+      }).prompt,
     ).toBe("Review the draft of task-1.");
-    expect(review.prompts.readOnlyRejection({ role: "editor" })).toBe(
-      "The editor cannot change files.",
-    );
     expect(
-      review.prompts.mergeOverrides({
-        globalOverrides: { [kickoffKey]: { template: "Global", baseVersion: 1 } },
-        repoOverrides: {
-          [workflowKey("messages.unknown")]: { template: "Ignored", baseVersion: 1 },
+      review.prompts.readOnlyRejection({ role: "editor", settings: EMPTY_PROMPT_SETTINGS }),
+    ).toBe("The editor cannot change files.");
+    expect(
+      review.prompts.kickoffPrompt({
+        launchActionId: "edit_review",
+        task: { taskId: "task-1" },
+        settings: {
+          global: {
+            overrides: { [kickoffKey]: { template: "Global", baseVersion: 1 } },
+            appends: { [kickoffKey]: { text: "Also {{task.id}}.", enabled: true } },
+          },
+          repository: {
+            overrides: {
+              [workflowKey("messages.unknown")]: { template: "Ignored", baseVersion: 1 },
+            },
+            appends: {},
+          },
         },
-      }),
-    ).toEqual({ [kickoffKey]: { template: "Global", baseVersion: 1 } });
+      }).prompt,
+    ).toBe("Global\n\nAlso task-1.");
   });
 
   test("lists the agent events of each role and lists them in the role prompt", () => {
@@ -439,6 +477,7 @@ describe("createTaskWorkflow", () => {
     const writerPrompt = review.prompts.systemPrompt({
       role: "writer",
       task: { taskId: "task-1" },
+      settings: EMPTY_PROMPT_SETTINGS,
     }).prompt;
     expect(writerPrompt).toContain(
       [
@@ -449,7 +488,11 @@ describe("createTaskWorkflow", () => {
       ].join("\n"),
     );
     expect(
-      review.prompts.systemPrompt({ role: "editor", task: { taskId: "task-1" } }).prompt,
+      review.prompts.systemPrompt({
+        role: "editor",
+        task: { taskId: "task-1" },
+        settings: EMPTY_PROMPT_SETTINGS,
+      }).prompt,
     ).not.toContain("Workflow events for odt_apply_workflow_event");
   });
 

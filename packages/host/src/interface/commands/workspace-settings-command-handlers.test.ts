@@ -28,6 +28,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
       appearance: { sidebarSessionGrouping: "none" },
       workspaces: {},
       globalPromptOverrides: {},
+      globalPromptAppends: {},
     });
     const calls: SidebarSessionGrouping[] = [];
     const service = createWorkspaceSettingsServiceTestDouble({
@@ -126,6 +127,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               actions: { items: [], defaultActionId: null },
               worktreeCopyPaths: [],
               promptOverrides: {},
+              promptAppends: {},
               agentDefaults: {},
               agentStudioState: state,
             };
@@ -151,6 +153,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
           actions: { items: [], defaultActionId: null },
           worktreeCopyPaths: [],
           promptOverrides: {},
+          promptAppends: {},
           agentDefaults: {},
           agentStudioState: {
             openTaskIds: action.type === "ensure_tab" ? [action.taskId] : [],
@@ -172,6 +175,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               actions: { items: [], defaultActionId: null },
               worktreeCopyPaths: [],
               promptOverrides: {},
+              promptAppends: {},
               agentDefaults: {},
               agentStudioState: { openTaskIds: [] },
             };
@@ -213,6 +217,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             agentModelFavorites: [],
             workspaces: {},
             globalPromptOverrides: {},
+            globalPromptAppends: {},
           };
         });
       },

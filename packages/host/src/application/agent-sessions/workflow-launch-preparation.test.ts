@@ -85,6 +85,64 @@ test("a launch without the human feedback context cannot commit an event before 
   expect(h.starts).toHaveLength(0);
 });
 
+test("a saved append with a placeholder that the prompt cannot fill fails before any task mutation", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("human_review");
+  h.setPromptAppends({
+    [specPlanBuildPromptKey("messages.build_requested_changes")]: {
+      text: "Compare with {{git.targetBranch}}.",
+      enabled: true,
+    },
+  });
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "build_after_human_request_changes",
+        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+      },
+      instruction: { kind: "kickoff", feedback: "Required changes" },
+      beforeStartAction: { eventId: "human-request-changes" },
+    }),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    failure: {
+      message: expect.stringContaining(
+        'The repository append of prompt "messages.build_requested_changes" has a placeholder problem. This prompt cannot fill {{git.targetBranch}}.',
+      ),
+    },
+  });
+  expect(h.getTask().status).toBe("human_review");
+  expect(h.starts).toHaveLength(0);
+});
+
+test("a launch with its own first message is not blocked by a bad kickoff layer", async () => {
+  const h = await createLaunchHarness();
+  h.setTaskStatus("human_review");
+  h.setPromptAppends({
+    [specPlanBuildPromptKey("messages.build_requested_changes")]: {
+      text: "Compare with {{git.targetBranch}}.",
+      enabled: true,
+    },
+  });
+  const result = await Effect.runPromise(
+    h.service.launch({
+      ...requestFor("codex"),
+      policy: {
+        kind: "manual",
+        actionId: "build_after_human_request_changes",
+        decision: { startMode: "fresh", selectedModel: modelFor("codex") },
+      },
+      instruction: { kind: "kickoff", text: "Fix the review notes.", feedback: "Required changes" },
+      beforeStartAction: { eventId: "human-request-changes" },
+    }),
+  );
+  expect(result).not.toMatchObject({ status: "failed" });
+  expect(h.starts).toHaveLength(1);
+});
+
 test("a saved override with an unsupported placeholder fails before any task mutation", async () => {
   const h = await createLaunchHarness();
   h.setTaskStatus("human_review");
@@ -110,7 +168,7 @@ test("a saved override with an unsupported placeholder fails before any task mut
     status: "failed",
     failure: {
       message:
-        'The prompt "workflow.task_context" uses unsupported placeholder "task.qaRequired". Edit or disable this prompt override in Settings.',
+        'The repository override of prompt "workflow.task_context" has a placeholder problem. Unsupported placeholder: {{task.qaRequired}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}. Edit or turn off this override in Settings.',
     },
   });
   expect(h.getTask().status).toBe("human_review");

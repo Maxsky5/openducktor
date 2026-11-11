@@ -35,6 +35,14 @@ import { FeatureTourDialogHost } from "@/features/feature-tour/feature-tour-dial
 import { SettingsModal, SettingsModalProvider } from "./settings-modal";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
+type SettingsContent = ReturnType<typeof within>;
+/** The overview row of a prompt, named by its label. */
+const promptRow = (content: SettingsContent, label: string) =>
+  content.getByRole("button", { name: label });
+/** An open prompt shows its editor, with the prompt label as its heading. */
+const isSelectedPrompt = (content: SettingsContent, label: string) =>
+  content.queryByRole("heading", { name: label }) !== null;
+
 // The tour host loads the dialog and its scenes lazily. Load both here, so no test pays for the
 // first load.
 await (await import("@/features/feature-tour/feature-tour-dialog-loader")).loadFeatureTourDialog();
@@ -114,15 +122,14 @@ for (const shared of [true, false]) {
     }
   });
 
-  test(`${shared ? "shared" : "local"} settings discards edits and keeps the prompt tab after cancel`, async () => {
+  test(`${shared ? "shared" : "local"} settings discards edits and keeps the selected prompt after cancel`, async () => {
     const settings = renderSettings(shared);
     try {
       let content = await settings.open();
       fireEvent.click(content.getByRole("button", { name: "System prompts" }));
-      fireEvent.click(content.getByRole("tab", { name: "Builder" }));
-      expect(content.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe(
-        "true",
-      );
+      expect(content.getByRole("textbox", { name: "Search all prompts" })).toBeDefined();
+      fireEvent.click(promptRow(content, "Builder"));
+      expect(isSelectedPrompt(content, "Builder Instructions")).toBe(true);
       fireEvent.click(content.getByRole("button", { name: "Sessions" }));
       const thinkingMessages = content.getByRole("switch", {
         name: "Show thinking messages in session transcripts",
@@ -133,9 +140,10 @@ for (const shared of [true, false]) {
       await settings.close(content);
       expect(settings.saveSettingsSnapshot).not.toHaveBeenCalled();
       content = await settings.open(shared ? "Other settings" : "Open settings");
-      expect(content.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe(
-        "true",
-      );
+      expect(isSelectedPrompt(content, "Builder Instructions")).toBe(true);
+      // The prompt keeps the screen that opened it, so Back returns to the first screen.
+      fireEvent.click(content.getByRole("button", { name: "Back to System prompts" }));
+      expect(content.getByRole("textbox", { name: "Search all prompts" })).toBeDefined();
       fireEvent.click(content.getByRole("button", { name: "Sessions" }));
       expect(
         content
@@ -152,7 +160,7 @@ for (const shared of [true, false]) {
     try {
       let content = await settings.open();
       fireEvent.click(content.getByRole("button", { name: "System prompts" }));
-      fireEvent.click(content.getByRole("tab", { name: "Builder" }));
+      fireEvent.click(promptRow(content, "Builder"));
       fireEvent.click(content.getByRole("button", { name: "Sessions" }));
       const thinkingMessages = content.getByRole("switch", {
         name: "Show thinking messages in session transcripts",
@@ -168,9 +176,7 @@ for (const shared of [true, false]) {
       content = await settings.open();
       expect(content.getByRole("heading", { name: "Session settings" })).toBeDefined();
       fireEvent.click(content.getByRole("button", { name: "System prompts" }));
-      expect(content.getByRole("tab", { name: "Builder" }).getAttribute("aria-selected")).toBe(
-        "true",
-      );
+      expect(isSelectedPrompt(content, "Builder Instructions")).toBe(true);
     } finally {
       settings.unmount();
     }
@@ -329,7 +335,7 @@ test("shared settings remembers the section opened by a deep link", async () => 
   }
 });
 
-test("shared settings remembers the repository subsection and prompt tab", async () => {
+test("shared settings remembers the repository subsection and selected prompt", async () => {
   const settings = renderSettings(true);
   try {
     let content = await settings.open("Open scripts");
@@ -337,10 +343,11 @@ test("shared settings remembers the repository subsection and prompt tab", async
       content.getByLabelText("Before worktree removal script (one command per line)"),
     ).toBeDefined();
     fireEvent.click(content.getByRole("button", { name: "Repository prompts" }));
-    fireEvent.click(content.getByRole("tab", { name: "QA" }));
+    fireEvent.click(promptRow(content, "Spec, Plan, Build"));
+    fireEvent.click(promptRow(content, "QA Kickoff"));
     await settings.close(content);
     content = await settings.open();
-    expect(content.getByRole("tab", { name: "QA" }).getAttribute("aria-selected")).toBe("true");
+    expect(isSelectedPrompt(content, "QA Kickoff")).toBe(true);
   } finally {
     settings.unmount();
   }

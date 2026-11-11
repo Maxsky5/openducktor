@@ -21,6 +21,7 @@ const repoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
+  promptAppends: {},
   agentDefaults: {},
   agentStudioState: { openTaskIds: [] },
   ...overrides,

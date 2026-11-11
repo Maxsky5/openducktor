@@ -409,7 +409,7 @@ The built-in prompt templates live in [spec-plan-build/prompt-templates.ts](../p
 
 For each changed template, set `builtinVersion` to the target branch's version plus one. Increment it only once per PR, even when later commits revise the prompt.
 
-Existing custom overrides remain active. Users must review, update, or disable old overrides themselves. The app does not display a version-mismatch warning. A new built-in version does not replace custom text. Update artifact reads to use `odt_read_task` for metadata, then `odt_read_task_artifacts` with `codes` for content. Update workflow saves to use `odt_set_task_artifact` with a workflow code and complete Markdown text directly in `content`. See the [artifact tool contract](external-mcp.md#read-and-manage-task-artifacts) for required fields and role access.
+Existing custom overrides remain active. A new built-in version does not replace custom text. Settings marks an override that is on and older than the built-in version as Outdated. The notice lets the user view the built-in text, keep the override, or remove it. Append instructions keep built-in updates, so prefer them to overrides. Update artifact reads to use `odt_read_task` for metadata, then `odt_read_task_artifacts` with `codes` for content. Update workflow saves to use `odt_set_task_artifact` with a workflow code and complete Markdown text directly in `content`. See the [artifact tool contract](external-mcp.md#read-and-manage-task-artifacts) for required fields and role access.
 
 ### Permissions and pending input
 

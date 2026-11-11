@@ -1,8 +1,9 @@
-import type { RepoPromptOverrides, WorkspaceSession } from "@openducktor/contracts";
+import type { WorkspaceSession } from "@openducktor/contracts";
 import {
   buildGitConflictAssistancePrompt,
   gitConflictPromptContext,
   taskGitConflictLaunch,
+  type PromptSettings,
   type ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import { matchesAgentSessionIdentity } from "../../lib/agent-session-identity";
@@ -102,17 +103,17 @@ export const conflictBuilderSessions = <Session extends AgentSessionIdentity>(
   return { matching, defaultBuilder };
 };
 
-/** The conflict request for the Builder of a task, with the task context and prompt overrides. */
+/** The conflict request for the Builder of a task, with the task context and prompt layers. */
 export const buildTaskConflictPrompt = ({
   conflict,
   taskId,
   task,
-  overrides,
+  settings,
 }: {
   conflict: GitConflict;
   taskId: string;
   task: TaskCard | null;
-  overrides: RepoPromptOverrides;
+  settings: PromptSettings;
 }): string => {
   if (!task)
     throw new Error(
@@ -130,7 +131,7 @@ export const buildTaskConflictPrompt = ({
       status: task.status,
       description: task.description,
     },
-    overrides,
+    settings,
     git: gitConflictPromptContext(git),
   }).prompt;
   return buildGitConflictAssistancePrompt({ git, instructions });

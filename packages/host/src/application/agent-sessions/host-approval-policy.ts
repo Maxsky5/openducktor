@@ -10,7 +10,12 @@ import type {
 import { agentSessionRefKey, normalizeOdtWorkflowToolName } from "@openducktor/core";
 import type { TaskWorkflowRole } from "@openducktor/workflows";
 import { Deferred, Effect, Exit, FiberSet, Scope } from "effect";
-import { HostValidationError, type HostError, errorMessage } from "../../effect/host-errors";
+import {
+  HostValidationError,
+  type HostError,
+  errorMessage,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import { requireWorkflowRole } from "../tasks/support/task-workflow-events";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { resolveRuntimeDescriptor } from "../runtimes/runtime-request-resolution";
@@ -48,7 +53,7 @@ export const createHostApprovalPolicy = (deps: {
   definitions: RuntimeDefinitionsService;
   preparation: Pick<
     ReturnType<typeof createSessionTurnPreparation>,
-    "promptOverrides" | "taskWorkflow"
+    "promptSettings" | "taskWorkflow"
   >;
   reportFailure: (error: HostError) => Effect.Effect<void>;
 }) => {
@@ -162,14 +167,22 @@ export const createHostApprovalPolicy = (deps: {
           claims.set(key, claim);
           const work = Effect.gen(function* () {
             let message = input.message;
-            if (reject && workflowSession)
-              message = workflowSession.workflow.prompts.readOnlyRejection({
-                role: workflowSession.scope.role,
-                overrides: yield* deps.preparation.promptOverrides(
-                  { workspaceId: workflowSession.scope.workspaceId, repoPath: root.repoPath },
-                  workflowSession.workflow,
-                ),
+            if (reject && workflowSession) {
+              const settings = yield* deps.preparation.promptSettings({
+                workspaceId: workflowSession.scope.workspaceId,
+                repoPath: root.repoPath,
               });
+              // A saved layer with a placeholder problem throws. It must reach the failure report.
+              message = yield* Effect.try({
+                try: () =>
+                  workflowSession.workflow.prompts.readOnlyRejection({
+                    role: workflowSession.scope.role,
+                    settings,
+                  }),
+                catch: (cause) =>
+                  toHostOperationError(cause, "approval-policy.read-only-rejection"),
+              });
+            }
             const replyInput: AgentSessionLiveReplyApprovalInput = {
               ...resolved.owner,
               requestId: resolved.request.requestId,

@@ -1,17 +1,11 @@
 export {
-  buildPromptOverrideValidationErrors,
-  canClearPromptOverride,
-  clearPromptOverride,
   ensureDraftAgentDefault,
   findCatalogModel,
   getNeededCatalogRuntimeKinds,
-  resolvePromptOverrideFallbackTemplate,
   resolveRepoAgentDefaultRuntimeKind,
   selectedModelKey,
   selectedModelKeyForRole,
-  togglePromptOverrideEnabled,
   toRoleVariantOptions,
   toVariantOptionsForModelKey,
-  updatePromptOverrideTemplate,
   updateRepoDefaultModel,
 } from "./settings-modal-model";

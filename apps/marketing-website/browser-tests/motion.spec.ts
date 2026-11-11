@@ -94,8 +94,8 @@ const scenes = [
 /**
  * The markup of a view holds the frame that visitors without motion see, most often the last
  * frame of the loop. The opening view holds its first frame, so the page does not change under
- * the first paint. The prompt editor holds the placeholder error from the middle of its loop,
- * because that frame shows the check. The command palette holds its search results from the
+ * the first paint. The prompt editor holds the typed append from the middle of its loop, because
+ * the loop ends while the settings save. The command palette holds its search results from the
  * middle of its loop, because the loop ends with the palette closed. The runtime defaults hold
  * the last frame with the model picker still open, so they show a model list.
  */

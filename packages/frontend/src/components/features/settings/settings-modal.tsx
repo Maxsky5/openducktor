@@ -1,4 +1,4 @@
-import type { WorkflowPromptRoleTabId } from "@openducktor/workflows";
+import type { PromptView } from "./settings-prompt-owners";
 import { RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RuntimeImpactDialog } from "@/components/features/runtimes/runtime-impact-dialog";
@@ -226,12 +226,12 @@ function SettingsDialog({
     setNavigation((current) => ({ ...current, repositorySection }));
   };
 
-  const handleGlobalPromptRoleTabChange = (globalPromptRoleTab: WorkflowPromptRoleTabId): void => {
-    setNavigation((current) => ({ ...current, globalPromptRoleTab }));
+  const handleGlobalPromptViewChange = (globalPromptView: PromptView): void => {
+    setNavigation((current) => ({ ...current, globalPromptView }));
   };
 
-  const handleRepoPromptRoleTabChange = (repoPromptRoleTab: WorkflowPromptRoleTabId): void => {
-    setNavigation((current) => ({ ...current, repoPromptRoleTab }));
+  const handleRepoPromptViewChange = (repoPromptView: PromptView): void => {
+    setNavigation((current) => ({ ...current, repoPromptView }));
   };
 
   const handleSelectedReusablePromptIdChange = (selectedReusablePromptId: string | null): void => {
@@ -285,7 +285,9 @@ function SettingsDialog({
       <DialogContent
         loading={isPreparing}
         loadingLabel="Loading settings…"
-        className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col p-0"
+        // The dialog and its body clip instead of scroll, so `scrollIntoView` moves only the pane
+        // of the open section, never the dialog itself.
+        className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col overflow-clip p-0"
         onCloseAutoFocus={onCloseAutoFocus}
       >
         <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6 pr-14">
@@ -302,7 +304,7 @@ function SettingsDialog({
           ) : null}
         </DialogHeader>
 
-        <DialogBody className="min-h-0 flex-1 overflow-hidden">
+        <DialogBody className="min-h-0 flex-1 overflow-clip">
           <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1">
             <SettingsSidebar
               section={navigation.section}
@@ -315,8 +317,8 @@ function SettingsDialog({
                 <SettingsModalContent
                   section={navigation.section}
                   repositorySection={navigation.repositorySection}
-                  globalPromptRoleTab={navigation.globalPromptRoleTab}
-                  repoPromptRoleTab={navigation.repoPromptRoleTab}
+                  globalPromptView={navigation.globalPromptView}
+                  repoPromptView={navigation.repoPromptView}
                   selectedReusablePromptId={navigation.selectedReusablePromptId}
                   selectedCustomAgentRoleId={navigation.selectedCustomAgentRoleId}
                   onSelectedCustomAgentRoleIdChange={(selectedCustomAgentRoleId) =>
@@ -325,8 +327,8 @@ function SettingsDialog({
                   isInteractionDisabled={isInteractionDisabled}
                   controller={controller}
                   onRepositorySectionChange={handleRepositorySectionChange}
-                  onGlobalPromptRoleTabChange={handleGlobalPromptRoleTabChange}
-                  onRepoPromptRoleTabChange={handleRepoPromptRoleTabChange}
+                  onGlobalPromptViewChange={handleGlobalPromptViewChange}
+                  onRepoPromptViewChange={handleRepoPromptViewChange}
                   onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
                   contentFocusRequest={focusRequest}
                   onContentFocusRequestHandled={clearFocusRequest}
@@ -350,6 +352,7 @@ function SettingsDialog({
             customAgentRoleFieldErrorCount:
               controller.customAgentRoleValidationState.totalErrorCount,
             promptPlaceholderErrorCount: controller.promptValidationState.totalErrorCount,
+            promptPlaceholderErrorPlace: controller.promptValidationState.firstErrorPlace,
             reusablePromptFieldErrorCount: controller.reusablePromptValidationState.totalErrorCount,
             runtimeAvailabilityErrorCount:
               controller.runtimeAvailabilityValidationState.totalErrorCount,

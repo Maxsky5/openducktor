@@ -34,6 +34,7 @@ const repoConfig: SettingsRepoConfig = {
   actions: { items: [], defaultActionId: null },
   worktreeCopyPaths: [],
   promptOverrides: {},
+  promptAppends: {},
   agentDefaults: {
     spec: {
       runtimeKind: "codex",

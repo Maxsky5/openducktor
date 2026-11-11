@@ -45,8 +45,8 @@ export function SearchField({
 }
 
 type ToolbarSearchFieldProps = SearchFieldProps & {
-  /** `sm` fits a panel toolbar. `md` fits a page header toolbar. */
-  size?: "sm" | "md";
+  /** `sm` fits a panel toolbar. `md` fits a page header toolbar. `lg` fits a settings page. */
+  size?: "sm" | "md" | "lg";
   ref?: Ref<HTMLInputElement | null>;
 };
 
@@ -77,7 +77,7 @@ export function ToolbarSearchField({
         value={value}
         placeholder={placeholder}
         disabled={disabled}
-        classes={size === "md" ? MEDIUM_CLASSES : SMALL_CLASSES}
+        classes={TOOLBAR_CLASSES[size]}
         autoComplete="off"
         spellCheck={false}
         onKeyDown={(event) => {
@@ -121,6 +121,12 @@ const MEDIUM_CLASSES: SearchInputClasses = {
   clearButton: "top-1/2 right-1 size-6 -translate-y-1/2 text-muted-foreground",
   clearIcon: "size-3.5",
 };
+
+const TOOLBAR_CLASSES = {
+  sm: SMALL_CLASSES,
+  md: MEDIUM_CLASSES,
+  lg: DEFAULT_CLASSES,
+} satisfies Record<NonNullable<ToolbarSearchFieldProps["size"]>, SearchInputClasses>;
 
 type SearchInputProps = Pick<ComponentProps<"input">, "autoComplete" | "spellCheck" | "onKeyDown"> &
   Omit<SearchFieldProps, "label"> & {

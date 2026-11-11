@@ -1,5 +1,6 @@
+import { EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { describe, expect, mock, test } from "bun:test";
-import type { RepoPromptOverrides } from "@openducktor/contracts";
+import type { PromptSettings } from "@openducktor/workflows";
 import {
   createAgentSessionCollection,
   getAgentSession,
@@ -67,12 +68,12 @@ const createHistoryLoadHarness = (initialSession: AgentSessionState) => {
 };
 
 const createPromptPolicy = (
-  loadRepoPromptOverrides = async (): Promise<RepoPromptOverrides> => ({}),
+  loadPromptSettings = async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS,
 ) =>
   createWorkflowSessionHistoryPromptPolicy({
     workspaceId: "workspace-1",
     taskRef: { current: [] },
-    loadRepoPromptOverrides,
+    loadPromptSettings,
   });
 
 describe("session history loader scope", () => {
@@ -110,7 +111,7 @@ describe("session history loader scope", () => {
       sessionAssociation: { kind: "unbound" },
     };
     const harness = createHistoryLoadHarness(unboundSession);
-    const loadRepoPromptOverrides = mock(async (): Promise<RepoPromptOverrides> => ({}));
+    const loadPromptSettings = mock(async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS);
     const loadSessionHistory = mock(async () => []);
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
@@ -119,7 +120,7 @@ describe("session history loader scope", () => {
       currentWorkspaceRepoPathRef: { current: "/repo" },
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
-      loadSystemPromptContext: createPromptPolicy(loadRepoPromptOverrides),
+      loadSystemPromptContext: createPromptPolicy(loadPromptSettings),
       historyReadGeneration,
     });
 
@@ -127,7 +128,7 @@ describe("session history loader scope", () => {
       "Cannot load history for unbound session 'external-1'; repository or workflow context is required.",
     );
 
-    expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
+    expect(loadPromptSettings).not.toHaveBeenCalled();
     expect(loadSessionHistory).not.toHaveBeenCalled();
     expect(harness.session.historyLoadState).toBe("not_requested");
   });
@@ -135,7 +136,7 @@ describe("session history loader scope", () => {
   test("loads workflow history from the active workspace", async () => {
     const workflowSession = createSession();
     const harness = createHistoryLoadHarness(workflowSession);
-    const loadRepoPromptOverrides = mock(async (): Promise<RepoPromptOverrides> => ({}));
+    const loadPromptSettings = mock(async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS);
     const loadSessionHistory = mock(async () => []);
     const loadAgentSessionHistory = createLoadAgentSessionHistory({
       workspaceRepoPath: "/repo",
@@ -147,14 +148,14 @@ describe("session history loader scope", () => {
       loadSystemPromptContext: createWorkflowSessionHistoryPromptPolicy({
         workspaceId: "workspace-1",
         taskRef: { current: [createTaskCardFixture({ id: "task-1" })] },
-        loadRepoPromptOverrides,
+        loadPromptSettings,
       }),
       historyReadGeneration,
     });
 
     await expect(loadAgentSessionHistory(sessionTarget)).resolves.not.toBeNull();
 
-    expect(loadRepoPromptOverrides).toHaveBeenCalled();
+    expect(loadPromptSettings).toHaveBeenCalled();
     expect(loadSessionHistory).toHaveBeenCalledWith(expect.objectContaining({ repoPath: "/repo" }));
     expect(harness.session.historyLoadState).toBe("loaded");
   });
@@ -187,7 +188,7 @@ describe("session history loader scope", () => {
       sessionAssociation: { kind: "repository", workspaceId: "workspace-1" },
     };
     const harness = createHistoryLoadHarness(repositorySession);
-    const loadRepoPromptOverrides = mock(async (): Promise<RepoPromptOverrides> => ({}));
+    const loadPromptSettings = mock(async (): Promise<PromptSettings> => EMPTY_PROMPT_SETTINGS);
     let historyInput:
       | Parameters<
           Parameters<typeof loadSessionHistoryIntoStore>[0]["adapter"]["loadSessionHistory"]
@@ -205,7 +206,7 @@ describe("session history loader scope", () => {
       readSessionSnapshot: harness.readSessionSnapshot,
       updateSession: harness.updateSession,
       identity: sessionTarget,
-      loadSystemPromptContext: createPromptPolicy(loadRepoPromptOverrides),
+      loadSystemPromptContext: createPromptPolicy(loadPromptSettings),
       isStaleRepoOperation: () => false,
       historyReadGeneration,
     });
@@ -214,6 +215,6 @@ describe("session history loader scope", () => {
       externalSessionId: "external-1",
       sessionScope: { kind: "repository", workspaceId: "workspace-1" },
     });
-    expect(loadRepoPromptOverrides).not.toHaveBeenCalled();
+    expect(loadPromptSettings).not.toHaveBeenCalled();
   });
 });

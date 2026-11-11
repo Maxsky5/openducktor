@@ -14,6 +14,7 @@ import type {
 import {
   isPullRequestLaunch,
   requirePullRequestTarget,
+  promptSettingsOf,
   type TaskFacts,
   type TaskWorkflow,
   type TaskWorkflowLaunchAction,
@@ -75,14 +76,17 @@ export const prepareWorkflowLaunch = (
             catch: (cause) => launchValidationError(errorMessage(cause)),
           });
     yield* validateLaunchAvailable(workflow, launchTask, action, repoPath);
-    const settings = yield* deps.settingsConfig.readGlobalConfig();
-    const overrides = workflow.prompts.mergeOverrides({
-      globalOverrides: settings.globalPromptOverrides,
-      repoOverrides: config.promptOverrides,
+    const globalConfig = yield* deps.settingsConfig.readGlobalConfig();
+    const promptSettings = promptSettingsOf(globalConfig, config);
+    // Validate input before any task mutation or runtime creation. A launch builds the kickoff of
+    // its action only when the request does not bring its own first message.
+    const buildsKickoff =
+      request.instruction.kind === "kickoff" && request.instruction.text === undefined;
+    const layerProblem = workflow.prompts.findLayerProblem(promptSettings, {
+      role: action.role,
+      launchActionId: buildsKickoff ? actionId : undefined,
     });
-    // Validate input before any task mutation or runtime creation.
-    const overrideProblem = workflow.prompts.findOverrideProblem(overrides);
-    if (overrideProblem !== undefined) return yield* launchValidationError(overrideProblem);
+    if (layerProblem !== undefined) return yield* launchValidationError(layerProblem);
     const messageParts =
       request.instruction.kind === "message"
         ? yield* deps.resolveParts(request.instruction.parts)
@@ -127,7 +131,7 @@ export const prepareWorkflowLaunch = (
                 task: toPromptTask(task),
                 humanFeedback: feedback || undefined,
                 targetBranch: isPullRequestLaunch(action.id) ? targetBranch : undefined,
-                overrides,
+                settings: promptSettings,
               }).prompt,
         catch: (cause) => toHostOperationError(cause, "workflow-launch.instruction"),
       });
@@ -144,7 +148,7 @@ export const prepareWorkflowLaunch = (
             config,
             action,
             latest: launch.latest,
-            alwaysStartQaReviewsFresh: settings.autopilot.alwaysStartQaReviewsFresh,
+            alwaysStartQaReviewsFresh: globalConfig.autopilot.alwaysStartQaReviewsFresh,
           });
     if (resolved.kind === "skipped") return resolved;
     const decision = resolved.decision;
@@ -280,7 +284,7 @@ export const prepareWorkflowLaunch = (
     const systemPrompt = workflow.prompts.systemPrompt({
       role: action.role,
       task: toPromptTask(task),
-      overrides,
+      settings: promptSettings,
     }).prompt;
     let parts = messageParts;
     // Goal mode sends the goal instead of the kickoff, as a `/goal` message would.

@@ -19,6 +19,7 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
       validationSummary: {
         openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
+        promptPlaceholderErrorPlace: null,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
         runtimeAvailabilityErrorCount: 0,
@@ -34,6 +35,39 @@ const renderFooter = (overrides: Partial<Parameters<typeof SettingsModalFooter>[
 };
 
 describe("SettingsModalFooter", () => {
+  test("names the place of the first prompt placeholder error, so the user can find it", () => {
+    const base = {
+      openCodePermissionErrorCount: 0,
+      customAgentRoleFieldErrorCount: 0,
+      reusablePromptFieldErrorCount: 0,
+      runtimeAvailabilityErrorCount: 0,
+      hasUnacknowledgedCodexDangerousSettings: false,
+      promptPlaceholderErrorPlace: "Fix Kickoff (Bug Triage, System prompts)",
+    };
+    const one = renderFooter({
+      validationSummary: { ...base, promptPlaceholderErrorCount: 1 },
+    });
+    try {
+      expect(
+        screen.getByText("Fix the placeholder error in Fix Kickoff (Bug Triage, System prompts)."),
+      ).toBeTruthy();
+    } finally {
+      one.unmount();
+    }
+    const two = renderFooter({
+      validationSummary: { ...base, promptPlaceholderErrorCount: 2 },
+    });
+    try {
+      expect(
+        screen.getByText(
+          "Fix 2 prompt placeholder errors. The first is in Fix Kickoff (Bug Triage, System prompts).",
+        ),
+      ).toBeTruthy();
+    } finally {
+      two.unmount();
+    }
+  });
+
   test("closes remote control without offering an unrelated settings save", () => {
     const close = mock(() => {});
     const save = mock(() => {});
@@ -59,6 +93,7 @@ describe("SettingsModalFooter", () => {
         validationSummary: {
           openCodePermissionErrorCount: 0,
           promptPlaceholderErrorCount: 1,
+          promptPlaceholderErrorPlace: null,
           customAgentRoleFieldErrorCount: 2,
           reusablePromptFieldErrorCount: 3,
           runtimeAvailabilityErrorCount: 4,
@@ -96,6 +131,7 @@ describe("SettingsModalFooter", () => {
       validationSummary: {
         openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
+        promptPlaceholderErrorPlace: null,
         customAgentRoleFieldErrorCount: 2,
         reusablePromptFieldErrorCount: 0,
         runtimeAvailabilityErrorCount: 0,
@@ -144,6 +180,7 @@ describe("SettingsModalFooter", () => {
       validationSummary: {
         openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
+        promptPlaceholderErrorPlace: null,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 1,
         runtimeAvailabilityErrorCount: 0,
@@ -166,6 +203,7 @@ describe("SettingsModalFooter", () => {
       validationSummary: {
         openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
+        promptPlaceholderErrorPlace: null,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
         runtimeAvailabilityErrorCount: 2,
@@ -188,6 +226,7 @@ describe("SettingsModalFooter", () => {
       validationSummary: {
         openCodePermissionErrorCount: 0,
         promptPlaceholderErrorCount: 0,
+        promptPlaceholderErrorPlace: null,
         customAgentRoleFieldErrorCount: 0,
         reusablePromptFieldErrorCount: 0,
         runtimeAvailabilityErrorCount: 0,

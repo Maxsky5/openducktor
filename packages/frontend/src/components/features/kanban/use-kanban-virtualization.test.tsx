@@ -21,7 +21,12 @@ const createCardLayouts = (tasks: HookArgs["tasks"]): ProductionHookArgs["cardLa
   new Map(
     tasks.map((task) => [
       task.id,
-      { contentRevision: JSON.stringify(task), hasSessionShortcuts: false },
+      // A short revision, as getCardLayout builds. The full card holds its workflow, and a copy of
+      // it on each render makes these tests slow enough to time out on a busy runner.
+      {
+        contentRevision: JSON.stringify([task.updatedAt, task.title, task.status]),
+        hasSessionShortcuts: false,
+      },
     ]),
   );
 

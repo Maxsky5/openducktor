@@ -3,12 +3,18 @@ import type {
   AgentRuntimes,
   GlobalGitConfig,
   SettingsRepoConfig,
-  RepoPromptOverrides,
   ReusablePrompt,
   SettingsSnapshot,
 } from "@openducktor/contracts";
+import {
+  globalPromptLayersOf,
+  repoPromptLayersOf,
+  withGlobalPromptLayers,
+  withRepoPromptLayers,
+} from "@openducktor/workflows";
 import { useCallback } from "react";
 import { ensureDraftAgentDefault, updateRepoDefaultModel } from "./settings-modal-model";
+import type { PromptSettingsLayersUpdater } from "./settings-prompt-layers";
 import type { SettingsSnapshotDraftUpdater } from "./use-settings-modal-snapshot-state";
 
 type UseSettingsModalDraftActionsArgs = {
@@ -47,12 +53,8 @@ export type SettingsModalDraftActions = {
   updateGlobalAutopilotSettings: (
     updater: (current: SettingsSnapshot["autopilot"]) => SettingsSnapshot["autopilot"],
   ) => void;
-  updateGlobalPromptOverrides: (
-    updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
-  ) => void;
-  updateRepoPromptOverrides: (
-    updater: (current: RepoPromptOverrides) => RepoPromptOverrides,
-  ) => void;
+  updateGlobalPromptLayers: (updater: PromptSettingsLayersUpdater) => void;
+  updateRepoPromptLayers: (updater: PromptSettingsLayersUpdater) => void;
   updateSelectedRepoAgentDefault: (
     role: string,
     field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
@@ -113,11 +115,14 @@ export const useSettingsModalDraftActions = ({
     [selectedWorkspaceId, setSnapshotDraft],
   );
 
-  const updateGlobalPromptOverrides = useCallback(
-    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
-      updateSnapshotSection("globalPromptOverrides", updater);
+  const updateGlobalPromptLayers = useCallback(
+    (updater: PromptSettingsLayersUpdater): void => {
+      setSnapshotDraft((current) => {
+        if (!current) return current;
+        return withGlobalPromptLayers(current, updater(globalPromptLayersOf(current)));
+      });
     },
-    [updateSnapshotSection],
+    [setSnapshotDraft],
   );
 
   const updateGlobalGitConfig = useCallback(
@@ -205,12 +210,11 @@ export const useSettingsModalDraftActions = ({
     [updateSnapshotSection],
   );
 
-  const updateRepoPromptOverrides = useCallback(
-    (updater: (current: RepoPromptOverrides) => RepoPromptOverrides): void => {
-      updateSelectedRepoConfig((repoConfig) => ({
-        ...repoConfig,
-        promptOverrides: updater(repoConfig.promptOverrides),
-      }));
+  const updateRepoPromptLayers = useCallback(
+    (updater: PromptSettingsLayersUpdater): void => {
+      updateSelectedRepoConfig((repoConfig) =>
+        withRepoPromptLayers(repoConfig, updater(repoPromptLayersOf(repoConfig))),
+      );
     },
     [updateSelectedRepoConfig],
   );
@@ -288,8 +292,8 @@ export const useSettingsModalDraftActions = ({
     updateReusablePrompts,
     updateGlobalKanbanSettings,
     updateGlobalAutopilotSettings,
-    updateGlobalPromptOverrides,
-    updateRepoPromptOverrides,
+    updateGlobalPromptLayers,
+    updateRepoPromptLayers,
     updateSelectedRepoAgentDefault,
     clearSelectedRepoAgentDefault,
     updateSelectedRepoDefaultModel,

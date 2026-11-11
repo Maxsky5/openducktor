@@ -27,6 +27,22 @@ const AGENT_PROMPT_PLACEHOLDER_SET = new Set<string>(agentPromptPlaceholderValue
 
 const PLACEHOLDER_PATTERN = /{{\s*([a-zA-Z0-9_.-]+)\s*}}/g;
 
+/** A piece of a template: plain text, or a `{{placeholder}}` with its name. */
+export type PromptTemplatePiece = { text: string; placeholder?: string };
+
+/** The template in order, cut at each placeholder. Empty pieces are left out. */
+export const splitPromptTemplate = (template: string): PromptTemplatePiece[] => {
+  const pieces: PromptTemplatePiece[] = [];
+  let offset = 0;
+  for (const match of template.matchAll(PLACEHOLDER_PATTERN)) {
+    if (match.index > offset) pieces.push({ text: template.slice(offset, match.index) });
+    pieces.push({ text: match[0], placeholder: match[1] ?? "" });
+    offset = match.index + match[0].length;
+  }
+  if (offset < template.length) pieces.push({ text: template.slice(offset) });
+  return pieces;
+};
+
 export const extractPromptTemplatePlaceholders = (template: string): string[] => {
   const tokens: string[] = [];
   const seen = new Set<string>();
@@ -43,14 +59,22 @@ export const extractPromptTemplatePlaceholders = (template: string): string[] =>
   return tokens;
 };
 
-/** The template that declares the placeholders supplies the required ones. */
+/**
+ * The template that declares the placeholders supplies the required ones. A supported placeholder
+ * outside the placeholders that the prompt can fill is unfillable.
+ */
 export const validatePromptTemplatePlaceholders = (
   template: string,
-  requiredPlaceholders: readonly string[] = [],
+  requiredPlaceholders: readonly string[],
+  fillablePlaceholders: readonly string[],
 ) => {
   const placeholders = extractPromptTemplatePlaceholders(template);
   const unsupportedPlaceholders = placeholders.filter(
     (placeholder) => !AGENT_PROMPT_PLACEHOLDER_SET.has(placeholder),
+  );
+  const unfillablePlaceholders = placeholders.filter(
+    (placeholder) =>
+      AGENT_PROMPT_PLACEHOLDER_SET.has(placeholder) && !fillablePlaceholders.includes(placeholder),
   );
   const missingRequiredPlaceholders = requiredPlaceholders.filter(
     (placeholder) => !placeholders.includes(placeholder),
@@ -59,6 +83,7 @@ export const validatePromptTemplatePlaceholders = (
   return {
     placeholders,
     unsupportedPlaceholders,
+    unfillablePlaceholders,
     missingRequiredPlaceholders,
   };
 };
@@ -142,3 +167,16 @@ export const repoPromptOverridesSchema = z
   .record(promptOverrideKeySchema, agentPromptOverrideSchema)
   .default({});
 export type RepoPromptOverrides = z.output<typeof repoPromptOverridesSchema>;
+
+/** Text that OpenDucktor adds after a prompt. The built-in text stays current with each update. */
+export const agentPromptAppendSchema = z.object({
+  text: z.string(),
+  enabled: z.boolean(),
+});
+export type AgentPromptAppend = z.infer<typeof agentPromptAppendSchema>;
+
+/** Keyed by prompt owner and prompt ID, like overrides. */
+export const repoPromptAppendsSchema = z
+  .record(promptOverrideKeySchema, agentPromptAppendSchema)
+  .default({});
+export type RepoPromptAppends = z.output<typeof repoPromptAppendsSchema>;

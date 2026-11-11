@@ -472,6 +472,7 @@ function createRepoConfigFixture(promptOverrides: RepoPromptOverrides = {}): Rep
     actions: { items: [], defaultActionId: null },
     worktreeCopyPaths: [],
     promptOverrides,
+    promptAppends: {},
     agentStudioState: { openTaskIds: [] },
     agentDefaults: {
       spec: {
@@ -1448,7 +1449,7 @@ describe("KanbanPage session start modal flow", () => {
 
     await waitFor(() => {
       expect(renderer.getSessionStartModalModel()?.kickoffPromptError).toBe(
-        'The prompt "messages.build_start" uses unsupported placeholder "unsupported.token". Edit or disable this prompt override in Settings.',
+        'The repository override of prompt "messages.build_start" has a placeholder problem. Unsupported placeholder: {{unsupported.token}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}. Edit or turn off this override in Settings.',
       );
     });
     expect(startAgentSessionMock).not.toHaveBeenCalled();

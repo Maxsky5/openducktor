@@ -7,6 +7,7 @@ import {
 import {
   resolveCodexRolePolicy,
   buildReadOnlyPermissionRejectionMessage,
+  EMPTY_PROMPT_SETTINGS,
 } from "@openducktor/workflows";
 import { BUILTIN_ROLE_IDS } from "@openducktor/workflows/test-support";
 import { agentSessionIdentityKey } from "../../../lib/agent-session-identity";
@@ -446,7 +447,7 @@ export const listenToAgentSessionEvents = (
           Promise.resolve(
             buildReadOnlyPermissionRejectionMessage({
               role: builtinRoleId(role),
-              overrides: {},
+              settings: EMPTY_PROMPT_SETTINGS,
             }),
           )),
       readOnlyApprovalAutoRejectSafe:

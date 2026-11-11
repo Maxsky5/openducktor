@@ -2,10 +2,9 @@ import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
 import type {
   AgentMessageTarget,
   AgentSessionModelSelection,
-  RepoPromptOverrides,
   WorkspaceRef,
 } from "@openducktor/contracts";
-import type { TaskWorkflow } from "@openducktor/workflows";
+import { promptSettingsOf, type PromptSettings, type TaskWorkflow } from "@openducktor/workflows";
 import {
   resolveSavedSessionModel,
   isSameSelection,
@@ -44,14 +43,11 @@ export const createSessionTurnPreparation = (deps: {
         });
       return read.models.catalog;
     });
-  const overridesFor = (scope: WorkspaceRef, workflow: TaskWorkflow) =>
+  const promptSettingsFor = (scope: WorkspaceRef) =>
     Effect.gen(function* () {
       const config = yield* getScopedRepoConfig(deps.settings, scope);
-      const settings = yield* deps.settingsConfig.readGlobalConfig();
-      return workflow.prompts.mergeOverrides({
-        globalOverrides: settings.globalPromptOverrides,
-        repoOverrides: config.promptOverrides,
-      });
+      const global = yield* deps.settingsConfig.readGlobalConfig();
+      return promptSettingsOf(global, config);
     });
   return {
     /** The task workflow of the task of a workflow session. */
@@ -62,11 +58,9 @@ export const createSessionTurnPreparation = (deps: {
         Effect.map((task) => deps.taskWorkflows.forTask(task)),
         Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-context")),
       ),
-    promptOverrides: (
-      scope: WorkspaceRef,
-      workflow: TaskWorkflow,
-    ): Effect.Effect<RepoPromptOverrides, HostError> =>
-      overridesFor(scope, workflow).pipe(
+    /** The saved prompt layers of the global settings and of the repository of a scope. */
+    promptSettings: (scope: WorkspaceRef): Effect.Effect<PromptSettings, HostError> =>
+      promptSettingsFor(scope).pipe(
         Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-context")),
       ),
     context: (target: PreparationTarget) =>
@@ -78,15 +72,17 @@ export const createSessionTurnPreparation = (deps: {
           taskId: target.sessionScope.taskId,
         });
         const workflow = deps.taskWorkflows.forTask(task);
-        const overrides = yield* overridesFor(
-          { workspaceId: target.sessionScope.workspaceId, repoPath: target.repoPath },
-          workflow,
-        );
-        const overrideProblem = workflow.prompts.findOverrideProblem(overrides);
-        if (overrideProblem !== undefined) {
+        const settings = yield* promptSettingsFor({
+          workspaceId: target.sessionScope.workspaceId,
+          repoPath: target.repoPath,
+        });
+        const layerProblem = workflow.prompts.findLayerProblem(settings, {
+          role: target.sessionScope.role,
+        });
+        if (layerProblem !== undefined) {
           return yield* new HostValidationError({
-            field: "promptOverrides",
-            message: overrideProblem,
+            field: "promptSettings",
+            message: layerProblem,
           });
         }
         return workflow.prompts.systemPrompt({
@@ -98,7 +94,7 @@ export const createSessionTurnPreparation = (deps: {
             status: task.status,
             description: task.description,
           },
-          overrides,
+          settings,
         }).prompt;
       }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "session.prepare-context"))),
     model: (

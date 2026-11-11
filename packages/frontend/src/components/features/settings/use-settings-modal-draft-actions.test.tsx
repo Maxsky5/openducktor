@@ -38,6 +38,7 @@ const createInitialSnapshot = (): SettingsSnapshot =>
         actions: { items: [], defaultActionId: null },
         worktreeCopyPaths: [],
         promptOverrides: {},
+        promptAppends: {},
         agentDefaults: {},
       },
     },
@@ -59,7 +60,7 @@ const createHookHarness = (initialProps: HarnessArgs) =>
   createSharedHookHarness(useDraftActionsHarness, initialProps);
 
 describe("useSettingsModalDraftActions", () => {
-  test("updates selected repo config and prompt overrides", async () => {
+  test("updates selected repo config and prompt layers", async () => {
     const harness = createHookHarness({
       selectedWorkspaceId: "repo-a",
       initialSnapshot: createInitialSnapshot(),
@@ -71,21 +72,20 @@ describe("useSettingsModalDraftActions", () => {
         ...repo,
         branchPrefix: "feature/",
       }));
-      state.updateRepoPromptOverrides((overrides) => ({
-        ...overrides,
-        [specPlanBuildPromptKey("messages.spec_start")]: {
-          template: "custom",
-          baseVersion: 2,
-          enabled: true,
+      state.updateRepoPromptLayers((layers) => ({
+        ...layers,
+        overrides: {
+          ...layers.overrides,
+          [specPlanBuildPromptKey("messages.spec_start")]: {
+            template: "custom",
+            baseVersion: 2,
+            enabled: true,
+          },
         },
       }));
-      state.updateGlobalPromptOverrides((overrides) => ({
-        ...overrides,
-        [rolePromptKey("spec")]: {
-          template: "global custom",
-          baseVersion: 2,
-          enabled: true,
-        },
+      state.updateGlobalPromptLayers((layers) => ({
+        ...layers,
+        appends: { ...layers.appends, [rolePromptKey("spec")]: { text: "more", enabled: true } },
       }));
     });
 
@@ -95,7 +95,10 @@ describe("useSettingsModalDraftActions", () => {
       snapshot?.workspaces["repo-a"]?.promptOverrides[specPlanBuildPromptKey("messages.spec_start")]
         ?.template,
     ).toBe("custom");
-    expect(snapshot?.globalPromptOverrides[rolePromptKey("spec")]?.template).toBe("global custom");
+    expect(snapshot?.globalPromptAppends[rolePromptKey("spec")]).toEqual({
+      text: "more",
+      enabled: true,
+    });
 
     await harness.unmount();
   });

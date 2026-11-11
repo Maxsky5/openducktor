@@ -1,12 +1,12 @@
-// The Settings dialog on the global prompt overrides of the QA role. Sources: settings-modal.tsx,
-// settings-modal-sidebars.tsx, settings-prompt-overrides-section.tsx,
-// settings-modal-prompt-components.tsx, and settings-modal-footer.tsx in
-// packages/frontend/src/components/features/settings. The markup holds the last frame of the
-// error: the new line uses {{task.type}}, which is not a placeholder of OpenDucktor.
+// The Settings dialog on the System prompts list and the editor of the QA Kickoff prompt. Sources:
+// settings-modal.tsx, settings-modal-sidebars.tsx, settings-prompt-home.tsx,
+// settings-prompt-rows.tsx, settings-prompt-workflow-page.tsx, settings-prompt-page-header.tsx,
+// settings-prompt-layer-editor.tsx, settings-prompt-text-field.tsx, settings-prompt-final-text.tsx,
+// and settings-modal-footer.tsx in packages/frontend/src/components/features/settings, and
+// workflow-prompt-settings.ts in packages/frontend-core/src/queries. The markup
+// holds the frame before the save: the append instructions are on and show in the final text.
 import {
   Bell,
-  ChevronDown,
-  CircleAlert,
   Columns3,
   Cpu,
   FolderGit2,
@@ -19,6 +19,7 @@ import {
   Radio,
   Save,
   SlidersHorizontal,
+  Trash2,
   Workflow,
   X,
 } from "lucide-react";
@@ -27,24 +28,22 @@ import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
 import { flag } from "../../replicas/flag";
 import { SettingsPane } from "../../replicas/settings/SettingsPane";
 import { Pointer } from "../../replicas/shell/Pointer";
+import { Badge } from "../../replicas/ui/Badge";
 import { Button } from "../../replicas/ui/Button";
-import { Segment } from "../../replicas/ui/Segment";
-import { Segmented } from "../../replicas/ui/Segmented";
 import { Switch } from "../../replicas/ui/Switch";
 import {
   ACTIVE_SECTION,
-  ACTIVE_TAB,
-  ADDED_LINE,
-  PROMPT_TABS,
-  QA_BASE_AFTER,
-  QA_BASE_BEFORE,
-  QA_BASE_CARD,
+  APPEND_TEXT,
+  LAYER_LABELS,
   QA_KICKOFF,
   QA_KICKOFF_CARD,
+  QA_KICKOFF_PLACEHOLDERS,
   SECTION_LABELS,
   type SectionLabel,
-  unsupported,
+  STATUS_LABELS,
 } from "./sample";
+import { PromptOverview } from "./PromptOverview";
+import { PromptCrumbs } from "./PromptCrumbs";
 import "./view.css";
 
 /** The icon of each section, as SETTINGS_SECTIONS gives it. */
@@ -64,20 +63,17 @@ const SECTION_ICONS = {
   Autopilot: Workflow,
 } satisfies Record<SectionLabel, LucideIcon>;
 
-/** The sections of the dialog. The active section shows the placeholder error. */
 function SectionNav(): ReactElement {
   return (
     <div className="pd-nav">
       {SECTION_LABELS.map((label) => {
         const Icon = SECTION_ICONS[label];
-        const active = label === ACTIVE_SECTION;
         return (
-          <span className="pd-nav-item" data-active={flag(active)} key={label}>
+          <span className="pd-nav-item" data-active={flag(label === ACTIVE_SECTION)} key={label}>
             <span className="pd-nav-label">
               <Icon className="i16" />
               <span>{label}</span>
             </span>
-            {active && <CircleAlert className="i14 pd-alert" data-alert />}
           </span>
         );
       })}
@@ -85,83 +81,105 @@ function SectionNav(): ReactElement {
   );
 }
 
-type Card = { label: string; owner: string; description: string };
-
-/** The heading of a prompt card, with its owner, and its Enable override switch. */
-function CardHead({ card, checked }: { card: Card; checked: boolean }): ReactElement {
+/** The text of a final text part, with each placeholder marked as the app marks it. */
+function MarkedText({ text }: { text: string }): ReactElement {
   return (
-    <div className="pd-card-head">
-      <div>
-        <strong>{card.label}</strong>
-        <p className="pd-owner">{card.owner}</p>
-        <p>{card.description}</p>
-      </div>
-      <span className="pd-enable">
-        {checked ? <Switch checked data-switch /> : <Switch />}
-        Enable override
-      </span>
-    </div>
+    <>
+      {text.split(/({{[a-zA-Z.]+}})/).map((piece, index) =>
+        index % 2 === 1 ? (
+          <mark className="pd-mark" key={piece}>
+            {piece}
+          </mark>
+        ) : (
+          piece
+        ),
+      )}
+    </>
   );
 }
 
-/** The row of the inherited prompt, for a card without an override. */
-function Inherited({ hidden = false }: { hidden?: boolean }): ReactElement {
+/**
+ * The editor of the QA Kickoff prompt with the typed append instructions. The pane is scrolled to
+ * its end, so it shows the final text.
+ */
+function Editor(): ReactElement {
   return (
-    <div className="pd-inherited" hidden={hidden} data-inherited={flag(hidden)}>
-      <p>Inherited prompt in use: Built-in prompt</p>
-      <ChevronDown className="i14" />
-    </div>
-  );
-}
-
-/** The QA Role Base card with the override on and the new line with the wrong key. */
-function BaseCard(): ReactElement {
-  return (
-    <div className="pd-card">
-      <CardHead card={QA_BASE_CARD} checked />
-      <Inherited hidden />
-      <div className="pd-editor">
-        <span className="pd-label">Override prompt</span>
-        <div className="pd-textarea" data-textarea="">
-          <pre>
-            {QA_BASE_BEFORE}
-            <span data-part="lead">{ADDED_LINE.lead}</span>
-            <span data-part="key">{ADDED_LINE.wrongKey}</span>
-            <span data-part="close">{ADDED_LINE.close}</span>
-            <span data-part="tail">{ADDED_LINE.tail}</span>
-            <i className="pd-caret" data-caret="" />
-            {QA_BASE_AFTER}
-          </pre>
+    <div className="pd-editor" data-editor="" data-scrolled="">
+      <div className="pd-editor-inner" data-editor-inner="">
+        <div className="pd-title">
+          <PromptCrumbs backTitle={QA_KICKOFF_CARD.owner} title={QA_KICKOFF_CARD.label}>
+            <Badge variant="success" data-badge-appended="">
+              {STATUS_LABELS.appended}
+            </Badge>
+          </PromptCrumbs>
+          <p>
+            {QA_KICKOFF_CARD.description} {QA_KICKOFF_CARD.usage}. Your changes apply to every task
+            of {QA_KICKOFF_CARD.owner}, in every repository.
+          </p>
         </div>
-        <p className="pd-error" data-error="">
-          {unsupported(ADDED_LINE.wrongKey)}
-        </p>
-      </div>
-      <div className="pd-actions">
-        <Button variant="ghost" size="sm" data-clear>
-          Clear override
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** The QA Kickoff card without an override. */
-function KickoffCard(): ReactElement {
-  return (
-    <div className="pd-card">
-      <CardHead card={QA_KICKOFF_CARD} checked={false} />
-      <Inherited />
-      <div className="pd-editor">
-        <span className="pd-label">Override prompt</span>
-        <div className="pd-textarea">
-          <pre>{QA_KICKOFF}</pre>
+        <div className="pd-card">
+          <div className="pd-card-head">
+            <div>
+              <strong>Append instructions</strong>
+              <p>Add your own rules after this prompt. The built-in text keeps its updates.</p>
+            </div>
+            <span className="pd-enable" data-append-controls="">
+              <Switch checked />
+              <span className="pd-remove">
+                <Trash2 className="i14" />
+                Remove append
+              </span>
+            </span>
+          </div>
+          <div className="pd-textarea" data-textarea="">
+            <pre>
+              <span data-typed="">{APPEND_TEXT}</span>
+              <i className="pd-caret" data-caret="" />
+            </pre>
+            <span className="pd-placeholder" hidden data-placeholder="">
+              For example: Run the linter before you finish.
+            </span>
+          </div>
+          <div className="pd-chips">
+            <span>Insert a placeholder</span>
+            {QA_KICKOFF_PLACEHOLDERS.map((name) => (
+              <Button variant="outline" size="sm" className="pd-chip" key={name}>
+                {name}
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="pd-actions">
-        <Button variant="ghost" size="sm" data-disabled>
-          Clear override
-        </Button>
+        <div className="pd-replace">
+          <div>
+            <strong>Replace the whole prompt</strong>
+            <p>
+              Write the whole prompt yourself. A replaced prompt does not get built-in updates, so
+              use append instructions when you can.
+            </p>
+          </div>
+          <Button variant="outline" size="sm">
+            Replace
+          </Button>
+        </div>
+        <div className="pd-final">
+          <strong>Final text</strong>
+          <p>
+            What the agent receives. OpenDucktor fills the marked placeholders when it sends the
+            prompt.
+          </p>
+          <div className="pd-parts">
+            <div className="pd-part">
+              <Badge>{LAYER_LABELS.builtin}</Badge>
+              <pre>
+                <MarkedText text={QA_KICKOFF} />
+              </pre>
+            </div>
+            <div className="pd-part" data-user="" data-append-part="">
+              <Badge variant="success">{LAYER_LABELS.global_append}</Badge>
+              <pre data-append-preview="">{APPEND_TEXT}</pre>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -172,9 +190,9 @@ export function PromptsView(props: SceneViewProps): ReactElement {
     <SceneFrame
       {...props}
       name="prompts"
-      alt="The Settings dialog on the global prompt overrides of the QA role. The visitor turns on the override of the QA Role Base prompt and adds a line with the placeholder {{task.type}}. OpenDucktor shows that the placeholder is not supported and disables Save. The visitor changes it to {{task.issueType}} and saves the settings."
+      alt="The Settings dialog on System prompts. The first screen lists the role instructions and the workflows. The visitor opens the Spec, Plan, Build workflow, then its QA Kickoff prompt. The visitor types append instructions. The append turns on, the prompt gets the Appended badge, and the final text shows the built-in prompt and then the global append. The visitor saves the settings."
     >
-      <SettingsPane className="prompts-dialog" data-prompts data-invalid>
+      <SettingsPane className="prompts-dialog" data-prompts>
         <div className="pd-header">
           <strong>Settings</strong>
           <p>Manage your agents, workspaces and app preferences.</p>
@@ -185,38 +203,16 @@ export function PromptsView(props: SceneViewProps): ReactElement {
         <div className="pd-body">
           <SectionNav />
           <div className="pd-content">
-            <div className="pd-heading">
-              <strong>Global prompt overrides</strong>
-              <p>
-                These prompts apply to every repository. An enabled repository override takes
-                priority.
-              </p>
-            </div>
-            <Segmented size="sm">
-              {PROMPT_TABS.map((tab) => (
-                <Segment className="pd-tab" active={tab === ACTIVE_TAB} key={tab}>
-                  <span>{tab}</span>
-                  {tab === ACTIVE_TAB && <CircleAlert className="i14" data-alert />}
-                </Segment>
-              ))}
-            </Segmented>
-            <p className="pd-banner" data-banner="">
-              1 prompt placeholder error in this tab.
-            </p>
-            <div className="pd-cards">
-              <BaseCard />
-              <KickoffCard />
-            </div>
+            <PromptOverview />
+            <Editor />
           </div>
         </div>
         <div className="pd-footer">
           <Button variant="outline" data-cancel>
             Cancel
           </Button>
-          <span className="pd-message">
-            <span data-message="">1 prompt placeholder error.</span>
-          </span>
-          <Button className="pd-save" data-disabled data-save>
+          <span className="pd-message" />
+          <Button className="pd-save" data-save>
             <Save className="i16 pd-save-icon" />
             <LoaderCircle className="i16 spin pd-saving-icon" />
             <span data-save-label="">Save settings</span>

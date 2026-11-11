@@ -11,6 +11,8 @@ type SettingsModalFooterSaveState = {
 type SettingsModalFooterValidationSummary = {
   customAgentRoleFieldErrorCount: number;
   promptPlaceholderErrorCount: number;
+  /** Where the first prompt placeholder error is, such as "Fix Kickoff (Bug Triage, System prompts)". */
+  promptPlaceholderErrorPlace: string | null;
   reusablePromptFieldErrorCount: number;
   runtimeAvailabilityErrorCount: number;
   claudeSettingsError?: string | null | undefined;
@@ -39,9 +41,18 @@ export type SettingsModalFooterState = {
 const fieldErrors = (count: number, label: string): string | null =>
   count > 0 ? `${count} ${label} error${count > 1 ? "s" : ""}.` : null;
 
+/** The prompt errors, with the place of the first one, so the user can find it. */
+const promptErrors = (count: number, place: string | null | undefined): string | null => {
+  if (count === 0) return null;
+  if (!place) return fieldErrors(count, "prompt placeholder");
+  return count === 1
+    ? `Fix the placeholder error in ${place}.`
+    : `Fix ${count} prompt placeholder errors. The first is in ${place}.`;
+};
+
 const validationMessage = (summary: SettingsModalFooterValidationSummary): string | null =>
   fieldErrors(summary.openCodePermissionErrorCount, "OpenCode permission field") ??
-  fieldErrors(summary.promptPlaceholderErrorCount, "prompt placeholder") ??
+  promptErrors(summary.promptPlaceholderErrorCount, summary.promptPlaceholderErrorPlace) ??
   fieldErrors(summary.reusablePromptFieldErrorCount, "reusable prompt field") ??
   fieldErrors(summary.runtimeAvailabilityErrorCount, "runtime executable") ??
   summary.claudeSettingsError ??

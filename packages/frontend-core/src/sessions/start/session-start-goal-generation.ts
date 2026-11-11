@@ -3,7 +3,7 @@ import { goalTaskMaterial, type TaskWorkflow } from "@openducktor/workflows";
 import type { QueryClient } from "@tanstack/react-query";
 import { connectionHost } from "../../connection/client-connection";
 import { loadTaskDocumentFromQuery } from "../../queries/documents";
-import { loadEffectivePromptOverrides } from "../../queries/prompt-overrides";
+import { loadPromptSettings } from "../../queries/prompt-settings";
 import type { RuntimeBoundModelSelection } from "../../lib/repo-agent-defaults";
 
 export const GOAL_GENERATION_NEEDS_DEFAULT_MODEL =
@@ -11,7 +11,7 @@ export const GOAL_GENERATION_NEEDS_DEFAULT_MODEL =
 
 /**
  * Asks the model to write the goal of a launch. The goal prompt of the workflow, with the
- * repository and global overrides, gives the instructions. The model gets no tools, so the client
+ * global and repository prompt layers, gives the instructions. The model gets no tools, so the client
  * sends the task, its workflow artifacts, and the default goal of the launch.
  */
 export const generateSessionStartGoal = async ({
@@ -33,8 +33,8 @@ export const generateSessionStartGoal = async ({
   defaultObjective: string;
   model: RuntimeBoundModelSelection;
 }): Promise<string> => {
-  const [overrides, documents] = await Promise.all([
-    loadEffectivePromptOverrides(workspace.workspaceId, queryClient, taskWorkflow),
+  const [settings, documents] = await Promise.all([
+    loadPromptSettings(workspace.workspaceId, queryClient),
     // Only the artifacts that the task has are material.
     Promise.all(
       taskWorkflow.definition.artifacts
@@ -55,7 +55,7 @@ export const generateSessionStartGoal = async ({
       description: task.description,
     },
     humanFeedback,
-    overrides,
+    settings,
   }).prompt;
   const generationModel: AgentTextGenerationInput["model"] = {
     runtimeKind: model.runtimeKind,

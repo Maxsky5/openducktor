@@ -1,11 +1,5 @@
 import { resolveRuntimeKindSelection } from "@openducktor/frontend-core/lib/agent-runtime";
-import {
-  type SettingsRepoConfig,
-  type RepoPromptOverrides,
-  type RuntimeDescriptor,
-  type RuntimeKind,
-  validatePromptTemplatePlaceholders,
-} from "@openducktor/contracts";
+import type { SettingsRepoConfig, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import {
   ensureDraftAgentDefault,
   resolveRepoAgentDefaultRuntimeKind,
@@ -17,8 +11,6 @@ import type {
   ModelDefaultDraft,
 } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
-import type { SettingsPromptTemplate } from "@openducktor/frontend-core/queries/workflow-settings";
-type AgentPromptTemplateId = string;
 
 export {
   ensureDraftAgentDefault,
@@ -102,121 +94,4 @@ export const getNeededCatalogRuntimeKinds = (
   }
 
   return [...runtimeKinds];
-};
-
-export const canClearPromptOverride = (
-  override: RepoPromptOverrides[AgentPromptTemplateId] | undefined,
-): boolean => Boolean(override);
-
-export const clearPromptOverride = (
-  overrides: RepoPromptOverrides,
-  templateId: AgentPromptTemplateId,
-) => {
-  const existing = overrides[templateId];
-  if (!existing) {
-    return overrides;
-  }
-
-  const next = { ...overrides };
-  delete next[templateId];
-  return next;
-};
-
-export const togglePromptOverrideEnabled = (
-  overrides: RepoPromptOverrides,
-  templateId: AgentPromptTemplateId,
-  nextEnabled: boolean,
-  fallbackTemplate: string,
-  fallbackBaseVersion: number,
-) => {
-  const existing = overrides[templateId];
-  if (nextEnabled) {
-    return {
-      ...overrides,
-      [templateId]: {
-        template: existing?.template ?? fallbackTemplate,
-        baseVersion: existing?.baseVersion ?? fallbackBaseVersion,
-        enabled: true,
-      },
-    };
-  }
-
-  if (!existing) {
-    return overrides;
-  }
-
-  return {
-    ...overrides,
-    [templateId]: {
-      ...existing,
-      enabled: false,
-    },
-  };
-};
-
-export const resolvePromptOverrideFallbackTemplate = (
-  inheritedTemplate: string | undefined,
-  builtinTemplate: string,
-): string => inheritedTemplate ?? builtinTemplate;
-
-export const updatePromptOverrideTemplate = (
-  overrides: RepoPromptOverrides,
-  templateId: AgentPromptTemplateId,
-  nextTemplate: string,
-  fallbackBaseVersion: number,
-) => {
-  const existing = overrides[templateId];
-  return {
-    ...overrides,
-    [templateId]: {
-      template: nextTemplate,
-      baseVersion: existing?.baseVersion ?? fallbackBaseVersion,
-      enabled: existing ? existing.enabled !== false : false,
-    },
-  };
-};
-
-type PromptOverrideValidationErrors = Partial<Record<AgentPromptTemplateId, string>>;
-
-const formatPlaceholders = (placeholders: string[]): string => {
-  return placeholders.map((placeholder) => `{{${placeholder}}}`).join(", ");
-};
-
-export const buildPromptOverrideValidationErrors = (
-  overrides: RepoPromptOverrides,
-  templates: readonly SettingsPromptTemplate[],
-) => {
-  const errors: PromptOverrideValidationErrors = {};
-
-  for (const template of templates) {
-    const templateId = template.key;
-    const override = overrides[templateId];
-    if (!override || override.enabled === false) {
-      continue;
-    }
-
-    const { unsupportedPlaceholders, missingRequiredPlaceholders } =
-      validatePromptTemplatePlaceholders(override.template, template.requiredPlaceholders);
-    if (unsupportedPlaceholders.length === 0 && missingRequiredPlaceholders.length === 0) {
-      continue;
-    }
-
-    const messages: string[] = [];
-    if (unsupportedPlaceholders.length > 0) {
-      const suffix = unsupportedPlaceholders.length > 1 ? "s" : "";
-      messages.push(
-        `Unsupported placeholder${suffix}: ${formatPlaceholders(unsupportedPlaceholders)}.`,
-      );
-    }
-    if (missingRequiredPlaceholders.length > 0) {
-      const suffix = missingRequiredPlaceholders.length > 1 ? "s" : "";
-      messages.push(
-        `Missing required placeholder${suffix}: ${formatPlaceholders(missingRequiredPlaceholders)}.`,
-      );
-    }
-
-    errors[templateId] = messages.join(" ");
-  }
-
-  return errors satisfies PromptOverrideValidationErrors;
 };

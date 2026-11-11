@@ -1,4 +1,4 @@
-import type { WorkflowPromptRoleTabId } from "@openducktor/workflows";
+import { PROMPT_HOME_VIEW, type PromptView } from "./settings-prompt-owners";
 import {
   resolveSettingsDeepLink,
   type SettingsContentFocusRequest,
@@ -34,8 +34,10 @@ export function getOpenState(
 export type Navigation = {
   section: SettingsSectionId;
   repositorySection: RepositorySectionId;
-  globalPromptRoleTab: WorkflowPromptRoleTabId;
-  repoPromptRoleTab: WorkflowPromptRoleTabId;
+  /** The open screen of System prompts. */
+  globalPromptView: PromptView;
+  /** The open screen of Repository prompts. */
+  repoPromptView: PromptView;
   selectedReusablePromptId: string | null;
   selectedCustomAgentRoleId: string | null;
 };
@@ -43,8 +45,8 @@ export type Navigation = {
 export const INITIAL_NAVIGATION: Navigation = {
   section: "repositories",
   repositorySection: "configuration",
-  globalPromptRoleTab: "shared",
-  repoPromptRoleTab: "shared",
+  globalPromptView: PROMPT_HOME_VIEW,
+  repoPromptView: PROMPT_HOME_VIEW,
   selectedReusablePromptId: null,
   selectedCustomAgentRoleId: null,
 };

@@ -18,7 +18,9 @@ import { conditionallyReplaceOpenFile } from "./conditional-file-replace";
 // POSIX FIFOs must not block open before the descriptor type can be checked.
 const NONBLOCKING_OPEN_FLAG = process.platform === "win32" ? 0 : constants.O_NONBLOCK;
 
-const revisionForFile = (bytes: Uint8Array, identity: { dev: number; ino: number }): string =>
+// Windows file IDs are 64-bit and can pass Number.MAX_SAFE_INTEGER, so two files can get one
+// Number. The file identity uses bigint stats.
+const revisionForFile = (bytes: Uint8Array, identity: { dev: bigint; ino: bigint }): string =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}:file:${identity.dev}:${identity.ino}`;
 
 const nodeErrorSchema = z.object({ code: z.string() }).passthrough();
@@ -54,7 +56,7 @@ const snapshotOpenFile = async (
   maxBytes: number,
   input: Pick<FilesystemFileOperationError, "path" | "operation">,
 ): Promise<FilesystemFileSnapshot> => {
-  const metadata = await file.stat();
+  const metadata = await file.stat({ bigint: true });
   if (!metadata.isFile())
     throw new FilesystemFileOperationError({
       ...input,
@@ -65,8 +67,8 @@ const snapshotOpenFile = async (
   return {
     bytes,
     isFile: metadata.isFile(),
-    size: Math.max(metadata.size, bytes.byteLength),
-    mtimeMs: Number.isFinite(metadata.mtimeMs) ? metadata.mtimeMs : null,
+    size: Math.max(Number(metadata.size), bytes.byteLength),
+    mtimeMs: Number(metadata.mtimeNs) / 1_000_000,
     revision: revisionForFile(bytes, metadata),
   };
 };
@@ -120,7 +122,10 @@ const verifyOpenFileContainment = async (
     throw unavailableFile(inputPath, "The selected file moved after it was loaded.");
   }
 
-  const [openedMetadata, targetMetadata] = await Promise.all([file.stat(), stat(canonicalTarget)]);
+  const [openedMetadata, targetMetadata] = await Promise.all([
+    file.stat({ bigint: true }),
+    stat(canonicalTarget, { bigint: true }),
+  ]);
   if (openedMetadata.dev !== targetMetadata.dev || openedMetadata.ino !== targetMetadata.ino) {
     throw unavailableFile(inputPath, "The selected path changed while the file was opened.");
   }

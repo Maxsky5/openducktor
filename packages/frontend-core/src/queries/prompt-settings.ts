@@ -1,24 +1,20 @@
-import type { RepoPromptOverrides } from "@openducktor/contracts";
-import type { TaskWorkflow } from "@openducktor/workflows";
+import { promptSettingsOf, type PromptSettings } from "@openducktor/workflows";
 import type { QueryClient } from "@tanstack/react-query";
 import { loadRepoConfigFromQuery, loadSettingsSnapshotFromQuery } from "./workspace";
 
-export const loadEffectivePromptOverrides = async (
+/** The saved prompt layers of the global settings and of the repository of a workspace. */
+export const loadPromptSettings = async (
   workspaceId: string,
   queryClient: QueryClient,
-  workflow: TaskWorkflow,
-): Promise<RepoPromptOverrides> => {
+): Promise<PromptSettings> => {
   const normalizedWorkspaceId = workspaceId.trim();
   if (normalizedWorkspaceId.length === 0) {
-    throw new Error("Workspace id is required to load prompt overrides.");
+    throw new Error("Workspace id is required to load prompt settings.");
   }
   const [repoConfig, snapshot] = await Promise.all([
     loadRepoConfigFromQuery(queryClient, normalizedWorkspaceId),
     loadSettingsSnapshotFromQuery(queryClient),
   ]);
 
-  return workflow.prompts.mergeOverrides({
-    globalOverrides: snapshot.globalPromptOverrides,
-    repoOverrides: repoConfig.promptOverrides,
-  });
+  return promptSettingsOf(snapshot, repoConfig);
 };
