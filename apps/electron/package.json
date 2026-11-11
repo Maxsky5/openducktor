@@ -29,7 +29,7 @@
     "lint": "oxlint -c ../../.oxlintrc.json src scripts vite.config.ts"
   },
   "dependencies": {
-    "@azure/msal-node-extensions": "^5.6.0",
+    "@azure/msal-node-extensions": "^5.6.1",
     "@ff-labs/fff-node": "0.11.0",
     "node-pty": "1.2.0-beta.18",
     "playwright-core": "1.65.0"
@@ -44,7 +44,7 @@
     "@openducktor/host": "workspace:*",
     "@openducktor/host-client": "workspace:*",
     "@openducktor/remote-host": "workspace:*",
-    "@tailwindcss/vite": "^4.3.4",
+    "@tailwindcss/vite": "^4.3.5",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^26.6.6",
     "@types/semver": "^7.7.1",

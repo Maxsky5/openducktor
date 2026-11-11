@@ -37,7 +37,7 @@
     "worker:check": "cmp client/_headers dist/client/_headers && WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.json"
   },
   "dependencies": {
-    "@azure/msal-node-extensions": "^5.6.0",
+    "@azure/msal-node-extensions": "^5.6.1",
     "@ff-labs/fff-node": "0.11.0",
     "node-pty": "1.2.0-beta.18",
     "playwright-core": "1.65.0"
@@ -52,8 +52,8 @@
     "@openducktor/host-client": "workspace:*",
     "@openducktor/remote-host": "workspace:*",
     "@openducktor/workflows": "workspace:*",
-    "@tailwindcss/vite": "^4.3.4",
-    "@tanstack/react-query": "^5.106.1",
+    "@tailwindcss/vite": "^4.3.5",
+    "@tanstack/react-query": "^5.107.1",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
