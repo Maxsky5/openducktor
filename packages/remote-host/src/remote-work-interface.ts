@@ -99,16 +99,12 @@ const readNegotiationBody = async (request: Request): Promise<RemoteConnectionRe
   }
   const body = JSON.parse(new TextDecoder().decode(bytes.subarray(0, size)));
   const parsed = remoteConnectionRequestSchema.safeParse(body);
-  let input: RemoteConnectionRequest;
-  if (parsed.success) input = parsed.data;
-  else {
-    // Legacy hellos are read only to return the compatibility refusal, never for admission.
-    const legacy = remoteClientHelloSchema.safeParse(body);
-    if (!legacy.success || legacy.data.supportedProtocolVersions.includes(REMOTE_PROTOCOL_VERSION))
-      throw parsed.error;
-    input = { ...legacy.data, clientKind: "browser" };
-  }
-  return input;
+  if (parsed.success) return parsed.data;
+  // Legacy hellos are read only to return the compatibility refusal, never for admission.
+  const legacy = remoteClientHelloSchema.safeParse(body);
+  if (!legacy.success || legacy.data.supportedProtocolVersions.includes(REMOTE_PROTOCOL_VERSION))
+    throw parsed.error;
+  return { ...legacy.data, clientKind: "browser" };
 };
 
 /** The baseline capabilities and compact session history. */
