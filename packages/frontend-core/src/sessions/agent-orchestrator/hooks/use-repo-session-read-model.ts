@@ -270,6 +270,7 @@ export const useRepoSessionReadModel = ({
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
   const readCurrentTaskIds = useEffectEvent(() => normalizeAgentSessionTaskIds(taskIds));
+  const readIsLoadingTasks = useEffectEvent(() => isLoadingTasks);
   const observeLiveSessions = useEffectEvent(
     (
       input: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[0],
@@ -500,10 +501,6 @@ export const useRepoSessionReadModel = ({
   });
   const observedScopeKeyRef = useRef<string | null>(null);
   const scopeKey = JSON.stringify([workspaceId, workspaceRepoPath]);
-  const canObserveRepo =
-    (taskRecords.kind === "ready" &&
-      (workspaceId === null || !workspaceRecords.records.isPending)) ||
-    observedScopeKeyRef.current === scopeKey;
 
   // Synchronizes an async query lifecycle with the parent-owned session read model.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
@@ -677,12 +674,11 @@ export const useRepoSessionReadModel = ({
   ]);
 
   useEffect(() => {
-    if (!workspaceRepoPath || !workspaceId || !canObserveRepo) {
+    if (!workspaceRepoPath || !workspaceId) {
       return;
     }
     return () => transcriptEvents.close();
   }, [
-    canObserveRepo,
     commitSessionCollection,
     currentWorkspaceRepoPathRef,
     queryClient,
@@ -694,9 +690,11 @@ export const useRepoSessionReadModel = ({
   ]);
 
   // Owns the async stream lifecycle; its loading state is not render-derived.
+  // Observation starts without waiting for record reads, so live fields show as soon as the
+  // snapshot arrives. A record pass applies the kept snapshot of each session that it adds.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
-    if (!workspaceRepoPath || !workspaceId || !canObserveRepo) {
+    if (!workspaceRepoPath || !workspaceId) {
       return;
     }
 
@@ -711,6 +709,10 @@ export const useRepoSessionReadModel = ({
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     const readLoadedWorkflowRecords = (): LoadedWorkflowSessionRecords | null => {
+      // An empty task list that is still loading proves nothing about task records.
+      if (readIsLoadingTasks()) {
+        return null;
+      }
       const cached = readCachedTaskSessionRecords(
         queryClient,
         { workspaceId, repoPath },
@@ -1132,7 +1134,6 @@ export const useRepoSessionReadModel = ({
       unsubscribe?.();
     };
   }, [
-    canObserveRepo,
     commitSessionCollection,
     recordHistoryEnvelope,
     currentWorkspaceRepoPathRef,

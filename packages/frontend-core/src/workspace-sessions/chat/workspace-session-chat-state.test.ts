@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { WorkspaceSession } from "@openducktor/contracts";
 import { createAgentSessionFixture } from "../../test-support/shared-test-fixtures";
 import {
+  failedAgentSessionReadModelLoadState,
   loadingAgentSessionReadModelLoadState,
   readyAgentSessionReadModelLoadState,
 } from "../../types/agent-session-read-model";
@@ -53,6 +54,24 @@ describe("projectWorkspaceSessionChatState", () => {
     expect(state.observationReady).toBe(false);
     expect(state.activityState).toBe("running");
     expect(state.canStopSession).toBe(true);
+  });
+
+  test("keeps the activity of a live session when task records fail", () => {
+    const state = project(
+      "present",
+      failedAgentSessionReadModelLoadState("/repo", "Task records failed.", "task-records"),
+    );
+    expect(state.activityState).toBe("running");
+    expect(state.canStopSession).toBe(true);
+  });
+
+  test("hides the reported activity when the live stream fails", () => {
+    const state = project(
+      "present",
+      failedAgentSessionReadModelLoadState("/repo", "Stream failed.", "live-stream"),
+    );
+    expect(state.activityState).toBeNull();
+    expect(state.canStopSession).toBe(false);
   });
 
   test("shows no activity before a snapshot reports the session", () => {

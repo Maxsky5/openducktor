@@ -54,7 +54,7 @@ Rules:
 - A live snapshot cannot create a root. A root enters through an OpenDucktor start registration or a durable task or workspace session record.
 - A live event can add a descendant only when its parent already exists in the collection.
 - The session store keeps the newest snapshot of each live session, also when no root exists for it yet. A task or workspace record pass that adds a root applies that kept snapshot and places its descendants. It sends no host request.
-- A workspace chat shows the activity of a session that a snapshot reports while task records still load. A loading read model hides only fields that no source has given yet.
+- A workspace chat shows the activity of a session that a snapshot reports while task records load or after they fail. Only a live-stream failure hides that activity. A field that no source has given yet shows its loading state.
 - On reload, the host reads exact root references from durable task and workspace session records. Runtime adapters read only those roots and their verified descendants.
 - Runtime state cannot prove task ownership. Only an explicit workflow start or durable task record can attach a session to a task.
 - The browser and Electron use one host channel WebSocket for all host events.
@@ -63,7 +63,7 @@ Rules:
 - A later connection snapshot can follow missed `task_session_records_updated` envelopes. It makes the cached task session lists of its repository read again.
 - Treat each later snapshot as a full collection reset.
 - Commit a snapshot once so rows, activity, pending input, context, and counters use the same state.
-- Per-task session-list queries own workflow records. Workspace session-list queries own repository records. The first live projection waits for task records and for the workspace record query to settle. A workspace record failure blocks workspace session actions, not healthy task sessions.
+- Per-task session-list queries own workflow records. Workspace session-list queries own repository records. Live observation starts without waiting for these reads. A record pass that adds a root applies the kept snapshot of that root. A workspace record failure blocks workspace session actions, not healthy task sessions.
 - Use `session-read-model/agent-session-workflow-records.ts` to project durable ownership into the collection. The host workflow launch service resolves source records when it prepares a launch.
 
 This owner does not load catalogs, file status, diff, selected history, or page navigation. It does not select a native runtime protocol.
@@ -564,13 +564,13 @@ Rules:
 
 1. Mount one session controller for each open workspace and read its tasks through the shared Query key.
 2. Read each workspace's task and workspace session records through their shared Query keys.
-3. Use the workspace activity observer's generic host-event subscription, then request a repository live snapshot for the controller. Host observation already follows admitted workspaces and does not depend on this client attachment.
-4. Runtime adapters read exact saved roots and verified descendants. Apply durable records before and after the live projection, then commit once.
+3. At the same time, use the workspace activity observer's generic host-event subscription, then request a repository live snapshot for the controller. This step does not wait for step 2. Host observation already follows admitted workspaces and does not depend on this client attachment.
+4. Runtime adapters read exact saved roots and verified descendants. Apply the durable records that are loaded before and after the live projection, then commit once. A record that loads later applies the kept snapshot of the root it adds.
 5. Derive rows, activity, pending input, current context usage, and counters from that commit.
 6. Apply ordered changes on the same channel. After a browser reconnect, apply the replayed changes. Attach again only after a replay gap or a host change.
 7. Load history or missing context only for the selected session.
 
-Startup is complete when task records and the first host snapshot have produced one committed collection after the workspace record query settles. Workspace record failures remain visible through `workspaceSessionRecordsError`. They do not stop the shared observer or fail task-session startup. History does not block startup.
+The read model is ready when the task records of the current task list and the first host snapshot are both applied. Each live field shows when its source has it, before the read model is ready. Workspace record failures remain visible through `workspaceSessionRecordsError`. They do not stop the shared observer or fail task-session startup. History does not block startup.
 
 ## Regression tests
 

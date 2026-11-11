@@ -1575,7 +1575,7 @@ describe("useRepoSessionReadModel", () => {
       state.queryClient.clear();
     }
   });
-  test("waits for workspace ownership before admitting an unbound native root on cold load", async () => {
+  test("admits an unbound native root with its live state when its workspace record loads", async () => {
     const loaded = createDeferred<WorkspaceSession[]>();
     const entry: WorkspaceSession = {
       id: "workspace-session",
@@ -1610,11 +1610,15 @@ describe("useRepoSessionReadModel", () => {
     state.clearSessions();
     try {
       await state.harness.mount();
-      expect(state.observeAgentSessionLive).not.toHaveBeenCalled();
+      // Observation does not wait for record reads, but the snapshot cannot create the root.
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      expect(state.getSession()).toBeNull();
       await state.harness.run(() => loaded.resolve([entry]));
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.waitFor(() => state.getSession() !== null);
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
       expect(state.getSession()).toMatchObject({
         sessionAssociation: { kind: "repository", workspaceId: "workspace-a" },
+        livePresence: "present",
         status: "idle",
         pendingQuestions: [{ requestId: "answer", questions: [] }],
       });
@@ -2103,6 +2107,65 @@ describe("useRepoSessionReadModel", () => {
       releaseSnapshot.resolve();
       task2Hydration.resolve([]);
       await state.harness.unmount();
+    }
+  });
+
+  test("shows live fields on cold start before task records load", async () => {
+    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
+    const workspaceRef = { ...snapshot().ref, externalSessionId: "workspace-thread" };
+    const state = createState(
+      (emit) =>
+        emit(
+          createLiveSnapshotEnvelope({
+            sessions: [
+              snapshot({
+                ref: workspaceRef,
+                activity: "running",
+                repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+                contextUsage: { totalTokens: 900 },
+                goal: { objective: "Ship the feature", status: "active" },
+              }),
+              snapshot({ activity: "running" }),
+            ],
+          }),
+        ),
+      record,
+      { agentSessionsListForTasks: () => task2Hydration.promise },
+    );
+    try {
+      state.props.isLoadingTasks = true;
+      state.props.taskIds = [];
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      // The task list and its records are still loading. Known live fields show at once.
+      expect(state.getStoredSession(workspaceRef)).toMatchObject({
+        livePresence: "present",
+        status: "running",
+        contextUsage: { totalTokens: 900 },
+        goal: { objective: "Ship the feature", status: "active" },
+      });
+      expect(state.getSession()).toBeNull();
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+
+      await state.harness.update({
+        ...state.props,
+        isLoadingTasks: false,
+        taskIds: ["task-1", "task-2"],
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+      expect(state.getStoredSession(workspaceRef)?.status).toBe("running");
+
+      await state.harness.run(async () => {
+        task2Hydration.resolve([{ taskId: "task-2", agentSessions: [] }]);
+        await task2Hydration.promise;
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.getSession()).toMatchObject({ livePresence: "present", status: "running" });
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+    } finally {
+      task2Hydration.resolve([]);
+      await state.harness.unmount();
+      state.queryClient.clear();
     }
   });
 
