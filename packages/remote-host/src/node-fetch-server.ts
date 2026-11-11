@@ -143,7 +143,7 @@ export const startNodeFetchServer = async <Data>({
     const abort = new AbortController();
     outgoing.on("close", () => abort.abort());
     void (async () => {
-      const request = toRequest(incoming, hostname, abort.signal);
+      const request = toRequest(incoming, hostname, abort.signal, outgoing);
       const response = await fetch(request, makeRequestServer(outgoing, null));
       if (!response) throw new Error("HTTP request did not produce a response.");
       if (abort.signal.aborted) {
@@ -265,7 +265,12 @@ export const startNodeFetchServer = async <Data>({
   return makeRequestServer(null, null);
 };
 
-const toRequest = (incoming: IncomingMessage, hostname: string, signal: AbortSignal): Request => {
+const toRequest = (
+  incoming: IncomingMessage,
+  hostname: string,
+  signal: AbortSignal,
+  outgoing?: ServerResponse,
+): Request => {
   const headers = new Headers();
   for (let index = 0; index < incoming.rawHeaders.length; index += 2) {
     const name = incoming.rawHeaders[index];
@@ -281,7 +286,16 @@ const toRequest = (incoming: IncomingMessage, hostname: string, signal: AbortSig
     headers,
     signal,
     ...(hasBody && {
-      body: nodeReadableStream(incoming),
+      body: nodeReadableStream(incoming, () => {
+        if (!outgoing) {
+          incoming.destroy();
+          return;
+        }
+        // Destroying an IncomingMessage also destroys its socket. Send the refusal first.
+        incoming.pause();
+        outgoing.shouldKeepAlive = false;
+        outgoing.once("finish", () => incoming.destroy());
+      }),
       duplex: "half" as const,
     }),
   });
