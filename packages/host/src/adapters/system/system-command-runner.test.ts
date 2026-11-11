@@ -1,8 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { ChildProcess } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
+import type { SystemCommandRunOptions } from "../../ports/system-command-port";
 import { createSystemCommandRunner } from "./system-command-runner";
 
 const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> => {
@@ -15,6 +17,107 @@ const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> 
 };
 
 describe("createSystemCommandRunner", () => {
+  for (const path of ["timeout", "interruption", "overflow"] as const) {
+    test(`awaits process and stream closure after ${path}`, async () => {
+      const originalEmit = ChildProcess.prototype.emit;
+      let child: ChildProcess | undefined;
+      let closed = false;
+      let ready!: () => void;
+      const readiness = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      const script =
+        "process.on('SIGTERM',()=>{});process.stdout.write('ready');setInterval(()=>{process.stdout.write('x');process.stderr.write('y')},10);setTimeout(()=>process.exit(0),4000)";
+      const spy = spyOn(ChildProcess.prototype, "emit").mockImplementation(function (
+        this: ChildProcess,
+        event: string | symbol,
+        ...args: unknown[]
+      ) {
+        const result = originalEmit.call(this, event, ...args);
+        if (event !== "spawn") return result;
+        // Capture the native child for process-death assertions and emergency teardown.
+        // oxlint-disable-next-line typescript/no-this-alias
+        child = this;
+        this.once("close", () => {
+          closed = true;
+        });
+        this.stdout?.once("data", () => ready());
+        return result;
+      });
+      const options: SystemCommandRunOptions = { timeoutMs: path === "timeout" ? 300 : 3000 };
+      if (path === "overflow") options.maxStdoutBytes = 8;
+      const fiber = Effect.runFork(
+        createSystemCommandRunner().runCommandAllowFailure(
+          process.execPath,
+          ["-e", script],
+          options,
+        ),
+      );
+      try {
+        await readiness;
+        if (path === "interruption") await Effect.runPromise(Fiber.interrupt(fiber));
+        const exit = await Effect.runPromise(Fiber.await(fiber));
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(closed).toBe(true);
+        expect(child?.stdout?.destroyed).toBe(true);
+        expect(child?.stderr?.destroyed).toBe(true);
+        expect(child?.stdout?.listenerCount("data")).toBe(0);
+        expect(child?.stderr?.listenerCount("data")).toBe(0);
+        expect(child?.listenerCount("error")).toBe(0);
+        expect(child?.listenerCount("close")).toBe(0);
+        expect(() => process.kill(child!.pid!, 0)).toThrow();
+      } finally {
+        child?.kill("SIGKILL");
+        await Effect.runPromise(Fiber.interrupt(fiber));
+        spy.mockRestore();
+      }
+    });
+  }
+
+  test("keeps the operation error and reports bounded termination failure", async () => {
+    const originalEmit = ChildProcess.prototype.emit;
+    let child: ChildProcess | undefined;
+    const spy = spyOn(ChildProcess.prototype, "emit").mockImplementation(function (
+      this: ChildProcess,
+      event: string | symbol,
+      ...args: unknown[]
+    ) {
+      const result = originalEmit.call(this, event, ...args);
+      if (event !== "spawn") return result;
+      // Capture the native child for process-death assertions and emergency teardown.
+      // oxlint-disable-next-line typescript/no-this-alias
+      child = this;
+      this.kill = () => false;
+      return result;
+    });
+    try {
+      const exit = await Effect.runPromise(
+        Effect.exit(
+          createSystemCommandRunner().runCommandAllowFailure(
+            process.execPath,
+            [
+              "-e",
+              "setInterval(()=>process.stderr.write('x'),10);setTimeout(()=>process.exit(0),4000)",
+            ],
+            { timeoutMs: 100 },
+          ),
+        ),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const errors = Cause.pretty(exit.cause);
+        expect(errors).toContain("Timed out running");
+        expect(errors).toContain("Failed to stop command");
+      }
+      expect(child?.stdout?.destroyed).toBe(true);
+      expect(child?.stderr?.destroyed).toBe(true);
+      expect(child?.stderr?.listenerCount("data")).toBe(0);
+    } finally {
+      if (child) ChildProcess.prototype.kill.call(child, "SIGKILL");
+      spy.mockRestore();
+    }
+  });
+
   test("returns binary stdout as base64 and stops oversized output", async () => {
     const port = createSystemCommandRunner({
       readEnv: () => process.env,
