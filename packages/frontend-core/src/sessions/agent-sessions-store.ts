@@ -323,15 +323,15 @@ export const createAgentSessionsStore = (
     const { collection, result } = commit(sessionCollection);
     // A snapshot can come before the record of its session, so a commit that adds the session
     // applies the kept snapshot.
-    const nextCollection = projectLiveNotices(
+    const withLiveState =
       collection === sessionCollection
         ? collection
         : applyLiveSnapshotsToAddedSessions({
             previous: sessionCollection,
             current: collection,
             snapshots: observedActivity.values(),
-          }),
-    );
+          });
+    const nextCollection = projectLiveNotices(withLiveState);
     noticeUpdates.clear();
     if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
       return result;

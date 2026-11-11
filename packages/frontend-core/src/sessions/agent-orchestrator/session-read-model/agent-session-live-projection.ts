@@ -628,13 +628,17 @@ export const applyLiveSnapshotsToAddedSessions = ({
       continue;
     }
     const session = getAgentSession(current, identity);
-    const parentAdded =
-      snapshot.parentExternalSessionId !== undefined &&
-      !getAgentSession(previous, {
-        ...identity,
-        externalSessionId: snapshot.parentExternalSessionId,
-      });
-    if (session ? session.livePresence !== "present" : parentAdded) {
+    if (session) {
+      if (session.livePresence !== "present") {
+        added.push(snapshot);
+      }
+      continue;
+    }
+    const parentExternalSessionId = snapshot.parentExternalSessionId;
+    if (
+      parentExternalSessionId !== undefined &&
+      !getAgentSession(previous, { ...identity, externalSessionId: parentExternalSessionId })
+    ) {
       added.push(snapshot);
     }
   }
