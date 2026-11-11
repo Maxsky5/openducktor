@@ -23,15 +23,7 @@ type StalledProviderResponse = {
  * the request signal and the end of the server response, so a test can check that a deadline or
  * an interruption closes the complete exchange.
  */
-export const createStalledProviderResponse = ({
-  status = 200,
-  headers = { "content-type": "application/json" },
-  chunk = "{",
-}: {
-  status?: number;
-  headers?: Record<string, string>;
-  chunk?: string;
-} = {}): StalledProviderResponse => {
+export const createStalledProviderResponse = (status = 200): StalledProviderResponse => {
   const bodyReadStarted = Promise.withResolvers<void>();
   const requestSignal = Promise.withResolvers<AbortSignal>();
   const responseClosed = Promise.withResolvers<void>();
@@ -43,13 +35,13 @@ export const createStalledProviderResponse = ({
       return new Response(
         new ReadableStream({
           start(controller) {
-            controller.enqueue(encoder.encode(chunk));
+            controller.enqueue(encoder.encode("{"));
           },
           cancel() {
             responseClosed.resolve();
           },
         }),
-        { status, headers },
+        { status, headers: { "content-type": "application/json" } },
       );
     },
   });

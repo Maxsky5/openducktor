@@ -13,29 +13,17 @@ const request = {
 };
 
 describe("GitLab HTTP", () => {
-  test("times out a success response that stalls after its headers", async () => {
-    const probe = createStalledProviderResponse();
+  test.each([
+    ["send", 200],
+    ["sendAllowingClientErrors", 400],
+  ] as const)("times out %s when the response stalls after its headers", async (method, status) => {
+    const probe = createStalledProviderResponse(status);
     try {
       const http = createGitlabHttp(probe.fetch);
-      const result = await timeoutStalledRequest(probe, http.send(request));
-
-      expect(result._tag).toBe("Failure");
-      if (result._tag === "Failure") {
-        expect(result.failure.message).toContain("did not answer within 30 seconds");
-        expect(gitlabProblemOf(result.failure)?.problem).toBe("instance_unreachable");
-      }
-      await probe.responseClosed;
-      expect((await probe.requestSignal).aborted).toBe(true);
-    } finally {
-      await probe.close();
-    }
-  });
-
-  test("times out a client error response that stalls after its headers", async () => {
-    const probe = createStalledProviderResponse({ status: 400 });
-    try {
-      const http = createGitlabHttp(probe.fetch);
-      const result = await timeoutStalledRequest(probe, http.sendAllowingClientErrors(request));
+      const result = await timeoutStalledRequest(
+        probe,
+        method === "send" ? http.send(request) : http.sendAllowingClientErrors(request),
+      );
 
       expect(result._tag).toBe("Failure");
       if (result._tag === "Failure") {

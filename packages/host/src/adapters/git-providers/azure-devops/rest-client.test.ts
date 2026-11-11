@@ -143,35 +143,11 @@ describe("Azure DevOps REST client", () => {
     );
   });
 
-  test("times out a success response that stalls after its headers", async () => {
-    const probe = createStalledProviderResponse();
-    try {
-      const client = createAzureDevOpsRestClient({
-        connection,
-        fetchImplementation: probe.fetch,
-      });
-
-      const result = await timeoutStalledRequest(
-        probe,
-        client.request(repoConfig, repository, {
-          operation: "read repository",
-          path: "git/repositories/app",
-        }),
-      );
-
-      expect(result._tag).toBe("Failure");
-      if (result._tag === "Failure") {
-        expect(result.failure.message).toContain("timed out after 30 seconds");
-      }
-      await probe.responseClosed;
-      expect((await probe.requestSignal).aborted).toBe(true);
-    } finally {
-      await probe.close();
-    }
-  });
-
-  test("times out an error response that stalls after its headers", async () => {
-    const probe = createStalledProviderResponse({ status: 401 });
+  test.each([
+    ["success", 200],
+    ["error", 401],
+  ] as const)("times out a %s response that stalls after its headers", async (_kind, status) => {
+    const probe = createStalledProviderResponse(status);
     try {
       const client = createAzureDevOpsRestClient({
         connection,
