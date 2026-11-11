@@ -291,10 +291,9 @@ const toRequest = (
           incoming.destroy();
           return;
         }
-        // Destroying an IncomingMessage also destroys its socket. Send the refusal first.
+        // Let HTTP close the socket after flushing the response. Destroying it here can reset it.
         incoming.pause();
         outgoing.shouldKeepAlive = false;
-        outgoing.once("finish", () => incoming.destroy());
       }),
       duplex: "half" as const,
     }),
