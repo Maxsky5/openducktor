@@ -1,5 +1,6 @@
 import { admittedWorkOptions } from "./remote-approval.test-support";
 import assert from "node:assert/strict";
+import { request as httpRequest } from "node:http";
 import { test } from "node:test";
 import { Effect } from "effect";
 import {
@@ -186,6 +187,44 @@ for (const shell of ["electron", "web"] as const) {
     try {
       for (const prefix of ["/api/remote", ""]) {
         const base = `http://127.0.0.1:${server.port}${prefix}`;
+        // Leave the upload open. The listener must deliver its refusal before the rest arrives.
+        for (const declared of ["4194304", undefined]) {
+          await new Promise<void>((resolve, reject) => {
+            const upload = httpRequest(
+              `${base}/connections`,
+              {
+                method: "POST",
+                headers: {
+                  "content-type": "application/json",
+                  ...(declared && { "content-length": declared }),
+                },
+              },
+              (response) => {
+                let body = "";
+                response.setEncoding("utf8");
+                response.on("data", (chunk) => {
+                  body += chunk;
+                });
+                response.on("error", reject);
+                response.on("end", () => {
+                  try {
+                    assert.equal(response.statusCode, 400);
+                    assert.equal(JSON.parse(body).failure.code, "invalid_protocol");
+                    assert.match(JSON.parse(body).failure.message, /65536/);
+                    assert.equal(response.headers.connection, "close");
+                    resolve();
+                  } catch (cause) {
+                    reject(cause);
+                  } finally {
+                    upload.destroy();
+                  }
+                });
+              },
+            );
+            upload.on("error", reject);
+            upload.write(" ".repeat(65537));
+          });
+        }
         const admitted = await fetch(`${base}/connections`, {
           method: "POST",
           headers: { "content-type": "application/json" },

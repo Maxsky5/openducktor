@@ -62,6 +62,55 @@ type Connection = {
 };
 const MAX_CONNECTIONS = 128;
 const MAX_LEASES_PER_CONNECTION = 32;
+const MAX_NEGOTIATION_BYTES = 64 * 1024;
+class NegotiationBodyTooLarge extends Error {}
+
+const readNegotiationBody = async (request: Request): Promise<RemoteConnectionRequest> => {
+  if (Number(request.headers.get("content-length")) > MAX_NEGOTIATION_BYTES) {
+    await request.body?.cancel();
+    throw new NegotiationBodyTooLarge();
+  }
+  if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") {
+    await request.body?.cancel();
+    throw new Error("Use application/json for remote requests.");
+  }
+  if (!request.body) throw new SyntaxError("The connection hello is empty.");
+  const reader = request.body.getReader();
+  const bytes = new Uint8Array(MAX_NEGOTIATION_BYTES);
+  let size = 0;
+  let done = false;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) {
+        done = true;
+        break;
+      }
+      if (next.value.byteLength > MAX_NEGOTIATION_BYTES - size) throw new NegotiationBodyTooLarge();
+      bytes.set(next.value, size);
+      size += next.value.byteLength;
+    }
+  } finally {
+    try {
+      if (!done) await reader.cancel();
+    } finally {
+      reader.releaseLock();
+    }
+  }
+  const body = JSON.parse(new TextDecoder().decode(bytes.subarray(0, size)));
+  const parsed = remoteConnectionRequestSchema.safeParse(body);
+  let input: RemoteConnectionRequest;
+  if (parsed.success) input = parsed.data;
+  else {
+    // Legacy hellos are read only to return the compatibility refusal, never for admission.
+    const legacy = remoteClientHelloSchema.safeParse(body);
+    if (!legacy.success || legacy.data.supportedProtocolVersions.includes(REMOTE_PROTOCOL_VERSION))
+      throw parsed.error;
+    input = { ...legacy.data, clientKind: "browser" };
+  }
+  return input;
+};
+
 /** The baseline capabilities and compact session history. */
 const HOST_CAPABILITIES: readonly string[] = [
   ...REMOTE_BASELINE_CAPABILITIES,
@@ -340,35 +389,17 @@ export const createRemoteWorkInterface = (
         ? url.pathname.slice(mountPath.length) || "/"
         : url.pathname;
     url.pathname = route;
-    const routed = new Request(url, request);
-    const jsonBody = async (bodyRequest: Request) => {
-      if (bodyRequest.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json")
-        throw new Error("Use application/json for remote requests.");
-      return await bodyRequest.json();
-    };
     try {
       if (route === "/" && request.method === "GET") return remoteJson(descriptor, 200, cors);
       if (route === "/connections" && request.method === "POST") {
-        const body = await jsonBody(routed);
-        const parsed = remoteConnectionRequestSchema.safeParse(body);
-        let input: RemoteConnectionRequest;
-        if (parsed.success) input = parsed.data;
-        else {
-          // Legacy hellos are read only to return the compatibility refusal, never for admission.
-          const legacy = remoteClientHelloSchema.safeParse(body);
-          if (
-            !legacy.success ||
-            legacy.data.supportedProtocolVersions.includes(REMOTE_PROTOCOL_VERSION)
-          )
-            throw parsed.error;
-          input = { ...legacy.data, clientKind: "browser" };
-        }
+        const input = await readNegotiationBody(request);
         const result = await Effect.runPromise(
           negotiate(input, request.headers.get("authorization")),
         );
         if (result.status === "rejected") return remoteFailureResponse(result.failure, cors);
         return remoteJson(result, 201, cors);
       }
+      const routed = new Request(url, request);
       const socketProtocol =
         request.method === "GET" ? HOST_SOCKET_PROTOCOLS.get(route) : undefined;
       const protocols = socketProtocol === undefined ? [] : offeredSubprotocols(request);
@@ -523,6 +554,15 @@ export const createRemoteWorkInterface = (
         cors,
       );
     } catch (cause) {
+      if (cause instanceof NegotiationBodyTooLarge)
+        return remoteFailureResponse(
+          remoteFailure(
+            "invalid_protocol",
+            `The connection hello exceeds the ${MAX_NEGOTIATION_BYTES}-byte limit.`,
+            "Send a smaller connection hello without extra fields or padding.",
+          ),
+          cors,
+        );
       if (cause instanceof WebHostRequestError)
         return remoteJson({ error: "resource_failed", message: cause.message }, cause.status, cors);
       return remoteFailureResponse(
