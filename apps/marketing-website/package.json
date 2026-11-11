@@ -13,6 +13,7 @@
     "format": "prettier --config .prettierrc.json --write 'src/**/*.astro' '../../packages/product-scenes/src/**/*.astro'",
     "format:check": "prettier --config .prettierrc.json --check 'src/**/*.astro' '../../packages/product-scenes/src/**/*.astro'",
     "worker:dev": "WRANGLER_SEND_METRICS=false wrangler dev --config wrangler.preview.json --local",
+    "deploy": "WRANGLER_SEND_METRICS=false wrangler deploy --config wrangler.json",
     "worker:check": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.json && WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.preview.json"
   },
   "devDependencies": {

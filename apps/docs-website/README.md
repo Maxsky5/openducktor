@@ -159,6 +159,8 @@ Canonical URLs and the sitemap always use `https://doc.openducktor.dev`. `@opend
 
 The site deploys to two assets-only Cloudflare Workers: `openducktor-docs` for production and `openducktor-docs-preview` for pull requests. Both use `404-page` handling, so an unknown path gets `404.html` with HTTP 404. `tests/wrangler-config.test.ts` keeps each configuration to these fields.
 
+To publish by hand from the repository root, run `bun run docs:build`, which builds production, and then `bun run docs:deploy`, which uploads `out/` to `openducktor-docs`. Run `bunx wrangler login` once before the first upload.
+
 Run these commands from `apps/docs-website`:
 
 | Step | Command | Who runs it |

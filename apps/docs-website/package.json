@@ -10,6 +10,7 @@
     "test": "bun test --preload ../../tools/bun-test-preload.ts --timeout 1000 ./tests",
     "test:browser": "playwright test",
     "worker:dev": "WRANGLER_SEND_METRICS=false wrangler dev --config wrangler.preview.json --local",
+    "deploy": "WRANGLER_SEND_METRICS=false wrangler deploy --config wrangler.json",
     "worker:check": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.json && WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.preview.json"
   },
   "dependencies": {
