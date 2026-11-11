@@ -3,6 +3,9 @@ import { Effect } from "effect";
 /** The fetch that REST provider adapters use. Electron passes `net.fetch`, which uses the OS trust store. */
 export type GitProviderFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+/** The deadline for one complete provider exchange: fetch plus the response body read. */
+export const PROVIDER_REQUEST_TIMEOUT = "30 seconds";
+
 /**
  * Runs one provider request and its body read under one abort controller. Fetch resolves when the
  * headers arrive, so the caller keeps the controller through the body read. A caller deadline or

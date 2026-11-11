@@ -2,9 +2,11 @@ import { type GitlabProblem, gitlabProblemSchema } from "@openducktor/contracts"
 import { Effect } from "effect";
 import { z } from "zod";
 import { type HostError, HostOperationError } from "../../../effect/host-errors";
-import { type GitProviderFetch, withAbortableResponse } from "../git-provider-fetch";
-
-const REQUEST_TIMEOUT = "30 seconds";
+import {
+  PROVIDER_REQUEST_TIMEOUT,
+  type GitProviderFetch,
+  withAbortableResponse,
+} from "../git-provider-fetch";
 
 const gitlabFailureDetailsSchema = z.object({
   provider: z.literal("gitlab"),
@@ -168,6 +170,7 @@ export const createGitlabHttp = (fetchImplementation: GitProviderFetch = fetch):
       const instance = request.instanceUrl;
       const readResponse = (response: Response) =>
         Effect.gen(function* () {
+          const status = response.status;
           const responseBody = yield* Effect.tryPromise({
             try: () => response.arrayBuffer(),
             catch: (cause) =>
@@ -175,12 +178,11 @@ export const createGitlabHttp = (fetchImplementation: GitProviderFetch = fetch):
                 request.operation,
                 "instance_unreachable",
                 `${instance} returned an unreadable response. Retry.`,
-                { cause, status: response.status },
+                { cause, status },
               ),
           });
-          const status = response.status;
-          if (status >= 200 && status < 300)
-            return { status, headers: response.headers, body: responseBody };
+          const httpResponse = { status, headers: response.headers, body: responseBody };
+          if (status >= 200 && status < 300) return httpResponse;
           if (status === 0 || (status >= 300 && status < 400))
             return yield* Effect.fail(
               gitlabFailure(
@@ -201,8 +203,7 @@ export const createGitlabHttp = (fetchImplementation: GitProviderFetch = fetch):
               ),
             );
           }
-          if (allowClientErrors && status >= 400 && status < 500)
-            return { status, headers: response.headers, body: responseBody };
+          if (allowClientErrors && status >= 400 && status < 500) return httpResponse;
           const detail = readErrorText(responseBody);
           if (status === 401)
             return yield* Effect.fail(
@@ -271,13 +272,13 @@ export const createGitlabHttp = (fetchImplementation: GitProviderFetch = fetch):
         readResponse,
       ).pipe(
         Effect.timeoutOrElse({
-          duration: REQUEST_TIMEOUT,
+          duration: PROVIDER_REQUEST_TIMEOUT,
           orElse: () =>
             Effect.fail(
               gitlabFailure(
                 request.operation,
                 "instance_unreachable",
-                `${instance} did not answer within ${REQUEST_TIMEOUT}. Check the instance URL and the network, then retry.`,
+                `${instance} did not answer within ${PROVIDER_REQUEST_TIMEOUT}. Check the instance URL and the network, then retry.`,
               ),
             ),
         }),

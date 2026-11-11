@@ -3,11 +3,13 @@ import { azureDevOpsCollectionUrl } from "@openducktor/core";
 import { Effect } from "effect";
 import { type HostError, HostOperationError } from "../../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-connection-port";
-import { type GitProviderFetch, withAbortableResponse } from "../git-provider-fetch";
+import {
+  PROVIDER_REQUEST_TIMEOUT,
+  type GitProviderFetch,
+  withAbortableResponse,
+} from "../git-provider-fetch";
 import { azureDevOpsJsonListSchema, azureDevOpsJsonSchema, type AzureDevOpsJson } from "./json";
 import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
-
-const REQUEST_TIMEOUT = "30 seconds";
 
 export type AzureDevOpsFetch = GitProviderFetch;
 
@@ -133,12 +135,12 @@ export const createAzureDevOpsRestClient = ({
         readResponse,
       ).pipe(
         Effect.timeoutOrElse({
-          duration: REQUEST_TIMEOUT,
+          duration: PROVIDER_REQUEST_TIMEOUT,
           orElse: () =>
             Effect.fail(
               new HostOperationError({
                 operation: input.operation,
-                message: `Azure DevOps ${input.operation} timed out after ${REQUEST_TIMEOUT}. Check the server address and network.`,
+                message: `Azure DevOps ${input.operation} timed out after ${PROVIDER_REQUEST_TIMEOUT}. Check the server address and network.`,
               }),
             ),
         }),
