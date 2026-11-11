@@ -328,8 +328,29 @@ export const useRepoSessionReadModel = ({
     },
     [commitSessionCollection],
   );
+  // An unresolved live-stream failure stays the public failure, so a view cannot show the last
+  // live state as current while the stream is down. The task-record failure shows after the
+  // stream recovers.
+  const publishTaskRecordFailure = useCallback((repoPath: string, message: string): void => {
+    const liveMessage = liveStreamFailureRef.current;
+    setSessionReadModelLoadState(
+      liveMessage
+        ? failedAgentSessionReadModelLoadState(repoPath, liveMessage, "live-stream")
+        : failedAgentSessionReadModelLoadState(repoPath, message, "task-records"),
+    );
+  }, []);
   const failTaskRecordApply = useCallback(
-    (repoPath: string, recordsWorkspaceId: string, taskIdsKey: string, cause: unknown): void => {
+    ({
+      repoPath,
+      workspaceId: recordsWorkspaceId,
+      taskIdsKey,
+      cause,
+    }: {
+      repoPath: string;
+      workspaceId: string;
+      taskIdsKey: string;
+      cause: unknown;
+    }): void => {
       const message = `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(cause)}`;
       taskRecordApplyRef.current = {
         kind: "failed",
@@ -339,11 +360,9 @@ export const useRepoSessionReadModel = ({
         failedAt: "apply",
         message,
       };
-      setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(repoPath, message, "task-records"),
-      );
+      publishTaskRecordFailure(repoPath, message);
     },
-    [],
+    [publishTaskRecordFailure],
   );
   // Applies the records of every task in the current set, so the task records become ready.
   const applyTaskRecords = useCallback(
@@ -352,7 +371,12 @@ export const useRepoSessionReadModel = ({
       try {
         commitTaskRecords(records);
       } catch (error: unknown) {
-        failTaskRecordApply(repoPath, records.workspaceId, taskIdsKey, error);
+        failTaskRecordApply({
+          repoPath,
+          workspaceId: records.workspaceId,
+          taskIdsKey,
+          cause: error,
+        });
         return false;
       }
       taskRecordApplyRef.current = {
@@ -396,7 +420,11 @@ export const useRepoSessionReadModel = ({
       repoEpochRef.current === repoEpoch;
     const retryFailureMessage = (cause: unknown): string =>
       `Failed to retry task session records for repo '${repoPath}': ${errorMessage(cause)}`;
-    setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
+    // While the live stream is down, its failure stays public during the retry. A successful
+    // retry restarts the observation, which opens the loading window.
+    if (!liveStreamFailureRef.current) {
+      setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
+    }
     // Query exposes the chat error separately. Wait for its result before the new snapshot,
     // but do not classify a chat failure as a failed task-record retry.
     const workspaceRetry =
@@ -456,17 +484,12 @@ export const useRepoSessionReadModel = ({
         if (!isCurrentRetry()) {
           return;
         }
-        setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(
-            repoPath,
-            retryFailureMessage(cause),
-            "task-records",
-          ),
-        );
+        publishTaskRecordFailure(repoPath, retryFailureMessage(cause));
       },
     );
   }, [
     currentWorkspaceRepoPathRef,
+    publishTaskRecordFailure,
     queryClient,
     repoEpochRef,
     sessionReadPort,
@@ -510,7 +533,12 @@ export const useRepoSessionReadModel = ({
         // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
         commitTaskRecords(taskRecords.loaded);
       } catch (error: unknown) {
-        failTaskRecordApply(workspaceRepoPath, workspaceId, readCurrentTaskIdsKey(), error);
+        failTaskRecordApply({
+          repoPath: workspaceRepoPath,
+          workspaceId,
+          taskIdsKey: readCurrentTaskIdsKey(),
+          cause: error,
+        });
         return;
       }
     }
@@ -520,6 +548,7 @@ export const useRepoSessionReadModel = ({
       // own lifecycle.
       const appliedRecords = taskRecordApplyRef.current;
       const staleScopeFailure =
+        !liveStreamFailureRef.current &&
         appliedRecords &&
         appliedRecords.repoPath === workspaceRepoPath &&
         appliedRecords.workspaceId === workspaceId &&
@@ -544,9 +573,7 @@ export const useRepoSessionReadModel = ({
         failedAt: "load",
         message,
       };
-      setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(workspaceRepoPath, message, "task-records"),
-      );
+      publishTaskRecordFailure(workspaceRepoPath, message);
       return;
     }
 
@@ -602,6 +629,7 @@ export const useRepoSessionReadModel = ({
     commitTaskRecords,
     currentWorkspaceRepoPathRef,
     failTaskRecordApply,
+    publishTaskRecordFailure,
     repoEpochRef,
     taskRecords,
     workspaceRepoPath,
@@ -634,13 +662,7 @@ export const useRepoSessionReadModel = ({
         failedAt: "apply",
         message: recordRetryResult.message,
       };
-      setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(
-          recordRetryResult.repoPath,
-          recordRetryResult.message,
-          "task-records",
-        ),
-      );
+      publishTaskRecordFailure(recordRetryResult.repoPath, recordRetryResult.message);
       return;
     }
     if (taskRecords.kind === "loading") {
@@ -667,6 +689,7 @@ export const useRepoSessionReadModel = ({
     }
   }, [
     applyTaskRecords,
+    publishTaskRecordFailure,
     repoEpochRef,
     taskIdsKey,
     recordRetryResult,
@@ -968,6 +991,10 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "task_session_records_updated") {
         if (envelope.workspaceId !== workspaceId) return;
+        // The store keeps the newest live state, so a later commit that adds the session uses it.
+        if (envelope.liveSession) {
+          applyLiveEnvelopeToStore({ type: "session_upsert", session: envelope.liveSession });
+        }
         commitProjected((current) => {
           const owned = applyWorkflowSessionRecords({
             projected: current,

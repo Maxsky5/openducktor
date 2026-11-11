@@ -2154,6 +2154,71 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("shows the sessions of a read task list while another list fails", async () => {
+    const state = createState(
+      (emit) => emit(createLiveSnapshotEnvelope({ sessions: [snapshot({ activity: "running" })] })),
+      record,
+      {
+        agentSessionsListForTasks: async () => {
+          throw new Error("task 2 read failed");
+        },
+      },
+    );
+    try {
+      state.queryClient.setDefaultOptions({ queries: { retry: false } });
+      state.props.taskIds = ["task-1", "task-2"];
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        kind: "failed",
+        source: "task-records",
+      });
+      expect(state.getSession()).toMatchObject({
+        sessionAssociation: { kind: "workflow", taskId: "task-1" },
+        livePresence: "present",
+        status: "running",
+      });
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
+  test("keeps the live state of an ownership event for a later commit that adds the session", async () => {
+    const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
+    const saved = { ...record, externalSessionId: "new-thread" };
+    const ref = { ...snapshot().ref, externalSessionId: saved.externalSessionId };
+    const ownership = {
+      type: "task_session_records_updated" as const,
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskId: "task-1",
+      agentSessions: [saved],
+    };
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit({ type: "session_upsert", session: snapshot({ ref, activity: "idle" }) });
+        state.emit({ ...ownership, liveSession: snapshot({ ref, activity: "running" }) });
+      });
+      expect(state.getStoredSession(ref)?.status).toBe("running");
+
+      // The session leaves the collection, then a record pass adds it again.
+      await state.harness.run(() => {
+        state.clearSessions();
+        state.emit(ownership);
+      });
+      expect(state.getStoredSession(ref)).toMatchObject({
+        livePresence: "present",
+        status: "running",
+      });
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
   test("applies an update that came before the ownership event of a new task session", async () => {
     const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
     const saved = { ...record, externalSessionId: "new-thread" };
@@ -2359,10 +2424,17 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("keeps a live-stream failure failed across record recovery until the stream recovers", async () => {
+  test("keeps a live-stream failure public over task-record failures until the stream recovers", async () => {
     const state = createState((emit) => {
       emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
+    const expectLiveStreamFailure = () => {
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      expect(latest).toMatchObject({ kind: "failed", source: "live-stream" });
+      expect(latest.kind === "failed" && latest.message).toContain(
+        "The observation stream stopped.",
+      );
+    };
 
     try {
       await state.harness.mount();
@@ -2376,13 +2448,11 @@ describe("useRepoSessionReadModel", () => {
           message: "The observation stream stopped.",
         });
       });
-      await state.harness.waitFor(
-        (value) =>
-          value.sessionReadModelLoadState.kind === "failed" &&
-          value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
-      );
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      expectLiveStreamFailure();
 
-      // A task-record read failure then overwrites the public slot.
+      // A task-record read fails. The stream failure stays public, so views do not show the
+      // last live state as current.
       await expect(
         state.queryClient.fetchQuery({
           queryKey: agentSessionQueryKeys.list(workspaceScope, "task-1"),
@@ -2393,37 +2463,31 @@ describe("useRepoSessionReadModel", () => {
           retry: false,
         }),
       ).rejects.toThrow("record read failed");
+      await state.harness.run(async () => {});
+      expectLiveStreamFailure();
+
+      // A retry that fails while the stream is down keeps the stream failure, also during the retry.
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      expectLiveStreamFailure();
+      await state.harness.run(async () => {});
+      expectLiveStreamFailure();
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+
+      // The stream recovers. The task-record failure then shows.
+      await state.harness.run(() => {
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
+      });
       await state.harness.waitFor(
         (value) =>
           value.sessionReadModelLoadState.kind === "failed" &&
-          value.sessionReadModelLoadState.message.endsWith("record read failed"),
+          value.sessionReadModelLoadState.source === "task-records",
       );
 
-      // The record read recovers; the live-stream failure must surface again.
-      const refreshedRecords = [{ ...record, externalSessionId: "thread-after-recovery" }];
+      // The record read recovers.
       await state.harness.run(() => {
-        state.queryClient.setQueryData(
-          agentSessionQueryKeys.list(workspaceScope, "task-1"),
-          refreshedRecords,
-        );
-      });
-      const recoveredIdentity = {
-        externalSessionId: "thread-after-recovery",
-        runtimeKind: record.runtimeKind,
-        workingDirectory: record.workingDirectory,
-      };
-      await state.harness.waitFor(() => state.getStoredSession(recoveredIdentity) !== null);
-
-      const latest = state.harness.getLatest().sessionReadModelLoadState;
-      if (latest.kind !== "failed") {
-        throw new Error("Expected the live-stream failure to stay failed.");
-      }
-      expect(latest.source).toBe("live-stream");
-      expect(latest.message).toContain("The observation stream stopped.");
-
-      // A fresh authoritative snapshot proves the stream is healthy again.
-      await state.harness.run(() => {
-        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+          record,
+        ]);
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
     } finally {
@@ -2516,7 +2580,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("resurfaces an unresolved live failure after a hydrating task set supersedes a stale one", async () => {
+  test("keeps an unresolved live failure public while task sets change and fail", async () => {
     const deferredB = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() => deferredB.promise);
     const state = createState(
@@ -2547,7 +2611,13 @@ describe("useRepoSessionReadModel", () => {
           value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
       );
 
-      // A task-record read failure then overwrites the public slot.
+      const expectLiveStreamFailure = () =>
+        expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+          kind: "failed",
+          source: "live-stream",
+        });
+
+      // A task-record read fails. The stream failure stays public.
       await expect(
         state.queryClient.fetchQuery({
           queryKey: agentSessionQueryKeys.list(workspaceScope, "task-2"),
@@ -2559,22 +2629,26 @@ describe("useRepoSessionReadModel", () => {
         }),
       ).rejects.toThrow("task 2 read failed");
       await state.harness.update({ ...state.props, taskIds: ["task-2"] });
-      await state.harness.waitFor(
-        (value) =>
-          value.sessionReadModelLoadState.kind === "failed" &&
-          value.sessionReadModelLoadState.message.endsWith("task 2 read failed"),
-      );
+      expectLiveStreamFailure();
 
-      // Switching task sets demotes the stale failure to loading; when the
-      // new scope loads, the still-unresolved live failure must surface again.
+      // A new task set hydrates. The stream failure stays public through the loading window.
       await state.harness.update({ ...state.props, taskIds: ["task-3"] });
-      deferredB.resolve([
-        {
-          taskId: "task-3",
-          agentSessions: [{ ...record, externalSessionId: "thread-three", role: "qa" as const }],
-        },
-      ]);
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      expectLiveStreamFailure();
+      const threeIdentity = {
+        externalSessionId: "thread-three",
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      };
+      await state.harness.run(async () => {
+        deferredB.resolve([
+          {
+            taskId: "task-3",
+            agentSessions: [{ ...record, externalSessionId: "thread-three", role: "qa" as const }],
+          },
+        ]);
+        await deferredB.promise;
+      });
+      await state.harness.waitFor(() => state.getStoredSession(threeIdentity) !== null);
 
       const latest = state.harness.getLatest().sessionReadModelLoadState;
       if (latest.kind !== "failed") {

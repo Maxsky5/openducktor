@@ -54,7 +54,7 @@ Rules:
 - A live snapshot cannot create a root. A root enters through an OpenDucktor start registration or a durable task or workspace session record.
 - A live event can add a descendant only when its parent already exists in the collection.
 - The session store keeps the newest snapshot of each live session, also when no root exists for it yet. Each store commit that adds a session that is not live applies its kept snapshot and places the descendants of that session. A commit that removes a session never brings it back from a kept snapshot. This sends no host request.
-- A workspace chat shows the activity of a session that a snapshot reports while task records load or after they fail. Only a live-stream failure hides that activity. A field that no source has given yet shows its loading state.
+- A workspace chat shows the activity of a session that a snapshot reports while task records load or after they fail. Only a live-stream failure hides that activity. While the live stream is down, its failure stays the public read-model failure, also during a retry. A task-record failure shows after the stream recovers. A field that no source has given yet shows its loading state.
 - On reload, the host reads exact root references from durable task and workspace session records. Runtime adapters read only those roots and their verified descendants.
 - Runtime state cannot prove task ownership. Only an explicit workflow start or durable task record can attach a session to a task.
 - The browser and Electron use one host channel WebSocket for all host events.

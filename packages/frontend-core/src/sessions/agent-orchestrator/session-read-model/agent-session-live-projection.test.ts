@@ -218,6 +218,7 @@ describe("applyLiveSnapshotsToAddedSessions", () => {
             { requestId: "approve", requestType: "command_execution", title: "Run" },
           ],
         }),
+        snapshot("grandchild", { parentExternalSessionId: "child" }),
         snapshot("root", { activity: "running", goal: { objective: "Ship", status: "active" } }),
         snapshot("placed"),
         snapshot("orphan", { parentExternalSessionId: "missing" }),
@@ -231,6 +232,7 @@ describe("applyLiveSnapshotsToAddedSessions", () => {
       pendingApprovals: [{ requestId: "approve" }],
     });
     expect(getAgentSession(next, identity("child"))?.livePresence).toBe("present");
+    expect(getAgentSession(next, identity("grandchild"))?.livePresence).toBe("present");
     // A session that the projection already holds keeps its newer state.
     expect(getAgentSession(next, identity("placed"))).toBe(placed);
     expect(getAgentSession(next, identity("orphan"))).toBeNull();
@@ -250,6 +252,8 @@ describe("applyLiveSnapshotsToAddedSessions", () => {
         snapshots: [
           snapshot("removed", { repositoryScope }),
           snapshot("live", { activity: "running" }),
+          // The parent of this child is in neither collection, so its scope does not create it.
+          snapshot("scoped-child", { parentExternalSessionId: "gone", repositoryScope }),
         ],
       }),
     ).toBe(current);
