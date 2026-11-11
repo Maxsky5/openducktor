@@ -11,6 +11,7 @@ import {
   MACHINE_OUTPUT_ENV,
   normalizeProcessEnvironment,
 } from "../../infrastructure/process/process-environment";
+import { waitForChildProcessClose } from "../../infrastructure/process/process-tree";
 import type {
   SystemCommandPort,
   SystemCommandResolveOptions,
@@ -19,6 +20,7 @@ import type {
 } from "../../ports/system-command-port";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 10_000;
+const COMMAND_STOP_TIMEOUT_MS = 500;
 
 export type CreateSystemCommandRunnerInput = {
   /** Reads the environment when a command runs, so it uses the latest user PATH. */
@@ -90,8 +92,9 @@ export const createSystemCommandRunner = ({
           }),
       });
 
+      let cleanup: Effect.Effect<void, HostOperationErrorAggregate> = Effect.void;
       return yield* Effect.callback<SystemCommandRunResult, HostOperationErrorAggregate>(
-        (resume, signal) => {
+        (resume) => {
           let child: ReturnType<typeof spawn>;
           try {
             child = spawn(launch.command, launch.args, {
@@ -113,36 +116,20 @@ export const createSystemCommandRunner = ({
             );
             return;
           }
-          if (!child.stdout || !child.stderr) {
-            child.kill("SIGTERM");
-            resume(
-              Effect.fail(
-                new HostOperationError({
-                  operation: "systemCommand.runCommandAllowFailure",
-                  message: `Command ${command} did not expose piped stdout and stderr.`,
-                  details: { command, args, cwd: options.cwd },
-                }),
-              ),
-            );
-            return;
-          }
           const stdoutChunks: Buffer[] = [];
           const stderrChunks: Buffer[] = [];
           let stdoutBytes = 0;
           let settled = false;
+          let closed = false;
           const finish = (
             effect: Effect.Effect<SystemCommandRunResult, HostOperationErrorAggregate>,
           ) => {
-            if (settled) {
-              return;
-            }
+            if (settled) return;
             settled = true;
             clearTimeout(timeout);
-            signal.removeEventListener("abort", abort);
             resume(effect);
           };
           const timeout = setTimeout(() => {
-            child.kill("SIGTERM");
             finish(
               Effect.fail(
                 new HostOperationError({
@@ -157,23 +144,10 @@ export const createSystemCommandRunner = ({
               ),
             );
           }, options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
-          const abort = () => {
-            child.kill("SIGTERM");
-            finish(
-              Effect.fail(
-                new HostOperationError({
-                  operation: "systemCommand.runCommandAllowFailure",
-                  message: `Command ${command} was aborted.`,
-                  details: { command, args },
-                }),
-              ),
-            );
-          };
-          signal.addEventListener("abort", abort, { once: true });
-          child.stdout.on("data", (chunk: Buffer) => {
+          const onStdout = (chunk: Buffer) => {
+            if (settled) return;
             stdoutBytes += chunk.length;
             if (options.maxStdoutBytes !== undefined && stdoutBytes > options.maxStdoutBytes) {
-              child.kill("SIGTERM");
               finish(
                 Effect.fail(
                   new HostOperationError({
@@ -186,9 +160,11 @@ export const createSystemCommandRunner = ({
               return;
             }
             stdoutChunks.push(chunk);
-          });
-          child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
-          child.on("error", (error) => {
+          };
+          const onStderr = (chunk: Buffer) => {
+            if (!settled) stderrChunks.push(chunk);
+          };
+          const onError = (error: Error) => {
             finish(
               Effect.fail(
                 toHostOperationError(error, "systemCommand.runCommandAllowFailure", {
@@ -198,8 +174,10 @@ export const createSystemCommandRunner = ({
                 }),
               ),
             );
-          });
-          child.on("close", (code) => {
+          };
+          const onClose = (code: number | null) => {
+            closed = true;
+            if (settled) return;
             finish(
               Effect.succeed({
                 ok: code === 0,
@@ -208,9 +186,70 @@ export const createSystemCommandRunner = ({
                 stderr: Buffer.concat(stderrChunks).toString("utf8"),
               }),
             );
-          });
+          };
+          child.stdout?.on("data", onStdout);
+          child.stderr?.on("data", onStderr);
+          child.on("error", onError);
+          child.on("close", onClose);
+          cleanup = Effect.gen(function* () {
+            settled = true;
+            clearTimeout(timeout);
+            child.stdout?.off("data", onStdout);
+            child.stderr?.off("data", onStderr);
+            stdoutChunks.length = 0;
+            stderrChunks.length = 0;
+            // Drain without retaining output while waiting for process and pipe closure.
+            child.stdout?.resume();
+            child.stderr?.resume();
+            if (closed) return;
+            const signalErrors: unknown[] = [];
+            const terminate = (signal: NodeJS.Signals) =>
+              Effect.sync(() => {
+                try {
+                  if (!child.kill(signal) && child.exitCode === null && child.signalCode === null) {
+                    signalErrors.push(`Could not send ${signal}.`);
+                  }
+                } catch (error) {
+                  signalErrors.push(error);
+                }
+              });
+            yield* terminate("SIGTERM");
+            if (yield* waitForChildProcessClose(child, () => closed, COMMAND_STOP_TIMEOUT_MS))
+              return;
+            // Windows kill already forces termination; POSIX needs SIGKILL escalation.
+            if (platform !== "win32") yield* terminate("SIGKILL");
+            if (yield* waitForChildProcessClose(child, () => closed, COMMAND_STOP_TIMEOUT_MS))
+              return;
+            return yield* Effect.fail(
+              new HostOperationError({
+                operation: "systemCommand.runCommandAllowFailure.cleanup",
+                message: `Failed to stop command ${command} and close its output within ${2 * COMMAND_STOP_TIMEOUT_MS}ms.`,
+                details: { command, args, pid: child.pid, signalErrors },
+              }),
+            );
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                child.stdout?.destroy();
+                child.stderr?.destroy();
+                child.off("error", onError);
+                child.off("close", onClose);
+              }),
+            ),
+          );
+          if (!child.stdout || !child.stderr) {
+            finish(
+              Effect.fail(
+                new HostOperationError({
+                  operation: "systemCommand.runCommandAllowFailure",
+                  message: `Command ${command} did not expose piped stdout and stderr.`,
+                  details: { command, args, cwd: options.cwd },
+                }),
+              ),
+            );
+          }
         },
-      );
+      ).pipe(Effect.onExit(() => cleanup));
     });
 
   return {
