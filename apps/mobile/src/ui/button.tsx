@@ -1,5 +1,5 @@
 import type { WorkflowIcon } from "@openducktor/contracts";
-import type { ReactElement } from "react";
+import { createContext, type ReactElement, useContext } from "react";
 import {
   type StyleProp,
   type TextStyle,
@@ -79,6 +79,13 @@ const foregroundColor = (theme: AppTheme, variant: ButtonVariant): string =>
   })[variant];
 
 /**
+ * The side padding of the buttons inside it. `compact` gives every size the small side padding,
+ * for buttons that share one row of a phone, such as the actions of a form footer.
+ */
+export type ButtonDensity = "regular" | "compact";
+export const ButtonDensityContext = createContext<ButtonDensity>("regular");
+
+/**
  * A button keeps its colors in styles, so a theme change repaints it without a render. Only a
  * role icon renders again.
  */
@@ -101,6 +108,7 @@ export function Button({
 }: ButtonProps): ReactElement {
   const blockedByConnection = useCommandBlocked(command, label);
   const inactive = disabled || loading || blockedByConnection;
+  const compact = useContext(ButtonDensityContext) === "compact";
   // Read theme styles here so a button opened after a theme change uses the current colors.
   const foreground = styles[FOREGROUNDS[variant]];
   const iconSize = ICON_SIZES[size];
@@ -120,7 +128,7 @@ export function Button({
       }
       accessibilityState={{ disabled: inactive, busy: loading }}
       containerStyle={fill ? styles.fill : styles.hug}
-      style={[styles.button, styles[variant], styles[size], style]}
+      style={[styles.button, styles[variant], styles[size], compact ? styles.compact : null, style]}
     >
       <View style={styles.content}>
         <LeadingIcon
@@ -220,6 +228,7 @@ const styles = StyleSheet.create((theme) => ({
   sm: { minHeight: HEIGHTS.sm, paddingHorizontal: 12 },
   md: { minHeight: HEIGHTS.md, paddingHorizontal: 16 },
   lg: { minHeight: HEIGHTS.lg, paddingHorizontal: 20 },
+  compact: { paddingHorizontal: 12 },
   content: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: "100%" },
   placeholder: (size: "sm" | "md" | "lg", width: number, fontScale: number) => ({
     width,
