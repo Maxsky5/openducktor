@@ -1,10 +1,17 @@
 import type { AgentFileSearchResultKind } from "@openducktor/core";
 import { FileCode2, FileImage, FilePlay, FileText, FolderTree, Paintbrush } from "lucide-react";
 import type { ReactElement } from "react";
+import {
+  FileTypeIcon,
+  mountFileTypeIconSprite,
+  resolveFileTypeIcon,
+} from "@/components/ui/file-type-icon";
 import { cn } from "@/lib/utils";
 
 type AgentChatFileReferenceIconProps = {
   kind: AgentFileSearchResultKind;
+  /** The path of the file, which picks the icon of its type, as the file tree shows it. */
+  path: string;
   className?: string;
 };
 
@@ -58,19 +65,33 @@ const FILE_REFERENCE_ICON_MARKUP = {
   },
 } satisfies Record<AgentFileSearchResultKind, { name: string; paths: string }>;
 
+/**
+ * The icon of a file reference: the icon of the type of the file, as the file tree shows it, or
+ * the icon of its kind when the file tree has none. A folder shows the folder icon.
+ */
 export function AgentChatFileReferenceIcon({
   kind,
+  path,
   className,
 }: AgentChatFileReferenceIconProps): ReactElement {
+  if (kind !== "directory" && resolveFileTypeIcon(path)) {
+    return <FileTypeIcon filePath={path} className={className} />;
+  }
   const Icon = resolveFileReferenceIcon(kind);
-
   return <Icon className={cn("size-3.5", className)} />;
 }
 
 export const getAgentChatFileReferenceIconMarkup = (
   kind: AgentFileSearchResultKind,
+  path: string,
   className = "size-3.5",
 ): string => {
+  const typeIcon = kind === "directory" ? null : resolveFileTypeIcon(path);
+  if (typeIcon) {
+    mountFileTypeIconSprite();
+    const style = typeIcon.color ? ` style="color:${typeIcon.color}"` : "";
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="${className} shrink-0"${style} aria-hidden="true"><use href="${typeIcon.href}"></use></svg>`;
+  }
   const { name, paths } = FILE_REFERENCE_ICON_MARKUP[kind] ?? FILE_REFERENCE_ICON_MARKUP.default;
   const classes = ["lucide", `lucide-${name}`, className].filter(Boolean).join(" ");
 

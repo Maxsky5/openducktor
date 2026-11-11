@@ -67,6 +67,7 @@ const buildComposerFileReferenceChipMarkup = (
     cn(AGENT_CHAT_FILE_REFERENCE_CHIP_BASE_CLASS_NAME, "mr-2 max-w-full align-middle"),
   )}"><span class="${escapeHtml(AGENT_CHAT_FILE_REFERENCE_CHIP_ICON_CLASS_NAME)}">${getAgentChatFileReferenceIconMarkup(
     file.kind,
+    file.path,
   )}</span><span class="${escapeHtml(AGENT_CHAT_FILE_REFERENCE_CHIP_LABEL_CLASS_NAME)}">${escapeHtml(
     file.name,
   )}</span></span>`;

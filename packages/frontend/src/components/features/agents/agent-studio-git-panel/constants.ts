@@ -1,18 +1,22 @@
-import { FilePlus, FileText, FileX, FolderGit2 } from "lucide-react";
 import type { DiffScope } from "@openducktor/frontend-core/git/contracts";
 import type { FileListViewMode } from "./file-list-view-preference";
 
-export const FILE_STATUS_ICON = new Map<string, typeof FileText>([
-  ["modified", FileText],
-  ["added", FilePlus],
-  ["deleted", FileX],
-  ["submodule", FolderGit2],
+/**
+ * The letter of a file change, as Git shows it. The icon of a changed file shows its type, so the
+ * letter shows the change. A submodule shows its own icon.
+ */
+export const FILE_STATUS_LETTER = new Map<string, string>([
+  ["modified", "M"],
+  ["added", "A"],
+  ["deleted", "D"],
+  ["renamed", "R"],
 ]);
 
 export const FILE_STATUS_COLOR = new Map<string, string>([
   ["modified", "text-blue-600 dark:text-blue-400"],
   ["added", "text-green-600 dark:text-green-400"],
   ["deleted", "text-red-600 dark:text-red-400"],
+  ["renamed", "text-blue-600 dark:text-blue-400"],
   ["submodule", "text-blue-600 dark:text-blue-400"],
 ]);
 
