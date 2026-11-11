@@ -556,7 +556,7 @@ export const useRepoSessionReadModel = ({
         appliedRecords.taskIdsKey !== readCurrentTaskIdsKey();
       if (staleScopeFailure) {
         demotedStaleFailureRef.current = true;
-        // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
+        // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
         setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
       }
       return;
@@ -1123,8 +1123,16 @@ export const useRepoSessionReadModel = ({
     recoveredLiveFailureRef.current = false;
     snapshotAwaitsRecordsRef.current = false;
     initialLiveSnapshotReceivedRef.current = false;
+    // A task-record failure of this repository stays visible with its retry while observation
+    // starts. A newer record result or a live-stream failure replaces it.
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
-    setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
+    setSessionReadModelLoadState((current) =>
+      current.kind === "failed" &&
+      current.source === "task-records" &&
+      current.workspaceRepoPath === repoPath
+        ? current
+        : loadingAgentSessionReadModelLoadState(repoPath),
+    );
     void observeLiveSessions({ repoPath }, (envelope) => {
       if (isStaleRepoOperation()) {
         return;

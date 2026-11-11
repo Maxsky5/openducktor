@@ -2184,6 +2184,46 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
+  test("keeps a known task-record failure visible while the observation starts", async () => {
+    const releaseSnapshot = createDeferred<void>();
+    const state = createState((emit) => {
+      void releaseSnapshot.promise.then(() =>
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
+      );
+    }, record);
+    try {
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-2"),
+          queryFn: async () => {
+            throw new Error("task 2 read failed");
+          },
+          retry: false,
+        }),
+      ).rejects.toThrow("task 2 read failed");
+      state.props.taskIds = ["task-1", "task-2"];
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        kind: "failed",
+        source: "task-records",
+      });
+
+      await state.harness.run(async () => {
+        releaseSnapshot.resolve();
+        await releaseSnapshot.promise;
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        kind: "failed",
+        source: "task-records",
+      });
+    } finally {
+      releaseSnapshot.resolve();
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
   test("keeps the live state of an ownership event for a later commit that adds the session", async () => {
     const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
     const saved = { ...record, externalSessionId: "new-thread" };
