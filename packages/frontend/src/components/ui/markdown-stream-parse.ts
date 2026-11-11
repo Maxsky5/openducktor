@@ -49,7 +49,7 @@ export const parseMarkdown = (
   markdown: string,
   previous: ParsedMarkdown | null,
 ): ParsedMarkdown => {
-  if (previous && markdown.startsWith(previous.markdown)) {
+  if (previous) {
     const listTail = parseListTail(markdown, previous);
     if (listTail) {
       return listTail;
@@ -77,31 +77,37 @@ export const parseMarkdown = (
 const markdownParser = unified().use(remarkParse).use(MATH_REMARK_PLUGINS);
 
 // Offsets belong to the parse that made each node. Keep restart offsets in whole-text coordinates.
-type ListTail = { start: number; itemIndex: number };
-const listTails = new WeakMap<ParsedBlock, ListTail>();
+const listTailStarts = new WeakMap<ParsedBlock, number>();
 
 /** A list can join a following partial item, so consider either of the last two blocks. */
 const parseListTail = (markdown: string, previous: ParsedMarkdown): ParsedMarkdown | null => {
-  const blockIndex = previous.blocks.findLastIndex(
-    (block, index) => index >= previous.blocks.length - 2 && listTails.has(block),
-  );
+  const lastIndex = previous.blocks.length - 1;
+  const lastBlock = previous.blocks[lastIndex];
+  const blockIndex = lastBlock && listTailStarts.has(lastBlock) ? lastIndex : lastIndex - 1;
   const block = previous.blocks[blockIndex];
-  const restart = block && listTails.get(block);
-  if (!block || block.node.type !== "list" || !restart || restart.itemIndex === 0) {
+  const restart = block && listTailStarts.get(block);
+  if (
+    !block ||
+    block.node.type !== "list" ||
+    restart === undefined ||
+    block.node.children.length <= 2 ||
+    !markdown.startsWith(previous.markdown)
+  ) {
     return null;
   }
+  const itemIndex = block.node.children.length - 2;
   // Task-list math can make local definitions whose source is the whole list, without item offsets.
   if (previous.definitions.some((entry) => entry.start >= block.start && !definesForText(entry))) {
     return null;
   }
 
-  const tail = parseTail(markdown, restart.start, previous.definitions);
+  const tail = parseTail(markdown, restart, previous.definitions);
   const first = tail.blocks[0];
   if (!first || first.node.type !== "list") {
     return null;
   }
   const definitions = [
-    ...previous.definitions.filter(({ start }) => start < restart.start),
+    ...previous.definitions.filter(({ start }) => start < restart),
     ...tail.definitions,
   ];
   if (
@@ -115,7 +121,7 @@ const parseListTail = (markdown: string, previous: ParsedMarkdown): ParsedMarkdo
     ...block.node,
     // Appending text cannot remove the blank lines between earlier items.
     spread: block.node.spread || first.node.spread,
-    children: [...block.node.children.slice(0, restart.itemIndex), ...first.node.children],
+    children: [...block.node.children.slice(0, itemIndex), ...first.node.children],
   };
   const joined: ParsedBlock = {
     ...first,
@@ -124,12 +130,9 @@ const parseListTail = (markdown: string, previous: ParsedMarkdown): ParsedMarkdo
     node,
     ...readBlockFacts(node),
   };
-  const nextRestart = listTails.get(first);
-  if (nextRestart) {
-    listTails.set(joined, {
-      start: nextRestart.start,
-      itemIndex: restart.itemIndex + nextRestart.itemIndex,
-    });
+  const nextRestart = listTailStarts.get(first);
+  if (nextRestart !== undefined) {
+    listTailStarts.set(joined, nextRestart);
   }
   return {
     markdown,
@@ -168,22 +171,15 @@ const parseTail = (
         ...readBlockFacts(node),
         openFenceCode: index === nodes.length - 1 ? readOpenFenceCode(node, blockText) : null,
       };
-      if (node.type === "list" && node.children.length >= 2) {
-        const itemIndex = node.children.length - 2;
-        const item = node.children[itemIndex];
-        if (item) {
-          const itemStart = readOffsets(item, prefix.length).start;
-          listTails.set(block, {
-            start:
-              tailStart +
-              Math.max(
-                tail.lastIndexOf("\n", itemStart - 1),
-                tail.lastIndexOf("\r", itemStart - 1),
-              ) +
-              1,
-            itemIndex,
-          });
-        }
+      const item = node.type === "list" ? node.children.at(-2) : undefined;
+      if (item) {
+        const itemStart = readOffsets(item, prefix.length).start;
+        listTailStarts.set(
+          block,
+          tailStart +
+            Math.max(tail.lastIndexOf("\n", itemStart - 1), tail.lastIndexOf("\r", itemStart - 1)) +
+            1,
+        );
       }
       return block;
     }),
