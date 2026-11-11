@@ -166,7 +166,11 @@ describe("createSystemCommandRunner", () => {
     });
   }
 
-  for (const failurePath of ["timeout", "overflow", "interruption"] as const) {
+  for (const [failurePath, expectedMessage] of [
+    ["timeout", "Timed out running"],
+    ["overflow", "more than 8 bytes"],
+    ["interruption", "interrupted"],
+  ] as const) {
     test(`reports ${failurePath} and cleanup failure to the host caller`, async () => {
       await withCommandChild(true, async (fixture) => {
         const options: SystemCommandRunOptions = {
@@ -202,13 +206,7 @@ describe("createSystemCommandRunner", () => {
         }
         expect(error).toBeInstanceOf(HostOperationError);
         if (error instanceof HostOperationError) {
-          const expected =
-            failurePath === "timeout"
-              ? "Timed out running"
-              : failurePath === "overflow"
-                ? "more than 8 bytes"
-                : "interrupted";
-          expect(error.message).toContain(expected);
+          expect(error.message).toContain(expectedMessage);
           expect(error.message).toContain("Failed to stop command");
           expect(error.details).toMatchObject({ command: process.execPath });
           if (failurePath === "timeout") {
