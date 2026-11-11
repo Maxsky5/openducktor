@@ -15,7 +15,7 @@ import {
   useToolPartDetails,
 } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { memo, type ReactElement, useLayoutEffect, useMemo } from "react";
+import { memo, type ReactElement, type ReactNode, useLayoutEffect, useMemo } from "react";
 import { type StyleProp, View, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useFeedbackStore } from "@/app-shell/app-services";
@@ -42,23 +42,6 @@ export type ToolDetailsColors = {
   text: string;
   errorFrame: StyleProp<ViewStyle>;
   errorText: string;
-};
-
-export const useCardDetailsColors = (): ToolDetailsColors => {
-  const theme = useAppTheme();
-  // The parts of the theme stay the same objects until the theme changes, so the memo keys on them.
-  return useMemo(
-    () => ({
-      frame: { borderColor: theme.desktop.border, backgroundColor: theme.desktop.card },
-      text: theme.desktop.foreground,
-      errorFrame: {
-        borderColor: theme.desktop.destructiveBorder,
-        backgroundColor: theme.desktop.destructiveSurface,
-      },
-      errorText: theme.desktop.destructiveMuted,
-    }),
-    [theme.desktop],
-  );
 };
 
 /**
@@ -196,15 +179,20 @@ export function WithFullToolPart({
   meta: ToolMeta;
   children: (shown: ToolMeta) => ReactElement;
 }): ReactElement {
+  if (!meta.detailsOmitted) return children(meta);
+  return (
+    <ToolPartSessionProvider>
+      <FullToolPart meta={meta}>{children}</FullToolPart>
+    </ToolPartSessionProvider>
+  );
+}
+
+/** Gives the calls under it the session that reads their full details. */
+export function ToolPartSessionProvider({ children }: { children: ReactNode }): ReactElement {
   const { sessionRef, parentSession } = useTranscriptRows();
   const sessionScope = parentSession.sessionScope ?? null;
   const session = useMemo(() => ({ ...sessionRef, sessionScope }), [sessionRef, sessionScope]);
-  if (!meta.detailsOmitted) return children(meta);
-  return (
-    <ToolPartSessionContext value={session}>
-      <FullToolPart meta={meta}>{children}</FullToolPart>
-    </ToolPartSessionContext>
-  );
+  return <ToolPartSessionContext value={session}>{children}</ToolPartSessionContext>;
 }
 
 function FullToolPart({
@@ -265,7 +253,7 @@ export function ToolPartLoader({
  * The desktop `AgentToolResultContentView`: text as pre text, files as native file lines.
  * `output` reads the formatted output text, for a call without result content.
  */
-function ToolOutput({
+export function ToolOutput({
   content,
   output,
   color,
@@ -423,9 +411,12 @@ export const QuestionDetails = memo(function QuestionDetails({
 export const ToolFileEdits = memo(function ToolFileEdits({
   meta,
   resetKey,
+  open,
 }: {
   meta: ToolMeta;
   resetKey: string;
+  /** Opens the changes at first. The `expandFileDiffsByDefault` setting decides otherwise. */
+  open?: boolean;
 }): ReactElement | null {
   const { workingDirectory, expandFileDiffsByDefault } = useTranscriptRows();
   const { edits, diffUnavailable } = useMemo(
@@ -440,7 +431,7 @@ export const ToolFileEdits = memo(function ToolFileEdits({
           key={data.filePath}
           data={data}
           resetKey={`${resetKey}:file:${data.filePath}`}
-          defaultOpen={expandFileDiffsByDefault}
+          defaultOpen={open ?? expandFileDiffsByDefault}
         />
       ))}
       {diffUnavailable ? (

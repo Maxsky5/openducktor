@@ -10,6 +10,23 @@ import type {
 import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
 import type { AgentChatTranscriptNavigation } from "./use-agent-chat-transcript-navigation";
 import { useAgentChatWindow } from "./use-agent-chat-window";
+import { useAgentChatRowEntryMotion } from "./use-agent-chat-row-entry-motion";
+import { groupToolRuns } from "@openducktor/frontend-core/sessions/transcript/tool-runs";
+import {
+  type AgentChatTurnItem,
+  buildToolRunWindowRows,
+  buildTurnItems,
+  foldUserMessageAnchors,
+} from "./agent-chat-tool-run-layout";
+import { buildAgentChatTurnAnchors } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import {
+  type ToolRunActions,
+  type ToolRunFoldStore,
+  useCollapseFinishedToolRuns,
+  useToolRunClassifier,
+  useToolRunFolds,
+} from "./agent-chat-tool-run-folds";
+import { REVEAL_ELEMENT_EVENT } from "@/lib/reveal-element";
 
 const TRANSCRIPT_MODEL_PENDING_NOTICE: NonNullable<AgentChatTranscriptPresentation["notice"]> =
   Object.freeze({
@@ -22,6 +39,8 @@ const TRANSCRIPT_MODEL_PENDING_NOTICE: NonNullable<AgentChatTranscriptPresentati
 export type AgentChatRenderedTurn = {
   key: string;
   rows: AgentChatTranscriptRow[];
+  /** The rows of the turn, with the calls of each tool run together. */
+  items: AgentChatTurnItem[];
   isActive: boolean;
   activeStreamingAssistantMessageId: string | null;
 };
@@ -48,8 +67,10 @@ export const getTurnActiveStreamingAssistantMessageId = (
 
 type UseAgentChatRenderedTranscriptArgs = {
   transcript: AgentChatThreadModel["transcript"];
+  runtimePresentation: AgentChatThreadModel["runtimePresentation"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   scrollToBottomOnSendRef: AgentChatThreadModel["scrollToBottomOnSendRef"];
+  toolRunFolds: ToolRunFoldStore;
 };
 
 type UseAgentChatRenderedTranscriptResult = {
@@ -60,14 +81,17 @@ type UseAgentChatRenderedTranscriptResult = {
   isNearTop: boolean;
   scrollToBottom: () => void;
   scrollToTop: () => void;
+  toolRunActions: ToolRunActions;
   userMessageAnchors: AgentChatUserMessageAnchor[];
   navigation: AgentChatTranscriptNavigation;
 };
 
 export function useAgentChatRenderedTranscript({
   transcript,
+  runtimePresentation,
   messagesContainerRef,
   scrollToBottomOnSendRef,
+  toolRunFolds,
 }: UseAgentChatRenderedTranscriptArgs): UseAgentChatRenderedTranscriptResult {
   const { session, displayedSessionKey, shouldResetWindow, notice } = transcript;
   const showThinkingMessages = useAgentChatSettings()?.showThinkingMessages ?? false;
@@ -80,6 +104,29 @@ export function useAgentChatRenderedTranscript({
   const effectiveShouldResetTranscriptWindow = shouldResetWindow || isTranscriptModelMissing;
   const effectiveTranscriptNotice =
     notice ?? (isTranscriptModelMissing ? TRANSCRIPT_MODEL_PENDING_NOTICE : null);
+  // Each tool run is one row of the row window, so the rows after a long run stay in reach.
+  const classify = useToolRunClassifier(runtimePresentation);
+  const windowRows = useMemo(
+    () =>
+      buildToolRunWindowRows(
+        transcriptModelState.rows,
+        groupToolRuns(transcriptModelState.rows, classify),
+      ),
+    [transcriptModelState.rows, classify],
+  );
+  const folds = useToolRunFolds(toolRunFolds);
+  const collapseFinishedRuns = useCollapseFinishedToolRuns();
+  const turnAnchors = useMemo(
+    () =>
+      windowRows.layoutKey === ""
+        ? transcriptModelState.turnAnchors
+        : buildAgentChatTurnAnchors(windowRows.rows),
+    [windowRows, transcriptModelState.turnAnchors],
+  );
+  const userMessageAnchors = useMemo(
+    () => foldUserMessageAnchors(transcriptModelState.userMessageAnchors, windowRows.layoutKey),
+    [transcriptModelState.userMessageAnchors, windowRows.layoutKey],
+  );
   const {
     visibleRows,
     visibleTurnAnchors,
@@ -89,12 +136,18 @@ export function useAgentChatRenderedTranscript({
     scrollToTop,
     navigation,
   } = useAgentChatWindow({
-    rows: transcriptModelState.rows,
-    turnAnchors: transcriptModelState.turnAnchors,
+    rows: windowRows.rows,
+    turnAnchors,
     displayedSessionKey,
     shouldResetForTranscriptLoad: effectiveShouldResetTranscriptWindow,
     messagesContainerRef,
     messagesContentRef,
+  });
+  useAgentChatRowEntryMotion({
+    sessionKey: displayedSessionKey,
+    rows: transcriptModelState.rows,
+    contentRef: messagesContentRef,
+    mountedRows: visibleRows,
   });
   const latestUserTurnKey = useMemo(() => {
     if (!displayedSessionKey || !transcriptModelState.lastUserMessageKey) {
@@ -114,20 +167,45 @@ export function useAgentChatRenderedTranscript({
         rows,
         transcriptModelState.activeStreamingAssistantMessageId,
       );
-
       return {
         key: turn.key,
         rows,
+        items: buildTurnItems(rows, windowRows, folds, collapseFinishedRuns),
         isActive: turn.key === latestUserTurnKey,
         activeStreamingAssistantMessageId,
       };
     });
   }, [
+    collapseFinishedRuns,
+    folds,
     latestUserTurnKey,
     visibleRows,
     visibleTurnAnchors,
+    windowRows,
     transcriptModelState.activeStreamingAssistantMessageId,
   ]);
+
+  // A transcript that follows its end stops following, so the run stays where the reader pressed
+  // it. Scroll anchoring then keeps the content in view while the run changes its height.
+  const toolRunActions = useMemo<ToolRunActions>(() => {
+    const stopFollowing = (header: HTMLElement): void => {
+      header.dispatchEvent(new Event(REVEAL_ELEMENT_EVENT, { bubbles: true }));
+    };
+    return {
+      toggle: (runKey, header, folded) => {
+        stopFollowing(header);
+        toolRunFolds.choose(runKey, folded ? "open" : "folded");
+      },
+      showEarlier: (runKey, header, keptHidden) => {
+        stopFollowing(header);
+        toolRunFolds.showEarlier(runKey, keptHidden);
+      },
+      hideEarlier: (runKey, header) => {
+        stopFollowing(header);
+        toolRunFolds.hideEarlier(runKey);
+      },
+    };
+  }, [toolRunFolds]);
 
   useLayoutEffect(() => {
     scrollToBottomOnSendRef.current = scrollToBottom;
@@ -141,7 +219,8 @@ export function useAgentChatRenderedTranscript({
     isNearTop,
     scrollToBottom,
     scrollToTop,
-    userMessageAnchors: transcriptModelState.userMessageAnchors,
+    toolRunActions,
+    userMessageAnchors,
     navigation,
   };
 }

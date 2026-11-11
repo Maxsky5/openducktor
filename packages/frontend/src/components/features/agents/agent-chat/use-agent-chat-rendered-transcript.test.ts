@@ -4,6 +4,16 @@ import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-se
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
+import { presentRegularToolCall } from "./agent-chat-test-fixtures";
+import { createToolRunFoldStore } from "./agent-chat-tool-run-folds";
+
+const toolRunFolds = createToolRunFoldStore();
+const RUNTIME_PRESENTATION = {
+  runtimeKind: "opencode",
+  presentToolCall: presentRegularToolCall,
+  supportedApprovalReplyOutcomes: null,
+  supportsRunningCommandOutput: false,
+} as const;
 import {
   buildMessage,
   buildSession,
@@ -117,8 +127,10 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
             shouldResetWindow: false,
             notice: null,
           },
+          runtimePresentation: RUNTIME_PRESENTATION,
           messagesContainerRef: createRef<HTMLDivElement>(),
           scrollToBottomOnSendRef,
+          toolRunFolds,
         }),
       {},
       { wrapper: settingsWrapper },
@@ -165,8 +177,10 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
             shouldResetWindow: false,
             notice: null,
           },
+          runtimePresentation: RUNTIME_PRESENTATION,
           messagesContainerRef: createRef<HTMLDivElement>(),
           scrollToBottomOnSendRef,
+          toolRunFolds,
         }),
       {},
       { wrapper: settingsWrapper },
@@ -216,8 +230,10 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
             shouldResetWindow: false,
             notice: null,
           },
+          runtimePresentation: RUNTIME_PRESENTATION,
           messagesContainerRef,
           scrollToBottomOnSendRef,
+          toolRunFolds,
         }),
       { tick: 0 },
       { wrapper: settingsWrapper },

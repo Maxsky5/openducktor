@@ -1,5 +1,6 @@
 import { memo, type ReactElement } from "react";
 import { AgentChatThreadRow } from "./agent-chat-thread-row";
+import { ToolRunGroup } from "./agent-chat-tool-run";
 import {
   type AgentChatTurnRowProps,
   type AgentChatTurnGroupProps,
@@ -46,29 +47,38 @@ export const AgentChatTurnGroup = memo(function AgentChatTurnGroup({
 }: AgentChatTurnGroupProps): ReactElement {
   return (
     <div>
-      {turn.rows.map((row) => (
-        <AgentChatTurnRow
-          key={row.key}
-          row={row}
-          modelCatalog={modelCatalog}
-          isStreamingAssistantMessage={isAgentChatTurnRowStreamingAssistant(
-            row,
-            turn.activeStreamingAssistantMessageId,
-          )}
-          sessionIdentity={transcriptTarget}
-          runtimePresentation={runtimePresentation}
-          subagentPendingApprovalCount={readSubagentPendingApprovalCount(
-            row,
-            subagentPendingApprovalCountBySessionKey,
-            transcriptTarget,
-          )}
-          subagentPendingQuestionCount={readSubagentPendingQuestionCount(
-            row,
-            subagentPendingQuestionCountBySessionKey,
-            transcriptTarget,
-          )}
-        />
-      ))}
+      {turn.items.map((item) =>
+        item.kind === "tool_run" ? (
+          <ToolRunGroup
+            key={item.key}
+            item={item}
+            runtimePresentation={runtimePresentation}
+            workingDirectory={transcriptTarget?.workingDirectory ?? null}
+          />
+        ) : (
+          <AgentChatTurnRow
+            key={item.key}
+            row={item.row}
+            modelCatalog={modelCatalog}
+            isStreamingAssistantMessage={isAgentChatTurnRowStreamingAssistant(
+              item.row,
+              turn.activeStreamingAssistantMessageId,
+            )}
+            sessionIdentity={transcriptTarget}
+            runtimePresentation={runtimePresentation}
+            subagentPendingApprovalCount={readSubagentPendingApprovalCount(
+              item.row,
+              subagentPendingApprovalCountBySessionKey,
+              transcriptTarget,
+            )}
+            subagentPendingQuestionCount={readSubagentPendingQuestionCount(
+              item.row,
+              subagentPendingQuestionCountBySessionKey,
+              transcriptTarget,
+            )}
+          />
+        ),
+      )}
     </div>
   );
 }, areAgentChatTurnGroupPropsEqual);

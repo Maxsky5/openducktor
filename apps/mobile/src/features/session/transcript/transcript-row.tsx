@@ -19,6 +19,8 @@ import { SubagentRow } from "./rows/subagent-row";
 import { SystemRow } from "./rows/system-row";
 import { TaskToolRow } from "./rows/task-tool-row";
 import { ToolCallRow } from "./rows/tool-call-row";
+import { ToolRunListRow } from "./rows/tool-run-rows";
+import type { ToolRunListItem } from "./transcript-list-items";
 import { UserMessageRow } from "./rows/user-message-row";
 import { ArtifactToolRow, WorkflowToolRow } from "./rows/workflow-tool-row";
 import { useMessageStreaming, useSubagentPendingCount } from "./transcript-row-state";
@@ -27,7 +29,9 @@ import { messageRowKind } from "./transcript-row-type";
 import { useTranscriptRows } from "./transcript-rows-context";
 import { messageTimeLabel } from "./transcript-text";
 
-export type TranscriptRowProps = { item: AgentChatTranscriptRow | MessagePartItem };
+export type TranscriptRowProps = {
+  item: AgentChatTranscriptRow | MessagePartItem | ToolRunListItem;
+};
 
 /**
  * One transcript row, as the desktop `AgentChatThreadRow`. The list keeps the object of an
@@ -58,11 +62,13 @@ export const TranscriptRow = memo(function TranscriptRow({
 });
 
 function renderItem(
-  item: AgentChatTranscriptRow | MessagePartItem,
+  item: TranscriptRowProps["item"],
   isStreaming: boolean,
   subagentPendingCount: number,
 ): ReactElement {
   switch (item.kind) {
+    case "tool_run":
+      return <ToolRunListRow item={item} />;
     case "message_part":
       return item.look === "reasoning" ? (
         <ReasoningPartRow part={item} />
@@ -120,6 +126,7 @@ function MessageRow({
       return (
         <TaskToolRow
           meta={row.meta}
+          messageId={message.id}
           tool={row.taskTool}
           messageContent={message.content}
           messageTimestamp={message.timestamp}
@@ -131,30 +138,31 @@ function MessageRow({
       return (
         <WorkflowToolRow
           meta={row.meta}
+          messageId={message.id}
           odtTool={row.odtTool}
           messageTimestamp={message.timestamp}
           timeLabel={timeLabel}
           displayName={row.displayName}
           summary={buildToolSummary(row.meta, message.content)}
           document={null}
-          rowKey={rowKey}
         />
       );
     case "artifact_tool":
       return (
         <ArtifactToolRow
           meta={row.meta}
+          messageId={message.id}
           operation={row.operation}
           messageTimestamp={message.timestamp}
           timeLabel={timeLabel}
           displayName={row.displayName}
-          rowKey={rowKey}
         />
       );
     case "tool":
       return (
         <ToolCallRow
           meta={row.meta}
+          messageId={message.id}
           messageContent={message.content}
           messageTimestamp={message.timestamp}
           timeLabel={timeLabel}

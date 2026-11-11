@@ -1,6 +1,8 @@
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import { isAssistantMessageStreaming } from "@openducktor/frontend-core/sessions/transcript/agent-chat-streaming";
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import type { AgentChatTurnItem } from "./agent-chat-tool-run-layout";
+import { arraysEqual } from "@/lib/arrays-equal";
 import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { getSubagentMessageSessionKey } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 import type { AgentChatRenderedTurn } from "./use-agent-chat-rendered-transcript";
@@ -121,8 +123,8 @@ export const readSubagentPendingQuestionCount = (
 };
 
 const areTurnRowsEquivalent = (
-  previousRows: AgentChatTranscriptRow[],
-  nextRows: AgentChatTranscriptRow[],
+  previousRows: readonly AgentChatTranscriptRow[],
+  nextRows: readonly AgentChatTranscriptRow[],
 ): boolean => {
   if (previousRows.length !== nextRows.length) {
     return false;
@@ -177,6 +179,18 @@ const areTurnSubagentPendingCountsEquivalent = ({
   return true;
 };
 
+// The rows of the items compare with the rows of the turn. A tool run keeps its item while its
+// calls and its folds do not change, so a run compares at once.
+const areTurnItemsEquivalent = (
+  previousItems: readonly AgentChatTurnItem[],
+  nextItems: readonly AgentChatTurnItem[],
+): boolean =>
+  arraysEqual(previousItems, nextItems, (item, nextItem) =>
+    item.kind === "row" || nextItem.kind === "row"
+      ? item.kind === nextItem.kind
+      : item === nextItem,
+  );
+
 export const areAgentChatTurnRowPropsEqual = (
   previousProps: AgentChatTurnRowProps,
   nextProps: AgentChatTurnRowProps,
@@ -213,6 +227,7 @@ export const areAgentChatTurnGroupPropsEqual = (
     ) &&
     previousProps.runtimePresentation === nextProps.runtimePresentation &&
     areTurnRowsEquivalent(previousProps.turn.rows, nextProps.turn.rows) &&
+    areTurnItemsEquivalent(previousProps.turn.items, nextProps.turn.items) &&
     areTurnSubagentPendingCountsEquivalent({
       rows: nextProps.turn.rows,
       previousApprovalCounts: previousProps.subagentPendingApprovalCountBySessionKey,

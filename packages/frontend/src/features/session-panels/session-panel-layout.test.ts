@@ -22,10 +22,12 @@ import {
   pickPanelTabKind,
   reconcileSessionPanelLayout,
   removePanelEntry,
+  removeViewPanelTab,
   type SessionPanelContext,
   type SessionPanelLayout,
   selectedPanelTabId,
   selectPanelTab,
+  showViewPanelTab,
   shownPanelTabs,
 } from "./session-panel-layout";
 
@@ -80,6 +82,32 @@ const reconciled = (ctx: SessionPanelContext, layout = emptySessionPanelLayout()
   reconcileSessionPanelLayout(layout, ctx);
 
 describe("session panel layout", () => {
+  test("shows a tool call in its own right panel tab, and gives the selection back when it leaves", () => {
+    const ctx = context();
+    const start = selectPanelTab(reconciled(ctx), ctx, "right", "files");
+
+    const shown = showViewPanelTab(start, ctx, "tool_call");
+    expect(ids(shown, "right", ctx)).toEqual(["document", "diffs", "files", "tool_call"]);
+    expect(selectedPanelTabId(shown, "right", ctx)).toBe("tool_call");
+    // A second call reuses the tab, and selects it again after the user picked another tab.
+    const again = showViewPanelTab(selectPanelTab(shown, ctx, "right", "diffs"), ctx, "tool_call");
+    expect(ids(again, "right", ctx)).toEqual(["document", "diffs", "files", "tool_call"]);
+    expect(selectedPanelTabId(again, "right", ctx)).toBe("tool_call");
+
+    const removed = removeViewPanelTab(shown, ctx, "tool_call");
+    expect(ids(removed, "right", ctx)).toEqual(["document", "diffs", "files"]);
+    expect(selectedPanelTabId(removed, "right", ctx)).toBe("files");
+    expect(removed.closedKinds).toEqual([]);
+  });
+
+  test("hides the tool call tab while the page shows no call", () => {
+    const ctx = context();
+    const shown = showViewPanelTab(reconciled(ctx), ctx, "tool_call");
+    const withoutCall = context({ unavailableKinds: new Set(["ci_checks", "tool_call"]) });
+
+    expect(ids(shown, "right", withoutCall)).toEqual(["document", "diffs", "files"]);
+  });
+
   test("opens the default tool tabs of a task and of a chat in the right panel", () => {
     const task = context();
     const chat = context({

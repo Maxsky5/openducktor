@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
-import { fireEvent, render, within } from "@testing-library/react";
+import { render, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
 import { WorkflowToolMessage } from "./agent-chat-workflow-tool-message";
@@ -33,14 +33,14 @@ const renderToolCard = (meta: ToolMeta) =>
   );
 
 const header = (container: HTMLElement): HTMLElement => {
-  const title = container.querySelector("button[aria-expanded], p");
+  const title = container.querySelector("button[aria-pressed], p");
   const row = title?.parentElement;
   if (!row) throw new Error("Expected the header of the tool card.");
   return row;
 };
 
 describe("WorkflowToolMessage", () => {
-  test("titles a Workflow Event call with its event and shows only its header while closed", () => {
+  test("titles a Workflow Event call with its event and keeps its note out of the transcript", () => {
     const view = renderToolCard({
       kind: "tool",
       partId: "part-event",
@@ -52,39 +52,11 @@ describe("WorkflowToolMessage", () => {
       output: '{"ok":true}',
     });
     try {
-      const title = view.getByRole("button", { name: "Build Completed details" });
-      expect(title.textContent).toBe("Build Completed");
+      expect(view.getByText("Build Completed")).toBeTruthy();
       expect(view.container.querySelector(".lucide-workflow")).not.toBeNull();
       expect(view.queryByText("Workflow Event")).toBeNull();
       expect(view.queryByText("build-completed")).toBeNull();
       expect(view.queryByText(/Facebook login works/)).toBeNull();
-    } finally {
-      view.unmount();
-    }
-  });
-
-  test("shows the note as Markdown before the Input and Output boxes when the card opens", async () => {
-    const view = renderToolCard({
-      kind: "tool",
-      partId: "part-note",
-      callId: "call-note",
-      tool: "odt_apply_workflow_event",
-      toolType: "workflow",
-      status: "completed",
-      input: {
-        taskId: "task-1",
-        eventId: "build-completed",
-        note: "What changed:\n\n- Facebook **login** works.",
-      },
-      output: '{"ok":true}',
-    });
-    try {
-      fireEvent.click(view.getByRole("button", { name: "Build Completed details" }));
-      const item = await view.findByText(/Facebook/, { selector: "li" });
-      expect(item.querySelector("strong")?.textContent).toBe("login");
-      expect(view.queryByText(/- Facebook/)).toBeNull();
-      const input = view.getByText("Input");
-      expect(item.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     } finally {
       view.unmount();
     }
@@ -151,45 +123,27 @@ describe("WorkflowToolMessage", () => {
     }
   });
 
-  test("shows the Input and Output boxes only after a press on the tool name", () => {
-    const view = render(
-      <WorkflowToolMessage
-        meta={{
-          kind: "tool",
-          partId: "part-io",
-          callId: "call-io",
-          tool: "odt_set_pull_request",
-          toolType: "workflow",
-          status: "completed",
-          input: { taskId: "task-1", number: 141 },
-          output: '{"ok":true}',
-        }}
-        odtTool="odt_set_pull_request"
-        messageTimestamp={TIMESTAMP}
-        timeLabel=""
-        displayName="Set Pull Request"
-      />,
-    );
+  test("keeps the Input and the Output of the call out of the transcript", () => {
+    const view = renderToolCard({
+      kind: "tool",
+      partId: "part-io",
+      callId: "call-io",
+      tool: "odt_set_pull_request",
+      toolType: "workflow",
+      status: "completed",
+      input: { taskId: "task-1", number: 141 },
+      output: '{"ok":true}',
+    });
     try {
-      const title = view.getByRole("button", { name: "Set Pull Request details" });
-      expect(title.getAttribute("aria-expanded")).toBe("false");
+      expect(view.getByText("Set Pull Request")).toBeTruthy();
       expect(view.queryByText("Input")).toBeNull();
       expect(view.queryByText("Output")).toBeNull();
-
-      fireEvent.click(title);
-      expect(title.getAttribute("aria-expanded")).toBe("true");
-      expect(view.getByText("Input")).toBeTruthy();
-      expect(view.getByText("Output")).toBeTruthy();
-
-      fireEvent.click(title);
-      expect(title.getAttribute("aria-expanded")).toBe("false");
-      expect(view.queryByText("Input")).toBeNull();
     } finally {
       view.unmount();
     }
   });
 
-  test("shows a plain error text as the line of a failed call, with no Error box", () => {
+  test("shows a plain error text as the line of a failed call", () => {
     const view = render(
       <WorkflowToolMessage
         meta={{
@@ -202,6 +156,7 @@ describe("WorkflowToolMessage", () => {
           input: { taskId: "task-1", eventId: "build-blocked" },
           error: "build-blocked requires a note.",
         }}
+        messageId="message-error"
         odtTool="odt_apply_workflow_event"
         messageTimestamp={TIMESTAMP}
         timeLabel=""
@@ -211,15 +166,13 @@ describe("WorkflowToolMessage", () => {
     try {
       expect(view.getByText("build-blocked requires a note.").tagName).toBe("P");
       expect(view.getByText("FAILED")).toBeTruthy();
-      fireEvent.click(view.getByRole("button", { name: "Build Blocked details" }));
-      expect(view.getByText("Input")).toBeTruthy();
       expect(view.queryByText("Error")).toBeNull();
     } finally {
       view.unmount();
     }
   });
 
-  test("shows the message of an ODT error, and its JSON in a closed Error box after a press", () => {
+  test("shows the message of an ODT error, and keeps its JSON for the tool details", () => {
     const envelope = JSON.stringify(
       {
         ok: false,
@@ -244,6 +197,7 @@ describe("WorkflowToolMessage", () => {
           input: { taskId: "task-1", number: 143 },
           error: envelope,
         }}
+        messageId="message-envelope"
         odtTool="odt_set_pull_request"
         messageTimestamp={TIMESTAMP}
         timeLabel=""
@@ -255,17 +209,12 @@ describe("WorkflowToolMessage", () => {
       expect(view.getAllByText("Task task-1 already has pull request #141.")).toHaveLength(1);
       expect(view.container.textContent).not.toContain("ODT_HOST_BRIDGE_ERROR");
       expect(view.queryByText("Error")).toBeNull();
-
-      fireEvent.click(view.getByRole("button", { name: "Set Pull Request details" }));
-      const error = view.getByText("Error").closest("details");
-      expect(error?.open).toBe(false);
-      expect(error?.textContent).toContain("ODT_HOST_BRIDGE_ERROR");
     } finally {
       view.unmount();
     }
   });
 
-  test("shows the JSON of an ODT error that only the output holds once, in a closed Error box", () => {
+  test("shows the message of an ODT error that only the output holds", () => {
     const envelope = JSON.stringify({
       ok: false,
       error: { code: "ODT_HOST_BRIDGE_ERROR", message: "Pull request #143 was not found." },
@@ -282,11 +231,7 @@ describe("WorkflowToolMessage", () => {
     });
     try {
       expect(view.getAllByText("Pull request #143 was not found.")).toHaveLength(1);
-      fireEvent.click(view.getByRole("button", { name: "Set Pull Request details" }));
-      expect(view.queryByText("Output")).toBeNull();
-      const error = view.getByText("Error").closest("details");
-      expect(error?.open).toBe(false);
-      expect(error?.textContent).toContain("ODT_HOST_BRIDGE_ERROR");
+      expect(view.container.textContent).not.toContain("ODT_HOST_BRIDGE_ERROR");
     } finally {
       view.unmount();
     }
@@ -448,7 +393,7 @@ describe("WorkflowToolMessage", () => {
       }),
     );
 
-    expect(html).toContain(">Build Blocked</span>");
+    expect(html).toContain(">Build Blocked</p>");
     expect(html).not.toContain("The API key is missing.");
     expect(html).not.toContain("build-blocked");
     expect(html).toContain('aria-label="Running tool"');

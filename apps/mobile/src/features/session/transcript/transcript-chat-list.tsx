@@ -1,4 +1,9 @@
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import {
+  NO_TOOL_RUNS,
+  readToolRunClassifier,
+} from "@openducktor/frontend-core/sessions/transcript/tool-runs";
+import { useDevicePreferences } from "@/app-shell/app-services";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { type FlashListRef, type ListRenderItemInfo, type ViewToken } from "@shopify/flash-list";
 import { FlashList } from "@/ui/flash-list";
@@ -113,9 +118,16 @@ export const TranscriptChatList = memo(function TranscriptChatList({
   accessibilityActions,
   onAccessibilityAction,
 }: TranscriptChatListProps): ReactElement {
+  const groupToolCalls = useDevicePreferences((state) => state.preferences.groupToolCalls);
   const list = useMemo(
-    () => transcriptListItems(kind, rows, (row) => messageParts(row, presentToolCall)),
-    [kind, presentToolCall, rows],
+    () =>
+      transcriptListItems(
+        kind,
+        rows,
+        (row) => messageParts(row, presentToolCall),
+        groupToolCalls ? readToolRunClassifier(presentToolCall) : NO_TOOL_RUNS,
+      ),
+    [groupToolCalls, kind, presentToolCall, rows],
   );
   const { items } = list;
   useLayoutEffect(() => {

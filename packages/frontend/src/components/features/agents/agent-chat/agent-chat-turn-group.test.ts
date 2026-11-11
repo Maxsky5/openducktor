@@ -3,6 +3,12 @@ import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-se
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { presentRegularToolCall } from "./agent-chat-test-fixtures";
 import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
+import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import {
+  groupToolRuns,
+  readToolRunClassifier,
+} from "@openducktor/frontend-core/sessions/transcript/tool-runs";
+import { buildToolRunWindowRows, buildTurnItems } from "./agent-chat-tool-run-layout";
 import {
   type AgentChatTurnRowProps,
   type AgentChatTurnGroupProps,
@@ -10,6 +16,8 @@ import {
   areAgentChatTurnGroupPropsEqual,
   isAgentChatTurnRowStreamingAssistant,
 } from "./agent-chat-turn-group-comparator";
+
+const NO_FOLDS = { choices: new Map(), keptHidden: new Map() };
 
 const createSessionIdentity = (): AgentSessionIdentity => ({
   externalSessionId: "parent-session",
@@ -38,6 +46,7 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
   turn: {
     key: "turn-1",
     rows: [{ kind: "message", key: "parent-session:assistant-1", message: createMessage() }],
+    items: [],
     isActive: false,
     activeStreamingAssistantMessageId: null,
   },
@@ -46,6 +55,7 @@ const baseProps = (overrides: Partial<AgentChatTurnGroupProps> = {}): AgentChatT
     runtimeKind: "opencode",
     presentToolCall: presentRegularToolCall,
     supportedApprovalReplyOutcomes: null,
+    supportsRunningCommandOutput: false,
   },
   subagentPendingApprovalCountBySessionKey: {},
   subagentPendingQuestionCountBySessionKey: {},
@@ -62,6 +72,7 @@ const baseTurnRowProps = (
     runtimeKind: "opencode",
     presentToolCall: presentRegularToolCall,
     supportedApprovalReplyOutcomes: null,
+    supportsRunningCommandOutput: false,
   },
   subagentPendingApprovalCount: 0,
   subagentPendingQuestionCount: 0,
@@ -103,6 +114,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
           turn: {
             key: "turn-duration",
             rows: [{ kind: "turn_duration", key: "duration-1", durationMs: 1_000 }],
+            items: [],
             isActive: false,
             activeStreamingAssistantMessageId: null,
           },
@@ -112,6 +124,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
           turn: {
             key: "turn-duration",
             rows: [{ kind: "turn_duration", key: "duration-1", durationMs: 1_000 }],
+            items: [],
             isActive: false,
             activeStreamingAssistantMessageId: null,
           },
@@ -205,6 +218,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
       turn: {
         key: "turn-message",
         rows: [{ kind: "message", key: "message-row", message }],
+        items: [],
         isActive: false,
         activeStreamingAssistantMessageId: null,
       },
@@ -248,11 +262,57 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
     ).toBe(false);
   });
 
+  test("a changed call of a tool run invalidates the turn of the run", () => {
+    const classify = readToolRunClassifier(presentRegularToolCall);
+    const shellRow = (id: string, status: "running" | "completed"): AgentChatTranscriptRow => ({
+      kind: "message",
+      key: `parent-session:${id}`,
+      message: buildMessage("tool", `Tool ${id}`, {
+        id,
+        meta: {
+          kind: "tool",
+          partId: `${id}-part`,
+          callId: `${id}-call`,
+          tool: "bash",
+          toolType: "bash",
+          status,
+          input: { command: "bun test" },
+        },
+      }),
+    });
+    const shown = shellRow("bash-1", "completed");
+    const running = shellRow("bash-2", "running");
+    // The run is one row of the row window: its first call.
+    const turnOf = (rows: AgentChatTranscriptRow[]) => {
+      const windowRows = buildToolRunWindowRows(rows, groupToolRuns(rows, classify));
+      return {
+        ...baseProps().turn,
+        rows: windowRows.rows,
+        items: buildTurnItems(windowRows.rows, windowRows, NO_FOLDS, false),
+      };
+    };
+    const props = baseProps({ turn: turnOf([shown, running]) });
+
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({ ...props, turn: turnOf([shown, running]) }),
+      ),
+    ).toBe(true);
+    expect(
+      areAgentChatTurnGroupPropsEqual(
+        props,
+        baseProps({ ...props, turn: turnOf([shown, shellRow("bash-2", "completed")]) }),
+      ),
+    ).toBe(false);
+  });
+
   test("changed turn duration values invalidate turn groups", () => {
     const props = baseProps({
       turn: {
         key: "turn-duration",
         rows: [{ kind: "turn_duration", key: "duration-1", durationMs: 1_000 }],
+        items: [],
         isActive: false,
         activeStreamingAssistantMessageId: null,
       },
@@ -285,6 +345,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
             context: "Summary",
           },
         ],
+        items: [],
         isActive: false,
         activeStreamingAssistantMessageId: null,
       },
@@ -418,6 +479,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         rows: [
           { kind: "message", key: "parent-session:subagent-1", message: createSubagentMessage() },
         ],
+        items: [],
         isActive: false,
         activeStreamingAssistantMessageId: null,
       },
@@ -444,6 +506,7 @@ describe("areAgentChatTurnGroupPropsEqual", () => {
         rows: [
           { kind: "message", key: "parent-session:subagent-1", message: createSubagentMessage() },
         ],
+        items: [],
         isActive: false,
         activeStreamingAssistantMessageId: null,
       },

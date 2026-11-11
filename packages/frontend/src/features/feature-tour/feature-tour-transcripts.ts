@@ -122,9 +122,7 @@ const bashMessage = (
 
 /** The end of the Builder session of `TASKS.shortcut`: it checks and commits the QA fixes. */
 export const REVIEW_ROWS = transcriptRows("tour-review", [
-  readMessage("review-read-keys", "src/app/keyboard.ts", 11),
   bashMessage("review-typecheck", "bun run typecheck", 10, 3000),
-  bashMessage("review-lint", "bun run lint", 10, 1800),
   bashMessage("review-test", "bun test src/search", 9, 2400),
   bashMessage("review-commit", 'git commit -m "fix(search): ignore Alt and open dialogs"', 8, 300),
   assistantMessage(

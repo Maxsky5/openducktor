@@ -3,3 +3,7 @@ export const MOTION_EASE_OUT_POINTS = [0.22, 1, 0.36, 1] as const;
 
 /** The same curve as a CSS easing. The Web Animations API cannot read a CSS variable. */
 export const MOTION_EASE_OUT = `cubic-bezier(${MOTION_EASE_OUT_POINTS.join(", ")})`;
+
+/** True when the reader asks for less motion, so JavaScript motion does not start. */
+export const prefersReducedMotion = (): boolean =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;

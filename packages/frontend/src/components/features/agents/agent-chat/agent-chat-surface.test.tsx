@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   createChatSettingsFixture,
   createAgentSessionFixture,
@@ -22,41 +22,28 @@ import {
   buildSession,
 } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 
-test("keeps expanded tool output when returning to a session in another workspace", async () => {
+test("shows the tool details of a session again when the user returns to it", async () => {
   const alpha = model("/alpha");
   const beta = model("/beta");
   const view = render(<AgentChatSurface model={alpha} />);
   try {
-    await waitFor(() => expect(view.container.querySelector("details.group")).not.toBeNull(), {
-      timeout: 500,
-    });
     const container = alpha.thread.messagesContainerRef.current!;
-    const details = openDetails(container);
-    const output = openDetails(container, "Output");
+    await openToolDetails(container);
+    expect(screen.getByRole("complementary").textContent).toContain("Output of /alpha");
+
     view.rerender(<AgentChatSurface model={beta} />);
-    const betaContainer = beta.thread.messagesContainerRef.current!;
-    openDetails(betaContainer);
-    openDetails(betaContainer, "Output");
-    await waitFor(
-      () =>
-        expect(beta.thread.messagesContainerRef.current?.textContent).toContain("Output of /beta"),
-      { timeout: 500 },
-    );
+    expect(screen.queryByRole("complementary")).toBeNull();
+
     view.rerender(<AgentChatSurface model={alpha} />);
     expect(alpha.thread.messagesContainerRef.current === container).toBe(true);
-    expect(details.isConnected).toBe(true);
-    expect(details.open).toBe(true);
-    expect(output.isConnected).toBe(true);
-    expect(output.open).toBe(true);
-    expect(container.textContent).toContain("Output of /alpha");
+    expect(screen.getByRole("complementary").textContent).toContain("Output of /alpha");
     expect(container.textContent).toContain("2.0s");
-    expect(container.textContent).not.toContain("Output of /beta");
   } finally {
     view.unmount();
   }
 });
 
-test("keeps an expanded tool open and shows its completed result after a hidden session update", async () => {
+test("keeps the tool details open and shows the completed result after a hidden session update", async () => {
   const alpha = model("/alpha", "running");
   const beta = model("/beta");
   const source = createAgentSessionFixture({ ...alpha.thread.transcript.session! });
@@ -73,7 +60,8 @@ test("keeps an expanded tool open and shows its completed result after a hidden 
   );
   const view = render(content(alpha));
   try {
-    const details = openDetails(alpha.thread.messagesContainerRef.current!);
+    await openToolDetails(alpha.thread.messagesContainerRef.current!);
+    expect(screen.getByRole("complementary").textContent).toContain("Running");
     view.rerender(content(beta));
     const completed = model("/alpha");
     const result = completed.thread.transcript.session!.messages.items[0]!;
@@ -96,36 +84,26 @@ test("keeps an expanded tool open and shows its completed result after a hidden 
     };
     view.rerender(content(completed));
     const container = completed.thread.messagesContainerRef.current!;
-    await waitFor(
-      () =>
-        expect(
-          [...container.querySelectorAll("summary")].some(
-            (summary) => summary.textContent === "Output",
-          ),
-        ).toBe(true),
-      { timeout: 500 },
-    );
-    openDetails(container, "Output");
-    expect(details.isConnected).toBe(true);
-    expect(details.open).toBe(true);
-    expect(container.textContent).toContain("Output of /alpha");
-    expect(completed.thread.messagesContainerRef.current?.textContent).toContain("2.0s");
+    await waitFor(() => expect(container.textContent).toContain("2.0s"), { timeout: 500 });
+    expect(screen.getByRole("complementary").textContent).toContain("Output of /alpha");
+    expect(screen.getByRole("complementary").textContent).toContain("Succeeded");
   } finally {
     view.unmount();
     driver.restore();
   }
 });
 
-function openDetails(container: HTMLElement, label?: string): HTMLDetailsElement {
-  const details = [...container.querySelectorAll("details")].find(
-    (element) => label === undefined || element.querySelector("summary")?.textContent === label,
+/** Presses the tool row of the transcript, so the tool details panel shows its call. */
+async function openToolDetails(container: HTMLElement): Promise<void> {
+  const row = await waitFor(
+    () => {
+      const button = container.querySelector<HTMLButtonElement>("button[aria-pressed]");
+      if (!button) throw new Error("The transcript has no tool row with details.");
+      return button;
+    },
+    { timeout: 500 },
   );
-  if (!details) throw new Error("The tool row has no details.");
-  act(() => {
-    details.open = true;
-    fireEvent(details, new Event("toggle"));
-  });
-  return details;
+  act(() => fireEvent.click(row));
 }
 
 test("bounds retained transcripts and evicts the least recently visited session", async () => {

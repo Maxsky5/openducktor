@@ -84,4 +84,4 @@ export const showsInvalidTaskToolAlert = (
   task === null;
 
 export const INVALID_TASK_TOOL_RESULT_MESSAGE =
-  "OpenDucktor returned an invalid task result. Expand the tool output to inspect the response.";
+  "OpenDucktor returned an invalid task result. Open the tool details to inspect the response.";

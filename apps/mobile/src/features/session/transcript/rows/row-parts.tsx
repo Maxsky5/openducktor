@@ -17,7 +17,7 @@ import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { truncateForDisplay } from "../transcript-text";
-import { type Disclosure, useDisclosure } from "./disclosure";
+import { useDisclosure } from "./disclosure";
 
 /** The marker of a desktop `<details>` summary: a small chevron that turns down when open. */
 export function DisclosureMarker({
@@ -174,22 +174,20 @@ export const ToolLine = memo(function ToolLine({
   active,
   durationMs,
   timeLabel,
-  disclosure,
+  onPress,
   accessibilityLabel,
-  summaryIsError = false,
 }: {
   icon: IconName;
   name: string;
   summary: string;
-  /** The summary is the error message of a failed tool call: it wraps, in the error color. */
-  summaryIsError?: boolean | undefined;
   /** "middle" keeps both ends of a path in view. */
   summaryEllipsis?: "tail" | "middle" | undefined;
   tone: ToolLineTone;
   active: boolean;
   durationMs: number | null;
   timeLabel: string;
-  disclosure?: Disclosure | null | undefined;
+  /** Opens the details of the call in the tool details sheet, or null for a call without any. */
+  onPress?: (() => void) | null | undefined;
   accessibilityLabel: string;
 }): ReactElement {
   const { desktop } = useAppTheme();
@@ -202,13 +200,9 @@ export const ToolLine = memo(function ToolLine({
       </Text>
       {summary.length > 0 ? (
         <Text
-          numberOfLines={summaryIsError ? undefined : 1}
+          numberOfLines={1}
           ellipsizeMode={summaryEllipsis}
-          style={[
-            styles.lineText,
-            styles.lineSummary,
-            summaryIsError && { color: desktop.destructiveMuted },
-          ]}
+          style={[styles.lineText, styles.lineSummary]}
         >
           {summary}
         </Text>
@@ -218,7 +212,7 @@ export const ToolLine = memo(function ToolLine({
       <ToolTiming active={active} durationMs={durationMs} timeLabel={timeLabel} />
     </>
   );
-  if (!disclosure) {
+  if (!onPress) {
     return (
       <View
         style={[styles.lineTouch, styles.line, tone === "preparing" && styles.linePreparing]}
@@ -233,12 +227,12 @@ export const ToolLine = memo(function ToolLine({
   }
   return (
     <Touchable
-      feedback="none"
-      onPress={disclosure.toggle}
+      feedback="highlight"
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint={disclosure.open ? "Hides the details." : "Shows the details."}
-      accessibilityState={{ expanded: disclosure.open, busy: active }}
+      accessibilityHint="Shows the details."
+      accessibilityState={{ busy: active }}
       containerStyle={styles.lineTouch}
       style={[styles.line, tone === "preparing" && styles.linePreparing]}
     >
@@ -246,6 +240,18 @@ export const ToolLine = memo(function ToolLine({
     </Touchable>
   );
 });
+
+/**
+ * The desktop error preview of a failed tool call: the first line of its error, under the summary
+ * of the tool line. The details of the call hold the full error.
+ */
+export function ToolErrorPreview({ text }: { text: string }): ReactElement {
+  return (
+    <Text numberOfLines={1} style={styles.errorPreview}>
+      {text}
+    </Text>
+  );
+}
 
 /**
  * A desktop `<details>` box with a summary row: `rounded border` with the label in 12-point
@@ -351,11 +357,6 @@ export const StatusPill = memo(function StatusPill({
   );
 });
 
-/** The space before details under a tool line: the desktop `ml-5 mt-1 space-y-2`. */
-export function LineDetails({ children }: PropsWithChildren): ReactElement {
-  return <View style={styles.lineDetails}>{children}</View>;
-}
-
 /** The inset of tool details: the desktop `px-1` of the tool container and the `ml-5` of the details. */
 export const LINE_DETAILS_INSET = 24;
 
@@ -397,6 +398,15 @@ const styles = StyleSheet.create((theme) => ({
   lineText: { ...sansWeight("regular"), fontSize: 13, lineHeight: 18, flexShrink: 0 },
   lineSummary: { flex: 1, flexShrink: 1, minWidth: 0, color: theme.desktop.mutedForeground },
   lineSpacer: { flex: 1 },
+  // Under the tool name: the line padding, the 14-point icon, and the gap.
+  errorPreview: {
+    ...sansWeight("regular"),
+    fontSize: 12,
+    lineHeight: 16,
+    paddingLeft: theme.space.xs + 14 + LINE_GAP,
+    paddingRight: theme.space.xs,
+    color: theme.desktop.destructiveMuted,
+  },
   box: { borderWidth: 1, borderRadius: 4, overflow: "hidden" },
   boxSummary: {
     flexDirection: "row",
@@ -433,11 +443,4 @@ const styles = StyleSheet.create((theme) => ({
     textTransform: "uppercase",
   },
   pillMedium: sansWeight("medium"),
-  lineDetails: {
-    paddingLeft: LINE_DETAILS_INSET,
-    paddingRight: theme.space.xs,
-    paddingTop: theme.space.xs,
-    paddingBottom: theme.space.xs,
-    gap: theme.space.sm,
-  },
 }));

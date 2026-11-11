@@ -21,6 +21,7 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
         runtimeKind: null,
         presentToolCall: (toolName) => ({ kind: "regular", displayName: toolName }),
         supportedApprovalReplyOutcomes: null,
+        supportsRunningCommandOutput: false,
       },
       isSessionWorking: false,
       isInteractionEnabled: false,

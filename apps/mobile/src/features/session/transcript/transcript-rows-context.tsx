@@ -11,10 +11,14 @@ import type { RowStateStore } from "./transcript-row-state";
 import type { PresentToolCall } from "./transcript-row-type";
 import type { VisibleRowsStore } from "./transcript-visibility";
 
-/** The full diff or text of a file edit, which the reader opens from a row. */
+/**
+ * The full diff or text of a file edit, or the details of a tool call, which the reader opens from
+ * a row. The details of a call follow its live message, so they keep only its message ID.
+ */
 export type TranscriptFullView =
   | { kind: "diff"; title: string; rows: readonly DiffRow[] }
-  | { kind: "content"; title: string; code: string; language: CodeLanguage | null };
+  | { kind: "content"; title: string; code: string; language: CodeLanguage | null }
+  | { kind: "tool"; title: string; messageId: string };
 
 /**
  * The session facts and actions that transcript rows share. The values change only when the
@@ -30,6 +34,8 @@ export type TranscriptRowsContextValue = {
   presentToolCall: PresentToolCall;
   modelCatalog: AgentModelCatalog | null;
   supportsImageGeneration: boolean;
+  /** The runtime sends the output of a shell command while the command runs. */
+  supportsRunningCommandOutput: boolean;
   expandFileDiffsByDefault: boolean;
   /** The task of `odt-asset:` images in Markdown, for task sessions. */
   imageContext: TaskImageContext | null;

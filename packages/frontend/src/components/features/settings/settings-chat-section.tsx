@@ -96,6 +96,28 @@ export function SettingsChatSection({
       />
 
       <SettingsSwitchRow
+        title="Group tool calls"
+        description="Consecutive commands, file reads, searches, and other tool calls show as one group that you can fold. When disabled, each call shows as its own row. Changes apply after you save settings."
+        checked={chat.groupToolCalls}
+        disabled={disabled}
+        ariaLabel="Group tool calls in session transcripts"
+        onCheckedChange={(checked) =>
+          onUpdateChat((current) => ({ ...current, groupToolCalls: checked }))
+        }
+      />
+
+      <SettingsSwitchRow
+        title="Collapse finished tool calls"
+        description="A group of tool calls folds once all its calls ended and the agent wrote after it. A group that you open stays open. Needs grouped tool calls. Changes apply after you save settings."
+        checked={chat.collapseFinishedToolCalls}
+        disabled={disabled || !chat.groupToolCalls}
+        ariaLabel="Collapse finished tool call groups in session transcripts"
+        onCheckedChange={(checked) =>
+          onUpdateChat((current) => ({ ...current, collapseFinishedToolCalls: checked }))
+        }
+      />
+
+      <SettingsSwitchRow
         title="Show conversation minimap"
         description="Shows your messages beside session transcripts. Changes apply after you save settings."
         checked={chat.showConversationMinimap}

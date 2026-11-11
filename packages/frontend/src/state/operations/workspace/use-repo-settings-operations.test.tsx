@@ -476,6 +476,8 @@ describe("use-repo-settings-operations", () => {
     const explicitChatSettings = {
       steerMessagesByDefault: true,
       showThinkingMessages: true,
+      groupToolCalls: false,
+      collapseFinishedToolCalls: false,
       expandFileDiffsByDefault: false,
       diffStyle: "unified" as const,
       diffIndicators: "classic" as const,

@@ -1,12 +1,14 @@
 import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, type LucideIcon, Plus, X } from "lucide-react";
 import {
+  createContext,
   memo,
   type ReactElement,
   type ReactNode,
   type RefObject,
+  use,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -31,10 +33,12 @@ import { terminalTabLifecycle } from "@openducktor/frontend-core/terminals/termi
 import { cn } from "@/lib/utils";
 import {
   isToolTabKind,
+  isViewTabKind,
   PANEL_NAMES,
   PANEL_TAB_KIND_RULES,
   type PanelId,
   type ToolTabKind,
+  type ViewTabKind,
 } from "./panel-tab-kinds";
 import type { ResolvedPanelTab } from "./session-panel-layout";
 import { SessionPanelLauncher } from "./session-panel-launcher";
@@ -55,9 +59,20 @@ export type ToolTabView = {
   ariaLabel?: string | undefined;
   /** Renders over the tab icon. */
   indicator?: ReactNode;
+  /** Replaces the kind label and icon, for a tab that shows one item, such as a tool call. */
+  label?: string | undefined;
+  icon?: LucideIcon | undefined;
 };
 
-export type ToolTabViews = Partial<Record<ToolTabKind, ToolTabView>>;
+export type ToolTabViews = Partial<Record<ToolTabKind | ViewTabKind, ToolTabView>>;
+
+/**
+ * The views of the view-kind tabs of the page, such as the tool call that the transcript shows.
+ * The page gives them once at its root, so both of its panels show them.
+ */
+export const SessionPanelViewTabsContext = createContext<Partial<
+  Record<ViewTabKind, ToolTabView>
+> | null>(null);
 
 type SessionPanelProps = {
   model: SessionPanelModel;
@@ -71,9 +86,14 @@ const OTHER_PANEL = { right: "bottom", bottom: "right" } satisfies Record<PanelI
 /** One panel of a session page: a tab strip and the selected tab content. */
 export const SessionPanel = memo(function SessionPanel({
   model,
-  toolTabs,
+  toolTabs: pageToolTabs,
   isShown = true,
 }: SessionPanelProps): ReactElement {
+  const viewTabs = use(SessionPanelViewTabsContext);
+  const toolTabs = useMemo(
+    () => (viewTabs ? { ...pageToolTabs, ...viewTabs } : pageToolTabs),
+    [pageToolTabs, viewTabs],
+  );
   // The content stays mounted with its kept view and hides with it, so a switch paints the panel
   // without a mount. A dialog that stays open closes when its view hides.
   const hasTerminalTabs = model.tabs.some((tab) => tab.kind === "terminal");
@@ -266,7 +286,11 @@ function SessionPanelTabStrip({ model, toolTabs }: SessionPanelProps): ReactElem
                 panel={model.panel}
                 dropGap={dropGaps[index] ?? 0}
                 isSelected={tab.id === model.selectedTabId}
-                view={isToolTabKind(tab.kind) ? toolTabs?.[tab.kind] : undefined}
+                view={
+                  isToolTabKind(tab.kind) || isViewTabKind(tab.kind)
+                    ? toolTabs?.[tab.kind]
+                    : undefined
+                }
                 model={model}
               />
             ))}
@@ -387,7 +411,13 @@ function SessionPanelTab({
     data: tabData,
     transition: horizontalTabSortTransition,
   });
-  const presentation = panelTabPresentation(tab);
+  const kindPresentation = panelTabPresentation(tab);
+  const presentation: PanelTabPresentation = {
+    ...kindPresentation,
+    label: view?.label ?? kindPresentation.label,
+    icon: view?.icon ?? kindPresentation.icon,
+    ariaLabel: view?.label ?? kindPresentation.ariaLabel,
+  };
   const otherPanel = OTHER_PANEL[panel];
   const moves = useSessionPanelMoves();
   const canMoveToOtherPanel = moves.canMove(tab.id, otherPanel);
@@ -404,7 +434,10 @@ function SessionPanelTab({
           data-selected={isSelected ? "true" : "false"}
           data-dragging={isDragging ? "true" : "false"}
           className={cn(
-            "group relative inline-flex h-7 max-w-48 min-w-0 shrink-0 touch-none select-none items-center rounded-md transition-colors",
+            "group relative inline-flex h-7 min-w-0 shrink-0 touch-none select-none items-center rounded-md transition-colors",
+            // The label of a tab for one item, such as a command, is narrower, so the kind tabs
+            // beside it keep their labels.
+            view?.label ? "max-w-40" : "max-w-48",
             isSelected
               ? "bg-muted text-foreground ring-1 ring-border ring-inset"
               : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",

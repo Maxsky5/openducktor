@@ -15,10 +15,9 @@ import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranscriptRows } from "../transcript-rows-context";
-import { useDisclosure } from "./disclosure";
-import { LineDetails, ToolLine, type ToolLineTone } from "./row-parts";
+import { ToolErrorPreview, ToolLine, type ToolLineTone } from "./row-parts";
 import { toolIcon } from "./tool-icon";
-import { QuestionDetails, ToolDetails, ToolFileEdits, useCardDetailsColors } from "./tool-details";
+import { QuestionDetails, ToolFileEdits } from "./tool-details";
 
 const PATH_TOOL_TYPES: ReadonlySet<ToolMeta["toolType"]> = new Set(["read", "list", "file_edit"]);
 
@@ -37,11 +36,13 @@ const toolStateLabel = (phase: ToolLifecyclePhase, running: boolean): string => 
 
 /**
  * The desktop `RegularToolMessage`: one compact line with the tool name, its summary, and its
- * timing. A press opens the Input, Output, and Error boxes, as the desktop `<details>`. Question
- * answers and file edit cards show under the line.
+ * timing, and the error preview of a failed call under it. A press opens the input, output, and
+ * error of the call in the tool details sheet. Question answers and file edit cards show under
+ * the line.
  */
 export const ToolCallRow = memo(function ToolCallRow({
   meta,
+  messageId,
   messageContent,
   messageTimestamp,
   timeLabel,
@@ -49,23 +50,22 @@ export const ToolCallRow = memo(function ToolCallRow({
   rowKey,
 }: {
   meta: ToolMeta;
+  messageId: string;
   messageContent: string;
   messageTimestamp: string;
   timeLabel: string;
   displayName: string;
   rowKey: string;
 }): ReactElement {
-  const { workingDirectory } = useTranscriptRows();
-  const colors = useCardDetailsColors();
-  const disclosure = useDisclosure(false, rowKey);
+  const { workingDirectory, openFullView } = useTranscriptRows();
   const phase = getToolLifecyclePhase(meta);
-  const availability = readToolDetailAvailability(meta);
-  const expandable = hasExpandableToolDetails(availability);
+  const expandable = hasExpandableToolDetails(readToolDetailAvailability(meta));
   const summary = resolveRegularToolSummary(meta, messageContent, workingDirectory);
   const timing = readRegularToolTiming(meta, messageTimestamp);
   const preparing = isRegularToolPreparing(meta);
   const name = regularToolLineName(meta, displayName);
   const stateLabel = toolStateLabel(phase, timing.isActive && !preparing);
+  const errorLabel = summary.errorPreview === null ? "" : `: ${summary.errorPreview}`;
   return (
     <View style={styles.row}>
       <ToolLine
@@ -77,22 +77,12 @@ export const ToolCallRow = memo(function ToolCallRow({
         active={timing.isActive}
         durationMs={timing.durationMs}
         timeLabel={timeLabel}
-        disclosure={expandable ? disclosure : null}
-        accessibilityLabel={`${name}${summary.text.length > 0 ? `: ${summary.text}` : ""}${stateLabel}`}
-        summaryIsError={summary.isError}
+        onPress={
+          expandable ? () => openFullView({ kind: "tool", messageId, title: displayName }) : null
+        }
+        accessibilityLabel={`${name}${summary.text.length > 0 ? `: ${summary.text}` : ""}${stateLabel}${errorLabel}`}
       />
-      {expandable && disclosure.open ? (
-        <LineDetails>
-          <ToolDetails
-            meta={meta}
-            resetKey={rowKey}
-            hasInput={availability.hasInput}
-            hasOutput={availability.hasOutput}
-            errorText={availability.hasError ? (meta.error ?? null) : null}
-            colors={colors}
-          />
-        </LineDetails>
-      ) : null}
+      {summary.errorPreview === null ? null : <ToolErrorPreview text={summary.errorPreview} />}
       <QuestionDetails meta={meta} resetKey={rowKey} />
       <ToolFileEdits meta={meta} resetKey={rowKey} />
     </View>

@@ -49,7 +49,9 @@ import {
   TRANSCRIPT_ACTIONS,
   useTranscriptListJumps,
 } from "./use-transcript-list-jumps";
-import { useRowState } from "./use-transcript-rows";
+import { useRowState, useTranscriptRowsContext } from "./use-transcript-rows";
+import { TranscriptRowsProvider } from "./transcript-rows-context";
+import { createVisibleRowsStore } from "./transcript-visibility";
 
 export type TranscriptListProps = {
   rows: readonly AgentChatTranscriptRow[];
@@ -168,6 +170,15 @@ export function TranscriptList({
   const rowState = useRowState(activeStreamingMessageId, subagentPendingCountBySessionKey);
   const [fullView, setFullView] = useState<TranscriptFullView | null>(null);
   const closeFullView = useCallback(() => setFullView(null), []);
+  // The sheet sits beside the lists, so it gets its own context with the same session facts.
+  const [sheetVisibleRows] = useState(createVisibleRowsStore);
+  const sheetContext = useTranscriptRowsContext({
+    visibleRows: sheetVisibleRows,
+    rowState,
+    presentToolCall,
+    onOpenSubagent,
+    openFullView: setFullView,
+  });
   // Images and isolated pages in visible rows check their own position against this viewport.
   const {
     store: viewportStore,
@@ -321,7 +332,9 @@ export function TranscriptList({
           hasNewActivity={follow.hasNewActivity}
           onJumpToLatest={jumps.jumpToLatest}
         />
-        <TranscriptFullViewSheet view={fullView} onClose={closeFullView} />
+        <TranscriptRowsProvider value={sheetContext}>
+          <TranscriptFullViewSheet view={fullView} rows={rows} onClose={closeFullView} />
+        </TranscriptRowsProvider>
       </View>
     </ViewportProvider>
   );

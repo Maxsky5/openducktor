@@ -1714,6 +1714,8 @@ describe("createWorkspaceSettingsService", () => {
     const explicitChatSettings = {
       steerMessagesByDefault: true,
       showThinkingMessages: true,
+      groupToolCalls: false,
+      collapseFinishedToolCalls: true,
       expandFileDiffsByDefault: false,
       diffStyle: "unified" as const,
       diffIndicators: "none" as const,

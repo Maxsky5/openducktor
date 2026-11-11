@@ -390,4 +390,15 @@ describe("tool text display", () => {
     expect(shown.notice).toContain("20,005");
     expect(truncateForDisplay("short")).toEqual({ text: "short", truncated: false, notice: "" });
   });
+
+  test("keeps the end of a command output, where its newest lines are", () => {
+    const shown = truncateForDisplay(
+      `start${"x".repeat(MAX_DISPLAY_CHARACTERS)}end`,
+      undefined,
+      "end",
+    );
+    expect(shown.text.endsWith("end")).toBe(true);
+    expect(shown.text).not.toContain("start");
+    expect(shown.notice).toStartWith("Showing the last 20,000");
+  });
 });

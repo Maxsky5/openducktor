@@ -58,8 +58,10 @@ test("renders create_task through the real message card as a Kanban-style task",
   const document = new DOMParser().parseFromString(html, "text/html");
   const section = document.querySelector("section");
   const regularTool = section?.firstElementChild;
-  expect(regularTool?.querySelector("details > summary")?.textContent).toContain("create_task");
-  expect(regularTool?.querySelector("details[open]")).toBeNull();
+  expect(regularTool?.querySelector('[data-slot="tool-line"]')?.textContent).toContain(
+    "create_task",
+  );
+  expect(regularTool?.querySelector("details")).toBeNull();
   expect(regularTool?.nextElementSibling?.getAttribute("data-task-id")).toBe("task-1");
   const card = document.querySelector('[data-task-id="task-1"]');
   expect(card?.querySelector("h3")?.textContent).toBe("Add task search shortcut");
@@ -95,12 +97,12 @@ test("renders search_tasks as a regular tool with filters and counts, never task
   });
   expect(html).not.toContain("data-task-id");
   const document = new DOMParser().parseFromString(html, "text/html");
-  const summary = document.querySelector("section > div > details > summary");
+  const summary = document.querySelector('[data-slot="tool-line"]');
   expect(summary?.textContent).toContain(
     "5 results, 2 returned · title: login · status: open · type: feature · priority: P0 · tags: auth, web · limit: 2",
   );
   expect(document.querySelectorAll("h3")).toHaveLength(0);
-  expect(document.querySelector("details[open]")).toBeNull();
+  expect(document.querySelector("details")).toBeNull();
   const empty = renderTool("odt_search_tasks", {
     input: { limit: 10 },
     output: JSON.stringify({ results: [], limit: 10, totalCount: 0, hasMore: false }),
@@ -109,7 +111,7 @@ test("renders search_tasks as a regular tool with filters and counts, never task
   expect(empty).not.toContain("data-task-id");
 });
 
-test("keeps a hundred search results inside the regular collapsed output", () => {
+test("keeps a hundred search results out of the transcript", () => {
   const html = renderTool("odt_search_tasks", {
     input: { limit: 100 },
     output: JSON.stringify({
@@ -121,11 +123,11 @@ test("keeps a hundred search results inside the regular collapsed output", () =>
   });
   const document = new DOMParser().parseFromString(html, "text/html");
   expect(document.querySelectorAll("[data-task-id], h3")).toHaveLength(0);
-  expect(document.querySelector("section > div > details > summary")?.textContent).toContain(
+  expect(document.querySelector('[data-slot="tool-line"]')?.textContent).toContain(
     "500 results, 100 returned",
   );
-  expect(document.querySelectorAll("details")).toHaveLength(3);
-  expect(document.querySelector("details[open]")).toBeNull();
+  expect(document.querySelectorAll("details")).toHaveLength(0);
+  expect(html).not.toContain("task-99");
 });
 
 test("search shows filters while pending and does not invent a count on failure", () => {
@@ -137,7 +139,7 @@ test("search shows filters while pending and does not invent a count on failure"
       output: "malformed",
     });
     const document = new DOMParser().parseFromString(html, "text/html");
-    const summary = document.querySelector("section > div > details > summary")?.textContent;
+    const summary = document.querySelector('[data-slot="tool-line"]')?.textContent;
     if (status !== "error") expect(summary).toContain("status: open · limit: 2");
     expect(summary).not.toContain("results");
     if (status === "error") expect(summary).toContain("Search unavailable");
@@ -285,10 +287,9 @@ test.each(["not JSON", JSON.stringify({ task: { id: "fake", title: "Incomplete" 
   "reports invalid successful output without fabricating a task card",
   (output) => {
     const html = renderTool("odt_create_task", { output });
-    expect(html).toContain("invalid task result");
+    expect(html).toContain("invalid task result. Open the tool details");
     expect(html).not.toContain("Task created");
     expect(html).not.toContain("data-task-id");
-    expect(html).toContain("Output");
   },
 );
 
@@ -305,9 +306,11 @@ test("renders update_task through the real message card as a Kanban-style task",
   const document = new DOMParser().parseFromString(html, "text/html");
   const section = document.querySelector("section");
   const regularTool = section?.firstElementChild;
-  expect(regularTool?.querySelector("details > summary")?.textContent).toContain("update_task");
+  expect(regularTool?.querySelector('[data-slot="tool-line"]')?.textContent).toContain(
+    "update_task",
+  );
   expect(regularTool?.nextElementSibling?.getAttribute("data-task-id")).toBe("task-1");
-  expect(section?.querySelector("details[open]")).toBeNull();
+  expect(section?.querySelector("details")).toBeNull();
 });
 
 test("does not claim a task update before completion or after failure", () => {

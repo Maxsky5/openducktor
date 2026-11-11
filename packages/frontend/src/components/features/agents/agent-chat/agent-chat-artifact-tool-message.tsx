@@ -27,9 +27,9 @@ export const ArtifactToolMessage = ({
   ...props
 }: {
   meta: ToolMeta;
+  messageId: string;
   messageTimestamp: string;
   timeLabel: string;
-  sessionWorkingDirectory?: string | null | undefined;
 }): ReactElement => {
   const snapshot = useMemo(() => readArtifactToolCall(meta), [meta]);
   const taskId = snapshot.saved?.taskId ?? readArtifactToolTaskId(meta);

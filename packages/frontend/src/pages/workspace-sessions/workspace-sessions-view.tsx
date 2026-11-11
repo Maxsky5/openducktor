@@ -49,6 +49,10 @@ import { useMountedRef } from "@openducktor/frontend-core/lib/use-mounted-ref";
 import { useWorkspaceSessionNavigation } from "./use-workspace-session-navigation";
 import { useWorkspaceSessionSelection } from "./use-workspace-session-selection";
 import { useVisibleSessionId } from "./use-visible-session-id";
+import {
+  PageToolDetailsProvider,
+  usePageToolDetails,
+} from "@/features/session-panels/page-tool-details";
 
 export type WorkspaceSessionsViewState = {
   workspace: ActiveWorkspace;
@@ -143,12 +147,14 @@ export function WorkspaceSessions({
     [selectedId, workspace.workspaceId],
   );
   const browser = useBrowserPanelModel(browserOwner);
+  const toolDetails = usePageToolDetails(selectedId);
   const panels = useSessionPanels({
     owner: panelOwner,
     selectionKey: "chat",
     terminals,
     shortcutsEnabled: isActive && selectedId !== null,
     browser,
+    toolCallTab: toolDetails.toolCallTab,
   });
   const { selectedFile, onSelectedFileChange } = useSelectedFiles(
     workspace.workspaceId,
@@ -209,29 +215,31 @@ export function WorkspaceSessions({
       <WorkspaceSessionReadModelNotice />
       <WorkspaceSessionRecordsRefreshNotice error={recordsError} onRetry={retryRecords} />
       {archiveTarget === null && <WorkspaceSessionArchiveError error={archive.error} />}
-      <WorkspaceSessionActiveContent
-        workspace={workspace}
-        selected={selected}
-        isActive={isActive}
-        missingSessionId={missingSessionId}
-        onDismissMissing={() => updateNavigation({ sessionId: null })}
-        panels={panels}
-        selectedFile={selectedFile}
-        onSelectedFileChange={onSelectedFileChange}
-        onSafeToLeave={leaveRemovedChat}
-        hasSessions={sessions.length > 0}
-        onCreate={() => setCreating(true)}
-        viewControls={
-          <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
-        }
-        onArchive={(onCloseAutoFocus) => {
-          if (!selected) return;
-          archiveCloseAutoFocusRef.current = onCloseAutoFocus;
-          archive.reset();
-          setArchiveTarget(selected);
-        }}
-        isArchiving={archive.isPending}
-      />
+      <PageToolDetailsProvider details={toolDetails}>
+        <WorkspaceSessionActiveContent
+          workspace={workspace}
+          selected={selected}
+          isActive={isActive}
+          missingSessionId={missingSessionId}
+          onDismissMissing={() => updateNavigation({ sessionId: null })}
+          panels={panels}
+          selectedFile={selectedFile}
+          onSelectedFileChange={onSelectedFileChange}
+          onSafeToLeave={leaveRemovedChat}
+          hasSessions={sessions.length > 0}
+          onCreate={() => setCreating(true)}
+          viewControls={
+            <SessionViewControls bottom={panels.bottomToggle} right={panels.rightToggle} />
+          }
+          onArchive={(onCloseAutoFocus) => {
+            if (!selected) return;
+            archiveCloseAutoFocusRef.current = onCloseAutoFocus;
+            archive.reset();
+            setArchiveTarget(selected);
+          }}
+          isArchiving={archive.isPending}
+        />
+      </PageToolDetailsProvider>
       <OnSessionViewHide
         onHide={() => {
           if (archiveTarget !== null) setArchiveTarget(null);

@@ -8,23 +8,32 @@ export type Disclosure = {
 };
 
 /**
- * The reader's open and closed choices of one transcript, by part key. The list reuses row views
- * for other rows, so a choice lives here and not in the view: a part that scrolls away and back
- * keeps it.
+ * A choice of the reader: whether a part is open, or how many earlier calls of a tool run stay
+ * hidden. No choice is `undefined`.
+ */
+type ReaderChoice =
+  | { kind: "open"; open: boolean }
+  | { kind: "kept_hidden"; count: number }
+  | undefined;
+
+/**
+ * The reader's choices of one transcript, by part key. The list reuses row views for other rows,
+ * so a choice lives here and not in the view: a part that scrolls away and back keeps it.
  */
 export type DisclosureStore = {
-  read: (key: string) => boolean | undefined;
-  choose: (key: string, open: boolean) => void;
+  read: (key: string) => ReaderChoice;
+  choose: (key: string, choice: ReaderChoice) => void;
   subscribe: (key: string, listener: () => void) => () => void;
 };
 
 export const createDisclosureStore = (): DisclosureStore => {
-  const choices = new Map<string, boolean>();
+  const choices = new Map<string, NonNullable<ReaderChoice>>();
   const listeners = new Map<string, Set<() => void>>();
   return {
     read: (key) => choices.get(key),
-    choose(key, open) {
-      choices.set(key, open);
+    choose(key, choice) {
+      if (choice === undefined) choices.delete(key);
+      else choices.set(key, choice);
       for (const listener of Array.from(listeners.get(key) ?? [])) listener();
     },
     subscribe(key, listener) {
@@ -51,13 +60,7 @@ const RowLayoutContext = createContext<(() => void) | null>(null);
 
 export const RowLayoutProvider = RowLayoutContext;
 
-/**
- * The open state of a part that the reader opens with a press, as a desktop `<details>`. The part
- * follows `defaultOpen` until the reader presses it, so a part that gets content later, such as a
- * file edit whose diff arrives when the call ends, opens as it does after a reload. Each `key`
- * has its own choice. In the transcript list, a press measures the row again in the same frame.
- */
-export const useDisclosure = (defaultOpen: boolean, key: string): Disclosure => {
+const useReaderChoice = (key: string): [ReaderChoice, (choice: ReaderChoice) => void] => {
   const store = use(DisclosureStoreContext);
   if (!store) throw new Error("A disclosure needs the transcript disclosure store.");
   const layoutRow = use(RowLayoutContext);
@@ -67,10 +70,41 @@ export const useDisclosure = (defaultOpen: boolean, key: string): Disclosure => 
   );
   const read = useCallback(() => store.read(key), [key, store]);
   const choice = useSyncExternalStore(subscribe, read, read);
-  const open = choice ?? defaultOpen;
-  const toggle = useCallback(() => {
-    store.choose(key, !open);
-    layoutRow?.();
-  }, [key, layoutRow, open, store]);
+  const choose = useCallback(
+    (next: ReaderChoice) => {
+      store.choose(key, next);
+      layoutRow?.();
+    },
+    [key, layoutRow, store],
+  );
+  return [choice, choose];
+};
+
+/**
+ * The open state of a part that the reader opens with a press, as a desktop `<details>`. The part
+ * follows `defaultOpen` until the reader presses it, so a part that gets content later, such as a
+ * file edit whose diff arrives when the call ends, opens as it does after a reload. Each `key`
+ * has its own choice. In the transcript list, a press measures the row again in the same frame.
+ */
+export const useDisclosure = (defaultOpen: boolean, key: string): Disclosure => {
+  const [choice, choose] = useReaderChoice(key);
+  const open = choice?.kind === "open" ? choice.open : defaultOpen;
+  const toggle = useCallback(() => choose({ kind: "open", open: !open }), [choose, open]);
   return useMemo(() => ({ open, pressed: choice !== undefined, toggle }), [choice, open, toggle]);
+};
+
+/**
+ * The earlier calls of a long tool run that stay hidden after the reader showed some, or
+ * `undefined` while the run shows only its latest calls. A change measures the row again.
+ */
+export const useKeptHiddenCalls = (
+  key: string,
+): [keptHidden: number | undefined, choose: (keptHidden: number | undefined) => void] => {
+  const [choice, choose] = useReaderChoice(key);
+  const chooseKeptHidden = useCallback(
+    (count: number | undefined) =>
+      choose(count === undefined ? undefined : { kind: "kept_hidden", count }),
+    [choose],
+  );
+  return [choice?.kind === "kept_hidden" ? choice.count : undefined, chooseKeptHidden];
 };

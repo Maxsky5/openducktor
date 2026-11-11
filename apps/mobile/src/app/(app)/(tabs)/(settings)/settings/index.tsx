@@ -87,6 +87,12 @@ export default function SettingsScreen(): ReactElement {
                 value={preferences.showReasoning}
                 onValueChange={(showReasoning) => update({ showReasoning })}
               />
+              <SettingsSwitchRow
+                title="Group Tool Calls"
+                description="Consecutive commands, file reads, searches, and other tool calls show as one group that you can fold. Turn this off to show each call as its own row."
+                value={preferences.groupToolCalls}
+                onValueChange={(groupToolCalls) => update({ groupToolCalls })}
+              />
             </DividedCard>
           </SettingsSection>
           <AppVersionFooter version={APP_VERSION} />

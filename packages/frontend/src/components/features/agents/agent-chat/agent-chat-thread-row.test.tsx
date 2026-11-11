@@ -19,6 +19,7 @@ const createBaseProps = () => ({
     runtimeKind: "opencode" as const,
     presentToolCall: presentRegularToolCall,
     supportedApprovalReplyOutcomes: null,
+    supportsRunningCommandOutput: false,
   },
 });
 
