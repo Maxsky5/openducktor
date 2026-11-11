@@ -98,17 +98,6 @@ export const effectiveShortcut = (
   Object.hasOwn(preferences.overrides, id)
     ? preferences.overrides[id]!
     : defaultShortcut(id, platform, electron);
-const exactCombination = (left: ShortcutCombination, right: ShortcutCombination): boolean =>
-  left.ctrl === right.ctrl &&
-  left.meta === right.meta &&
-  left.alt === right.alt &&
-  left.shift === right.shift &&
-  left.key.kind === right.key.kind &&
-  (left.key.kind === "logical" && right.key.kind === "logical"
-    ? left.key.key.toLowerCase() === right.key.key.toLowerCase()
-    : left.key.kind === "number-row" &&
-      right.key.kind === "number-row" &&
-      left.key.digit === right.key.digit);
 const INPUT_EXCEPTIONS = new Set([
   "palette",
   "focus-task-search",
@@ -129,7 +118,7 @@ export const isApprovedInputException = (
 ): boolean => {
   const defaultValue = defaultShortcut(id, platform, electron);
   return (
-    INPUT_EXCEPTIONS.has(id) && defaultValue !== null && exactCombination(defaultValue, combination)
+    INPUT_EXCEPTIONS.has(id) && defaultValue !== null && shortcutsOverlap(defaultValue, combination)
   );
 };
 export const protectedInputReason = (

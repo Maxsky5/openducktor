@@ -1,7 +1,6 @@
 import { memo } from "react";
 import type { AppPlatform } from "@openducktor/contracts";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
-import { useCommandPaletteCommands } from "../command-palette/command-palette-registry";
 import {
   useCommandPaletteActions,
   type ActionArgs,
@@ -29,7 +28,6 @@ export const ShortcutDispatcher = memo(function ShortcutDispatcher({
   runAfterClose(run: () => void): void;
 }) {
   const { openSettings } = useSettingsModal();
-  const pageCommands = useCommandPaletteCommands();
   const { actions } = useCommandPaletteActions({
     scopeWorkspace: null,
     query: "",
@@ -42,7 +40,6 @@ export const ShortcutDispatcher = memo(function ShortcutDispatcher({
   });
   const { inputError, retry } = useShortcutDispatch({
     platform,
-    pageCommands,
     actions,
     isOpen,
     open,

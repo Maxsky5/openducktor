@@ -1,10 +1,7 @@
-import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
-import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useShortcutDispatch } from "@/features/shortcuts/use-shortcut-dispatch";
-import { CommandPaletteContext } from "@/features/command-palette/command-palette-context";
-import type { CommandPalettePageCommand } from "@/features/command-palette/command-palette-types";
-import { useCallback, type PropsWithChildren } from "react";
+import { type PropsWithChildren } from "react";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -46,34 +43,15 @@ const renderBar = ({
   const connection = createTestClientConnection();
   connection.queryClient.setQueryData(["keyboard-shortcuts"], { version: 1, overrides: {} });
   function ShortcutOwner({ children }: PropsWithChildren) {
-    const [commands, setCommands] = useState<CommandPalettePageCommand[]>([]);
-    const registerPageCommand = useCallback((command: CommandPalettePageCommand) => {
-      setCommands((current) => [...current, command]);
-      return () => setCommands((current) => current.filter((entry) => entry !== command));
-    }, []);
     useShortcutDispatch({
       platform,
-      pageCommands: commands,
       actions: [],
       isOpen: false,
       open: () => {},
       close: () => {},
       runAfterClose: (run) => run(),
     });
-    return (
-      <CommandPaletteRegistryContext
-        value={{
-          pageCommands: commands,
-          subscribe: () => () => {},
-          invalidatePageCommands: () => {},
-          registerPageCommand,
-        }}
-      >
-        <CommandPaletteContext value={{ platform, open: () => {}, registerPageCommand }}>
-          {children}
-        </CommandPaletteContext>
-      </CommandPaletteRegistryContext>
-    );
+    return children;
   }
   const latest = { filter: EMPTY_KANBAN_BOARD_FILTER };
   function Harness({ initial, labelOptions = [], isDisabled = false }: HarnessProps): ReactElement {
@@ -99,11 +77,11 @@ const renderBar = ({
     );
   }
   render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <ShortcutOwner>
         <Harness {...props} />
       </ShortcutOwner>
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   return {
     latest,

@@ -12,9 +12,9 @@ import {
   useCommandPaletteCommands,
 } from "./command-palette-registry";
 
-test("command updates do not rerender controls that only register commands", () => {
+test("command updates publish fresh snapshots without rerendering registration owners", async () => {
   let renders = 0;
-  let registry: NonNullable<ReturnType<typeof useRegistry>>;
+  let registry!: NonNullable<ReturnType<typeof useRegistry>>;
   function useRegistry() {
     return use(CommandPaletteRegistryContext);
   }
@@ -29,20 +29,41 @@ test("command updates do not rerender controls that only register commands", () 
     </CommandPaletteRegistryProvider>,
   );
   const before = renders;
-  let release: () => void;
-  act(() => {
-    release = registry.registerPageCommand({
-      id: "task-edit",
-      label: "Edit task",
-      icon: Command,
-      keywords: [],
-      run() {},
+  let notifications = 0;
+  const unsubscribe = registry.subscribe(() => notifications++);
+  const first = {
+    id: "task-edit" as const,
+    label: "Edit task",
+    icon: Command,
+    keywords: [],
+    run() {},
+  };
+  const second = { ...first, label: "Edit another task" };
+  try {
+    const empty = registry.pageCommands;
+    expect(registry.pageCommands).toBe(empty);
+    await act(async () => {
+      const releaseFirst = registry.registerPageCommand(first);
+      const releaseSecond = registry.registerPageCommand(second);
+      const added = registry.pageCommands;
+      expect(added).toEqual([first, second]);
+      expect(registry.pageCommands).toBe(added);
+      registry.invalidatePageCommands();
+      expect(registry.pageCommands).not.toBe(added);
+      expect(registry.pageCommands).toEqual(added);
+      releaseFirst();
+      expect(registry.pageCommands).toEqual([second]);
+      releaseSecond();
+      expect(registry.pageCommands).toEqual([]);
+      expect(added).toEqual([first, second]);
     });
-  });
-  act(() => registry.invalidatePageCommands());
-  act(() => release());
-  expect(renders).toBe(before);
-  view.unmount();
+    expect(empty).toEqual([]);
+    expect(notifications).toBe(1);
+    expect(renders).toBe(before);
+  } finally {
+    unsubscribe();
+    view.unmount();
+  }
 });
 
 test("changing another command label does not rerender an unchanged control", () => {

@@ -306,7 +306,7 @@ export function WorkspaceRail({
     });
   };
 
-  const selectShortcutWorkspace = (workspaceId: string) => {
+  const selectGuardedWorkspace = (workspaceId: string) => {
     if (workspaceId === activeWorkspace?.workspaceId) return;
     guardWorkspaceChange(
       async () => {
@@ -350,7 +350,7 @@ export function WorkspaceRail({
       target: { kind: "app" as const, key: "workspace-rail" },
       run: () => {
         const workspace = workspaces[index];
-        if (workspace) selectShortcutWorkspace(workspace.workspaceId);
+        if (workspace) selectGuardedWorkspace(workspace.workspaceId);
       },
     })),
     ...(["previous", "next"] as const).map((direction) => ({
@@ -370,7 +370,7 @@ export function WorkspaceRail({
               : workspaces.length - 1
             : (index + (direction === "next" ? 1 : -1) + workspaces.length) % workspaces.length;
         const workspace = workspaces[position];
-        if (workspace) selectShortcutWorkspace(workspace.workspaceId);
+        if (workspace) selectGuardedWorkspace(workspace.workspaceId);
       },
     })),
   ]);
@@ -404,21 +404,7 @@ export function WorkspaceRail({
                           suppressedSelectionWorkspaceIdRef.current === workspace.workspaceId
                         }
                         isSwitchingWorkspace={isSwitchingWorkspace}
-                        onSelectWorkspace={(workspaceId) => {
-                          if (workspaceId === activeWorkspace?.workspaceId) return;
-                          guardWorkspaceChange(
-                            async () => {
-                              try {
-                                await selectWorkspace(workspaceId);
-                                return true;
-                              } catch {
-                                return false;
-                              }
-                            },
-                            undefined,
-                            { waitForSuccess: true },
-                          );
-                        }}
+                        onSelectWorkspace={selectGuardedWorkspace}
                         onRequestCloseWorkspace={(workspace) =>
                           setLifecycleRequest({ action: "close", workspace })
                         }

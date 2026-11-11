@@ -143,7 +143,6 @@ type SessionPanelsInput = {
   /** Kinds that the rules allow but that the page cannot show now. */
   unavailableKinds?: ReadonlySet<ToolTabKind>;
   terminals: TerminalSessionsModel;
-  shortcutsEnabled?: boolean;
   /** The browser tabs of the owner. Without it, the panels offer no browser tabs and hide saved ones. */
   browser?: SessionPanelBrowserModel | null;
   /**

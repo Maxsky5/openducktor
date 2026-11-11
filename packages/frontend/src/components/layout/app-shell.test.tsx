@@ -1,9 +1,8 @@
-import { CommandPaletteRegistryProvider } from "@/features/command-palette/command-palette-registry";
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import {
   type ClientStorage,
@@ -386,163 +385,161 @@ function AppShellTestEnvironment({
   return (
     <MemoryRouter initialEntries={[options.initialEntry ?? "/kanban"]} useTransitions={false}>
       <CurrentRoute />
-      <CommandPaletteRegistryProvider>
-        <ClientConnectionProvider connection={connection}>
-          <ThemeProvider>
-            <ActiveWorkspaceContext.Provider
+      <ShortcutTestProviders connection={connection}>
+        <ThemeProvider>
+          <ActiveWorkspaceContext.Provider
+            value={{
+              activeWorkspace: currentActiveWorkspace,
+              setActiveWorkspace: setCurrentActiveWorkspace,
+            }}
+          >
+            <WorkspacePresenceContext.Provider
               value={{
-                activeWorkspace: currentActiveWorkspace,
-                setActiveWorkspace: setCurrentActiveWorkspace,
+                hasLoadedWorkspaceList: true,
+                workspaceRecordsAreCurrent: true,
+                isLoadingWorkspaces: false,
+                workspaceLoadError: null,
+                retryWorkspaces: async () => {},
+                ...options.workspacePresence,
+                hasWorkspaces,
               }}
             >
-              <WorkspacePresenceContext.Provider
-                value={{
-                  hasLoadedWorkspaceList: true,
-                  workspaceRecordsAreCurrent: true,
-                  isLoadingWorkspaces: false,
-                  workspaceLoadError: null,
-                  retryWorkspaces: async () => {},
-                  ...options.workspacePresence,
-                  hasWorkspaces,
-                }}
+              <WorkspaceStateContext.Provider
+                value={createWorkspaceState({
+                  workspaces,
+                  closedWorkspaces: options.closedOnly
+                    ? [{ ...activeWorkspace, isActive: false }]
+                    : (options.closedWorkspaces ?? []),
+                  incompleteRemovals: options.incompleteRemovals ?? [],
+                  activeWorkspace: currentWorkspace,
+                  commitWorkspaceProviderSetup: async (input) => ({
+                    workspace: await createWorkspace(localOnlyWorkspaceDetails(input)),
+                    registrationSaved: true,
+                    settingsSaved: true,
+                    credentialsSaved: true,
+                    phase: "complete",
+                    error: null,
+                  }),
+                  selectWorkspace: async (workspaceId) => {
+                    const selected = workspaces.find(
+                      (workspace) => workspace.workspaceId === workspaceId,
+                    );
+                    if (!selected) throw new Error(`Unknown workspace: ${workspaceId}`);
+                    setWorkspaces((current) =>
+                      current.map((workspace) => ({
+                        ...workspace,
+                        isActive: workspace.workspaceId === workspaceId,
+                      })),
+                    );
+                    setCurrentWorkspace({ ...selected, isActive: true });
+                    setCurrentActiveWorkspace(selected);
+                  },
+                })}
               >
-                <WorkspaceStateContext.Provider
-                  value={createWorkspaceState({
-                    workspaces,
-                    closedWorkspaces: options.closedOnly
-                      ? [{ ...activeWorkspace, isActive: false }]
-                      : (options.closedWorkspaces ?? []),
-                    incompleteRemovals: options.incompleteRemovals ?? [],
-                    activeWorkspace: currentWorkspace,
-                    commitWorkspaceProviderSetup: async (input) => ({
-                      workspace: await createWorkspace(localOnlyWorkspaceDetails(input)),
-                      registrationSaved: true,
-                      settingsSaved: true,
-                      credentialsSaved: true,
-                      phase: "complete",
-                      error: null,
-                    }),
-                    selectWorkspace: async (workspaceId) => {
-                      const selected = workspaces.find(
-                        (workspace) => workspace.workspaceId === workspaceId,
-                      );
-                      if (!selected) throw new Error(`Unknown workspace: ${workspaceId}`);
-                      setWorkspaces((current) =>
-                        current.map((workspace) => ({
-                          ...workspace,
-                          isActive: workspace.workspaceId === workspaceId,
-                        })),
-                      );
-                      setCurrentWorkspace({ ...selected, isActive: true });
-                      setCurrentActiveWorkspace(selected);
-                    },
-                  })}
+                <WorkspaceBranchStateContext.Provider
+                  value={createWorkspaceBranchState({ activeWorkspace: currentWorkspace })}
                 >
-                  <WorkspaceBranchStateContext.Provider
-                    value={createWorkspaceBranchState({ activeWorkspace: currentWorkspace })}
+                  <RuntimeDefinitionsContext.Provider
+                    value={{
+                      runtimeDefinitions: [],
+                      availableRuntimeDefinitions: [],
+                      agentRuntimes: settingsSnapshot.agentRuntimes,
+                      isLoadingRuntimeDefinitions: options.isLoadingRuntimeDefinitions ?? false,
+                      runtimeDefinitionsError: options.runtimeDefinitionsError ?? null,
+                      isLoadingRuntimeSettings: false,
+                      runtimeSettingsError: null,
+                      hasRuntimeSettingsSnapshot: true,
+                      refreshRuntimeSettings: async () => {},
+                      refreshRuntimeDefinitions: async () => [],
+                      loadRepoRuntimeCatalog: async () => {
+                        throw new Error("loadRepoRuntimeCatalog is not used in this test");
+                      },
+                      loadRepoRuntimeFileSearch: async () => {
+                        throw new Error("loadRepoRuntimeFileSearch is not used in this test");
+                      },
+                    }}
                   >
-                    <RuntimeDefinitionsContext.Provider
-                      value={{
-                        runtimeDefinitions: [],
-                        availableRuntimeDefinitions: [],
-                        agentRuntimes: settingsSnapshot.agentRuntimes,
-                        isLoadingRuntimeDefinitions: options.isLoadingRuntimeDefinitions ?? false,
-                        runtimeDefinitionsError: options.runtimeDefinitionsError ?? null,
-                        isLoadingRuntimeSettings: false,
-                        runtimeSettingsError: null,
-                        hasRuntimeSettingsSnapshot: true,
-                        refreshRuntimeSettings: async () => {},
-                        refreshRuntimeDefinitions: async () => [],
-                        loadRepoRuntimeCatalog: async () => {
-                          throw new Error("loadRepoRuntimeCatalog is not used in this test");
-                        },
-                        loadRepoRuntimeFileSearch: async () => {
-                          throw new Error("loadRepoRuntimeFileSearch is not used in this test");
-                        },
-                      }}
+                    <HostRuntimeStatusContext.Provider
+                      value={createHostRuntimeStatusContextValue({ statusByKind: {} })}
                     >
-                      <HostRuntimeStatusContext.Provider
-                        value={createHostRuntimeStatusContextValue({ statusByKind: {} })}
-                      >
-                        <DiagnosticsAutoOpenProvider>
-                          <ChecksStateContext.Provider value={createChecksState()}>
-                            <TasksStateContext.Provider
-                              value={createTasksState(
-                                options.tasksByRepoPath?.[currentWorkspace?.repoPath ?? ""],
-                              )}
-                            >
-                              <TaskControlContext.Provider value={taskControlValue}>
-                                <AgentSessionsContext.Provider
-                                  value={createAgentSessionsStore("/repo")}
-                                >
-                                  <NotificationContext.Provider value={notificationContextValue}>
-                                    <WorkspaceActivityContext.Provider
-                                      value={createWorkspaceActivityObserverStub()}
-                                    >
-                                      <WorkspacePreviewTransitionGuardProvider>
-                                        <FeatureTourProvider>
-                                          <SettingsModalProvider>
-                                            <DiagnosticsPanelProvider>
-                                              <TaskWorkflowActionsContext.Provider
-                                                value={createTaskWorkflowActionsFixture(
-                                                  options.taskWorkflowActions,
-                                                )}
-                                              >
-                                                <Routes>
+                      <DiagnosticsAutoOpenProvider>
+                        <ChecksStateContext.Provider value={createChecksState()}>
+                          <TasksStateContext.Provider
+                            value={createTasksState(
+                              options.tasksByRepoPath?.[currentWorkspace?.repoPath ?? ""],
+                            )}
+                          >
+                            <TaskControlContext.Provider value={taskControlValue}>
+                              <AgentSessionsContext.Provider
+                                value={createAgentSessionsStore("/repo")}
+                              >
+                                <NotificationContext.Provider value={notificationContextValue}>
+                                  <WorkspaceActivityContext.Provider
+                                    value={createWorkspaceActivityObserverStub()}
+                                  >
+                                    <WorkspacePreviewTransitionGuardProvider>
+                                      <FeatureTourProvider>
+                                        <SettingsModalProvider>
+                                          <DiagnosticsPanelProvider>
+                                            <TaskWorkflowActionsContext.Provider
+                                              value={createTaskWorkflowActionsFixture(
+                                                options.taskWorkflowActions,
+                                              )}
+                                            >
+                                              <Routes>
+                                                <Route
+                                                  element={
+                                                    <ManualPullRequestSyncProvider>
+                                                      <ManualMergeCheckProvider>
+                                                        <AppShell />
+                                                      </ManualMergeCheckProvider>
+                                                    </ManualPullRequestSyncProvider>
+                                                  }
+                                                >
                                                   <Route
+                                                    path="/kanban"
+                                                    element={<main>Kanban</main>}
+                                                  />
+                                                  <Route
+                                                    path="/sessions"
                                                     element={
-                                                      <ManualPullRequestSyncProvider>
-                                                        <ManualMergeCheckProvider>
-                                                          <AppShell />
-                                                        </ManualMergeCheckProvider>
-                                                      </ManualPullRequestSyncProvider>
+                                                      options.sessionContent ? (
+                                                        <div key={currentWorkspace?.workspaceId}>
+                                                          {options.sessionContent}
+                                                        </div>
+                                                      ) : (
+                                                        <main>Sessions</main>
+                                                      )
                                                     }
-                                                  >
-                                                    <Route
-                                                      path="/kanban"
-                                                      element={<main>Kanban</main>}
-                                                    />
-                                                    <Route
-                                                      path="/sessions"
-                                                      element={
-                                                        options.sessionContent ? (
-                                                          <div key={currentWorkspace?.workspaceId}>
-                                                            {options.sessionContent}
-                                                          </div>
-                                                        ) : (
-                                                          <main>Sessions</main>
-                                                        )
-                                                      }
-                                                    />
-                                                    <Route
-                                                      path="/onboarding"
-                                                      element={<Navigate to="/kanban" replace />}
-                                                    />
-                                                  </Route>
-                                                </Routes>
-                                                {/* `ApplicationOverlays` mounts the tour host. */}
-                                                <FeatureTourDialogHost />
-                                              </TaskWorkflowActionsContext.Provider>
-                                            </DiagnosticsPanelProvider>
-                                          </SettingsModalProvider>
-                                        </FeatureTourProvider>
-                                      </WorkspacePreviewTransitionGuardProvider>
-                                    </WorkspaceActivityContext.Provider>
-                                  </NotificationContext.Provider>
-                                </AgentSessionsContext.Provider>
-                              </TaskControlContext.Provider>
-                            </TasksStateContext.Provider>
-                          </ChecksStateContext.Provider>
-                        </DiagnosticsAutoOpenProvider>
-                      </HostRuntimeStatusContext.Provider>
-                    </RuntimeDefinitionsContext.Provider>
-                  </WorkspaceBranchStateContext.Provider>
-                </WorkspaceStateContext.Provider>
-              </WorkspacePresenceContext.Provider>
-            </ActiveWorkspaceContext.Provider>
-          </ThemeProvider>
-        </ClientConnectionProvider>
-      </CommandPaletteRegistryProvider>
+                                                  />
+                                                  <Route
+                                                    path="/onboarding"
+                                                    element={<Navigate to="/kanban" replace />}
+                                                  />
+                                                </Route>
+                                              </Routes>
+                                              {/* `ApplicationOverlays` mounts the tour host. */}
+                                              <FeatureTourDialogHost />
+                                            </TaskWorkflowActionsContext.Provider>
+                                          </DiagnosticsPanelProvider>
+                                        </SettingsModalProvider>
+                                      </FeatureTourProvider>
+                                    </WorkspacePreviewTransitionGuardProvider>
+                                  </WorkspaceActivityContext.Provider>
+                                </NotificationContext.Provider>
+                              </AgentSessionsContext.Provider>
+                            </TaskControlContext.Provider>
+                          </TasksStateContext.Provider>
+                        </ChecksStateContext.Provider>
+                      </DiagnosticsAutoOpenProvider>
+                    </HostRuntimeStatusContext.Provider>
+                  </RuntimeDefinitionsContext.Provider>
+                </WorkspaceBranchStateContext.Provider>
+              </WorkspaceStateContext.Provider>
+            </WorkspacePresenceContext.Provider>
+          </ActiveWorkspaceContext.Provider>
+        </ThemeProvider>
+      </ShortcutTestProviders>
     </MemoryRouter>
   );
 }

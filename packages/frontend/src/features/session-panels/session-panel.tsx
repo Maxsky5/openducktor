@@ -132,7 +132,6 @@ export const SessionPanel = memo(function SessionPanel({
       ? [
           {
             id: "close-panel-tab" as const,
-            label: "Close current panel tab",
             icon: X,
             keywords: ["close", "tab"],
             target: { kind: "panel" as const, key: model.tabIdBase },
@@ -146,7 +145,6 @@ export const SessionPanel = memo(function SessionPanel({
           },
           {
             id: "move-panel-tab" as const,
-            label: "Move tab to other panel",
             icon: Plus,
             keywords: ["move", "tab"],
             target: { kind: "panel" as const, key: model.tabIdBase },
@@ -161,7 +159,6 @@ export const SessionPanel = memo(function SessionPanel({
           },
           ...model.launcher.map((entry) => ({
             id: `panel:${entry.kind}` as const,
-            label: `Open ${PANEL_TAB_KIND_RULES[entry.kind].label}`,
             icon: Plus,
             keywords: ["tool", "tab"],
             target: { kind: "panel" as const, key: model.tabIdBase },

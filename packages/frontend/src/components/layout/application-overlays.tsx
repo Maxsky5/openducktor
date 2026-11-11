@@ -1,3 +1,4 @@
+import { ShortcutPreferencesProvider } from "@/features/shortcuts/shortcut-preferences-provider";
 import { CommandPaletteRegistryProvider } from "@/features/command-palette/command-palette-registry";
 import { type PropsWithChildren, type ReactElement, useCallback } from "react";
 import { AgentSessionTranscriptDialogHost } from "@/components/features/agents/agent-chat/use-agent-session-transcript-dialog";
@@ -39,31 +40,33 @@ function NotificationFailurePromptHost(): ReactElement {
 // Central composition layer for cross-page overlays that can be opened from anywhere in the app.
 export function ApplicationOverlays({ children }: PropsWithChildren): ReactElement {
   return (
-    <CommandPaletteRegistryProvider>
-      <FeatureTourProvider>
-        <SettingsModalProvider>
-          <DiagnosticsPanelProvider>
-            <NotificationFailurePromptHost />
-            <TaskWorkflowActionsProvider>
-              {/* One pool for the app, so page and workspace switches keep the warm diff workers. */}
-              <DiffWorkerProvider>
-                <AgentSessionTranscriptDialogHost>
-                  <NotificationNavigationRegistrar />
-                  <NotificationAttentionFocus />
-                  {children}
-                  <StartupNotifications />
-                  <AppUpdatePrompt />
-                </AgentSessionTranscriptDialogHost>
-                {/*
-                 * The tour opens from the shared Settings on every route, onboarding included. Its
-                 * Create task needs the task workflow actions, and its pictures show diffs.
-                 */}
-                <FeatureTourDialogHost />
-              </DiffWorkerProvider>
-            </TaskWorkflowActionsProvider>
-          </DiagnosticsPanelProvider>
-        </SettingsModalProvider>
-      </FeatureTourProvider>
-    </CommandPaletteRegistryProvider>
+    <ShortcutPreferencesProvider>
+      <CommandPaletteRegistryProvider>
+        <FeatureTourProvider>
+          <SettingsModalProvider>
+            <DiagnosticsPanelProvider>
+              <NotificationFailurePromptHost />
+              <TaskWorkflowActionsProvider>
+                {/* One pool for the app, so page and workspace switches keep the warm diff workers. */}
+                <DiffWorkerProvider>
+                  <AgentSessionTranscriptDialogHost>
+                    <NotificationNavigationRegistrar />
+                    <NotificationAttentionFocus />
+                    {children}
+                    <StartupNotifications />
+                    <AppUpdatePrompt />
+                  </AgentSessionTranscriptDialogHost>
+                  {/*
+                   * The tour opens from the shared Settings on every route, onboarding included. Its
+                   * Create task needs the task workflow actions, and its pictures show diffs.
+                   */}
+                  <FeatureTourDialogHost />
+                </DiffWorkerProvider>
+              </TaskWorkflowActionsProvider>
+            </DiagnosticsPanelProvider>
+          </SettingsModalProvider>
+        </FeatureTourProvider>
+      </CommandPaletteRegistryProvider>
+    </ShortcutPreferencesProvider>
   );
 }

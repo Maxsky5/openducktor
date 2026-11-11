@@ -1,16 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
-import { keyboardShortcutsQueryOptions } from "@openducktor/frontend-core/queries/keyboard-shortcuts";
+import { createContext, use } from "react";
+import type { UseQueryResult, UseMutationResult } from "@tanstack/react-query";
 import type { ShortcutPreferences } from "@openducktor/contracts";
+
+export const ShortcutPreferencesContext = createContext<{
+  query: UseQueryResult<ShortcutPreferences, Error>;
+  save: UseMutationResult<ShortcutPreferences, Error, ShortcutPreferences>;
+  updatesError: string | null;
+} | null>(null);
+
 export function useShortcutPreferences() {
-  const host = useHostClient();
-  const client = useQueryClient();
-  const options = keyboardShortcutsQueryOptions();
-  const query = useQuery(options);
-  const save = useMutation({
-    mutationFn: (preferences: ShortcutPreferences) =>
-      host.workspaceSaveKeyboardShortcuts(preferences),
-    onSuccess: (preferences) => client.setQueryData(options.queryKey, preferences),
-  });
-  return { query, save };
+  const preferences = use(ShortcutPreferencesContext);
+  if (!preferences) throw new Error("Shortcut preferences require ShortcutPreferencesProvider.");
+  return preferences;
 }

@@ -27,7 +27,8 @@ export function useCommandPaletteCommands(enabled = true): readonly CommandPalet
 /** Command readers subscribe without rerendering registration owners. */
 export function CommandPaletteRegistryProvider({ children }: PropsWithChildren) {
   const [registry] = useState<CommandPaletteRegistry>(() => {
-    let pageCommands: readonly CommandPalettePageCommand[] = [];
+    const commands = new Set<CommandPalettePageCommand>();
+    let snapshot: readonly CommandPalettePageCommand[] | null = null;
     const listeners = new Set<() => void>();
     let pending = false;
     const notify = () => {
@@ -40,7 +41,7 @@ export function CommandPaletteRegistryProvider({ children }: PropsWithChildren) 
     };
     return {
       get pageCommands() {
-        return pageCommands;
+        return (snapshot ??= [...commands]);
       },
       subscribe(listener) {
         listeners.add(listener);
@@ -49,15 +50,17 @@ export function CommandPaletteRegistryProvider({ children }: PropsWithChildren) 
         };
       },
       registerPageCommand(command) {
-        pageCommands = [...pageCommands, command];
+        commands.add(command);
+        snapshot = null;
         notify();
         return () => {
-          pageCommands = pageCommands.filter((entry) => entry !== command);
+          commands.delete(command);
+          snapshot = null;
           notify();
         };
       },
       invalidatePageCommands() {
-        pageCommands = [...pageCommands];
+        snapshot = null;
         notify();
       },
       shortcutLabels: createShortcutLabelStore(),

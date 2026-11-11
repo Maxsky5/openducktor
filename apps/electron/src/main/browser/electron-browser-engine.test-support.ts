@@ -1,5 +1,4 @@
 import { EventEmitter } from "node:events";
-import type { BrowserServerMessage } from "@openducktor/contracts";
 import type { BrowserEngineEvent, CdpPayload } from "@openducktor/host";
 import { createElectronBrowserEngine, type ElectronBrowserEngine } from "./electron-browser-engine";
 import type {
@@ -315,7 +314,6 @@ export type EngineHarness = {
   engine: ElectronBrowserEngine;
   viewPort: FakeViewPort;
   events: BrowserEngineEvent[];
-  rendererMessages: Array<{ hostId: number; message: BrowserServerMessage }>;
   revealed: string[];
   failures: string[];
   sessions: Map<string, FakePartitionSession>;
@@ -330,7 +328,6 @@ export type EngineHarness = {
 /** An engine with one loaded OpenDucktor window and a view port that records placements. */
 export const createEngineHarness = (devToolsUrl: string | null = null): EngineHarness => {
   const events: BrowserEngineEvent[] = [];
-  const rendererMessages: EngineHarness["rendererMessages"] = [];
   const revealed: string[] = [];
   const failures: string[] = [];
   const sessions = new Map<string, FakePartitionSession>();
@@ -353,7 +350,6 @@ export const createEngineHarness = (devToolsUrl: string | null = null): EngineHa
     downloadsDirectory: () => "/downloads",
     fileExists: () => false,
     showItemInFolder: (filePath) => revealed.push(filePath),
-    notifyRenderer: (hostId, message) => rendererMessages.push({ hostId, message }),
     devToolsFrontendUrl: () => devToolsUrl,
     decodePng: () => {
       throw new Error("The engine harness has no images. Test page screenshots on their own.");
@@ -378,7 +374,6 @@ export const createEngineHarness = (devToolsUrl: string | null = null): EngineHa
     engine,
     viewPort,
     events,
-    rendererMessages,
     revealed,
     failures,
     sessions,

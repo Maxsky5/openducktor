@@ -22,7 +22,7 @@ import { ShortcutDispatcher } from "../shortcuts/shortcut-dispatcher";
 import type { WorkspaceScopeAction, WorkspaceScopeTarget } from "@/types/workspace-scope";
 import { CommandPaletteContext, type CommandPaletteContextValue } from "./command-palette-context";
 import { CommandPaletteDialog } from "./command-palette-dialog";
-import type { CommandPaletteShell } from "./command-palette-types";
+import type { CommandPalettePageCommand, CommandPaletteShell } from "./command-palette-types";
 import { MergeCheckDialog } from "./merge-check-dialog";
 import { PullRequestSyncDialog } from "./pull-request-sync-dialog";
 import { useRecentItems } from "./recent-items";
@@ -111,6 +111,19 @@ export function CommandPaletteProvider({
     [open, platform, registerPageCommand, runPageCommand],
   );
   const previousFocus = useCallback(() => previousFocusRef.current, []);
+  const paletteCommands: CommandPalettePageCommand[] = [];
+  if (isOpen) {
+    const resolvedCommands = new Map<ShortcutActionId, CommandPalettePageCommand | null>();
+    for (const command of pageCommands) {
+      if (command.localOnly) continue;
+      if (!resolvedCommands.has(command.id))
+        resolvedCommands.set(
+          command.id,
+          resolvePageCommand(pageCommands, command.id, previousFocusRef.current, true),
+        );
+      if (resolvedCommands.get(command.id) === command) paletteCommands.push(command);
+    }
+  }
 
   return (
     <CommandPaletteContext value={value}>
@@ -131,16 +144,7 @@ export function CommandPaletteProvider({
         openScopeChoice={openScopeChoice}
         platform={platform}
         shell={shell}
-        pageCommands={
-          isOpen
-            ? pageCommands.filter(
-                (command) =>
-                  !command.localOnly &&
-                  resolvePageCommand(pageCommands, command.id, previousFocusRef.current, true) ===
-                    command,
-              )
-            : []
-        }
+        pageCommands={paletteCommands}
         close={close}
         runAfterClose={runAfterClose}
         runIntent={runIntent}

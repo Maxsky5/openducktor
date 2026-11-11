@@ -1,11 +1,10 @@
 import { useShortcutCatalogue } from "@/features/shortcuts/use-shortcut-catalogue";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   ShortcutCombination,
   ShortcutPreferences,
   ShortcutActionId,
 } from "@openducktor/contracts";
-import { recordShortcut } from "@openducktor/frontend-core/shortcuts/key-matching";
 import { Search, RotateCcw } from "lucide-react";
 import { SettingsShortcutRow } from "./settings-shortcut-row";
 import { Button } from "@/components/ui/button";
@@ -17,105 +16,35 @@ import {
   effectiveShortcut,
   validateShortcuts,
 } from "@/features/shortcuts/catalogue";
-import { shortcutInputFromEvent } from "@/features/shortcuts/dom-input";
-import { setShortcutRecording } from "@/features/shortcuts/recording";
+import { useShortcutRecorder } from "@/features/shortcuts/recording";
 import { useShortcutPreferences } from "@/features/shortcuts/use-shortcut-preferences";
 
 type ProposedShortcut = { id: ShortcutActionId; combination: ShortcutCombination | null };
 export function SettingsKeyboardShortcutsSection() {
-  const { query, save } = useShortcutPreferences();
+  const { query, save, updatesError } = useShortcutPreferences();
   const catalogue = useShortcutCatalogue(query.data);
   const [search, setSearch] = useState("");
   const [proposed, setProposed] = useState<ProposedShortcut | null>(null);
-  const [recording, setRecording] = useState<ShortcutActionId | null>(null);
-  const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
   const restoreFocus = useRef(false);
+  const platform = readDevicePlatform();
+  const electron = getShellBridge().browser.surface === "electron";
+  const recorder = useShortcutRecorder({
+    platform,
+    onRecorded: (id, combination) => {
+      setProposed({ id, combination });
+      setError(null);
+    },
+    onError: setError,
+  });
+  const { recording, preparing } = recorder;
   useLayoutEffect(() => {
     if (!restoreFocus.current || preparing || save.isPending) return;
     restoreFocus.current = false;
     opener.current?.focus();
   }, [preparing, save.isPending, proposed, resetOpen]);
-  const lifetime = useRef<{ mounted: boolean; request: symbol | null }>({
-    mounted: true,
-    request: null,
-  });
-  useEffect(() => {
-    const owner = lifetime.current;
-    owner.mounted = true;
-    const blur = () => {
-      if (owner.request) void endRecording();
-    };
-    window.addEventListener("blur", blur);
-    return () => {
-      window.removeEventListener("blur", blur);
-      owner.mounted = false;
-      if (!owner.request) return;
-      owner.request = null;
-      void setShortcutRecording(false).catch((cause) =>
-        console.error("Could not end shortcut recording.", cause),
-      );
-    };
-  }, []);
-  const platform = readDevicePlatform();
-  const electron = getShellBridge().browser.surface === "electron";
-  const endRecording = async () => {
-    if (!lifetime.current.request) return;
-    lifetime.current.request = null;
-    setPreparing(true);
-    setRecording(null);
-    try {
-      await setShortcutRecording(false);
-    } catch (cause) {
-      if (lifetime.current.mounted) setError(String(cause));
-    } finally {
-      if (lifetime.current.mounted) {
-        restoreFocus.current = true;
-        setPreparing(false);
-      }
-    }
-  };
-  useLayoutEffect(() => {
-    if (!recording || preparing) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (!lifetime.current.request) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (event.key === "Escape") {
-        void endRecording();
-        return;
-      }
-      const value = recordShortcut(shortcutInputFromEvent(event), platform);
-      if (!value) return;
-      setProposed({ id: recording, combination: value });
-      setError(null);
-      void endRecording();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-    };
-  }, [recording, preparing, platform]);
-  const beginRecording = async (id: ShortcutActionId, element: HTMLElement) => {
-    opener.current = element;
-    setRecording(id);
-    setPreparing(true);
-    setError(null);
-    const request = Symbol();
-    lifetime.current.request = request;
-    try {
-      await setShortcutRecording(true);
-      if (!lifetime.current.mounted || lifetime.current.request !== request) return;
-    } catch (cause) {
-      if (!lifetime.current.mounted || lifetime.current.request !== request) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
-      await endRecording();
-    } finally {
-      if (lifetime.current.mounted && lifetime.current.request === request) setPreparing(false);
-    }
-  };
   const persist = async (preferences: ShortcutPreferences) => {
     const problem = validateShortcuts(preferences, platform, electron, catalogue);
     if (problem) {
@@ -182,6 +111,11 @@ export function SettingsKeyboardShortcutsSection() {
         </Button>
       </div>
       {query.isPending && <p role="status">Loading shortcuts…</p>}
+      {updatesError && (
+        <p role="alert" className="text-sm text-destructive">
+          {updatesError}
+        </p>
+      )}
       {(query.error || validationError) && (
         <div
           role="alert"
@@ -281,8 +215,10 @@ export function SettingsKeyboardShortcutsSection() {
                 preparing={preparing}
                 proposed={proposed?.id === entry.id ? proposed : null}
                 onRecord={(element) => {
+                  opener.current = element;
                   setProposed(null);
-                  void beginRecording(entry.id, element);
+                  setError(null);
+                  void recorder.begin(entry.id, element);
                 }}
                 onClear={(element) => {
                   opener.current = element;
@@ -290,7 +226,7 @@ export function SettingsKeyboardShortcutsSection() {
                   setError(null);
                 }}
                 onCancel={() => {
-                  if (lifetime.current.request) void endRecording();
+                  if (recording || preparing) void recorder.cancel();
                   else {
                     setProposed(null);
                     setError(null);

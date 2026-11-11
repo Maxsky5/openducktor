@@ -7,7 +7,6 @@ import {
 import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import { useCommandPalettePageCommands } from "@/features/command-palette/command-palette-context";
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
-import { Command } from "lucide-react";
 import { Bot, BrainCog, Paperclip, Square } from "lucide-react";
 import {
   memo,
@@ -224,8 +223,6 @@ export function AgentChatComposer({
       ? [
           {
             id: "session-send" as const,
-            label: "Send message",
-            icon: Command,
             keywords: ["submit", "send"],
             target: { kind: "session", key: model.displayedSessionKey ?? "draft" },
             disabledReason: () =>
@@ -234,8 +231,6 @@ export function AgentChatComposer({
           },
           {
             id: "session-stop" as const,
-            label: "Stop run",
-            icon: Command,
             keywords: ["stop", "interrupt"],
             target: { kind: "session", key: model.displayedSessionKey ?? "draft" },
             disabledReason: () => (model.canStopSession ? null : "No run can be stopped."),
@@ -243,8 +238,6 @@ export function AgentChatComposer({
           },
           {
             id: "session-attach" as const,
-            label: "Attach files",
-            icon: Command,
             keywords: ["files", "attachment"],
             target: { kind: "session", key: model.displayedSessionKey ?? "draft" },
             disabledReason: () =>

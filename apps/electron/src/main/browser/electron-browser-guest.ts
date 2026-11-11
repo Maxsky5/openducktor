@@ -1,5 +1,4 @@
 import { routeGuestShortcut, focusShortcutGuest } from "../electron-shortcut-ipc";
-import { type BrowserForwardedShortcutId } from "@openducktor/contracts";
 import { type CdpEvent, attachCdpTargetSession } from "@openducktor/host";
 import { z } from "zod";
 import { refusedBrowserPageScheme } from "./electron-browser-policy";
@@ -100,7 +99,6 @@ export type BrowserGuestEvents = {
   /** True for panel guests. Popup windows keep their keys. */
   readonly forwardShortcuts: boolean;
   onSchemeRefused(scheme: string): void;
-  onShortcut(shortcut: BrowserForwardedShortcutId): void;
   /** Returns true when the page may unload once, after a Leave answer. */
   consumeUnloadAllowance(): boolean;
   onUnloadHeld(): void;

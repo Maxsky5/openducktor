@@ -2,14 +2,10 @@ import { ShortcutLabels } from "@/test-utils/shortcut-labels";
 import { Command } from "lucide-react";
 import { useCommandPalettePageCommand } from "../command-palette/command-palette-context";
 import { ShortcutButton } from "../shortcuts/shortcut-controls";
-import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useShortcutDispatch } from "../shortcuts/use-shortcut-dispatch";
-import {
-  CommandPaletteRegistryContext,
-  CommandPaletteRegistryProvider,
-  useCommandPaletteCommands,
-} from "../command-palette/command-palette-registry";
+import { CommandPaletteRegistryContext } from "../command-palette/command-palette-registry";
 import { CommandPaletteContext } from "../command-palette/command-palette-context";
 import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
 import { describe, expect, mock, spyOn, test } from "bun:test";
@@ -166,7 +162,6 @@ describe("SessionPanel", () => {
       });
       useShortcutDispatch({
         platform: "darwin",
-        pageCommands: useCommandPaletteCommands(),
         actions: [],
         isOpen: false,
         open: () => {},
@@ -180,22 +175,20 @@ describe("SessionPanel", () => {
       );
     }
     const view = render(
-      <ClientConnectionProvider connection={connection}>
-        <CommandPaletteRegistryProvider>
-          <Routing />
-          <SessionPanel
-            model={createSessionPanelFixture({
-              tabs: [
-                { id: "files", kind: "files" },
-                { id: "diffs", kind: "diffs" },
-              ],
-              selectedTabId: "files",
-              onClose: close,
-            })}
-            toolTabs={{ files: { content: <input aria-label="Find a file" /> } }}
-          />
-        </CommandPaletteRegistryProvider>
-      </ClientConnectionProvider>,
+      <ShortcutTestProviders connection={connection}>
+        <Routing />
+        <SessionPanel
+          model={createSessionPanelFixture({
+            tabs: [
+              { id: "files", kind: "files" },
+              { id: "diffs", kind: "diffs" },
+            ],
+            selectedTabId: "files",
+            onClose: close,
+          })}
+          toolTabs={{ files: { content: <input aria-label="Find a file" /> } }}
+        />
+      </ShortcutTestProviders>,
     );
     try {
       const tab = screen.getByRole("tab", { name: "Files" });

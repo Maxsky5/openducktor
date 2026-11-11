@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { registerShortcutRecorder } from "@/features/shortcuts/recording";
 import type { ShortcutPreferences } from "@openducktor/contracts";
@@ -25,9 +25,9 @@ test("records, validates, saves, clears and resets shortcuts through Settings", 
   });
   const release = registerShortcutRecorder(async () => {});
   const view = render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <SettingsKeyboardShortcutsSection />
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   const record = async (key: string, code: string, shiftKey = false) => {
     fireEvent.click(screen.getByRole("button", { name: "Record shortcut for Toggle sidebar" }));
@@ -56,17 +56,21 @@ test("records, validates, saves, clears and resets shortcuts through Settings", 
     expect(document.activeElement?.getAttribute("aria-label")).toBe(
       "Record shortcut for Toggle sidebar",
     );
-    expect(
-      screen.getByRole("button", { name: "Record shortcut for Toggle sidebar" }).textContent,
-    ).toBe("CtrlShiftF9");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Record shortcut for Toggle sidebar" }).textContent,
+      ).toBe("CtrlShiftF9"),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Clear shortcut for Toggle sidebar" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
     });
     expect(write.mock.calls[1]![0].overrides.sidebar).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Record shortcut for Toggle sidebar" }).textContent,
-    ).toBe("Unassigned");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Record shortcut for Toggle sidebar" }).textContent,
+      ).toBe("Unassigned"),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Reset all shortcuts" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(write).toHaveBeenCalledTimes(2);
@@ -102,9 +106,9 @@ test("can clear an invalid saved assignment without changing other shortcuts", a
     },
   });
   const view = render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <SettingsKeyboardShortcutsSection />
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   try {
     expect(screen.getByText("This workflow action is not available on this host.")).toBeTruthy();

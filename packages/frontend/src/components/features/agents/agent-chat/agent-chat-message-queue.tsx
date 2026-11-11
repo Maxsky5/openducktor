@@ -212,7 +212,6 @@ export function AgentChatMessageQueuePauseNotice({
     active && pause && model.queue
       ? {
           id: "session-resume-queue" as const,
-          label: "Resume queue",
           icon: Play,
           keywords: ["resume", "queue", "paused"],
           target: { kind: "session", key: model.queue.target.externalSessionId },

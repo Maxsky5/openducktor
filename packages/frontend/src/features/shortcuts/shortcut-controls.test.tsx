@@ -4,13 +4,10 @@ import { expect, test, spyOn } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import type { ShortcutPreferences } from "@openducktor/contracts";
-import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { SidebarNavigation } from "@/components/layout/sidebar/sidebar-navigation";
-import {
-  CommandPaletteRegistryProvider,
-  useCommandPaletteCommands,
-} from "../command-palette/command-palette-registry";
+import {} from "../command-palette/command-palette-registry";
 import { ShortcutButton } from "./shortcut-controls";
 import { useShortcutDispatch } from "./use-shortcut-dispatch";
 import { useShortcutPreferences } from "./use-shortcut-preferences";
@@ -44,7 +41,6 @@ test("shared controls follow committed assignments across the palette subtree an
   function RoutingOwner() {
     useShortcutDispatch({
       platform: "darwin",
-      pageCommands: useCommandPaletteCommands(),
       actions: ids.map((id) => ({
         key: `action:${id}`,
         label: id,
@@ -76,20 +72,18 @@ test("shared controls follow committed assignments across the palette subtree an
     );
   }
   const tree = (ownerKey: number) => (
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <MemoryRouter>
-        <CommandPaletteRegistryProvider>
-          <RoutingOwner key={ownerKey} />
-          <SidebarNavigation />
-          <ShortcutButton shortcutId="new-task" title="New task">
-            Create
-          </ShortcutButton>
-          <ShortcutButton shortcutId="new-task" title="Unavailable task" disabled>
-            Unavailable
-          </ShortcutButton>
-        </CommandPaletteRegistryProvider>
+        <RoutingOwner key={ownerKey} />
+        <SidebarNavigation />
+        <ShortcutButton shortcutId="new-task" title="New task">
+          Create
+        </ShortcutButton>
+        <ShortcutButton shortcutId="new-task" title="Unavailable task" disabled>
+          Unavailable
+        </ShortcutButton>
       </MemoryRouter>
-    </ClientConnectionProvider>
+    </ShortcutTestProviders>
   );
   const view = render(tree(0));
   try {
@@ -139,7 +133,6 @@ test("only the focused message advertises and receives its fork shortcut", async
   function Routing() {
     useShortcutDispatch({
       platform: "darwin",
-      pageCommands: useCommandPaletteCommands(),
       actions: [],
       isOpen: false,
       open: () => {},
@@ -149,24 +142,22 @@ test("only the focused message advertises and receives its fork shortcut", async
     return null;
   }
   const view = render(
-    <ClientConnectionProvider connection={connection}>
-      <CommandPaletteRegistryProvider>
-        <Routing />
-        <AgentChatForkActionsContext
-          value={{
-            disabledReason: null,
-            isPending: () => false,
-            onFork: (point) => calls.push(point.messageId),
-          }}
-        >
-          {["A", "B"].map((id) => (
-            <div key={id} data-message-owner tabIndex={-1} data-testid={`message-${id}`}>
-              <AgentChatForkButton point={{ messageId: id }} />
-            </div>
-          ))}
-        </AgentChatForkActionsContext>
-      </CommandPaletteRegistryProvider>
-    </ClientConnectionProvider>,
+    <ShortcutTestProviders connection={connection}>
+      <Routing />
+      <AgentChatForkActionsContext
+        value={{
+          disabledReason: null,
+          isPending: () => false,
+          onFork: (point) => calls.push(point.messageId),
+        }}
+      >
+        {["A", "B"].map((id) => (
+          <div key={id} data-message-owner tabIndex={-1} data-testid={`message-${id}`}>
+            <AgentChatForkButton point={{ messageId: id }} />
+          </div>
+        ))}
+      </AgentChatForkActionsContext>
+    </ShortcutTestProviders>,
   );
   const buttons = screen.getAllByRole("button", { name: "Fork from this reply" });
   const rects = buttons.map((button) =>

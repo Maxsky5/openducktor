@@ -152,7 +152,6 @@ export function WorkspaceSessions({
     owner: panelOwner,
     selectionKey: "chat",
     terminals,
-    shortcutsEnabled: isActive && selectedId !== null,
     browser,
     toolCallTab: toolDetails.toolCallTab,
   });

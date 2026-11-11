@@ -1,7 +1,4 @@
 import type { ShortcutActionId } from "@openducktor/contracts";
-import { useHostConnection } from "@openducktor/frontend-core/connection/client-connection-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { keyboardShortcutsQueryOptions } from "@openducktor/frontend-core/queries/keyboard-shortcuts";
 import { useShortcutCatalogue } from "./use-shortcut-catalogue";
 import type { AppPlatform, ShortcutRoute, EmbeddedShortcutEvent } from "@openducktor/contracts";
 import {
@@ -15,14 +12,14 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { CommandPaletteRegistryContext } from "../command-palette/command-palette-registry";
+import {
+  CommandPaletteRegistryContext,
+  useCommandPaletteCommands,
+} from "../command-palette/command-palette-registry";
 import { matchesShortcut, shortcutLabel } from "@openducktor/frontend-core/shortcuts/key-matching";
 import { getShellBridge } from "@/lib/shell-bridge";
 import { hasOpenDialog, openDialogCount, subscribeOpenDialogs } from "@/components/ui/open-dialogs";
-import type {
-  CommandPalettePageCommand,
-  PaletteAction,
-} from "../command-palette/command-palette-types";
+import type { PaletteAction } from "../command-palette/command-palette-types";
 import { commandIdFromPalette, effectiveShortcut, validateShortcuts } from "./catalogue";
 import { isProtectedFocus, resolvePageCommand } from "./command-resolution";
 import { shortcutInputFromEvent } from "./dom-input";
@@ -35,7 +32,6 @@ import { dismissShortcutPortal } from "./shortcut-focus";
 
 export function useShortcutDispatch({
   platform,
-  pageCommands,
   actions,
   isOpen,
   open,
@@ -43,7 +39,6 @@ export function useShortcutDispatch({
   runAfterClose,
 }: {
   platform: AppPlatform;
-  pageCommands: readonly CommandPalettePageCommand[];
   actions: readonly PaletteAction[];
   isOpen: boolean;
   open(): void;
@@ -51,43 +46,8 @@ export function useShortcutDispatch({
   runAfterClose(run: () => void): void;
 }) {
   const registry = use(CommandPaletteRegistryContext);
-  const hostConnection = useHostConnection();
-  const queryClient = useQueryClient();
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
-  useEffect(() => {
-    let disposed = false;
-    let release: (() => void) | undefined;
-    void hostConnection
-      .subscribeRunEvents((event) => {
-        if (
-          ("type" in event && event.type === "keyboard_shortcuts_saved") ||
-          ("__openducktorConnectionControl" in event &&
-            event.kind === "reconnected" &&
-            event.missedEvents)
-        ) {
-          return queryClient.invalidateQueries({
-            queryKey: keyboardShortcutsQueryOptions().queryKey,
-            exact: true,
-          });
-        }
-      })
-      .then(
-        (stop) => {
-          if (disposed) stop();
-          else release = stop;
-        },
-        (cause) => {
-          if (!disposed)
-            setSubscriptionError(
-              `Shortcut updates are unavailable. Reload the app to reconnect. ${String(cause)}`,
-            );
-        },
-      );
-    return () => {
-      disposed = true;
-      release?.();
-    };
-  }, [hostConnection, queryClient]);
+  if (!registry) throw new Error("Shortcut dispatch requires CommandPaletteRegistryProvider.");
+  const pageCommands = useCommandPaletteCommands();
   const [retryRevision, setRetryRevision] = useState(0);
   const overlays = useSyncExternalStore(subscribeOpenDialogs, openDialogCount, openDialogCount);
   const preferences = useShortcutPreferences();
@@ -139,12 +99,7 @@ export function useShortcutDispatch({
       (isOpen && id !== "palette" && definition.context !== "task" && definition.context !== "chat")
     )
       return null;
-    const localCommand = resolvePageCommand(
-      registry ? registry.pageCommands : pageCommands,
-      id,
-      focus,
-      isOpen,
-    );
+    const localCommand = resolvePageCommand(registry.pageCommands, id, focus, isOpen);
     const overlay = !isOpen && hasOpenDialog();
     if (overlay && !localCommand?.focusRoot?.()?.closest('[role="dialog"], [role="alertdialog"]'))
       return null;
@@ -385,7 +340,7 @@ export function useShortcutDispatch({
   useLayoutEffect(() => () => labelStore?.replace(new Map()), [labelStore]);
   return {
     labelForCommand,
-    inputError: validationError ?? subscriptionError ?? native.error ?? frames.error ?? null,
+    inputError: validationError ?? preferences.updatesError ?? native.error ?? frames.error ?? null,
     retry: () => {
       if (validationError) {
         void preferences.query.refetch();

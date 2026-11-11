@@ -182,18 +182,13 @@ function FileExplorerRootPathHeader({ rootPath }: { rootPath: string }): ReactEl
     errorLogContext: "TaskExecutionFileExplorerPanel.copyWorkingDirectory",
   });
 
-  const root = useRef<HTMLDivElement>(null);
-  const shortcutOwner = useLocalShortcuts(root, [
-    {
-      id: "file-copy-path" as const,
-      run: () => {
-        void copyToClipboard(rootPath);
-      },
-    },
-  ]);
   const copyWorkingDirectory = useCallback(() => {
     void copyToClipboard(rootPath);
   }, [copyToClipboard, rootPath]);
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutOwner = useLocalShortcuts(root, [
+    { id: "file-copy-path" as const, run: copyWorkingDirectory },
+  ]);
 
   return (
     <ShortcutScope owners={[shortcutOwner]}>

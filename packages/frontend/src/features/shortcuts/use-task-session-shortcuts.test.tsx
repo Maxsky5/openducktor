@@ -4,17 +4,14 @@ import { buildWorkflowModelContext } from "@/pages/agents/use-agent-studio-page-
 import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { afterEach, expect, mock, test } from "bun:test";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
-import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import {
   createTaskCardFixture,
   createTaskWorkflowActionsFixture,
 } from "@/test-utils/shared-test-fixtures";
-import {
-  CommandPaletteRegistryProvider,
-  useCommandPaletteCommands,
-} from "../command-palette/command-palette-registry";
+import {} from "../command-palette/command-palette-registry";
 import { useShortcutDispatch } from "./use-shortcut-dispatch";
 import { TaskSessionShortcuts } from "./task-session-shortcuts";
 
@@ -33,7 +30,6 @@ afterEach(cleanup);
 function Input() {
   useShortcutDispatch({
     platform: "darwin",
-    pageCommands: useCommandPaletteCommands(),
     actions: [],
     isOpen: false,
     open: () => {},
@@ -64,19 +60,17 @@ test("editing follows the visible loaded task without another task or session re
     );
   }
   const tree = (task: typeof first) => (
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <TaskWorkflowActionsContext value={actions}>
-        <CommandPaletteRegistryProvider>
-          <Input />
-          <SessionViewContext value={{ id: "first", isActive: task.id === first.id }}>
-            <VisibleTask task={first} />
-          </SessionViewContext>
-          <SessionViewContext value={{ id: "second", isActive: task.id === second.id }}>
-            <VisibleTask task={second} />
-          </SessionViewContext>
-        </CommandPaletteRegistryProvider>
+        <Input />
+        <SessionViewContext value={{ id: "first", isActive: task.id === first.id }}>
+          <VisibleTask task={first} />
+        </SessionViewContext>
+        <SessionViewContext value={{ id: "second", isActive: task.id === second.id }}>
+          <VisibleTask task={second} />
+        </SessionViewContext>
       </TaskWorkflowActionsContext>
-    </ClientConnectionProvider>
+    </ShortcutTestProviders>
   );
   const view = render(tree(first));
   await act(async () => {});
@@ -127,23 +121,21 @@ test("an assigned session workflow action uses the visible header handler and it
   });
   const actions = createTaskWorkflowActionsFixture();
   const tree = (pending: boolean) => (
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <TaskWorkflowActionsContext value={actions}>
-        <CommandPaletteRegistryProvider>
-          <Input />
-          <TaskSessionShortcuts
-            task={task}
-            sessions={[]}
-            header={{
-              ...header,
-              quickActions: workflow.quickActions,
-              onQuickAction,
-              isCreatingSession: pending,
-            }}
-          />
-        </CommandPaletteRegistryProvider>
+        <Input />
+        <TaskSessionShortcuts
+          task={task}
+          sessions={[]}
+          header={{
+            ...header,
+            quickActions: workflow.quickActions,
+            onQuickAction,
+            isCreatingSession: pending,
+          }}
+        />
       </TaskWorkflowActionsContext>
-    </ClientConnectionProvider>
+    </ShortcutTestProviders>
   );
   const view = render(tree(false));
   await act(async () => {});

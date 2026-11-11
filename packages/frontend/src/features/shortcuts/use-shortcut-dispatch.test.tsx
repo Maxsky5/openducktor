@@ -1,17 +1,16 @@
 import { SettingsKeyboardShortcutsSection } from "@/components/features/settings/settings-keyboard-shortcuts-section";
 import { use, useState } from "react";
 import { Command } from "lucide-react";
+import { CommandPaletteRegistryContext } from "../command-palette/command-palette-registry";
 import {
-  CommandPaletteRegistryContext,
-  CommandPaletteRegistryProvider,
-  useCommandPaletteCommands,
-} from "../command-palette/command-palette-registry";
-import { useCommandPalettePageCommand } from "../command-palette/command-palette-context";
+  useCommandPalettePageCommand,
+  useCommandPalettePageCommands,
+} from "../command-palette/command-palette-context";
 import type { ElectronShortcutBridge, EmbeddedShortcutEvent } from "@openducktor/contracts";
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ElectronShortcutRules } from "@openducktor/contracts";
-import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { useShortcutDispatch } from "./use-shortcut-dispatch";
@@ -81,9 +80,9 @@ test("keeps native guest focus when entering its separate WebContents blurs the 
     },
   ];
   function Owner() {
+    useCommandPalettePageCommands(commands);
     useShortcutDispatch({
       platform: "darwin",
-      pageCommands: commands,
       actions: [],
       isOpen: false,
       open: () => {},
@@ -93,9 +92,9 @@ test("keeps native guest focus when entering its separate WebContents blurs the 
     return <button>Renderer input</button>;
   }
   const view = render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <Owner />
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   try {
     act(() => screen.getByRole("button", { name: "Renderer input" }).focus());
@@ -132,7 +131,6 @@ test("blocks DOM commands after native installation fails and restores routing o
   function Owner() {
     const routing = useShortcutDispatch({
       platform: "darwin",
-      pageCommands: [],
       actions: [
         {
           key: "action:sidebar",
@@ -159,9 +157,9 @@ test("blocks DOM commands after native installation fails and restores routing o
     );
   }
   render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <Owner />
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   await screen.findByText("Native input failed.");
   expect(fireEvent.keyDown(window, { key: "b", ctrlKey: true })).toBe(true);
@@ -215,7 +213,6 @@ test("refreshes native claims when owner and app action availability changes", a
     if (!registry) throw new Error("Missing registry");
     useShortcutDispatch({
       platform: "darwin",
-      pageCommands: useCommandPaletteCommands(),
       actions: [
         {
           key: "action:sidebar",
@@ -239,16 +236,16 @@ test("refreshes native claims when owner and app action availability changes", a
   function Harness() {
     const [available, setAvailable] = useState(true);
     return (
-      <CommandPaletteRegistryProvider>
+      <>
         <Routing available={available} />
         <button onClick={() => setAvailable((current) => !current)}>Toggle availability</button>
-      </CommandPaletteRegistryProvider>
+      </>
     );
   }
   render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <Harness />
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   const claimedKeys = () =>
     applied
@@ -288,11 +285,9 @@ test("keeps preview failures per source and hides labels and hints until focused
       run: () => {},
     },
   ];
-  const commands: never[] = [];
   function Owner() {
     const routing = useShortcutDispatch({
       platform: "darwin",
-      pageCommands: commands,
       actions,
       isOpen: false,
       open: () => {},
@@ -315,9 +310,9 @@ test("keeps preview failures per source and hides labels and hints until focused
     );
   }
   const view = render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <Owner />
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   const rects: DOMRectList = {
     0: new DOMRect(),
@@ -401,7 +396,6 @@ test.each(["unmount", "blur"] as const)(
       const [showSettings, setShowSettings] = useState(true);
       useShortcutDispatch({
         platform: "darwin",
-        pageCommands: [],
         actions: [
           {
             key: "action:sidebar",
@@ -430,9 +424,9 @@ test.each(["unmount", "blur"] as const)(
     let view!: ReturnType<typeof render>;
     await act(async () => {
       view = render(
-        <ClientConnectionProvider connection={connection}>
+        <ShortcutTestProviders connection={connection}>
           <Owner />
-        </ClientConnectionProvider>,
+        </ShortcutTestProviders>,
       );
     });
     try {
@@ -476,7 +470,6 @@ test("native shortcuts activate only after the current installation acknowledges
     const [settingsAvailable, setSettingsAvailable] = useState(false);
     const routing = useShortcutDispatch({
       platform: "darwin",
-      pageCommands: [],
       actions: [
         {
           key: "action:settings",
@@ -514,9 +507,9 @@ test("native shortcuts activate only after the current installation acknowledges
     );
   }
   const view = render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <Owner />
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   try {
     await waitFor(() => expect(installations.length).toBe(1));
@@ -580,7 +573,6 @@ test("ordinary focus changes keep keyboard routing current without rendering the
     renders++;
     useShortcutDispatch({
       platform: "darwin",
-      pageCommands: [],
       actions: [],
       isOpen: false,
       open,
@@ -595,9 +587,9 @@ test("ordinary focus changes keep keyboard routing current without rendering the
     );
   }
   const view = render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <Owner />
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   await waitFor(() => expect(connection.queryClient.isFetching()).toBe(0));
   await act(async () => screen.getByRole("button", { name: "First control" }).focus());
@@ -627,11 +619,9 @@ test("saved workflow bindings stay inactive when the workflow is absent from the
     },
   });
   function Owner() {
+    useCommandPalettePageCommand({ id, label: "Unavailable workflow action", run });
     useShortcutDispatch({
       platform: "darwin",
-      pageCommands: [
-        { id, label: "Unavailable workflow action", icon: Command, keywords: [], run },
-      ],
       actions: [],
       isOpen: false,
       open() {},
@@ -643,9 +633,9 @@ test("saved workflow bindings stay inactive when the workflow is absent from the
     return null;
   }
   render(
-    <ClientConnectionProvider connection={connection}>
+    <ShortcutTestProviders connection={connection}>
       <Owner />
-    </ClientConnectionProvider>,
+    </ShortcutTestProviders>,
   );
   expect(fireEvent.keyDown(window, { key: "F8", code: "F8", ctrlKey: true })).toBe(true);
   expect(run).not.toHaveBeenCalled();

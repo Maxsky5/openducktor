@@ -233,11 +233,32 @@ export function WorkspaceSidebar({
     [],
   );
 
-  const { scopedCollapsed, positions, toggleGroup } = useSessionNavigationShortcuts({
-    groups: model.groups,
-    listScopeKey,
-    openEntry,
-  });
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const { scopedCollapsed, numberedEntries, cyclingEntries, positions } = useMemo(() => {
+    const scopedCollapsed = new Set(
+      model.groups
+        .filter((group) => collapsedGroups.has(`${listScopeKey}:${group.id}`))
+        .map((group) => group.id),
+    );
+    const numberedEntries = model.groups
+      .filter((group) => !scopedCollapsed.has(group.id))
+      .flatMap((group) => group.entries);
+    return {
+      scopedCollapsed,
+      numberedEntries,
+      cyclingEntries: model.groups.flatMap((group) => group.entries),
+      positions: new Map(numberedEntries.map((entry, index) => [entry.key, index + 1])),
+    };
+  }, [model.groups, collapsedGroups, listScopeKey]);
+  const toggleGroup = (id: string) =>
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      const key = `${listScopeKey}:${id}`;
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  useSessionNavigationShortcuts({ numberedEntries, cyclingEntries, listScopeKey, openEntry });
 
   return (
     <SessionPositionsContext value={positions}>

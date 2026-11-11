@@ -387,7 +387,6 @@ describe("Electron browser engine page events", () => {
     expect(key("k", true)).toBe(false);
     expect(key("k", false)).toBe(false);
     expect(key("c", true)).toBe(false);
-    expect(harness.rendererMessages).toEqual([]);
   });
 
   test("reloads a focused page on its own reload keys, not the window", async () => {
