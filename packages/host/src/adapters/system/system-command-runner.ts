@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import {
+  causeMessage,
   HostOperationError,
   type HostOperationErrorAggregate,
   toHostOperationError,
@@ -93,7 +94,7 @@ export const createSystemCommandRunner = ({
       });
 
       let cleanup: Effect.Effect<void, HostOperationErrorAggregate> = Effect.void;
-      return yield* Effect.callback<SystemCommandRunResult, HostOperationErrorAggregate>(
+      const operation = Effect.callback<SystemCommandRunResult, HostOperationErrorAggregate>(
         (resume) => {
           let child: ReturnType<typeof spawn>;
           try {
@@ -249,7 +250,33 @@ export const createSystemCommandRunner = ({
             );
           }
         },
-      ).pipe(Effect.onExit(() => cleanup));
+      );
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const operationExit = yield* Effect.exit(restore(operation));
+          const cleanupExit = yield* Effect.exit(cleanup);
+          if (Exit.isFailure(cleanupExit)) {
+            const original = Exit.isFailure(operationExit)
+              ? Cause.findErrorOption(operationExit.cause)
+              : Option.none();
+            const error = new HostOperationError<object>({
+              operation: Option.isSome(original)
+                ? original.value.operation
+                : "systemCommand.runCommandAllowFailure.cleanup",
+              message: `${Exit.isFailure(operationExit) ? `${causeMessage(operationExit.cause)}\n` : ""}Cleanup failed: ${causeMessage(cleanupExit.cause)}`,
+              details: {
+                ...(Option.isSome(original) ? original.value.details : { command, args }),
+              },
+              cause: { operation: operationExit, cleanup: cleanupExit.cause },
+            });
+            if (Exit.isFailure(operationExit) && Cause.hasInterrupts(operationExit.cause)) {
+              return yield* Effect.failCause(Cause.combine(operationExit.cause, Cause.fail(error)));
+            }
+            return yield* Effect.fail(error);
+          }
+          return yield* operationExit;
+        }),
+      );
     });
 
   return {
