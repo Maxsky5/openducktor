@@ -4,8 +4,8 @@
  */
 import type { Root as HastRoot, RootContent as HastRootContent } from "hast";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
-import type { Paragraph } from "mdast";
-import { toHast } from "mdast-util-to-hast";
+import type { List, Paragraph } from "mdast";
+import { defaultHandlers, toHast } from "mdast-util-to-hast";
 import type { ReactElement } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import type { Components, UrlTransform } from "react-markdown";
@@ -51,15 +51,18 @@ export const renderMarkdownBlock = (
  *   the list.
  */
 const markdownBlockTree = (content: MarkdownBlockContent): HastRoot => {
-  const tree = toHast({
-    type: "root",
-    // The conversion can share node data with the tree, so convert a copy.
-    children: structuredClone([
-      ...content.definitions,
-      ...footnoteReplay(content.previousFootnoteIds),
-      ...content.nodes,
-    ]),
-  });
+  const tree = toHast(
+    {
+      type: "root",
+      // The conversion can share node data with the tree, so convert a copy.
+      children: structuredClone([
+        ...content.definitions,
+        ...footnoteReplay(content.previousFootnoteIds),
+        ...content.nodes,
+      ]),
+    },
+    { handlers: { listItem: createListItemHandler() } },
+  );
   if (tree.type !== "root") {
     throw new Error(`mdast-util-to-hast returned a "${tree.type}" node for a root.`);
   }
@@ -69,6 +72,27 @@ const markdownBlockTree = (content: MarkdownBlockContent): HastRoot => {
       : (node: HastRootContent) => !isFootnoteList(node) && !isFootnoteReplay(node);
   tree.children = tree.children.filter(isVisible);
   return tree;
+};
+
+/** Resolve list-wide looseness once, so the default item handler does not scan every sibling. */
+const createListItemHandler = (): typeof defaultHandlers.listItem => {
+  const parents = new WeakMap<List, List>();
+  return (state, node, parent) => {
+    if (parent?.type !== "list") {
+      return defaultHandlers.listItem(state, node, parent);
+    }
+    let resolved = parents.get(parent);
+    if (!resolved) {
+      resolved = {
+        ...parent,
+        spread:
+          parent.spread || parent.children.some((item) => item.spread ?? item.children.length > 1),
+        children: [],
+      };
+      parents.set(parent, resolved);
+    }
+    return defaultHandlers.listItem(state, node, resolved);
+  };
 };
 
 const FOOTNOTE_REPLAY_PROPERTY = "dataOdtFootnoteReplay";

@@ -138,9 +138,10 @@ describe("describeMarkdown", () => {
     ["CR", "\r"],
   ])("keeps list items in order with %s line endings", (_, lineEnding) => {
     for (const indent of ["", "  "]) {
-      const markdown = ["- one", "- two", "- three", "- four", "- five"]
-        .map((line) => `${indent}${line}`)
-        .join(lineEnding);
+      const items = ["- one", "- two", "- three", "- four", "- five"].map(
+        (line) => `${indent}${line}`,
+      );
+      const markdown = ["Intro", "", ...items].join(lineEnding);
 
       for (const described of describeWhileStreaming(markdown, 1)) {
         expect(renderBlocks(described)).toBe(renderWholeText(described.markdown));
@@ -149,6 +150,8 @@ describe("describeMarkdown", () => {
   });
 
   test.each([
+    "- one\n- two\n\n  Second paragraph.\n- three\n- four\n- five",
+    "3. one\n4. two\n\n   Second paragraph.\n5. three\n6. four\n7. five",
     "Intro\n\n- one\n- two\n- three\n- four\n- five\n- six\n\nAfter",
     "- one\n\n- two\n- three\n- four\n\n- five\n  - nested\n\n    continuation\n- six\n\nAfter",
     "  3) one\n  4) two\n  5) three\n  6) four\n  7) five\n  8) six\n\n  9) seven\n\nEnd",
