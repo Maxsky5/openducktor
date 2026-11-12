@@ -197,15 +197,24 @@ describe("Scene", () => {
 /** A page scene in its own container, the markup of the server, and the unmount. */
 type RenderedScene = { container: HTMLElement; html: string; unmount: () => void };
 
-/** Renders the page scene of `props` as a server does, then hydrates it in a new container. */
+/**
+ * The server HTML of each page scene that the tests hydrate. It renders before the tests, because
+ * the server render of the large workflow view can exceed the test budget on a loaded runner.
+ */
+const serverHtml = new Map<string, string>();
+
+function pageElement(props: PageSceneProps) {
+  const [{ createElement }, , , , { PageScene }] = modules;
+  const stylesheet = (sheet: string) => `/scenes/${sheet}.css`;
+  return createElement(PageScene, { ...props, failure: null, stylesheet });
+}
+
+/** Hydrates the server HTML of the page scene of `props` in a new container. */
 function renderScene(props: PageSceneProps): RenderedScene {
-  const [{ createElement }, { hydrateRoot }, , , { PageScene }, , { renderToString }] = modules;
-  const element = createElement(PageScene, {
-    ...props,
-    failure: null,
-    stylesheet: (sheet) => `/scenes/${sheet}.css`,
-  });
-  const html = renderToString(element);
+  const [, { hydrateRoot }] = modules;
+  const element = pageElement(props);
+  const html = serverHtml.get(props.name);
+  if (html === undefined) throw new Error(`Render the server HTML of ${props.name} first.`);
   const container = document.createElement("div");
   container.innerHTML = html;
   document.body.append(container);
@@ -259,6 +268,10 @@ const shownPanels = (root: HTMLElement): HTMLElement[] =>
 describe("PageScene", () => {
   let native: typeof IntersectionObserver;
   beforeAll(() => {
+    const scenes: PageSceneProps[] = [{ name: "workflow" }, { name: "autopilot" }];
+    scenes.push({ name: "hero", options: { version: null } });
+    for (const props of scenes)
+      serverHtml.set(props.name, modules[6].renderToString(pageElement(props)));
     native = globalThis.IntersectionObserver;
     Observer = testObserver();
     globalThis.IntersectionObserver = Observer;

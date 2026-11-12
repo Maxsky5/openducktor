@@ -94,7 +94,7 @@ afterAll(async () => {
   await GlobalRegistrator.unregister();
 });
 
-/** Renders the static view of the scene `name` in the document and returns its root. */
+/** Renders the static view of the scene `name` and returns its root, out of the document. */
 async function renderView<Name extends SceneName>(name: Name): Promise<HTMLElement> {
   const [{ createElement }, { renderToStaticMarkup }, , , { MAC_KEYS }, , { VIEWS }] = modules;
   const views: SceneViewLoaders = VIEWS;
@@ -107,9 +107,24 @@ async function renderView<Name extends SceneName>(name: Name): Promise<HTMLEleme
   holder.innerHTML = renderToStaticMarkup(createElement(View, props));
   const root = holder.firstElementChild;
   if (!(root instanceof HTMLElement)) throw new Error(`The ${name} view has no root.`);
-  document.body.append(root);
   return root;
 }
+
+// The views render before the test cases, as the modules load, so each case only builds and plays
+// its run. A view stays out of the document until its case, because each step of happy-dom costs
+// more in a larger document.
+// A chapter reads only its own panel, so the view of a chapter keeps no other panel.
+const VIEW_ROOTS = new Map(
+  await Promise.all(
+    RUN_CASES.map(async (run) => {
+      const root = await renderView(run.name);
+      for (const panel of root.querySelectorAll("[data-chapter-panel]")) {
+        if (panel.getAttribute("data-chapter-panel") !== run.chapter) panel.remove();
+      }
+      return [run, root] as const;
+    }),
+  ),
+);
 
 /** The stage of a run and its frame: the view of a loop scene, or the panel of a chapter. */
 type Run = { frame: HTMLElement; stage: HTMLElement; build: SceneBuilder<string> };
@@ -130,11 +145,6 @@ async function runOf({ name, chapter }: RunCase, root: HTMLElement): Promise<Run
   const panel = root.querySelector(`[data-chapter-panel="${chapter}"]`);
   if (!build || !(panel instanceof HTMLElement)) {
     throw new Error(`The ${name} view has no chapter ${chapter}.`);
-  }
-  // A chapter reads only its own panel. Each step of happy-dom costs more in a larger document,
-  // so the other panels go.
-  for (const other of root.querySelectorAll("[data-chapter-panel]")) {
-    if (other !== panel) other.remove();
   }
   return { frame: panel, stage: stageOf(panel), build };
 }
@@ -158,7 +168,9 @@ describe("each registered scene", () => {
     "$label renders its static view, builds its timeline from it, and plays it",
     async (run) => {
       const [, , { gsap }, { createScene }] = modules;
-      const root = await renderView(run.name);
+      const root = VIEW_ROOTS.get(run);
+      if (!root) throw new Error(`The ${run.label} case has no view.`);
+      document.body.append(root);
       try {
         expect(root.dataset.scene ?? root.dataset.chapters).toBe(run.name);
         const { frame, stage, build } = await runOf(run, root);
