@@ -1,7 +1,10 @@
 import { getSessionMessages } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { readMessageTimeLabel } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
-import { readToolDetailsHeading } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
+import {
+  hasFileEditChanges,
+  readToolDetailsHeading,
+} from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { OdtToolIconKind } from "@openducktor/frontend-core/sessions/messages/odt-tool-call";
 import {
   isShellCommandCall,
@@ -108,7 +111,7 @@ const ToolCallDetailsBody = ({
         />
       );
     }
-    if (shownMeta.toolType === "file_edit") {
+    if (shownMeta.toolType === "file_edit" && hasFileEditChanges(shownMeta, sessionFolder)) {
       return (
         <FileEditDetails
           meta={shownMeta}

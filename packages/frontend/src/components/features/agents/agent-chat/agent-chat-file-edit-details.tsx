@@ -14,8 +14,9 @@ import {
 } from "./agent-chat-tool-details-content";
 
 /**
- * The details of a file edit: the tool, its status and run facts, its error, and the changes of
- * each file, open. A tool run shows an edit on one line, so its changes show here.
+ * The details of a file edit with a change to show: the tool, its status and run facts, its error,
+ * and the changes of each file, open. A tool run shows an edit on one line, so its changes show
+ * here.
  */
 export const FileEditDetails = ({
   meta,
@@ -53,11 +54,6 @@ export const FileEditDetails = ({
         ) : null}
         {diffUnavailable ? (
           <p className="text-xs leading-5 text-muted-foreground">{FILE_DIFF_UNAVAILABLE_MESSAGE}</p>
-        ) : null}
-        {edits.length === 0 && !error ? (
-          <p className="text-xs leading-5 text-muted-foreground">
-            The edit has no changes to show yet.
-          </p>
         ) : null}
       </div>
     </div>

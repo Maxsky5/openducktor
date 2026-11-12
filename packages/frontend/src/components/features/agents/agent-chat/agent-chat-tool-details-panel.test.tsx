@@ -239,6 +239,33 @@ describe("AgentChatToolDetailsBeside", () => {
     }
   });
 
+  test("shows the input of a failed edit, which has no changes to show", () => {
+    const view = render(
+      <Transcript
+        messages={[
+          toolMessage("edit", {
+            tool: "Edit",
+            toolType: "file_edit",
+            status: "error",
+            input: { file_path: "/repo/src/auth.ts", old_string: "one", new_string: "two" },
+            error: "String to replace not found in file.",
+          }),
+        ]}
+      />,
+    );
+    try {
+      pressRow(/edit src\/auth\.ts/);
+      const details = within(panel());
+      expect(details.getByRole("region", { name: "Error" })).toBeTruthy();
+      // The reader sees the replacement that the agent tried.
+      const input = details.getByRole("region", { name: "Input" });
+      expect(within(input).getByText(/"old_string": "one"/)).toBeTruthy();
+      expect(details.queryByRole("region", { name: "Changes" })).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("shows the live input of a regular call, and a second press on its row closes it", () => {
     const call = (input: NonNullable<ToolMeta["input"]>) =>
       toolMessage("inspect", { tool: "inspect", toolType: "generic", status: "running", input });

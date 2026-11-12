@@ -82,7 +82,7 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - Tool row icons sit on the middle of their line, which is the middle of the capital letters. An error line opens under its call, so the icon and the timing stay on the line of the call.
 - `ToolCallIcon` shows a spinner in place of the tool icon while the agent writes a call, and moving bars while the call runs. The run lines and the plain tool rows use it.
 - A part of a call that a new state brings moves in: a new icon fades and grows in, the command fades in, and an error opens under the call. A part that shows when its row mounts does not move, so a session that loads shows at once.
-- The path of a read or an edit shows the icon of its file type before it. An edit line shows its added and removed lines, and its details show the changes of each file.
+- The path of a read or an edit shows the icon of its file type before it. An edit line shows its added and removed lines, and its details show the changes of each file. An edit without a change to show, such as a failed edit, shows its input instead, so the reader sees what the agent tried (`hasFileEditChanges`).
 - The `groupToolCalls` chat setting turns runs off. Each call then shows as its own tool row with the same details. The mobile app has the same switch in its device preferences.
 - The header of a run says when its calls fail or stop. It says that the run runs only while the run is folded, because an open run shows its running calls in their lines.
 - The header of a run counts the calls of each kind. The edits count the files that they change, so a patch of five files counts as five edits.

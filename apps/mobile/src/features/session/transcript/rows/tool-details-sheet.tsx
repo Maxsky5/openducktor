@@ -3,6 +3,7 @@ import { ToolFileEdits, ToolOutput, ToolPartSessionProvider } from "./tool-detai
 import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/message-formatting";
 import {
   formatToolInput,
+  hasFileEditChanges,
   readToolDetailAvailability,
   readToolDetailsHeading,
   readToolDetailsError,
@@ -71,8 +72,11 @@ type DetailsTiming = { messageTimestamp: string; timeLabel: string };
 
 /** The details of a call by its kind: a shell command, a file edit, or another call. */
 function ShownToolDetails({ meta, ...timing }: { meta: ToolMeta } & DetailsTiming): ReactElement {
+  const { workingDirectory } = useTranscriptRows();
   if (isShellCommandCall(meta)) return <ShellCommandDetails meta={meta} {...timing} />;
-  if (meta.toolType === "file_edit") return <FileEditDetails meta={meta} {...timing} />;
+  if (meta.toolType === "file_edit" && hasFileEditChanges(meta, workingDirectory)) {
+    return <FileEditDetails meta={meta} {...timing} />;
+  }
   return <ToolCallDetails meta={meta} {...timing} />;
 }
 
@@ -408,8 +412,8 @@ function CommandOutput({
 }
 
 /**
- * The details of a file edit: its status and run facts, its error, and the changes of each file,
- * open. A tool run shows an edit on one line, so its changes show here.
+ * The details of a file edit with a change to show: its status and run facts, its error, and the
+ * changes of each file, open. A tool run shows an edit on one line, so its changes show here.
  */
 function FileEditDetails({
   meta,

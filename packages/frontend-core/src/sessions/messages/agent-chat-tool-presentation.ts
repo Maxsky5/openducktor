@@ -299,6 +299,13 @@ export const readToolFileEdits = (
 };
 
 /**
+ * A file edit shows its changes in its details when it has a change to show. A failed edit, or an
+ * edit whose changes did not come yet, shows its input, so the reader sees what the agent tried.
+ */
+export const hasFileEditChanges = (meta: ToolMeta, workingDirectory?: string | null): boolean =>
+  readToolFileEdits(meta, workingDirectory).edits.some((edit) => edit.kind !== "path");
+
+/**
  * The file that a call reads or edits, relative to the working directory, or null for a call on
  * another file count or on no file. Its line shows the icon of the type of the file before it.
  */

@@ -5,6 +5,7 @@ import {
   buildComputerUsePresentation,
   buildQuestionDetailEntries,
   formatToolInput,
+  hasFileEditChanges,
   readToolDetailAvailability,
   readToolFileEdits,
   readRegularToolTiming,
@@ -179,6 +180,15 @@ describe("tool presentation", () => {
     );
     expect(edits.edits.map((edit) => edit.filePath)).toEqual(["src/a.ts"]);
     expect(edits.diffUnavailable).toBe(true);
+  });
+
+  test("shows the changes of an edit only when it has one, so a failed edit shows its input", () => {
+    const input = { file_path: "/repo/src/a.ts", old_string: "one", new_string: "two" };
+    const edit = (status: ToolMeta["status"]) =>
+      meta({ tool: "Edit", toolType: "file_edit", status, input });
+
+    expect(hasFileEditChanges(edit("completed"), "/repo")).toBe(true);
+    expect(hasFileEditChanges(edit("error"), "/repo")).toBe(false);
   });
 
   test("formats input with paths relative to the working directory", () => {
