@@ -19,13 +19,13 @@
     "@openducktor/build-tools": "workspace:*",
     "@openducktor/product-scenes": "workspace:*",
     "@openducktor/theme": "workspace:*",
-    "@xyflow/react": "12.12.0",
-    "fumadocs-core": "16.17.8",
-    "fumadocs-mdx": "15.4.10",
-    "fumadocs-ui": "16.17.8",
+    "@xyflow/react": "12.12.1",
+    "fumadocs-core": "16.18.3",
+    "fumadocs-mdx": "15.5.2",
+    "fumadocs-ui": "16.18.3",
     "gsap": "^3.15.0",
     "lucide-react": "^1.72.0",
-    "next": "16.4.3",
+    "next": "16.4.5",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
@@ -41,7 +41,7 @@
     "lightningcss": "1.33.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.0",
-    "wrangler": "4.151.1",
+    "wrangler": "4.158.0",
     "zod": "^4.6.7"
   }
 }
