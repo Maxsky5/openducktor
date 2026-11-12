@@ -1,3 +1,5 @@
+import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
+import type { ToolLifecyclePhase } from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
 import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
 import {
   memo,
@@ -11,13 +13,16 @@ import Animated, { type CSSStyle, useReducedMotion } from "react-native-reanimat
 import { StyleSheet } from "react-native-unistyles";
 import { useClipboardCopy } from "@/platform/use-clipboard-copy";
 import { useAppTheme } from "@/theme/app-theme-context";
+import { withAlpha } from "@/theme/color-alpha";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { type AppTheme, monoWeight, motion, sansWeight } from "@/theme/tokens";
-import { Icon, type IconName } from "@/ui/icon";
+import { Icon } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { truncateForDisplay } from "../transcript-text";
 import { useDisclosure } from "./disclosure";
+import { ToolCallIcon, ToolRunningBars } from "./tool-status";
+import type { ToolActivity } from "./tool-status-presentation";
 
 /** The marker of a desktop `<details>` summary: a small chevron that turns down when open. */
 export function DisclosureMarker({
@@ -111,26 +116,27 @@ export const CopyControl = memo(function CopyControl({
 });
 
 /**
- * The desktop `ToolMessageTiming`: a spinner while the call runs, the run time, and the clock
- * time, in 11-point muted text at the end of a line.
+ * The desktop `ToolMessageTiming`: a spinner while the agent prepares the call, moving bars while
+ * it runs, the run time, and the clock time, in 11-point muted text at the end of a line.
  */
 export const ToolTiming = memo(function ToolTiming({
-  active,
+  activity,
   durationMs,
   timeLabel,
   color,
 }: {
-  active: boolean;
+  activity: ToolActivity;
   durationMs: number | null;
   timeLabel: string;
   color?: string | undefined;
 }): ReactElement | null {
   const theme = useAppTheme();
   const tint = color ?? theme.desktop.mutedForeground;
-  if (!active && durationMs === null && timeLabel.length === 0) return null;
+  if (activity === null && durationMs === null && timeLabel.length === 0) return null;
   return (
     <View style={styles.timing}>
-      {active ? <LoaderSpinner size={12} color={tint} /> : null}
+      {activity === "preparing" ? <LoaderSpinner size={12} color={tint} /> : null}
+      {activity === "running" ? <ToolRunningBars color={tint} /> : null}
       {durationMs !== null ? (
         <Text style={[styles.timingText, { color: tint }]}>{formatAgentDuration(durationMs)}</Text>
       ) : null}
@@ -141,49 +147,46 @@ export const ToolTiming = memo(function ToolTiming({
   );
 });
 
-export type ToolLineTone = "plain" | "preparing" | "failed" | "cancelled";
-
-/** The name and icon colors of a tool line in each tone. */
-type ToolLineColors = { nameColor: string; iconColor: string };
-
-const toolLineColors = (desktop: AppTheme["desktop"], tone: ToolLineTone): ToolLineColors => {
-  switch (tone) {
+/** The desktop text color of a tool line in each phase of its call. */
+const toolLineTextColor = (phase: ToolLifecyclePhase, desktop: AppTheme["desktop"]): string => {
+  switch (phase) {
     case "failed":
-      return { nameColor: desktop.destructiveMuted, iconColor: desktop.destructiveAccent };
+      return desktop.destructiveMuted;
     case "cancelled":
-      return { nameColor: desktop.cancelledMuted, iconColor: desktop.cancelledAccent };
+      return desktop.cancelledMuted;
     case "preparing":
-      return { nameColor: desktop.mutedForeground, iconColor: desktop.mutedForeground };
-    case "plain":
-      return { nameColor: desktop.foreground, iconColor: desktop.mutedForeground };
+    case "queued":
+      return desktop.mutedForeground;
+    case "executing":
+    case "completed":
+      return desktop.foreground;
   }
 };
 
 /**
- * The desktop `RegularToolSummary`: a plain muted icon, the tool name as the runtime names it,
- * the summary in muted text, and the timing at the end. A failed or cancelled call draws its
- * name and icon in its status color, and a preparing call shows at half opacity in muted colors.
- * A line with details opens them with a press.
+ * The desktop `RegularToolSummary`: the icon of the call in the color of its status, the tool name
+ * in the color of its phase, the summary, and the timing at the end. A call that the agent still
+ * prepares shows at half opacity. A line with details opens them with a press.
  */
 export const ToolLine = memo(function ToolLine({
-  icon,
+  meta,
+  phase,
   name,
   summary,
   summaryEllipsis = "tail",
-  tone,
-  active,
+  preparing,
   durationMs,
   timeLabel,
   onPress,
   accessibilityLabel,
 }: {
-  icon: IconName;
+  meta: Pick<ToolMeta, "tool" | "toolType">;
+  phase: ToolLifecyclePhase;
   name: string;
   summary: string;
   /** "middle" keeps both ends of a path in view. */
   summaryEllipsis?: "tail" | "middle" | undefined;
-  tone: ToolLineTone;
-  active: boolean;
+  preparing: boolean;
   durationMs: number | null;
   timeLabel: string;
   /** Opens the details of the call in the tool details sheet, or null for a call without any. */
@@ -191,35 +194,39 @@ export const ToolLine = memo(function ToolLine({
   accessibilityLabel: string;
 }): ReactElement {
   const { desktop } = useAppTheme();
-  const { nameColor, iconColor } = toolLineColors(desktop, tone);
+  const quiet = withAlpha(desktop.foreground, 0.75);
+  const busy = phase === "preparing" || phase === "queued" || phase === "executing";
   const content = (
     <>
-      <Icon name={icon} size={14} colorValue={iconColor} />
-      <Text numberOfLines={1} style={[styles.lineName, { color: nameColor }]}>
+      <ToolCallIcon meta={meta} phase={phase} />
+      <Text
+        numberOfLines={1}
+        style={[styles.lineName, { color: toolLineTextColor(phase, desktop) }]}
+      >
         {name}
       </Text>
       {summary.length > 0 ? (
         <Text
           numberOfLines={1}
           ellipsizeMode={summaryEllipsis}
-          style={[styles.lineText, styles.lineSummary]}
+          style={[styles.lineText, styles.lineSummary, { color: quiet }]}
         >
           {summary}
         </Text>
       ) : (
         <View style={styles.lineSpacer} />
       )}
-      <ToolTiming active={active} durationMs={durationMs} timeLabel={timeLabel} />
+      <ToolTiming activity={null} durationMs={durationMs} timeLabel={timeLabel} color={quiet} />
     </>
   );
   if (!onPress) {
     return (
       <View
-        style={[styles.lineTouch, styles.line, tone === "preparing" && styles.linePreparing]}
+        style={[styles.lineTouch, styles.line, preparing && styles.linePreparing]}
         accessible
         accessibilityRole="text"
         accessibilityLabel={accessibilityLabel}
-        accessibilityState={{ busy: active }}
+        accessibilityState={{ busy }}
       >
         {content}
       </View>
@@ -232,9 +239,9 @@ export const ToolLine = memo(function ToolLine({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint="Shows the details."
-      accessibilityState={{ busy: active }}
+      accessibilityState={{ busy }}
       containerStyle={styles.lineTouch}
-      style={[styles.line, tone === "preparing" && styles.linePreparing]}
+      style={[styles.line, preparing && styles.linePreparing]}
     >
       {content}
     </Touchable>
@@ -396,7 +403,7 @@ const styles = StyleSheet.create((theme) => ({
     maxWidth: "45%",
   },
   lineText: { ...sansWeight("regular"), fontSize: 13, lineHeight: 18, flexShrink: 0 },
-  lineSummary: { flex: 1, flexShrink: 1, minWidth: 0, color: theme.desktop.mutedForeground },
+  lineSummary: { flex: 1, flexShrink: 1, minWidth: 0 },
   lineSpacer: { flex: 1 },
   // Under the tool name: the line padding, the 14-point icon, and the gap.
   errorPreview: {

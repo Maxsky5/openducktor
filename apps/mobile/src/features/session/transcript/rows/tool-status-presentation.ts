@@ -48,3 +48,13 @@ export const TOOL_STATUS = {
     textColor: (desktop) => desktop.cancelledMuted,
   },
 } as const satisfies Record<ToolLifecyclePhase, ToolStatus>;
+
+/** What a call does now: the agent prepares it, it runs, or it ended. */
+export type ToolActivity = "preparing" | "running" | null;
+
+/** The desktop activity of a call in each phase, for its timing and its card. */
+export const toolActivity = (phase: ToolLifecyclePhase): ToolActivity => {
+  if (phase === "executing") return "running";
+  if (phase === "preparing") return "preparing";
+  return null;
+};

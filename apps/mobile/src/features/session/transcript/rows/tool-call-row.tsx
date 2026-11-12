@@ -15,17 +15,10 @@ import { memo, type ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranscriptRows } from "../transcript-rows-context";
-import { ToolErrorPreview, ToolLine, type ToolLineTone } from "./row-parts";
-import { toolIcon } from "./tool-icon";
+import { ToolErrorPreview, ToolLine } from "./row-parts";
 import { QuestionDetails, ToolFileEdits } from "./tool-details";
 
 const PATH_TOOL_TYPES: ReadonlySet<ToolMeta["toolType"]> = new Set(["read", "list", "file_edit"]);
-
-/** The tone of the tool line: a failed or cancelled call, a call that prepares, or plain. */
-const toolLineTone = (phase: ToolLifecyclePhase, preparing: boolean): ToolLineTone => {
-  if (phase === "failed" || phase === "cancelled") return phase;
-  return preparing ? "preparing" : "plain";
-};
 
 /** The state that a screen reader hears after the tool name and summary. */
 const toolStateLabel = (phase: ToolLifecyclePhase, running: boolean): string => {
@@ -69,12 +62,12 @@ export const ToolCallRow = memo(function ToolCallRow({
   return (
     <View style={styles.row}>
       <ToolLine
-        icon={toolIcon(meta)}
+        meta={meta}
+        phase={phase}
         name={name}
         summary={summary.text}
         summaryEllipsis={PATH_TOOL_TYPES.has(meta.toolType) ? "middle" : "tail"}
-        tone={toolLineTone(phase, preparing)}
-        active={timing.isActive}
+        preparing={preparing}
         durationMs={timing.durationMs}
         timeLabel={timeLabel}
         onPress={

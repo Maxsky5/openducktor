@@ -37,6 +37,7 @@ import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { MarkdownView } from "@/rich-content/markdown/markdown-view";
 import { useAppTheme } from "@/theme/app-theme-context";
+import { withAlpha } from "@/theme/color-alpha";
 import { monoWeight, sansWeight } from "@/theme/tokens";
 import { Icon } from "@/ui/icon";
 import { LoaderSpinner } from "@/ui/loader-spinner";
@@ -318,21 +319,26 @@ function OutputText({ text }: { text: string }): ReactElement {
         <Text style={[styles.small, { color: desktop.terminalMuted }]}>{shown.notice}</Text>
       ) : null}
       <Text selectable style={[styles.outputText, { color: desktop.terminalForeground }]}>
-        {shown.segments.map(({ segment, key }) => (
-          <Text
-            key={key}
-            style={[
-              segment.fg ? { color: terminalColorValue(segment.fg) } : null,
-              segment.bg ? { backgroundColor: terminalColorValue(segment.bg) } : null,
-              segment.bold ? styles.outputBold : null,
-              segment.dim ? styles.outputDim : null,
-              segment.italic ? styles.outputItalic : null,
-              segment.underline ? styles.outputUnderline : null,
-            ]}
-          >
-            {segment.text}
-          </Text>
-        ))}
+        {shown.segments.map(({ segment, key }) => {
+          const color = segment.fg ? terminalColorValue(segment.fg) : desktop.terminalForeground;
+          // Each run sets its font and its color, because the shared text gives each run its own
+          // defaults. A nested run has no opacity, so a dim run takes a dimmer color.
+          return (
+            <Text
+              key={key}
+              style={[
+                styles.outputText,
+                { color: segment.dim ? withAlpha(color, 0.6) : color },
+                segment.bg ? { backgroundColor: terminalColorValue(segment.bg) } : null,
+                segment.bold ? styles.outputBold : null,
+                segment.italic ? styles.outputItalic : null,
+                segment.underline ? styles.outputUnderline : null,
+              ]}
+            >
+              {segment.text}
+            </Text>
+          );
+        })}
       </Text>
     </>
   );
@@ -617,7 +623,6 @@ const styles = StyleSheet.create((theme) => ({
   agentMessageLabel: { ...sansWeight("medium"), fontSize: 11.5, lineHeight: 16 },
   outputText: { ...monoWeight("regular"), fontSize: 12.5, lineHeight: 20 },
   outputBold: monoWeight("bold"),
-  outputDim: { opacity: 0.6 },
   outputItalic: { fontStyle: "italic" },
   outputUnderline: { textDecorationLine: "underline" },
   fill: { flex: 1, minWidth: 0 },

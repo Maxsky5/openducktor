@@ -33,6 +33,7 @@ import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { StatusPill, ToolTiming } from "./row-parts";
 import { toolIcon } from "./tool-icon";
+import { toolActivity } from "./tool-status-presentation";
 
 type Family = "info" | "pending" | "destructive" | "cancelled" | "success";
 
@@ -191,7 +192,7 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
         <View style={[styles.trailing, lineStyle]}>
           <View {...HIDDEN_FROM_SCREEN_READERS}>
             <ToolTiming
-              active={active}
+              activity={toolActivity(phase)}
               durationMs={durationMs}
               timeLabel={timeLabel}
               color={withAlpha(text, 0.75)}

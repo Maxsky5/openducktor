@@ -1,9 +1,6 @@
 import { plural } from "@openducktor/frontend-core/lib/plural";
 import { getToolDuration } from "@openducktor/frontend-core/sessions/messages/tool-duration";
-import {
-  getToolLifecyclePhase,
-  type ToolLifecyclePhase,
-} from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
+import { getToolLifecyclePhase } from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
 import {
   countFailedCalls,
   type EarlierCalls,
@@ -20,22 +17,24 @@ import {
   type ToolRunState,
   type ToolRunTitle,
 } from "@openducktor/frontend-core/sessions/transcript/tool-runs";
-import { memo, type ReactElement } from "react";
-import { View } from "react-native";
+import { useRecyclingState } from "@shopify/flash-list";
+import { memo, type PropsWithChildren, type ReactElement } from "react";
+import { View, type ViewStyle } from "react-native";
+import Animated, { type CSSStyle, useReducedMotion } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
-import type { AppTheme } from "@/theme/tokens";
+import { withAlpha } from "@/theme/color-alpha";
+import { type AppTheme, monoWeight, motion, sansWeight } from "@/theme/tokens";
 import { Icon, type IconName } from "@/ui/icon";
-import { LoaderSpinner } from "@/ui/loader-spinner";
-import { monoWeight, sansWeight } from "@/theme/tokens";
+import { useValueAtMount } from "@/ui/use-value-at-mount";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import type { ToolRunListItem } from "../transcript-list-items";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { messageTimeLabel } from "../transcript-text";
 import { useDisclosure, useKeptHiddenCalls } from "./disclosure";
-import { DisclosureMarker, ToolTiming } from "./row-parts";
-import { toolIcon } from "./tool-icon";
+import { DisclosureMarker, Reveal, ToolTiming } from "./row-parts";
+import { ToolCallIcon } from "./tool-status";
 import { TOOL_STATUS } from "./tool-status-presentation";
 
 /**
@@ -43,7 +42,9 @@ import { TOOL_STATUS } from "./tool-status-presentation";
  * searches, and the calls of tools that show one line. Each run, also a run of one call, gets a
  * header line that folds it, so nothing moves when the next call comes. The calls show under it
  * along a guide line, each as one line with the icon of its tool in the color of its status. A
- * long run shows its latest calls under a line that shows the others.
+ * long run shows its latest calls under a line that shows the others. As on desktop, a part moves
+ * only when it changes after it showed: a run that the reader opens fades its calls in, a call that
+ * comes fades and rises in, and a part of a call that changes its state fades in.
  */
 
 const TITLE_ICONS = {
@@ -65,6 +66,11 @@ export const ToolRunListRow = memo(function ToolRunListRow({
   const title = readToolRunTitle(item);
   const earlier = readEarlierCalls(item.rows.length, keptHidden);
   const states = readToolRunStates(item, !disclosure.open);
+  // The calls that the run showed when its row mounted for it. A call that comes later moves in.
+  const [mountRowKeys] = useRecyclingState(
+    () => new Set(item.rows.map((row) => row.key)),
+    [item.runKey],
+  );
   return (
     <View style={styles.run}>
       <Touchable
@@ -107,12 +113,15 @@ export const ToolRunListRow = memo(function ToolRunListRow({
       {disclosure.open ? (
         // The guide line runs under the kind icon of the header, and the calls start under its
         // label.
-        <View style={[styles.nested, { borderLeftColor: desktop.border }]}>
+        <Reveal
+          animate={disclosure.pressed}
+          style={[styles.nested, { borderLeftColor: desktop.border }]}
+        >
           <EarlierCallsBar item={item} earlier={earlier} onChoose={chooseKeptHidden} />
           {item.rows.slice(earlier.earlierCallCount).map((row) => (
-            <ToolRunLine key={row.key} row={row} />
+            <ToolRunLine key={row.key} row={row} enters={!mountRowKeys.has(row.key)} />
           ))}
-        </View>
+        </Reveal>
       ) : null}
     </View>
   );
@@ -184,38 +193,36 @@ const stateColor = (key: ToolRunState["key"], desktop: AppTheme["desktop"]): str
   return desktop.statusRunningForeground;
 };
 
-/**
- * The color of the icon of a call by status, as on desktop. A call that succeeded keeps the color
- * of the other tool icons, so only running, failed, and cancelled calls stand out.
- */
-const statusColor = (phase: ToolLifecyclePhase, desktop: AppTheme["desktop"]): string => {
-  if (phase === "failed") return desktop.destructiveMuted;
-  if (phase === "cancelled") return desktop.cancelledMuted;
-  if (phase === "executing") return desktop.statusRunningForeground;
-  return desktop.mutedForeground;
+/** The desktop `tool-line-enter`: a call that comes fades and rises in. */
+const LINE_ENTER: CSSStyle<ViewStyle> = {
+  animationName: { from: { opacity: 0, transform: [{ translateY: 4 }] } },
+  animationDuration: 200,
+  animationTimingFunction: motion.easeOut,
 };
 
-/**
- * The icon of a call, as on desktop: the icon of its tool in the color of its status. A spinner
- * takes its place while the agent writes the call and while the call runs.
- */
-function ToolCallIcon({
-  meta,
-  phase,
-}: {
-  meta: ToolRunRow["message"]["meta"];
-  phase: ToolLifecyclePhase;
-}): ReactElement {
-  const { desktop } = useAppTheme();
-  const color = statusColor(phase, desktop);
-  if (phase === "executing" || phase === "preparing") {
-    return (
-      <View style={styles.callIcon}>
-        <LoaderSpinner size={12} color={color} />
-      </View>
-    );
-  }
-  return <Icon name={toolIcon(meta)} size={14} colorValue={color} />;
+/** The desktop `tool-line-swap-in`: a part of a call that changes its state fades in. */
+const SWAP_IN: CSSStyle<ViewStyle> = {
+  animationName: { from: { opacity: 0 } },
+  animationDuration: 180,
+  animationTimingFunction: motion.easeOut,
+};
+
+/** A part that fades in when the value changes after the part mounted. */
+function SwapIn({
+  value,
+  style,
+  children,
+}: PropsWithChildren<{ value: string; style: ViewStyle }>): ReactElement {
+  const reducedMotion = useReducedMotion();
+  const mountValue = useValueAtMount(value);
+  return (
+    <Animated.View
+      key={value}
+      style={[style, value !== mountValue && !reducedMotion ? SWAP_IN : null]}
+    >
+      {children}
+    </Animated.View>
+  );
 }
 
 /**
@@ -223,19 +230,29 @@ function ToolCallIcon({
  * error, and its timing. A press opens the call in the tool details sheet. The line renders again
  * only when its row changes.
  */
-const ToolRunLine = memo(function ToolRunLine({ row }: { row: ToolRunRow }): ReactElement {
-  const { desktop } = useAppTheme();
+const ToolRunLine = memo(function ToolRunLine({
+  row,
+  enters,
+}: {
+  row: ToolRunRow;
+  /** The call came after its run showed, so it fades and rises in. */
+  enters: boolean;
+}): ReactElement {
+  const reducedMotion = useReducedMotion();
   const { openFullView, presentToolCall, workingDirectory } = useTranscriptRows();
+  const entersAtMount = useValueAtMount(enters);
   const { message } = row;
   const { meta } = message;
   const phase = getToolLifecyclePhase(meta);
   const line = readToolRunCallLine(row, presentToolCall, workingDirectory);
-  const { errorPreview } = line;
   // The desktop line reads its status, its call, and its error preview.
-  const accessibilityLabel = [TOOL_STATUS[phase].label, readLineLabel(line), errorPreview || null]
+  const accessibilityLabel = [
+    TOOL_STATUS[phase].label,
+    readLineLabel(line),
+    line.errorPreview || null,
+  ]
     .filter((part) => part !== null)
     .join(", ");
-  const changes = line.kind === "call" ? line.changes : null;
   return (
     <Touchable
       feedback="highlight"
@@ -252,23 +269,39 @@ const ToolRunLine = memo(function ToolRunLine({ row }: { row: ToolRunRow }): Rea
       accessibilityHint={readLineHint(line)}
       style={styles.line}
     >
-      {/* The icon of the tool, in the color of the status of the call. */}
-      <ToolCallIcon meta={meta} phase={phase} />
-      <View style={styles.lineText}>
-        {line.kind === "command" ? (
-          <CommandLineText line={line} />
-        ) : (
-          <ToolCallLineText line={line} />
-        )}
-        {errorPreview ? (
-          <Text
-            numberOfLines={1}
-            style={[styles.errorPreview, { color: desktop.destructiveMuted }]}
-          >
-            {errorPreview}
-          </Text>
-        ) : null}
-      </View>
+      <Animated.View style={entersAtMount && !reducedMotion ? LINE_ENTER : null}>
+        {/* The icon and the timing stay on the first line of the call, on its middle. */}
+        <View style={styles.firstLine}>
+          <ToolCallIcon meta={meta} phase={phase} />
+          <SwapIn value={phase} style={styles.lineText}>
+            {line.kind === "command" ? (
+              <CommandLineText line={line} />
+            ) : (
+              <ToolCallLineText line={line} />
+            )}
+          </SwapIn>
+          <CallLineEnd row={row} line={line} phase={phase} />
+        </View>
+        <CallErrorLine errorPreview={line.errorPreview} />
+      </Animated.View>
+    </Touchable>
+  );
+});
+
+/** The end of the first line of a call: its changed lines, its cancel, and its timing. */
+function CallLineEnd({
+  row: { message },
+  line,
+  phase,
+}: {
+  row: ToolRunRow;
+  line: ToolRunCallLine;
+  phase: ReturnType<typeof getToolLifecyclePhase>;
+}): ReactElement {
+  const { desktop } = useAppTheme();
+  const changes = line.kind === "call" ? line.changes : null;
+  return (
+    <>
       {changes && (changes.additions > 0 || changes.deletions > 0) ? (
         <Text style={styles.changes}>
           {changes.additions > 0 ? (
@@ -280,16 +313,32 @@ const ToolRunLine = memo(function ToolRunLine({ row }: { row: ToolRunRow }): Rea
         </Text>
       ) : null}
       {phase === "cancelled" ? (
-        <Text style={[styles.cancelled, { color: desktop.mutedForeground }]}>Cancelled</Text>
+        <Text style={[styles.cancelled, { color: desktop.cancelledMuted }]}>Cancelled</Text>
       ) : null}
       <ToolTiming
-        active={false}
-        durationMs={getToolDuration(meta, message.timestamp)}
+        activity={null}
+        durationMs={getToolDuration(message.meta, message.timestamp)}
         timeLabel={messageTimeLabel(message)}
+        color={withAlpha(desktop.foreground, 0.75)}
       />
-    </Touchable>
+    </>
   );
-});
+}
+
+/** The first line of the error of a call, under the call. A later error fades in. */
+function CallErrorLine({ errorPreview }: { errorPreview: string | null }): ReactElement | null {
+  const { desktop } = useAppTheme();
+  const reducedMotion = useReducedMotion();
+  const mountHadError = useValueAtMount(errorPreview !== null);
+  if (!errorPreview) return null;
+  return (
+    <Animated.View style={[styles.errorLine, !mountHadError && !reducedMotion ? SWAP_IN : null]}>
+      <Text numberOfLines={1} style={[styles.errorPreview, { color: desktop.destructiveMuted }]}>
+        {errorPreview}
+      </Text>
+    </Animated.View>
+  );
+}
 
 type CommandLine = Extract<ToolRunCallLine, { kind: "command" }>;
 type CallLine = Extract<ToolRunCallLine, { kind: "call" }>;
@@ -362,7 +411,6 @@ function ToolCallLineText({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  callIcon: { width: 14, height: 14, alignItems: "center", justifyContent: "center" },
   run: { paddingVertical: 2 },
   // The tool line padding, then the 14-point icon and the gap of the header before the calls.
   header: {
@@ -391,15 +439,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingLeft: 14 + theme.space.sm - 7.5 - theme.space.xs,
     borderLeftWidth: 1,
   },
-  line: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: theme.space.sm,
-    minHeight: 32,
-    paddingHorizontal: theme.space.xs,
-    paddingVertical: 7,
-  },
-  lineText: { flex: 1, minWidth: 0, gap: 2 },
+  line: { minHeight: 32, paddingHorizontal: theme.space.xs, paddingVertical: 7 },
+  firstLine: { flexDirection: "row", alignItems: "center", gap: theme.space.sm, minHeight: 18 },
+  lineText: { flex: 1, minWidth: 0 },
+  // The error starts under the tool name: the 14-point icon and the gap.
+  errorLine: { paddingLeft: 14 + theme.space.sm, paddingTop: 2 },
   commandLine: { flexDirection: "row", alignItems: "baseline", gap: theme.space.sm },
   toolName: { ...sansWeight("medium"), fontSize: 12.5, lineHeight: 18, flexShrink: 0 },
   command: { ...monoWeight("regular"), fontSize: 12.5, lineHeight: 18, flexShrink: 1 },
