@@ -33,7 +33,7 @@ const PENDING_STATUS = {
 };
 
 /** The label, icon, and colors of each phase of a tool call. */
-export const TOOL_STATUS = {
+const TOOL_STATUS = {
   preparing: { label: TOOL_LIFECYCLE_LABELS.preparing, ...PENDING_STATUS },
   queued: { label: TOOL_LIFECYCLE_LABELS.queued, ...PENDING_STATUS },
   executing: {
@@ -62,30 +62,18 @@ export const TOOL_STATUS = {
   },
 } as const satisfies Record<ToolLifecyclePhase, ToolStatus>;
 
-/**
- * The icon of the phase of a tool call, with its label for screen readers. A `decorative` icon
- * sits next to its visible label, so screen readers skip it.
- */
-export const ToolStatusIcon = ({
-  phase,
-  decorative = false,
-  className,
-}: {
-  phase: ToolLifecyclePhase;
-  decorative?: boolean;
-  className?: string;
-}): ReactElement => {
-  const { label, Icon, iconClassName } = TOOL_STATUS[phase];
+/** The icon and the label of the phase of a tool call, in the color of the phase. */
+export const ToolStatusLabel = ({ phase }: { phase: ToolLifecyclePhase }): ReactElement => {
+  const { label, Icon, iconClassName, textClassName } = TOOL_STATUS[phase];
   return (
-    <span
-      {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": label })}
-      className={cn(
-        "inline-flex size-3.5 shrink-0 items-center justify-center",
-        iconClassName,
-        className,
-      )}
-    >
-      {Icon ? <Icon aria-hidden="true" className="size-3.5" /> : <ToolRunningBars />}
+    <span className={cn("inline-flex items-center gap-1.5 font-medium", textClassName)}>
+      <span
+        aria-hidden="true"
+        className={cn("inline-flex size-3.5 shrink-0 items-center justify-center", iconClassName)}
+      >
+        {Icon ? <Icon aria-hidden="true" className="size-3.5" /> : <ToolRunningBars />}
+      </span>
+      {label}
     </span>
   );
 };

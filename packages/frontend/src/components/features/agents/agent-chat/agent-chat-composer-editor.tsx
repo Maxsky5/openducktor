@@ -35,7 +35,7 @@ import {
   AGENT_CHAT_FILE_REFERENCE_CHIP_ICON_CLASS_NAME,
   AGENT_CHAT_FILE_REFERENCE_CHIP_LABEL_CLASS_NAME,
 } from "./agent-chat-file-reference-chip-classnames";
-import { getAgentChatFileReferenceIconMarkup } from "./agent-chat-file-reference-icon";
+import { getAgentChatFileReferenceIconMarkup } from "./agent-chat-file-reference-icon-markup";
 import {
   AGENT_CHAT_SKILL_REFERENCE_CHIP_BASE_CLASS_NAME,
   AGENT_CHAT_SKILL_REFERENCE_CHIP_ICON_CLASS_NAME,

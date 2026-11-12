@@ -9,7 +9,8 @@ import {
   type ToolDetailsStore,
   ToolDetailsStoreContext,
 } from "@/components/features/agents/agent-chat/agent-chat-tool-details-store";
-import { SessionPanelViewTabsContext, type ToolTabView } from "./session-panel";
+import type { ToolTabView } from "./session-panel";
+import { SessionPanelViewTabsContext } from "./session-panel-view-tabs";
 
 /** The tool details of a page, and what its session panels need to show the tool call tab. */
 export type PageToolDetails = {

@@ -295,7 +295,7 @@ function OutputBar({ text }: { text: string }): ReactElement {
 const OUTPUT_END_THRESHOLD = 24;
 
 /** Command output with the colors and styles that the command wrote. Long output keeps its end. */
-function OutputText({ text, color }: { text: string; color: string }): ReactElement {
+function OutputText({ text }: { text: string }): ReactElement {
   const { desktop } = useAppTheme();
   // The output shows on the surface of the integrated terminal, so it takes the terminal colors.
   const shown = useMemo(() => {
@@ -311,9 +311,9 @@ function OutputText({ text, color }: { text: string; color: string }): ReactElem
   return (
     <>
       {shown.notice ? (
-        <Text style={[styles.small, { color: desktop.mutedForeground }]}>{shown.notice}</Text>
+        <Text style={[styles.small, { color: desktop.terminalMuted }]}>{shown.notice}</Text>
       ) : null}
-      <Text selectable style={[styles.outputText, { color }]}>
+      <Text selectable style={[styles.outputText, { color: desktop.terminalForeground }]}>
         {shown.segments.map(({ segment, key }) => (
           <Text
             key={key}
@@ -397,7 +397,7 @@ function CommandOutput({
           </Text>
         </View>
       ) : null}
-      {text ? <OutputText text={text} color={desktop.foreground} /> : null}
+      {text ? <OutputText text={text} /> : null}
       {!text && !message ? (
         <Text style={[styles.description, { color: desktop.terminalMuted }]}>
           {readEmptyShellOutput(phase, supportsRunningCommandOutput)}

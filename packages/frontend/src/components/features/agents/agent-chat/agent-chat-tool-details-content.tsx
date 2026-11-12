@@ -15,7 +15,7 @@ import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import { AgentToolResultContentView } from "./agent-tool-result-content";
-import { TOOL_STATUS, ToolStatusIcon } from "./agent-chat-tool-status";
+import { ToolStatusLabel } from "./agent-chat-tool-status";
 
 export type ToolDetailsTiming = { messageTimestamp: string; timeLabel: string };
 
@@ -90,15 +90,7 @@ export const DetailsStatusLine = ({
   ].filter((fact) => fact !== null);
   return (
     <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-4">
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 font-medium",
-          TOOL_STATUS[phase].textClassName,
-        )}
-      >
-        <ToolStatusIcon phase={phase} decorative />
-        {TOOL_STATUS[phase].label}
-      </span>
+      <ToolStatusLabel phase={phase} />
       {facts.map((fact) => (
         <Fragment key={fact}>
           <span aria-hidden="true" className="text-muted-foreground">

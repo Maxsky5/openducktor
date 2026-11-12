@@ -3,7 +3,6 @@ import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dn
 import { CSS } from "@dnd-kit/utilities";
 import { Loader2, type LucideIcon, Plus, X } from "lucide-react";
 import {
-  createContext,
   memo,
   type ReactElement,
   type ReactNode,
@@ -41,6 +40,7 @@ import {
   type ViewTabKind,
 } from "./panel-tab-kinds";
 import type { ResolvedPanelTab } from "./session-panel-layout";
+import { SessionPanelViewTabsContext } from "./session-panel-view-tabs";
 import { SessionPanelLauncher } from "./session-panel-launcher";
 import { PanelTabBadgeView, PanelTabIcon } from "./session-panel-tab-icon";
 import { type PanelTabPresentation, panelTabPresentation } from "./session-panel-tab-presentation";
@@ -65,14 +65,6 @@ export type ToolTabView = {
 };
 
 export type ToolTabViews = Partial<Record<ToolTabKind | ViewTabKind, ToolTabView>>;
-
-/**
- * The views of the view-kind tabs of the page, such as the tool call that the transcript shows.
- * The page gives them once at its root, so both of its panels show them.
- */
-export const SessionPanelViewTabsContext = createContext<Partial<
-  Record<ViewTabKind, ToolTabView>
-> | null>(null);
 
 type SessionPanelProps = {
   model: SessionPanelModel;

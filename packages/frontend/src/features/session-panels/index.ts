@@ -21,12 +21,7 @@ export {
   type SessionPanelLayoutStore,
   useSessionPanelLayoutStore,
 } from "./session-panel-layout-store";
-export {
-  SessionPanel,
-  SessionPanelViewTabsContext,
-  type ToolTabView,
-  type ToolTabViews,
-} from "./session-panel";
+export { SessionPanel, type ToolTabView, type ToolTabViews } from "./session-panel";
 export {
   BottomPanelSplit,
   SessionPanelSplit,

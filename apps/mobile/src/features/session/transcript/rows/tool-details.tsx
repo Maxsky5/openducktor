@@ -1,10 +1,8 @@
 import { useRecyclingState } from "@shopify/flash-list";
 import type { AgentNativeFileReference, AgentToolResultContent } from "@openducktor/contracts";
-import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/message-formatting";
 import {
   buildQuestionDetailEntries,
   FILE_DIFF_UNAVAILABLE_MESSAGE,
-  formatToolInput,
   NO_ANSWER_YET_LABEL,
   readToolFileEdits,
   toolResultContentEntries,
@@ -16,7 +14,7 @@ import {
 } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { memo, type ReactElement, type ReactNode, useLayoutEffect, useMemo } from "react";
-import { type StyleProp, View, type ViewStyle } from "react-native";
+import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useFeedbackStore } from "@/app-shell/app-services";
 import { readDataUri } from "@/platform/data-uri";
@@ -31,142 +29,6 @@ import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { FileEditView } from "./file-edit-view";
 import { DetailsBox, LINE_DETAILS_INSET, PreText } from "./row-parts";
-
-/**
- * The colors of tool detail boxes. `card` is the desktop `rounded border border-border bg-card`
- * of a regular call. `current` is the workflow card box: a border in the text color at 20% on
- * the card.
- */
-export type ToolDetailsColors = {
-  frame: StyleProp<ViewStyle>;
-  text: string;
-  errorFrame: StyleProp<ViewStyle>;
-  errorText: string;
-};
-
-/**
- * Returns a reader that formats the text on its first call and keeps the result. A closed box
- * never calls it, so it does no format work.
- */
-const formatOnce = (format: () => string): (() => string) => {
-  let text: string | undefined;
-  return () => {
-    text ??= format();
-    return text;
-  };
-};
-
-/** Tool text that a box formats when it opens. */
-function FormattedText({ read, color }: { read: () => string; color: string }): ReactElement {
-  return <PreText text={read()} color={color} />;
-}
-
-/**
- * The desktop Input, Output, and Error boxes of a Tool Call. Each box opens on its own, and its
- * text builds only when it opens.
- */
-export const ToolDetails = memo(function ToolDetails(props: ToolDetailsProps): ReactElement {
-  return (
-    <WithFullToolPart meta={props.meta}>
-      {(shown) => <ToolDetailsBody {...props} meta={shown} />}
-    </WithFullToolPart>
-  );
-});
-
-type ToolDetailsProps = {
-  meta: ToolMeta;
-  resetKey: string;
-  hasInput: boolean;
-  hasOutput: boolean;
-  /** The text of the Error box, or null for no box. */
-  errorText: string | null;
-  colors: ToolDetailsColors;
-};
-
-function ToolDetailsBody({
-  meta,
-  resetKey,
-  hasInput,
-  hasOutput,
-  errorText,
-  colors,
-}: ToolDetailsProps): ReactElement {
-  const output = useMemo(
-    () => formatOnce(() => formatRawJsonLikeText(meta.output ?? "")),
-    [meta.output],
-  );
-  const error = useMemo(
-    () => formatOnce(() => formatRawJsonLikeText(errorText ?? "")),
-    [errorText],
-  );
-  const outputCut = meta.detailsOmitted?.output === true;
-  return (
-    <>
-      {hasInput && meta.input ? (
-        <ToolInput meta={meta} resetKey={resetKey} colors={colors} />
-      ) : null}
-      {hasOutput ? (
-        <DetailsBox
-          label="Output"
-          resetKey={`${resetKey}:output`}
-          frameStyle={colors.frame}
-          textColor={colors.text}
-          copyText={outputCut || meta.resultContent ? undefined : output}
-        >
-          {outputCut ? (
-            <ToolPartLoader meta={meta} what="output" color={colors.text} />
-          ) : (
-            <ToolOutput content={meta.resultContent} output={output} color={colors.text} />
-          )}
-        </DetailsBox>
-      ) : null}
-      {errorText ? (
-        <DetailsBox
-          label="Error"
-          resetKey={`${resetKey}:error`}
-          frameStyle={colors.errorFrame}
-          textColor={colors.errorText}
-          copyText={error}
-        >
-          <FormattedText read={error} color={colors.errorText} />
-        </DetailsBox>
-      ) : null}
-    </>
-  );
-}
-
-function ToolInput({
-  meta,
-  resetKey,
-  colors,
-}: {
-  meta: ToolMeta;
-  resetKey: string;
-  colors: ToolDetailsColors;
-}): ReactElement {
-  const { workingDirectory } = useTranscriptRows();
-  // The box builds its content only while open, so the format runs on the first open.
-  const text = useMemo(
-    () => formatOnce(() => (meta.input ? formatToolInput(meta.input, workingDirectory) : "")),
-    [meta.input, workingDirectory],
-  );
-  const inputCut = meta.detailsOmitted?.input === true;
-  return (
-    <DetailsBox
-      label="Input"
-      resetKey={`${resetKey}:input`}
-      frameStyle={colors.frame}
-      textColor={colors.text}
-      copyText={inputCut ? undefined : text}
-    >
-      {inputCut ? (
-        <ToolPartLoader meta={meta} what="input" color={colors.text} />
-      ) : (
-        <FormattedText read={text} color={colors.text} />
-      )}
-    </DetailsBox>
-  );
-}
 
 /**
  * Renders `children` with the call. When compact history cut the call, it renders the cut call
@@ -263,7 +125,7 @@ export function ToolOutput({
   color: string;
 }): ReactElement {
   const entries = useMemo(() => (content ? toolResultContentEntries(content) : null), [content]);
-  if (!entries) return <FormattedText read={output} color={color} />;
+  if (!entries) return <PreText text={output()} color={color} />;
   return (
     <>
       {entries.map(({ value, key }) =>
