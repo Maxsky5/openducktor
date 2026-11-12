@@ -602,7 +602,78 @@ export const buildAgentSessionLiveCollection = ({
       resetSessionLiveStateForSnapshot(settled, liveSnapshot !== undefined),
     );
   }
+  return rebuildProjectedPendingInput(placeLiveSnapshots(collection, snapshots));
+};
 
+/**
+ * Applies kept live snapshots to the sessions that `current` adds to `previous`.
+ *
+ * A snapshot that arrives before the record of its session finds no session, so the commit
+ * that adds the session applies it. A missing child follows a parent that the commit added, also
+ * through a child that this pass places. A session that `current` already reports as live keeps
+ * its state.
+ */
+export const applyLiveSnapshotsToAddedSessions = ({
+  previous,
+  current,
+  snapshots,
+}: {
+  previous: AgentSessionCollection;
+  current: AgentSessionCollection;
+  snapshots: Iterable<AgentSessionLiveSnapshot>;
+}): AgentSessionCollection => {
+  const added: AgentSessionLiveSnapshot[] = [];
+  let children: { snapshot: AgentSessionLiveSnapshot; parent: AgentSessionIdentity }[] = [];
+  for (const snapshot of snapshots) {
+    const identity = toSessionIdentity(snapshot.ref);
+    if (getAgentSession(previous, identity)) {
+      continue;
+    }
+    const session = getAgentSession(current, identity);
+    if (session) {
+      if (session.livePresence !== "present") {
+        added.push(snapshot);
+      }
+      continue;
+    }
+    if (snapshot.parentExternalSessionId !== undefined) {
+      children.push({
+        snapshot,
+        parent: { ...identity, externalSessionId: snapshot.parentExternalSessionId },
+      });
+    }
+  }
+  const placedChildKeys = new Set<string>();
+  const isAddedParent = (parent: AgentSessionIdentity): boolean =>
+    placedChildKeys.has(agentSessionIdentityKey(parent)) ||
+    (getAgentSession(current, parent) !== null && getAgentSession(previous, parent) === null);
+  while (children.length > 0) {
+    const waiting: typeof children = [];
+    for (const child of children) {
+      if (isAddedParent(child.parent)) {
+        added.push(child.snapshot);
+        placedChildKeys.add(agentSessionIdentityKey(toSessionIdentity(child.snapshot.ref)));
+      } else {
+        waiting.push(child);
+      }
+    }
+    if (waiting.length === children.length) {
+      break;
+    }
+    children = waiting;
+  }
+  if (added.length === 0) {
+    return current;
+  }
+  const collection = placeLiveSnapshots(current, added);
+  return collection === current ? current : rebuildProjectedPendingInput(collection);
+};
+
+const placeLiveSnapshots = (
+  current: AgentSessionCollection,
+  snapshots: readonly AgentSessionLiveSnapshot[],
+): AgentSessionCollection => {
+  let collection = current;
   let remaining = [...snapshots];
   while (remaining.length > 0) {
     const deferred: AgentSessionLiveSnapshot[] = [];
@@ -632,7 +703,7 @@ export const buildAgentSessionLiveCollection = ({
     }
     remaining = deferred;
   }
-  return rebuildProjectedPendingInput(collection);
+  return collection;
 };
 
 export const applyAgentSessionLiveDelta = ({

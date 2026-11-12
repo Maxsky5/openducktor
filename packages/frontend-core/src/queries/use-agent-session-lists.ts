@@ -22,6 +22,8 @@ export type AgentSessionListQueryResult = UseQueryResult<AgentSessionRecord[], E
 
 export type AgentSessionListsState = {
   data: Record<string, AgentSessionRecord[]>;
+  /** Tasks whose lists were read. `data` holds an empty list for each other task. */
+  loadedTaskIds: string[];
   error: unknown | null;
   isPending: boolean;
 };
@@ -130,13 +132,21 @@ export const useAgentSessionLists = ({
         normalizedTaskIds.map((taskId, index) => [taskId, reads[index]?.data ?? []]),
       );
       if (!shouldReadLists) {
-        return { data, error: null, isPending: true };
+        return { data, loadedTaskIds: [], error: null, isPending: true };
       }
+      const loadedTaskIds = normalizedTaskIds.filter(
+        (_taskId, index) => reads[index]?.status === "success",
+      );
       const failedRead = reads.find((read) => read.status === "error");
       if (failedRead) {
-        return { data, error: failedRead.error, isPending: false };
+        return { data, loadedTaskIds, error: failedRead.error, isPending: false };
       }
-      return { data, error: null, isPending: reads.some((read) => read.status === "pending") };
+      return {
+        data,
+        loadedTaskIds,
+        error: null,
+        isPending: reads.some((read) => read.status === "pending"),
+      };
     },
     [normalizedTaskIds, shouldReadLists],
   );

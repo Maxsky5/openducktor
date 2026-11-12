@@ -25,6 +25,7 @@ import { createAgentSessionFixture } from "../../../test-support/shared-test-fix
 import { createSessionMessagesState } from "../support/messages";
 import {
   applyAgentSessionLiveDelta,
+  applyLiveSnapshotsToAddedSessions,
   buildAgentSessionLiveCollection,
   projectSessionSnapshotActivity,
   rebuildProjectedPendingInput,
@@ -193,6 +194,70 @@ describe("projectSessionSnapshotActivity", () => {
       });
     },
   );
+});
+
+describe("applyLiveSnapshotsToAddedSessions", () => {
+  test("applies kept snapshots to a session that a commit added, and to its child", () => {
+    const root = createAgentSessionFixture({
+      ...identity("root"),
+      sessionAssociation: workflowAssociation(),
+      livePresence: "absent",
+    });
+    const placed = createAgentSessionFixture({ ...identity("placed"), status: "running" });
+    const previous = replaceAgentSession(emptyAgentSessionCollection(), placed);
+    const recorded = replaceAgentSession(previous, root);
+
+    const next = applyLiveSnapshotsToAddedSessions({
+      previous,
+      current: recorded,
+      snapshots: [
+        snapshot("child", {
+          parentExternalSessionId: "root",
+          activity: "waiting_for_permission",
+          pendingApprovals: [
+            { requestId: "approve", requestType: "command_execution", title: "Run" },
+          ],
+        }),
+        snapshot("grandchild", { parentExternalSessionId: "child" }),
+        snapshot("root", { activity: "running", goal: { objective: "Ship", status: "active" } }),
+        snapshot("placed"),
+        snapshot("orphan", { parentExternalSessionId: "missing" }),
+      ],
+    });
+
+    expect(getAgentSession(next, identity("root"))).toMatchObject({
+      livePresence: "present",
+      status: "running",
+      goal: { objective: "Ship", status: "active" },
+      pendingApprovals: [{ requestId: "approve" }],
+    });
+    expect(getAgentSession(next, identity("child"))?.livePresence).toBe("present");
+    expect(getAgentSession(next, identity("grandchild"))?.livePresence).toBe("present");
+    // A session that the projection already holds keeps its newer state.
+    expect(getAgentSession(next, identity("placed"))).toBe(placed);
+    expect(getAgentSession(next, identity("orphan"))).toBeNull();
+  });
+
+  test("keeps a commit that adds no session or adds a live one", () => {
+    const repositoryScope = { kind: "repository", workspaceId: "workspace-1" } as const;
+    const live = createAgentSessionFixture({ ...identity("live"), livePresence: "present" });
+    const removed = createAgentSessionFixture(identity("removed"));
+    const previous = replaceAgentSession(emptyAgentSessionCollection(), removed);
+    const current = replaceAgentSession(emptyAgentSessionCollection(), live);
+    // A removal must not bring a session back from its kept snapshot.
+    expect(
+      applyLiveSnapshotsToAddedSessions({
+        previous,
+        current,
+        snapshots: [
+          snapshot("removed", { repositoryScope }),
+          snapshot("live", { activity: "running" }),
+          // The parent of this child is in neither collection, so its scope does not create it.
+          snapshot("scoped-child", { parentExternalSessionId: "gone", repositoryScope }),
+        ],
+      }),
+    ).toBe(current);
+  });
 });
 
 describe("agent session live projection", () => {

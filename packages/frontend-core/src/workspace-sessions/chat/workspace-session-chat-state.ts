@@ -83,8 +83,14 @@ export function projectWorkspaceSessionChatState({
 }) {
   const observationReady = readModelLoadState.kind === "ready";
   const targetFault = fault?.source === "workspace-target" ? fault : null;
+  // A snapshot already reported this session, so task-record reads must not hide its activity.
+  // Only a live-stream failure makes the reported activity unknown.
+  const liveStreamFailed =
+    readModelLoadState.kind === "failed" && readModelLoadState.source === "live-stream";
+  const activityKnown =
+    observationReady || (!liveStreamFailed && session?.livePresence === "present");
   const observedActivity =
-    session && observationReady ? getAgentSessionActivityStateFromSession(session) : null;
+    session && activityKnown ? getAgentSessionActivityStateFromSession(session) : null;
   const statusUnavailableReason =
     session?.statusUnavailableReason ?? (fault?.statusUnavailable ? fault.message : null);
   const activityState = visibleSessionActivity(observedActivity, statusUnavailableReason);

@@ -98,6 +98,38 @@ describe("useAgentSessionLists", () => {
     }
   });
 
+  test("reports the lists that were read when another list fails", async () => {
+    const batchList = mock(
+      async (_scope: WorkspaceRef, taskIds: string[]): Promise<BatchResult> => {
+        if (taskIds.includes("task-2")) throw new Error("task 2 read failed");
+        return [{ taskId: "task-1", agentSessions: [sessionFixture] }];
+      },
+    );
+    const props: HarnessProps = {
+      repoPath: "/repo",
+      taskIds: ["task-1"],
+      enabled: true,
+      readPort: { agentSessionsListForTasks: batchList },
+    };
+    const harness = createHarness(props);
+
+    try {
+      await harness.mount();
+      await harness.waitFor((state) => !state.isPending);
+      expect(harness.getLatest().loadedTaskIds).toEqual(["task-1"]);
+
+      await harness.update({ ...props, taskIds: ["task-1", "task-2"] });
+      await harness.waitFor((state) => state.error !== null);
+      expect(harness.getLatest()).toMatchObject({
+        data: { "task-1": [sessionFixture], "task-2": [] },
+        loadedTaskIds: ["task-1"],
+        isPending: false,
+      });
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("stays pending without reading when disabled", async () => {
     const batchList = mock(async () => []);
     const harness = createHarness({
@@ -111,6 +143,7 @@ describe("useAgentSessionLists", () => {
       await harness.mount();
       expect(harness.getLatest()).toEqual({
         data: { "task-1": [] },
+        loadedTaskIds: [],
         error: null,
         isPending: true,
       });
@@ -133,6 +166,7 @@ describe("useAgentSessionLists", () => {
       await harness.mount();
       expect(harness.getLatest()).toEqual({
         data: { "task-1": [] },
+        loadedTaskIds: [],
         error: null,
         isPending: true,
       });

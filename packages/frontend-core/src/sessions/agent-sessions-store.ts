@@ -1,4 +1,7 @@
-import { projectSessionSnapshotActivity } from "./agent-orchestrator/session-read-model/agent-session-live-projection";
+import {
+  applyLiveSnapshotsToAddedSessions,
+  projectSessionSnapshotActivity,
+} from "./agent-orchestrator/session-read-model/agent-session-live-projection";
 import type {
   AgentSessionLiveEnvelope,
   AgentSessionLiveSnapshot,
@@ -318,7 +321,17 @@ export const createAgentSessionsStore = (
     commit: AgentSessionCollectionCommit<Result>,
   ): Result => {
     const { collection, result } = commit(sessionCollection);
-    const nextCollection = projectLiveNotices(collection);
+    // A snapshot can come before the record of its session, so a commit that adds the session
+    // applies the kept snapshot.
+    const withLiveState =
+      collection === sessionCollection
+        ? collection
+        : applyLiveSnapshotsToAddedSessions({
+            previous: sessionCollection,
+            current: collection,
+            snapshots: observedActivity.values(),
+          });
+    const nextCollection = projectLiveNotices(withLiveState);
     noticeUpdates.clear();
     if (areAgentSessionCollectionsEquivalent(sessionCollection, nextCollection)) {
       return result;

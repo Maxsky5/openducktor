@@ -1574,7 +1574,7 @@ describe("useRepoSessionReadModel", () => {
       state.queryClient.clear();
     }
   });
-  test("waits for workspace ownership before admitting an unbound native root on cold load", async () => {
+  test("admits an unbound native root with its live state when its workspace record loads", async () => {
     const loaded = createDeferred<WorkspaceSession[]>();
     const entry: WorkspaceSession = {
       id: "workspace-session",
@@ -1609,11 +1609,15 @@ describe("useRepoSessionReadModel", () => {
     state.clearSessions();
     try {
       await state.harness.mount();
-      expect(state.observeAgentSessionLive).not.toHaveBeenCalled();
+      // Observation does not wait for record reads, but the snapshot cannot create the root.
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      expect(state.getSession()).toBeNull();
       await state.harness.run(() => loaded.resolve([entry]));
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.waitFor(() => state.getSession() !== null);
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("ready");
       expect(state.getSession()).toMatchObject({
         sessionAssociation: { kind: "repository", workspaceId: "workspace-a" },
+        livePresence: "present",
         status: "idle",
         pendingQuestions: [{ requestId: "answer", questions: [] }],
       });
@@ -2005,13 +2009,26 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("becomes ready when a grown task set hydrates after the initial snapshot", async () => {
+  test("applies a snapshot that came before its session record when a grown task set hydrates", async () => {
     const task2Hydration = createDeferred<TaskSessionRecordBatch>();
     const releaseSnapshot = createDeferred<void>();
+    const lateRecord: AgentSessionRecord = { ...record, externalSessionId: "late", role: "qa" };
+    const lateRef = { ...snapshot().ref, externalSessionId: lateRecord.externalSessionId };
+    const lateSnapshot = snapshot({
+      ref: lateRef,
+      activity: "waiting_for_question",
+      pendingQuestions: [{ requestId: "question", questions: [] }],
+      contextUsage: { totalTokens: 1200 },
+      goal: { objective: "Ship the feature", status: "active" },
+    });
     const state = createState(
       (emit) => {
         void releaseSnapshot.promise.then(() => {
-          emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
+          emit(
+            createLiveSnapshotEnvelope({
+              sessions: [snapshot({ activity: "running" }), lateSnapshot],
+            }),
+          );
         });
       },
       record,
@@ -2021,13 +2038,87 @@ describe("useRepoSessionReadModel", () => {
     try {
       await state.harness.mount();
       await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
-
-      // The task list grows while the first snapshot is on its way, as on a slow network.
+      // The task list grows while the first snapshot is on its way, as on a slow network, so
+      // the new task's record loads after the snapshot.
       await state.harness.update({ ...state.props, taskIds: ["task-1", "task-2"] });
       await state.harness.run(async () => {
         releaseSnapshot.resolve();
         await releaseSnapshot.promise;
       });
+
+      // The late record does not hold back the fields of a session that the store already has.
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+      expect(state.getSession()).toMatchObject({ livePresence: "present", status: "running" });
+      expect(state.getStoredSession(lateRef)).toBeNull();
+
+      await state.harness.run(async () => {
+        task2Hydration.resolve([{ taskId: "task-2", agentSessions: [lateRecord] }]);
+        await task2Hydration.promise;
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      const late = state.getStoredSession(lateRef)!;
+      expect(getAgentSessionActivityStateFromSession(late)).toBe("waiting_input");
+      expect(late).toMatchObject({
+        sessionAssociation: { kind: "workflow", taskId: "task-2", role: "qa" },
+        livePresence: "present",
+        pendingQuestions: [{ requestId: "question", questions: [] }],
+        contextUsage: { totalTokens: 1200 },
+        goal: { objective: "Ship the feature", status: "active" },
+      });
+    } finally {
+      releaseSnapshot.resolve();
+      task2Hydration.resolve([]);
+      await state.harness.unmount();
+    }
+  });
+
+  test("shows live fields on cold start before task records load", async () => {
+    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
+    const workspaceRef = { ...snapshot().ref, externalSessionId: "workspace-thread" };
+    const state = createState(
+      (emit) =>
+        emit(
+          createLiveSnapshotEnvelope({
+            sessions: [
+              snapshot({
+                ref: workspaceRef,
+                activity: "running",
+                repositoryScope: { kind: "repository", workspaceId: "workspace-1" },
+                contextUsage: { totalTokens: 900 },
+                goal: { objective: "Ship the feature", status: "active" },
+              }),
+              snapshot({ activity: "running" }),
+            ],
+          }),
+        ),
+      record,
+      { agentSessionsListForTasks: () => task2Hydration.promise },
+    );
+    try {
+      state.props.isLoadingTasks = true;
+      state.props.taskIds = [];
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      // The task list and its records are still loading. Known live fields show at once.
+      expect(state.getStoredSession(workspaceRef)).toMatchObject({
+        livePresence: "present",
+        status: "running",
+        contextUsage: { totalTokens: 900 },
+        goal: { objective: "Ship the feature", status: "active" },
+      });
+      expect(state.getSession()).toBeNull();
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+
+      await state.harness.update({
+        ...state.props,
+        isLoadingTasks: false,
+        taskIds: ["task-1", "task-2"],
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+      expect(state.getStoredSession(workspaceRef)?.status).toBe("running");
+      // Task 1 has its record. Task 2 still loads, but it does not hold back task 1.
+      await state.harness.waitFor(() => state.getSession() !== null);
+      expect(state.getSession()).toMatchObject({ livePresence: "present", status: "running" });
       expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
 
       await state.harness.run(async () => {
@@ -2035,11 +2126,164 @@ describe("useRepoSessionReadModel", () => {
         await task2Hydration.promise;
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      expect(state.getSession()).not.toBeNull();
+      expect(state.getSession()).toMatchObject({ livePresence: "present", status: "running" });
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
     } finally {
-      releaseSnapshot.resolve();
       task2Hydration.resolve([]);
       await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
+  test("stays loading while the task list loads, and becomes ready for a workspace without tasks", async () => {
+    const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })));
+    try {
+      state.props.isLoadingTasks = true;
+      state.props.taskIds = [];
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      // The empty task list of a loading read proves nothing about task records.
+      expect(state.harness.getLatest().sessionReadModelLoadState.kind).toBe("loading");
+
+      await state.harness.update({ ...state.props, isLoadingTasks: false, taskIds: [] });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
+  test("shows the sessions of a read task list while another list fails", async () => {
+    const state = createState(
+      (emit) => emit(createLiveSnapshotEnvelope({ sessions: [snapshot({ activity: "running" })] })),
+      record,
+      {
+        agentSessionsListForTasks: async () => {
+          throw new Error("task 2 read failed");
+        },
+      },
+    );
+    try {
+      state.queryClient.setDefaultOptions({ queries: { retry: false } });
+      state.props.taskIds = ["task-1", "task-2"];
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        kind: "failed",
+        source: "task-records",
+      });
+      expect(state.getSession()).toMatchObject({
+        sessionAssociation: { kind: "workflow", taskId: "task-1" },
+        livePresence: "present",
+        status: "running",
+      });
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
+  test("keeps a known task-record failure visible while the observation starts", async () => {
+    const releaseSnapshot = createDeferred<void>();
+    const state = createState((emit) => {
+      void releaseSnapshot.promise.then(() =>
+        emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
+      );
+    }, record);
+    try {
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-2"),
+          queryFn: async () => {
+            throw new Error("task 2 read failed");
+          },
+          retry: false,
+        }),
+      ).rejects.toThrow("task 2 read failed");
+      state.props.taskIds = ["task-1", "task-2"];
+      await state.harness.mount();
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 1);
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        kind: "failed",
+        source: "task-records",
+      });
+
+      await state.harness.run(async () => {
+        releaseSnapshot.resolve();
+        await releaseSnapshot.promise;
+      });
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        kind: "failed",
+        source: "task-records",
+      });
+    } finally {
+      releaseSnapshot.resolve();
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
+  test("keeps the live state of an ownership event for a later commit that adds the session", async () => {
+    const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
+    const saved = { ...record, externalSessionId: "new-thread" };
+    const ref = { ...snapshot().ref, externalSessionId: saved.externalSessionId };
+    const ownership = {
+      type: "task_session_records_updated" as const,
+      workspaceId: "workspace-1",
+      repoPath: "/repo",
+      taskId: "task-1",
+      agentSessions: [saved],
+    };
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit({ type: "session_upsert", session: snapshot({ ref, activity: "idle" }) });
+        state.emit({ ...ownership, liveSession: snapshot({ ref, activity: "running" }) });
+      });
+      expect(state.getStoredSession(ref)?.status).toBe("running");
+
+      // The session leaves the collection, then a record pass adds it again.
+      await state.harness.run(() => {
+        state.clearSessions();
+        state.emit(ownership);
+      });
+      expect(state.getStoredSession(ref)).toMatchObject({
+        livePresence: "present",
+        status: "running",
+      });
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
+    }
+  });
+
+  test("applies an update that came before the ownership event of a new task session", async () => {
+    const state = createState((emit) => emit(createLiveSnapshotEnvelope({ sessions: [] })), []);
+    const saved = { ...record, externalSessionId: "new-thread" };
+    const ref = { ...snapshot().ref, externalSessionId: saved.externalSessionId };
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await state.harness.run(() => {
+        state.emit({ type: "session_upsert", session: snapshot({ ref, activity: "running" }) });
+        state.emit({
+          type: "task_session_records_updated",
+          workspaceId: "workspace-1",
+          repoPath: "/repo",
+          taskId: "task-1",
+          agentSessions: [saved],
+        });
+      });
+      expect(state.getStoredSession(ref)).toMatchObject({
+        sessionAssociation: { kind: "workflow", taskId: "task-1" },
+        livePresence: "present",
+        status: "running",
+      });
+    } finally {
+      await state.harness.unmount();
+      state.queryClient.clear();
     }
   });
 
@@ -2220,10 +2464,17 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("keeps a live-stream failure failed across record recovery until the stream recovers", async () => {
+  test("keeps a live-stream failure public over task-record failures until the stream recovers", async () => {
     const state = createState((emit) => {
       emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
     });
+    const expectLiveStreamFailure = () => {
+      const latest = state.harness.getLatest().sessionReadModelLoadState;
+      expect(latest).toMatchObject({ kind: "failed", source: "live-stream" });
+      expect(latest.kind === "failed" && latest.message).toContain(
+        "The observation stream stopped.",
+      );
+    };
 
     try {
       await state.harness.mount();
@@ -2237,13 +2488,11 @@ describe("useRepoSessionReadModel", () => {
           message: "The observation stream stopped.",
         });
       });
-      await state.harness.waitFor(
-        (value) =>
-          value.sessionReadModelLoadState.kind === "failed" &&
-          value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
-      );
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      expectLiveStreamFailure();
 
-      // A task-record read failure then overwrites the public slot.
+      // A task-record read fails. The stream failure stays public, so views do not show the
+      // last live state as current.
       await expect(
         state.queryClient.fetchQuery({
           queryKey: agentSessionQueryKeys.list(workspaceScope, "task-1"),
@@ -2254,37 +2503,31 @@ describe("useRepoSessionReadModel", () => {
           retry: false,
         }),
       ).rejects.toThrow("record read failed");
+      await state.harness.run(async () => {});
+      expectLiveStreamFailure();
+
+      // A retry that fails while the stream is down keeps the stream failure, also during the retry.
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      expectLiveStreamFailure();
+      await state.harness.run(async () => {});
+      expectLiveStreamFailure();
+      expect(state.observeAgentSessionLive).toHaveBeenCalledTimes(1);
+
+      // The stream recovers. The task-record failure then shows.
+      await state.harness.run(() => {
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
+      });
       await state.harness.waitFor(
         (value) =>
           value.sessionReadModelLoadState.kind === "failed" &&
-          value.sessionReadModelLoadState.message.endsWith("record read failed"),
+          value.sessionReadModelLoadState.source === "task-records",
       );
 
-      // The record read recovers; the live-stream failure must surface again.
-      const refreshedRecords = [{ ...record, externalSessionId: "thread-after-recovery" }];
+      // The record read recovers.
       await state.harness.run(() => {
-        state.queryClient.setQueryData(
-          agentSessionQueryKeys.list(workspaceScope, "task-1"),
-          refreshedRecords,
-        );
-      });
-      const recoveredIdentity = {
-        externalSessionId: "thread-after-recovery",
-        runtimeKind: record.runtimeKind,
-        workingDirectory: record.workingDirectory,
-      };
-      await state.harness.waitFor(() => state.getStoredSession(recoveredIdentity) !== null);
-
-      const latest = state.harness.getLatest().sessionReadModelLoadState;
-      if (latest.kind !== "failed") {
-        throw new Error("Expected the live-stream failure to stay failed.");
-      }
-      expect(latest.source).toBe("live-stream");
-      expect(latest.message).toContain("The observation stream stopped.");
-
-      // A fresh authoritative snapshot proves the stream is healthy again.
-      await state.harness.run(() => {
-        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
+        state.queryClient.setQueryData(agentSessionQueryKeys.list(workspaceScope, "task-1"), [
+          record,
+        ]);
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
     } finally {
@@ -2377,7 +2620,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
 
-  test("resurfaces an unresolved live failure after a hydrating task set supersedes a stale one", async () => {
+  test("keeps an unresolved live failure public while task sets change and fail", async () => {
     const deferredB = createDeferred<TaskSessionRecordBatch>();
     const batchList = mock(() => deferredB.promise);
     const state = createState(
@@ -2408,7 +2651,13 @@ describe("useRepoSessionReadModel", () => {
           value.sessionReadModelLoadState.message.endsWith("The observation stream stopped."),
       );
 
-      // A task-record read failure then overwrites the public slot.
+      const expectLiveStreamFailure = () =>
+        expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+          kind: "failed",
+          source: "live-stream",
+        });
+
+      // A task-record read fails. The stream failure stays public.
       await expect(
         state.queryClient.fetchQuery({
           queryKey: agentSessionQueryKeys.list(workspaceScope, "task-2"),
@@ -2420,22 +2669,26 @@ describe("useRepoSessionReadModel", () => {
         }),
       ).rejects.toThrow("task 2 read failed");
       await state.harness.update({ ...state.props, taskIds: ["task-2"] });
-      await state.harness.waitFor(
-        (value) =>
-          value.sessionReadModelLoadState.kind === "failed" &&
-          value.sessionReadModelLoadState.message.endsWith("task 2 read failed"),
-      );
+      expectLiveStreamFailure();
 
-      // Switching task sets demotes the stale failure to loading; when the
-      // new scope loads, the still-unresolved live failure must surface again.
+      // A new task set hydrates. The stream failure stays public through the loading window.
       await state.harness.update({ ...state.props, taskIds: ["task-3"] });
-      deferredB.resolve([
-        {
-          taskId: "task-3",
-          agentSessions: [{ ...record, externalSessionId: "thread-three", role: "qa" as const }],
-        },
-      ]);
-      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      expectLiveStreamFailure();
+      const threeIdentity = {
+        externalSessionId: "thread-three",
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      };
+      await state.harness.run(async () => {
+        deferredB.resolve([
+          {
+            taskId: "task-3",
+            agentSessions: [{ ...record, externalSessionId: "thread-three", role: "qa" as const }],
+          },
+        ]);
+        await deferredB.promise;
+      });
+      await state.harness.waitFor(() => state.getStoredSession(threeIdentity) !== null);
 
       const latest = state.harness.getLatest().sessionReadModelLoadState;
       if (latest.kind !== "failed") {

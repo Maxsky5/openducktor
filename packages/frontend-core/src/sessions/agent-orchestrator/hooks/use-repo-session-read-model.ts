@@ -256,6 +256,7 @@ export const useRepoSessionReadModel = ({
   const readReloadGeneration = useEffectEvent(() => reloadGeneration);
   const readCurrentTaskIdsKey = useEffectEvent(() => taskIdsKey);
   const readCurrentTaskIds = useEffectEvent(() => normalizeAgentSessionTaskIds(taskIds));
+  const readIsLoadingTasks = useEffectEvent(() => isLoadingTasks);
   const observeLiveSessions = useEffectEvent(
     (
       input: Parameters<AgentSessionLiveFrontendPort["observeAgentSessionLive"]>[0],
@@ -313,42 +314,81 @@ export const useRepoSessionReadModel = ({
     },
     [sessionFaults, workspaceRepoPath],
   );
-  const applyTaskRecords = useCallback(
-    (repoPath: string, records: TaskSessionRecords): boolean => {
-      try {
-        commitSessionCollection((current) => ({
-          collection: applyWorkflowSessionRecords({
-            projected: current,
-            records: toLoadedWorkflowSessionRecords(records),
-            associationEvidence: current,
-          }),
-          result: undefined,
-        }));
-        taskRecordApplyRef.current = {
-          kind: "ready",
-          workspaceId: records.workspaceId,
-          repoPath,
-          taskIdsKey: taskIdsScopeKey(records.taskIds),
-          records,
-        };
-        return true;
-      } catch (error: unknown) {
-        const message = `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(error)}`;
-        taskRecordApplyRef.current = {
-          kind: "failed",
-          workspaceId: records.workspaceId,
-          repoPath,
-          taskIdsKey: taskIdsScopeKey(records.taskIds),
-          failedAt: "apply",
-          message,
-        };
-        setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(repoPath, message, "task-records"),
-        );
-        return false;
-      }
+  // Commits task records. It throws when a record conflicts with a known session association.
+  const commitTaskRecords = useCallback(
+    (records: TaskSessionRecords): void => {
+      commitSessionCollection((current) => ({
+        collection: applyWorkflowSessionRecords({
+          projected: current,
+          records: toLoadedWorkflowSessionRecords(records),
+          associationEvidence: current,
+        }),
+        result: undefined,
+      }));
     },
     [commitSessionCollection],
+  );
+  // An unresolved live-stream failure stays the public failure, so a view cannot show the last
+  // live state as current while the stream is down. The task-record failure shows after the
+  // stream recovers.
+  const publishTaskRecordFailure = useCallback((repoPath: string, message: string): void => {
+    const liveMessage = liveStreamFailureRef.current;
+    setSessionReadModelLoadState(
+      liveMessage
+        ? failedAgentSessionReadModelLoadState(repoPath, liveMessage, "live-stream")
+        : failedAgentSessionReadModelLoadState(repoPath, message, "task-records"),
+    );
+  }, []);
+  const failTaskRecordApply = useCallback(
+    ({
+      repoPath,
+      workspaceId: recordsWorkspaceId,
+      taskIdsKey,
+      cause,
+    }: {
+      repoPath: string;
+      workspaceId: string;
+      taskIdsKey: string;
+      cause: unknown;
+    }): void => {
+      const message = `Failed to reconcile task session records for repo '${repoPath}': ${errorMessage(cause)}`;
+      taskRecordApplyRef.current = {
+        kind: "failed",
+        workspaceId: recordsWorkspaceId,
+        repoPath,
+        taskIdsKey,
+        failedAt: "apply",
+        message,
+      };
+      publishTaskRecordFailure(repoPath, message);
+    },
+    [publishTaskRecordFailure],
+  );
+  // Applies the records of every task in the current set, so the task records become ready.
+  const applyTaskRecords = useCallback(
+    (repoPath: string, records: TaskSessionRecords): boolean => {
+      const taskIdsKey = taskIdsScopeKey(records.taskIds);
+      try {
+        commitTaskRecords(records);
+      } catch (error: unknown) {
+        failTaskRecordApply({
+          repoPath,
+          workspaceId: records.workspaceId,
+          taskIdsKey,
+          cause: error,
+        });
+        return false;
+      }
+      taskRecordApplyRef.current = {
+        kind: "ready",
+        workspaceId: records.workspaceId,
+        repoPath,
+        taskIdsKey,
+        records,
+      };
+      return true;
+    },
+    [commitTaskRecords, failTaskRecordApply],
   );
   const reloadSessionReadModel = useCallback(() => {
     const retryId = retryIdRef.current + 1;
@@ -380,7 +420,11 @@ export const useRepoSessionReadModel = ({
       repoEpochRef.current === repoEpoch;
     const retryFailureMessage = (cause: unknown): string =>
       `Failed to retry task session records for repo '${repoPath}': ${errorMessage(cause)}`;
-    setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
+    // While the live stream is down, its failure stays public during the retry. A successful
+    // retry restarts the observation, which opens the loading window.
+    if (!liveStreamFailureRef.current) {
+      setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
+    }
     // Query exposes the chat error separately. Wait for its result before the new snapshot,
     // but do not classify a chat failure as a failed task-record retry.
     const workspaceRetry =
@@ -440,17 +484,12 @@ export const useRepoSessionReadModel = ({
         if (!isCurrentRetry()) {
           return;
         }
-        setSessionReadModelLoadState(
-          failedAgentSessionReadModelLoadState(
-            repoPath,
-            retryFailureMessage(cause),
-            "task-records",
-          ),
-        );
+        publishTaskRecordFailure(repoPath, retryFailureMessage(cause));
       },
     );
   }, [
     currentWorkspaceRepoPathRef,
+    publishTaskRecordFailure,
     queryClient,
     repoEpochRef,
     sessionReadPort,
@@ -481,12 +520,6 @@ export const useRepoSessionReadModel = ({
     queryClient,
     readPort: sessionReadPort,
   });
-  const observedScopeKeyRef = useRef<string | null>(null);
-  const scopeKey = JSON.stringify([workspaceId, workspaceRepoPath]);
-  const canObserveRepo =
-    (taskRecords.kind === "ready" &&
-      (workspaceId === null || !workspaceRecords.records.isPending)) ||
-    observedScopeKeyRef.current === scopeKey;
 
   // Synchronizes an async query lifecycle with the parent-owned session read model.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
@@ -494,25 +527,37 @@ export const useRepoSessionReadModel = ({
     if (!workspaceRepoPath || !workspaceId) {
       return;
     }
+    // Only the complete set makes the task records ready.
+    if (taskRecords.kind !== "ready" && taskRecords.loaded) {
+      try {
+        // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent
+        commitTaskRecords(taskRecords.loaded);
+      } catch (error: unknown) {
+        failTaskRecordApply({
+          repoPath: workspaceRepoPath,
+          workspaceId,
+          taskIdsKey: readCurrentTaskIdsKey(),
+          cause: error,
+        });
+        return;
+      }
+    }
     if (taskRecords.kind === "loading") {
-      if (observedScopeKeyRef.current !== scopeKey) {
+      // The observation effect opens the loading window of a new scope. A prior task set's
+      // failure must not describe a hydrating one. Reload-driven loading windows keep their
+      // own lifecycle.
+      const appliedRecords = taskRecordApplyRef.current;
+      const staleScopeFailure =
+        !liveStreamFailureRef.current &&
+        appliedRecords &&
+        appliedRecords.repoPath === workspaceRepoPath &&
+        appliedRecords.workspaceId === workspaceId &&
+        appliedRecords.kind === "failed" &&
+        appliedRecords.taskIdsKey !== readCurrentTaskIdsKey();
+      if (staleScopeFailure) {
+        demotedStaleFailureRef.current = true;
         // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
         setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
-      } else {
-        // A prior task set's failure must not describe a hydrating one.
-        // Reload-driven loading windows keep their own lifecycle.
-        const appliedRecords = taskRecordApplyRef.current;
-        const staleScopeFailure =
-          appliedRecords &&
-          appliedRecords.repoPath === workspaceRepoPath &&
-          appliedRecords.workspaceId === workspaceId &&
-          appliedRecords.kind === "failed" &&
-          appliedRecords.taskIdsKey !== readCurrentTaskIdsKey();
-        if (staleScopeFailure) {
-          demotedStaleFailureRef.current = true;
-          // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
-          setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(workspaceRepoPath));
-        }
       }
       return;
     }
@@ -528,9 +573,7 @@ export const useRepoSessionReadModel = ({
         failedAt: "load",
         message,
       };
-      setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(workspaceRepoPath, message, "task-records"),
-      );
+      publishTaskRecordFailure(workspaceRepoPath, message);
       return;
     }
 
@@ -583,10 +626,12 @@ export const useRepoSessionReadModel = ({
     });
   }, [
     applyTaskRecords,
+    commitTaskRecords,
     currentWorkspaceRepoPathRef,
+    failTaskRecordApply,
+    publishTaskRecordFailure,
     repoEpochRef,
     taskRecords,
-    scopeKey,
     workspaceRepoPath,
     workspaceId,
   ]);
@@ -617,13 +662,7 @@ export const useRepoSessionReadModel = ({
         failedAt: "apply",
         message: recordRetryResult.message,
       };
-      setSessionReadModelLoadState(
-        failedAgentSessionReadModelLoadState(
-          recordRetryResult.repoPath,
-          recordRetryResult.message,
-          "task-records",
-        ),
-      );
+      publishTaskRecordFailure(recordRetryResult.repoPath, recordRetryResult.message);
       return;
     }
     if (taskRecords.kind === "loading") {
@@ -650,22 +689,21 @@ export const useRepoSessionReadModel = ({
     }
   }, [
     applyTaskRecords,
+    publishTaskRecordFailure,
     repoEpochRef,
     taskIdsKey,
     recordRetryResult,
     taskRecords,
-    scopeKey,
     workspaceRepoPath,
     workspaceId,
   ]);
 
   useEffect(() => {
-    if (!workspaceRepoPath || !workspaceId || !canObserveRepo) {
+    if (!workspaceRepoPath || !workspaceId) {
       return;
     }
     return () => transcriptEvents.close();
   }, [
-    canObserveRepo,
     commitSessionCollection,
     currentWorkspaceRepoPathRef,
     queryClient,
@@ -677,9 +715,11 @@ export const useRepoSessionReadModel = ({
   ]);
 
   // Owns the async stream lifecycle; its loading state is not render-derived.
+  // Observation starts without waiting for record reads, so live fields show as soon as the
+  // snapshot arrives.
   // react-doctor-disable-next-line react-doctor/no-derived-state-effect
   useEffect(() => {
-    if (!workspaceRepoPath || !workspaceId || !canObserveRepo) {
+    if (!workspaceRepoPath || !workspaceId) {
       return;
     }
 
@@ -694,6 +734,10 @@ export const useRepoSessionReadModel = ({
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     const readLoadedWorkflowRecords = (): LoadedWorkflowSessionRecords | null => {
+      // An empty task list that is still loading proves nothing about task records.
+      if (readIsLoadingTasks()) {
+        return null;
+      }
       const cached = readCachedTaskSessionRecords(
         queryClient,
         { workspaceId, repoPath },
@@ -947,6 +991,10 @@ export const useRepoSessionReadModel = ({
       }
       if (envelope.type === "task_session_records_updated") {
         if (envelope.workspaceId !== workspaceId) return;
+        // The store keeps the newest live state, so a later commit that adds the session uses it.
+        if (envelope.liveSession) {
+          applyLiveEnvelopeToStore({ type: "session_upsert", session: envelope.liveSession });
+        }
         commitProjected((current) => {
           const owned = applyWorkflowSessionRecords({
             projected: current,
@@ -1071,13 +1119,20 @@ export const useRepoSessionReadModel = ({
       );
     };
 
-    observedScopeKeyRef.current = scopeKey;
     demotedStaleFailureRef.current = false;
     recoveredLiveFailureRef.current = false;
     snapshotAwaitsRecordsRef.current = false;
     initialLiveSnapshotReceivedRef.current = false;
+    // A task-record failure of this repository stays visible with its retry while observation
+    // starts. A newer record result or a live-stream failure replaces it.
     // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change, react-doctor/no-derived-state
-    setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
+    setSessionReadModelLoadState((current) =>
+      current.kind === "failed" &&
+      current.source === "task-records" &&
+      current.workspaceRepoPath === repoPath
+        ? current
+        : loadingAgentSessionReadModelLoadState(repoPath),
+    );
     void observeLiveSessions({ repoPath }, (envelope) => {
       if (isStaleRepoOperation()) {
         return;
@@ -1104,9 +1159,6 @@ export const useRepoSessionReadModel = ({
 
     return () => {
       cancelled = true;
-      if (observedScopeKeyRef.current === scopeKey) {
-        observedScopeKeyRef.current = null;
-      }
       liveStreamFailureRef.current = null;
       demotedStaleFailureRef.current = false;
       recoveredLiveFailureRef.current = false;
@@ -1115,7 +1167,6 @@ export const useRepoSessionReadModel = ({
       unsubscribe?.();
     };
   }, [
-    canObserveRepo,
     commitSessionCollection,
     recordHistoryEnvelope,
     currentWorkspaceRepoPathRef,
@@ -1129,7 +1180,6 @@ export const useRepoSessionReadModel = ({
     recordSessionFault,
     workspaceRepoPath,
     workspaceId,
-    scopeKey,
   ]);
 
   return useMemo(
