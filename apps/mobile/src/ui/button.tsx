@@ -1,5 +1,5 @@
 import type { WorkflowIcon } from "@openducktor/contracts";
-import { createContext, type ReactElement, useContext } from "react";
+import { type ReactElement, useContext } from "react";
 import {
   type StyleProp,
   type TextStyle,
@@ -17,6 +17,7 @@ import { Icon, type IconName } from "./icon";
 import { LoaderSpinner } from "./loader-spinner";
 import { Text } from "./text";
 import { Touchable } from "./touchable";
+import { ButtonDensityContext } from "./button-density";
 
 /**
  * The desktop button styles. `filled` is the one violet action of a view. `outline` is a white
@@ -77,13 +78,6 @@ const foregroundColor = (theme: AppTheme, variant: ButtonVariant): string =>
     destructive: theme.desktop.destructiveForeground,
     warning: theme.desktop.warningMuted,
   })[variant];
-
-/**
- * The side padding of the buttons inside it. `compact` gives every size the small side padding,
- * for buttons that share one row of a phone, such as the actions of a form footer.
- */
-export type ButtonDensity = "regular" | "compact";
-export const ButtonDensityContext = createContext<ButtonDensity>("regular");
 
 /**
  * A button keeps its colors in styles, so a theme change repaints it without a render. Only a

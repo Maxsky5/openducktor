@@ -1,21 +1,12 @@
 // The Inline Diff Comment flow of DiffScreen.tsx, as diff-comment-flow.tsx moves it: a tap selects
 // a line, a tap on another line extends the range, Comment opens the comment field, and the save
-// adds the pending comment under the last line of the range. The labels come from
-// selectionLabel of diff-comment-model.ts and lineRangeLabel of diff-comment-view.tsx.
+// adds the pending comment under the last line of the range. The labels are in
+// diff-comment-text.ts.
 import { must } from "../../motion/dom";
 import { fadeIn, growIn } from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
 import { typeText } from "../../motion/text";
-
-/** The selected new lines, as the selection bar names them. */
-export function selectionLabel(start: number, end: number): string {
-  return start === end ? `Line ${start}, new lines` : `Lines ${start} to ${end}, new lines`;
-}
-
-/** The lines of a pending comment on new lines, as its card names them. */
-export function commentRangeLabel(start: number, end: number): string {
-  return start === end ? `Line ${start}, new` : `Lines ${start}-${end}, new`;
-}
+import { selectionLabel } from "./diff-comment-text";
 
 /** The comment flow of the diff screen `screen`. Build time clears it. */
 export function diffComments(scene: Scene, screen: HTMLElement) {

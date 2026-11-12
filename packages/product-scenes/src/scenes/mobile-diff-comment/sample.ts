@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import type { MenuAction } from "../../replicas/mobile/ActionMenu";
 import type { ChangesRow } from "../../replicas/mobile/ChangesScreen";
-import { commentRangeLabel } from "../../replicas/mobile/diff-comments";
+import { commentRangeLabel } from "../../replicas/mobile/diff-comment-text";
 import type { RailStep } from "../../replicas/mobile/MobileRail";
 import type { MobileTool } from "../../replicas/mobile/TranscriptRows";
 import type { RoleId } from "../../replicas/vocabulary";

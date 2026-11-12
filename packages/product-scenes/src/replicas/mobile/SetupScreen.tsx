@@ -9,7 +9,7 @@ import "./MobileHeader.css";
 import "./SetupScreen.css";
 
 /** The version label of the app build in the screenshots, as appVersionLabel gives it. */
-export const APP_VERSION = "1.1.0 (1)";
+const APP_VERSION = "1.1.0 (1)";
 
 /** The text of the card. */
 export const SETUP_TEXT = {

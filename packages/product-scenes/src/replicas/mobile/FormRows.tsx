@@ -151,7 +151,7 @@ export function TextArea({ label, value }: { label: string; value: string }): Re
 }
 
 /** The switch of fields.tsx: the input color when off, the switch color when on. */
-export function Toggle({ on }: { on: boolean }): ReactElement {
+function Toggle({ on }: { on: boolean }): ReactElement {
   return (
     <span className="mob-toggle" data-on={flag(on)}>
       <i />

@@ -1,6 +1,7 @@
 import { icons } from "lucide-react";
 import { createElement, type ReactElement } from "react";
-import { BrandIcon, isBrandName } from "@/components/brand-icons";
+import { BrandIcon } from "@/components/brand-icons";
+import { isBrandName } from "./brands";
 
 function isLucideName(name: string): name is keyof typeof icons {
   return Object.hasOwn(icons, name);

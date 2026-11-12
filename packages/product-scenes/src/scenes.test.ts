@@ -131,6 +131,11 @@ async function runOf({ name, chapter }: RunCase, root: HTMLElement): Promise<Run
   if (!build || !(panel instanceof HTMLElement)) {
     throw new Error(`The ${name} view has no chapter ${chapter}.`);
   }
+  // A chapter reads only its own panel. Each step of happy-dom costs more in a larger document,
+  // so the other panels go.
+  for (const other of root.querySelectorAll("[data-chapter-panel]")) {
+    if (other !== panel) other.remove();
+  }
   return { frame: panel, stage: stageOf(panel), build };
 }
 

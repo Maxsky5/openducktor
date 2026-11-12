@@ -17,3 +17,9 @@ export const splitInlineCode = (text: string): InlineCodePart[] => {
   if (cursor < text.length) parts.push({ text: text.slice(cursor), code: false, start: cursor });
   return parts;
 };
+
+/** The text of a message without its code backticks, for a screen reader announcement. */
+export const inlineCodePlainText = (text: string): string =>
+  splitInlineCode(text)
+    .map((part) => part.text)
+    .join("");

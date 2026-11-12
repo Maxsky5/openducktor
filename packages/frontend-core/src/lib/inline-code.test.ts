@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { splitInlineCode } from "./inline-code";
+import { inlineCodePlainText, splitInlineCode } from "./inline-code";
 
 describe("splitInlineCode", () => {
   test("splits each value between backticks from the text", () => {
@@ -17,4 +17,10 @@ describe("splitInlineCode", () => {
       { text: "Codex reported: missing ` quote", code: false, start: 0 },
     ]);
   });
+});
+
+test("inlineCodePlainText keeps the code values and drops their backticks", () => {
+  expect(inlineCodePlainText("Run `gh auth login`, then retry.")).toBe(
+    "Run gh auth login, then retry.",
+  );
 });

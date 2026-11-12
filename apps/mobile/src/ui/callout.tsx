@@ -4,7 +4,8 @@ import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { type CalloutTone, calloutColors } from "./callout-colors";
 import { Icon, type IconName } from "./icon";
-import { InlineCodeText, inlineCodePlainText } from "./inline-code-text";
+import { inlineCodePlainText } from "@openducktor/frontend-core/lib/inline-code";
+import { InlineCodeText } from "./inline-code-text";
 import { Text } from "./text";
 import { useAnnounce } from "./use-announce";
 

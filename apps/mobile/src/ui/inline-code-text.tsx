@@ -23,12 +23,6 @@ export function InlineCodeText({ text }: { text: string }): ReactElement {
   );
 }
 
-/** The text of a message without its code backticks, for a screen reader announcement. */
-export const inlineCodePlainText = (text: string): string =>
-  splitInlineCode(text)
-    .map((part) => part.text)
-    .join("");
-
 const styles = StyleSheet.create((theme) => ({
   // The desktop `INLINE_CODE_CLASS_NAME`: mono text in the foreground color on the muted fill.
   code: {

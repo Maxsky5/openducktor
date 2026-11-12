@@ -17,7 +17,7 @@ export const GOAL_MODE_LAUNCHES = [
 ] as const;
 
 /** The fixed text of the goal field. */
-export const GOAL_FIELD_TEXT = {
+const GOAL_FIELD_TEXT = {
   label: "Goal mode",
   hint: "The agent gets this goal instead of a first message, and works until it is met.",
   generate: "Generate goal",

@@ -38,7 +38,7 @@ Write for a developer who learns OpenDucktor:
 - Use bold only for an exact UI label that the reader must find, such as **Start Spec**.
 - Link other pages with root-relative URLs and a trailing slash, for example `/settings-reference/#notifications`.
 - Give a heading a stable ID when other pages link to it: `## Notifications [#notifications]`. Keep the ID when you change the heading text.
-- Use the components `<Steps>`, `<Tabs>`, `<Callout>`, `<Accordions>`, `<Cards>`, and `<Card>`. `components/mdx.tsx` gives the Fumadocs components, and its own `<Steps>`, which shows a small number badge on each step. `<Callout type="warn">` is for actions that delete work or weaken security. The `icon` of a `<Card>` is a name, as in the frontmatter.
+- Use the components `<Steps>`, `<Tabs>`, `<Callout>`, `<Accordions>`, `<Cards>`, and `<Card>`. `components/mdx.ts` gives the Fumadocs components, and the `<Steps>` of `components/mdx-blocks.tsx`, which shows a small number badge on each step. `<Callout type="warn">` is for actions that delete work or weaken security. The `icon` of a `<Card>` is a name, as in the frontmatter.
 - Use the site components of the table below, and the media components of [Screenshots](#screenshots).
 - Put a message that the reader sends to an agent in `` <AgentMessage>{`...`}</AgentMessage> ``, not in a code block. Its lines wrap at the page width, and it has a copy button.
 

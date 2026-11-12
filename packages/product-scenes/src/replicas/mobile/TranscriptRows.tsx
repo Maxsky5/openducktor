@@ -41,7 +41,7 @@ type ToolLineProps = {
 };
 
 /** A tool call. While it runs, `data-running` on the line shows the spinner and hides the run time. */
-export function ToolLine({
+function ToolLine({
   type,
   name,
   summary,

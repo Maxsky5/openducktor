@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { NO_CHANGES } from "./replicas/mobile/ChangesScreen";
 import { COMMENT_PLACEHOLDER } from "./replicas/mobile/DiffScreen";
-import { commentRangeLabel, selectionLabel } from "./replicas/mobile/diff-comments";
+import { commentRangeLabel, selectionLabel } from "./replicas/mobile/diff-comment-text";
 import { QUEUE_STATUS_LABELS } from "./replicas/mobile/MessageQueue";
 import { pendingCommentsText } from "./replicas/mobile/PendingCommentsNotice";
 import { COMMENT, HOOK, RANGE, SENT_MESSAGE, TYPED } from "./scenes/mobile-diff-comment/sample";

@@ -30,8 +30,13 @@ export function isPhone(page: Page): boolean {
   return (page.viewportSize()?.width ?? 0) < 768;
 }
 
-/** Marks the current document. A full page load removes the mark, a client navigation keeps it. */
+/**
+ * Marks the current document. A full page load removes the mark, a client navigation keeps it. A
+ * client navigation needs the router, so the mark waits until the page hydrates: a link that the
+ * reader selects before that loads its page in full.
+ */
 export async function markDocument(page: Page): Promise<void> {
+  await page.locator("html[data-hydrated]").waitFor({ state: "attached" });
   await page.evaluate(() => {
     document.documentElement.dataset.testDocument = "kept";
   });
