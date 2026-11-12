@@ -41,6 +41,8 @@ function definitions(): Set<string> {
   return names;
 }
 
+// This test reads every stylesheet and script of the product scenes, so a cold CI filesystem can
+// exceed the workspace default of 1 second.
 test("every custom property that a stylesheet reads has a definition", () => {
   const defined = definitions();
   const missing = files(SOURCE, [".css"]).flatMap((path) =>
@@ -49,4 +51,4 @@ test("every custom property that a stylesheet reads has a definition", () => {
       .map((name) => `${relative(SOURCE, path)} reads ${name}, which nothing defines.`),
   );
   expect([...new Set(missing)]).toEqual([]);
-});
+}, 5_000);

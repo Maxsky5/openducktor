@@ -10,6 +10,11 @@ import type { AzureDevOpsCredentialIndex } from "./credential-index";
 import { createAzureDevOpsConnectionAdapter } from "./connection";
 import { azureDevOpsRepositoryKey } from "@openducktor/core";
 import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
+import type { GitProviderFetch } from "../git-provider-fetch";
+import {
+  createStalledProviderResponse,
+  timeoutStalledRequest,
+} from "../stalled-provider-response.test-support";
 
 const repository: AzureDevOpsRepository = {
   providerId: "azure_devops",
@@ -349,6 +354,64 @@ describe("Azure DevOps connection", () => {
         expect(signal?.aborted).toBe(true);
       }).pipe(Effect.provide(TestClock.layer())),
     );
+  });
+
+  test("keeps the working PAT when replacement validation stalls after its headers", async () => {
+    const records = new Map<string, string>();
+    const protectedStorage: AzureDevOpsProtectedStorage = {
+      readConnection: (scope) => Effect.succeed(records.get(`${scope}:connection`) ?? null),
+      open: (scope, record) =>
+        Effect.succeed({
+          save: async (contents: string) => void records.set(`${scope}:${record}`, contents),
+          load: async () => records.get(`${scope}:${record}`) ?? null,
+          delete: async () => records.delete(`${scope}:${record}`),
+        } as unknown as IPersistence),
+    };
+    let activeFetch: GitProviderFetch = async () => Response.json(repositoryResponse());
+    const connection = createAzureDevOpsConnectionAdapter({
+      clientId: undefined,
+      credentialIndex: createCredentialIndex(),
+      protectedStorage,
+      fetchImplementation: (input, init) => activeFetch(input, init),
+    });
+    await Effect.runPromise(connection.replacePat(repoConfig, repository, "working"));
+
+    const probe = createStalledProviderResponse();
+    try {
+      activeFetch = probe.fetch;
+      const replacement = await timeoutStalledRequest(
+        probe,
+        connection.replacePat(repoConfig, repository, "stalled"),
+      );
+
+      expect(replacement._tag).toBe("Failure");
+      if (replacement._tag === "Failure") {
+        expect(replacement.failure.message).toContain("timed out after 30 seconds");
+        expect(replacement.failure.message).toContain("prior connection remains active");
+      }
+      await probe.responseClosed;
+      const signal = await probe.requestSignal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      await probe.close();
+    }
+
+    await expect(
+      Effect.runPromise(connection.getAuthorization(repoConfig, repository)),
+    ).resolves.toEqual({
+      headerValue: `Basic ${btoa(":working")}`,
+      account: null,
+    });
+
+    activeFetch = async () => Response.json(repositoryResponse());
+    await Effect.runPromise(connection.replacePat(repoConfig, repository, "replacement"));
+    await expect(
+      Effect.runPromise(connection.getAuthorization(repoConfig, repository)),
+    ).resolves.toEqual({
+      headerValue: `Basic ${btoa(":replacement")}`,
+      account: null,
+    });
   });
 
   test("does not save or publish a cloud sign-in that completed after cancellation", async () => {

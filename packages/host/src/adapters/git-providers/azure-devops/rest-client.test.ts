@@ -8,6 +8,11 @@ import type { GitPort } from "../../../ports/git-port";
 import { AzureDevOpsProviderAdapter } from "./provider-adapter";
 import { createAzureDevOpsRestClient } from "./rest-client";
 import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
+import {
+  createStalledProviderResponse,
+  interruptStalledRequest,
+  timeoutStalledRequest,
+} from "../stalled-provider-response.test-support";
 
 const repository = azureDevOpsRepositorySchema.parse({
   providerId: "azure_devops",
@@ -136,5 +141,62 @@ describe("Azure DevOps REST client", () => {
         expect(signal?.aborted).toBe(true);
       }).pipe(Effect.provide(TestClock.layer())),
     );
+  });
+
+  test.each([200, 401] as const)(
+    "times out a %s response that stalls after its headers",
+    async (status) => {
+      const probe = createStalledProviderResponse(status);
+      try {
+        const client = createAzureDevOpsRestClient({
+          connection,
+          fetchImplementation: probe.fetch,
+        });
+
+        const result = await timeoutStalledRequest(
+          probe,
+          client.request(repoConfig, repository, {
+            operation: "read repository",
+            path: "git/repositories/app",
+          }),
+        );
+
+        expect(result._tag).toBe("Failure");
+        if (result._tag === "Failure") {
+          expect(result.failure.message).toContain("timed out after 30 seconds");
+        }
+        await probe.responseClosed;
+        const signal = await probe.requestSignal;
+        expect(signal).toBeInstanceOf(AbortSignal);
+        expect(signal?.aborted).toBe(true);
+      } finally {
+        await probe.close();
+      }
+    },
+  );
+
+  test("aborts a stalled response body when the request is interrupted", async () => {
+    const probe = createStalledProviderResponse();
+    try {
+      const client = createAzureDevOpsRestClient({
+        connection,
+        fetchImplementation: probe.fetch,
+      });
+
+      await interruptStalledRequest(
+        probe,
+        client.request(repoConfig, repository, {
+          operation: "read repository",
+          path: "git/repositories/app",
+        }),
+      );
+
+      await probe.responseClosed;
+      const signal = await probe.requestSignal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      await probe.close();
+    }
   });
 });

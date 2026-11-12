@@ -227,6 +227,8 @@ describe("ApplicationOverlays", () => {
     expect(containsElementByType(workers, FeatureTourDialogHost)).toBe(true);
   });
 
+  // This test renders the full overlay tree and hands Settings to the lazy tour dialog. A loaded CI
+  // runner can exceed the workspace default of 1 second.
   test("opens the tour from the shared Settings on onboarding, with the focus on Next", async () => {
     const overlays = renderOnboardingOverlays();
     try {
@@ -248,12 +250,12 @@ describe("ApplicationOverlays", () => {
           expect(dialogs).toHaveLength(1);
           return within(dialogs[0]!);
         },
-        { timeout: 500 },
+        { timeout: 2_000 },
       );
       expect(tour.getByText("1 of 8")).toBeDefined();
       expect(document.activeElement).toBe(tour.getByRole("button", { name: "Next" }));
     } finally {
       overlays.unmount();
     }
-  });
+  }, 5_000);
 });
