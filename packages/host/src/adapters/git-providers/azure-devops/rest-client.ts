@@ -6,7 +6,7 @@ import type { AzureDevOpsConnectionPort } from "../../../ports/azure-devops-conn
 import {
   PROVIDER_REQUEST_TIMEOUT,
   type GitProviderFetch,
-  withAbortableResponse,
+  runProviderRequest,
 } from "../git-provider-fetch";
 import { azureDevOpsJsonListSchema, azureDevOpsJsonSchema, type AzureDevOpsJson } from "./json";
 import type { GitProviderWorkspace } from "../../../ports/git-provider-workspace";
@@ -117,7 +117,7 @@ export const createAzureDevOpsRestClient = ({
           };
         });
 
-      return yield* withAbortableResponse(
+      return yield* runProviderRequest(
         (signal) =>
           Effect.tryPromise({
             try: () =>
@@ -133,17 +133,11 @@ export const createAzureDevOpsRestClient = ({
               }),
           }),
         readResponse,
-      ).pipe(
-        Effect.timeoutOrElse({
-          duration: PROVIDER_REQUEST_TIMEOUT,
-          orElse: () =>
-            Effect.fail(
-              new HostOperationError({
-                operation: input.operation,
-                message: `Azure DevOps ${input.operation} timed out after ${PROVIDER_REQUEST_TIMEOUT}. Check the server address and network.`,
-              }),
-            ),
-        }),
+        () =>
+          new HostOperationError({
+            operation: input.operation,
+            message: `Azure DevOps ${input.operation} timed out after ${PROVIDER_REQUEST_TIMEOUT}. Check the server address and network.`,
+          }),
       );
     });
 

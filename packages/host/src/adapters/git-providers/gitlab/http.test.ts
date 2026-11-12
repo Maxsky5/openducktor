@@ -31,7 +31,9 @@ describe("GitLab HTTP", () => {
         expect(gitlabProblemOf(result.failure)?.problem).toBe("instance_unreachable");
       }
       await probe.responseClosed;
-      expect((await probe.requestSignal).aborted).toBe(true);
+      const signal = await probe.requestSignal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(true);
     } finally {
       await probe.close();
     }
@@ -45,7 +47,9 @@ describe("GitLab HTTP", () => {
       await interruptStalledRequest(probe, http.send(request));
 
       await probe.responseClosed;
-      expect((await probe.requestSignal).aborted).toBe(true);
+      const signal = await probe.requestSignal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(true);
     } finally {
       await probe.close();
     }

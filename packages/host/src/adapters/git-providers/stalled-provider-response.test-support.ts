@@ -10,8 +10,8 @@ type StalledProviderResponse = {
   fetch: GitProviderFetch;
   /** Resolves when the adapter starts to read the response body. */
   bodyReadStarted: Promise<void>;
-  /** The abort signal of the request. */
-  requestSignal: Promise<AbortSignal>;
+  /** The abort signal of the request, or undefined when fetch receives no signal. */
+  requestSignal: Promise<AbortSignal | undefined>;
   /** Resolves when the server closes the response, or the client aborts its request. */
   responseClosed: Promise<void>;
   close(): Promise<void>;
@@ -25,7 +25,7 @@ type StalledProviderResponse = {
  */
 export const createStalledProviderResponse = (status = 200): StalledProviderResponse => {
   const bodyReadStarted = Promise.withResolvers<void>();
-  const requestSignal = Promise.withResolvers<AbortSignal>();
+  const requestSignal = Promise.withResolvers<AbortSignal | undefined>();
   const responseClosed = Promise.withResolvers<void>();
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -46,8 +46,7 @@ export const createStalledProviderResponse = (status = 200): StalledProviderResp
     },
   });
   const fetchImplementation: GitProviderFetch = async (_input, init) => {
-    const signal = init?.signal;
-    if (signal) requestSignal.resolve(signal);
+    requestSignal.resolve(init?.signal ?? undefined);
     const response = await fetch(server.url, init);
     if (response.body === null) return response;
     const reader = response.body.getReader();

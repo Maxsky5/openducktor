@@ -7,13 +7,15 @@ export type GitProviderFetch = (input: RequestInfo | URL, init?: RequestInit) =>
 export const PROVIDER_REQUEST_TIMEOUT = "30 seconds";
 
 /**
- * Runs one provider request and its body read under one abort controller. Fetch resolves when the
- * headers arrive, so the caller keeps the controller through the body read. A caller deadline or
- * an interruption then aborts the request and cancels the response body instead of abandoning it.
+ * Runs one provider request and its body read under one abort controller and one deadline. Fetch
+ * resolves when the headers arrive, so the helper keeps the controller through the body read. A
+ * deadline or an interruption then aborts the request and cancels the response body instead of
+ * abandoning it.
  */
-export const withAbortableResponse = <A, E>(
+export const runProviderRequest = <A, E>(
   fetchResponse: (signal: AbortSignal) => Effect.Effect<Response, E>,
   use: (response: Response) => Effect.Effect<A, E>,
+  timeoutError: () => E,
 ): Effect.Effect<A, E> =>
   Effect.gen(function* () {
     let liveResponse: Response | undefined;
@@ -32,4 +34,9 @@ export const withAbortableResponse = <A, E>(
           void liveResponse?.body?.cancel().catch(() => undefined);
         }),
     );
-  });
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: PROVIDER_REQUEST_TIMEOUT,
+      orElse: () => Effect.fail(timeoutError()),
+    }),
+  );

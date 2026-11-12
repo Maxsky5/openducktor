@@ -390,7 +390,9 @@ describe("Azure DevOps connection", () => {
         expect(replacement.failure.message).toContain("prior connection remains active");
       }
       await probe.responseClosed;
-      expect((await probe.requestSignal).aborted).toBe(true);
+      const signal = await probe.requestSignal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(true);
     } finally {
       await probe.close();
     }

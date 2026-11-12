@@ -5,7 +5,7 @@ import { type HostError, HostOperationError } from "../../../effect/host-errors"
 import {
   PROVIDER_REQUEST_TIMEOUT,
   type GitProviderFetch,
-  withAbortableResponse,
+  runProviderRequest,
 } from "../git-provider-fetch";
 
 const gitlabFailureDetailsSchema = z.object({
@@ -242,7 +242,7 @@ export const createGitlabHttp = (fetchImplementation: GitProviderFetch = fetch):
           );
         });
 
-      return yield* withAbortableResponse(
+      return yield* runProviderRequest(
         (signal) =>
           Effect.tryPromise({
             try: () =>
@@ -270,18 +270,12 @@ export const createGitlabHttp = (fetchImplementation: GitProviderFetch = fetch):
                   ),
           }),
         readResponse,
-      ).pipe(
-        Effect.timeoutOrElse({
-          duration: PROVIDER_REQUEST_TIMEOUT,
-          orElse: () =>
-            Effect.fail(
-              gitlabFailure(
-                request.operation,
-                "instance_unreachable",
-                `${instance} did not answer within ${PROVIDER_REQUEST_TIMEOUT}. Check the instance URL and the network, then retry.`,
-              ),
-            ),
-        }),
+        () =>
+          gitlabFailure(
+            request.operation,
+            "instance_unreachable",
+            `${instance} did not answer within ${PROVIDER_REQUEST_TIMEOUT}. Check the instance URL and the network, then retry.`,
+          ),
       );
     });
   return {

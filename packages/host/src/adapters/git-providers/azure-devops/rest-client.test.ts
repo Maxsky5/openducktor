@@ -166,7 +166,9 @@ describe("Azure DevOps REST client", () => {
           expect(result.failure.message).toContain("timed out after 30 seconds");
         }
         await probe.responseClosed;
-        expect((await probe.requestSignal).aborted).toBe(true);
+        const signal = await probe.requestSignal;
+        expect(signal).toBeInstanceOf(AbortSignal);
+        expect(signal?.aborted).toBe(true);
       } finally {
         await probe.close();
       }
@@ -190,7 +192,9 @@ describe("Azure DevOps REST client", () => {
       );
 
       await probe.responseClosed;
-      expect((await probe.requestSignal).aborted).toBe(true);
+      const signal = await probe.requestSignal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(true);
     } finally {
       await probe.close();
     }

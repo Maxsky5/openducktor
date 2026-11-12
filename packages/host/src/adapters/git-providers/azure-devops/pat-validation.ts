@@ -2,7 +2,7 @@ import type { AzureDevOpsRepository } from "@openducktor/contracts";
 import { azureDevOpsCollectionUrl } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
-import { PROVIDER_REQUEST_TIMEOUT, withAbortableResponse } from "../git-provider-fetch";
+import { PROVIDER_REQUEST_TIMEOUT, runProviderRequest } from "../git-provider-fetch";
 import { azureDevOpsJsonSchema } from "./json";
 import { parseAzureRepository } from "./models";
 import type { AzureDevOpsFetch } from "./rest-client";
@@ -60,7 +60,7 @@ export const validatePat = (
       });
     });
 
-  return withAbortableResponse(
+  return runProviderRequest(
     (signal) =>
       Effect.tryPromise({
         try: () =>
@@ -81,16 +81,10 @@ export const validatePat = (
           }),
       }),
     readResponse,
-  ).pipe(
-    Effect.timeoutOrElse({
-      duration: PROVIDER_REQUEST_TIMEOUT,
-      orElse: () =>
-        Effect.fail(
-          new HostOperationError({
-            operation: "azureDevOps.connection.validatePat",
-            message: `Azure DevOps PAT validation timed out after ${PROVIDER_REQUEST_TIMEOUT}. Check the service address and network. The prior connection remains active.`,
-          }),
-        ),
-    }),
+    () =>
+      new HostOperationError({
+        operation: "azureDevOps.connection.validatePat",
+        message: `Azure DevOps PAT validation timed out after ${PROVIDER_REQUEST_TIMEOUT}. Check the service address and network. The prior connection remains active.`,
+      }),
   );
 };
