@@ -7,6 +7,7 @@ import type { MessagePartItem } from "./transcript-message-parts";
 import {
   type MessagePartsOf,
   topRowIndex,
+  type TranscriptListItems,
   type TranscriptListKind,
   transcriptListItems,
 } from "./transcript-list-items";
@@ -106,7 +107,7 @@ const toolRow = (key: string, tool: string): AgentChatTranscriptRow => ({
 
 const shellRow = (
   key: string,
-  status: "completed" | "error" = "completed",
+  status: "completed" | "error" | "running" = "completed",
 ): AgentChatTranscriptRow => ({
   kind: "message",
   key,
@@ -186,6 +187,23 @@ describe("tool runs", () => {
     ]);
     expect(list.items[1]).toMatchObject({ callCount: 2, kindCounts: { command: 1, tool: 1 } });
     expect(list.items[3]).toMatchObject({ callCount: 1, kindCounts: { tool: 1 } });
+  });
+
+  test("settles a run whose calls all ended and that another row follows, so it can fold", () => {
+    const settled = (list: TranscriptListItems) =>
+      list.items.flatMap((item) => (item.kind === "tool_run" ? [[item.runKey, item.settled]] : []));
+    expect(settled(transcriptListItems(first, runRows, whole, classify))).toEqual([
+      ["s1", true],
+      ["solo", false],
+    ]);
+    const running = [shellRow("s1", "running"), rows[0]!];
+    expect(settled(transcriptListItems(first, running, whole, classify))).toEqual([["s1", false]]);
+    // The last run settles once a row comes after it.
+    const answered = [...runRows, rows[2]!];
+    expect(settled(transcriptListItems(first, answered, whole, classify))).toEqual([
+      ["s1", true],
+      ["solo", true],
+    ]);
   });
 
   test("keeps the item of an unchanged run, so its card does not render again", () => {

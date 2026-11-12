@@ -93,6 +93,13 @@ export default function SettingsScreen(): ReactElement {
                 value={preferences.groupToolCalls}
                 onValueChange={(groupToolCalls) => update({ groupToolCalls })}
               />
+              <SettingsSwitchRow
+                title="Collapse Finished Tool Calls"
+                description="A group of tool calls folds once all its calls ended and the agent wrote after it. A group that you open stays open. Needs grouped tool calls."
+                value={preferences.collapseFinishedToolCalls}
+                disabled={!preferences.groupToolCalls}
+                onValueChange={(collapseFinishedToolCalls) => update({ collapseFinishedToolCalls })}
+              />
             </DividedCard>
           </SettingsSection>
           <AppVersionFooter version={APP_VERSION} />

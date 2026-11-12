@@ -7,7 +7,12 @@ describe("device preferences", () => {
   test("starts with System theme and hidden reasoning", () => {
     const preferences = createDevicePreferences(createMemoryDeviceStore());
     expect(preferences.state.getState()).toEqual({
-      preferences: { theme: "system", showReasoning: false, groupToolCalls: true },
+      preferences: {
+        theme: "system",
+        showReasoning: false,
+        groupToolCalls: true,
+        collapseFinishedToolCalls: true,
+      },
       invalid: null,
     });
   });
@@ -19,15 +24,21 @@ describe("device preferences", () => {
       theme: "dark",
       showReasoning: false,
       groupToolCalls: true,
+      collapseFinishedToolCalls: true,
     });
   });
 
-  test("groups tool calls for a record from before that preference", () => {
+  test("groups tool calls and folds finished groups for a record from before those preferences", () => {
     const store = createMemoryDeviceStore({
       [DEVICE_PREFERENCES_KEY]: JSON.stringify({ theme: "dark", showReasoning: true }),
     });
     expect(createDevicePreferences(store).state.getState()).toEqual({
-      preferences: { theme: "dark", showReasoning: true, groupToolCalls: true },
+      preferences: {
+        theme: "dark",
+        showReasoning: true,
+        groupToolCalls: true,
+        collapseFinishedToolCalls: true,
+      },
       invalid: null,
     });
   });

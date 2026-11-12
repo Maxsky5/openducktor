@@ -40,6 +40,8 @@ export type ToolRunListItem = ToolRunSummary & {
   /** The key of the first row of the run, which keys its fold. */
   readonly runKey: string;
   readonly rows: readonly ToolRunRow[];
+  /** All the calls of the run ended and another row follows it, so it can fold by itself. */
+  readonly settled: boolean;
 };
 
 export type TranscriptListItem =
@@ -65,14 +67,16 @@ export type MessagePartsOf = (row: AgentChatTranscriptRow) => readonly MessagePa
 // streamed change renders only the runs that changed.
 const runItems = new WeakMap<ToolRun, ToolRunListItem>();
 
-const runItem = (run: ToolRun): ToolRunListItem => {
+const runItem = (run: ToolRun, followed: boolean): ToolRunListItem => {
+  const settled = followed && run.summary.activeCount === 0;
   const known = runItems.get(run);
-  if (known) return known;
+  if (known?.settled === settled) return known;
   const item: ToolRunListItem = {
     kind: "tool_run",
     key: `${run.runKey}:tool-run`,
     runKey: run.runKey,
     rows: run.rows,
+    settled,
     ...run.summary,
   };
   runItems.set(run, item);
@@ -120,7 +124,7 @@ export const transcriptListItems = (
   };
   // Adds a run of tool run calls that starts at `start` as one item.
   const addToolRun = (start: number, run: ToolRun): void => {
-    add(runItem(run), start);
+    add(runItem(run, start + run.rows.length < rows.length), start);
     for (let index = start; index < start + run.rows.length; index += 1) {
       topItemOfRow[index] = items.length - 1;
     }

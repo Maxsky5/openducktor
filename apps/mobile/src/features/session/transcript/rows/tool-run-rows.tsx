@@ -18,6 +18,7 @@ import {
   type ToolRunTitle,
 } from "@openducktor/frontend-core/sessions/transcript/tool-runs";
 import { useRecyclingState } from "@shopify/flash-list";
+import { useDevicePreferences } from "@/app-shell/app-services";
 import { memo, type PropsWithChildren, type ReactElement } from "react";
 import { View, type ViewStyle } from "react-native";
 import Animated, { type CSSStyle, useReducedMotion } from "react-native-reanimated";
@@ -60,7 +61,11 @@ export const ToolRunListRow = memo(function ToolRunListRow({
   item: ToolRunListItem;
 }): ReactElement {
   const { desktop } = useAppTheme();
-  const disclosure = useDisclosure(true, `${item.runKey}:tool-run`);
+  const collapseFinished = useDevicePreferences(
+    (state) => state.preferences.collapseFinishedToolCalls,
+  );
+  // A finished run that the agent wrote after folds, unless the reader opened it.
+  const disclosure = useDisclosure(!(collapseFinished && item.settled), `${item.runKey}:tool-run`);
   const [keptHidden, chooseKeptHidden] = useKeptHiddenCalls(`${item.runKey}:kept-hidden`);
   const countLabels = readToolRunCountLabels(item);
   const title = readToolRunTitle(item);

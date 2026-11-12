@@ -88,7 +88,7 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - The header of a run counts the calls of each kind. The edits count the files that they change, so a patch of five files counts as five edits.
 - An open run of more than six calls shows its latest five calls under a bar. The bar shows the earlier calls 25 at a time, and it also hides them again. Calls that the reader showed stay shown while new calls come.
 - In a run that shows only its latest calls, a new call comes in at the bottom, and the oldest shown call goes out at the top, under the bar. The run keeps its height.
-- The `collapseFinishedToolCalls` chat setting folds a run once all its calls ended and another row follows it. A run that the reader opened or folded keeps that choice.
+- The `collapseFinishedToolCalls` chat setting folds a run once all its calls ended and another row follows it. A run that the reader opened or folded keeps that choice. The mobile app has the same switch in its device preferences.
 - A run folds and opens like an accordion with `CssPresenceReveal` and its `tool-run-reveal` motion.
 - Each run is one row of the row window: its first row, which shows the whole run. `buildToolRunWindowRows` in `agent-chat-tool-run-layout.ts` gives these rows to the window. A new call, a fold, or a page of earlier calls changes only the height of that row, as a streamed message does. Do not change the row window for tool runs.
 - A press on a run control stops the transcript from following its end, so scroll anchoring keeps the run where the reader pressed it.
