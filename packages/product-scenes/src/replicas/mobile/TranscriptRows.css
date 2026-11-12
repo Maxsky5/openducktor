@@ -1,0 +1,97 @@
+@layer replica {
+  :where(.stage) {
+    /* A tool line of row-parts.tsx: a 32 point line, 2 points above and under it. */
+    .mob-tool-row {
+      padding: calc(2 * var(--u)) 0;
+    }
+    .mob-tool {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(32 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .mob-tool-icon.lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-tool-name {
+      flex: 0 0 auto;
+      max-width: 45%;
+      overflow: hidden;
+      color: var(--foreground);
+      font-weight: 500;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-tool-summary {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted-foreground);
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* ToolTiming: a spinner while the call runs, the run time, and the clock time. */
+    .mob-tool-timing {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      margin-left: auto;
+      color: var(--muted-foreground);
+      font-size: calc(11.5 * var(--u));
+      line-height: calc(16 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .mob-tool-spinner.lucide {
+      display: none;
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+    .mob-tool[data-running] .mob-tool-spinner {
+      display: block;
+    }
+    .mob-tool[data-running] .mob-tool-duration {
+      display: none;
+    }
+    /* An assistant message: the article padding of assistant-message-row.tsx. */
+    .mob-agent {
+      padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(12 * var(--u));
+    }
+    .mob-agent-text {
+      display: grid;
+      gap: calc(8 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      color: var(--foreground);
+      font-size: calc(15 * var(--u));
+      line-height: calc(22 * var(--u));
+    }
+    .mob-agent-text code {
+      padding: 0 calc(4 * var(--u));
+      border-radius: calc(4 * var(--u));
+      background: var(--muted);
+      font-family: var(--mono);
+      font-size: calc(13 * var(--u));
+    }
+    /* A user message: a chat surface bubble on the right, at most 80% wide. */
+    .mob-user {
+      display: flex;
+      justify-content: flex-end;
+      padding: calc(16 * var(--u)) 0;
+    }
+    .mob-user-bubble {
+      max-width: 80%;
+      padding: calc(8 * var(--u)) calc(14 * var(--u));
+      border-radius: calc(16 * var(--u)) calc(16 * var(--u)) calc(8 * var(--u));
+      background: var(--chat-surface);
+      color: var(--foreground);
+      box-shadow: var(--m-shadow-raised);
+      font-size: calc(15 * var(--u));
+      line-height: calc(24 * var(--u));
+    }
+  }
+}

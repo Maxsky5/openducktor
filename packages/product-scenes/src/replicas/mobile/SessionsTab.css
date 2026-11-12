@@ -1,0 +1,108 @@
+@layer replica {
+  :where(.stage) {
+    /* The list scrolls under the header and ends behind the tab bar. */
+    .mob-list {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* The scope switch: SegmentedControl of ui/fields.tsx in 16 point margins. */
+    .mob-scope {
+      padding: calc(8 * var(--u)) calc(16 * var(--u)) calc(4 * var(--u));
+    }
+    .mob-scope-track {
+      display: flex;
+      gap: calc(3 * var(--u));
+      padding: calc(3 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--muted);
+    }
+    .mob-scope-option {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: calc(34 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid transparent;
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-scope-option[data-selected] {
+      border-color: var(--input);
+      background: var(--segmented-selected);
+      color: var(--foreground);
+      box-shadow: var(--m-shadow-card);
+    }
+    /* The group header of session-group-header.tsx: a muted bar with the icon, the name, the
+       count, and the chevron. */
+    .mob-group-cell {
+      padding: calc(12 * var(--u)) calc(16 * var(--u)) calc(4 * var(--u));
+    }
+    .mob-group-bar {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(44 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--m-chip-fill);
+    }
+    .mob-group-icon {
+      color: var(--sidebar-muted-foreground);
+    }
+    [data-nav-group="needs_you"] .mob-group-icon {
+      color: var(--warning-accent);
+    }
+    [data-nav-group="running"] .mob-group-icon {
+      color: var(--info-accent);
+    }
+    .mob-group-label {
+      flex: 1;
+      color: var(--sidebar-foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-group-count {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: calc(24 * var(--u));
+      min-height: calc(20 * var(--u));
+      padding: calc(1 * var(--u)) calc(7 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--muted);
+      color: var(--sidebar-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    [data-nav-group="needs_you"] .mob-group-count {
+      background: var(--warning-surface);
+      color: var(--warning-muted);
+    }
+    [data-nav-group="running"] .mob-group-count {
+      background: var(--info-surface);
+      color: var(--info-muted);
+    }
+    .mob-group-chevron.lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--sidebar-muted-foreground);
+    }
+    .mob-group-list {
+      display: block;
+      margin: 0;
+      padding: 0;
+    }
+  }
+}

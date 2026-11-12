@@ -9,7 +9,7 @@
       height: calc(40 * var(--u));
       padding: 0 calc(8 * var(--u));
       border-top: calc(1 * var(--u)) solid var(--border);
-      background: color-mix(in oklch, var(--muted) 40%, transparent);
+      background: color-mix(in oklab, var(--muted) 40%, transparent);
     }
     .pal-hints {
       display: flex;

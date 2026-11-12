@@ -1,0 +1,286 @@
+@layer replica {
+  :where(.stage) {
+    /* DialogContent with sm:max-w-3xl gap-0 p-0. After the choice of a runtime, the dialog has
+       h-[min(48rem,calc(100dvh-2rem))], so the list fills the space between the header and the
+       footer. */
+    .is-dialog {
+      width: calc(768 * var(--u));
+    }
+    .is-dialog[data-chosen] {
+      height: min(calc(768 * var(--u)), 100%);
+    }
+    /* DialogHeader with pr-14 leaves room for the close button. */
+    .is-head {
+      padding-right: calc(56 * var(--u));
+    }
+    /* DialogBody: flex flex-col gap-5 overflow-hidden px-6 py-4. */
+    .is-body {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      gap: calc(20 * var(--u));
+      min-height: 0;
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+      overflow: hidden;
+    }
+    /* The runtime field: grid shrink-0 gap-2.5. */
+    .is-runtime {
+      display: grid;
+      flex: none;
+      gap: calc(10 * var(--u));
+    }
+    .is-placeholder {
+      color: var(--muted-foreground);
+    }
+    .is-value {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    :is(.is-placeholder, .is-value)[hidden] {
+      display: none;
+    }
+    /* PopoverContent of the combobox: z-50 rounded-lg border bg-popover p-0 shadow-lg, 6px under
+       the trigger and with its width. The scene sets the position and the width. */
+    .is-options {
+      position: absolute;
+      z-index: 5;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-lg);
+    }
+    .is-options[hidden] {
+      display: none;
+    }
+    /* CommandGroup: p-1. */
+    .is-options-group {
+      display: flex;
+      flex-direction: column;
+      padding: calc(4 * var(--u));
+    }
+    /* CommandItem: flex items-center gap-2 rounded-md px-2 py-1.5 text-sm. The highlighted item
+       has bg-accent text-accent-foreground. The label row has gap-2, with the icon in
+       text-muted-foreground. */
+    .is-option {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      padding: calc(6 * var(--u)) calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .is-option[data-hover] {
+      background: var(--accent);
+      color: var(--accent-foreground);
+    }
+    .is-option-icon {
+      display: flex;
+      flex: none;
+      color: var(--muted-foreground);
+    }
+    .is-option-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The results: flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border. */
+    .is-results {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+    }
+    .is-results[hidden] {
+      display: none;
+    }
+    /* The search: grid shrink-0 gap-2.5 border-b bg-muted/20 p-4. The field has a size-4 search
+       icon at left-3 and pl-9, and a clear button when it has text. */
+    .is-search {
+      display: grid;
+      flex: none;
+      gap: calc(10 * var(--u));
+      padding: calc(16 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+      background: color-mix(in oklab, var(--muted) 20%, transparent);
+    }
+    .is-search-input {
+      gap: calc(8 * var(--u));
+    }
+    .is-search-icon,
+    .is-search-clear {
+      flex: none;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .is-search-clear {
+      margin-left: auto;
+    }
+    .is-search-input:not([data-filled]) > .is-search-clear {
+      display: none;
+    }
+    /* While the import runs, the search field and the close button are disabled: opacity-50. */
+    .is-search-input[data-disabled],
+    .is-dialog .sc-close[data-disabled] {
+      opacity: 0.5;
+    }
+    /* The loading state: flex-1 flex-col items-center justify-center gap-2 py-6 text-center
+       text-sm text-muted-foreground, with a size-5 spinner and a font-medium title. */
+    .is-loading {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: calc(8 * var(--u));
+      min-height: 0;
+      padding: calc(24 * var(--u)) calc(16 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      text-align: center;
+    }
+    .is-loading[hidden] {
+      display: none;
+    }
+    .is-loading-icon {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+      margin-bottom: calc(4 * var(--u));
+    }
+    .is-loading-title {
+      color: var(--foreground);
+      font-weight: 500;
+    }
+    /* The list: min-h-0 flex-1 overflow-y-auto divide-y. */
+    .is-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .is-list[hidden],
+    .is-row[hidden] {
+      display: none;
+    }
+    /* A row: flex items-center gap-4 p-4, with divide-y between the rows. The text column has
+       space-y-2. */
+    .is-row {
+      display: flex;
+      align-items: center;
+      gap: calc(16 * var(--u));
+      padding: calc(16 * var(--u));
+    }
+    .is-row:not([hidden]) ~ .is-row:not([hidden]) {
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    .is-row-text {
+      display: grid;
+      flex: 1;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .is-row-title {
+      overflow: hidden;
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .is-row-meta {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+    }
+    .is-row-meta > :last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .is-row-folder {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The session ID line: the label has mr-1.5 before the ID. */
+    .is-row-id {
+      gap: calc(6 * var(--u));
+    }
+    .is-row-id > :first-child {
+      flex: none;
+    }
+    /* The end of a row: flex-col items-end gap-3, the time in text-xs text-muted-foreground. */
+    .is-row-end {
+      display: flex;
+      flex: none;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: calc(12 * var(--u));
+    }
+    .is-row-time {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .is-row .ui-button {
+      gap: calc(6 * var(--u));
+    }
+    .is-row .ui-button > svg {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    .is-row .ui-button:not([data-importing]) :is(.is-importing-icon, .is-importing-label),
+    .is-row .ui-button[data-importing] :is(.is-import-icon, .is-import-label) {
+      display: none;
+    }
+    /* The count: border-t p-3 text-xs text-muted-foreground. */
+    .is-count {
+      flex: none;
+      padding: calc(12 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .is-count[hidden] {
+      display: none;
+    }
+    /* Below the sm breakpoint, the dialog is at the top and narrower, and a row stacks its text over the time
+       and Import, which share one row. */
+    @container stage (width <= 699px) {
+      /* The positioner has items-start below sm, so the dialog stays at the top and grows down. */
+      .is-overlay {
+        place-items: start center;
+      }
+      .is-dialog {
+        width: calc(408 * var(--u));
+      }
+      .is-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: calc(12 * var(--u));
+      }
+      .is-row-end {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .is-dialog .sc-foot {
+        flex-direction: row;
+      }
+    }
+  }
+}

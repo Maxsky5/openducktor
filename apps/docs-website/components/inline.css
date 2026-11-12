@@ -1,0 +1,43 @@
+/*
+ * Inline marks of the guides: the buttons of the app as button chips, and the callouts.
+ * `lane-pill.css` draws the board lanes as colored pills.
+ */
+
+.docs-action {
+  display: inline;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 6px;
+  background: var(--color-fd-card);
+  padding: 0 0.5em;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.08);
+  color: var(--color-fd-foreground);
+  font-size: 0.8125em;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+  vertical-align: 0.06em;
+}
+
+/* The Fumadocs callouts: a note in the brand violet, a warning in amber, and an error in red. */
+:root {
+  --color-fd-info: var(--color-fd-primary);
+  --color-fd-warning: oklch(76.9% 0.188 70.08);
+  --color-fd-error: oklch(64.5% 0.246 16.439);
+}
+
+/* Table text is smaller, so its marks are a little larger. */
+td .docs-action {
+  font-size: 0.875em;
+}
+
+/* A message to an agent wraps its lines, unlike a code block. */
+pre.docs-agent-message {
+  width: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A code block indents each of its lines. This message has no line elements, so its text does. */
+pre.docs-agent-message code {
+  padding-inline: 1rem;
+}

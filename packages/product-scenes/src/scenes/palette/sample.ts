@@ -3,10 +3,9 @@
 // the timeline clones them by name.
 import type { BoardData, CardActionsData } from "../../replicas/board/model";
 import type { NavData } from "../../replicas/shell/nav";
-import { type Notification, sessionNotification } from "../../replicas/vocabulary";
 import { CARDS } from "../../sample/board";
 import { NAV_SESSIONS } from "../../sample/nav";
-import { TASKS } from "../../sample/tasks";
+import { taskId, WORKSPACE } from "../../sample/workspace";
 
 /** The board under the palette: the task to plan, the Builder that waits, and the others. */
 export const PALETTE_BOARD: BoardData = {
@@ -42,7 +41,10 @@ export const CARD_ACTIONS = {
   "builder-running": { session: { role: "Builder", status: "Running" } },
 } as const satisfies Record<string, CardActionsData>;
 
-/** The notification of the Planner session that starts in the background. */
-export const STARTED: Notification = sessionNotification("Planner", TASKS.h5w3.title);
+/**
+ * The origin of the startup notification of the Planner: the repository and the task. The
+ * Planner works in the repository folder, so its startup has no worktree steps.
+ */
+export const PLANNER_ORIGIN = `${WORKSPACE} · ${taskId(CARDS.titles.task)}`;
 
-export type PaletteTemplate = keyof typeof CARD_ACTIONS | "planner-dialog" | "toast-started";
+export type PaletteTemplate = keyof typeof CARD_ACTIONS | "planner-dialog" | "toast-startup";

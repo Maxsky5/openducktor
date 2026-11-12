@@ -1,0 +1,150 @@
+@layer replica {
+  :where(.stage) {
+    /* DialogContent with sm:max-w-2xl gap-0 p-0: rounded-xl border bg-popover shadow-xl, and at
+       most the height of the window less 2rem. The header and the footer stay, and the body
+       scrolls between them. */
+    .sc-overlay {
+      padding: calc(16 * var(--u));
+    }
+    .sc-dialog {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: calc(672 * var(--u));
+      max-width: 100%;
+      max-height: 100%;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-xl);
+    }
+    /* The close button: absolute right-3 top-3 size-9. A dialog that starts a session has none. */
+    .sc-close {
+      position: absolute;
+      top: calc(12 * var(--u));
+      right: calc(12 * var(--u));
+      display: grid;
+      place-items: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .sc-dialog[data-starting] > .sc-close {
+      display: none;
+    }
+    /* DialogHeader: border-b px-6 py-4 gap-1.5. The title is text-lg font-semibold leading-6,
+       and the description is text-sm leading-6 text-muted-foreground. */
+    .sc-head {
+      display: grid;
+      flex: none;
+      gap: calc(6 * var(--u));
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .sc-head b {
+      font-size: calc(18 * var(--u));
+      font-weight: 600;
+      line-height: calc(24 * var(--u));
+    }
+    .sc-head p {
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(24 * var(--u));
+    }
+    /* DialogBody: flex flex-col gap-3 px-6 py-4. The scene scrolls it. */
+    .sc-body {
+      position: relative;
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      min-height: 0;
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+      overflow: hidden;
+    }
+    .sc-body > * {
+      flex: none;
+    }
+    /* The fields and their labels take the classes of StartDialog.css. The optional note of a
+       label has font-normal text-muted-foreground. */
+    .sc-optional {
+      color: var(--muted-foreground);
+      font-weight: 400;
+    }
+    .sc-hint {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* Custom role: grid-cols-[minmax(0,1fr)_auto] gap-2, with Manage roles as an outline button. */
+    .sc-role {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    .sc-role > .ui-button {
+      gap: calc(8 * var(--u));
+      box-shadow: none;
+    }
+    /* DialogFooter: border-t px-6 py-4, Cancel at the start and Create session at the end. */
+    .sc-foot {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    .sc-foot .ui-button {
+      gap: calc(8 * var(--u));
+    }
+    /* The fieldset is disabled while the session starts, and the button shows the spinner. */
+    .sc-dialog[data-starting] .sc-body,
+    .sc-dialog[data-starting] .sc-foot {
+      opacity: 0.5;
+    }
+    .sc-dialog:not([data-starting]) :is(.sc-starting-icon, .sc-starting-label),
+    .sc-dialog[data-starting] :is(.sc-create-icon, .sc-create-label) {
+      display: none;
+    }
+    /* The progress: max-w-lg overflow-hidden, at least 18rem tall. The header has px-4 py-3, and
+       its description is only for screen readers. The form and its footer leave. */
+    .sc-progress {
+      display: none;
+    }
+    .sc-dialog[data-progress] {
+      width: calc(512 * var(--u));
+      min-height: min(calc(288 * var(--u)), 100%);
+    }
+    .sc-dialog[data-progress] > .sc-head {
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+    }
+    .sc-dialog[data-progress] > .sc-head p,
+    .sc-dialog[data-progress] > .sc-body,
+    .sc-dialog[data-progress] > .sc-foot {
+      display: none;
+    }
+    .sc-dialog[data-progress] > .sc-progress {
+      display: block;
+    }
+    /* Below the sm breakpoint, the dialog is narrower, its fields make one column, and the footer
+       stacks its buttons with min-h-11, the action on top. */
+    @container stage (width <= 699px) {
+      .sc-dialog,
+      .sc-dialog[data-progress] {
+        width: calc(408 * var(--u));
+      }
+      .sc-foot {
+        flex-direction: column-reverse;
+        align-items: stretch;
+        gap: calc(8 * var(--u));
+      }
+      .sc-foot .ui-button {
+        height: calc(44 * var(--u));
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "title": "OpenDucktor",
+  "pages": [
+    "---Start here---",
+    "index",
+    "install-and-update",
+    "first-workspace-and-task",
+    "---Guides---",
+    "tasks-and-workflows",
+    "coding-sessions",
+    "harnesses",
+    "models",
+    "autopilot",
+    "workspace-sessions",
+    "git-and-pull-requests",
+    "command-palette",
+    "notifications",
+    "agent-prompts",
+    "customize-openducktor",
+    "---Clients and integrations---",
+    "remote-control",
+    "mobile",
+    "external-mcp",
+    "---Reference---",
+    "settings-reference",
+    "---Help---",
+    "troubleshooting"
+  ]
+}

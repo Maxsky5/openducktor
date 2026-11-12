@@ -1,5 +1,5 @@
 // The steps that each chapter of the workflow repeats: you start a session from the quick
-// action, the agent saves its document, and the turn ends. The sidebar groups the sessions by
+// action, the agent saves its artifact, and the turn ends. The sidebar groups the sessions by
 // task, so the entry of the story task follows its latest session.
 import type { Attention, NavTone } from "../../replicas/shell/nav";
 import type { Studio, StudioChange } from "../../replicas/studio/studio";
@@ -59,19 +59,18 @@ export function startSession<Template extends string>(
 }
 
 /**
- * The agent saves its document with the workflow card `row`, and the document panel fills. A
+ * The agent saves its artifact with the workflow card `row`, and the Artifacts panel fills. A
  * narrow window shows the panel for `reading` seconds. Returns the time of the save.
  */
-export function saveDocument(
+export function saveArtifact(
   studio: Studio,
   row: HTMLElement,
   at: number,
-  updated: string,
   change: StudioChange,
   reading: number,
 ): number {
   const saved = studio.rows.workflow(row, at, 0.6);
-  studio.panels.fill(updated, saved);
+  studio.panels.fill(saved);
   studio.patch(saved, change);
   showPanel(studio, saved + 0.1, reading);
   return saved;

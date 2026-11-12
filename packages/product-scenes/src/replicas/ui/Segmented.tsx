@@ -4,7 +4,7 @@ import type { ComponentProps, ReactElement } from "react";
 import { classes } from "../classes";
 import "./Segmented.css";
 
-type SegmentedProps = ComponentProps<"div"> & { size: "sm" | "lg" };
+type SegmentedProps = ComponentProps<"div"> & { size: "sm" | "md" | "lg" };
 
 export function Segmented({ size, className, ...attributes }: SegmentedProps): ReactElement {
   return <div className={classes("ui-segmented", className)} data-size={size} {...attributes} />;

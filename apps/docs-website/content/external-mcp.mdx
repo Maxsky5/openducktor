@@ -1,0 +1,143 @@
+---
+icon: Plug
+title: External MCP
+description: Let another MCP client create, find, and update OpenDucktor tasks.
+---
+
+Connect another agent, such as Claude Code or Codex, to OpenDucktor through MCP. It can then create, find, read, and update your tasks.
+
+<ProductDemo id="mcp" />
+
+## Connect a client [#connect]
+
+Run OpenDucktor on the same computer as the client. Install [Bun](https://bun.sh/).
+
+<Steps>
+<Step>
+Add the server to your client.
+
+<Tabs items={["Claude Code", "Codex", "Other clients"]}>
+<Tab value="Claude Code">
+
+```sh
+claude mcp add openducktor -- bunx @openducktor/mcp
+```
+
+</Tab>
+<Tab value="Codex">
+
+```toml title="~/.codex/config.toml"
+[mcp_servers.openducktor]
+command = "bunx"
+args = ["@openducktor/mcp"]
+```
+
+</Tab>
+<Tab value="Other clients">
+
+Add this entry to the MCP config file of your client. Some clients use another top-level key than `mcpServers`.
+
+```json title="MCP config of your client"
+{
+  "mcpServers": {
+    "openducktor": {
+      "command": "bunx",
+      "args": ["@openducktor/mcp"]
+    }
+  }
+}
+```
+
+</Tab>
+</Tabs>
+</Step>
+<Step>Restart the client. It now lists the `odt_*` tools.</Step>
+</Steps>
+
+The server finds the running OpenDucktor app by itself. The agent gets your workspaces from `odt_get_workspaces`, and gives a `workspaceId` in each call. So one client can work in all your workspaces.
+
+## Set a default workspace [#default-workspace]
+
+When a client works in one repository, you can give the server a default workspace. The agent can then leave out `workspaceId`.
+
+<Steps>
+<Step>
+In OpenDucktor, open **Settings**, then **Repositories**. Select your repository, and copy the [**Workspace ID**](/settings-reference/#repository-configuration-workspace-id) from **Configuration**.
+
+<Screenshot id="settings-workspace-id" alt="The read-only Workspace ID field in Settings, Repositories, Configuration, with the ID fieldnotes." />
+</Step>
+<Step>
+Add `--workspace-id` and the ID after `@openducktor/mcp`. For example, in the repository folder:
+
+```sh
+claude mcp add openducktor -- bunx @openducktor/mcp --workspace-id fieldnotes
+```
+</Step>
+</Steps>
+
+The agent can still give another `workspaceId`. To keep it in the default workspace, also set `ODT_FORBID_WORKSPACE_ID_INPUT` to `true`.
+
+## Server options [#options]
+
+Give an option after `@openducktor/mcp`, or set its environment variable in the MCP config of your client. The option wins over the variable.
+
+- **Default workspace**: `--workspace-id <id>`, or `ODT_WORKSPACE_ID`. The agent can leave out `workspaceId`. The server stops if OpenDucktor has no workspace with this ID. See [Set a default workspace](#default-workspace).
+- **One workspace only**: `ODT_FORBID_WORKSPACE_ID_INPUT` set to `true` or `1`. With a default workspace, it removes `workspaceId` from every tool, so the agent can use only that workspace.
+- **Tools**: `ODT_ALLOWED_TOOLS`, with tool names separated by commas, such as `odt_search_tasks,odt_read_task`. The server offers only these tools. The default is the [task tools](#task-tools).
+- **Address**: `--host-url <url>`, or `ODT_HOST_URL`. The server connects to this address of OpenDucktor, and not to the address that it found.
+- **Token**: `--host-token <token>`, `ODT_HOST_TOKEN`, or `ODT_HOST_TOKEN_FILE` with the path of a file that holds the token. Use it with the address.
+
+For example, this entry keeps a client in the workspace `fieldnotes`:
+
+```json title="MCP config of your client"
+{
+  "mcpServers": {
+    "openducktor": {
+      "command": "bunx",
+      "args": ["@openducktor/mcp"],
+      "env": {
+        "ODT_WORKSPACE_ID": "fieldnotes",
+        "ODT_FORBID_WORKSPACE_ID_INPUT": "true"
+      }
+    }
+  }
+}
+```
+
+Without `--host-url`, the server reads the address and the token of the running app from `runtime/mcp-bridge.json`, in the folder of OpenDucktor: `~/.openducktor`, or the folder of `OPENDUCKTOR_CONFIG_DIR`.
+
+## Create a task from the client
+
+Ask the client, for example:
+
+<AgentMessage>{`
+File an OpenDucktor bug: moving a note drops its tags. Priority P1.
+`}</AgentMessage>
+
+Approve the `odt_create_task` call if the client asks. The card shows in the <Status of="open" /> lane, with the **Bug** and **P1** badges.
+
+## Task tools
+
+| Tool | What it does |
+|---|---|
+| `odt_get_workspaces` | Lists the workspaces with their IDs, names, and repository paths. |
+| `odt_create_task` | Creates a task, feature, or bug in Backlog. |
+| `odt_search_tasks` | Finds tasks that are not closed, by status, issue type, priority, title, or label. |
+| `odt_read_task` | Reads one task and the list of its artifacts. |
+| `odt_read_task_artifacts` | Reads the content of task artifacts, such as the Specification or the Implementation Plan. |
+| `odt_read_task_assets` | Reads the images in a task description. |
+| `odt_update_task` | Changes the title, description, priority, labels, or issue type. It never changes the status. |
+| `odt_set_task_artifact` | Saves the Specification, the Implementation Plan, the QA Report, or another artifact. A workflow artifact can move the task to another lane. See [Artifacts](/tasks-and-workflows/#artifacts). |
+| `odt_delete_task_artifact` | Deletes an artifact that is not a workflow artifact. |
+
+The server also lists `odt_apply_workflow_event` and `odt_set_pull_request`. In [Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/#lanes), the Builder uses `odt_apply_workflow_event` to send the events `build-blocked`, `build-resumed`, and `build-completed`, which change the status of a task. `build-blocked` requires a note. The Builder uses `odt_set_pull_request` to save the pull request of a task. Your client can call both tools too.
+
+## Fix connection problems
+
+If the client shows no `odt_*` tools, read the MCP server log of the client. The first error names the cause. For each error and its fix, see [Troubleshooting](/troubleshooting/#external-mcp).
+
+## Next
+
+<Cards>
+  <Card title="Tasks and workflows" href="/tasks-and-workflows/">Learn the lanes and artifacts that the tools read and change.</Card>
+</Cards>

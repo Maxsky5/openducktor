@@ -1,0 +1,29 @@
+@layer replica {
+  :where(.stage) {
+    /* The transcript is an inverted list: its newest row sits at the bottom, and the older rows
+       leave at the top under the rail. */
+    .mob-transcript {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      justify-content: flex-end;
+      min-height: 0;
+      overflow: hidden;
+      padding: 0 calc(14 * var(--u));
+    }
+    .mob-track {
+      flex: 0 0 auto;
+    }
+    /* SessionPendingInput: 12 point margins, 8 points above and 4 points under the cards. */
+    .mob-pending {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      flex: 0 0 auto;
+      gap: calc(8 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u)) calc(4 * var(--u));
+    }
+    .mob-pending:not(:has(> :not([hidden]))) {
+      display: none;
+    }
+  }
+}

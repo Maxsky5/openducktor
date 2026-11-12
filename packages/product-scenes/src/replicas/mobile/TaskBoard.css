@@ -1,0 +1,87 @@
+@layer replica {
+  :where(.stage) {
+    /* The navigation bar of the Tasks tab: the workspace title on the left, the plain icon
+       buttons of the task actions and the search on the right. */
+    .mob-board-head {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      height: calc(56 * var(--u));
+      padding: 0 calc(10 * var(--u)) 0 calc(16 * var(--u));
+      color: var(--foreground);
+    }
+    .mob-board-workspace {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    /* The active workspace tile: 28 points on the sidebar accent. */
+    .mob-board-tile {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      border-radius: calc(8 * var(--u));
+      background: var(--sidebar-accent);
+      color: var(--sidebar-accent-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+    }
+    .mob-board-name {
+      overflow: hidden;
+      font-size: calc(15 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+      letter-spacing: calc(-0.1 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-board-workspace > .lucide {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-board-icon {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+    }
+    .mob-board-icon .lucide {
+      width: calc(22 * var(--u));
+      height: calc(22 * var(--u));
+    }
+
+    /* The pager: one page for each lane on the wash of the shown lane. */
+    .mob-board {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      background: var(--lane-wash);
+      transition: background-color 0.3s;
+    }
+    .mob-board-pages {
+      display: flex;
+      height: 100%;
+      transform: translateX(calc(var(--lane-progress) * -100%));
+    }
+    .mob-board-page {
+      display: flex;
+      flex: 0 0 100%;
+      flex-direction: column;
+      min-width: 0;
+      gap: calc(8 * var(--u));
+      padding: calc(12 * var(--u)) calc(12 * var(--u)) calc(48 * var(--u));
+    }
+  }
+}

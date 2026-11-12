@@ -114,7 +114,7 @@ export function McpView(props: SceneViewProps): ReactElement {
     <SceneFrame
       {...props}
       name="mcp"
-      alt="An MCP client that uses the openducktor server with the default workspace fieldnotes. The visitor asks it to file a bug about tags that drop when a note moves. The client calls odt_create_task, and the result holds the new task fieldnotes-h4t8. At the same time, the task shows at the top of the Backlog lane on the OpenDucktor board."
+      alt="An MCP client that uses the openducktor server with the default workspace fieldnotes. The user asks it to file a bug about tags that drop when a note moves. The client calls odt_create_task, and the result holds the new task fieldnotes-h4t8. At the same time, the task shows at the top of the Backlog lane on the OpenDucktor board."
     >
       <Replica className="mcp-scene">
         <McpClient />

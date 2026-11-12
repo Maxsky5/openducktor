@@ -1,0 +1,54 @@
+@layer replica {
+  :where(.stage) {
+    /* The toolbar of stack-header.tsx: the back control, the title at the start, and Refresh. */
+    .mob-stack-header {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      height: calc(56 * var(--u));
+      padding: 0 calc(12 * var(--u)) 0 calc(6 * var(--u));
+      color: var(--foreground);
+    }
+    .mob-stack-back,
+    .mob-stack-action {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(44 * var(--u));
+      height: calc(44 * var(--u));
+    }
+    .mob-stack-back .lucide {
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+    }
+    .mob-stack-action .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .mob-stack-title {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+      padding-left: calc(12 * var(--u));
+    }
+    .mob-stack-title > * {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-stack-title strong {
+      font-size: calc(17 * var(--u));
+      font-weight: 600;
+      line-height: calc(22 * var(--u));
+    }
+    .mob-stack-title span {
+      color: var(--m-secondary);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+  }
+}

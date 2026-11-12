@@ -1,6 +1,6 @@
 // The command palette over the Kanban board. The markup holds the search results of the query, the
 // frame of the middle of the scene that shows the most. The templates hold the start dialog of the
-// Planner, its notification, and the changes of the board.
+// Planner, its startup notification, and the changes of the board.
 import type { ReactElement } from "react";
 import { designWidthStyle } from "../../frame/design-width";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
@@ -10,15 +10,21 @@ import { BoardHead } from "../../replicas/board/BoardHead";
 import { CardActions } from "../../replicas/board/CardActions";
 import { Palette } from "../../replicas/palette/Palette";
 import { AppWindow } from "../../replicas/shell/AppWindow";
+import { KeyHud } from "../../replicas/shell/KeyHud";
 import type { NavGroupId } from "../../replicas/shell/nav";
 import { Pointer } from "../../replicas/shell/Pointer";
-import { Toast } from "../../replicas/shell/Toast";
+import { StartupToast } from "../../replicas/shell/StartupToast";
 import { ToastStack } from "../../replicas/shell/ToastStack";
 import { StartDialog } from "../../replicas/studio/StartDialog";
 import { LANES, type LaneId } from "../../replicas/vocabulary";
 import { PLANNER_SESSION } from "../../sample/studio";
-import { KeyHud } from "./KeyHud";
-import { CARD_ACTIONS, PALETTE_BOARD, PALETTE_NAV, type PaletteTemplate, STARTED } from "./sample";
+import {
+  CARD_ACTIONS,
+  PALETTE_BOARD,
+  PALETTE_NAV,
+  PLANNER_ORIGIN,
+  type PaletteTemplate,
+} from "./sample";
 import "./view.css";
 
 /**
@@ -54,15 +60,10 @@ function PaletteStock(): ReactElement {
         </Stock>
       ))}
       <Stock name={"planner-dialog" satisfies PaletteTemplate}>
-        <StartDialog
-          role="Planner"
-          description="Start a fresh session for Planner."
-          session={PLANNER_SESSION}
-          background
-        />
+        <StartDialog role="Planner" session={PLANNER_SESSION} background />
       </Stock>
-      <Stock name={"toast-started" satisfies PaletteTemplate}>
-        <Toast {...STARTED} />
+      <Stock name={"toast-startup" satisfies PaletteTemplate}>
+        <StartupToast role="Planner" origin={PLANNER_ORIGIN} />
       </Stock>
     </>
   );

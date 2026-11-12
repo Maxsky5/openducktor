@@ -1,0 +1,234 @@
+@layer replica {
+  :where(.stage) {
+    /* The colors of PIERRE_COLORS: the page, the line washes, the gutters, the selection, and
+       the syntax of the pierre-light and pierre-dark themes. */
+    .mob-diff,
+    .mob-diff-comment,
+    .mob-review-page {
+      --pierre-page: #ffffff;
+      --pierre-text: #0a0a0a;
+      --pierre-number: color-mix(in srgb, #0a0a0a 65%, #ffffff);
+      --pierre-separator: color-mix(in srgb, #ffffff 96%, #000000);
+      --pierre-add: #0dbe4e;
+      --pierre-add-line: color-mix(in srgb, #ffffff 88%, #0dbe4e);
+      --pierre-add-gutter: color-mix(in srgb, #ffffff 91%, #0dbe4e);
+      --pierre-select-line: color-mix(in srgb, #ffffff 88%, #009fff);
+      --pierre-select-gutter: color-mix(in srgb, #ffffff 75%, #009fff);
+      --pierre-select-number: color-mix(in srgb, #009fff 65%, #000000);
+      --pierre-keyword: #d32a61;
+      --pierre-string: #199f43;
+      --pierre-number-token: #1ca1c7;
+      --pierre-function: #693acf;
+      --pierre-comment: #737373;
+    }
+    :where([data-theme="dark"]) & :is(.mob-diff, .mob-diff-comment, .mob-review-page) {
+      --pierre-page: #0a0a0a;
+      --pierre-text: #fafafa;
+      --pierre-number: color-mix(in srgb, #fafafa 65%, #0a0a0a);
+      --pierre-separator: color-mix(in srgb, #0a0a0a 85%, #ffffff);
+      --pierre-add: #5ecc71;
+      --pierre-add-line: color-mix(in srgb, #0a0a0a 80%, #5ecc71);
+      --pierre-add-gutter: color-mix(in srgb, #0a0a0a 85%, #5ecc71);
+      --pierre-select-line: color-mix(in srgb, #0a0a0a 80%, #69b1ff);
+      --pierre-select-gutter: color-mix(in srgb, #0a0a0a 69%, #69b1ff);
+      --pierre-select-number: color-mix(in srgb, #69b1ff 75%, #ffffff);
+      --pierre-keyword: #ff678d;
+      --pierre-string: #5ecc71;
+      --pierre-number-token: #68cdf2;
+      --pierre-function: #9d6afb;
+      --pierre-comment: #737373;
+    }
+    .mob-diff {
+      background: var(--pierre-page);
+      color: var(--pierre-text);
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .mob-diff-gap {
+      display: block;
+      height: calc(8 * var(--u));
+    }
+    /* A line row: the gutter of two digits, 12 points before and 8 after the number, the 4 point
+       bar, and the text that wraps with 8 and 12 points of padding. */
+    .mob-diff-line {
+      position: relative;
+      display: flex;
+      background: var(--pierre-add-line);
+    }
+    .mob-diff-line::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: calc(4 * var(--u));
+      background: var(--pierre-add);
+    }
+    .mob-diff-number {
+      flex: 0 0 auto;
+      width: calc(35 * var(--u));
+      padding: 0 calc(8 * var(--u)) 0 calc(12 * var(--u));
+      background: var(--pierre-add-gutter);
+      color: var(--pierre-add);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .mob-diff-code {
+      flex: 1;
+      min-width: 0;
+      padding: 0 calc(12 * var(--u)) 0 calc(8 * var(--u));
+      font: inherit;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .mob-diff-line[data-selected] {
+      background: var(--pierre-select-line);
+    }
+    .mob-diff-line[data-selected] .mob-diff-number {
+      background: var(--pierre-select-gutter);
+      color: var(--pierre-select-number);
+    }
+    .mob-diff .tk-k {
+      color: var(--pierre-keyword);
+    }
+    .mob-diff .tk-s {
+      color: var(--pierre-string);
+    }
+    .mob-diff .tk-f {
+      color: var(--pierre-function);
+    }
+    .mob-diff .tk-c {
+      color: var(--pierre-number-token);
+    }
+    .mob-diff .tk-m {
+      color: var(--pierre-comment);
+    }
+    /* The pending comment: a 12 point card with 12 points of padding on the diff page. */
+    .mob-diff-comment {
+      padding: calc(8 * var(--u)) calc(16 * var(--u));
+      background: var(--pierre-page);
+      font-family: "Space Grotesk Variable", "Space Grotesk", sans-serif;
+    }
+    .mob-diff-comment-card {
+      display: grid;
+      gap: calc(12 * var(--u));
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+    }
+    .mob-diff-comment-meta {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    .mob-diff-comment-text {
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .mob-diff-comment-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: calc(8 * var(--u));
+    }
+    .mob-diff-comment-actions > span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: calc(10 * var(--u));
+    }
+    .mob-diff-comment-actions > [data-variant="outline"] {
+      border: calc(1 * var(--u)) solid var(--border);
+      background: var(--card);
+      color: var(--foreground);
+    }
+    .mob-diff-comment-actions > [data-variant="destructive"] {
+      background: var(--destructive);
+      color: var(--destructive-foreground);
+    }
+    .mob-diff-comment-actions .lucide {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    /* The warning Badge of ui/badge.tsx: amber in both themes. */
+    .mob-pending-badge {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      min-height: calc(22 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--amber-200);
+      border-radius: 999px;
+      background: var(--amber-50);
+      color: var(--amber-700);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
+    }
+    :where([data-theme="dark"]) & .mob-pending-badge {
+      border-color: var(--amber-800);
+      background: color-mix(in oklab, var(--amber-950) 50%, transparent);
+      color: var(--amber-300);
+    }
+    /* The colors of review-colors.ts: Tailwind green, blue, red, and emerald shades. */
+    .mob-review-page,
+    .mob-changes {
+      --git-added: oklch(44.8% 0.119 151.328);
+      --git-modified: oklch(54.6% 0.245 262.881);
+      --git-total-add: oklch(72.3% 0.219 149.579);
+      --git-total-del: oklch(63.7% 0.237 25.331);
+      --git-ahead: oklch(59.6% 0.145 163.225);
+      --diff-divider: color-mix(in oklab, var(--border) 50%, transparent);
+    }
+    :where([data-theme="dark"]) & :is(.mob-review-page, .mob-changes) {
+      --git-added: oklch(79.2% 0.209 151.711);
+      --git-modified: oklch(70.7% 0.165 254.624);
+      --git-ahead: oklch(76.5% 0.177 163.223);
+    }
+    .mob-line-counts {
+      display: flex;
+      flex: 0 0 auto;
+      gap: calc(4 * var(--u));
+      font-family: var(--mono);
+      font-size: calc(11.5 * var(--u));
+      line-height: calc(16 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .mob-line-counts [data-sign="add"] {
+      color: var(--git-added);
+    }
+    .mob-line-counts [data-sign="del"] {
+      color: var(--destructive);
+    }
+    /* The filled Button at size sm: 32 points, a 10 point corner, and 13 point medium text. */
+    .mob-sm-button {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-height: calc(32 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--primary);
+      color: var(--primary-foreground);
+      box-shadow: var(--m-shadow-primary);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-sm-button .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+  }
+}

@@ -193,6 +193,17 @@ A change in `modules/`, `plugins/`, or `app.config.ts` needs a new `bun run andr
 
 To connect, enter the address that Remote control shows on the host. The emulator uses the network of its computer, so a Wi-Fi or Tailscale address of the host works. Do not use `localhost`, which names the emulator itself.
 
+### Run on iOS
+
+Run these commands from the repository root. They also work in `apps/mobile`.
+
+| Goal | Command |
+|---|---|
+| Develop with hot reload | `bun run ios`. Expo builds the debug app for a simulator and starts Metro. |
+| Install the app on an iPhone | Turn on Developer Mode on the iPhone, connect it by USB, and add your Apple account in Xcode. Then run `bun run ios --device --configuration Release`, and select the phone and your development team. It starts no Metro, so the app runs without this computer. |
+
+Apple registers a bundle ID to one team. Outside the OpenDucktor team, use an ID of your own. In `apps/mobile`, run `export OPENDUCKTOR_IOS_BUNDLE_ID=com.example.openducktor`, then `bun run native` to regenerate `ios/`, then `bun run ios --device --configuration Release`.
+
 ## Commands
 
 Run these commands in `apps/mobile`. `bun run ios`, `bun run android`, and `bun run android:release` also work from the repository root.

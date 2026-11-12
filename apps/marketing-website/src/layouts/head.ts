@@ -1,4 +1,4 @@
-import type { BuildTarget } from "../../config/build";
+import type { BuildTarget } from "@openducktor/build-tools/static-site";
 
 /** What a page says about itself. Only a page that search engines can list is indexable. */
 export type PageHead = { title: string; description: string; indexable: boolean };

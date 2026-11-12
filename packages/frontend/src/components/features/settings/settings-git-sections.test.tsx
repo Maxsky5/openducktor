@@ -145,7 +145,7 @@ describe("settings git sections", () => {
 
     expect(html).toContain(">GitHub<");
     expect(html).toContain("Not ready");
-    expect(html).toContain("Run `gh auth login` to connect GitHub.");
+    expect(html).toMatch(/Run <code [^>]*>gh auth login<\/code> to connect GitHub\./);
     expect(html).toContain("openai/openducktor");
     expect(html).toContain("bg-warning-surface");
     expect(html).toContain("bg-success-surface");

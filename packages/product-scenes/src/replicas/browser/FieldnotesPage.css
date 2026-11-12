@@ -1,0 +1,375 @@
+@layer replica {
+  :where(.stage) {
+    /* Fieldnotes is a website in the browser tab. Its colors stay light in both themes, and its sizes
+       use the design pixel, so the page scales with the replica. */
+    .fn {
+      --fn-ink: #18181b;
+      --fn-body: #3f3f46;
+      --fn-muted: #71717a;
+      --fn-faint: #a1a1aa;
+      --fn-line: #e4e4e7;
+      --fn-soft-line: #efeff1;
+      --fn-side: #fafafa;
+      --fn-brand: #5100ff;
+      --fn-brand-ink: #4700e0;
+      --fn-brand-tint: #f1ebff;
+      position: absolute;
+      inset: 0;
+      display: flex;
+      overflow: hidden;
+      background: #fff;
+      color: var(--fn-ink);
+      font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      letter-spacing: 0;
+      color-scheme: light;
+    }
+    .fn .lucide {
+      stroke-width: 1.75;
+    }
+    /* An element of one notebook shows only while that notebook is open. */
+    .fn[data-notebook="inbox"] [data-for="travel"],
+    .fn[data-notebook="travel"] [data-for="inbox"] {
+      display: none;
+    }
+
+    /* The notebooks. */
+    .fn-nav {
+      display: flex;
+      flex: 0 0 calc(148 * var(--u));
+      flex-direction: column;
+      padding: 0 calc(8 * var(--u)) calc(10 * var(--u));
+      border-right: calc(1 * var(--u)) solid var(--fn-soft-line);
+      background: var(--fn-side);
+    }
+    .fn-brand {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(46 * var(--u));
+      padding: 0 calc(6 * var(--u));
+    }
+    .fn-logo {
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+    }
+    .fn-brand-name {
+      font-size: calc(15 * var(--u));
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+    .fn-section {
+      margin: calc(6 * var(--u)) calc(8 * var(--u)) calc(4 * var(--u));
+      color: var(--fn-faint);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(16 * var(--u));
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .fn-list {
+      display: flex;
+      flex-direction: column;
+      gap: calc(2 * var(--u));
+      list-style: none;
+    }
+    .fn-item {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      height: calc(30 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(8 * var(--u));
+      color: var(--fn-body);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+    }
+    .fn-item-icon.lucide {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--fn-muted);
+    }
+    .fn-item-name {
+      flex: 1;
+      min-width: 0;
+    }
+    .fn-item-count {
+      color: var(--fn-faint);
+      font-size: calc(12 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    /* The item of the open notebook. */
+    .fn[data-notebook="inbox"] .fn-item[data-notebook-id="inbox"],
+    .fn[data-notebook="travel"] .fn-item[data-notebook-id="travel"] {
+      background: var(--fn-brand-tint);
+      color: var(--fn-brand-ink);
+      font-weight: 600;
+    }
+    .fn[data-notebook="inbox"]
+      .fn-item[data-notebook-id="inbox"]
+      :is(.fn-item-icon, .fn-item-count),
+    .fn[data-notebook="travel"]
+      .fn-item[data-notebook-id="travel"]
+      :is(.fn-item-icon, .fn-item-count) {
+      color: var(--fn-brand);
+    }
+    .fn-item-add {
+      color: var(--fn-faint);
+      font-weight: 450;
+    }
+    .fn-item-add .fn-item-icon.lucide {
+      color: var(--fn-faint);
+    }
+    .fn-account {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      margin-top: auto;
+      padding: calc(10 * var(--u)) calc(8 * var(--u)) 0;
+      border-top: calc(1 * var(--u)) solid var(--fn-soft-line);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      color: var(--fn-body);
+    }
+    .fn-avatar {
+      display: grid;
+      place-items: center;
+      width: calc(26 * var(--u));
+      height: calc(26 * var(--u));
+      border-radius: 50%;
+      background: #ffedd5;
+      color: #c2410c;
+      font-size: calc(11 * var(--u));
+      font-weight: 650;
+    }
+
+    /* The open notebook. */
+    .fn-main {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .fn-top {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      height: calc(46 * var(--u));
+      padding: 0 calc(16 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--fn-soft-line);
+    }
+    .fn-title {
+      display: flex;
+      align-items: baseline;
+      gap: calc(8 * var(--u));
+      margin: 0;
+      font-size: calc(16 * var(--u));
+      font-weight: 650;
+      line-height: calc(24 * var(--u));
+      letter-spacing: -0.01em;
+    }
+    .fn-title-count {
+      color: var(--fn-faint);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+    .fn-search {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      width: calc(156 * var(--u));
+      height: calc(30 * var(--u));
+      padding: 0 calc(6 * var(--u)) 0 calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--fn-line);
+      border-radius: calc(9 * var(--u));
+      background: #fff;
+      color: var(--fn-faint);
+      font-size: calc(13 * var(--u));
+    }
+    .fn-search-icon.lucide {
+      width: calc(15 * var(--u));
+      height: calc(15 * var(--u));
+    }
+    .fn-search-text {
+      flex: 1;
+      white-space: nowrap;
+    }
+    .fn-kbd {
+      padding: 0 calc(5 * var(--u));
+      border: calc(1 * var(--u)) solid var(--fn-line);
+      border-radius: calc(5 * var(--u));
+      color: var(--fn-faint);
+      font-family: inherit;
+      font-size: calc(11 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+
+    /* The notes of the Inbox: a short list of cards. */
+    .fn-notes {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8 * var(--u));
+      padding: calc(14 * var(--u)) calc(16 * var(--u));
+    }
+    .fn-note {
+      padding: calc(10 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--fn-line);
+      border-radius: calc(10 * var(--u));
+      background: #fff;
+      box-shadow: 0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(0 0 0 / 0.04);
+    }
+    .fn-note-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+    }
+    .fn-note-title {
+      margin: 0;
+      color: var(--fn-ink);
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .fn-note-date {
+      flex: 0 0 auto;
+      color: var(--fn-faint);
+      font-size: calc(12 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .fn-note-line {
+      margin-top: calc(3 * var(--u));
+      overflow: hidden;
+      color: var(--fn-muted);
+      font-size: calc(13 * var(--u));
+      line-height: calc(19 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* The empty state, in the middle of the notebook area. */
+    .fn-empty {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 calc(24 * var(--u)) calc(12 * var(--u));
+      text-align: center;
+    }
+    .fn-art {
+      width: calc(104 * var(--u));
+      height: calc(80 * var(--u));
+    }
+    .fn-empty-title {
+      margin-top: calc(10 * var(--u));
+      font-size: calc(18 * var(--u));
+      font-weight: 650;
+      line-height: calc(26 * var(--u));
+      letter-spacing: -0.015em;
+    }
+    .fn-empty-subtitle {
+      max-width: calc(288 * var(--u));
+      margin-top: calc(6 * var(--u));
+      color: var(--fn-muted);
+      font-size: calc(14 * var(--u));
+      line-height: calc(21 * var(--u));
+      text-wrap: balance;
+    }
+    .fn-actions {
+      display: flex;
+      align-items: center;
+      gap: calc(18 * var(--u));
+      margin-top: calc(16 * var(--u));
+    }
+
+    /* Before: a plain outline button. */
+    .fn-create {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      height: calc(36 * var(--u));
+      padding: 0 calc(14 * var(--u));
+      border: calc(1 * var(--u)) solid #d4d4d8;
+      border-radius: calc(8 * var(--u));
+      background: #fff;
+      box-shadow: 0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(0 0 0 / 0.05);
+      color: #27272a;
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .fn-create-icon.lucide {
+      display: none;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      stroke-width: 2.25;
+    }
+    .fn-import {
+      display: none;
+      color: var(--fn-brand);
+      font-size: calc(14 * var(--u));
+      font-weight: 550;
+      white-space: nowrap;
+      text-decoration: underline;
+      text-decoration-color: color-mix(in srgb, var(--fn-brand) 35%, transparent);
+      text-decoration-thickness: calc(1.5 * var(--u));
+      text-underline-offset: calc(4 * var(--u));
+    }
+
+    /* After: the primary violet button with a plus icon, and the import link next to it. */
+    .fn[data-version="after"] .fn-create {
+      padding: 0 calc(16 * var(--u)) 0 calc(12 * var(--u));
+      border-color: var(--fn-brand);
+      background: var(--fn-brand);
+      box-shadow:
+        inset 0 calc(1 * var(--u)) 0 rgb(255 255 255 / 0.16),
+        0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(81 0 255 / 0.25),
+        0 calc(6 * var(--u)) calc(14 * var(--u)) calc(-4 * var(--u)) rgb(81 0 255 / 0.45);
+      color: #fff;
+      font-weight: 600;
+    }
+    .fn[data-version="after"] .fn-create-icon.lucide {
+      display: block;
+    }
+    .fn[data-version="after"] .fn-import {
+      display: inline;
+    }
+    /* A phone stage shows a narrow page, so the notebooks become a rail of icons. */
+    @container stage (width <= 500px) {
+      .fn-nav {
+        flex-basis: calc(48 * var(--u));
+        align-items: center;
+        padding: 0 0 calc(10 * var(--u));
+      }
+      .fn-brand-name,
+      .fn-section,
+      .fn-item-name,
+      .fn-item-count,
+      .fn-account-name {
+        display: none;
+      }
+      .fn-section + .fn-list {
+        margin-top: calc(6 * var(--u));
+      }
+      .fn-search {
+        width: auto;
+      }
+      .fn-search-text,
+      .fn-kbd {
+        display: none;
+      }
+      .fn-account {
+        padding-right: 0;
+        padding-left: 0;
+      }
+    }
+  }
+}

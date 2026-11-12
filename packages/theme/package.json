@@ -5,7 +5,8 @@
   "exports": {
     "./tokens.css": "./src/tokens.css",
     "./blocks": "./src/blocks.ts",
-    "./colors": "./src/colors.ts"
+    "./colors": "./src/colors.ts",
+    "./site-palette.css": "./src/site-palette.css"
   },
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",

@@ -1,0 +1,364 @@
+@layer replica {
+  :where(.stage) {
+    /* The tab body: flex h-full min-h-0 flex-col. The Tailwind shadows of the overlays, in design
+       pixels. */
+    .bw {
+      --bw-shadow-sm:
+        0 calc(1 * var(--u)) calc(3 * var(--u)) 0 rgb(0 0 0 / 0.1),
+        0 calc(1 * var(--u)) calc(2 * var(--u)) calc(-1 * var(--u)) rgb(0 0 0 / 0.1);
+      --bw-shadow-md:
+        0 calc(4 * var(--u)) calc(6 * var(--u)) calc(-1 * var(--u)) rgb(0 0 0 / 0.1),
+        0 calc(2 * var(--u)) calc(4 * var(--u)) calc(-2 * var(--u)) rgb(0 0 0 / 0.1);
+      --bw-shadow-lg:
+        0 calc(10 * var(--u)) calc(15 * var(--u)) calc(-3 * var(--u)) rgb(0 0 0 / 0.1),
+        0 calc(4 * var(--u)) calc(6 * var(--u)) calc(-4 * var(--u)) rgb(0 0 0 / 0.1);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      background: var(--card);
+    }
+
+    /* The toolbar: flex shrink-0 flex-col border-b border-border bg-card, and the row of controls in
+       it: flex h-9 items-center gap-0.5 px-1. */
+    .bw-toolbar {
+      display: flex;
+      flex: 0 0 auto;
+      flex-direction: column;
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+      background: var(--card);
+    }
+    .bw-toolbar-row {
+      display: flex;
+      align-items: center;
+      gap: calc(2 * var(--u));
+      height: calc(36 * var(--u));
+      padding: 0 calc(4 * var(--u));
+    }
+
+    /* A toolbar button: a ghost icon Button with size-7 shrink-0 text-muted-foreground, and an icon
+       in size-4. A popover button has h-7 min-w-7 gap-1 px-1.5 and text-xs. */
+    .bw-tool {
+      position: relative;
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      gap: calc(4 * var(--u));
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    .bw-tool[data-popover] {
+      width: auto;
+      min-width: calc(28 * var(--u));
+      padding: 0 calc(6 * var(--u));
+    }
+    .bw-tool .lucide {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    /* hover:bg-accent/60 hover:text-foreground. A scene sets data-hover. */
+    .bw-tool[data-hover] {
+      background: color-mix(in oklab, var(--accent) 60%, transparent);
+      color: var(--foreground);
+    }
+    /* aria-pressed:bg-info-surface aria-pressed:text-info-surface-foreground
+       aria-pressed:hover:bg-info-surface-hover. */
+    .bw-tool[aria-pressed="true"] {
+      background: var(--info-surface);
+      color: var(--info-surface-foreground);
+    }
+    .bw-tool[aria-pressed="true"][data-hover] {
+      background: var(--info-surface-hover);
+    }
+    .bw-tool[data-disabled] {
+      opacity: 0.5;
+    }
+    /* A page that loads shows Stop (X) in place of Reload, and no page yet. */
+    .bw-tool .bw-stop-icon,
+    .bw[data-state="loading"] .bw-tool .bw-reload-icon {
+      display: none;
+    }
+    .bw[data-state="loading"] .bw-tool .bw-stop-icon {
+      display: block;
+    }
+    .bw[data-state="loading"] .fn {
+      visibility: hidden;
+    }
+
+    /* The count of pending annotations: rounded-full bg-sky-300 px-1.5 text-[10px] leading-4
+       font-semibold text-neutral-950 tabular-nums. */
+    .bw-count {
+      padding: 0 calc(6 * var(--u));
+      border-radius: 999px;
+      background: var(--sky-300);
+      color: var(--neutral-950);
+      font-size: calc(10 * var(--u));
+      font-weight: 600;
+      line-height: calc(16 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* The address bar of browser-address-bar.tsx: an Input with h-7 rounded-md bg-muted/50 px-2 py-1
+       text-xs shadow-none, and the border border-input of a field. With the focus it has
+       focus-visible:bg-card and focus-visible:border-ring. */
+    .bw-address {
+      display: flex;
+      flex: 1 1 0%;
+      align-items: center;
+      min-width: 0;
+      height: calc(28 * var(--u));
+      padding: calc(4 * var(--u)) calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: color-mix(in oklab, var(--muted) 50%, transparent);
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .bw-address[data-focus] {
+      border-color: var(--ring);
+      background: var(--card);
+    }
+    .bw-address-text {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bw-address-text::after {
+      height: calc(14 * var(--u));
+    }
+    /* The placeholder of an empty address bar. The caret shows before it, as in a field. */
+    .bw-address-text:empty::before {
+      content: attr(data-placeholder);
+      position: absolute;
+      left: 0;
+      color: var(--muted-foreground);
+    }
+
+    /* The new tab page of browser-new-tab-view.tsx, for a tab with no address: h-full bg-card, and a
+       column of max-w-3xl flex-col gap-6 px-5 py-6. */
+    .bw-newtab {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: calc(24 * var(--u));
+      padding: calc(24 * var(--u)) calc(20 * var(--u));
+      background: var(--card);
+    }
+    .bw:not([data-state="blank"]) .bw-newtab {
+      display: none;
+    }
+    /* The heading: text-sm font-semibold, then text-xs text-muted-foreground. */
+    .bw-newtab h2 {
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .bw-newtab header p {
+      margin-top: calc(4 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .bw-newtab code {
+      font-family: var(--mono);
+    }
+    /* No page yet: rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs. */
+    .bw-newtab-empty {
+      padding: calc(24 * var(--u)) calc(16 * var(--u));
+      border: calc(1 * var(--u)) dashed var(--border);
+      border-radius: calc(14 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      text-align: center;
+    }
+
+    /* The page area: relative min-h-0 flex-1, with the page and the overlay element over it. */
+    .bw-page {
+      position: relative;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .bw-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    /* The layers of the markers, of the agent marker, and of the picker: absolute inset-0 z-10
+       overflow-hidden. */
+    .bw-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      overflow: hidden;
+    }
+
+    /* A numbered marker on the top left corner of an annotated element: inline-flex size-5
+       rounded-full bg-sky-300 text-[11px] font-semibold leading-none text-neutral-950, with
+       shadow-md ring-2 ring-white. */
+    .bw-marker {
+      position: absolute;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+      border-radius: 50%;
+      background: var(--sky-300);
+      box-shadow:
+        0 0 0 calc(2 * var(--u)) #fff,
+        var(--bw-shadow-md);
+      color: var(--neutral-950);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    /* A selected element: rounded-[2px] bg-sky-400/15 outline-2 outline-sky-600. */
+    .bw-selected {
+      position: absolute;
+      border-radius: calc(2 * var(--u));
+      background: color-mix(in oklab, var(--sky-400) 15%, transparent);
+      outline: calc(2 * var(--u)) solid var(--sky-600);
+    }
+
+    /* The element under the pointer: rounded-[2px] border border-sky-500 bg-sky-400/25. */
+    .bw-target {
+      position: absolute;
+      border: calc(1 * var(--u)) solid var(--sky-500);
+      border-radius: calc(2 * var(--u));
+      background: color-mix(in oklab, var(--sky-400) 25%, transparent);
+    }
+    /* Its label: absolute left-0 -top-[21px] max-w-64 truncate rounded-sm bg-sky-300 px-1.5
+       text-[11px] leading-5 font-medium text-neutral-950 shadow-sm. It goes inside the box, at
+       top-0, when the box is less than 20 pixels from the top. */
+    .bw-target-label {
+      position: absolute;
+      top: calc(-21 * var(--u));
+      left: 0;
+      max-width: calc(256 * var(--u));
+      padding: 0 calc(6 * var(--u));
+      overflow: hidden;
+      border-radius: calc(8 * var(--u));
+      background: var(--sky-300);
+      box-shadow: var(--bw-shadow-sm);
+      color: var(--neutral-950);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bw-target[data-inside] .bw-target-label {
+      top: 0;
+    }
+
+    /* The comment box of a selection: absolute z-30 w-80, under the selection. */
+    .bw-comment {
+      position: absolute;
+      z-index: 30;
+    }
+    /* The form: flex w-80 flex-col gap-2 rounded-lg border border-border bg-card p-3
+       text-card-foreground shadow-lg. */
+    .bw-comment-form {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8 * var(--u));
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      box-shadow: var(--bw-shadow-lg);
+      color: var(--card-foreground);
+    }
+    /* The selected element name: truncate text-xs font-medium text-muted-foreground. */
+    .bw-comment-label {
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The Textarea with min-h-20 resize-y, three rows of text-sm, px-3 py-2, and the field chrome:
+       rounded-md border border-input bg-card shadow-sm. The box takes the focus when it opens, so
+       its border has the ring color of focus-visible:border-ring. */
+    .bw-textarea {
+      position: relative;
+      height: calc(80 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--ring);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      box-shadow: var(--bw-shadow-sm);
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .bw-comment-text {
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
+    /* The placeholder does not take the place of the caret, which shows before it, as in a field. */
+    .bw-comment-text:empty::before {
+      content: attr(data-placeholder);
+      position: absolute;
+      top: calc(8 * var(--u));
+      left: calc(12 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .bw-comment-text::after {
+      height: calc(17 * var(--u));
+    }
+    /* The resize grip that Chromium draws in the corner of a resize-y textarea. */
+    .bw-resizer {
+      position: absolute;
+      right: calc(2 * var(--u));
+      bottom: calc(2 * var(--u));
+      width: calc(8 * var(--u));
+      height: calc(8 * var(--u));
+      fill: none;
+      stroke: var(--muted-foreground);
+      stroke-width: 1;
+      stroke-linecap: round;
+    }
+    /* The footer: flex flex-wrap items-center justify-between gap-2. */
+    .bw-comment-footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+    }
+    /* The Screenshot label: flex items-center gap-2 text-xs text-muted-foreground. */
+    .bw-comment-switch {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .bw-comment-buttons {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+    }
+  }
+}

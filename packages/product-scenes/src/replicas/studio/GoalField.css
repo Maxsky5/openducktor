@@ -1,0 +1,73 @@
+@layer replica {
+  :where(.stage) {
+    /* session-start-goal-field.tsx: the switch row, then the reveal with pt-3 and gap-1.5. */
+    .st-goal {
+      display: flex;
+      flex-direction: column;
+    }
+    .st-goal-reveal {
+      padding-top: calc(12 * var(--u));
+      overflow: clip;
+      overflow-clip-margin: calc(4 * var(--u));
+    }
+    /* One field: rounded-md border border-input bg-card shadow-sm, with the text and its footer. */
+    .st-goal-group {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+    }
+    /* The embedded Textarea with rows={11}: px-3 py-2 text-sm, eleven lines of 20 pixels. */
+    .st-goal-text {
+      height: calc(236 * var(--u));
+      margin: 0;
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
+    /* The footer: flex items-center justify-between gap-3 border-t border-input bg-muted/40 px-3
+       py-2, with the hint in text-xs text-muted-foreground. */
+    .st-goal-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--input);
+      background: color-mix(in oklab, var(--muted) 40%, transparent);
+    }
+    .st-goal-foot > p {
+      margin: 0;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* Generate goal: a secondary sm button with gap-2 and a size-3.5 icon. While a model writes the
+       goal, it is disabled and shows LoaderCircle and Generating goal…. */
+    .st-generate {
+      flex: none;
+      gap: calc(8 * var(--u));
+    }
+    .st-generate .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .st-generate .st-busy,
+    .st-generate[data-busy] .st-idle {
+      display: none;
+    }
+    .st-generate[data-busy] .st-busy {
+      display: block;
+    }
+    .st-generate[data-busy] {
+      opacity: 0.5;
+    }
+  }
+}

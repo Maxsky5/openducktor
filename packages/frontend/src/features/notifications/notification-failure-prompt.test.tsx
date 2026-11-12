@@ -76,6 +76,31 @@ describe("NotificationFailurePrompt", () => {
     });
   });
 
+  test("names the test button when the user has not chosen the permission yet", async () => {
+    await withMockedToast(async ({ toastInfoMock }) => {
+      render(
+        <NotificationFailurePrompt
+          failure={{
+            ...failure("permission-prompt"),
+            message: "OS notification permission is required.",
+            osStatus: "denied",
+            osPermission: "prompt",
+          }}
+          onOpenSettings={() => {}}
+          onReload={() => {}}
+        />,
+      );
+
+      expect(toastInfoMock).toHaveBeenCalledWith(
+        "OS notifications are not allowed",
+        expect.objectContaining({
+          description:
+            "OS notification permission is required. Select Test system notification in the Notifications settings.",
+        }),
+      );
+    });
+  });
+
   test("shows one actionable toast for each OS failure occurrence", async () => {
     await withMockedToast(async ({ toastErrorMock }) => {
       const onOpenSettings = mock(() => {});

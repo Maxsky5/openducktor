@@ -38,6 +38,17 @@ describe("check presentation", () => {
     expect(ciChecksIndicatorStatus(checks)).toBeNull();
     expect(checksSummaryLabel(checks)).toBe("2 checks");
   });
+
+  test("the check summary counts the checks of its status without a plural ending", () => {
+    const pending: PullRequestReviewCheck = { ...completedCheck(null), status: "in_progress" };
+    const passing = [completedCheck("success", "unit"), completedCheck("success", "lint")];
+
+    expect(checksSummaryLabel([pending, { ...pending, name: "test" }])).toBe("2 pending");
+    expect(checksSummaryLabel(passing)).toBe("2 passing");
+    expect(checksSummaryLabel([completedCheck("failure"), completedCheck("failure", "unit")])).toBe(
+      "2 failing",
+    );
+  });
 });
 
 describe("isBotCommentAuthor", () => {

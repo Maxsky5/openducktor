@@ -1,5 +1,10 @@
 import type { ReactElement } from "react";
-import { Text as NativeText, type TextProps as NativeTextProps, Platform } from "react-native";
+import {
+  Text as NativeText,
+  type TextProps as NativeTextProps,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { MONO_TYPE, monoWeight, sansWeight } from "@/theme/tokens";
 import { useNativeParagraphKey } from "./use-native-paragraph-key";
@@ -66,18 +71,67 @@ export function Text({
   const mono = variant === "mono" || variant === "monoSmall";
   // Android draws selectable text without its ellipsis, so one truncated line would clip.
   const truncatedLine = Platform.OS === "android" && props.numberOfLines === 1;
+  const textStyle = [
+    styles[variant],
+    styles[tone],
+    weight === undefined ? null : styles[(mono ? MONO_WEIGHTS : SANS_WEIGHTS)[weight]],
+    tabular ? styles.tabular : null,
+    overline ? styles.overline : null,
+    style,
+  ];
+  if (
+    Platform.OS === "android" &&
+    props.maxFontSizeMultiplier !== undefined &&
+    props.allowFontScaling !== false
+  ) {
+    return (
+      <AndroidCappedText
+        key={paragraphKey}
+        {...props}
+        maxFontSizeMultiplier={props.maxFontSizeMultiplier}
+        selectable={selectable && !truncatedLine}
+        style={textStyle}
+      />
+    );
+  }
   return (
     <NativeText
       key={paragraphKey}
       {...props}
       selectable={selectable && !truncatedLine}
+      style={textStyle}
+    />
+  );
+}
+
+/**
+ * React Native on Android caps the font size at `maxFontSizeMultiplier`, but it scales the line
+ * height with the full system text size, so a capped line grows past its row of fixed height.
+ * Above the cap, this text turns off the system scaling and draws the font size, the line height,
+ * and the letter spacing at the cap, as iOS does.
+ */
+function AndroidCappedText({
+  maxFontSizeMultiplier,
+  style,
+  ...props
+}: NativeTextProps & { maxFontSizeMultiplier: number }): ReactElement {
+  const { fontScale } = useWindowDimensions();
+  if (fontScale <= maxFontSizeMultiplier) {
+    return <NativeText {...props} maxFontSizeMultiplier={maxFontSizeMultiplier} style={style} />;
+  }
+  const { fontSize, lineHeight, letterSpacing } = StyleSheet.flatten(style) ?? {};
+  return (
+    <NativeText
+      {...props}
+      allowFontScaling={false}
       style={[
-        styles[variant],
-        styles[tone],
-        weight === undefined ? null : styles[(mono ? MONO_WEIGHTS : SANS_WEIGHTS)[weight]],
-        tabular ? styles.tabular : null,
-        overline ? styles.overline : null,
         style,
+        {
+          fontSize: fontSize === undefined ? undefined : fontSize * maxFontSizeMultiplier,
+          lineHeight: lineHeight === undefined ? undefined : lineHeight * maxFontSizeMultiplier,
+          letterSpacing:
+            letterSpacing === undefined ? undefined : letterSpacing * maxFontSizeMultiplier,
+        },
       ]}
     />
   );

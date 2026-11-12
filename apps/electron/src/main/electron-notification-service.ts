@@ -117,13 +117,15 @@ export const createElectronNotificationService = ({
     if (permission === "denied") {
       return {
         status: "denied",
+        permission: "denied",
         message: "OS notification permission was denied. Enable notifications in system settings.",
       };
     }
     if (permission === "prompt" && request.purpose !== "test") {
       return {
         status: "denied",
-        message: "OS notification permission is required. Use Test OS in notification settings.",
+        permission: "prompt",
+        message: "OS notification permission is required.",
       };
     }
 

@@ -1,0 +1,57 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The session page of SessionPage.tsx. A view sets the design width and the height of the
+     * window. The right panel takes 40% of the row, a little more than the 37% of
+     * RIGHT_PANEL_SIZES in agents-page-layout.tsx, so its rows keep their labels.
+     */
+    /* A page of a window: a session page, or a page that a scene switches with it, such as the
+       board. */
+    .page-pane {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .page-pane[hidden] {
+      display: none;
+    }
+    .tpage-main {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+    .tpage-chat {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+    }
+    .tpage-right {
+      display: flex;
+      flex: 0 0 40%;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--card);
+    }
+    .tpage-right > :last-child {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* A phone stage shows only the right panel, as a narrow window shows one panel at a time. */
+    @container stage (width <= 500px) {
+      .tpage .tpage-chat,
+      .tpage .ui-handle {
+        display: none;
+      }
+      .tpage .tpage-right {
+        flex: 1;
+      }
+      .tpage .pstrip[data-fade-start] {
+        mask-image: none;
+      }
+    }
+  }
+}

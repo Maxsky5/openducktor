@@ -4,6 +4,8 @@ import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { type CalloutTone, calloutColors } from "./callout-colors";
 import { Icon, type IconName } from "./icon";
+import { inlineCodePlainText } from "@openducktor/frontend-core/lib/inline-code";
+import { InlineCodeText } from "./inline-code-text";
 import { Text } from "./text";
 import { useAnnounce } from "./use-announce";
 
@@ -37,7 +39,9 @@ export function Callout({
   const theme = useAppTheme();
   const colors = calloutColors(theme, tone);
   styles.useVariants({ size });
-  useAnnounce([title, message, detail].filter((part) => part).join(". "));
+  useAnnounce(
+    [title, message && inlineCodePlainText(message), detail].filter((part) => part).join(". "),
+  );
   const textVariant = size === "sm" ? "footnote" : "subhead";
   return (
     <View
@@ -65,7 +69,7 @@ export function Callout({
             style={{ color: size === "md" && title ? colors.muted : colors.text }}
             selectable
           >
-            {message}
+            <InlineCodeText text={message} />
           </Text>
         ) : null}
         {detail ? (

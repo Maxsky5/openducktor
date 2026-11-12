@@ -30,7 +30,9 @@ Set `MARKETING_BUILD_TARGET` and `MARKETING_SITE_ORIGIN` in the environment. Pro
 
 ## Cloudflare commands
 
-The site deploys to two assets-only Cloudflare Workers: `openducktor-marketing` for production and `openducktor-marketing-preview` for pull requests. Neither Worker has a script, `run_worker_first`, or a binding, so Cloudflare serves every request from the static assets. Cloudflare bills only requests that run a Worker script. Static asset requests are free and unlimited. `tests/wrangler-config.test.ts` keeps each configuration to these fields. The build stays far below the static assets limits of 20,000 files for each version and 25 MiB for each file. The generated `_headers` file lets browsers keep the files of `_astro/` for a year, because Astro puts a hash of the content in each file name, so a changed file gets a new name at the next deployment. The pages and the files at the root keep the Cloudflare default, which checks them again at each visit. See [Cloudflare Static Assets billing and limitations](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/).
+The site deploys to two assets-only Cloudflare Workers: `openducktor-marketing` for production and `openducktor-marketing-preview` for pull requests. Neither Worker has a script, `run_worker_first`, or a binding, so Cloudflare serves every request from the static assets. Cloudflare bills only requests that run a Worker script. Static asset requests are free and unlimited. `tests/wrangler-config.test.ts` keeps each configuration to these fields. The build stays far below the static assets limits of 20,000 files for each version and 25 MiB for each file. `@openducktor/build-tools/static-site` writes the `_headers` and `robots.txt` files of this site and of the documentation, with the same security headers. The Content-Security-Policy lets a page load files only from its own origin. The generated `_headers` file lets browsers keep the files of `_astro/` for a year, because Astro puts a hash of the content in each file name, so a changed file gets a new name at the next deployment. The pages and the files at the root keep the Cloudflare default, which checks them again at each visit. See [Cloudflare Static Assets billing and limitations](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/).
+
+To publish by hand from the repository root, set `MARKETING_SITE_ORIGIN` and run `bun run marketing:build`, which builds production. Then run `bun run marketing:deploy`, which uploads `dist/` to `openducktor-marketing`. Run `bunx wrangler login` once before the first upload.
 
 Run these commands from `apps/marketing-website`:
 
@@ -98,7 +100,7 @@ bun run build
 bun run test:browser
 ```
 
-The browser suite owns a temporary preview server on port 4398 and fails if that port is occupied. It checks both themes at desktop and phone sizes, the tabs keyboard pattern, the copy buttons and a failed copy, the pause control, the install terminals, reduced motion, 200% text size, text contrast, FAQ disclosures, third-party requests, the GSAP license notices, and operation without JavaScript. It does not stop an existing development or preview server.
+The browser suite serves `dist/` with its `_headers` in the local Workers runtime on port 4398, and fails if that port is occupied. A test fails when a page breaks a rule of the Content-Security-Policy. It checks both themes at desktop and phone sizes, the tabs keyboard pattern, the copy buttons and a failed copy, the pause control, the install terminals, reduced motion, 200% text size, text contrast, FAQ disclosures, third-party requests, the GSAP license notices, and operation without JavaScript. It does not stop an existing development or preview server.
 
 ## Product views
 

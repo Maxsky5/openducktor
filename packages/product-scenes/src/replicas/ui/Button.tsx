@@ -9,7 +9,7 @@ type ButtonVariant = "default" | "secondary" | "ghost" | "outline" | "destructiv
 
 type ButtonProps = ComponentProps<"span"> & {
   variant?: ButtonVariant;
-  size?: "default" | "sm" | "icon";
+  size?: "default" | "sm" | "xs" | "icon";
 };
 
 export function Button({

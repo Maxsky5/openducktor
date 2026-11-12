@@ -27,8 +27,10 @@ export type SceneViewProps = {
 /** The props of the view of the scene `Name`: the props of every view and the scene options. */
 export type ViewPropsOf<Name extends SceneName> = SceneViewProps & { options: SceneOptions<Name> };
 
-/** The view of each scene. */
-export type SceneViews = { [Name in SceneName]: ComponentType<ViewPropsOf<Name>> };
+/** The view of each scene in `Names`. */
+export type SceneViews<Names extends SceneName = SceneName> = {
+  [Name in Names]: ComponentType<ViewPropsOf<Name>>;
+};
 
 type SceneFrameProps = SceneViewProps & {
   name: SceneName;

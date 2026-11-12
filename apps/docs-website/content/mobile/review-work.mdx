@@ -1,0 +1,96 @@
+---
+icon: FileDiff
+title: Review work
+description: Read the changes of a task, comment on diff lines for the Builder, and open the files, CI checks, artifacts, and terminals from your phone.
+---
+
+The work views show what the agents did on the host.
+
+<Screenshot id="phone-session-menu" alt="A task session with the Session actions menu open: Task Details, Copy Task ID, Changes, Files, Artifacts, CI Checks, and Terminals.">
+
+Open them from the **Session actions** menu of a session, or from the **Work** card of the [task details](/mobile/tasks/#task-details):
+
+- [Changes](#changes): the changed files and their diffs.
+- [Files](#files): the files of the worktree.
+- [Artifacts](#artifacts): the documents of the task.
+- [CI Checks](#ci-checks): the pull request and its checks.
+- [Terminals](#terminals): the shells of the worktree.
+
+**Artifacts** and **CI Checks** show only for a task.
+
+</Screenshot>
+
+## Changes [#changes]
+
+<AnnotatedScreenshot
+  id="phone-changes"
+  alt="The Changes view of a task. The branch card shows the task branch, Not published, and the target main with 1 commit ahead. Branch changes is selected, with 3 changed files. Sidebar.tsx is open with its diff, where line 7 is added."
+  parts={[
+    { at: "refresh", title: "Refresh", text: "Reads the changes again." },
+    { at: "branches", title: "Branches", text: "The task branch, then the Comparison Branch with the commits ahead and behind. Tap the comparison branch to change it." },
+    { at: "uncommitted-or-branch", title: "Uncommitted or branch", text: "Uncommitted changes groups the files in Conflicts, Unstaged, and Staged. Branch changes compares the task branch with the comparison branch." },
+    { at: "tree-or-list", title: "Tree or list", text: "Shows the files in their folders, or in one list." },
+    { at: "a-file", title: "A file", text: "Tap a file to show its diff. Long press it for Open full diff, View file, and Copy path. Tap a line to comment on it." },
+  ]}
+/>
+
+The phone does not stage, commit, or push. The agents commit their work, and the push comes with the [approval](/mobile/tasks/#approve).
+
+When a rebase or a merge stops on a conflict, **Changes** shows the conflicted files. Tap <Action>Abort rebase</Action> or <Action>Abort merge</Action> to go back. Or tap <Action>Resolve conflicts</Action>, then <Action>Send request</Action>, to ask the Builder to fix it.
+
+## Comment on a diff [#comment]
+
+<ProductDemo id="mobile-diff-comment" />
+
+<Steps>
+<Step>In **Changes**, tap a file to show its diff, or open its full diff.</Step>
+<Step>Tap a line. To comment on more lines, tap the last line of the range.</Step>
+<Step>Tap <Action>Comment</Action>, write what to change, and tap <Action>Comment</Action> again. The comment shows **Pending**.</Step>
+<Step>Tap <Action>Send</Action>. The session opens, and your comments go with your next message.</Step>
+</Steps>
+
+## Files [#files]
+
+<Screenshot id="phone-files" alt="The file viewer showing src/ui/Sidebar.tsx with line numbers.">
+
+**Files** shows the folders of the worktree, with the Git status of each file. Each folder opens on its own screen. Search finds the files in the folder and below it.
+
+The viewer shows:
+
+- code with line numbers,
+- Markdown as **Preview** or **Source**,
+- images.
+
+The phone has no editor.
+
+</Screenshot>
+
+## CI checks [#ci-checks]
+
+**CI Checks** shows the pull request of the task, its checks, and its review comments, as on the desktop. To hide the resolved comments, open **Filter comments** and select **Hide resolved**. The same menu filters the comments by author. The view is read-only. See [CI checks](/git-and-pull-requests/#ci-checks).
+
+## Artifacts [#artifacts]
+
+**Artifacts** lists the documents of the workflow, such as the spec, the plan, and the QA report, and the free artifacts of the task. A free artifact shows a preview, or <Action>Share</Action> when the phone cannot show it. An HTML file shows as source: the app never runs it. To open a file in another app, tap <Action>Share</Action>. To add, rename, or delete a free artifact, use the desktop.
+
+## Terminals [#terminals]
+
+**Terminals** lists the open terminals of the task or the session. Tap <Action>New terminal</Action> to open a shell in the worktree, or start a [repository action](/customize-openducktor/#add-repository-actions). You set up the actions on the desktop.
+
+<AnnotatedScreenshot
+  id="phone-terminal"
+  alt="A terminal of the task fieldnotes-170l after ls. Under it, the key bar shows esc, tab, ctrl, alt, and the arrows, then Select all, Copy, Clear, Paste, and the keyboard button."
+  parts={[
+    { at: "close", title: "Close", text: "Closes the terminal. While a command runs, confirm Stop and close." },
+    { at: "keys", title: "Keys", text: "esc, tab, ctrl, alt, and the arrows. Scroll the row for ⇧ tab, ⌫, del, and ↵." },
+    { at: "edit", title: "Edit", text: "Select all, Copy, Clear, and Paste." },
+    { at: "keyboard", title: "Keyboard", text: "Shows the keyboard of the phone, so you can type." },
+  ]}
+/>
+
+## Next [#next]
+
+<Cards>
+  <Card title="Tasks" href="/mobile/tasks/">Approve the work or send it back.</Card>
+  <Card title="Review the work on the desktop" href="/coding-sessions/#inspect-work">Learn the work views of the desktop.</Card>
+</Cards>

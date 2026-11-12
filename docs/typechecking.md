@@ -8,6 +8,7 @@ Each standalone workspace runs `bun check -p tsconfig.json`. The mobile app chec
 
 | Workspace directory | Standalone configurations |
 |---|---|
+| `apps/docs-website` | `tsconfig.json` |
 | `apps/electron` | `tsconfig.json` |
 | `apps/mobile` | `tsconfig.json`, `tsconfig.test.json` |
 | `packages/adapters-codex-app-server` | `tsconfig.json` |
@@ -27,7 +28,7 @@ Each standalone workspace runs `bun check -p tsconfig.json`. The mobile app chec
 | `packages/workflows` | `tsconfig.json`, `tsconfig.test.json` |
 | `tools/oxlint/anti-slop` | `tsconfig.json` |
 
-These are 23 configurations across 18 workspaces. The website adds its Astro check. `packages/host/tsconfig.build.json` remains a build configuration, separate from the host's standalone check.
+These are 24 configurations across 19 workspaces. The website adds its Astro check. `packages/host/tsconfig.build.json` remains a build configuration, separate from the host's standalone check.
 
 ## Compiler versions and limits
 
@@ -46,6 +47,10 @@ Bun upgrades can change compiler behavior even when the installed `typescript` p
 The website keeps `astro check --minimumFailingSeverity warning` as its required `typecheck` script. Both warnings and errors must fail. A plain TypeScript check cannot replace Astro template diagnostics.
 
 The installed `@astrojs/check` `0.9.10` accepts TypeScript 5 or 6. The installed `@astrojs/language-server` `2.17.1` rejects TypeScript 7 because it has no JavaScript compiler API. Keep the website's workspace-local TypeScript `^6.0.0` dependency. Do not replace it with the root compiler, a custom compiler bridge, a dependency patch, or a fork. A TypeScript 7 upgrade for Astro needs official upstream support and is outside this migration. See [Astro's rejection](https://github.com/withastro/astro/pull/17345) and [compatibility tracking](https://github.com/withastro/roadmap/discussions/1321).
+
+## Next.js build check
+
+The docs website runs `bun check -p tsconfig.json` as its required `typecheck` script, like the other workspaces. Its `next build` also checks types. Next.js needs the TypeScript JavaScript API for that check, which TypeScript 7 does not have. Keep the docs website's workspace-local TypeScript `^6.0.0` dependency for the build. Do not turn off the build check or replace it with a custom compiler bridge.
 
 ## Parallelism and verification
 

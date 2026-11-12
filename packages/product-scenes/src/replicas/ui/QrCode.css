@@ -1,0 +1,9 @@
+@layer product {
+  :where(.stage) {
+    /* The modules keep sharp edges at every scale, as the pixelated image of the app. */
+    .ui-qr {
+      display: block;
+      shape-rendering: crispEdges;
+    }
+  }
+}

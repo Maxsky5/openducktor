@@ -1,0 +1,175 @@
+@layer replica {
+  :where(.stage) {
+    /* The card: the desktop rounded-xl outline on the card color, with the card shadow. */
+    .mob-tcard {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: calc(8 * var(--u));
+      padding: calc(10 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      box-shadow: var(--m-shadow-card);
+    }
+    .mob-tcard-title {
+      display: -webkit-box;
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(15 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+      letter-spacing: calc(-0.1 * var(--u));
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .mob-tcard-foot {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-height: calc(32 * var(--u));
+    }
+    .mob-tcard-meta {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+    }
+    /* IssueTypeMark: the icon color of the type badge. Feature is sky, Bug rose, Task neutral. */
+    .mob-tcard-kind {
+      flex: 0 0 auto;
+      width: calc(15 * var(--u));
+      height: calc(15 * var(--u));
+      color: var(--foreground);
+    }
+    .mob-tcard-kind[data-kind="feature"] {
+      color: var(--sky-600);
+    }
+    .mob-tcard-kind[data-kind="bug"] {
+      color: var(--rose-600);
+    }
+    :where([data-theme="dark"]) & .mob-tcard-kind[data-kind="feature"] {
+      color: var(--sky-400);
+    }
+    :where([data-theme="dark"]) & .mob-tcard-kind[data-kind="bug"] {
+      color: var(--rose-400);
+    }
+    /* PriorityBadge, small: P1 orange, P2 amber, P3 sky, with a dot of the 500 shade. */
+    .mob-tcard-priority {
+      --chip: var(--amber-50);
+      --chip-border: var(--amber-200);
+      --chip-text: var(--amber-700);
+      --chip-dot: var(--amber-500);
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      min-height: calc(22 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--chip-border);
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--chip-text);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
+    }
+    .mob-tcard-priority i {
+      width: calc(6 * var(--u));
+      height: calc(6 * var(--u));
+      border-radius: 50%;
+      background: var(--chip-dot);
+    }
+    .mob-tcard-priority[data-priority="1"] {
+      --chip: var(--orange-50);
+      --chip-border: var(--orange-200);
+      --chip-text: var(--orange-700);
+      --chip-dot: var(--orange-500);
+    }
+    .mob-tcard-priority[data-priority="3"] {
+      --chip: var(--sky-50);
+      --chip-border: var(--sky-200);
+      --chip-text: var(--sky-700);
+      --chip-dot: var(--sky-500);
+    }
+    :where([data-theme="dark"]) & .mob-tcard-priority {
+      --chip: color-mix(in oklab, var(--amber-950) 50%, transparent);
+      --chip-border: var(--amber-800);
+      --chip-text: var(--amber-300);
+    }
+    :where([data-theme="dark"]) & .mob-tcard-priority[data-priority="1"] {
+      --chip: color-mix(in oklab, var(--orange-950) 50%, transparent);
+      --chip-border: var(--orange-800);
+      --chip-text: var(--orange-300);
+    }
+    :where([data-theme="dark"]) & .mob-tcard-priority[data-priority="3"] {
+      --chip: color-mix(in oklab, var(--sky-950) 50%, transparent);
+      --chip-border: var(--sky-800);
+      --chip-text: var(--sky-300);
+    }
+    /* The ID gives way first, so the priority always reads. */
+    .mob-tcard-id {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-family: var(--mono);
+      font-size: calc(11.5 * var(--u));
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* The compact action: 32 points high, the outline or the violet look of the desktop. */
+    .mob-tcard-start {
+      display: flex;
+      flex: 0 1 auto;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      max-width: calc(210 * var(--u));
+      min-height: calc(32 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(8 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: var(--m-shadow-card);
+      font-size: calc(13 * var(--u));
+      font-weight: 600;
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-tcard-start[data-appearance="filled"] {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+    .mob-tcard-start .lucide {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .mob-tcard-start span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mob-tcard-menu {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(8 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: var(--m-shadow-card);
+    }
+    .mob-tcard-menu .lucide {
+      width: calc(15 * var(--u));
+      height: calc(15 * var(--u));
+    }
+  }
+}

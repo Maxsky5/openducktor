@@ -1,0 +1,39 @@
+/* The search dialog: its notes, the retry footer, the input, and the results. */
+.docs-search-note {
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-fd-muted-foreground);
+}
+
+.docs-search-failure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.docs-search-failure p {
+  flex: 1 1 16rem;
+}
+
+.docs-search-failure button {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.5rem;
+  background: var(--color-fd-background);
+  padding: 0.375rem 0.75rem;
+  font-weight: 500;
+}
+
+/* The search dialog marks its input itself, so the input needs no focus ring of its own. */
+.docs-search-input:focus-visible {
+  outline: none;
+}
+
+/* A text result shows at most three lines, so the list stays easy to scan. */
+#fd-search-list [role="option"] .prose {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}

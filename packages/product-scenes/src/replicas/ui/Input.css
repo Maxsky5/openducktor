@@ -1,0 +1,33 @@
+@layer product {
+  :where(.stage) {
+    /* The field: h-9 w-full px-3 py-1 text-sm, with rounded-md border border-input bg-card
+       shadow-sm. The focus has focus-visible:border-ring. */
+    .ui-input {
+      display: flex;
+      align-items: center;
+      height: calc(36 * var(--u));
+      min-width: 0;
+      padding: calc(4 * var(--u)) calc(12 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      white-space: nowrap;
+    }
+    .ui-input[data-focused] {
+      border-color: var(--ring);
+    }
+    .ui-input-placeholder {
+      color: var(--muted-foreground);
+    }
+    .ui-input[data-filled] > .ui-input-placeholder {
+      display: none;
+    }
+    .ui-input .typed::after {
+      height: calc(18 * var(--u));
+    }
+  }
+}

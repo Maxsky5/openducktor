@@ -8,11 +8,11 @@
       padding: calc(16 * var(--u));
       border: calc(1 * var(--u)) solid var(--border);
       border-radius: calc(16 * var(--u));
-      background: color-mix(in oklch, var(--muted) 40%, transparent);
+      background: color-mix(in oklab, var(--muted) 40%, transparent);
       color: var(--foreground);
     }
     .diag-overview[data-tone="healthy"] {
-      border-color: color-mix(in oklch, var(--success-border) 60%, transparent);
+      border-color: color-mix(in oklab, var(--success-border) 60%, transparent);
       background: var(--success-surface);
       color: var(--success-surface-foreground);
     }
@@ -27,7 +27,7 @@
       color: var(--muted-foreground);
     }
     .diag-overview[data-tone="healthy"] .diag-overview-icon {
-      background: color-mix(in oklch, var(--success-accent) 15%, transparent);
+      background: color-mix(in oklab, var(--success-accent) 15%, transparent);
       color: var(--success-accent);
     }
     .diag-overview-icon .lucide {

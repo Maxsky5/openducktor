@@ -5,7 +5,7 @@
       margin: calc(4 * var(--u)) 0 calc(4 * var(--u)) calc(20 * var(--u));
       border: calc(1 * var(--u)) solid var(--border);
       border-radius: calc(4 * var(--u));
-      background: color-mix(in oklch, var(--muted) 90%, transparent);
+      background: color-mix(in oklab, var(--muted) 90%, transparent);
     }
     .st-answers > span {
       display: block;

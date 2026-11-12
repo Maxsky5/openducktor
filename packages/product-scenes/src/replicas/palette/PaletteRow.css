@@ -20,7 +20,7 @@
       color: var(--destructive-muted);
     }
     .pal-row[data-destructive][data-selected] {
-      background: color-mix(in oklch, var(--destructive) 10%, transparent);
+      background: color-mix(in oklab, var(--destructive) 10%, transparent);
     }
     .pal-dot {
       display: grid;
@@ -78,11 +78,11 @@
     /* The marks of the query: the primary violet at 15%, or 35% in the dark theme. */
     .pal-row mark {
       border-radius: calc(3 * var(--u));
-      background: color-mix(in oklch, var(--primary) 15%, transparent);
+      background: color-mix(in oklab, var(--primary) 15%, transparent);
       color: inherit;
     }
     :where([data-theme="dark"]) & .pal-row mark {
-      background: color-mix(in oklch, var(--primary) 35%, transparent);
+      background: color-mix(in oklab, var(--primary) 35%, transparent);
     }
     /* The workspace tile in its xs size: a 20 pixel circle. */
     .pal-tile {

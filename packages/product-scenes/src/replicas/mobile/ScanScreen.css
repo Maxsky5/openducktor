@@ -1,0 +1,120 @@
+@layer replica {
+  :where(.stage) {
+    /* The camera: a dim room, and the screen of the computer that shows the QR code. The camera
+       image is the same in both themes. */
+    .mob-camera {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(120% 70% at 50% 40%, #3a3d45 0%, #1c1e24 55%, #0b0c10 100%), #0b0c10;
+    }
+    .mob-camera-view {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: calc(330 * var(--u));
+      margin: calc(-150 * var(--u)) 0 0 calc(-165 * var(--u));
+    }
+    .mob-camera-laptop {
+      padding: calc(12 * var(--u));
+      border-radius: calc(16 * var(--u));
+      background: #121318;
+      box-shadow:
+        0 0 0 calc(2 * var(--u)) #2a2c33,
+        0 calc(30 * var(--u)) calc(60 * var(--u)) rgb(0 0 0 / 0.5);
+    }
+    .mob-camera-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: calc(276 * var(--u));
+      border-radius: calc(6 * var(--u));
+      background: linear-gradient(160deg, #f4f6fb, #dfe4ee);
+    }
+    .mob-camera-qr {
+      width: calc(196 * var(--u));
+      height: calc(196 * var(--u));
+      border-radius: calc(4 * var(--u));
+    }
+    .mob-scan-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: calc(24 * var(--u));
+      padding: 0 calc(24 * var(--u));
+    }
+    /* The viewfinder: four 34 point corners with a 4 point stroke and a 22 point radius. */
+    .mob-viewfinder {
+      position: relative;
+      width: calc(264 * var(--u));
+      height: calc(264 * var(--u));
+    }
+    .mob-viewfinder i {
+      position: absolute;
+      width: calc(34 * var(--u));
+      height: calc(34 * var(--u));
+      border: 0 solid #fff;
+    }
+    .mob-viewfinder [data-corner="top-left"] {
+      top: 0;
+      left: 0;
+      border-width: calc(4 * var(--u)) 0 0 calc(4 * var(--u));
+      border-top-left-radius: calc(22 * var(--u));
+    }
+    .mob-viewfinder [data-corner="top-right"] {
+      top: 0;
+      right: 0;
+      border-width: calc(4 * var(--u)) calc(4 * var(--u)) 0 0;
+      border-top-right-radius: calc(22 * var(--u));
+    }
+    .mob-viewfinder [data-corner="bottom-left"] {
+      bottom: 0;
+      left: 0;
+      border-width: 0 0 calc(4 * var(--u)) calc(4 * var(--u));
+      border-bottom-left-radius: calc(22 * var(--u));
+    }
+    .mob-viewfinder [data-corner="bottom-right"] {
+      right: 0;
+      bottom: 0;
+      border-width: 0 calc(4 * var(--u)) calc(4 * var(--u)) 0;
+      border-bottom-right-radius: calc(22 * var(--u));
+    }
+    .mob-scan-hint {
+      display: grid;
+      gap: calc(2 * var(--u));
+      max-width: calc(320 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+      border-radius: calc(16 * var(--u));
+      background: var(--m-scrim);
+      color: #fff;
+      text-align: center;
+    }
+    .mob-scan-hint strong {
+      font-size: calc(15 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .mob-scan-hint span {
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+      opacity: 0.8;
+    }
+    .mob-scan-close {
+      position: absolute;
+      top: calc(38 * var(--u));
+      left: calc(16 * var(--u));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: 50%;
+      background: var(--m-scrim);
+      color: #fff;
+    }
+  }
+}

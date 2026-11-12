@@ -1,6 +1,5 @@
 import { must } from "../../motion/dom";
-import { gsap } from "../../motion/gsap";
-import { EASE } from "../../motion/tokens";
+import { scrollToEnd } from "../../motion/effects";
 import type { SceneBuilder } from "../../motion/scene";
 import type { DiagStatusData } from "../../replicas/diagnostics/model";
 import { diagnosticsSheet } from "../../replicas/diagnostics/sheet";
@@ -49,14 +48,6 @@ export const build: SceneBuilder = (scene) => {
 
   // The panel scrolls to the checks of the workspace.
   const scrolled = healthy + 0.8;
-  scene.at(scrolled, () =>
-    scene.run(
-      gsap.to(scroll, {
-        scrollTop: scroll.scrollHeight - scroll.clientHeight,
-        duration: 1.3,
-        ease: EASE.move,
-      }),
-    ),
-  );
+  scene.at(scrolled, () => scene.run(scrollToEnd(scroll, 1.3)));
   scene.endAt(scrolled + 4.5);
 };

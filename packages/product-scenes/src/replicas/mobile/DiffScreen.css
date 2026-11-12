@@ -1,0 +1,156 @@
+@layer replica {
+  :where(.stage) {
+    /* The diff fills the screen on the Pierre page, over the bottom bar of the comment flow. */
+    .mob-file-diff {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      background: var(--pierre-page);
+    }
+    .mob-file-diff-head {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--diff-divider);
+      background: var(--chat-background);
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-file-diff-head > .lucide {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      color: var(--git-added);
+    }
+    .mob-file-diff-head > span:first-of-type {
+      flex: 1;
+    }
+    /* The bars sit on the bottom edge: Android gives no bottom inset, so the bar keeps only its own
+       padding and the 4 dp edge padding of diff-comment-flow.tsx. */
+    .mob-selection-bar {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      padding: calc(4 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u)) calc(4 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+      background: var(--card);
+      color: var(--foreground);
+    }
+    .mob-selection-clear {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+      color: var(--m-secondary);
+    }
+    .mob-selection-clear .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .mob-selection-text {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+    }
+    .mob-selection-text > * {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-selection-text strong {
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-selection-text span {
+      color: var(--muted-foreground);
+      font-family: var(--mono);
+      font-size: calc(11.5 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* The comment field of comment-composer.tsx: the title with Cancel, then a 20 point field. */
+    .mob-comment-composer {
+      display: grid;
+      flex: 0 0 auto;
+      gap: calc(4 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+      background: var(--chat-background);
+      color: var(--foreground);
+    }
+    .mob-comment-context {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-comment-context span {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--m-secondary);
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-comment-context strong {
+      color: var(--m-tint);
+      font-weight: 600;
+    }
+    .mob-comment-field {
+      display: flex;
+      align-items: flex-end;
+      gap: calc(8 * var(--u));
+      padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u)) calc(12 * var(--u));
+      border-radius: calc(20 * var(--u));
+      background: var(--muted);
+    }
+    .mob-comment-field p {
+      flex: 1;
+      min-width: 0;
+      padding: calc(5 * var(--u)) 0;
+      font-size: calc(15 * var(--u));
+      line-height: calc(22 * var(--u));
+    }
+    .mob-comment-hint {
+      color: var(--muted-foreground);
+    }
+    .mob-comment-typed:empty,
+    .mob-comment-field[data-can-save] .mob-comment-hint {
+      display: none;
+    }
+    /* Save: a 32 point circle, the tint once the comment has text. */
+    .mob-comment-save {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border-radius: 50%;
+      background: var(--m-fill-strong);
+      color: var(--muted-foreground);
+    }
+    .mob-comment-field[data-can-save] .mob-comment-save {
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+    .mob-comment-save .lucide {
+      width: calc(17 * var(--u));
+      height: calc(17 * var(--u));
+    }
+    .mob-review-page {
+      --m-fill-strong: oklch(92.9% 0.013 255.508);
+    }
+    :where([data-theme="dark"]) & .mob-review-page {
+      --m-fill-strong: oklch(37.2% 0.044 257.287);
+    }
+  }
+}

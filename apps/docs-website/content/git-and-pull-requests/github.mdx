@@ -1,0 +1,91 @@
+---
+icon: GitHub
+title: GitHub
+description: Connect a repository on GitHub or GitHub Enterprise Server through the GitHub CLI, import issues, and follow pull requests.
+---
+
+OpenDucktor talks to GitHub through the GitHub CLI, `gh`, with your account. It keeps no GitHub token of its own.
+
+## Before you start [#before-you-start]
+
+Install the [GitHub CLI](https://cli.github.com/) and sign in:
+
+```sh title="Terminal"
+gh auth login
+```
+
+For GitHub Enterprise Server, sign in to your host too: `gh auth login --hostname github.example.com`.
+
+The Builder also uses `gh` in its shell to open the pull request. See [Pull requests](#pull-requests).
+
+## Connect the repository [#connect]
+
+<AnnotatedScreenshot
+  id="settings-git-provider"
+  alt="The Git tab of a repository. The Git provider choice shows No provider, GitHub, GitLab, and Azure DevOps, with GitHub selected. The GitHub card shows Ready, CLI installed, and the Enabled switch on. The Repository row shows fieldnotes-app/fieldnotes on github.com, with Detect from origin and Edit manually."
+  parts={[
+    { at: "git-provider", title: "Git provider", text: "Choose GitHub." },
+    { at: "status", title: "Status", text: "Ready when gh is installed and signed in, and the repository matches a remote." },
+    { at: "repository", title: "Repository", text: "The host, the owner, and the repository. Detect from origin fills them." },
+  ]}
+/>
+
+<Steps>
+<Step>Open **Settings**, **Repositories**, your repository, then the **Git** tab.</Step>
+<Step>Select **GitHub**, then <Action>Detect from origin</Action>. OpenDucktor reads the `origin` remote. For GitHub Enterprise Server, select <Action>Edit manually</Action>, and set **Host** to your server, for example `github.example.com`.</Step>
+<Step>Select <Action>Save settings</Action>. The card shows **Ready**.</Step>
+</Steps>
+
+The card shows **CLI installed** or **CLI missing**. It shows **Configured** instead of **Ready** for a host other than `github.com`.
+
+## Import issues [#import]
+
+<Screenshot id="new-task-import-menu" alt="The New task menu with New session, Import tasks from GitHub Issues, Archived sessions, and Import session from an external runtime." />
+
+Select the arrow next to **New task**, then <Action>Import tasks from GitHub Issues</Action>.
+
+- The list shows the open issues of the repository, the most recently updated first. Pull requests and closed issues do not show.
+- Search matches titles. Type `#42` or `42` to find one issue.
+- Each task gets the title, the description, and the labels of its issue as tags. You choose the type and the priority before the import.
+- The task keeps a link to its issue. OpenDucktor does not change the issue.
+
+## Pull requests [#pull-requests]
+
+When you approve a task, you choose who writes the pull request:
+
+- **Ask Builder**: the Builder pushes the branch and runs `gh` in its shell to create or update the pull request. Then it links the pull request to the task.
+- **Write manually**: you enter the title and the description. OpenDucktor pushes the branch and creates the pull request with your `gh` account. If the task has an open pull request, OpenDucktor updates it.
+
+OpenDucktor creates a pull request ready for review, not a draft.
+
+## Checks and comments [#checks]
+
+The [**CI Checks** tab](/git-and-pull-requests/#ci-checks) reads the pull request with `gh`:
+
+- **Checks**: every check of `gh pr checks`, with its workflow and its link. The tab does not mark the required checks.
+- **[Comments](/git-and-pull-requests/#review-comments)**: the review threads, the reviews, and the comments of the pull request. A `suggestion` block shows as a suggested change.
+- **Count on the tab**: the review threads that are not resolved.
+
+## Limits [#limits]
+
+- OpenDucktor finds only the pull requests from a branch of the same repository. It does not find a pull request from a fork.
+- The repository host cannot have a port, such as `github.example.com:8443`. The GitHub CLI does not support it.
+- Exactly one Git remote must point to the repository. With no match or with two matches, the pull request does not open.
+- A branch can have one open pull request. With more, OpenDucktor stops and names the branch.
+
+## Problems [#problems]
+
+| The card shows | Fix |
+|---|---|
+| **CLI missing** | Install `gh`. If it is outside your `PATH`, set `OPENDUCKTOR_GH_PATH` to its file, then restart OpenDucktor. |
+| `GitHub authentication is not configured. Run gh auth login.` | Run `gh auth login`, with `--hostname` for your server. |
+| `No git remote matches the configured GitHub repository` | Check **Host**, **Owner**, and **Repository** against `git remote -v`. |
+
+For more, see [Git providers](/troubleshooting/#git-providers) in Troubleshooting.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Git and pull requests" href="/git-and-pull-requests/">Approve a task and follow its pull request.</Card>
+  <Card title="Git settings" href="/settings-reference/#repository-git-github">Read every GitHub setting.</Card>
+</Cards>

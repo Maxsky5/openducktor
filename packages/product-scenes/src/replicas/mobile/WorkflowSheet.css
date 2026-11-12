@@ -1,0 +1,146 @@
+@layer replica {
+  :where(.stage) {
+    /* The sheet: the popover surface of a desktop dialog over the whole display, the tab bar
+       included. */
+    .mob-screen.mob-fsheet[data-layer] {
+      z-index: 22;
+      background: var(--popover);
+    }
+    /* The title of the sheet frame: title2 with 20 points before it, in a 60 point row. */
+    .mob-fsheet-head {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      min-height: calc(60 * var(--u));
+      padding: 0 calc(16 * var(--u)) 0 calc(20 * var(--u));
+    }
+    .mob-fsheet-head strong {
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(20 * var(--u));
+      font-weight: 600;
+      line-height: calc(26 * var(--u));
+      letter-spacing: calc(-0.3 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-fsheet-intro {
+      display: grid;
+      flex: 0 0 auto;
+      gap: calc(4 * var(--u));
+      padding: 0 calc(16 * var(--u)) calc(12 * var(--u));
+    }
+    /* FormLead: callout text in the muted color. */
+    .mob-fsheet-lead {
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .mob-fsheet-task {
+      display: -webkit-box;
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(15 * var(--u));
+      font-weight: 500;
+      line-height: calc(22 * var(--u));
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .mob-fsheet-id {
+      color: var(--muted-foreground);
+      font-family: var(--mono);
+      font-size: calc(13 * var(--u));
+      line-height: calc(19 * var(--u));
+    }
+    /* The fields scroll above the footer. A scene moves the body to scroll it. */
+    .mob-fsheet-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .mob-fsheet-body {
+      display: grid;
+      gap: calc(20 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u)) calc(24 * var(--u));
+    }
+    /* FormFooter of action-form.tsx: a top rule, the reason, the third action on its own row,
+       then Cancel at the width of its label and the primary action in the rest of the row. */
+    .mob-fsheet-foot {
+      display: grid;
+      flex: 0 0 auto;
+      gap: calc(8 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+      background: var(--popover);
+    }
+    .mob-fsheet-note {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+      text-align: center;
+    }
+    .mob-fsheet-row {
+      display: flex;
+      gap: calc(8 * var(--u));
+    }
+    .mob-fsheet-row > * {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .mob-fsheet-row > :first-child:not(:only-child) {
+      flex: 0 0 auto;
+    }
+
+    /* A large button of a form footer: 48 dp high with the 12 dp radius. A footer button has the
+       12 dp side padding of the small size, and a long label wraps instead of an ellipsis. */
+    .mob-fbutton {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(6 * var(--u));
+      min-height: calc(48 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid transparent;
+      border-radius: calc(12 * var(--u));
+      font-size: calc(15 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+      letter-spacing: calc(-0.1 * var(--u));
+    }
+    .mob-fbutton[data-variant="filled"] {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: var(--m-shadow-primary);
+    }
+    .mob-fbutton[data-variant="outline"] {
+      border-color: var(--input);
+      background: var(--card);
+      color: var(--foreground);
+    }
+    .mob-fbutton[data-variant="warning"] {
+      border-color: var(--warning-border);
+      background: var(--warning-surface);
+      color: var(--warning-muted);
+    }
+    .mob-fbutton .lucide {
+      flex: 0 0 auto;
+      width: calc(18 * var(--u));
+      height: calc(18 * var(--u));
+    }
+    .mob-fbutton-label {
+      min-width: 0;
+      text-align: center;
+    }
+    .mob-fbutton-spinner,
+    .mob-fbutton[data-loading] .mob-fbutton-icon {
+      display: none;
+    }
+    .mob-fbutton[data-loading] .mob-fbutton-spinner {
+      display: block;
+    }
+    .mob-fbutton[data-loading] {
+      opacity: 0.85;
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import type { WorkflowIcon } from "@openducktor/contracts";
-import type { ReactElement } from "react";
+import { type ReactElement, useContext } from "react";
 import {
   type StyleProp,
   type TextStyle,
@@ -17,6 +17,7 @@ import { Icon, type IconName } from "./icon";
 import { LoaderSpinner } from "./loader-spinner";
 import { Text } from "./text";
 import { Touchable } from "./touchable";
+import { ButtonDensityContext } from "./button-density";
 
 /**
  * The desktop button styles. `filled` is the one violet action of a view. `outline` is a white
@@ -101,6 +102,7 @@ export function Button({
 }: ButtonProps): ReactElement {
   const blockedByConnection = useCommandBlocked(command, label);
   const inactive = disabled || loading || blockedByConnection;
+  const compact = useContext(ButtonDensityContext) === "compact";
   // Read theme styles here so a button opened after a theme change uses the current colors.
   const foreground = styles[FOREGROUNDS[variant]];
   const iconSize = ICON_SIZES[size];
@@ -120,7 +122,7 @@ export function Button({
       }
       accessibilityState={{ disabled: inactive, busy: loading }}
       containerStyle={fill ? styles.fill : styles.hug}
-      style={[styles.button, styles[variant], styles[size], style]}
+      style={[styles.button, styles[variant], styles[size], compact ? styles.compact : null, style]}
     >
       <View style={styles.content}>
         <LeadingIcon
@@ -220,6 +222,7 @@ const styles = StyleSheet.create((theme) => ({
   sm: { minHeight: HEIGHTS.sm, paddingHorizontal: 12 },
   md: { minHeight: HEIGHTS.md, paddingHorizontal: 16 },
   lg: { minHeight: HEIGHTS.lg, paddingHorizontal: 20 },
+  compact: { paddingHorizontal: 12 },
   content: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: "100%" },
   placeholder: (size: "sm" | "md" | "lg", width: number, fontScale: number) => ({
     width,

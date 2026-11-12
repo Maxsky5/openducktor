@@ -1,0 +1,15 @@
+@layer views {
+  :where(.stage) {
+    /* CI Checks: the cropped session page of SessionPage.tsx. A phone stage shows only the panel. */
+    .ci-window {
+      --design-width: 960;
+      height: calc(500 * var(--u));
+    }
+    @container stage (width <= 500px) {
+      .ci-window {
+        --design-width: 440;
+        height: calc(560 * var(--u));
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * Answer a question: the open sidebar next to the session page, with the right panel closed.
+     * The window keeps one height for the whole scene, and the transcript follows the stream. A
+     * phone stage shows one pane at a time: the sidebar or the session.
+     */
+    .aq-window {
+      --design-width: 1016;
+      height: calc(700 * var(--u));
+    }
+    /* The flow starts in the sidebar, so a tablet stage keeps it and drops only the workspace
+       rail. */
+    @container stage (width <= 959px) {
+      .aq-window {
+        --design-width: 960;
+      }
+      .aq-window .rail {
+        display: none;
+      }
+    }
+    @container stage (width <= 500px) {
+      .aq-window {
+        --design-width: 440;
+        height: calc(780 * var(--u));
+      }
+      .aq-window .sh-icon {
+        display: none;
+      }
+    }
+  }
+}

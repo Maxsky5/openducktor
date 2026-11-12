@@ -1,0 +1,64 @@
+/*
+ * The Fumadocs cards fit as many columns as the article has room for, so no card stays alone. A
+ * card has `data-card="true"`. A heading link has an empty `data-card`.
+ */
+.docs-cards {
+  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+  margin-block: 1.25rem;
+}
+
+/* A link card ends its title row with an arrow, which moves on hover. */
+a[data-card="true"] {
+  position: relative;
+  padding-inline-end: 2.5rem;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+a[data-card="true"]:hover {
+  border-color: color-mix(in oklch, var(--color-fd-primary) 55%, transparent);
+  background: color-mix(in oklch, var(--color-fd-primary) 6%, var(--color-fd-card));
+}
+
+a[data-card="true"]::after {
+  content: "";
+  position: absolute;
+  top: 1.125rem;
+  right: 1rem;
+  width: 1rem;
+  height: 1rem;
+  background: var(--color-fd-muted-foreground);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3Cpath d='m12 5 7 7-7 7'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  transition:
+    translate 150ms ease,
+    background-color 150ms ease;
+}
+
+/* A card to another site opens it in a new tab, so its arrow points out. */
+a[data-card="true"][target="_blank"]::after {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 7h10v10'/%3E%3Cpath d='M7 17 17 7'/%3E%3C/svg%3E");
+}
+
+a[data-card="true"]:hover::after {
+  translate: 0.125rem 0;
+  background: var(--color-fd-primary);
+}
+
+[data-card="true"] h3 {
+  color: var(--color-fd-foreground);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+/* A brand logo keeps the text color, as in the provider tiles of the app. */
+[data-card="true"] > .not-prose:first-child {
+  color: var(--color-fd-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a[data-card="true"]::after {
+    transition: none;
+  }
+}

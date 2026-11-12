@@ -1,6 +1,7 @@
 // The repository actions of repo-actions-split-button.tsx: two joined outline buttons. The first
 // runs the default action and shows only its icon. The chevron opens the menu of the other
-// actions and Manage actions. The menu stays closed in the static frame, and a scene opens it.
+// actions and Manage actions. The menu stays closed in the static frame, and a scene opens it. A
+// view can give its own actions in place of the sample repository actions.
 import {
   Bug,
   ChevronDown,
@@ -13,7 +14,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
-import { REPO_ACTIONS, type RepoActionIcon } from "../../sample/actions";
+import { REPO_ACTIONS, type RepoAction, type RepoActionIcon } from "../../sample/actions";
 import "./RepoActions.css";
 
 const ICONS = {
@@ -25,10 +26,14 @@ const ICONS = {
   debug: Bug,
 } as const satisfies Record<RepoActionIcon, LucideIcon>;
 
-const ACTIONS = Object.entries(REPO_ACTIONS).map(([id, action]) => ({ id, ...action }));
+type RepoActionsProps = {
+  /** The actions by id, in the saved order. One of them is the default action. */
+  actions?: Readonly<Record<string, RepoAction>>;
+};
 
-export function RepoActions(): ReactElement {
-  const main = ACTIONS.find((action) => "isDefault" in action);
+export function RepoActions({ actions: byId = REPO_ACTIONS }: RepoActionsProps): ReactElement {
+  const actions = Object.entries(byId).map(([id, action]) => ({ id, ...action }));
+  const main = actions.find((action) => action.isDefault);
   if (!main) throw new Error("The sample repository needs a default action.");
   const MainIcon = ICONS[main.icon];
   return (
@@ -40,15 +45,17 @@ export function RepoActions(): ReactElement {
         <ChevronDown />
       </span>
       <span className="ra-menu" hidden data-repo-menu="">
-        {ACTIONS.filter((action) => action !== main).map((action) => {
-          const Icon = ICONS[action.icon];
-          return (
-            <span className="ra-item" data-repo-item={action.id} key={action.id}>
-              <Icon />
-              {action.name}
-            </span>
-          );
-        })}
+        {actions
+          .filter((action) => action !== main)
+          .map((action) => {
+            const Icon = ICONS[action.icon];
+            return (
+              <span className="ra-item" data-repo-item={action.id} key={action.id}>
+                <Icon />
+                {action.name}
+              </span>
+            );
+          })}
         <hr />
         <span className="ra-item">
           <Settings2 />

@@ -41,6 +41,28 @@ export function fadeIn(element: Element, duration = 0.3): gsap.core.Tween {
   );
 }
 
+/** Fades an element out, then hides it and clears the inline styles of the fade. */
+export function fadeHide(element: HTMLElement, duration: number, ease: string): gsap.core.Tween {
+  return gsap.to(element, {
+    autoAlpha: 0,
+    duration,
+    ease,
+    onComplete: () => {
+      element.hidden = true;
+      gsap.set(element, { clearProps: "opacity,visibility" });
+    },
+  });
+}
+
+/** Scrolls an element to the end of its content. */
+export function scrollToEnd(element: Element, duration: number): gsap.core.Tween {
+  return gsap.to(element, {
+    scrollTop: element.scrollHeight - element.clientHeight,
+    duration,
+    ease: EASE.move,
+  });
+}
+
 /** Fades elements in while they rise by `rise` CSS pixels, `stagger` seconds apart. */
 export function riseIn(
   targets: gsap.TweenTarget,

@@ -106,7 +106,7 @@ const stillFrames = new Map([
 ]);
 const stillOnly = new Map([["runtimes", "[data-picker]"]]);
 
-test("each product view plays one loop, ends on its static frame, and cross fades into the next loop", async ({
+test("each product view plays one loop, ends on its static frame, and fades through the background into the next loop", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-light", "One project plays the long scenes.");
@@ -133,7 +133,8 @@ test("each product view plays one loop, ends on its static frame, and cross fade
       const frame = kind === "first" ? "[data-stage]" : "[data-stage-cover]";
       expect(await shownText(page, `[data-scene="${id}"] ${frame}`), id).toBe(still.get(id));
     }
-    expect(await stage.evaluate((element) => getComputedStyle(element).opacity), id).toBe("1");
+    // The first frame waits under the cover and shows only after the last frame fades out.
+    expect(await stage.evaluate((element) => getComputedStyle(element).opacity), id).toBe("0");
     if (id === "local") {
       // The panel scrolled to its end. The cover keeps that scroll, so the frame does not jump.
       const scroll = await cover.locator("[data-diag-scroll]").evaluate((panel) => panel.scrollTop);
@@ -141,6 +142,7 @@ test("each product view plays one loop, ends on its static frame, and cross fade
     }
     await runUntil(page, async () => (await cover.count()) === 0, 2);
     await expect(cover, id).toHaveCount(0);
+    expect(await stage.evaluate((element) => getComputedStyle(element).opacity), id).toBe("1");
   }
   expect(errors).toEqual([]);
 });
@@ -291,6 +293,12 @@ test("the chat opens a new task and starts its Builder in the background", async
   const background = stage.locator("[data-background]");
   await runUntil(page, async () => (await background.count()) > 0, 10);
   await expect(background).toHaveText("Run in background");
+  // The dialog closes, and the startup notification shows the steps until the Builder is ready.
+  const toast = stage.locator("[data-toasts] [data-startup-toast]");
+  await runUntil(page, async () => (await toast.count()) > 0, 10);
+  await expect(toast.locator("[data-step]")).toHaveCount(3);
+  await runUntil(page, async () => (await toast.getAttribute("data-phase")) === "ready", 10);
+  await expect(stage.locator("[data-dialog-box]")).toHaveCount(0);
   // The Builder joins Running, and the chat stays on screen and selected.
   const builder = stage.locator('[data-nav-list="running"] [data-nav-entry="menu-build"]');
   await runUntil(page, () => builder.isVisible(), 10);

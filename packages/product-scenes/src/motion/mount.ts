@@ -1,11 +1,12 @@
 // The mount of a scene with a handle: it builds the loop of the scene while the visitor accepts
 // motion, and it gives its host the controls of the loop. The app tour and a frame renderer use
-// it. A page that needs no handle uses `mountLoop`. This module loads no ScrollTrigger, so the
-// host gets no scroll listener.
+// it. A page that needs no handle uses `mountLoop`. This module watches no play zone, so the host
+// decides when the scene plays.
 import { gsap } from "./gsap";
 import { createLoop, type Loop } from "./loop";
 import { MOTION_QUERY } from "./preference";
 import type { SceneBuilder } from "./scene";
+import { motionState } from "./state";
 
 /** Seconds of one rendered frame, when `seek` plays a scene up to a time. */
 const FRAME = 1 / 60;
@@ -46,7 +47,7 @@ export function mountScene<Template extends string>(
       build(scene);
     });
   const update = (): void => {
-    root.dataset.motion = playing ? "running" : "paused";
+    root.dataset.motion = motionState(playing);
     loop?.sync(playing);
   };
   const current = (): gsap.core.Timeline => {

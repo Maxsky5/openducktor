@@ -6,137 +6,12 @@
       flex-direction: column;
       min-height: 0;
     }
-    .st-branches {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-      align-items: center;
-      gap: calc(8 * var(--u));
-      margin: calc(8 * var(--u)) 0;
-      padding: 0 calc(12 * var(--u));
-    }
-    .st-branch {
-      min-width: 0;
-      padding: calc(8 * var(--u)) calc(12 * var(--u));
-      border: calc(1 * var(--u)) solid var(--border);
-      border-radius: calc(12 * var(--u));
-      background: var(--card);
-    }
-    .st-branch small {
-      display: block;
-      color: var(--muted-foreground);
-      font-size: calc(10 * var(--u));
-      font-weight: 500;
-      letter-spacing: 0.025em;
-      line-height: calc(15 * var(--u));
-      text-transform: uppercase;
-    }
-    .st-branch > span {
-      display: flex;
-      align-items: center;
-      gap: calc(6 * var(--u));
-      height: calc(28 * var(--u));
-      margin-top: calc(4 * var(--u));
-    }
-    .st-branch .lucide {
-      flex-shrink: 0;
-      color: var(--muted-foreground);
-    }
-    .st-branch code {
-      min-width: 0;
-      flex: 1;
-      overflow: hidden;
-      font-family: var(--mono);
-      font-size: calc(12 * var(--u));
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .st-branch .lucide:last-child:not(:first-child) {
-      box-sizing: content-box;
-      padding: calc(7 * var(--u));
-      margin: 0 calc(-7 * var(--u)) 0 auto;
-    }
-    .st-arrow {
-      position: relative;
-      display: grid;
-      place-items: center;
-    }
-    .st-arrow > span {
-      display: grid;
-      place-items: center;
-      width: calc(28 * var(--u));
-      height: calc(28 * var(--u));
-      border: calc(1 * var(--u)) solid var(--border);
-      border-radius: 50%;
-      background: var(--muted);
-      color: var(--muted-foreground);
-    }
-    .st-arrow b {
-      position: absolute;
-      top: calc(-16 * var(--u));
-      left: 50%;
-      color: var(--emerald-600);
-      font-size: calc(13 * var(--u));
-      font-weight: 700;
-      line-height: 1;
-      font-variant-numeric: tabular-nums;
-      transform: translateX(-50%);
-    }
-    :where([data-theme="dark"]) & .st-arrow b {
-      color: var(--emerald-400);
-    }
-    .st-git-actions {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: calc(8 * var(--u));
-      padding: calc(4 * var(--u)) 0;
-      border-top: calc(1 * var(--u)) solid var(--border);
-      border-bottom: calc(1 * var(--u)) solid var(--border);
-    }
-    .st-sync {
-      display: inline-flex;
-      align-items: center;
-      gap: calc(2 * var(--u));
-      padding: 0 calc(4 * var(--u));
-    }
-    .st-sync > span {
-      position: relative;
-      display: grid;
-      place-items: center;
-      width: calc(36 * var(--u));
-      height: calc(36 * var(--u));
-      color: var(--muted-foreground);
-    }
-    .st-sync b {
-      position: absolute;
-      top: calc(4 * var(--u));
-      right: calc(4 * var(--u));
-      color: var(--emerald-600);
-      font-size: calc(11 * var(--u));
-      font-weight: 700;
-      line-height: 1;
-      font-variant-numeric: tabular-nums;
-    }
-    :where([data-theme="dark"]) & .st-sync b {
-      color: var(--emerald-400);
-    }
-    .st-detect {
-      display: inline-flex;
-      align-items: center;
-      gap: calc(6 * var(--u));
-      height: calc(32 * var(--u));
-      margin-right: calc(4 * var(--u));
-      padding: 0 calc(12 * var(--u));
-      color: var(--muted-foreground);
-      font-size: calc(14 * var(--u));
-      font-weight: 500;
-    }
     .st-files-head {
       display: flex;
       align-items: center;
       gap: calc(8 * var(--u));
       padding: calc(8 * var(--u)) calc(12 * var(--u));
-      border-bottom: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 50%, transparent);
+      border-bottom: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 50%, transparent);
       color: var(--muted-foreground);
       font-size: calc(12 * var(--u));
     }
@@ -144,7 +19,7 @@
       display: flex;
       overflow: hidden;
       margin-left: auto;
-      border: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 50%, transparent);
+      border: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 50%, transparent);
       border-radius: calc(10 * var(--u));
     }
     .st-diff-style > span {
@@ -170,7 +45,7 @@
       overflow: hidden;
     }
     .st-file-item + .st-file-item {
-      border-top: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 50%, transparent);
+      border-top: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 50%, transparent);
     }
     .st-file {
       display: flex;
@@ -247,7 +122,7 @@
       width: calc(48 * var(--u));
       height: calc(48 * var(--u));
       border-radius: 50%;
-      background: color-mix(in oklch, var(--muted) 60%, transparent);
+      background: color-mix(in oklab, var(--muted) 60%, transparent);
       color: var(--muted-foreground);
     }
     .st-git-empty b {
@@ -257,22 +132,13 @@
     }
     .st-git-empty small {
       margin-top: calc(-8 * var(--u));
-      color: color-mix(in oklch, var(--muted-foreground) 70%, transparent);
+      color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
       font-size: calc(12 * var(--u));
     }
     .st-git[data-git="empty"] .st-files-head,
     .st-git[data-git="empty"] .st-files,
     .st-git[data-git="filled"] .st-git-empty {
       display: none;
-    }
-    /* A narrow stage stacks the current and the target branch. */
-    @container stage (width <= 699px) {
-      .st-branches {
-        grid-template-columns: minmax(0, 1fr);
-      }
-      .st-arrow {
-        display: none;
-      }
     }
   }
 }

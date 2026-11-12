@@ -1,0 +1,164 @@
+@layer replica {
+  :where(.stage) {
+    /* The content pane of the Settings dialog on the Remote control section, as the other
+       settings replicas crop it. It is as high as its tallest state, the QR code of Add device,
+       so it keeps one height while the scene plays. */
+    .rc-window {
+      width: calc(520 * var(--u));
+      height: calc(804 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-sheet);
+    }
+    /* grid gap-6 p-4 */
+    .rc-content {
+      display: grid;
+      gap: calc(24 * var(--u));
+      padding: calc(16 * var(--u));
+    }
+    .rc-heading {
+      display: grid;
+      gap: calc(8 * var(--u));
+    }
+    .rc-heading h3,
+    .rc-devices-head strong {
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .rc-devices-head strong {
+      font-weight: 500;
+    }
+    .rc-heading p,
+    .rc-switch-text span,
+    .rc-devices-head span,
+    .rc-devices-empty,
+    .rc-devices-note,
+    .rc-device-status {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* SettingsSwitchRow: rounded-md border bg-card p-4. */
+    .rc-switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      padding: calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(8 * var(--u));
+      background: var(--card);
+    }
+    .rc-switch-text {
+      display: grid;
+      gap: calc(4 * var(--u));
+    }
+    .rc-switch-text strong {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+    }
+    /* Paired devices: the heading, then the empty note or the list. */
+    .rc-devices {
+      display: grid;
+      gap: calc(8 * var(--u));
+    }
+    .rc-devices[data-devices="none"] [data-for="one"],
+    .rc-devices[data-devices="one"] [data-for="none"] {
+      display: none;
+    }
+    .rc-devices-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+    }
+    .rc-devices-empty {
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+    }
+    .rc-device {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      padding: calc(10 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+    }
+    .rc-device-icon {
+      position: relative;
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border-radius: calc(8 * var(--u));
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    .rc-device-icon i {
+      position: absolute;
+      right: calc(-2 * var(--u));
+      bottom: calc(-2 * var(--u));
+      width: calc(10 * var(--u));
+      height: calc(10 * var(--u));
+      border-radius: 50%;
+      background: var(--status-running);
+      box-shadow: 0 0 0 calc(2 * var(--u)) var(--card);
+    }
+    .rc-device-text {
+      display: grid;
+      flex: 1;
+      gap: calc(2 * var(--u));
+      min-width: 0;
+      font-size: calc(14 * var(--u));
+    }
+    .rc-device-ref {
+      color: var(--muted-foreground);
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+    }
+    /* Button variant destructiveGhost. */
+    .rc-remove.ui-button {
+      border: 0;
+      background: transparent;
+      color: var(--destructive-surface-foreground);
+      box-shadow: none;
+    }
+    /* The Network section: rounded-xl border bg-card px-4 py-3 shadow-xs. */
+    .rc-network {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      box-shadow: var(--shadow-xs);
+    }
+    .rc-network-text {
+      display: grid;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+    }
+    .rc-network-text strong {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+    }
+    .rc-network-text > span {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+    }
+    .rc-network-endpoint {
+      color: var(--foreground);
+      font-family: var(--mono);
+    }
+  }
+}

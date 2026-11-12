@@ -1,0 +1,6 @@
+{
+  "title": "Coding sessions",
+  "icon": "MessagesSquare",
+  "defaultOpen": true,
+  "pages": ["terminals", "web-pages"]
+}

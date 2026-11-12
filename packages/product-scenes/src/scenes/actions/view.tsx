@@ -24,7 +24,7 @@ export function ActionsView(props: SceneViewProps): ReactElement {
       <StudioWindow
         className="actions-studio"
         frame={FRAME}
-        panel={<GitPanel files={BUILD_FILES} ahead={1} />}
+        panels={{ diffs: <GitPanel files={BUILD_FILES} ahead={1} /> }}
         openIn={<OpenInMenu tool={OPEN_IN_DEFAULT} appIcon menu />}
         bottom={<BottomPanel terminals={["web", "api"]} active="api" />}
       >

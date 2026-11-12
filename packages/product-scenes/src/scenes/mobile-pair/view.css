@@ -1,0 +1,11 @@
+@layer views {
+  :where(.stage) {
+    /* Pairing: the pointer works only on the computer, so a phone stage, which hides the
+       computer, hides the pointer too. */
+    @container stage (width <= 500px) {
+      .mob-stage[data-layout="split"] :is(.cursor, .click-ring) {
+        display: none;
+      }
+    }
+  }
+}

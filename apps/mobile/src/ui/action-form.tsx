@@ -18,6 +18,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useSheetClose } from "@/navigation/sheet-close";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { Button } from "./button";
+import { ButtonDensityContext } from "./button-density";
 import { Text } from "./text";
 import { KEYBOARD_DISMISS_ON_DRAG } from "./keyboard-dismiss";
 import { useAnnounce } from "./use-announce";
@@ -38,8 +39,10 @@ export const useScrollableFormFooter = (): boolean => useWindowDimensions().font
 
 /**
  * The footer of a workflow form, as the desktop dialog footer: a top rule, the reason why the
- * primary action is disabled, then equally wide actions in a row. In a sheet, Cancel is the
- * close control, so the sheet header shows only its title. The forms show in
+ * primary action is disabled, then the actions in a row. Cancel takes the width of its label and
+ * the primary action takes the rest, so a long primary label, such as "Push main and mark done",
+ * fits on a phone. In a sheet, Cancel is the close control, so the sheet header shows only its
+ * title. The forms show in
  * full sheets, which the keyboard does not resize on iOS or Android, so the footer moves up with
  * the keyboard. A low window puts the reason and actions in one row at normal text size.
  * Larger text stacks the actions in the form scroll. `onHeight` reports a fixed footer's height,
@@ -134,13 +137,15 @@ function StackedFooterBar({
           {note}
         </Text>
       ) : null}
-      {inSheet && secondary ? <View style={styles.actions}>{secondary}</View> : null}
-      <View style={[styles.actions, stacked && styles.stackedActions]}>
-        {cancel || secondary ? (
-          <View style={stacked ? undefined : styles.action}>{cancel ?? secondary}</View>
-        ) : null}
-        {primary ? <View style={stacked ? undefined : styles.action}>{primary}</View> : null}
-      </View>
+      <ButtonDensityContext value="compact">
+        {inSheet && secondary ? <View style={styles.actions}>{secondary}</View> : null}
+        <View style={[styles.actions, stacked && styles.stackedActions]}>
+          {cancel || secondary ? (
+            <View style={stacked ? undefined : styles.hugAction}>{cancel ?? secondary}</View>
+          ) : null}
+          {primary ? <View style={stacked ? undefined : styles.action}>{primary}</View> : null}
+        </View>
+      </ButtonDensityContext>
     </View>
   );
 }
@@ -172,9 +177,11 @@ function OneRowFooterBar({
           </Text>
         </View>
       ) : null}
-      {inSheet && secondary ? <View style={styles.action}>{secondary}</View> : null}
-      {cancel || secondary ? <View style={styles.action}>{cancel ?? secondary}</View> : null}
-      {primary ? <View style={styles.action}>{primary}</View> : null}
+      <ButtonDensityContext value="compact">
+        {inSheet && secondary ? <View style={styles.hugAction}>{secondary}</View> : null}
+        {cancel || secondary ? <View style={styles.hugAction}>{cancel ?? secondary}</View> : null}
+        {primary ? <View style={styles.action}>{primary}</View> : null}
+      </ButtonDensityContext>
     </View>
   );
 }
@@ -238,6 +245,7 @@ const styles = StyleSheet.create((theme) => ({
   actions: { flexDirection: "row", gap: theme.space.sm },
   stackedActions: { flexDirection: "column" },
   action: { flex: 1, flexBasis: 0, minWidth: 0 },
+  hugAction: { flexShrink: 0 },
   compactBar: { flexDirection: "row", alignItems: "center", paddingTop: theme.space.sm },
   compactNote: { flex: 1, minWidth: 0 },
 }));

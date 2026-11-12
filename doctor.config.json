@@ -4,7 +4,8 @@
     "@openducktor/frontend",
     "@openducktor/frontend-core",
     "@openducktor/electron",
-    "@openducktor/mobile"
+    "@openducktor/mobile",
+    "@openducktor/docs-website"
   ],
   "ignore": {
     "overrides": [

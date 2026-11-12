@@ -16,5 +16,11 @@
       flex: 1 0 auto;
       padding: calc(16 * var(--u)) calc(16 * var(--u)) calc(8 * var(--u));
     }
+    /* A phone stage gives the rows a narrower margin. */
+    @container stage (width <= 500px) {
+      .st-track {
+        padding: calc(12 * var(--u)) calc(12 * var(--u)) calc(6 * var(--u));
+      }
+    }
   }
 }

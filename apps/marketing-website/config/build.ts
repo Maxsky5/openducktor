@@ -1,4 +1,10 @@
-export type BuildTarget = "local" | "preview" | "production";
+import {
+  type BuildTarget,
+  headersFile,
+  readBuildTarget,
+  robotsFile,
+} from "@openducktor/build-tools/static-site";
+
 export type BuildConfig = { target: BuildTarget; origin: string | undefined };
 type BuildEnvironment = {
   MARKETING_BUILD_TARGET?: string | undefined;
@@ -11,10 +17,7 @@ export function readBuildConfig(
     MARKETING_SITE_ORIGIN: process.env.MARKETING_SITE_ORIGIN,
   },
 ): BuildConfig {
-  const target = env.MARKETING_BUILD_TARGET ?? "local";
-  if (target !== "local" && target !== "preview" && target !== "production") {
-    throw new Error("Set MARKETING_BUILD_TARGET to local, preview, or production.");
-  }
+  const target = readBuildTarget("MARKETING_BUILD_TARGET", env.MARKETING_BUILD_TARGET);
   const value = env.MARKETING_SITE_ORIGIN;
   if (!value) {
     if (target === "production") {
@@ -68,31 +71,15 @@ export function readBuildConfig(
   return { target, origin: url.origin };
 }
 
-const disallowRobots = "User-agent: *\nDisallow: /\n";
-
-/**
- * The Cache-Control of the files in _astro/. Astro puts a hash of its content in the name of each
- * of these files, so a changed file gets a new name at the next deployment. A browser can keep
- * each file for a year. The pages and the files at the root keep the Cloudflare default, which
- * checks each file again at each visit.
- */
-export const ASSET_CACHE = "public, max-age=31556952, immutable";
-
-/** The response headers of every page and asset. Only production pages can be indexed. */
-export function headersFile(target: BuildTarget): string {
-  const security =
-    "/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n";
-  const pages =
-    target === "production" ? security : `${security}  X-Robots-Tag: noindex, nofollow\n`;
-  return `${pages}/_astro/*\n  Cache-Control: ${ASSET_CACHE}\n`;
-}
+/** The files in _astro/ have a hash of their content in their name. */
+const HASHED_ASSETS = ["/_astro/*"];
 
 export function staticFiles(config: BuildConfig): Map<string, string> {
   const files = new Map<string, string>();
-  files.set("_headers", headersFile(config.target));
-  files.set("robots.txt", disallowRobots);
-  if (config.target === "production" && config.origin) {
-    files.set("robots.txt", `User-agent: *\nAllow: /\nSitemap: ${config.origin}/sitemap.xml\n`);
+  files.set("_headers", headersFile(config.target, HASHED_ASSETS));
+  const indexable = config.target === "production" && config.origin;
+  files.set("robots.txt", robotsFile(indexable ? `${config.origin}/sitemap.xml` : null));
+  if (indexable) {
     files.set(
       "sitemap.xml",
       `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${config.origin}/</loc></url></urlset>\n`,

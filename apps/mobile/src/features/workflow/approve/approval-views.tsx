@@ -45,6 +45,7 @@ import { Button } from "@/ui/button";
 import { SegmentedControl, TextField } from "@/ui/fields";
 import { Icon, type IconName } from "@/ui/icon";
 import { Callout } from "@/ui/callout";
+import { InlineCodeText } from "@/ui/inline-code-text";
 import { Text } from "@/ui/text";
 import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead, FormPanel, OptionCard, SectionLabel } from "@/ui/form-rows";
@@ -254,7 +255,7 @@ function ApprovalChoiceForm({
           />
           {choices.pullRequestUnavailable ? (
             <Text variant="subhead" tone="tertiary">
-              {choices.pullRequestUnavailable}
+              <InlineCodeText text={choices.pullRequestUnavailable} />
             </Text>
           ) : null}
         </ChoiceSection>

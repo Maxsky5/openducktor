@@ -1,0 +1,651 @@
+---
+icon: LifeBuoy
+title: Troubleshooting
+description: Find the symptom that you see, fix its cause, collect logs, and report a problem.
+---
+
+Each entry title is the message or the state that you see.
+
+Start with the Diagnostics panel. It checks the harnesses, Git, and the selected workspace.
+
+## Diagnostics [#diagnostics]
+
+To open the panel, select the shield icon at the bottom of the sidebar, beside **Settings**.
+
+<ProductDemo id="local" />
+
+| Check | What it needs |
+|---|---|
+| **Agent runtimes** | Each enabled harness is installed and **Ready**. |
+| **PATH** | The host can read your user PATH to find Git and the harnesses. |
+| **Git** | Git 2.41 or later. |
+| **OpenDucktor MCP bridge** | The bridge that agent sessions and MCP clients use to reach the host is **Ready**. |
+| **Repository setup** | The selected workspace has a worktree path. |
+| **Task store** | The task store of the selected workspace is **Ready**. |
+
+<Accordions>
+<Accordion id="check-timed-out" title="A check shows Timed out or Check unavailable">
+
+Cause: the check did not finish in time, or it could not run.
+
+1. Select <Action>Refresh</Action> at the top of the panel.
+2. Check that the row shows its result, such as **Available** or **Ready**. If the same check times out again, [report a problem](#report-a-problem).
+
+</Accordion>
+<Accordion id="path-issue" title="PATH shows Issue">
+
+Cause: the host cannot read your PATH from your login shell. The message gives the reason.
+
+1. Fix your shell startup files, for example `~/.zshrc`.
+2. Select <Action>Refresh</Action>.
+3. Check that **PATH** shows **Available**.
+
+</Accordion>
+<Accordion id="git-issue" title="Git shows Issue">
+
+Cause: Git is missing or older than version 2.41.
+
+1. Install or update Git.
+2. Select <Action>Refresh</Action>.
+3. Check that **Git** shows **Available** and version 2.41 or later.
+
+</Accordion>
+</Accordions>
+
+## Installation [#installation]
+
+The install scripts print each error after `OpenDucktor install:`. When an install fails, they keep or restore the previous app. A fix works when the script ends without an error.
+
+<Accordions>
+<Accordion id="homebrew-manages-openducktor" title="Homebrew manages OpenDucktor.">
+
+Cause: you installed OpenDucktor with Homebrew.
+
+1. [Update from the app](/install-and-update/#update-in-app), or run `brew upgrade --cask openducktor`.
+
+</Accordion>
+<Accordion id="another-installer" title="Another installer or another copy of the app exists">
+
+Cause: the script found a copy that another installer manages, for example in `/Applications`.
+
+1. Update that copy with its installer, or remove it.
+2. Run the install script again.
+
+</Accordion>
+<Accordion id="unsupported-system" title="Unsupported system">
+
+Cause: the scripts support macOS arm64, macOS x64, Linux x64, and Windows x64 only.
+
+1. Look for a file for your system on [GitHub Releases](https://github.com/Maxsky5/openducktor/releases).
+2. If none exists, use the [browser runner](/install-and-update/#browser-runner).
+
+</Accordion>
+<Accordion id="sha256-mismatch" title="The downloaded asset SHA-256 differs from the GitHub release digest.">
+
+Cause: the download is damaged or changed. The script leaves the installed app unchanged.
+
+1. Run the install script again. Do not install the file by hand.
+2. If the error repeats, [report a problem](#report-a-problem).
+
+</Accordion>
+<Accordion id="macos-signature-failed" title="The macOS app signature failed verification, or macOS did not accept the app signature.">
+
+Cause: macOS did not accept the signature of the app.
+
+1. Keep the macOS security checks on.
+2. [Report a problem](#report-a-problem) with the full output.
+
+</Accordion>
+<Accordion id="windows-protected-your-pc" title="Windows protected your PC">
+
+Cause: the Windows installer is not code-signed, so Windows SmartScreen warns about a downloaded `.exe` file.
+
+1. Select **More info**.
+2. Select **Run anyway**.
+
+The [PowerShell script](/install-and-update/#install) installs without this warning.
+
+</Accordion>
+<Accordion id="manual-update-required" title="The update prompt shows Manual update required">
+
+Cause: on macOS, the installed app does not have a signature that accepts the signed update.
+
+1. Select <Action>Download Signed Release</Action>. The release page opens on GitHub.
+2. Download the `.dmg` file, and install it over the current app. Automatic updates work after that.
+
+</Accordion>
+<Accordion id="install-needs-attention" title="The update prompt shows Install needs attention">
+
+Cause: the automatic installation of the downloaded update stopped. The message gives the reason.
+
+1. Quit OpenDucktor, open it again, and install the update when the prompt shows it again.
+2. If it fails again, select <Action>Download Latest Release</Action>. The release page opens on GitHub.
+3. Download the file for your system, and install it over the current app.
+4. Check that **Settings**, **General** shows the new **Current version**.
+
+</Accordion>
+</Accordions>
+
+## Harnesses [#harnesses]
+
+The **Agent runtimes** card in [Diagnostics](#diagnostics) shows the state of OpenCode, Codex, and Claude Code. Host messages name the settings section `Settings > Runtimes`. In the Settings dialog, its name is **Agent runtimes**.
+
+<Accordions>
+<Accordion id="harness-not-found" title="Cannot start the OpenCode, Codex, or Claude runtime">
+
+Cause: the harness did not start. The message on the row gives the reason, for example a missing executable or an old version.
+
+1. Install or update the harness, or set its executable path with <Action>Browse</Action> in **Settings**, **Agent runtimes**.
+2. Select <Action>Check again</Action>, and wait for **Available**.
+3. Select <Action>Save settings</Action>. A new path restarts the harness.
+4. If you did not change the path, select <Action>Restart</Action> on the Diagnostics row, then <Action>Restart</Action> in the dialog.
+5. Wait until the row shows **Ready**.
+
+</Accordion>
+<Accordion id="harness-needs-attention" title="A harness shows Needs attention in Settings">
+
+Cause: the harness is too old, or it did not start. The message gives the reason and the update command.
+
+1. Run the update command in the message, for example `opencode upgrade` or `claude update`.
+2. Select <Action>Check again</Action>, and wait for **Available**.
+3. Select <Action>Restart</Action> on the Diagnostics row, then <Action>Restart</Action> in the dialog.
+4. Wait until the row shows **Ready**.
+
+</Accordion>
+<Accordion id="goal-mode-off" title="Goals need OpenCode 2.2.1 or later">
+
+Cause: the **Goal mode** switch is off because the harness of the session cannot run goals. The message names the harness and the version that it needs. It can also say `Choose a model to use Goal mode.`
+
+1. Run the update command in the message, for example `opencode upgrade`.
+2. Select <Action>Check again</Action> in **Settings**, **Agent runtimes**, and wait for **Available**.
+3. Open the start dialog again. For the versions, see [Goal mode support](/harnesses/#goals).
+
+</Accordion>
+<Accordion id="goal-plugin-off" title="OpenCode has no /goal command">
+
+Cause: your OpenCode config turns the goal plugin off.
+
+1. Remove `"-opencode.goal"` from `plugins` in the OpenCode config.
+2. Start the session again.
+
+</Accordion>
+<Accordion id="generate-goal-off" title="Set a default model in the repository settings to generate a goal.">
+
+Cause: <Action>Generate goal</Action> uses the default model of the repository, and the repository has none.
+
+1. Open **Settings**, **Repositories**, your repository, then **Agents**.
+2. Set the [Default model](/settings-reference/#repository-agents-default-model), then select <Action>Save settings</Action>.
+
+</Accordion>
+<Accordion id="runtime-stopped" title="The OpenCode, Codex, or Claude runtime stopped unexpectedly">
+
+Cause: the harness process stopped.
+
+1. Select <Action>Restart</Action> on the Diagnostics row. The dialog lists the sessions that the restart affects.
+2. Select <Action>Restart</Action> to confirm, and wait until the row shows **Ready**.
+
+</Accordion>
+<Accordion id="retry-apply" title="A harness shows Retry apply">
+
+Cause: you turned the harness off, but its old process did not stop.
+
+1. Select <Action>Retry apply</Action>. The dialog lists the sessions that the change affects.
+2. Select <Action>Retry apply</Action> to confirm.
+3. Check that the row shows **Disabled**.
+
+</Accordion>
+<Accordion id="unexpected-runtime-version" title="The row shows an unexpected version or an In use path">
+
+Cause: OpenDucktor runs the executable on the **In use** line. It is not the executable that you expect.
+
+1. Set the exact executable path in **Settings**, **Agent runtimes**.
+2. Select <Action>Save settings</Action>. A new path restarts the harness.
+3. Check that the Diagnostics row shows the version that you expect, and no **In use** line.
+
+</Accordion>
+</Accordions>
+
+## Workspaces [#workspaces]
+
+The **Workspace** group in [Diagnostics](#diagnostics) checks the selected workspace only.
+
+<Accordions>
+<Accordion id="task-store-blocked" title="Task store shows Blocked or Degraded, or New task shows Task store unavailable">
+
+Cause: the task store of the workspace does not work. The **Health** and **Database** lines of the check give the reason.
+
+1. Fix the problem that these lines name.
+2. Select <Action>Refresh</Action> in Diagnostics.
+3. If the check still fails, [report a problem](#report-a-problem) with the logs.
+
+</Accordion>
+<Accordion id="not-a-git-repository" title="Workspace is not a Git repository, or Not a git repository">
+
+Cause: the repository moved, or it is no longer a Git repository.
+
+1. Select **Settings**, then **Repositories**, then your repository. Open the **Configuration** tab.
+2. Select <Action>Change folder</Action> beside **Repository path**, and choose the current folder. The workspace ID stays the same.
+
+</Accordion>
+<Accordion id="tasks-could-not-load" title="The sidebar shows Tasks could not load">
+
+Cause: one read of the workspace failed.
+
+1. Select the <Action>Retry</Action> icon on the warning, or run <Action>Refresh tasks</Action> in the command palette.
+2. If the warning stays, check the **Task store** row in Diagnostics.
+
+</Accordion>
+<Accordion id="workspace-missing" title="A workspace is missing from the sidebar">
+
+Cause: the workspace is closed.
+
+1. Run <Action>Reopen a workspace</Action> in the command palette, or select <Action>Open repository</Action>.
+
+</Accordion>
+<Accordion id="before-worktree-removal-failed" title="Before worktree removal script command failed:">
+
+Cause: a command of the [Before worktree removal script](/settings-reference/#repository-scripts-worktree-cleanup-script) failed. The message names the command, shows its output, and names the worktree. OpenDucktor kept the worktree and the task branch, and the task status did not change.
+
+1. Fix the cause in the output, or fix the command in **Settings**, **Repositories**, your repository, **Scripts**.
+2. Run the action again, for example <Action>Close Task</Action> or <Action>Remove Worktree</Action>.
+
+</Accordion>
+</Accordions>
+
+## Git providers [#git-providers]
+
+These problems show in the **Git** tab of a repository in Settings, or in the Git provider step of the setup wizard.
+
+<Accordions>
+<Accordion id="install-github-cli" title="Install GitHub CLI (gh) to enable provider-backed pull requests.">
+
+Cause: OpenDucktor uses the GitHub CLI for GitHub, and it cannot find `gh`.
+
+1. Install the [GitHub CLI](https://cli.github.com/), then run `gh auth login`.
+2. If `gh` is installed in a folder outside your PATH, set the `OPENDUCKTOR_GH_PATH` environment variable to its file, and restart OpenDucktor.
+3. Open the **Git** tab again, and check that it shows "GitHub pull requests are ready for this repository."
+
+</Accordion>
+<Accordion id="github-not-signed-in" title="GitHub authentication is not configured. Run gh auth login.">
+
+Cause: the GitHub CLI is installed, but it is not signed in.
+
+1. Run `gh auth login` in a terminal.
+2. Open the **Git** tab again, and check that it shows "GitHub pull requests are ready for this repository."
+
+</Accordion>
+<Accordion id="gitlab-token-rejected" title="GitLab rejected the token, or the token lacks the api scope">
+
+Cause: the token is wrong, expired, or revoked, or it does not have the `api` scope.
+
+1. Select <Action>Create a token in GitLab</Action>, and create a token with the `api` scope.
+2. Select <Action>Replace token</Action>, or <Action>Use another account</Action>, and paste the new token.
+
+</Accordion>
+<Accordion id="no-gitlab-remote" title="No local Git remote points to the GitLab project">
+
+Cause: the remotes of the repository do not use the GitLab URL of the project, for example because they use an SSH host alias.
+
+1. In **Project remote**, enter the name of the remote that points to the project, for example `origin`.
+2. Select <Action>Save settings</Action>.
+
+</Accordion>
+<Accordion id="no-azure-devops-remote" title="No local Git remote maps to the configured Azure DevOps repository.">
+
+Cause: the remotes of the repository do not use the Azure Repos URL of the repository, for example because they use an SSH host alias.
+
+1. In the **Git** tab, open **Advanced remote mappings**, and select <Action>Add mapping</Action>.
+2. Enter the **Remote name**, for example `origin`.
+3. Run `git remote -v`. Copy the fetch URL into **Fetch URL**, and each push URL into **Push URLs**.
+4. Select <Action>Save settings</Action>, and check that the card shows **Ready**.
+
+</Accordion>
+<Accordion id="tls-certificate-untrusted" title="The operating system does not trust the TLS certificate">
+
+Cause: the self-managed GitLab instance uses a certificate that your computer does not trust.
+
+1. Add the certificate to the trust store of the operating system.
+2. Select <Action>Retry</Action>.
+
+</Accordion>
+<Accordion id="secure-store-unavailable" title="The operating system secure credential store is unavailable.">
+
+Cause: OpenDucktor cannot save the GitLab or Azure DevOps token. On Linux, it needs a Secret Service keyring, such as GNOME Keyring.
+
+1. Install and unlock a Secret Service keyring.
+2. Add the token again.
+
+</Accordion>
+</Accordions>
+
+## External MCP [#external-mcp]
+
+The `@openducktor/mcp` server writes its startup errors after `[openducktor-mcp]`. Most MCP clients show them in their server log. After each fix, check that your MCP client lists the `odt_*` tools.
+
+<Accordions>
+<Accordion id="no-running-host" title="No running OpenDucktor host was discovered.">
+
+Cause: no OpenDucktor host runs on this computer, or OpenDucktor uses another config folder than the MCP server.
+
+1. Start the desktop app or the browser runner.
+2. If you start OpenDucktor with `OPENDUCKTOR_CONFIG_DIR`, set the same variable for the MCP server.
+3. Restart the MCP server.
+
+</Accordion>
+<Accordion id="no-healthy-host" title="No healthy OpenDucktor host was discovered.">
+
+Cause: the server found a host, but the host did not answer correctly. The message gives the reason after the host URL. OpenDucktor stopped without cleanup, its MCP bridge failed, or the [versions do not match](#host-bridge-incompatible).
+
+1. If the reason names the host bridge, follow [The OpenDucktor host bridge is incompatible](#host-bridge-incompatible).
+2. Otherwise, start or restart OpenDucktor.
+3. Restart the MCP server.
+
+The message ends with `Provide ODT_HOST_URL to override discovery.` OpenDucktor sets this variable for its own sessions. You do not need it when discovery works.
+
+</Accordion>
+<Accordion id="mcp-bridge-error" title="The OpenDucktor MCP bridge row in Diagnostics shows Error">
+
+Cause: the host could not start its MCP bridge. The row gives the reason. The host does not try again by itself.
+
+1. Fix the problem that the row names.
+2. Restart OpenDucktor.
+
+</Accordion>
+<Accordion id="default-workspace-not-found" title="Configured default workspace '<id>' was not found on the running OpenDucktor host.">
+
+Cause: the value of `--workspace-id` or `ODT_WORKSPACE_ID` is wrong.
+
+1. In **Settings**, select **Repositories**, then your repository. Copy the **Workspace ID** from the **Configuration** tab.
+2. Use it as the value of `--workspace-id` or `ODT_WORKSPACE_ID`. To name the workspace in each call instead, remove the option.
+3. Restart the MCP server.
+
+</Accordion>
+<Accordion id="missing-workspace-id" title="Missing workspaceId for workspace-scoped tool">
+
+Cause: the server has no default workspace, and the call names none.
+
+1. Set `--workspace-id`, or give `workspaceId` in the call. `odt_get_workspaces` lists the IDs.
+
+</Accordion>
+<Accordion id="workspace-not-configured" title="A tool result says Workspace is not configured">
+
+Cause: the call names a workspace that the host does not know.
+
+1. Call `odt_get_workspaces` and use one of its IDs.
+
+</Accordion>
+<Accordion id="host-bridge-incompatible" title="The OpenDucktor host bridge is incompatible, or is missing required MCP tools">
+
+Cause: the versions of the host and the package do not match. This message can show inside [No healthy OpenDucktor host was discovered.](#no-healthy-host)
+
+1. Update OpenDucktor to the latest release.
+2. Start the server with `bunx @openducktor/mcp@latest`.
+
+</Accordion>
+<Accordion id="invalid-discovery-file" title="Invalid, failed parsing, or failed reading of the OpenDucktor MCP discovery file">
+
+Cause: the file that tells the server where the host runs is damaged, or the server cannot read it.
+
+1. Quit OpenDucktor.
+2. Delete the file at the path in the message. The default path is `~/.openducktor/runtime/mcp-bridge.json`.
+3. Start OpenDucktor again. It writes a new file.
+
+</Accordion>
+<Accordion id="bun-not-found" title="The client cannot start the server, or bun is not found">
+
+Cause: the client starts the server with `bunx`, and Bun is not installed.
+
+1. Install [Bun](https://bun.sh/).
+
+</Accordion>
+</Accordions>
+
+## Browser runner [#browser]
+
+These problems stop the browser runner, `npx @openducktor/web`, or block its web page.
+
+<Accordions>
+<Accordion id="npx-stops-at-startup" title="npx @openducktor/web stops at startup">
+
+Cause: the browser runner needs Node.js 24.14 or later.
+
+1. Run `node --version`.
+2. If the version is older than 24.14, update Node.js.
+3. Start the runner again, and wait for `OpenDucktor web is ready:`.
+
+</Accordion>
+<Accordion id="port-in-use" title="The browser runner stops because a port is in use">
+
+Cause: another program uses port 1420 or 14327.
+
+1. Start the runner with free ports, for example `npx @openducktor/web --port 1520 --backend-port 14427`.
+
+</Accordion>
+<Accordion id="non-loopback-without-external-url" title="OpenDucktor web binds a non-loopback host without a remote --external-url.">
+
+Cause: you started the runner with `--host` set to a network address, but it has no address that browsers can open.
+
+1. Add `--external-url` with the `https://` address that browsers open. To get one, see [Network browser pages require HTTPS.](#network-pages-require-https)
+2. Wait for `OpenDucktor web is ready:`, and open the address that follows it.
+
+</Accordion>
+<Accordion id="network-pages-require-https" title="Network browser pages require HTTPS.">
+
+Cause: `--external-url` names another computer with an `http://` address. A browser on another computer needs HTTPS.
+
+1. For use on this computer only, use `--host 127.0.0.1` without `--external-url`.
+2. For other computers, put the runner behind an HTTPS proxy, such as Tailscale Serve. See [Serve the runner on another machine](https://github.com/Maxsky5/openducktor/blob/main/docs/web-runner.md#serve-the-runner-on-another-machine).
+3. Set `--external-url` to its `https://` address.
+
+</Accordion>
+<Accordion id="base-path-without-external-url" title="OpenDucktor web serves the TypeScript host under --base-path without --external-url.">
+
+Cause: a base path works only behind a reverse proxy, and the runner does not know the proxy address.
+
+1. Add `--external-url` with the address that browsers open, including the base path.
+
+</Accordion>
+<Accordion id="browser-403" title="A browser on another computer gets a 403 response, such as Host not allowed.">
+
+Cause: the runner accepts only the host name of `--external-url`, the `--host` address, and `localhost`. The response `Browser backend request origin is not allowed.` means that the page came from another address.
+
+1. Open OpenDucktor at the exact `--external-url` address.
+
+</Accordion>
+</Accordions>
+
+## Remote control [#remote-control]
+
+These problems affect the host when you share it, and the computers and browsers that connect to it. For the mobile app, see [Mobile](#mobile).
+
+<Accordions>
+<Accordion id="web-app-needs-https" title="This web app needs an HTTPS host address.">
+
+Cause: the hosted web client accepts only an HTTPS host address.
+
+1. [Give the host an HTTPS address](/remote-control/#https-host-address), then paste it.
+
+</Accordion>
+<Accordion id="local-network-blocked" title="This browser blocked access to your local network.">
+
+Cause: you blocked local network access for the site.
+
+1. Allow local network access in the site settings of the browser.
+2. Select <Action>Connect to host</Action> again, or <Action>Retry connection</Action> if the page shows it.
+
+</Accordion>
+<Accordion id="remote-control-port-in-use" title="Remote control says that the port is in use by another app">
+
+Cause: another program uses the Remote control port.
+
+1. Select <Action>Use another port</Action> in **Remote control**, or close the other program.
+2. With a [public host address](/settings-reference/#remote-control-public-host-address), **Use another port** does not show. Open **Advanced**, change **Port**, and change the port of your proxy too.
+
+</Accordion>
+<Accordion id="remote-address-changed" title="Remote control says that the address is not on this computer now">
+
+Cause: the network of the computer changed.
+
+1. In **Remote control**, under **Network**, select a network again.
+2. Turn on **Enable Remote Control**.
+
+</Accordion>
+<Accordion id="pairing-code-wrong" title="The pairing code is wrong, expired, or already used.">
+
+Cause: the code has a typo, is older than 5 minutes, or paired another device.
+
+1. Enter the code that the **Add a device** panel shows on the host now. While the panel stays open, a new code replaces an expired one.
+2. If the panel is closed, select <Action>Add device</Action> in **Remote control**, then enter the new code.
+
+</Accordion>
+<Accordion id="no-pairing-code-open" title="No pairing code is open on the host.">
+
+Cause: the pairing stopped. You closed the **Add a device** panel and its code expired, someone selected **Stop pairing**, or 5 wrong codes stopped it.
+
+1. On the host, select <Action>Add device</Action> in **Remote control**, then enter the new code.
+
+</Accordion>
+<Accordion id="device-needs-new-code" title="This device needs a new pairing code.">
+
+Cause: the host removed this device, or its saved access is not valid.
+
+1. On the host, select <Action>Add device</Action> in **Remote control**.
+2. On the device, enter the code in **Pair with host**.
+
+</Accordion>
+<Accordion id="no-secure-pairing" title="This host does not support secure pairing.">
+
+Cause: the host does not use the remote protocol of this client. It is older or newer than this client.
+
+1. Update OpenDucktor on the host and on the client to the same stable release. To update app.openducktor.dev, reload its tab.
+
+</Accordion>
+<Accordion id="client-host-version-mismatch" title="A client cannot read a host result, or asks you to update">
+
+Cause: the client and the host do not use the same remote protocol. The message names the app version and the protocol of each side, and the side to update.
+
+1. Update OpenDucktor on the host and on the client to the same stable release. To update app.openducktor.dev, reload its tab.
+
+</Accordion>
+</Accordions>
+
+## Mobile [#mobile]
+
+To see the checks of the connected host, open the **Host** tab in the app, then **Diagnostics**.
+
+<Accordions>
+<Accordion id="mobile-cannot-reach-host" title="Can't reach your host, or Can't reach the host">
+
+Cause: the host stopped, Remote control is off, or the phone cannot reach the network of the host.
+
+1. Check that OpenDucktor is open on the host computer and that Remote control is on.
+2. Check that the phone is on the same network as the host.
+3. Tap <Action>Retry connection</Action>.
+
+</Accordion>
+<Accordion id="mobile-reconnecting" title="Reconnecting shows for a long time">
+
+Cause: the host does not answer, for example because the host computer sleeps.
+
+1. Wake the host computer.
+2. Check that the phone is on the same network as the host.
+3. Tap <Action>Retry connection</Action>, or <Action>Choose another host</Action>.
+
+</Accordion>
+<Accordion id="ios-local-network" title="OpenDucktor needs Local Network access to reach this host.">
+
+Cause: iOS blocks local network access for the app.
+
+1. In the iOS **Settings**, open **Privacy & Security**, **Local Network**, and turn on OpenDucktor.
+2. Connect to the host again.
+
+</Accordion>
+<Accordion id="saved-access-missing" title="Saved access is missing on this device.">
+
+Cause: the phone lost the access that it saved for this host.
+
+1. On the host, select <Action>Add device</Action> in **Remote control**.
+2. In the app, enter the new code.
+
+</Accordion>
+<Accordion id="qr-scan-fails" title="The QR code scan does not start">
+
+Cause: the app has no camera access, or the camera failed.
+
+1. Allow camera access for OpenDucktor in the phone settings, then scan again.
+2. If the scan still does not start, tap <Action>Enter address</Action>, enter the **Host address**, and enter the code that the **Add a device** panel shows on the host.
+
+</Accordion>
+<Accordion id="mobile-untrusted-certificate" title="This device does not trust the host certificate.">
+
+Cause: the HTTPS proxy of the host uses a certificate that the phone does not trust.
+
+1. Use a certificate that the phone trusts on the host or its proxy, for example the one that Tailscale Serve gives.
+2. Tap <Action>Retry connection</Action>.
+
+</Accordion>
+</Accordions>
+
+## Logs [#logs]
+
+The desktop app and the browser runner write one log file each day and delete files older than 30 days. To open the log folder, run:
+
+<Tabs items={["macOS", "Linux", "Windows"]}>
+<Tab value="macOS">
+
+```sh
+open ~/.openducktor/logs
+```
+
+</Tab>
+<Tab value="Linux">
+
+```sh
+xdg-open ~/.openducktor/logs
+```
+
+</Tab>
+<Tab value="Windows">
+
+```powershell title="PowerShell"
+explorer "$env:USERPROFILE\.openducktor\logs"
+```
+
+</Tab>
+</Tabs>
+
+| Program | Log file |
+|---|---|
+| Desktop app | `openducktor-electron-YYYY-MM-DD.log` |
+| Browser runner | `openducktor-web-YYYY-MM-DD.log` |
+
+If you set `OPENDUCKTOR_CONFIG_DIR`, the logs are in its `logs` folder. The MCP server and the mobile app write no log file. For a mobile problem, collect the log of the host.
+
+Copy the log lines from before, during, and after the problem. Remove repository names, paths, and other text that you do not want to make public.
+
+## Report a problem [#report-a-problem]
+
+<Steps>
+<Step>Search the open [GitHub Issues](https://github.com/Maxsky5/openducktor/issues) for the same problem.</Step>
+<Step>Select **New issue**, then **Bug report**.</Step>
+<Step>Give the steps to reproduce the problem, the result that you expected, and the result that you got.</Step>
+<Step>
+Add these details:
+
+- The OpenDucktor version from **Settings**, **General**.
+- Your operating system, and how you run OpenDucktor.
+- For a session problem, the harness version from Diagnostics.
+- The exact error message and the Diagnostics overview.
+- The [log lines](#logs).
+</Step>
+</Steps>
+
+<Callout type="warn" title="Security problems">Report a security problem as the [security policy](https://github.com/Maxsky5/openducktor/blob/main/SECURITY.md) describes. Do not put it in a public issue.</Callout>
+
+## Next
+
+<Cards>
+  <Card title="Install and update" href="/install-and-update/">Install the desktop app or the browser runner again.</Card>
+  <Card title="Harnesses" href="/harnesses/">Set up OpenCode, Codex, and Claude Code.</Card>
+  <Card title="Settings reference" href="/settings-reference/">Look up each setting and its default value.</Card>
+</Cards>

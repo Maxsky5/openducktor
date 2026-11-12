@@ -2,26 +2,25 @@
   :where(.stage) {
     /*
      * Workspace chat: a new chat with a custom role on Claude Code. The design widths follow the
-     * task session replica, so both pages show at the same scale.
+     * task session replica, so both pages show at the same scale. The window keeps one height for
+     * the whole scene, as the session page does. The transcript then follows the stream. Each
+     * height shows the whole last frame, from the request to the model line of the last message,
+     * so the still frame of reduced motion shows the request too. The window does not flex, so the
+     * feature tile cannot change its height.
      */
     .chat-window {
       --design-width: 740;
-      min-height: calc(600 * var(--u));
+      flex: none;
+      height: calc(1115 * var(--u));
+    }
+    /* A compact window keeps about the height of the other scenes of the documentation. The
+       transcript follows the stream, so the still frame shows the end of the turn. */
+    .chat-window[data-compact] {
+      height: calc(580 * var(--u));
     }
     .ch-column {
       flex: 1;
       min-height: 0;
-    }
-    .ch-draft {
-      position: relative;
-      z-index: 1;
-      display: block;
-      min-height: calc(24 * var(--u));
-      color: var(--foreground);
-      white-space: pre-wrap;
-    }
-    .ch-draft .typed::after {
-      height: calc(18 * var(--u));
     }
     /* A slash command in the draft: the secondary badge with the yellow chip classes. */
     .ch-chip {
@@ -116,45 +115,41 @@
     @container stage (width >= 700px) {
       .chat-window {
         --design-width: 960;
-        min-height: calc(640 * var(--u));
+        height: calc(1070 * var(--u));
+      }
+      .chat-window[data-compact] {
+        height: calc(560 * var(--u));
       }
     }
     @container stage (width >= 1101px) {
       .chat-window {
         --design-width: 1440;
-        min-height: calc(760 * var(--u));
+        height: calc(1020 * var(--u));
+      }
+      .chat-window[data-compact] {
+        height: calc(520 * var(--u));
       }
     }
-    /* Narrow stages drop the app chrome and the header tools, as the task session replica does. */
+    /* Narrow stages drop the app chrome and the header tools, as the task session replica does. The
+       composer and the transcript take their phone rules from their replicas. */
     @container stage (width <= 500px) {
       .chat-window {
         --design-width: 440;
-        min-height: calc(660 * var(--u));
+        height: calc(1235 * var(--u));
+      }
+      .chat-window[data-compact] {
+        height: calc(680 * var(--u));
       }
       .chat-window .rail,
       .chat-window .sb-collapsed,
       .chat-window .ra,
       .chat-window .oi,
-      .chat-window .sh-icon,
-      .chat-window .st-attach,
-      .chat-window .st-chip.effort {
+      .chat-window .sh-icon {
         display: none;
       }
       .chat-window .app-body {
         padding-top: calc(34 * var(--u));
         background: var(--card);
-      }
-      .chat-window .st-track {
-        padding: calc(12 * var(--u)) calc(12 * var(--u)) calc(6 * var(--u));
-      }
-      .chat-window .st-agent-body {
-        padding-right: 0;
-      }
-      .chat-window .st-composer {
-        padding: calc(10 * var(--u)) calc(12 * var(--u)) calc(12 * var(--u));
-      }
-      .chat-window .st-context {
-        margin-right: calc(4 * var(--u));
       }
     }
   }

@@ -13,6 +13,7 @@
     "format": "prettier --config .prettierrc.json --write 'src/**/*.astro' '../../packages/product-scenes/src/**/*.astro'",
     "format:check": "prettier --config .prettierrc.json --check 'src/**/*.astro' '../../packages/product-scenes/src/**/*.astro'",
     "worker:dev": "WRANGLER_SEND_METRICS=false wrangler dev --config wrangler.preview.json --local",
+    "deploy": "WRANGLER_SEND_METRICS=false wrangler deploy --config wrangler.json",
     "worker:check": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.json && WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --config wrangler.preview.json"
   },
   "devDependencies": {
@@ -20,8 +21,10 @@
     "@fontsource-variable/space-grotesk": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@happy-dom/global-registrator": "^21.0.4",
-    "@lucide/astro": "^1.70.0",
+    "@lucide/astro": "^1.72.0",
+    "@openducktor/build-tools": "workspace:*",
     "@openducktor/product-scenes": "workspace:*",
+    "@openducktor/theme": "workspace:*",
     "@playwright/test": "^1.65.0",
     "@types/bun": "^1.4.4",
     "@types/react": "^19.3.0",

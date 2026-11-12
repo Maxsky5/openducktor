@@ -1,0 +1,29 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The window of SessionWindow.tsx. The default height is the height of the other scenes of the
+     * documentation, so a dialog body scrolls between its header and its footer, as it does in a
+     * short window of the app. The open sidebar leaves the top bar less room, so the top bar keeps
+     * the title, the session actions, and the panel toggles.
+     */
+    .session-window {
+      --design-width: 960;
+      --window-height: 540;
+      flex: none;
+      height: calc(var(--window-height) * var(--u));
+    }
+    .session-window .oi {
+      display: none;
+    }
+    /* A phone stage shows one pane, and the dialog covers the whole window. */
+    @container stage (width <= 500px) {
+      .session-window {
+        --design-width: 440;
+        --window-height: 640;
+      }
+      .session-window .sh-icon {
+        display: none;
+      }
+    }
+  }
+}

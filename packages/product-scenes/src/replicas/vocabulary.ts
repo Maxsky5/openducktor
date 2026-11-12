@@ -1,6 +1,5 @@
-// Text copied from the desktop app. Sources: packages/core/src/services/kanban-mapper.ts,
-// packages/frontend/src/components/features/kanban/task-action-ui.tsx, and
-// packages/frontend/src/features/notifications/notification-copy.ts.
+// Text copied from the desktop app. The states, the actions, and the notifications come from the
+// Spec, Plan, Build workflow in packages/workflows/src/builtin/spec-plan-build/definition.ts.
 
 /** The lanes of the Kanban board, in the order of the board. */
 export const LANES = [
@@ -88,7 +87,7 @@ export const PRIMARY_ACTIONS: ReadonlySet<CardAction> = new Set([
 /** The copy of an in-app notification. */
 export type Notification = { title: string; body: string };
 
-/** The workflow notifications of notification-copy.ts, for the statuses that the views reach. */
+/** The workflow notifications of the states that the views reach. */
 const WORKFLOW_NOTIFICATIONS = {
   ai_review: { title: "Ready for QA", body: "The implementation is ready for QA review." },
   human_review: { title: "Review", body: "Review the changes and approve or request updates." },

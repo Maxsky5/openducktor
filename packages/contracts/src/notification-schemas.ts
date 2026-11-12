@@ -224,6 +224,15 @@ export const notificationOsCapabilitySchema = z.strictObject({
 });
 export type NotificationOsCapability = z.infer<typeof notificationOsCapabilitySchema>;
 
+/**
+ * The OS permission of a denied delivery. `prompt`: the user has not chosen yet, so a test
+ * notification can ask for the permission.
+ */
+const notificationDeliveryPermissionSchema = z
+  .enum(NOTIFICATION_OS_PERMISSION_VALUES)
+  .extract(["denied", "prompt"]);
+export type NotificationDeliveryPermission = z.infer<typeof notificationDeliveryPermissionSchema>;
+
 export const notificationOsDeliveryRequestSchema = z.strictObject({
   purpose: z.enum(["notification", "test"]).optional(),
   occurrenceId: withMaxUtf16Length(z.string().trim().min(1), 1024),
@@ -242,6 +251,7 @@ export const notificationDeliveryResultSchema = z.discriminatedUnion("status", [
   }),
   z.strictObject({
     status: z.literal("denied"),
+    permission: notificationDeliveryPermissionSchema,
     message: withMaxUtf16Length(z.string().trim().min(1), 500),
   }),
   z.strictObject({

@@ -1,0 +1,24 @@
+@layer replica {
+  :where(.stage) {
+    /* SessionStartBackgroundButton: an outlined row at the touch target height. */
+    .mob-start-background {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(44 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-start-background .lucide {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+  }
+}

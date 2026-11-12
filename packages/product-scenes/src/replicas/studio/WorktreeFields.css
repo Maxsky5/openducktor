@@ -1,0 +1,47 @@
+@layer replica {
+  :where(.stage) {
+    /* The box: flex flex-col gap-3 rounded-lg border border-border p-3. */
+    .wt {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+    }
+    .wt[hidden] {
+      display: none;
+    }
+    /* The mode tabs: a segmented control of size md with w-full. A trigger has no border, and an
+       inactive one has text-foreground/70, or /80 in the dark theme. The content has pt-2. */
+    .wt-tabs > .ui-segment:not([data-active]) {
+      color: color-mix(in oklab, var(--foreground) 70%, transparent);
+    }
+    :where([data-theme="dark"]) & .wt-tabs > .ui-segment:not([data-active]) {
+      color: color-mix(in oklab, var(--foreground) 80%, transparent);
+    }
+    .wt-mode > .wt-hint {
+      padding-top: calc(8 * var(--u));
+    }
+    .wt-hint {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .wt-path {
+      word-break: break-all;
+    }
+    .wt-path[hidden] {
+      display: none;
+    }
+    /* Advanced: a ghost button of size sm with -ml-2. The new branch line has mt-1. */
+    .wt-advanced {
+      gap: calc(8 * var(--u));
+      margin-left: calc(-8 * var(--u));
+      color: var(--foreground);
+    }
+    .wt-branch {
+      margin-top: calc(4 * var(--u));
+    }
+  }
+}

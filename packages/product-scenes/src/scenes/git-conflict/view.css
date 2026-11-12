@@ -1,0 +1,16 @@
+@layer views {
+  :where(.stage) {
+    /* Git conflict: the cropped session page of SessionPage.tsx on the Diffs tab. A phone stage
+       shows only the panel. */
+    .gc-window {
+      --design-width: 960;
+      height: calc(520 * var(--u));
+    }
+    @container stage (width <= 500px) {
+      .gc-window {
+        --design-width: 440;
+        height: calc(580 * var(--u));
+      }
+    }
+  }
+}

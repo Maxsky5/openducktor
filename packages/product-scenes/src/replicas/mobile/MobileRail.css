@@ -1,0 +1,143 @@
+@layer replica {
+  :where(.stage) {
+    /* The rail band: border-b border-border bg-card px-3 py-2 of the desktop rail. */
+    .mob-rail {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(3 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+      background: var(--card);
+    }
+    /* The connector before a step, in the ring color of that step. */
+    .mob-rail-link {
+      flex: 0 0 auto;
+      width: calc(8 * var(--u));
+      height: calc(2 * var(--u));
+      border-radius: calc(1 * var(--u));
+      background: color-mix(in oklab, var(--muted-foreground) 40%, transparent);
+    }
+    .mob-rail-link[data-tone="done"] {
+      background: var(--success-ring);
+    }
+    .mob-rail-link[data-tone="in_progress"] {
+      background: var(--info-ring);
+    }
+    .mob-rail-link[data-tone="waiting_input"] {
+      background: var(--warning-ring);
+    }
+    .mob-rail-link[data-tone="rejected"] {
+      background: var(--rejected-ring);
+    }
+    .mob-rail-link[data-tone="blocked"] {
+      background: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
+    }
+    /* The selection ring: ring-2 ring-offset-1. Every step keeps the same size. */
+    .mob-rail-ring {
+      flex: 1;
+      min-width: 0;
+      padding: calc(1 * var(--u));
+      border: calc(2 * var(--u)) solid transparent;
+      border-radius: calc(13 * var(--u));
+    }
+    .mob-rail-ring[data-selected]:has([data-tone="in_progress"]) {
+      border-color: var(--info-ring);
+    }
+    .mob-rail-ring[data-selected]:has([data-tone="done"]) {
+      border-color: var(--success-ring);
+    }
+    .mob-rail-ring[data-selected]:has(:is([data-tone="waiting_input"], [data-tone="blocked"])) {
+      border-color: var(--warning-ring);
+    }
+    .mob-rail-ring[data-selected]:has(:is([data-tone="available"], [data-tone="optional"])) {
+      border-color: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
+    }
+    .mob-rail-step {
+      --tone-text: var(--foreground);
+      --tone-icon: var(--foreground);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: calc(2 * var(--u));
+      height: calc(40 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      color: var(--tone-text);
+    }
+    .mob-rail-step[data-tone="optional"] {
+      border-style: dashed;
+    }
+    .mob-rail-step[data-tone="in_progress"] {
+      --tone-text: var(--info-muted);
+      --tone-icon: var(--info-muted);
+      border-color: var(--info-border);
+      background: var(--info-surface);
+    }
+    .mob-rail-step[data-tone="done"] {
+      --tone-text: var(--success-muted);
+      --tone-icon: var(--success-icon);
+      border-color: var(--success-border);
+      background: var(--success-surface);
+    }
+    .mob-rail-step[data-tone="waiting_input"] {
+      --tone-text: var(--warning-muted);
+      --tone-icon: var(--warning-muted);
+      border-color: var(--warning-border);
+      background: var(--warning-surface);
+    }
+    .mob-rail-step[data-tone="rejected"] {
+      --tone-text: var(--rejected-muted);
+      --tone-icon: var(--rejected-muted);
+      border-color: var(--rejected-border);
+      background: var(--rejected-surface);
+    }
+    .mob-rail-step[data-tone="blocked"] {
+      --tone-text: var(--secondary-foreground);
+      --tone-icon: var(--muted-foreground);
+      border-color: var(--border);
+      background: var(--muted);
+    }
+    .mob-rail-marks {
+      display: flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+    }
+    .mob-rail-role.lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--tone-icon);
+    }
+    .mob-rail-mark.lucide {
+      display: none;
+      width: calc(11 * var(--u));
+      height: calc(11 * var(--u));
+    }
+    .mob-rail-mark[data-for="done"] {
+      color: var(--success-accent);
+    }
+    :is(
+      .mob-rail-step[data-mark="done"] [data-for="done"],
+      .mob-rail-step[data-mark="waiting"] [data-for="waiting"],
+      .mob-rail-step[data-mark="working"] [data-for="working"],
+      .mob-rail-step[data-mark="paused"] [data-for="paused"],
+      .mob-rail-step[data-mark="available"] [data-for="available"],
+      .mob-rail-step[data-mark="optional"] [data-for="optional"],
+      .mob-rail-step[data-mark="alert"] [data-for="alert"]
+    ) {
+      display: block;
+    }
+    .mob-rail-label {
+      max-width: 100%;
+      overflow: hidden;
+      font-size: calc(11.5 * var(--u));
+      font-weight: 500;
+      line-height: calc(15 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+  }
+}

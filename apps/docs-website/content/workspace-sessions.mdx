@@ -1,0 +1,99 @@
+---
+icon: MessageCircle
+title: Workspace sessions
+description: Work with an agent on your repository without a task, and turn a request into tasks.
+---
+
+A workspace session is a session that does not belong to a task. It has no workflow steps. It uses the same session page as a [task session](/coding-sessions/#session-page). The agent can read your repository and create tasks.
+
+<ProductDemo id="chat" />
+
+## Start a workspace session [#start-a-session]
+
+<ProductDemo id="new-session" />
+
+In a collapsed sidebar, select <Action>+</Action>, then <Action>New session</Action>. You can also run <Action>New session</Action> from the [command palette](/command-palette/).
+
+**Runtime and model** starts with the [**Default model**](/models/#model-choice) of the repository. For OpenCode, also check **Runtime profile**.
+
+| Work location | Where the agent works |
+|---|---|
+| **Current checkout** | In your repository folder, on its current branch. The agent changes the files of your checkout. |
+| **New worktree** | In a new folder, on a new branch or an existing branch. Enter a **Worktree name**. Your checkout does not change. |
+| **Existing worktree** | In a worktree that you select. Use it to continue work in the worktree of a task or an earlier workspace session. |
+
+The session compares its changes with the **Target branch**.
+
+**New session** has no Goal mode. To give the agent a goal, send `/goal` and the objective in its composer. See [Set a goal with /goal](/coding-sessions/#goal-command).
+
+## Use a custom role [#custom-roles]
+
+A custom agent role, such as a code reviewer, gives a workspace session its own instructions.
+
+<Steps>
+<Step>Open **Settings**, then **Custom agent roles**, and select <Action>Add role</Action>.</Step>
+<Step>Enter a **Name** and a **System prompt**, then select <Action>Save settings</Action>.</Step>
+<Step>Start a workspace session, and choose the role in **Custom role** in the **New session** dialog.</Step>
+</Steps>
+
+Roles are available in every workspace. New sessions use the saved role. Existing sessions keep their role when you edit or delete it.
+
+## Create tasks from a request [#create-tasks]
+
+Ask the agent to create tasks, for example:
+
+<AgentMessage>{`
+Let people export a notebook to Markdown and to PDF. Split this into tasks that each fit in one pull request. Search the board first, and do not create a task that exists.
+`}</AgentMessage>
+
+New tasks start in <Status of="open" />. Their first step depends on their [issue type](/tasks-and-workflows/#issue-types).
+
+<Steps>
+<Step>Each new task shows as a card in the session. Select <Action>Open</Action> on a card. The task details open.</Step>
+<Step>Select the workflow action, for example <Action>Start Builder</Action>. Then select <Action>Run in background</Action>. The task session starts, and the workspace session stays open.</Step>
+</Steps>
+
+## Fork a workspace session [#fork]
+
+<ProductDemo id="fork" />
+
+A fork is a new workspace session with the conversation of the source session up to one reply. Use it to try another follow-up and keep the source session as it is.
+
+<Action>Fork from this reply</Action> shows under the last reply of each completed turn. The fork keeps the runtime, the model, the role, and the target branch of the source session.
+
+| Work location | Where the fork works |
+|---|---|
+| **Same folder** | In the folder of the source session. The two sessions change the same files. |
+| **New worktree** | In a new worktree, on a new branch from the last commit of the source folder. Uncommitted changes do not go to the new worktree. The source folder must have a commit. |
+
+## Import a session from an external runtime [#import]
+
+Continue in OpenDucktor a conversation that you started in OpenCode, Codex, or Claude Code.
+
+<ProductDemo id="import-session" />
+
+Select the arrow beside <Action>New task</Action>, then <Action>Import session from an external runtime</Action>. You can also run it from the [command palette](/command-palette/#actions).
+
+The list shows only the main conversations that started in the repository folder or in one of its Git worktrees, and that no task or workspace session uses yet. For Codex, it also shows the sessions that you archived in Codex.
+
+The import does not copy the conversation. OpenDucktor continues the same session, with the same session ID, in the same folder. It uses the title and the model of the session, and the default target branch of the repository.
+
+The list stays current for 10 minutes. If an import fails with a message that ends with `Reload sessions.`, close the dialog and open it again.
+
+## Archive a workspace session [#archive-a-session]
+
+<Steps>
+<Step>Select <Action>Archive</Action> in the session header.</Step>
+<Step>For a session in a worktree, **Remove worktree and branch** is on. Archive then deletes the worktree and its branch. To keep them, turn it off. If another workspace session or an open task uses the worktree, OpenDucktor keeps it.</Step>
+<Step>Select <Action>Archive session</Action>. The session moves to **Archived sessions**, and its agent and terminals stop.</Step>
+</Steps>
+
+To restore a workspace session, select the arrow beside <Action>New task</Action>, then <Action>Archived sessions</Action>, then <Action>Restore</Action> on the session.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Coding sessions" href="/coding-sessions/">Use the panels, terminals, and diffs that workspace sessions also have.</Card>
+  <Card title="Tasks and workflows" href="/tasks-and-workflows/">Move the new tasks through the workflow.</Card>
+  <Card title="Command palette" href="/command-palette/">Find workspace sessions and tasks from the keyboard.</Card>
+</Cards>

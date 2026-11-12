@@ -23,9 +23,11 @@ export function onPauseChange(listener: () => void): () => void {
 /**
  * Binds the header control that pauses every view (WCAG 2.2.2). The control shows only while the
  * visitor accepts motion. It sets data-motion on the page root, which also pauses the CSS
- * animations of the page.
+ * animations of the page. A page can bind more than one control, such as one in the header and one
+ * in the menu of a narrow screen, and each control shows the current state. Returns the function
+ * that unbinds the control.
  */
-export function bindMotionControl(button: HTMLButtonElement): void {
+export function bindMotionControl(button: HTMLButtonElement): () => void {
   const motion = window.matchMedia(MOTION_QUERY);
   const render = (): void => {
     const label = paused ? "Play animations" : "Pause animations";
@@ -39,11 +41,17 @@ export function bindMotionControl(button: HTMLButtonElement): void {
     if (motion.matches) render();
     else delete document.documentElement.dataset.motion;
   };
-  button.addEventListener("click", () => {
+  const toggle = (): void => {
     paused = !paused;
-    render();
     for (const listener of listeners) listener();
-  });
+  };
+  const stopRender = onPauseChange(render);
+  button.addEventListener("click", toggle);
   motion.addEventListener("change", follow);
   follow();
+  return () => {
+    stopRender();
+    button.removeEventListener("click", toggle);
+    motion.removeEventListener("change", follow);
+  };
 }

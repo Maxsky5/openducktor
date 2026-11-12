@@ -7,11 +7,16 @@ import type { Scene } from "../../motion/scene";
 import { stream } from "../../motion/text";
 import { EASE } from "../../motion/tokens";
 
+/** Seconds that the track takes to glide to its new place. */
+const GLIDE = 0.45;
+
 /**
  * Keeps the newest transcript rows in view without a jump. The transcript pins its track to the
  * bottom, so a longer track moves up at once. The track then glides from its old place. The
- * browser reports the size changes after it lays out the page, so the glide starts then. Returns
- * the reset function for a session switch.
+ * browser reports the size changes after it lays out the page, so the glide starts then. While the
+ * track has `data-snap`, the next size change moves the track at once, as a sent message scrolls
+ * the transcript to its end, and the attribute goes. Returns the reset function for a session
+ * switch.
  */
 export function follow(scene: Scene, track: HTMLElement): () => void {
   let top: number | undefined;
@@ -26,8 +31,20 @@ export function follow(scene: Scene, track: HTMLElement): () => void {
     top = next;
     if (shift <= 0) return;
     glide?.kill();
+    if (track.hasAttribute("data-snap")) {
+      track.removeAttribute("data-snap");
+      gsap.set(track, { y: 0 });
+      return;
+    }
+    // A size change that the browser reports near the end of the scene glides only until the
+    // end, so the scene keeps its length.
+    const duration = Math.min(GLIDE, scene.timeLeft());
+    if (duration === 0) {
+      gsap.set(track, { y: 0 });
+      return;
+    }
     gsap.set(track, { y: Number(gsap.getProperty(track, "y")) + shift });
-    glide = gsap.to(track, { y: 0, duration: 0.45, ease: EASE.enter });
+    glide = gsap.to(track, { y: 0, duration, ease: EASE.enter });
     scene.runNow(glide);
   });
   observer.observe(track);
@@ -70,7 +87,7 @@ export function transcript(scene: Scene, root: HTMLElement) {
     return at + runs;
   };
 
-  /** Shows a workflow tool card, such as set_spec, that runs for `runs` seconds. Returns the end time. */
+  /** Shows an ODT tool card, such as Set Spec, that runs for `runs` seconds. Returns the end time. */
   const workflow = (row: HTMLElement, at: number, runs: number): number => {
     scene.at(at, () => {
       reveal(row);

@@ -1,0 +1,5 @@
+@layer views {
+  :where(.stage) {
+    /* Start Builder: the shared layout of MobileStage.tsx. The view adds no rule of its own. */
+  }
+}

@@ -99,17 +99,17 @@ export const checksSummaryLabel = (checks: readonly PullRequestReviewCheck[]): s
 
   const failing = checks.filter(isFailingCheck).length;
   if (failing > 0) {
-    return pluralize(failing, "failing");
+    return `${failing} failing`;
   }
 
   const pending = checks.filter(isPendingCheck).length;
   if (pending > 0) {
-    return pluralize(pending, "pending");
+    return `${pending} pending`;
   }
 
   const passing = checks.filter(isPassingCheck).length;
   if (passing === checks.length) {
-    return pluralize(passing, "passing");
+    return `${passing} passing`;
   }
 
   return pluralize(checks.length, "check");

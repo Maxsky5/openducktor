@@ -1,0 +1,48 @@
+@layer replica {
+  :where(.stage) {
+    /* The Agent badge of browser-toolbar.tsx, in place of Share with agents: inline-flex h-5
+       shrink-0 items-center gap-1 rounded-sm bg-info-surface px-1.5 text-[11px] font-medium
+       text-info-surface-foreground ring-1 ring-info-border/40 ring-inset, with a Bot icon in
+       size-3. */
+    .bw-agent-badge {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      height: calc(20 * var(--u));
+      padding: 0 calc(6 * var(--u));
+      border-radius: calc(8 * var(--u));
+      background: var(--info-surface);
+      box-shadow: inset 0 0 0 calc(1 * var(--u))
+        color-mix(in oklab, var(--info-border) 40%, transparent);
+      color: var(--info-surface-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    .bw-agent-badge .lucide {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+
+    /* The pulse of browser-agent-marker.tsx where an agent clicks, hovers, or types: absolute
+       size-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-sky-500, with
+       bg-sky-400/40 for a click and bg-sky-400/25 for text entry. agent-marker.ts scales it from
+       0.5 to 1.5 while it fades out in 700 ms. */
+    .bw-agent-marker {
+      position: absolute;
+      width: calc(28 * var(--u));
+      height: calc(28 * var(--u));
+      border: calc(2 * var(--u)) solid var(--sky-500);
+      border-radius: 50%;
+      background: color-mix(in oklab, var(--sky-400) 40%, transparent);
+      translate: -50% -50%;
+    }
+    .bw-agent-marker[data-action="hover"] {
+      background: transparent;
+    }
+    .bw-agent-marker[data-action="type"] {
+      background: color-mix(in oklab, var(--sky-400) 25%, transparent);
+    }
+  }
+}

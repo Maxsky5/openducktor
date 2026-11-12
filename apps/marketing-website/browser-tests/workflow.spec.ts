@@ -44,7 +44,7 @@ test("the workflow steps are tabs with arrows, Home, End, and one tab stop", asy
 test("on a phone, a longer workflow text moves the start line of the view below", async ({
   page,
 }, testInfo) => {
-  // A viewport change refreshes the triggers, so the test uses the phone size from the start.
+  // The Build text takes one more line only at the phone width.
   test.skip(testInfo.project.name !== "phone-light", "The test needs the phone width.");
   const viewport = page.viewportSize();
   if (!viewport) throw new Error("The phone project needs a viewport size.");
@@ -122,7 +122,7 @@ test("each workflow step ends on its static frame, and the next step starts ther
       // You start the QA review. No QA session exists yet, so only a fresh start is possible.
       const dialog = stage.locator(".st-dialog");
       await runUntil(page, async () => (await dialog.count()) > 0, 5);
-      await expect(dialog).toContainText("Start QA Session");
+      await expect(dialog).toContainText("Start QA session");
       await expect(stage.locator('[data-mode="reuse"]')).toHaveAttribute("data-disabled");
     }
   }

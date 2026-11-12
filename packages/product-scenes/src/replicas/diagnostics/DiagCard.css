@@ -14,7 +14,7 @@
       gap: calc(10 * var(--u));
       padding: calc(10 * var(--u)) calc(16 * var(--u));
       border-bottom: calc(1 * var(--u)) solid var(--border);
-      background: color-mix(in oklch, var(--muted) 40%, transparent);
+      background: color-mix(in oklab, var(--muted) 40%, transparent);
       color: var(--foreground);
       font-size: calc(14 * var(--u));
       font-weight: 500;

@@ -14,7 +14,7 @@ export const projectApproval = (
     requestId: request.id,
     requestType: "permission_grant",
     title: `Approve ${request.action}`,
-    summary: request.message ?? `OpenCode requested ${request.action}.`,
+    summary: request.message ?? "OpenCode requested approval.",
     action: { name: request.action },
     affectedPaths: request.resources,
     mutation: classifyOpenCodeApprovalMutation({

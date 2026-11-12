@@ -1,12 +1,12 @@
 import type { Scene } from "../../motion/scene";
 import { studioWindow } from "../../replicas/studio/studio";
-import { DOCUMENTS, FRAMES, PLANNER_SESSION } from "../../sample/studio";
+import { ARTIFACTS, FRAMES, PLANNER_SESSION } from "../../sample/studio";
 import { STORY_SESSIONS } from "../../sample/studio-nav";
 import type { RowId } from "../../sample/transcripts";
-import { endTurn, runSession, saveDocument, settleSession, startSession } from "./session";
+import { endTurn, runSession, saveArtifact, settleSession, startSession } from "./session";
 
 /** The templates of PlanStep.tsx. */
-export type PlanTemplate = "spec-document" | "planner-dialog";
+export type PlanTemplate = "spec-artifact" | "planner-dialog";
 
 /**
  * Plan: the step starts on the Spec session, where Spec ends. You start the Planner. It reads the
@@ -17,9 +17,9 @@ export function plan(scene: Scene<PlanTemplate>): void {
   const row = (id: RowId<"plan">): HTMLElement => studio.row("plan", id);
   studio.hideTurns("plan");
   studio.setSessionShown("spec");
-  const planDocument = studio.panels.takeDocument();
-  studio.panels.putDocument(scene.template("spec-document"));
-  studio.panels.setDocument(DOCUMENTS.spec, true);
+  const planArtifact = studio.panels.takeArtifact();
+  studio.panels.putArtifact(scene.template("spec-artifact"));
+  studio.panels.setArtifact(ARTIFACTS.spec, true);
   studio.apply(FRAMES.spec);
 
   const started = startSession(
@@ -34,8 +34,8 @@ export function plan(scene: Scene<PlanTemplate>): void {
     "planner",
   );
   scene.at(started, () => {
-    studio.panels.setDocument(DOCUMENTS.plan, false);
-    studio.panels.putDocument(planDocument);
+    studio.panels.setArtifact(ARTIFACTS.plan, false);
+    studio.panels.putArtifact(planArtifact);
   });
   runSession(studio, started, "planner", "spec_ready", "spec");
 
@@ -46,11 +46,10 @@ export function plan(scene: Scene<PlanTemplate>): void {
   studio.rows.tool(row("read-keymap"), started + 2.45, 0.25);
   studio.rows.tool(row("read-dialog"), started + 2.9, 0.25);
 
-  const saved = saveDocument(
+  const saved = saveArtifact(
     studio,
     row("set-plan"),
     started + 3.6,
-    DOCUMENTS.plan.updated,
     { tones: ["done", "in_progress", "available", "blocked"], action: "Start Implementation" },
     2.5,
   );

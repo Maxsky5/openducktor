@@ -1,0 +1,179 @@
+---
+icon: Route
+title: Spec, Plan, Build workflow
+description: Follow a task through the built-in workflow, from the spec to your approval, with its lanes, actions, and Autopilot rules.
+---
+
+**Spec, Plan, Build** is the built-in workflow of OpenDucktor. A task gets a spec, a plan, a build, a QA review, and then your review. For the board, the task details, and the actions that every workflow shares, see [Tasks and workflows](/tasks-and-workflows/).
+
+## Steps and roles [#steps]
+
+The workflow has four agent steps, then your approval. Each step saves an artifact that the next step reads, and the task moves to the next lane.
+
+<Diagram name="workflow" />
+
+| Role | Works in | Reads | Saves |
+|---|---|---|---|
+| **Spec** | The repository, read-only | The task and the code. It asks you about open decisions. | The **Specification** |
+| **Planner** | The repository, read-only | The Specification and the code | The **Implementation Plan** |
+| **Builder** | The [task worktree](/git-and-pull-requests/#task-worktrees), with write access | The Specification and the Implementation Plan | Commits on the task branch. It can also update the spec and the plan. It also writes the pull request. |
+| **QA** | The task worktree, read-only | The Specification, the Implementation Plan, and the build | The **QA Report**, with the verdict **Approved** or **Rejected** |
+
+## The workflow in action [#workflow-demo]
+
+<ProductDemo id="workflow" />
+
+## Issue types [#issue-types]
+
+| Type | First step | Rule |
+|---|---|---|
+| **Feature** | Spec | A feature needs a spec and a plan before the build. |
+| **Task**, **Bug** | Builder | The spec and the plan are optional. In <Status of="open" />, you can start the Spec, the Planner, or the Builder. |
+
+## Spec and plan [#spec-and-plan]
+
+<Steps>
+  <Step>On the card in <Status of="open" />, select <Action>Start Spec</Action>, then <Action>Start session</Action>.</Step>
+  <Step>[Answer the questions](/coding-sessions/#answer-a-question) of the Spec agent. When it saves the **Specification**, the task moves to <Status of="spec_ready" />.</Step>
+  <Step>Read the **Specification** in the **Artifacts** tab. To change it, ask the Spec agent in its session, or [edit it](/tasks-and-workflows/#artifacts).</Step>
+  <Step>Select <Action>Start Planner</Action>. When the Planner saves the **Implementation Plan**, the task moves to <Status of="ready_for_dev" />.</Step>
+  <Step>Read the **Implementation Plan**, then select <Action>Start Builder</Action>. On the session page, this button shows <Action>Start Implementation</Action>.</Step>
+</Steps>
+
+<Screenshot id="session-plan-done" alt="The Planner session of the task Export a notebook as PDF. The Spec and Planner steps show a check, the transcript shows the collapsed Set Plan card, the Implementation Plan is open in the Artifacts tab, and Start Implementation shows at the top right." />
+
+A later save of the spec or the plan does not move the task.
+
+To let the Builder work until a goal is met, turn on **Goal mode** in the start dialog. See [Work toward a goal](/coding-sessions/#goal-mode).
+
+## Build [#build]
+
+The Builder writes the code and the tests in the task worktree, then commits on the task branch. While it works, the task is in <Status of="in_progress" />. When it finishes, it sends the **Build Completed** workflow event with a summary note, and the task moves to <Status of="ai_review" />.
+
+### Blocked tasks [#blocked-work]
+
+When the Builder needs your input, it sends the **Build Blocked** workflow event with the reason in its note. The task moves to <Status of="blocked" />.
+
+<Steps>
+  <Step>On the card, select <Action>Open Builder</Action>.</Step>
+  <Step>Read the note on the **Build Blocked** card, then answer in the session.</Step>
+</Steps>
+
+When the Builder continues, it sends **Build Resumed**, and the task goes back to <Status of="in_progress" />.
+
+## QA review [#qa-review]
+
+In <Status of="ai_review" />, select <Action>Request QA Review</Action>. The QA agent checks the build against the spec and the plan, then saves a **QA Report** with its verdict:
+
+- **Approved**: the task moves to <Status of="human_review" />.
+- **Rejected**: the task goes back to <Status of="in_progress" />, and its card shows the <Status of="qa_rejected" /> badge.
+
+QA review is optional. To skip it, open the menu next to the main button, then select <Action>Approve Task</Action> or <Action>Request Changes</Action>.
+
+### Fix a QA rejection [#fix-a-qa-rejection]
+
+<Screenshot id="session-qa-rejected" alt="A QA session that rejected the change. The QA step is red, the transcript shows the collapsed Reject QA card, the QA Report shows the verdict Rejected and its findings, and Address QA Feedbacks shows at the top right." />
+
+<Steps>
+  <Step>Select <Action>Address QA Feedbacks</Action>.</Step>
+  <Step>In the dialog, select **Reuse existing** to continue the Builder session, or **Start fresh**. You can also turn on [Goal mode](/coding-sessions/#goal-mode).</Step>
+</Steps>
+
+The Builder fixes the findings. Then the task goes back to <Status of="ai_review" />.
+
+## Human review [#human-review]
+
+In <Status of="human_review" />, read the changes in the **Diffs** tab and the QA Report in the **Artifacts** tab. To comment on a line of the diff, see [Review the work](/coding-sessions/#inspect-work).
+
+<Screenshot id="human-review-diffs" alt="The QA session of the task Open search with a keyboard shortcut in Human Review. All four steps show a check, the transcript shows the collapsed Approve QA card, the Diffs tab shows the branch changes with an open diff, and Generate Pull Request shows at the top right." />
+
+### Approve a task [#approve-a-task]
+
+On the task card, select <Action>Approve Task</Action>. On the session page, the main button is <Action>Generate Pull Request</Action> until the task has a pull request. <Action>Approve Task</Action> is then in the menu next to it. The Builder writes the pull request in a fork of its last session. For each approval choice, see [Approve a task](/git-and-pull-requests/#approve-a-task).
+
+### Request changes [#request-changes]
+
+You can request changes in <Status of="ai_review" /> or <Status of="human_review" />.
+
+<Steps>
+  <Step>Select <Action>Request Changes</Action>. If the main button shows another action, open the menu next to it.</Step>
+  <Step>In **Your feedback**, describe the changes, then select <Action>Request changes</Action>.</Step>
+  <Step>In the dialog, select **Reuse existing** to continue the Builder session, or **Start fresh**. You can also turn on [Goal mode](/coding-sessions/#goal-mode).</Step>
+</Steps>
+
+When the Builder session starts, the task goes back to <Status of="in_progress" />. If you cancel the session start, the task keeps its lane, and the form keeps your feedback. While a session of the task runs, the session page cannot request changes, and the menu shows **Wait for the current session to finish.**
+
+If the task has an approved QA Report, it goes back to <Status of="human_review" /> when the Builder finishes. QA does not run again. To run QA on the new build, select <Action>Request QA Review</Action>.
+
+## Lanes and moves [#lanes]
+
+Agents move a task when they save an artifact or send a workflow event. You move it with an action.
+
+<Diagram name="laneMoves" />
+
+Some moves are not in the diagram:
+
+- A task or a bug in <Status of="open" /> goes to <Status of="ready_for_dev" /> when the Planner saves its plan, or to <Status of="in_progress" /> when the Builder starts.
+- **Build Completed** moves a task to <Status of="human_review" /> instead of <Status of="ai_review" /> when its last QA Report is **Approved**.
+- QA can also run in <Status of="blocked" /> and <Status of="human_review" />. Its verdict moves the task as in <Status of="ai_review" />.
+- <Action>Request Changes</Action> also works in <Status of="ai_review" />.
+- <Action>Close Task</Action>, <Action>Reset Task</Action>, and [Reset Implementation](#reset-implementation) can move a task from most lanes. See [Reset, close, or delete a task](/tasks-and-workflows/#reset-and-cleanup).
+
+### Actions of each lane [#lane-actions]
+
+The card shows the main action of its lane. The menu next to it and the task details list the other actions that the task allows now.
+
+| Lane | Main action | Also offers |
+|---|---|---|
+| <Status of="open" /> | <Action>Start Spec</Action> for a feature, <Action>Start Builder</Action> for a task or a bug | <Action>Start Planner</Action> and <Action>Start Spec</Action> for a task or a bug |
+| <Status of="spec_ready" /> | <Action>Start Planner</Action> | <Action>Open Spec</Action>, and <Action>Start Builder</Action> for a task or a bug |
+| <Status of="ready_for_dev" /> | <Action>Start Builder</Action> | <Action>Start Planner</Action>, <Action>Start Spec</Action> |
+| <Status of="in_progress" />, <Status of="blocked" /> | <Action>Open Builder</Action>, or <Action>Address QA Feedbacks</Action> after a QA rejection | <Action>Request QA Review</Action> in <Status of="blocked" />, <Action>Reset Implementation</Action> |
+| <Status of="ai_review" /> | <Action>Request QA Review</Action> | <Action>Approve Task</Action>, <Action>Request Changes</Action>, <Action>Open Builder</Action>, <Action>Reset Implementation</Action> |
+| <Status of="human_review" /> | <Action>Approve Task</Action> | <Action>Request Changes</Action>, <Action>Request QA Review</Action>, <Action>Open Builder</Action>, <Action>Reset Implementation</Action> |
+
+## Reset Implementation [#reset-implementation]
+
+<Action>Reset Implementation</Action> starts the build again from the plan. It is in the <Action>More</Action> menu of the task details, in <Status of="in_progress" />, <Status of="blocked" />, <Status of="ai_review" />, and <Status of="human_review" />.
+
+<Callout type="warn" title="Reset Implementation deletes code">
+It deletes the Builder commits and the uncommitted files. Push or merge the task branch first if you want to keep its commits.
+</Callout>
+
+It deletes the Builder and QA sessions, the QA reports, and the pull request link. It keeps the spec, the plan, the other artifacts, and the worktree. If a direct merge waits for its push, it also deletes the record of that merge. The merge commit stays on the local target branch.
+
+The task goes back to <Status of="ready_for_dev" />. If the task has no plan, it goes back to <Status of="spec_ready" /> when it has a spec, or else to <Status of="open" />.
+
+## Autopilot rules [#autopilot-rules]
+
+Spec, Plan, Build has five [Autopilot](/autopilot/) rules. With all of them on, you start the first agent and approve the task. Autopilot starts the other steps.
+
+<Diagram name="specPlanBuildAutopilot" />
+
+**Settings** shows each rule by its event. Each rule has one action:
+
+- **When a task progresses to Spec Ready**: **Start Planner** starts the Planner in a fresh session.
+- **When a task progresses to Ready for Dev**: **Start Builder** starts the Builder in a fresh session.
+- **When a task progresses to AI Review**: **Start QA** continues the last QA session of the task, or starts a fresh one.
+- **When a task is rejected by QA**: **Fix QA Rejection** continues the last Builder session, or starts a fresh one, to fix the findings.
+- **When a task progresses to Human Review**: **Generate Pull Request** forks the last Builder session to create or update the pull request. It needs a [Git provider](/git-and-pull-requests/#git-provider).
+
+Autopilot never starts a session in [Goal mode](/coding-sessions/#goal-mode).
+
+Only an agent sends these events: a spec save in <Status of="open" />, a plan save in <Status of="open" /> or <Status of="spec_ready" />, a finished build, and a QA verdict. <Action>Reset Implementation</Action>, a direct merge, and <Action>Request Changes</Action> start nothing. After <Action>Request Changes</Action>, the next finished build sends the AI Review or the Human Review event.
+
+### When QA rejects a task [#qa-rejection-loop]
+
+With the QA rejection rule and the AI Review rule on, the Builder fixes the findings, and then QA reviews the task again.
+
+By default, QA reviews the fix in its last session. To give each QA review a new session, turn on [Always start QA reviews in a fresh session](/settings-reference/#autopilot-always-start-qa-reviews-fresh).
+
+This loop has no limit. If QA reports the same findings again, set the QA rejection rule to **Disabled**. To fix the findings yourself, see [Fix a QA rejection](#fix-a-qa-rejection).
+
+## Next [#next]
+
+<Cards>
+  <Card title="Autopilot" href="/autopilot/">Turn on the rules of this workflow.</Card>
+  <Card title="Git and pull requests" href="/git-and-pull-requests/">Merge directly or open a pull request.</Card>
+  <Card title="Agent prompts" href="/agent-prompts/">Change what each role does in this workflow.</Card>
+</Cards>

@@ -1,0 +1,187 @@
+---
+icon: MessagesSquare
+title: Coding sessions
+description: Start an agent on a task, talk to it, answer its questions, and review its work.
+---
+
+An agent works on a task in a session. Each role of a task, such as the Spec agent or the Builder, has its own session.
+
+## The session page [#session-page]
+
+<AnnotatedScreenshot
+  id="session-question"
+  alt="The session page of the task Sort notes inside a notebook: the sidebar with the Spec session in Needs you, the workflow rail at the top, the transcript with a card of three questions, the composer, and the Artifacts tab on the right."
+  parts={[
+    { at: "sidebar", title: "Sidebar", text: "Your sessions, in Needs you, Running, and Recent. A session that waits for you shows in Needs you." },
+    { at: "workflow-rail", title: "Workflow rail", text: "The roles of the task, in order. A check marks a finished role. Select a role to open its session." },
+    { at: "next-step", title: "Next step", text: "The button that starts the next step of the task, for example Start Spec." },
+    { at: "transcript", title: "Transcript", text: "The agent works here. You see its messages, its commands, its file edits, and its questions." },
+    { at: "composer", title: "Composer", text: "Type a message to the agent. Type @ for files, / for commands, and $ for skills." },
+    { at: "right-panel", title: "Right panel", text: "The artifacts, diffs, files, and CI checks of the task. Select + to open a terminal or a web page." },
+  ]}
+/>
+
+## Follow the agent [#follow-the-agent]
+
+When the agent moves the task, a card with the event as its title shows in the transcript, for example **Build Completed**. Select the title to read the note of the agent. When the agent saves the pull request of the task, a **Set Pull Request** card shows it.
+
+## Start a session [#start-a-session]
+
+<Steps>
+<Step>On a task card, or in the top bar of the session page, select the button of a role, for example <Action>Start Spec</Action>.</Step>
+<Step>In the dialog, check the model, then select <Action>Start session</Action>. The session page opens and the agent starts.</Step>
+</Steps>
+
+<Screenshot id="start-session-dialog" alt="The Start Spec session dialog with Runtime and model, Effort, the Customize first message switch, and the Cancel, Run in background, and Start session buttons." />
+
+| Option | Use it to |
+|---|---|
+| **Runtime and model**, **Effort**, **Speed**, **Runtime profile** | Choose the model of this session. See [Change the model of one session](/models/#session-model). |
+| **Target branch** | Choose the branch that the work merges into. It shows for <Action>Start Builder</Action> and <Action>Generate Pull Request</Action>. See [Git and pull requests](/git-and-pull-requests/). |
+| **Session mode** | Continue an earlier session of the role with **Reuse existing**, or start a new one with **Start fresh**. It shows for <Action>Request QA Review</Action>, <Action>Address QA Feedbacks</Action>, <Action>Request Changes</Action>, and <Action>Resolve Git Conflict</Action>. For <Action>Generate Pull Request</Action>, choose **Reuse existing** or **Fork existing**. |
+| **Goal mode** | Give the Builder a goal instead of a first message. It shows for <Action>Start Builder</Action>, <Action>Address QA Feedbacks</Action>, and <Action>Request Changes</Action>. See [Work toward a goal](#goal-mode). |
+| <Action>Run in background</Action> | Start the session and stay on the current page. |
+
+## Send messages [#send-messages]
+
+To add a reference to a message, type its key in the composer, then select an item in the menu.
+
+<ProductDemo id="composer" />
+
+| Key | What it adds |
+|---|---|
+| `/` | A command of the harness, `/goal`, or one of your [reusable prompts](/customize-openducktor/#add-a-reusable-prompt). With some harnesses, also a skill. |
+| `@` | A file of the task worktree. With some harnesses, also a subagent. |
+| `$` | A skill. |
+
+A reusable prompt must be at the start of the message. A message with a reusable prompt cannot also have files, skills, subagents, or attachments.
+
+### Queue a message [#queue]
+
+While the agent works, <kbd>Enter</kbd> queues your message. The queued messages show above the composer. When the agent ends its turn, it gets the oldest queued message. Each next message waits for the end of the next turn.
+
+<ProductDemo id="queue" />
+
+To send a queued message to the agent at once, while it works, point to the message and select <Action>Steer now</Action>, the lightning icon.
+
+To send a new message to the agent at once, press <kbd>Cmd</kbd>+<kbd>Enter</kbd> on macOS or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> on Windows and Linux. To swap the keys, see [Steer messages by default](/settings-reference/#chat-steer-messages-by-default).
+
+If you stop the agent or a reply fails while messages wait in the queue, **Queue paused** shows above the composer. To send the queued messages, select <Action>Resume queue</Action>.
+
+### Fork from a reply [#fork]
+
+To try another way, select <Action>Fork from this reply</Action> on a reply of the agent. A new session of the same role starts with the conversation up to that reply, and it opens. The first session does not change.
+
+## Work toward a goal [#goal-mode]
+
+<ProductDemo id="goal-mode" />
+
+In Goal mode, the Builder gets a goal instead of a first message. Its harness then starts each next turn by itself, until the goal is met.
+
+### Start in Goal mode [#start-goal]
+
+<Steps>
+<Step>Select <Action>Start Builder</Action>, <Action>Address QA Feedbacks</Action>, or <Action>Request Changes</Action>. Only these steps show Goal mode.</Step>
+<Step>Turn on **Goal mode**. The **Goal** field shows a default goal: the outcome, and the conditions that must be true at the end.</Step>
+<Step>Edit the goal, or select <Action>Generate goal</Action>. A model writes a goal from the task, its documents, and the default goal.</Step>
+<Step>Select <Action>Start session</Action>.</Step>
+</Steps>
+
+- **The agent gets only the goal.** **Customize first message** hides while Goal mode is on. A goal can have 4000 characters.
+- **Generate goal** uses the [Default model](/settings-reference/#repository-agents-default-model) of the repository, and the [Goal Writer](/agent-prompts/#goal-writer) prompt. Without a default model, the button is off.
+- **Your harness must support goals.** If it does not, the switch is off and tells you why. See [Goal mode support](/harnesses/#goals).
+- **Autopilot** never starts a session in Goal mode.
+
+### Follow the goal [#goal-row]
+
+The goal row shows above the composer: **Goal**, the status, and the objective. Select the row to read the whole goal.
+
+| Status | What it means |
+|---|---|
+| **Active** | The agent works toward the goal. |
+| **Paused**, **Blocked**, **Limit reached** | The goal waits. The row shows the reason that the harness gives. |
+| **Waiting for your message** | Your next message continues the goal. |
+| **Complete** | The goal is met. |
+| **Goal ended** | The goal stopped. |
+
+The row has <Action>Pause goal</Action>, <Action>Resume goal</Action>, and <Action>Clear goal</Action>. Some harnesses can only clear a goal.
+
+A goal does not end when the task moves to another lane. The Builder can keep working after it reports the build as completed, until the goal is met. Before OpenDucktor removes a task worktree, it stops the sessions that work on a goal.
+
+### Set a goal with /goal [#goal-command]
+
+<ProductDemo id="goal-command" />
+
+In the composer of a session, type `/goal`, then the objective, and send the message. The message shows a **Goal** chip. To change a running goal, send `/goal pause`, `/goal resume`, or `/goal clear`.
+
+- A `/goal` message holds only text, with no files or attachments.
+- While the agent works in a normal turn, a `/goal` message waits in the queue. You cannot steer it.
+- While a goal drives the work, your other queued messages wait until the goal stops. A `/goal` message applies at once.
+
+## Answer the agent [#answer-pending-input]
+
+When an agent asks a question, needs a permission, or reports that the task is blocked, its session moves to **Needs you**. The agent waits until you answer. You can also answer from your phone. See [Answer the agent](/mobile/sessions/#answer-pending-input).
+
+### Answer a question [#answer-a-question]
+
+<Steps>
+<Step>In the sidebar, select the session in **Needs you**.</Step>
+<Step>Select an option, and the next question opens. To write your own answer, select **Other answer**, then <Action>Next</Action>.</Step>
+<Step>After the last question, select <Action>Confirm Answers</Action>. The agent continues, and the session moves to **Running**.</Step>
+</Steps>
+
+<ProductDemo id="question" />
+
+To answer without opening the session, point to its row in **Needs you**. A preview opens with the question. Answer it there, or select <Action>Open session</Action>.
+
+<AnnotatedScreenshot
+  id="needs-you-preview"
+  alt="The Kanban board with the pointer on the Spec session Show tag counts in the sidebar in Needs you. Beside the row, a preview shows the task, the workflow steps, the question with the options Hide empty tags and Show all tags, and Open session."
+  parts={[
+    { at: "needs-you-row", title: "Needs you row", text: "The session that waits for you. Point to it to open the preview." },
+    { at: "preview", title: "Preview", text: "The question of the agent. Select an option, then Confirm Answers." },
+    { at: "open-session", title: "Open session", text: "Opens the full session page." },
+  ]}
+/>
+
+### Reply to a permission request [#answer-a-permission-request]
+
+An agent asks for a permission before it does some actions, for example before it runs a command. Select a reply on the **Approval required** card.
+
+<Screenshot id="approval-card" alt="An Approval required card. Codex asks to run a shell command, the card shows the command, and it has the Approve once and Reject buttons." />
+
+Some harnesses also show these replies:
+
+| Reply | What it does |
+|---|---|
+| <Action>Approve for session</Action> | Allows the same request until the session ends. |
+| <Action>Always allow</Action> | Also allows the same request in later sessions. OpenCode shows it as <Action>Allow for project</Action>. |
+
+To get fewer requests, set the [permissions of each harness](/harnesses/#permissions).
+
+## Review the work [#inspect-work]
+
+Open the **Diffs** tab. **Branch changes** compares the task branch with its target branch.
+
+To comment on a line, point to it and select <Action>+</Action> in the gutter. The agent gets your comments with your next message.
+
+<AnnotatedScreenshot
+  id="session-diff"
+  alt="The Diffs tab with Branch changes selected. Editor.tsx shows removed and added lines, and a comment box under line 11 has the Cancel and Comment buttons."
+  parts={[
+    { at: "views", title: "Views", text: "Uncommitted changes, Branch changes, and History." },
+    { at: "changed-files", title: "Changed files", text: "Search the files. Select a file to open its diff." },
+    { at: "diff", title: "Diff", text: "The removed lines in red and the added lines in green." },
+    { at: "comment", title: "Comment", text: "Your comment on line 11. The agent gets it with your next message." },
+  ]}
+/>
+
+## Next [#next]
+
+<Cards>
+  <Card title="Terminals" href="/coding-sessions/terminals/">Run commands in the task worktree beside a session.</Card>
+  <Card title="Web pages" href="/coding-sessions/web-pages/">Open your dev server beside a session.</Card>
+  <Card title="Notifications" href="/notifications/">Get an alert when a session needs you.</Card>
+  <Card title="Git and pull requests" href="/git-and-pull-requests/">Merge the work or open a pull request.</Card>
+  <Card title="Command palette" href="/command-palette/">Start and answer sessions from the keyboard.</Card>
+</Cards>

@@ -5,6 +5,7 @@ import { TaskHeaderBadges } from "@/components/features/tasks/task-header-badges
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InlineCodeText } from "@/components/ui/inline-code-text";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import {
   resolveTaskPullRequestActions,
@@ -62,7 +63,7 @@ function TaskPullRequestActions({
           </Button>
           {disabledReason ? (
             <p id={errorId} className="max-w-72 text-right text-xs text-destructive">
-              {disabledReason}
+              <InlineCodeText text={disabledReason} />
             </p>
           ) : null}
         </div>

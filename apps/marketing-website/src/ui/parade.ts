@@ -4,7 +4,7 @@ import { watchPlayback, whileMotionAllowed } from "@openducktor/product-scenes/m
 import { EASE } from "@openducktor/product-scenes/motion/tokens";
 
 /** The parade plays from the moment its top passes 85% of the screen height until it leaves. */
-const PARADE_ZONE = { start: "top 85%", end: "bottom top" };
+const PARADE_ZONE = { top: 0, bottom: 15 };
 
 /**
  * The duck parade of the closing section. The ducks swim in once, the first time the parade

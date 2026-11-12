@@ -1,0 +1,49 @@
+---
+icon: Compass
+title: Overview
+description: OpenDucktor runs OpenCode, Codex, and Claude Code on your computer. The agents write the spec and the plan, build each task, and open the pull request.
+full: true
+---
+
+OpenDucktor orchestrates your coding agents on your computer: OpenCode, Codex, and Claude Code. They write the spec and the plan, build each task in its own Git worktree, and pass a QA review before yours.
+
+OpenDucktor is free and open source. Its license is the Apache License 2.0. [Read the code on GitHub](https://github.com/Maxsky5/openducktor).
+
+<ProductDemo id="hero" />
+
+## How a task moves [#how-a-task-moves]
+
+A task goes from a one-line request to merged code. The built-in [Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/) workflow sets its steps. You [start the first agent](/first-workspace-and-task/#start-the-builder) of each task. [Autopilot](/autopilot/) can start the next agents and the pull request for you.
+
+<Diagram name="workflow" />
+
+## Key terms [#key-terms]
+
+| Term | Meaning |
+|---|---|
+| Workspace | A local Git repository that you open in OpenDucktor. Each workspace has its own board, tasks, and settings. Settings lists workspaces under **Repositories**. |
+| Task | One piece of work on the board, of the type Feature, Task, or Bug. See [Tasks and workflows](/tasks-and-workflows/). |
+| Workflow | The lanes, roles, artifacts, and actions that a task follows. OpenDucktor has one workflow, Spec, Plan, Build. See [How a task moves](/tasks-and-workflows/#workflows). |
+| Lane | A column of the board. Each lane holds the tasks in one state of the workflow. See [The board](/tasks-and-workflows/#board-lanes). |
+| Role | The job of an agent on a task. The built-in roles are Spec (writes the specification), Planner, Builder, and QA. See [Start an agent](/tasks-and-workflows/#agent-roles). |
+| Session | One conversation between you and an agent. A task session runs one role of a task. A [workspace session](/workspace-sessions/) has no task. See [Coding sessions](/coding-sessions/). |
+| Artifact | A file that an agent or you save on a task, such as the Specification, the Implementation Plan, or the QA Report. See [Artifacts](/tasks-and-workflows/#artifacts). |
+| Worktree | A separate folder and branch for the code changes of one task. Your main checkout stays the same. See [Git and pull requests](/git-and-pull-requests/#task-worktrees). |
+| Harness | The coding agent that runs a session: OpenCode, Codex, or Claude Code. Settings lists them under **Agent runtimes**, and shows Claude Code as **Claude**. See [Harnesses](/harnesses/). |
+| Host | The part of OpenDucktor that runs the agents, Git, the terminals, and the task store on your computer. To use it from another device, see [Remote control](/remote-control/). |
+
+## Where it runs [#where-it-runs]
+
+You do not need an OpenDucktor account. OpenDucktor runs on your computer. It starts the coding agents that you installed, in your own repositories. Your coding agent sends prompts and code to the model provider that you set up.
+
+To follow the agents from your [phone](/mobile/) or from another computer, turn on [Remote control](/remote-control/) and pair the device. Other agents can also create and update tasks through [External MCP](/external-mcp/).
+
+<Diagram name="host" />
+
+## Start here [#next]
+
+<Cards>
+  <Card title="Install and update" href="/install-and-update/">Install the desktop app, or start the browser runner.</Card>
+  <Card title="First workspace and task" href="/first-workspace-and-task/">Complete the setup wizard and let the Builder do your first task.</Card>
+  <Card title="Spec, Plan, Build workflow" href="/tasks-and-workflows/spec-plan-build/">Learn each lane of the board and each agent role.</Card>
+</Cards>

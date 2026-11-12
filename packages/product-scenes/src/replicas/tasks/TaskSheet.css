@@ -24,9 +24,7 @@
       max-width: calc(680 * var(--u));
       border-left: calc(1 * var(--u)) solid var(--border);
       background: var(--popover);
-      box-shadow:
-        0 calc(20 * var(--u)) calc(25 * var(--u)) calc(-5 * var(--u)) rgb(0 0 0 / 0.1),
-        0 calc(8 * var(--u)) calc(10 * var(--u)) calc(-6 * var(--u)) rgb(0 0 0 / 0.1);
+      box-shadow: var(--shadow-xl);
     }
     /* The header: px-5 py-4 with a bottom border. */
     .ts-head {
@@ -70,43 +68,54 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    /* The ID and the dates: gap-x-3, the dates in text-[11px] with gap-1.5. */
+    .ts-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(4 * var(--u)) calc(6 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+    }
     .ts-id {
       display: inline-flex;
       align-items: center;
       gap: calc(4 * var(--u));
-      color: var(--muted-foreground);
+      margin-right: calc(6 * var(--u));
       font-family: var(--mono);
-      font-size: calc(11 * var(--u));
     }
     .ts-labels {
       display: flex;
       flex-wrap: wrap;
       gap: calc(6 * var(--u));
     }
-    /* The cards: space-y-3 px-5 py-4. */
+    /* The cards: space-y-2 px-5 py-4. */
     .ts-body {
       display: grid;
       flex: 1;
       grid-template-columns: minmax(0, 1fr);
       align-content: start;
-      gap: calc(12 * var(--u));
+      gap: calc(8 * var(--u));
       min-height: 0;
       overflow: hidden;
       padding: calc(16 * var(--u)) calc(20 * var(--u));
     }
-    /* A collapsible card: rounded-xl border-border/90 bg-card shadow-sm. */
+    /* A collapsible card of collapsible-card.tsx: rounded-xl border-border/90 bg-card shadow-sm. */
     .ts-card {
-      border: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 90%, transparent);
+      border: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 90%, transparent);
       border-radius: calc(16 * var(--u));
       background: var(--card);
       box-shadow: var(--shadow-sm);
     }
+    /* The header: min-h-10 px-3 py-1.5 gap-2, then the header actions and the chevron. */
     .ts-card-head {
       display: flex;
       align-items: center;
       gap: calc(8 * var(--u));
-      padding: calc(16 * var(--u));
+      min-height: calc(40 * var(--u));
+      padding: calc(6 * var(--u)) calc(12 * var(--u));
     }
+    /* The title: text-xs font-semibold uppercase tracking-wide text-muted-foreground. */
     .ts-card-title {
       display: flex;
       flex: 1;
@@ -122,35 +131,22 @@
     .ts-card-head svg {
       flex: none;
     }
-    .ts-missing {
-      padding: calc(4 * var(--u)) calc(10 * var(--u));
-      border: calc(1 * var(--u)) solid var(--border);
-      border-radius: 999px;
-      background: var(--muted);
-      color: var(--muted-foreground);
-      font-size: calc(11 * var(--u));
-      line-height: calc(14 * var(--u));
-    }
-    .ts-card-tool,
-    .ts-chevron {
-      display: grid;
-      place-items: center;
-      color: var(--muted-foreground);
-    }
+    /* The expand button: a ghost icon button in size-7. */
     .ts-card-tool {
       width: calc(28 * var(--u));
       height: calc(28 * var(--u));
     }
+    /* The chevron: size-4, turned up while the card is open. */
     .ts-chevron {
-      padding: calc(4 * var(--u));
+      color: var(--muted-foreground);
     }
-    .ts-chevron[data-open] svg {
+    .ts-card[data-open] .ts-chevron {
       rotate: 180deg;
     }
-    /* The description: the document text with its copy button. */
+    /* The description: px-3 pb-3, the text with pr-10, and the copy button at top-2 right-2. */
     .ts-card-text {
       position: relative;
-      padding: calc(12 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u));
+      margin: 0 calc(12 * var(--u)) calc(12 * var(--u));
     }
     .ts-card-text p {
       padding-right: calc(40 * var(--u));
@@ -161,7 +157,7 @@
     .ts-copy {
       position: absolute;
       top: calc(8 * var(--u));
-      right: calc(16 * var(--u));
+      right: calc(8 * var(--u));
       display: grid;
       place-items: center;
       width: calc(28 * var(--u));

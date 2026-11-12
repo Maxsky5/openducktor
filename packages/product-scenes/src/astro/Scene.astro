@@ -3,16 +3,16 @@
 // with react-dom/server, so the page loads no React. The script mounts the timeline of each scene
 // on the page.
 import { MAC_KEYS, type KeyLabels } from "../replicas/keys";
-import type { SceneName, SceneOptionsProp } from "../registry";
+import type { SceneOptionsProp, SiteSceneName } from "../registry";
 import { renderView } from "./render";
 
 type Props = {
-  [Name in SceneName]: {
+  [Name in SiteSceneName]: {
     name: Name;
     /** The keys that the scene shows. The default is the macOS keys. */
     keys?: KeyLabels;
   } & SceneOptionsProp<Name>;
-}[SceneName];
+}[SiteSceneName];
 const { name, keys = MAC_KEYS, options }: Props = Astro.props;
 const html = renderView(name, keys, options ?? {});
 ---

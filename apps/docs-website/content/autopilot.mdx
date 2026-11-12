@@ -1,0 +1,70 @@
+---
+icon: Bot
+title: Autopilot
+description: Let OpenDucktor start the next agent when a task reaches a new lane.
+---
+
+Autopilot starts the next agent of a task when the task reaches a new lane. The workflow of the task declares the moves that Autopilot can react to, and the agents that it can start. You choose which rules run. Each rule is off until you turn it on.
+
+<ProductDemo id="autopilot" />
+
+## How a rule works [#rule-actions]
+
+<Diagram name="autopilotRule" />
+
+A rule connects one workflow signal to one action. A signal is a move that the workflow names, such as **When a task progresses to AI Review**. The action starts one role of the workflow. For the rules of the built-in workflow, see [Autopilot rules of Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/#autopilot-rules).
+
+Each action starts its agent in one of these sessions. The workflow sets which one.
+
+- A fresh session.
+- The last session of the role in the task worktree. Without one, a fresh session if the action allows it.
+- A fork of the last session of the role. Without one, Autopilot skips the action.
+
+A new session uses the [default model of its role](/models/#role-defaults), or the **Default model** if the role has none. A continued or forked session keeps its model.
+
+## Turn on rules [#turn-on-rules]
+
+<Steps>
+<Step>Open [**Settings**](/settings-reference/#open-settings), then **Autopilot**.</Step>
+<Step>Under the workflow name, for example **Spec, Plan, Build**, find the event that you want. Change **Disabled** to its action, for example **Start QA**.</Step>
+<Step>Select <Action>Save settings</Action>.</Step>
+</Steps>
+
+<Screenshot id="settings-autopilot" alt="The Autopilot section of Settings. The Always start QA reviews in a fresh session switch is off. Under Spec, Plan, Build, each event shows its action: Start Planner, Start Builder, Start QA, Fix QA Rejection, and Generate Pull Request." />
+
+Each workflow has its own rules. A rule acts on task changes after you save it. It does not start an agent for a task that is already in that lane.
+
+**Always start QA reviews in a fresh session** applies to every workflow. When it is on, each review that Autopilot starts gets a new session, also when the action reuses sessions. A review is the step of a role that saves a verdict, such as QA.
+
+## Where Autopilot stops [#human-approval]
+
+Autopilot only starts agents. It does not do these steps:
+
+- Start the first agent of a new task. A new task has not moved yet, so no rule applies.
+- Answer the questions and permission requests of agents.
+- [Approve](/git-and-pull-requests/#approve-a-task) a task, merge code, or close a task.
+- Start an agent after a move that the workflow does not name, such as a reset.
+- Start a session in [Goal mode](/coding-sessions/#goal-mode). Autopilot sends the first message of the step.
+
+## When Autopilot cannot start an agent [#skipped-or-failed]
+
+If an action cannot start, an in-app notification shows the reason, for example "Autopilot skipped Generate Pull Request for fieldnotes-dabt." Common causes:
+
+- The Git provider is not ready.
+- The action needs a session or a task worktree that does not exist.
+- The role has no model.
+- The task moved to another lane before the action started.
+
+Fix the cause, then start the action from the task.
+
+If the session started but its first message failed, select <Action>Retry message</Action> in the notification.
+
+<Callout type="info" title="Keep OpenDucktor running">Autopilot runs only while the OpenDucktor host runs. It acts for every open workspace, also when no window shows it. It does not start agents for task changes from before the host started. If the host stops before an agent starts, start that step from the task.</Callout>
+
+## Next [#next]
+
+<Cards>
+  <Card title="Spec, Plan, Build workflow" href="/tasks-and-workflows/spec-plan-build/#autopilot-rules">Read what each rule of the built-in workflow starts.</Card>
+  <Card title="Git and pull requests" href="/git-and-pull-requests/">Approve the work with a merge or a pull request.</Card>
+  <Card title="Settings reference" href="/settings-reference/#autopilot">Read every Autopilot setting.</Card>
+</Cards>

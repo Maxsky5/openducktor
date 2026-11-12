@@ -4,7 +4,7 @@ import {
   BUILD_FILES,
   BUILDER_FIX_SESSION,
   BUILDER_SESSION,
-  DOCUMENTS,
+  ARTIFACTS,
   FIXED_FILES,
   fileOf,
   FRAMES,
@@ -17,7 +17,7 @@ import type { RowId } from "../../sample/transcripts";
 import {
   endTurn,
   runSession,
-  saveDocument,
+  saveArtifact,
   settleSession,
   showPanel,
   startSession,
@@ -37,7 +37,7 @@ export function qa(scene: Scene<QaTemplate>): void {
   studio.hideTurns("qa", "fix");
   studio.setSessionShown("build");
   studio.apply(FRAMES.build);
-  studio.panels.setDocument(DOCUMENTS.qa, false);
+  studio.panels.setArtifact(ARTIFACTS.qa, false);
   for (const file of BUILD_FILES) studio.panels.setFile(file);
   studio.panels.setTotals(BUILD_FILES);
   studio.panels.setAhead(1);
@@ -61,11 +61,10 @@ export function qa(scene: Scene<QaTemplate>): void {
   studio.rows.tool(row("read-hook"), reviewing + 1.4, 0.25);
   studio.rows.tool(row("test"), reviewing + 1.9, 1);
   studio.rows.tool(row("search"), reviewing + 3.2, 0.4);
-  const rejected = saveDocument(
+  const rejected = saveArtifact(
     studio,
     row("rejected"),
     reviewing + 4,
-    DOCUMENTS.qa.updated,
     { tones: ["done", "done", "done", "rejected"], action: "Address QA Feedbacks" },
     2.2,
   );

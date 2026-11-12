@@ -1,7 +1,5 @@
-// The sample data of the workflow scene: the chapters, the questions of the Spec agent, and the
-// files of the review.
+// The sample data of the workflow scene: the chapters and the files of the review.
 import type { GitFile } from "../../replicas/studio/model";
-import type { Question } from "../../replicas/transcript/model";
 import { HOOK_PATH, REVIEWED_FILES } from "../../sample/studio";
 
 /** The workflow steps: the tab label, the step text, and the text alternative of the view. */
@@ -10,7 +8,7 @@ export const CHAPTERS = [
     id: "spec",
     label: "Spec",
     text: "The Spec agent reads the task and asks you what it needs to know. Then it writes the specification.",
-    alt: "The session page of a task. The Spec agent asks which shortcut opens search and whether it works in text fields. While it waits, its session moves to Needs you in the sidebar. After the answers, it saves the specification in the Document tab.",
+    alt: "The session page of a task. The Spec agent asks which shortcut opens search and whether it works in text fields. While it waits, its session moves to Needs you in the sidebar. After the answers, it saves the specification in the Artifacts tab.",
   },
   {
     id: "plan",
@@ -39,37 +37,6 @@ export const CHAPTERS = [
 ] as const;
 
 export type ChapterId = (typeof CHAPTERS)[number]["id"];
-
-/** The questions of the Spec agent, with the answers that you pick. */
-export const SPEC_QUESTIONS: readonly Question[] = [
-  {
-    header: "Shortcut",
-    question: "Which shortcut opens search?",
-    options: [
-      {
-        label: "Cmd+K / Ctrl+K",
-        description: "Common in editors and chat apps. Free in Fieldnotes.",
-      },
-      {
-        label: "Cmd+/ / Ctrl+/",
-        description: "Free, but some keyboard layouts need Shift for /.",
-      },
-    ],
-    answer: "Cmd+K / Ctrl+K",
-  },
-  {
-    header: "Text fields",
-    question: "Should the shortcut work while typing in a text field?",
-    options: [
-      {
-        label: "No, ignore it in text fields",
-        description: "The note editor keeps Cmd+K for links.",
-      },
-      { label: "Yes, everywhere", description: "Search opens even while you type a note." },
-    ],
-    answer: "No, ignore it in text fields",
-  },
-];
 
 /** The files of the review, with the hook open on its diff. */
 export const REVIEW_FILES: readonly GitFile[] = REVIEWED_FILES.map((file) =>

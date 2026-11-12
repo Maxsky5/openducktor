@@ -4,10 +4,10 @@ import { gsap } from "../../motion/gsap";
 import { typeText } from "../../motion/text";
 import { EASE } from "../../motion/tokens";
 import type { SceneBuilder } from "../../motion/scene";
-import { composerActivity, contextMeter } from "../../replicas/shell/composer";
+import { composerActivity, composerDraft, contextMeter } from "../../replicas/shell/composer";
 import { pointer } from "../../replicas/shell/cursor";
 import { sessionList } from "../../replicas/shell/nav-list";
-import { notify } from "../../replicas/shell/notify";
+import { startupToast } from "../../replicas/shell/startup-toast";
 import { startDialog } from "../../replicas/studio/start-dialog";
 import { follow, transcript } from "../../replicas/transcript/rows";
 import { contextUse } from "../../sample/sessions";
@@ -29,17 +29,16 @@ import {
  * A workspace chat turns one request into Backlog tasks. The visitor picks a reusable prompt
  * from the slash menu and types the request. The agent searches the tasks, then creates the
  * tasks that are missing with the OpenDucktor MCP tools. Then the visitor opens a new task from
- * its card and starts its Builder in the background, so the chat stays on screen. The markup
- * holds the last frame.
+ * its card and starts its Builder in the background, so the chat stays on screen. The startup
+ * notification shows each step until the Builder is ready. The markup holds the last frame.
  */
 export const build: SceneBuilder<ChatTemplate> = (scene) => {
   const root = must(scene.stage, "[data-root]");
   const track = must(root, "[data-track]");
-  const editor = must(root, "[data-editor]");
+  const composer = composerDraft(scene, root);
+  const { editor, typed, button: send } = composer;
   const chip = must(editor, "[data-chip]");
-  const typed = must(editor, "[data-typed]");
   const menu = must(root, "[data-slash]");
-  const send = must(root, "[data-send]");
   const meter = must(root, "[data-meter]");
   const row = (name: string): HTMLElement => must(track, `[data-row="${name}"]`);
   const searchArgs = must(row("search"), "[data-tool-args]");
@@ -48,6 +47,8 @@ export const build: SceneBuilder<ChatTemplate> = (scene) => {
   const setContext = contextMeter(meter);
   const rows = transcript(scene, root);
   const cursor = pointer(scene, root);
+  const toasts = must(root, "[data-toasts]");
+  const toast = startupToast(scene, toasts, must(toasts, "[data-startup-toast]"));
   follow(scene, track);
 
   // Start: a new chat. The transcript is empty and the runtime has reported no context use. The
@@ -56,14 +57,15 @@ export const build: SceneBuilder<ChatTemplate> = (scene) => {
   for (const child of all(track, ":scope > *")) child.hidden = true;
   for (const card of all(track, "[data-task]")) card.hidden = true;
   meter.hidden = true;
+  toast.hide();
   searchArgs.textContent = SEARCH.running;
   setActivity("idle");
 
   // The visitor clicks the composer and types a slash query. The menu lists the matching prompts.
   const focused = cursor.click(() => editor, 0.5, 0.9);
-  scene.at(focused, () => typed.toggleAttribute("data-typing", true));
+  composer.focus(focused);
   const queryAt = focused + 0.4;
-  scene.at(queryAt, () => editor.toggleAttribute("data-draft", true));
+  composer.draft(queryAt);
   const queried = typeText(scene, typed, QUERY, queryAt, { charsPerSecond: 12 });
   scene.at(queried, () => {
     menu.toggleAttribute("data-open", true);
@@ -77,18 +79,15 @@ export const build: SceneBuilder<ChatTemplate> = (scene) => {
     typed.textContent = "";
     chip.hidden = false;
     scene.run(pop(chip, 1.08));
-    send.toggleAttribute("data-ready", true);
   });
+  composer.ready(picked);
   const requested = typeText(scene, typed, REQUEST, picked + 0.4, { charsPerSecond: 22 });
 
   // Send posts the prompt text with the request in place of $ARGUMENTS.
   const sent = cursor.click(() => send, requested + 0.25, 0.7);
+  composer.send(sent);
   scene.at(sent, () => {
-    typed.removeAttribute("data-typing");
-    typed.textContent = "";
     chip.hidden = true;
-    editor.removeAttribute("data-draft");
-    send.removeAttribute("data-ready");
     setActivity("working");
   });
   sessions.update(CHAT_ENTRY.id, sent, { running: true, selected: true });
@@ -153,12 +152,23 @@ export const build: SceneBuilder<ChatTemplate> = (scene) => {
     );
   });
 
-  // Run in background starts the Builder. The chat stays, and the session joins Running.
+  // Run in background closes the dialog at once. The chat stays, and the startup notification
+  // shows each step of the new task worktree and the session.
   const dialog = scene.template("builder-dialog");
   const closed = startDialog(scene, root, cursor, dialog, clicked + 0.1, "background");
-  const started = closed - 0.5;
   cursor.hide(closed);
-  sessions.update(BUILDER.id, started);
-  notify(scene, must(root, "[data-toasts]"), "toast-started", started + 0.2, 3.4);
-  scene.endAt(started + 4.4);
+  const shown = closed - 0.25;
+  toast.show(shown);
+  toast.setStep("checkout", "running", shown + 0.3);
+  toast.setStep("checkout", "completed", shown + 1.2);
+  toast.setStep("upstream", "running", shown + 1.2);
+  toast.setStep("upstream", "completed", shown + 1.6);
+  toast.setStep("session", "running", shown + 1.6);
+  toast.setStep("session", "completed", shown + 2.6);
+
+  // The Builder is ready. The notification shows Open, and the session joins Running.
+  const ready = shown + 2.6;
+  toast.ready(ready);
+  sessions.update(BUILDER.id, ready);
+  scene.endAt(ready + 3);
 };

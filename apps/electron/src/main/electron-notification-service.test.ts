@@ -124,7 +124,11 @@ describe("Electron notification service", () => {
       const result = await service.show({ ...request, purpose });
       expect(result).toEqual({
         status: "denied",
-        message: expect.stringContaining(permission === "prompt" ? "Test OS" : "system settings"),
+        permission,
+        message:
+          permission === "prompt"
+            ? "OS notification permission is required."
+            : "OS notification permission was denied. Enable notifications in system settings.",
       });
       expect(FakeNativeNotification.instances).toHaveLength(0);
       service.dispose();

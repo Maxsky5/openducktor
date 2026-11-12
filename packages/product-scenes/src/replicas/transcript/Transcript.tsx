@@ -9,6 +9,7 @@ import { PatchCard } from "./PatchCard";
 import { ToolRow } from "./ToolRow";
 import { UserMessage } from "./UserMessage";
 import { WorkflowCard } from "./WorkflowCard";
+import { Paragraph } from "../ui/InlineCode";
 import "./Transcript.css";
 
 type TranscriptProps = {
@@ -16,18 +17,6 @@ type TranscriptProps = {
   sessions: readonly SessionData[];
   shown: string;
 };
-
-/** A paragraph with its inline code spans, which the text marks with backticks. */
-function Paragraph({ text }: { text: string }): ReactElement {
-  return (
-    <p>
-      {text.split("`").map((part, index) =>
-        // The parts of a split never change order, so the index is a stable key.
-        index % 2 === 1 ? <code key={index}>{part}</code> : part,
-      )}
-    </p>
-  );
-}
 
 function TranscriptRow({ row }: { row: Row }): ReactElement {
   switch (row.kind) {
@@ -51,7 +40,16 @@ function TranscriptRow({ row }: { row: Row }): ReactElement {
         </ToolRow>
       );
     case "workflow":
-      return <WorkflowCard name={row.name} duration={row.duration} time={row.time} row={row.id} />;
+      return (
+        <WorkflowCard
+          title={row.title}
+          icon={row.icon}
+          pr={row.pr}
+          duration={row.duration}
+          time={row.time}
+          row={row.id}
+        />
+      );
     case "patch":
       return (
         <PatchCard path={row.path} kind={row.change} add={row.add} del={row.del} row={row.id} />

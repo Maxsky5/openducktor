@@ -95,6 +95,43 @@ describe("SessionPanelSplit", () => {
     });
   });
 
+  for (const { direction, key } of [
+    { direction: "horizontal", key: "ArrowRight" },
+    { direction: "vertical", key: "ArrowDown" },
+  ] as const) {
+    test(`resizes a ${direction} panel that opened after the split mounted with ${key}`, () => {
+      const removePanelLayout = installPanelLayout();
+      try {
+        const split = (presence: PanelPresence) => (
+          <SessionPanelSplit
+            ids={ids}
+            model={{ presence, onSettled: () => {}, onCollapsed: () => {} }}
+            direction={direction}
+            sizes={sizes}
+            separatorLabel="Resize panel"
+            className=""
+            mainClassName=""
+            main={<p>Chat</p>}
+            panel={<p>Panel content</p>}
+          />
+        );
+        const view = render(split("closed"));
+        expect(screen.queryByRole("separator", { name: "Resize panel" })).toBeNull();
+        view.rerender(split("open"));
+        const separator = screen.getByRole("separator", { name: "Resize panel" });
+
+        act(() => {
+          separator.focus();
+          fireEvent.keyDown(separator, { key });
+        });
+
+        expect(panelElement().style.flexGrow).toBe(String(sizes.panel - 5));
+      } finally {
+        removePanelLayout();
+      }
+    });
+  }
+
   test("ends a move at once when no slide runs, as with reduced motion", () => {
     const onSettled = mock(() => {});
     const view = render(renderSplit("closed", onSettled));
@@ -139,7 +176,7 @@ describe("SessionPanelSplit", () => {
       );
       expect(contentElement().dataset.moving).toBe("closing");
       expect(contentElement().hasAttribute("inert")).toBe(true);
-      expect(screen.getByRole("separator", { hidden: true }).hidden).toBe(true);
+      expect(screen.getByRole("separator", { hidden: true }).style.visibility).toBe("hidden");
       expect(onSettled).not.toHaveBeenCalled();
 
       slide.end();

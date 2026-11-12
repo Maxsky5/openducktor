@@ -120,8 +120,9 @@
     }
   }
   @media (width <= 479px) {
-    /* The footer links to the releases on a phone. */
+    /* The footer links to the releases and the documentation on a phone. */
     .header-download,
+    .docs-link,
     .release {
       display: none;
     }

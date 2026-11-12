@@ -1,0 +1,164 @@
+---
+icon: GitPullRequest
+title: Git and pull requests
+description: Review the branch of a task, connect GitHub, GitLab, or Azure DevOps, and finish the work with a merge or a pull request.
+---
+
+Each task works on its own branch. You review the branch, then finish the work with a direct merge or a pull request on GitHub, GitLab, or Azure DevOps.
+
+## Task worktrees and branches [#task-worktrees]
+
+A worktree is a second folder of your repository. It has the task branch checked out, so your checkout does not change. The first session of the task creates the branch and the worktree.
+
+<Diagram name="worktree" />
+
+The target branch is the branch that the work merges into. You choose it when the Builder starts.
+
+<Screenshot id="start-builder-dialog" alt="The Start Builder session dialog with Target branch main, the model Haiku 5.5, and low effort. The Goal mode and Customize first message switches are off. At the bottom are Cancel, Run in background, and Start session." />
+
+To change the folder, the branch prefix, or the default target branch, see [Repository configuration](/settings-reference/#repository-configuration).
+
+## Connect a Git provider [#git-provider]
+
+A Git provider links a repository to GitHub, GitLab, or Azure DevOps. With a provider, the Builder opens pull requests, the [**CI Checks** tab](#ci-checks) shows their checks and review comments, and you can import issues as tasks. A direct merge needs no provider.
+
+Each repository has its own provider. Set it in **Settings**, **Repositories**, your repository, then the **Git** tab. The setup wizard of a new workspace has the same step.
+
+<Cards>
+  <Card icon="GitHub" title="GitHub" href="/git-and-pull-requests/github/">Uses the GitHub CLI. Also for GitHub Enterprise Server.</Card>
+  <Card icon="GitLab" title="GitLab" href="/git-and-pull-requests/gitlab/">Sign in on GitLab.com, or use an access token. Also for self-managed GitLab.</Card>
+  <Card icon="AzureDevOps" title="Azure DevOps" href="/git-and-pull-requests/azure-devops/">Sign in with Microsoft, or use a personal access token. Also for Azure DevOps Server.</Card>
+</Cards>
+
+OpenDucktor calls them pull requests for every provider. On GitLab, they are merge requests.
+
+## Sync the task branch [#view-changes]
+
+The top of the **Diffs** tab keeps the task branch in sync with its remote and its target branch. To read the changes, see [Review the work](/coding-sessions/#inspect-work).
+
+<AnnotatedScreenshot
+  id="task-git-header"
+  alt="The top of the Diffs tab. The task branch odt/fieldnotes-170l-show-the-notebook-count points to the target branch main, with 1 commit ahead and 0 behind. Under it are the Refresh, Rebase onto target, Pull, and Push branch icons, with 1 on Push, and Detect PR. Rebase and Pull are off because the worktree has uncommitted changes."
+  parts={[
+    { at: "branches", title: "Branches", text: "The task branch, then the target branch. Select the target to change it. Green counts the commits to push. Red counts the target commits that the task branch does not have." },
+    { at: "sync-buttons", title: "Sync buttons", text: "Refresh, rebase, pull, and push. See the list under the screenshot." },
+    { at: "detect-pr", title: "Detect PR", text: "Finds the pull request of the task branch on the Git provider and links it to the task. It shows while the task has no pull request." },
+  ]}
+/>
+
+<IconList>
+<IconItem icon="RefreshCw" title="Refresh changes">Fetches the remote and reads the branch again.</IconItem>
+<IconItem icon="Target" title="Rebase onto target">Rebases the task branch onto the target branch. A red number counts the target commits to take.</IconItem>
+<IconItem icon="ArrowDown" title="Pull">Pulls the commits of the remote task branch. A red number counts them. If the task branch also has new commits, the pull rebases them, and you confirm first.</IconItem>
+<IconItem icon="ArrowUp" title="Push branch">Pushes the task branch. A green number counts the commits to push. If the remote branch has other commits, you confirm a force push with lease.</IconItem>
+</IconList>
+
+Rebase and Pull are off while the worktree has uncommitted changes. Commit or stash them first.
+
+### Resolve a conflict [#git-conflicts]
+
+<ProductDemo id="git-conflict" />
+
+When a rebase, a pull, or a direct merge stops on conflicts, a dialog lists the conflicted files and the Git output. Until the conflict ends, a strip at the top of the **Diffs** tab shows it.
+
+- Select <Action>Resolve conflicts</Action> to send the conflict to the Builder. Choose a Builder session, then select <Action>Start session</Action>. The Builder resolves the files, runs the checks, and finishes the rebase or merge.
+- Select <Action>Abort rebase</Action> or <Action>Abort merge</Action> to stop the operation. The branch goes back to its state before it.
+
+## Approve a task [#approve-a-task]
+
+Before a merge or a pull request, commit or discard the changes in the task worktree. Stop the running sessions of the task before a direct merge.
+
+<Diagram name="approval" />
+
+<Steps>
+<Step>At the top right, select <Action>Approve Task</Action>. If the main button shows another action, open the menu next to it, then select <Action>Approve Task</Action>.</Step>
+<Step>Select **Direct merge**, **Pull request**, or **Close task**. **Close task** merges no code.</Step>
+</Steps>
+
+**Pull request** shows only when the repository has a [Git provider](#git-provider). The dialog then selects it first. If the provider is not ready, the choice shows the reason. If the task branch is already merged into the target branch, the dialog selects **Close task**.
+
+### Merge directly [#direct-merge]
+
+<Screenshot id="approve-dialog" alt="The Approve task dialog with Direct merge selected, the Merge commit, Squash, and Rebase methods, the Remove worktree and branch switch on, and Merge locally." />
+
+<Steps>
+<Step>Select a merge method: **Merge commit**, **Squash**, or **Rebase**. For **Squash**, enter the **Squash commit message**.</Step>
+<Step>Select <Action>Merge locally</Action>. OpenDucktor merges the task branch into your local target branch.</Step>
+<Step>If the target branch has a remote, select <Action>Push main and mark done</Action>. The button shows the name of your target branch. Without a remote, the task moves to <Status of="closed" /> at once.</Step>
+</Steps>
+
+<Action>Finish later</Action> closes the dialog before the push. The merge stays in your local target branch, and the task stays in <Status of="human_review" />. Until you push, no agent session of the task can start. The task offers only <Action>Approve Task</Action>, <Action>Close Task</Action>, <Action>Reset Implementation</Action>, and the actions that open its sessions. Select <Action>Approve Task</Action> again to push.
+
+If the merge stops on conflicts, see [Resolve a conflict](#git-conflicts). To change the merge method that the dialog selects first, see [Default merge method](/settings-reference/#git-default-merge-method).
+
+### Open a pull request [#pull-request]
+
+<Screenshot id="approve-dialog-pull-request" alt="The Approve task dialog with the three choices Direct merge, Pull request, and Close task. Pull request is selected, with the Write manually and Ask Builder drafts, Ask Builder selected, and the Choose Builder session button." />
+
+Choose who writes the pull request:
+
+- **Ask Builder**: select <Action>Choose Builder session</Action>. Select **Reuse existing** to continue a Builder session, or **Fork existing** to continue in a copy of it, then select <Action>Start session</Action>. The Builder follows the pull request template of the repository, pushes the branch, and opens the pull request with the tools of its shell. For GitLab and Azure DevOps, install a CLI first. See [GitLab](/git-and-pull-requests/gitlab/#pull-requests) and [Azure DevOps](/git-and-pull-requests/azure-devops/#pull-requests).
+- **Write manually**: enter the **Pull request title** and the **Pull request description**, then select <Action>Create pull request</Action>. OpenDucktor pushes the branch and creates the pull request with the provider connection. If the task has an open pull request, OpenDucktor updates it.
+
+In <Status of="human_review" />, the session page can also show <Action>Generate Pull Request</Action>. It opens the same session choice.
+
+## Follow a pull request [#pull-request-lifecycle]
+
+<Diagram name="pullRequest" />
+
+The Builder runs the local checks, pushes the task branch, and creates or updates the pull request. Then it links the pull request to the task and waits for the required checks. If a check fails, the Builder fixes the cause and pushes again. The task stays in its lane, and the top bar of the session page shows the pull request.
+
+OpenDucktor does not merge the pull request. You merge it on the Git provider.
+
+### CI checks [#ci-checks]
+
+<ProductDemo id="ci-checks" />
+
+The right panel of a task session shows the **CI Checks** tab when the task has a linked pull request. The tab shows the checks of the pull request, then its [comments](#review-comments).
+
+- The tab reads the checks when it opens. It does not update itself. To read them again, select the refresh button next to **Updated**.
+- Open a check to see its workflow, its details, and its start and end times. To read its log, select its link icon. The check opens on the Git provider.
+- The dot on the tab shows the status: blue while checks run, red when a check fails, and green when all checks pass. A number on the tab counts the open review threads.
+
+The tab does not start a fix. The Builder session that wrote the pull request fixes failed checks while it waits. After that session ends, send it a message to ask for a fix.
+
+### Review comments [#review-comments]
+
+<ProductDemo id="pr-comments" />
+
+Under the checks, **Comments** lists the reviews and the comments of the pull request, as the Git provider shows them.
+
+- **Reviews** show their result: **Approved**, **Changes requested**, **Commented**, or **Review dismissed**. Comments of automated accounts show **Bot**.
+- **Comments on a line** show **Unresolved** or **Resolved**, the file and the line, and the code that they are about. Unresolved comments open, and resolved comments stay closed.
+- **Suggested changes** of a reviewer show as a diff in a **Suggested change** box under the comment.
+- **Filters**: select **All**, **Humans**, or **Bots**. To hide the resolved comments, select <Action>Filter comments</Action>, then turn on **Hide resolved**. OpenDucktor keeps this choice.
+- **Replies**: select the link icon of a comment to open it on the Git provider. You reply to a comment and resolve it there.
+
+The agent does not read the tab. To fix a comment, tell the Builder what to change, for example:
+
+<AgentMessage>{`Apply the suggestion of maya in src/search/use-search-shortcut.ts, then push.`}</AgentMessage>
+
+### When the pull request merges [#merged-pull-requests]
+
+OpenDucktor reads the pull requests of each open workspace when it starts, then every 5 minutes. When it finds a merged pull request, OpenDucktor stops the task terminals and sessions, runs the cleanup, and moves the task to <Status of="closed" />. It asks for no confirmation. A pull request closed without a merge does not close the task.
+
+To read the pull requests now, run <Action>Sync pull requests</Action> from the [command palette](/command-palette/#git-actions). If a task cannot close, for example because its worktree has uncommitted files, the task card shows the reason and a <Action>Close Task</Action> action.
+
+## Cleanup [#cleanup-choices]
+
+When a task closes, OpenDucktor can remove the task worktree and the local task branch. The way the task closes decides:
+
+- **Direct merge** and **Close task**: the **Remove worktree and branch** switch of the dialog decides. Cleanup removes the task worktree, the session worktrees, and their local branches.
+- A merged pull request: the **Remove worktree on close** field of the task decides. **Default** follows [Remove task worktree on close](/settings-reference/#git-remove-task-worktree-on-close). Cleanup removes the task worktree and the task branch. Uncommitted files stop the close.
+
+Cleanup keeps the task, its artifacts, its session history, and its pull request link. To remove a kept worktree later, open the closed task and select <Action>Remove Worktree</Action> in its actions menu.
+
+<Callout type="warn" title="Cleanup deletes work">Push the work that you want to keep before a task closes. Commits that exist only on the local task branch are lost.</Callout>
+
+## Next [#next]
+
+<Cards>
+  <Card title="Spec, Plan, Build workflow" href="/tasks-and-workflows/spec-plan-build/">Learn the review steps before approval.</Card>
+  <Card title="Autopilot" href="/autopilot/">Let the Builder create the pull request for you.</Card>
+  <Card title="Settings reference" href="/settings-reference/#repository-git">Read every Git and provider setting.</Card>
+</Cards>

@@ -1,0 +1,30 @@
+@layer replica {
+  :where(.stage) {
+    /* The query of the search field. It shows in place of the placeholder while the field has the
+       focus, also on a phone stage, where the field shows only its icon without the focus. */
+    .fn-search-query {
+      display: none;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--fn-ink);
+      white-space: nowrap;
+    }
+    .fn-search[data-focus] {
+      border-color: var(--fn-brand);
+      box-shadow: 0 0 0 calc(3 * var(--u)) var(--fn-brand-tint);
+    }
+    .fn-search[data-focus] .fn-search-text,
+    .fn-search[data-focus] .fn-kbd {
+      display: none;
+    }
+    .fn-search[data-focus] .fn-search-query {
+      display: block;
+    }
+    /* The page keeps its light look, so the caret is dark in both themes. */
+    .fn .fn-search-query.typed[data-typing]::after {
+      height: calc(15 * var(--u));
+      background: var(--fn-ink);
+    }
+  }
+}

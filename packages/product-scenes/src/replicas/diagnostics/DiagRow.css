@@ -23,7 +23,7 @@
       height: calc(36 * var(--u));
       border: calc(1 * var(--u)) solid var(--border);
       border-radius: calc(12 * var(--u));
-      background: color-mix(in oklch, var(--muted) 50%, transparent);
+      background: color-mix(in oklab, var(--muted) 50%, transparent);
       color: var(--muted-foreground);
     }
     .diag-tile .runtime-logo {

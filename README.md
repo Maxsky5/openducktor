@@ -4,6 +4,8 @@ OpenDucktor is an Agentic Development Environment built around tasks, repositori
 
 It uses a workspace-scoped SQLite task store as the task source of truth, orchestrates Specification, Planner, Builder, and QA sessions, and keeps documents, approvals, and delivery state attached to each task instead of scattered across chat threads.
 
+Read the user documentation at [doc.openducktor.dev](https://doc.openducktor.dev/).
+
 ![OpenDucktor Kanban board](docs/assets/screenshots/kanban-board.png)
 
 <details>
@@ -65,7 +67,7 @@ The web runner opens OpenDucktor in your browser on macOS, Linux, or Windows. It
 npx @openducktor/web
 ```
 
-See the [installation guide](docs/installation.md) for requirements, more install options, and update steps.
+See [Install and update](https://doc.openducktor.dev/install-and-update/) for requirements, more install options, the browser runner, and update steps. See [Remote control](https://doc.openducktor.dev/remote-control/) to use OpenDucktor from a phone or another computer.
 
 ## User Prerequisites
 
@@ -132,6 +134,10 @@ OpenDucktor keeps application lifecycle logs in `~/.openducktor/logs` by default
 Files rotate on the host's local calendar day. OpenDucktor retains the current date and the preceding 29 dates.
 
 ## Documentation
+
+User guides are at [doc.openducktor.dev](https://doc.openducktor.dev/). Their source is in [apps/docs-website](apps/docs-website/README.md).
+
+Developer documentation:
 
 - [docs/README.md](docs/README.md)
 - [docs/architecture-overview.md](docs/architecture-overview.md)

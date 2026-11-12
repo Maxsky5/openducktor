@@ -1,0 +1,148 @@
+---
+icon: Workflow
+title: Tasks and workflows
+description: Create a task, follow it on the board, start its agents, and approve, reset, close, or delete it.
+---
+
+A task is one piece of work, such as a feature or a bug fix. Its workflow moves it across the lanes of the board. At each step, you or [Autopilot](/autopilot/) start an agent, and at the end you review the work.
+
+OpenDucktor has one built-in workflow, [Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/), and every workspace uses it. This page shows what is the same in every workflow. The workflow page shows each lane, role, and action of Spec, Plan, Build.
+
+## Create a task [#create-a-task]
+
+<Screenshot id="new-task-type" alt="The first step of the Create task dialog. It offers three issue types: Feature, Bug, and Task, each with a short description." />
+
+<Steps>
+  <Step>In the sidebar, select <Action>New task</Action>.</Step>
+  <Step>Select the issue type: **Feature**, **Bug**, or **Task**.</Step>
+  <Step>Type a **Title** and a **Description**. Change the other fields if necessary.</Step>
+  <Step>Select <Action>Create task</Action>. The task shows in the first lane of the board, for example <Status of="open" />.</Step>
+</Steps>
+
+| Field | What it does |
+|---|---|
+| **Priority** | From **P0 · Critical** to **P4 · Very low**. New tasks get **P2 · Normal**. The card shows it, and you can filter the board by it. |
+| **Description** | Tells the agents what to do. It is Markdown, and it can contain images. |
+| **Labels** | Group the tasks. You can search and filter the board by label. |
+| **Remove worktree on close** | **Default**, **Yes**, or **No**. It decides if a merged pull request removes the worktree and the local task branch. See [Cleanup](/git-and-pull-requests/#cleanup-choices). |
+
+To change a field later, open the task details, then select <Action>Edit</Action>.
+
+### Issue types [#issue-types]
+
+The issue type tells the workflow which steps the task needs. In Spec, Plan, Build, a feature gets a spec and a plan before the build. The Builder can start a task or a bug immediately. See [Issue types of Spec, Plan, Build](/tasks-and-workflows/spec-plan-build/#issue-types).
+
+## The board [#board-lanes]
+
+The board has one lane for each state of the workflow. Each card is one task.
+
+<AnnotatedScreenshot
+  id="board"
+  alt="The board of the fieldnotes workspace. The header has Search tasks, the Labels, Type, and Priority filters, the card view buttons, and Refresh Tasks. The Backlog and Spec Ready lanes have 4 tasks each, and Ready for Dev has 2. Each card shows its title, the Feature and P2 badges, its ID, its session links, and its main action, such as Start Spec, Start Planner, or Start Builder."
+  parts={[
+    { at: "search-and-filters", title: "Search and filters", text: "Search finds a task by its title, its ID, or a label. Labels, Type, and Priority show only the matching tasks. Cmd+F or Ctrl+F selects the search field." },
+    { at: "card-view", title: "Card view", text: "Shows Normal cards or Compact cards." },
+    { at: "lane", title: "Lane", text: "One state of the workflow, with the number of tasks in it." },
+    { at: "task-card", title: "Task card", text: "Select the card to open the task details." },
+    { at: "badges", title: "Badges", text: "The issue type, the priority, the task ID with a copy button, and the labels." },
+    { at: "session-links", title: "Session links", text: "Open the session of a role that worked on the task, here the Planner." },
+    { at: "main-action", title: "Main action", text: "The next step of the task, such as Start Builder." },
+    { at: "other-actions", title: "Other actions", text: "The other actions that the task allows now." },
+  ]}
+/>
+
+While an agent works on a task, its card has a moving border. The main button then shows the role and **Running**. When the agent waits for your answer, the button shows **Waiting input**.
+
+The board shows a task in <Status of="closed" /> for 1 day. To change this, see [Done tasks visible for](/settings-reference/#kanban-done-tasks-visible-for). To hide or collapse the empty lanes, see [Empty columns](/settings-reference/#kanban-empty-columns).
+
+## How a task moves [#workflows]
+
+<Diagram name="taskFlow" />
+
+The workflow sets the lanes and the moves between them. An agent moves a task in one of two ways:
+
+- It saves a workflow artifact, such as a spec. See [Artifacts](#artifacts).
+- It sends a workflow event, such as **Build Completed**. The transcript shows the event as a card with the note of the agent.
+
+You move a task with an action, such as <Action>Approve Task</Action> or <Action>Close Task</Action>. With [Autopilot](/autopilot/) rules on, OpenDucktor starts the next agent when the task moves.
+
+### Start an agent [#agent-roles]
+
+Each agent has a role, such as the Builder. The role sets its tools, its access to the files, and its [system prompt](/agent-prompts/).
+
+<Steps>
+  <Step>On the card, select the main action, for example <Action>Start Builder</Action>. For another step, open the menu next to it.</Step>
+  <Step>In the dialog, check the model, then select <Action>Start session</Action>. The [session page](/coding-sessions/) opens, and the agent starts.</Step>
+</Steps>
+
+For the Builder, the dialog also offers [Goal mode](/coding-sessions/#goal-mode): the agent works until a goal is met.
+
+Some actions can continue or fork the last session of the role, instead of a fresh session. See **Session mode** in [Start a session](/coding-sessions/#start-a-session).
+
+## Task details and artifacts [#artifacts]
+
+Select a card to open the task details. Artifacts are the files that an agent or you save on a task. You can also open them in the **Artifacts** tab of a session.
+
+<AnnotatedScreenshot
+  id="task-details"
+  alt="The details sheet of the task Filter notes by tag in Ready for Dev. It shows the description, the Specification and the Implementation Plan in Artifacts, and the Close, Edit, Start Builder, and More buttons."
+  parts={[
+    { at: "status", title: "Status", text: "The lane of the task on the board." },
+    { at: "description", title: "Description", text: "What the task must do. Select Edit to change it." },
+    { at: "artifacts", title: "Artifacts", text: "The files of the task. Select one to open it." },
+    { at: "add-artifact", title: "Add artifact", text: "Adds a file to the task." },
+    { at: "next-step", title: "Next step", text: "Starts the next step of the task, here Start Builder." },
+    { at: "more", title: "More", text: "The other actions, such as Reset Task, Close Task, and Delete Task." },
+  ]}
+/>
+
+| Kind | What it holds | Effect on the task |
+|---|---|---|
+| Workflow artifact | A Markdown document that the workflow declares, such as a spec. A review artifact also has a verdict. | When an agent saves it, the workflow can move the task. |
+| Other artifact | Any file that an agent or you add, such as an HTML page, an image, or a Markdown document, up to 10 MiB. | None. The task keeps its lane and its review verdict. |
+
+Your own edits never move the task. To edit a workflow document, open it in the **Artifacts** tab and select the pencil button. When a task closes, its other artifacts become read-only. You can still edit its workflow documents.
+
+## Approve a task [#approval]
+
+When the work is done, select <Action>Approve Task</Action>. You can merge the task branch directly, open a pull request, or close the task. See [Approve a task](/git-and-pull-requests/#approve-a-task).
+
+The workflow sets the lanes where <Action>Approve Task</Action> shows, and the role that writes the pull request. In Spec, Plan, Build, this is the Builder.
+
+## Reset, close, or delete a task [#reset-and-cleanup]
+
+Every task has these actions. Open the task details, then select <Action>More</Action>.
+
+<Screenshot id="task-more-menu" alt="The details sheet of the task Open search with a keyboard shortcut, with the More menu open. It lists Request Changes, Request QA Review, the session actions, Reset Implementation, Reset Task, Close Task, and Delete Task." />
+
+The menu also lists the actions of the workflow, such as [Reset Implementation](/tasks-and-workflows/spec-plan-build/#reset-implementation) in Spec, Plan, Build.
+
+<Callout type="warn" title="Some actions are destructive">
+Push or merge the task branch first if you want to keep its commits.
+
+- <Action>Reset Task</Action>, <Action>Remove Worktree</Action>, and <Action>Delete Task</Action> delete the local task branch.
+- <Action>Close Task</Action> deletes it when **Remove worktree and branch** is on.
+</Callout>
+
+<Accordions>
+  <Accordion title="Reset Task" id="reset-task">
+    Deletes all artifacts, all sessions, the pull request link, the worktree, and the local task branches. Keeps the title, the description, and the other fields. The task goes back to the first lane, for example <Status of="open" />.
+  </Accordion>
+  <Accordion title="Close Task" id="close-a-task">
+    Merges no code. Stops the sessions and terminals of the task, then moves it to <Status of="closed" />. **Remove worktree and branch** is on by default. When it is on, **Close Task** also deletes the worktree and the local task branch. Keeps the task, its artifacts, and its sessions. To change the default, see [Remove task worktree on close](/settings-reference/#git-remove-task-worktree-on-close).
+  </Accordion>
+  <Accordion title="Remove Worktree" id="remove-worktree">
+    Shows only for a closed task that still has its worktree or its local task branch. Deletes the worktree and the local task branch. Keeps the task, its artifacts, and its sessions.
+  </Accordion>
+  <Accordion title="Delete Task" id="delete-task">
+    Deletes the task, all its artifacts, its worktrees, and its local branches. You cannot undo this action.
+  </Accordion>
+</Accordions>
+
+## Next [#next]
+
+<Cards>
+  <Card title="Spec, Plan, Build workflow" href="/tasks-and-workflows/spec-plan-build/">Follow each step, lane, and role of the built-in workflow.</Card>
+  <Card title="Coding sessions" href="/coding-sessions/">Follow a session, answer questions, and read the changes.</Card>
+  <Card title="Autopilot" href="/autopilot/">Start the next agent automatically when a task changes lane.</Card>
+</Cards>

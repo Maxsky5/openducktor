@@ -1,0 +1,98 @@
+@layer replica {
+  :where(.stage) {
+    /* The menu covers the screen under the status bar with the soft scrim of AnchoredPopover. */
+    .mob-qmenu-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 24;
+    }
+    .mob-qmenu-scrim {
+      position: absolute;
+      inset: 0;
+      background: #0206180f;
+    }
+    :where([data-theme="dark"]) & .mob-qmenu-scrim {
+      background: #00000040;
+    }
+    /* The card: 248 points wide. menus.ts places it 6 points under the zap button, aligned to
+       its right edge. */
+    .mob-qmenu {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: grid;
+      width: calc(248 * var(--u));
+      padding: calc(6 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      box-shadow: var(--m-shadow-overlay);
+    }
+    .mob-qmenu-title {
+      padding: calc(8 * var(--u)) calc(10 * var(--u)) calc(10 * var(--u));
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.8 * var(--u));
+      text-transform: uppercase;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-qmenu-item {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      min-height: calc(44 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--foreground);
+    }
+    .mob-qmenu-item > .lucide {
+      flex: 0 0 auto;
+      width: calc(17 * var(--u));
+      height: calc(17 * var(--u));
+      color: var(--m-secondary);
+    }
+    .mob-qmenu-item[data-destructive],
+    .mob-qmenu-item[data-destructive] > .lucide {
+      color: var(--rose-700);
+    }
+    :where([data-theme="dark"]) & .mob-qmenu-item[data-destructive],
+    :where([data-theme="dark"]) & .mob-qmenu-item[data-destructive] > .lucide {
+      color: var(--rose-300);
+    }
+    .mob-qmenu-item[data-disabled] {
+      opacity: 0.45;
+    }
+    .mob-qmenu-text {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+      padding: calc(4 * var(--u)) 0;
+    }
+    .mob-qmenu-text b {
+      font-size: calc(15 * var(--u));
+      font-weight: 500;
+      line-height: calc(22 * var(--u));
+    }
+    .mob-qmenu-text span {
+      color: var(--m-secondary);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-qmenu-divider {
+      height: calc(1 * var(--u));
+      margin: calc(4 * var(--u));
+      background: var(--m-separator);
+    }
+    .mob-phone {
+      --m-separator: oklch(96.8% 0.007 247.896);
+    }
+    :where([data-theme="dark"]) & .mob-phone {
+      --m-separator: oklch(27.9% 0.041 260.031);
+    }
+  }
+}

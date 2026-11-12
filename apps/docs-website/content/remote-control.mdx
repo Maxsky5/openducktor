@@ -1,0 +1,108 @@
+---
+icon: Radio
+title: Remote control
+description: Use your OpenDucktor host from a phone or another computer, with the devices that you pair.
+---
+
+Remote control shares your host with the devices that you pair. The host is the computer that runs OpenDucktor, with the desktop app or the [browser runner](/install-and-update/#browser-runner). The other devices control the host, but the agents always run on the host.
+
+<Diagram name="remoteAccess" />
+
+<Callout type="warn" title="A paired device controls this host">It can use the workspaces, agents, and terminals of the host. An `http://` address is not encrypted. Use it only on a trusted private network, such as your home network or a Tailscale network, or give the host an [HTTPS address](#https-host-address).</Callout>
+
+## Turn on Remote control [#turn-on]
+
+<Steps>
+<Step>On the host, open **Settings**, then **Remote control**.</Step>
+<Step>Under **Network**, select the network that the other device uses.</Step>
+<Step>Turn on **Enable Remote Control**.</Step>
+</Steps>
+
+You can also select the host icon next to **Settings**, then the **Remote control** tab, and select <Action>Turn on remote control</Action>.
+
+Remote control stays on when OpenDucktor starts again. Keep OpenDucktor open on the host. When you close the app or stop the browser runner, all remote connections end.
+
+## Pair a device [#pair-a-device]
+
+<Steps>
+<Step>In **Remote control**, select <Action>Add device</Action>.</Step>
+<Step>On the other device, enter the host address and the six-digit code, as [Connect from another computer](#connect-from-another-computer) shows. With the [mobile app](/mobile/#connect-to-a-host), you can scan the QR code of the **Scan a QR code** tab instead.</Step>
+<Step>The host shows **Device paired**. The device appears in **Paired devices** as **Connected**.</Step>
+</Steps>
+
+<Screenshot id="remote-add-device" alt="The Add a device panel with the tabs Enter a code and Scan a QR code, the host address http://192.168.1.9:14328 with Copy, the code 551-381 with Copy and its countdown, the HTTP warning, and Stop pairing." />
+
+A code works for one device for 5 minutes. While **Add a device** stays open, a new code replaces an expired one. After 5 wrong codes, pairing stops. To get a new code, select <Action>Add device</Action> again. A paired device keeps its access when the host restarts, and it connects again without a code.
+
+The host address cannot be a loopback address, such as `http://localhost:14328`.
+
+## Remove a device [#remove-a-device]
+
+<Screenshot id="settings-remote" alt="Remote control with Enable Remote Control on and 1 device connected, Device paired with Add another device, Paired devices with a connected Web browser and its Remove button, and the Network card with http://192.168.1.9:14328 and Change." />
+
+In **Paired devices**, select <Action>Remove</Action> next to the device. The device disconnects at once, and it needs a new code to connect again.
+
+A row shows the app type, such as **Mobile app**, **Desktop app**, or **Web browser**, and a short reference. It does not show the name of the device. If you do not know a device, remove it.
+
+## Connect from another computer [#connect-from-another-computer]
+
+### Use the desktop app or the browser runner [#connect-from-the-app]
+
+<Steps>
+<Step>On the other computer, select the host icon next to **Settings** at the bottom left of the window. The **Host connection** dialog opens.</Step>
+<Step>Select the **Connect to a host** tab.</Step>
+<Step>Enter the **Host address** and the **Pairing code** that **Add device** shows on the host. The app connects when you enter the last digit.</Step>
+</Steps>
+
+<Screenshot id="host-connect-dialog" alt="The Host connection dialog on the Connect to a host tab. The current host is Web runner host. The Host address is http://192.168.1.9:14328, five digits of the Pairing code are entered, and the buttons are Cancel and Switch host." />
+
+When this computer is already paired with the host, leave the code empty and select <Action>Switch host</Action>. To use the host of this computer again, select the host icon, then <Action>Use desktop host</Action> or <Action>Use web runner</Action>.
+
+### Give the host an HTTPS address [#https-host-address]
+
+app.openducktor.dev needs an HTTPS address. HTTPS also encrypts the connection outside a trusted network. Put an HTTPS proxy in front of the host. This example uses [Tailscale Serve](https://tailscale.com/kb/1312/serve).
+
+<Steps>
+<Step>In **Remote control**, if the **Network** card shows <Action>Change</Action>, select it. Open **Advanced**, and set **Local listen address** to `127.0.0.1`.</Step>
+<Step>Set **Public host address** to the HTTPS name of the computer, for example `https://my-computer.example.ts.net`.</Step>
+<Step>Turn on **Enable Remote Control**. If it is already on, select <Action>Apply changes</Action>.</Step>
+<Step>
+Forward the HTTPS address to the Remote control port. This command uses the default port, `14328`. If you changed **Port** in **Advanced**, use your port:
+
+```sh title="Host computer"
+tailscale serve --bg http://127.0.0.1:14328
+```
+</Step>
+</Steps>
+
+After this change, the host does not accept the old `http://` address. Other devices must connect to the HTTPS address.
+
+A web client that you serve yourself needs its address in **Other web clients**, under **Advanced**. See [Other web clients](/settings-reference/#remote-control-other-web-clients).
+
+For other proxies, see [Web entry points and proxies](https://github.com/Maxsky5/openducktor/blob/main/docs/remote-host-protocol.md#web-entry-points-and-proxies) in the developer guide.
+
+### Use app.openducktor.dev [#hosted-web-client]
+
+[app.openducktor.dev](https://app.openducktor.dev) opens OpenDucktor in any browser and connects it to a shared host.
+
+<Steps>
+<Step>Open [app.openducktor.dev](https://app.openducktor.dev).</Step>
+<Step>Enter the HTTPS **Host address** and the **Pairing code** that **Add device** shows on the host. The browser connects when you enter the last digit.</Step>
+<Step>If the browser asks for local network access, allow it.</Step>
+</Steps>
+
+When this browser is already paired with the host, leave the code empty and select <Action>Connect to host</Action>. To leave the host, select the host icon, then <Action>Disconnect</Action>. If you open the host address directly in a browser tab, it shows JSON. Enter the address in a client instead.
+
+## Compatibility [#compatibility]
+
+A client and a host work together when they use the same remote protocol. Their app versions can be different. When the protocols do not match, the client tells you which side to update.
+
+When a client and a host cannot work together, the client tells you to [update](/install-and-update/) the host, the client, or both. To update app.openducktor.dev, reload its tab.
+
+## Next
+
+<Cards>
+  <Card title="Mobile" href="/mobile/">Pair your phone with a shared host.</Card>
+  <Card title="Remote control settings" href="/settings-reference/#remote-control">Look up each Remote control field.</Card>
+  <Card title="Troubleshooting" href="/troubleshooting/#remote-control">Fix pairing and connection problems.</Card>
+</Cards>

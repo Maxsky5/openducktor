@@ -1,0 +1,106 @@
+@layer replica {
+  :where(.stage) {
+    /* DialogBody of the fork form: flex flex-col gap-4 px-6 py-4. */
+    .fd-body {
+      gap: calc(16 * var(--u));
+    }
+    /* The source folder: rounded-md border border-border bg-muted/30 p-3. The label is text-xs
+       font-medium text-muted-foreground, and the row under it has mt-1.5. */
+    .fd-source {
+      min-width: 0;
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: color-mix(in oklab, var(--muted) 30%, transparent);
+    }
+    .fd-source-label {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    /* From the sm breakpoint, the folder and the branch badge share a row. */
+    .fd-source-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      margin-top: calc(6 * var(--u));
+    }
+    .fd-source-name {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .fd-source-name > svg {
+      flex: none;
+    }
+    /* The branch: an outline Badge with gap-1.5 font-mono font-normal, and a size-3.5 icon. */
+    .fd-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      max-width: 100%;
+      padding: calc(2 * var(--u)) calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: 999px;
+      color: var(--foreground);
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .fd-badge > svg {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The directory: mt-2 break-words font-mono text-xs leading-relaxed text-muted-foreground, or
+       text-foreground/80 in the dark theme. */
+    .fd-source-path {
+      margin-top: calc(8 * var(--u));
+      overflow-wrap: anywhere;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: 1.625;
+    }
+    :where([data-theme="dark"]) & .fd-source-path {
+      color: color-mix(in oklab, var(--foreground) 80%, transparent);
+    }
+    /* The fields of New worktree: flex flex-col gap-3. The branch field has pt-2, and the new
+       branch line has mt-1. The note is text-sm text-muted-foreground. */
+    .fd-worktree {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+    }
+    .fd-worktree[hidden] {
+      display: none;
+    }
+    .fd-branch {
+      padding-top: calc(8 * var(--u));
+    }
+    .fd-note {
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    /* Below the sm breakpoint, the folder and the badge stack, and the footer keeps Cancel and
+       Fork session in one row, each min-h-11. */
+    @container stage (width <= 699px) {
+      .fd-source-row {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .fd-dialog .sc-foot {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+    }
+  }
+}

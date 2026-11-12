@@ -51,6 +51,9 @@
       .app-window[data-sidebar="full"] .sidebar {
         display: none;
       }
+      .app-window[data-sidebar-pinned] .sidebar {
+        display: flex;
+      }
     }
     @container stage (width <= 480px) {
       .app-window[data-sidebar="full"] .rail {
@@ -59,6 +62,35 @@
       .app-window[data-sidebar="full"] > .app-body {
         padding-top: calc(34 * var(--u));
         background: var(--card);
+      }
+    }
+    /*
+     * A phone stage shows one pane of a window with data-pane: the sidebar or the page. The panes
+     * fade, and they keep their place, because a scene measures the pointer targets in them.
+     */
+    @container stage (width <= 500px) {
+      .app-window[data-pane] .rail {
+        display: none;
+      }
+      .app-window[data-pane] > .app-body {
+        position: relative;
+        padding-top: calc(34 * var(--u));
+        background: var(--card);
+      }
+      .app-window[data-pane] .sidebar,
+      .app-window[data-pane] .app-main {
+        position: absolute;
+        inset: calc(34 * var(--u)) 0 0;
+        width: auto;
+        transition: opacity 250ms ease;
+      }
+      .app-window[data-pane] .sidebar {
+        border-right: 0;
+      }
+      .app-window[data-pane="main"] .sidebar,
+      .app-window[data-pane="sidebar"] .app-main {
+        opacity: 0;
+        pointer-events: none;
       }
     }
   }

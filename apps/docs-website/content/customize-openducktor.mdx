@@ -1,0 +1,103 @@
+---
+icon: SlidersHorizontal
+title: Actions, worktrees, and prompts
+description: Add repository actions, prepare new worktrees, and create reusable prompts.
+---
+
+Run your commands from a session, give new worktrees the files and dependencies that agents need, and insert saved text with a slash command. To add your instructions to the prompts of the Spec, Planner, Builder, and QA agents, or to replace a prompt, see [Agent prompts](/agent-prompts/).
+
+## Add repository actions [#add-repository-actions]
+
+A repository action is a command, such as your tests, that you run from the session top bar in a new terminal.
+
+When the repository has no actions, <Action>Add action</Action> in the session top bar opens these settings. When it has actions, select <Action>More actions</Action> in the top bar, then <Action>Manage actions</Action>.
+
+<Steps>
+<Step>Open **Settings**, then **Repositories**. Select your repository in the **Repository** list, then select **Scripts**.</Step>
+<Step>Select <Action>Add action</Action>, and enter a **Name** and the **Command**.</Step>
+<Step>Select <Action>Save action</Action>, then <Action>Save settings</Action>.</Step>
+</Steps>
+
+<Screenshot id="settings-repo-action-dialog" alt="The Add action dialog. The Name is Test with the Test icon. The Command has the lines bun install and bun test. The Run automatically on worktree creation and Wait for it to finish before the agent starts switches are off. The buttons are Cancel and Save action." />
+
+Each line runs after the line before it succeeds. OpenDucktor skips lines that start with `#`:
+
+```sh title="Command"
+# Install, then test.
+bun install
+bun test
+```
+
+The first action that you add becomes the default action. The top bar runs the default action with one click, and its menu lists the other actions. To change the default action, select <Action>Set as default</Action> on another action.
+
+<ProductDemo id="terminal" />
+
+## Prepare new worktrees [#prepare-worktrees]
+
+A new [task worktree](/git-and-pull-requests/#task-worktrees) or workspace session worktree has only the files that Git tracks. Untracked files and files that Git ignores, such as `.env`, are not in it.
+
+### Copy files into new worktrees [#copy-files-to-worktrees]
+
+<Steps>
+<Step>Open **Settings**, then **Repositories**. Select your repository in the **Repository** list, then select **Scripts**.</Step>
+<Step>Under **Files copied to worktrees (one path per line)**, enter one path from the repository root on each line. A folder copies with its content.</Step>
+<Step>Select <Action>Save settings</Action>.</Step>
+</Steps>
+
+```text title="Files copied to worktrees"
+.env
+config/local.json
+```
+
+If a path does not exist, the worktree setup stops with `Configured worktree copy source is unavailable:`. Correct the line, then start the work again.
+
+### Run setup commands [#run-setup-commands]
+
+<Steps>
+<Step>In **Scripts**, select <Action>Add action</Action>, and enter a **Name** and a **Command**, for example `bun install`.</Step>
+<Step>Turn on **Run automatically on worktree creation**.</Step>
+<Step>If the agent needs the result, such as installed dependencies, turn on **Wait for it to finish before the agent starts**.</Step>
+<Step>Select <Action>Save action</Action>, then <Action>Save settings</Action>.</Step>
+</Steps>
+
+Actions that run on worktree creation start in list order. An action that the agent waits for must end with exit code 0 within 5 minutes. If it fails or runs longer, OpenDucktor stops it, removes the new worktree, and shows the last output of the action.
+
+To run commands in a task worktree right before OpenDucktor removes it, see [Before worktree removal script](/settings-reference/#repository-scripts-worktree-cleanup-script).
+
+## Add a reusable prompt [#add-a-reusable-prompt]
+
+A reusable prompt is text that you insert with a slash command.
+
+<Steps>
+<Step>Open **Settings**, then **Reusable prompts**, and select <Action>Add prompt</Action>.</Step>
+<Step>Enter a **Name**, for example `review`, with no leading slash. The optional **Description** shows in the slash-command menu.</Step>
+<Step>Enter the **Content**. OpenDucktor replaces `$ARGUMENTS` with the text that you type after the command. Without `$ARGUMENTS`, it adds that text on a new line at the end.</Step>
+<Step>Select <Action>Save settings</Action>.</Step>
+</Steps>
+
+```md title="Content"
+Find bugs and missing tests in $ARGUMENTS.
+```
+
+<Screenshot id="settings-reusable-prompts" alt="The review prompt card in Reusable prompts. The Name is review, the Description is Find bugs and missing tests, and the Content is Find bugs and missing tests in $ARGUMENTS. The card says that the prompt appears in sessions as /review." />
+
+To use the prompt:
+
+<Steps>
+<Step>At the start of a message in a task session or a workspace session, type `/review`, and select it in the menu.</Step>
+<Step>Type the text for `$ARGUMENTS`, for example `the parser module`, and send the message.</Step>
+</Steps>
+
+The agent gets `Find bugs and missing tests in the parser module.`
+
+Every workspace has the same reusable prompts. A message with a reusable prompt must start with the command, and it can have only one command. It cannot have attachments, file references, skill references, or subagent references.
+
+If a harness command has the same name, the menu shows only the reusable prompt. The exceptions are the system commands `/compact` and `/goal`. `/compact` always compacts the session, and `/goal` always sets a [goal](/coding-sessions/#goal-command). The menu does not show a reusable prompt named `compact` or `goal`. A message with one of them fails, for example with `/goal is a reserved system slash command.` Do not use these names.
+
+## Next [#next]
+
+<Cards>
+  <Card title="Workspace sessions" href="/workspace-sessions/#custom-roles">Create a custom agent role for a workspace session.</Card>
+  <Card title="Coding sessions" href="/coding-sessions/">Use actions, terminals, and reusable prompts in a session.</Card>
+  <Card title="Settings reference" href="/settings-reference/">Look up each setting and its default value.</Card>
+</Cards>

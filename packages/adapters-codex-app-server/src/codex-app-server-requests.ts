@@ -268,7 +268,7 @@ const approvalContentFields = (
 
   return {
     title: `Codex ${request.method}`,
-    summary: `Codex requested ${request.method}.`,
+    summary: "Codex requested approval.",
     details: JSON.stringify(request.params ?? {}, null, 2),
   };
 };

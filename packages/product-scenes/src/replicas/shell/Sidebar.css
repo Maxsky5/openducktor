@@ -118,7 +118,7 @@
     .sb-create-menu {
       padding: 0 calc(10 * var(--u));
       border-left: calc(1 * var(--u)) solid
-        color-mix(in oklch, var(--primary-foreground) 25%, transparent);
+        color-mix(in oklab, var(--primary-foreground) 25%, transparent);
       border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
     }
     .sb-controls {
@@ -145,7 +145,7 @@
       height: calc(24 * var(--u));
       padding: 0 calc(8 * var(--u));
       border-radius: calc(10 * var(--u));
-      color: color-mix(in oklch, var(--foreground) 70%, transparent);
+      color: color-mix(in oklab, var(--foreground) 70%, transparent);
       font-size: calc(12 * var(--u));
       font-weight: 500;
       white-space: nowrap;
@@ -192,7 +192,7 @@
       height: calc(32 * var(--u));
       padding: 0 calc(10 * var(--u));
       border-radius: calc(10 * var(--u));
-      background: color-mix(in oklch, var(--muted) 60%, transparent);
+      background: color-mix(in oklab, var(--muted) 60%, transparent);
       color: var(--sidebar-foreground);
       font-size: calc(13 * var(--u));
       font-weight: 600;

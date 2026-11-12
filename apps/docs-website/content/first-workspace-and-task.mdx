@@ -1,0 +1,92 @@
+---
+icon: Rocket
+title: First workspace and task
+description: Complete the setup wizard, open a repository, and let the Builder agent do your first task.
+---
+
+You need a local Git repository with at least one commit, and one [harness](/harnesses/): OpenCode, Codex, or Claude Code. The setup wizard calls harnesses **coding agents**.
+
+## Run the setup wizard [#setup-wizard]
+
+<Screenshot id="onboarding-welcome" alt="The welcome page of the setup wizard, with the title Set up your local coding workspace. It lists three setup steps and shows the Configure coding agents button." />
+
+### Turn on your harnesses [#turn-on-harnesses]
+
+<Screenshot id="onboarding-agents" alt="The Configure coding agents step. OpenCode, Codex, and Claude each show Available, an Enabled switch, the executable path, and the version." />
+
+<Steps>
+  <Step>Turn on **Enabled** for each harness that you want to use.</Step>
+  <Step>Check that each harness shows **Available**. If it does not, select <Action>Browse</Action> and choose its executable.</Step>
+</Steps>
+
+If no harness shows **Available**, sessions cannot start. See [Harnesses](/troubleshooting/#harnesses) in Troubleshooting.
+
+### Choose notifications [#choose-notifications]
+
+<Screenshot id="onboarding-notifications" alt="The Configure notifications step in the browser runner, with Turn on system notifications and its Allow notifications button, the Test in-app notification and Test system notification buttons, and the sound and focus options." />
+
+Turn on system notifications for your platform. See [System permission](/notifications/#permission). To choose the events that notify you, see [Notifications](/notifications/#events).
+
+### Open your repository [#open-your-repository]
+
+<Screenshot id="onboarding-workspace" alt="The Open your first workspace step. The repository browser shows the fieldnotes folder with the Git repo badge." />
+
+<Steps>
+  <Step>On **Open your first workspace**, go to the folder of your repository, then select <Action>Choose This Folder</Action>.</Step>
+  <Step>Choose **No provider**, **GitHub**, **GitLab**, or **Azure DevOps**, then select <Action>Continue</Action>. To connect a provider later, select <Action>Skip Git provider setup</Action>. See [Connect a Git provider](/git-and-pull-requests/#git-provider).</Step>
+  <Step>Check the **Workspace name** and the **Default target branch**. If the branch field is empty, choose the branch.</Step>
+</Steps>
+
+### Choose the default model [#choose-the-default-model]
+
+<Screenshot id="onboarding-models" alt="The Models step. The Default model is Haiku 5.5 with low effort, Agent profile shows Not supported by runtime, and the Role defaults section is below it." />
+
+A role without a model in **Role defaults** uses the **Default model**. You can change both later. See [Models](/models/#role-defaults). Then select <Action>Open repository</Action>.
+
+## Create your first task [#create-a-task]
+
+Start with a small, clear change, such as a typo fix. The Builder can start a **Task** or a **Bug** immediately. A **Feature** first gets a spec and a plan. See [Issue types](/tasks-and-workflows/spec-plan-build/#issue-types).
+
+<Screenshot id="new-task-type" alt="The first step of the Create task dialog. It offers three issue types: Feature, Bug, and Task, each with a short description." />
+
+<Steps>
+  <Step>In the sidebar, select <Action>New task</Action>, then **Task**.</Step>
+  <Step>Type a **Title** and a **Description** of the change, then select <Action>Create task</Action>.</Step>
+</Steps>
+
+## Start the Builder [#start-the-builder]
+
+<Screenshot id="start-builder-dialog" alt="The Start Builder session dialog with Target branch main, the model Haiku 5.5, and low effort. The Goal mode and Customize first message switches are off. At the bottom are Cancel, Run in background, and Start session." />
+
+<Steps>
+  <Step>On the task card in <Status of="open" />, select <Action>Start Builder</Action>.</Step>
+  <Step>Check the **Target branch**, the branch that the change merges into, then select <Action>Start session</Action>.</Step>
+</Steps>
+
+OpenDucktor opens the session page of the Builder. The Builder works in a separate [worktree](/git-and-pull-requests/#task-worktrees), so your checkout stays the same. If it asks a question, [answer it](/coding-sessions/#answer-pending-input). When it finishes, the task moves to <Status of="ai_review" />.
+
+## Review and merge [#review-and-merge]
+
+<Screenshot id="task-diff" alt="The Builder session of the task Show the notebook count in the sidebar header in AI Review. The transcript ends with the Build Completed card and the summary of the Builder. The Diffs tab shows Branch changes with the open diff of Sidebar.tsx, and Request QA Review is at the top right." />
+
+<Steps>
+  <Step>Open the **Diffs** tab and read the **Branch changes**.</Step>
+  <Step>Optional: select <Action>Request QA Review</Action>, then <Action>Start session</Action>. When QA approves the change, the task moves to <Status of="human_review" />.</Step>
+  <Step>At the top right, select <Action>Approve Task</Action>. If the main button shows another action, open the menu next to it, then select <Action>Approve Task</Action>.</Step>
+  <Step>Select **Direct merge**, then <Action>Merge locally</Action>.</Step>
+</Steps>
+
+<Screenshot id="approve-dialog" alt="The Approve task dialog with Direct merge selected, the Merge commit, Squash, and Rebase methods, the Remove worktree and branch switch on, and Merge locally." />
+
+If the target branch has no remote, the task moves to <Status of="closed" />. If it has a remote, select <Action>Push main and mark done</Action>. The button shows the name of your target branch.
+
+To open a pull request instead, or to handle uncommitted changes and conflicts, see [Approve a task](/git-and-pull-requests/#approve-a-task). If QA rejects the change, see [Fix a QA rejection](/tasks-and-workflows/spec-plan-build/#fix-a-qa-rejection).
+
+## Next [#next]
+
+<Cards>
+  <Card title="Spec, Plan, Build workflow" href="/tasks-and-workflows/spec-plan-build/">Plan a feature with a spec and a plan before the build.</Card>
+  <Card title="Coding sessions" href="/coding-sessions/">Answer questions and read the work of each agent.</Card>
+  <Card title="Models" href="/models/">Choose the model of each role.</Card>
+  <Card title="Autopilot" href="/autopilot/">Let Autopilot start QA and the next roles for you.</Card>
+</Cards>

@@ -1,6 +1,7 @@
 // A regular tool row of agent-chat-regular-tool-summary.tsx, with the icon of agent-chat-tool-icon.tsx.
 import { FileText, type LucideIcon, Search, Terminal, Wrench } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
+import { flag } from "../flag";
 import type { ToolKind } from "./model";
 import { RowTime } from "./RowTime";
 import "./ToolRow.css";
@@ -12,6 +13,8 @@ type ToolRowProps = {
   duration: string;
   time: string;
   row?: string;
+  /** The tool still runs in the static frame: a spinner takes the place of the duration. */
+  running?: boolean;
   children?: ReactNode;
 };
 
@@ -29,12 +32,13 @@ export function ToolRow({
   duration,
   time,
   row,
+  running = false,
   children,
 }: ToolRowProps): ReactElement {
   const Icon = ICONS[kind];
   return (
     <div className="st-tool-wrap" data-row={row}>
-      <div className="st-tool" data-tool="">
+      <div className="st-tool" data-tool="" data-running={flag(running)}>
         <Icon className="i14" />
         <b>{name}</b>
         {args && (

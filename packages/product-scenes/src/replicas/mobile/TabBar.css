@@ -1,0 +1,128 @@
+@layer replica {
+  :where(.stage) {
+    /* The tab bar of app-tab-bar.tsx: the create button rises 16 dp over a 64 dp row. Android
+       gives no bottom inset, so the row ends on the bottom edge. */
+    .mob-tabbar {
+      position: absolute;
+      inset: auto 0 0;
+      z-index: 20;
+      height: calc(80 * var(--u));
+    }
+    .mob-tabbar-surface {
+      position: absolute;
+      top: calc(15 * var(--u));
+      left: 0;
+      width: 100%;
+      height: calc(65 * var(--u));
+      overflow: visible;
+    }
+    .mob-tabbar-fill {
+      fill: var(--card);
+    }
+    .mob-tabbar-edge {
+      fill: none;
+      stroke: var(--border);
+      stroke-width: 1;
+    }
+    .mob-tabbar-row {
+      position: absolute;
+      top: calc(16 * var(--u));
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      height: calc(64 * var(--u));
+    }
+    /* The cradle: twice the reach of the shoulders of tab-bar-geometry.ts. */
+    .mob-tabbar-slot {
+      flex: 0 0 auto;
+      width: calc(97.7 * var(--u));
+    }
+    .mob-tab {
+      position: relative;
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: calc(1 * var(--u));
+      height: 100%;
+      color: var(--muted-foreground);
+    }
+    .mob-tab[data-selected] {
+      color: var(--foreground);
+    }
+    /* The violet bar on the top edge of the open tab. */
+    .mob-tab-marker {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      display: none;
+      width: calc(44 * var(--u));
+      height: calc(4 * var(--u));
+      margin-left: calc(-22 * var(--u));
+      border-radius: 0 0 calc(4 * var(--u)) calc(4 * var(--u));
+      background: var(--m-tint);
+    }
+    .mob-tab[data-selected] .mob-tab-marker {
+      display: block;
+    }
+    .mob-tab-icon {
+      position: relative;
+      display: flex;
+    }
+    .mob-tab-icon .lucide {
+      width: calc(25 * var(--u));
+      height: calc(25 * var(--u));
+    }
+    .mob-tab-label {
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+    }
+    .mob-tab[data-selected] .mob-tab-label {
+      font-weight: 600;
+    }
+    /* The Needs you badge: a red pill that the ring cuts out of the bar. */
+    .mob-tab-badge {
+      position: absolute;
+      top: calc(-6 * var(--u));
+      right: calc(-10 * var(--u));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: calc(18 * var(--u));
+      height: calc(18 * var(--u));
+      padding: 0 calc(5 * var(--u));
+      border: calc(2 * var(--u)) solid var(--card);
+      border-radius: calc(9 * var(--u));
+      background: var(--m-red);
+      color: #fff;
+      font-size: calc(10 * var(--u));
+      font-weight: 600;
+      line-height: calc(12 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
+    }
+    /* The create button: a violet gradient with a soft violet glow. */
+    .mob-create {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(56 * var(--u));
+      height: calc(56 * var(--u));
+      margin-left: calc(-28 * var(--u));
+      border-radius: 50%;
+      background: linear-gradient(150deg, var(--violet-500), var(--primary) 70%);
+      color: #fff;
+      box-shadow: var(--m-shadow-primary);
+    }
+    .mob-create .lucide {
+      width: calc(26 * var(--u));
+      height: calc(26 * var(--u));
+    }
+  }
+}

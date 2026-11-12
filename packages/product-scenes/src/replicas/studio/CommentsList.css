@@ -1,0 +1,107 @@
+@layer replica {
+  :where(.stage) {
+    /* The comments of task-execution-ci-comments-list.tsx: flex-col gap-3 px-4 py-3. */
+    .cl-content {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+    }
+    .cl-bar {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    /* The author filters: grid-cols-3 rounded-md border bg-muted/30 p-1. */
+    .cl-filters {
+      display: grid;
+      flex: 1;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      min-width: 0;
+      padding: calc(4 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: color-mix(in oklab, var(--muted) 30%, transparent);
+    }
+    /* A ghost sm button with h-7 gap-1 rounded-sm px-2. The pressed one is bg-foreground/10. */
+    .cl-filter {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+      height: calc(28 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(8 * var(--u));
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .cl-filter[data-active] {
+      background: color-mix(in oklab, var(--foreground) 10%, transparent);
+      box-shadow: var(--shadow-sm);
+    }
+    .cl-filter > :last-child {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Filter comments: a ghost icon button, size-9. */
+    .cl-menu-button {
+      display: grid;
+      flex-shrink: 0;
+      place-items: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--foreground);
+    }
+    .cl-menu-button[data-hover] {
+      background: color-mix(in oklab, var(--accent) 60%, transparent);
+    }
+    .cl-menu-button .lucide {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    /* The popover: w-56 rounded-lg border bg-popover p-2 shadow-lg, 6 pixels under its trigger
+       and aligned with its end. */
+    .cl-menu {
+      position: absolute;
+      top: calc(100% + 6 * var(--u));
+      right: 0;
+      z-index: 5;
+      width: calc(224 * var(--u));
+      padding: calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--popover);
+      box-shadow: var(--shadow-lg);
+    }
+    .cl-menu[hidden] {
+      display: none;
+    }
+    .cl-menu > div {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      padding: calc(6 * var(--u)) calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--popover-foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .cl-cards {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8 * var(--u));
+    }
+    /* The filters of the list hide the cards that they leave out. */
+    [data-filter="humans"] .cc-card[data-bot],
+    [data-filter="bots"] .cc-card:not([data-bot]),
+    [data-hide-resolved] .cc-card[data-resolved] {
+      display: none;
+    }
+  }
+}

@@ -5,9 +5,9 @@
       position: relative;
       isolation: isolate;
       min-width: 0;
-      border: calc(1 * var(--u)) solid color-mix(in oklch, var(--border) 90%, transparent);
+      border: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 90%, transparent);
       border-radius: calc(12 * var(--u));
-      background: color-mix(in oklch, var(--card) 95%, transparent);
+      background: color-mix(in oklab, var(--card) 95%, transparent);
       box-shadow: var(--shadow-sm);
     }
     .card-content {
@@ -95,7 +95,7 @@
       font-weight: 500;
     }
     .card-links u {
-      text-decoration-color: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+      text-decoration-color: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
       text-underline-offset: calc(4 * var(--u));
     }
     /* Active sessions: border ray and waiting glow, as in the desktop styles. */

@@ -1,0 +1,66 @@
+@layer replica {
+  :where(.stage) {
+    /* The favicon: an img in size-3.5 rounded-[2px] object-contain, in place of the Globe icon. */
+    .bw-tab-favicon {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      border-radius: calc(2 * var(--u));
+    }
+    .bw-tab-favicon,
+    .bw-tab[data-favicon] .bw-tab-globe {
+      display: none;
+    }
+    .bw-tab[data-favicon] .bw-tab-favicon {
+      display: block;
+    }
+    /* The Shared badge of PanelTabBadgeView: shrink-0 rounded-sm px-1 text-[10px] leading-4
+       font-medium bg-muted text-muted-foreground ring-1 ring-border ring-inset. */
+    .bw-tab-badge {
+      display: none;
+      flex: 0 0 auto;
+      padding: 0 calc(4 * var(--u));
+      border-radius: calc(8 * var(--u));
+      background: var(--muted);
+      box-shadow: inset 0 0 0 calc(1 * var(--u)) var(--border);
+      color: var(--muted-foreground);
+      font-size: calc(10 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    .bw-tab[data-shared] .bw-tab-badge {
+      display: block;
+    }
+    /* The Agent badge: bg-info-surface text-info-surface-foreground ring-1 ring-info-border/40
+       ring-inset. A tab that an agent opened always shows it. */
+    .bw-tab[data-owner="agent"] .bw-tab-badge {
+      display: block;
+      background: var(--info-surface);
+      box-shadow: inset 0 0 0 calc(1 * var(--u))
+        color-mix(in oklab, var(--info-border) 40%, transparent);
+      color: var(--info-surface-foreground);
+    }
+    /* The mark of an agent that acts on the page: absolute -top-0.5 -right-0.5 size-1.5
+       rounded-full bg-info-accent ring-1 ring-card motion-safe:animate-pulse. */
+    .bw-tab-mark {
+      position: absolute;
+      top: calc(-2 * var(--u));
+      right: calc(-2 * var(--u));
+      display: none;
+      width: calc(6 * var(--u));
+      height: calc(6 * var(--u));
+      border-radius: 999px;
+      background: var(--info-accent);
+      box-shadow: 0 0 0 calc(1 * var(--u)) var(--card);
+      animation: bw-tab-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .bw-tab[data-agent-active] .bw-tab-mark {
+      display: block;
+    }
+  }
+  /* Tailwind animate-pulse. */
+  @keyframes bw-tab-pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+}

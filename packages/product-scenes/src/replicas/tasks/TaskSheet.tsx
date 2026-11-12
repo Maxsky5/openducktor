@@ -1,17 +1,18 @@
-// The task details sheet of task-details-sheet.tsx, for a Backlog task with no document and no
-// session: the header with the title, the ID, the status, and the badges, the collapsible cards,
-// and the footer with the workflow actions. It slides in from the right over a blurred page. The
-// copy here is the template of a scene, which opens it and closes it.
+// The task details sheet of task-details-sheet.tsx, for a Backlog task that the chat has just
+// created: the header with the title, the ID, the dates, the status, and the badges, the
+// Description card, the Artifacts card of task-artifacts.tsx, and the footer with the workflow
+// actions. The task has no artifact yet, so the Artifacts card stays closed and shows no count.
+// It slides in from the right over a blurred page. The copy here is the template of a scene,
+// which opens it and closes it.
 import {
   ChevronDown,
   CircleQuestionMark,
   Copy,
   Ellipsis,
   Expand,
-  FileCode,
-  Layers,
-  type LucideIcon,
+  Files,
   PencilLine,
+  Plus,
   Sparkles,
 } from "lucide-react";
 import type { ReactElement } from "react";
@@ -23,13 +24,6 @@ import { RoleIcon } from "../ui/RoleIcon";
 import { StatusPill } from "../ui/StatusPill";
 import type { ChatTask } from "./model";
 import "./TaskSheet.css";
-
-/** The document cards under the description. A Backlog task has no document yet. */
-const DOCUMENTS = [
-  { title: "Specification", Icon: FileCode },
-  { title: "Implementation Plan", Icon: FileCode },
-  { title: "QA Reports", Icon: undefined },
-] as const satisfies readonly { title: string; Icon: LucideIcon | undefined }[];
 
 export function TaskSheet({ task }: { task: ChatTask }): ReactElement {
   return (
@@ -43,9 +37,14 @@ export function TaskSheet({ task }: { task: ChatTask }): ReactElement {
                 <Sparkles />
                 <span>{task.title}</span>
               </span>
-              <span className="ts-id">
-                <code>{taskId(task.id)}</code>
-                <Copy className="i12" />
+              <span className="ts-meta">
+                <span className="ts-id">
+                  <code>{taskId(task.id)}</code>
+                  <Copy className="i12" />
+                </span>
+                <span>Created just now</span>
+                <span aria-hidden="true">·</span>
+                <span>Updated just now</span>
               </span>
             </div>
             <StatusPill status="open" badge />
@@ -58,18 +57,16 @@ export function TaskSheet({ task }: { task: ChatTask }): ReactElement {
           </div>
         </div>
         <div className="ts-body">
-          <div className="ts-card">
+          <div className="ts-card" data-open="">
             <span className="ts-card-head">
               <span className="ts-card-title">
                 <CircleQuestionMark className="i14" />
                 Description
               </span>
-              <span className="ts-card-tool">
+              <Button variant="ghost" size="icon" className="ts-card-tool">
                 <Expand className="i14" />
-              </span>
-              <span className="ts-chevron" data-open="">
-                <ChevronDown className="i14" />
-              </span>
+              </Button>
+              <ChevronDown className="ts-chevron" />
             </span>
             <div className="ts-card-text">
               <p>{task.description}</p>
@@ -78,29 +75,17 @@ export function TaskSheet({ task }: { task: ChatTask }): ReactElement {
               </span>
             </div>
           </div>
-          {DOCUMENTS.map(({ title, Icon }) => (
-            <div key={title} className="ts-card">
-              <span className="ts-card-head">
-                <span className="ts-card-title">
-                  {Icon ? <Icon className="i14" /> : <RoleIcon role="qa" className="i14" />}
-                  {title}
-                </span>
-                <span className="ts-missing">No document</span>
-                <span className="ts-chevron">
-                  <ChevronDown className="i14" />
-                </span>
-              </span>
-            </div>
-          ))}
           <div className="ts-card">
             <span className="ts-card-head">
               <span className="ts-card-title">
-                <Layers className="i14" />
-                Metadata
+                <Files className="i14" />
+                Artifacts
               </span>
-              <span className="ts-chevron">
-                <ChevronDown className="i14" />
-              </span>
+              <Button variant="ghost" size="xs">
+                <Plus />
+                Add artifact
+              </Button>
+              <ChevronDown className="ts-chevron" />
             </span>
           </div>
         </div>

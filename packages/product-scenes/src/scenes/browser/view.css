@@ -1,0 +1,15 @@
+@layer views {
+  :where(.stage) {
+    /* The Enter key shows over the chat, so it covers neither the top bar nor the browser. */
+    :where([data-scene="browser"]) & .key-hud[data-keys] {
+      top: 16%;
+      left: 23%;
+    }
+    @container stage (width <= 500px) {
+      :where([data-scene="browser"]) & .key-hud[data-keys] {
+        top: 8%;
+        left: 50%;
+      }
+    }
+  }
+}

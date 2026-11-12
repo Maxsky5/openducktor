@@ -1,0 +1,101 @@
+---
+icon: Command
+title: Command palette
+description: Find tasks, workspace sessions, and actions, and run workflow steps from the keyboard.
+---
+
+The command palette finds any task, workspace session, or action, and runs it without leaving the current page.
+
+<ProductDemo id="palette" />
+
+## Open the palette [#open]
+
+Press <kbd>Cmd</kbd>+<kbd>K</kbd> on macOS or <kbd>Ctrl</kbd>+<kbd>K</kbd> on Windows and Linux. You can also select the search button at the top of the sidebar. The shortcut does not work while another dialog is open.
+
+<AnnotatedScreenshot
+  id="palette-home"
+  alt="The command palette with an empty search: one task in Needs you, with a Question badge, the suggested actions, and one Recent task."
+  parts={[
+    { at: "search", title: "Search", text: "Type to search all actions, tasks, and sessions." },
+    { at: "workspace-filter", title: "Workspace filter", text: "Search all open workspaces, or only one." },
+    { at: "needs-you", title: "Needs you", text: "The tasks and workspace sessions where an agent waits for you." },
+    { at: "actions", title: "Actions", text: "A short list of common actions. See All actions below." },
+    { at: "recent", title: "Recent", text: "The tasks and workspace sessions that you opened last." },
+    { at: "key-hints", title: "Key hints", text: "The keys for the selected row, for example Tab to see its actions." },
+  ]}
+/>
+
+The palette searches only open workspaces. Archived sessions do not show. Use <Action>Archived sessions</Action> to find them.
+
+## Find a task [#find-a-task]
+
+<Steps>
+<Step>Type part of the title, the task ID, or a label.</Step>
+<Step>Press <kbd>Enter</kbd>. The latest session of the task opens. A task without a session opens its details.</Step>
+</Steps>
+
+<Screenshot id="palette-search" alt='The palette with the query "search". Two tasks, the Archived sessions action, and New task "search" match. Each task row shows a workspace tile, a task ID, and a status. Key hints show at the bottom.' />
+
+To search one workspace only, select the **All workspaces** filter, or press <kbd>Option</kbd>+<kbd>Down</kbd> on macOS or <kbd>Alt</kbd>+<kbd>Down</kbd> on Windows and Linux.
+
+## Run a task action [#run-a-task-action]
+
+<Steps>
+<Step>On a task row, press <kbd>Tab</kbd>.</Step>
+<Step>Select an action, for example <Action>Start Builder</Action>. A start dialog opens.</Step>
+<Step>Select <Action>Start session</Action>, or <Action>Run in background</Action> to stay on the current page.</Step>
+</Steps>
+
+<Screenshot id="palette-actions" alt="The task actions of the task Filter notes by tag: Open latest session, Open Planner session, Start Builder, Start Spec, Start Planner, Close Task, Edit Task, Open Task Details, Copy Task ID, Reset Task, and Delete Task. The list scrolls." />
+
+To skip the action list, move to the task row with <kbd>Up</kbd> or <kbd>Down</kbd>, then press <kbd>Cmd</kbd>+<kbd>Enter</kbd> on macOS or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> on Windows and Linux. It runs the main action of the task card. The palette footer shows its name, for example **Start Builder**.
+
+## Answer an agent [#answer-an-agent]
+
+<Steps>
+<Step>On a row in **Needs you**, press <kbd>Tab</kbd>.</Step>
+<Step>Select <Action>Reply to question</Action>, <Action>Reply to permission request</Action>, or <Action>Reply to requests</Action>. The request shows in the palette.</Step>
+<Step>Answer it there. You stay on the current page. After the last answer, the palette closes.</Step>
+</Steps>
+
+<Screenshot id="palette-reply" alt="The palette shows the question of the agent for the task Color-code tags, with its options, Reset, and Next. Esc goes back to the list." />
+
+## Other keys [#keyboard-shortcuts]
+
+| Keys | What it does |
+|---|---|
+| <kbd>Right</kbd> | Shows the actions of a task or workspace session, as <kbd>Tab</kbd> does. It works when the cursor is at the end of the search. |
+| <kbd>Cmd</kbd>+<kbd>E</kbd> on macOS, <kbd>Ctrl</kbd>+<kbd>E</kbd> on Windows and Linux | Edits a task or renames a workspace session. |
+| <kbd>Backspace</kbd> | In an action list with an empty search, goes back to the main list. |
+
+## Actions [#actions]
+
+A workspace action runs in the workspace that the filter selects. With **All workspaces**, it runs in the current workspace. Its row shows the workspace name. When an action is not available, its row shows the reason.
+
+| Action | What it does |
+|---|---|
+| **New task "…"** | Opens the new task form with your search as the title. Shows when you type a search. |
+| **Import tasks from …** | Imports issues as tasks. The label names your Git provider, for example **GitHub Issues**. With no provider set up, the label is **Import tasks from the Git provider**, and the action opens Settings. |
+| **Import session from an external runtime** | Opens the **Import session** dialog. See [Import a session from an external runtime](/workspace-sessions/#import). |
+| **Open latest session** | Opens the last session that started and that works or waits for you. Without one, it opens the session that started last. |
+| **Start Builder**, **Request QA Review**, **Approve Task**, … | Runs a workflow step. The palette shows only the workflow actions that the task allows now. See [Actions of each lane](/tasks-and-workflows/spec-plan-build/#lane-actions). |
+| **Reset Task**, **Close Task**, **Delete Task** | Ask you first. For what each action deletes, see [Reset, close, or delete a task](/tasks-and-workflows/#reset-and-cleanup). |
+| **Open diagnostics** | Checks the harnesses, the tools, and the workspace. See [Troubleshooting](/troubleshooting/). |
+| **Show tour** | Shows the tour of the main features again. OpenDucktor shows it once, after the setup. |
+
+### Git actions [#git-actions]
+
+| Action | What it does |
+|---|---|
+| **Sync pull requests** | Reads the pull requests of one workspace or all open workspaces from the Git provider. It closes the tasks whose pull request merged. |
+| **Check merged tasks** | Checks whether the task branches merged into their target branch. A merged task shows **Close Task** on its board card. |
+
+OpenDucktor also runs both actions every 5 minutes. See [Git and pull requests](/git-and-pull-requests/).
+
+## Next [#next]
+
+<Cards>
+  <Card title="Tasks and workflows" href="/tasks-and-workflows/">Learn the task statuses and the actions that the palette runs.</Card>
+  <Card title="Coding sessions" href="/coding-sessions/">Follow agents, answer them, and review their work.</Card>
+  <Card title="Workspace sessions" href="/workspace-sessions/">Start a workspace session from the palette.</Card>
+</Cards>

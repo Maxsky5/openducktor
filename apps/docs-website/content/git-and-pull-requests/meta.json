@@ -1,0 +1,6 @@
+{
+  "title": "Git and pull requests",
+  "icon": "GitPullRequest",
+  "defaultOpen": true,
+  "pages": ["github", "gitlab", "azure-devops"]
+}

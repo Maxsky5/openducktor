@@ -5,8 +5,25 @@ import webKnipConfig from "./packages/openducktor-web/knip.config";
 export default {
   tags: ["-internal"],
   workspaces: {
+    "apps/docs-website": {
+      entry: ["app/**/*.{ts,tsx}", "scripts/*.ts", "tests/*.test.ts", "browser-tests/*.ts"],
+      project: ["**/*.{ts,tsx}"],
+      // Tailwind loads through PostCSS. GSAP comes in through the product scenes, and
+      // scripts/finish-export.ts reads its license notices from this workspace. The layout and the
+      // link preview route load the font files by path, and app/global.css `@import`s the theme.
+      ignoreDependencies: [
+        "tailwindcss",
+        "gsap",
+        "@fontsource-variable/space-grotesk",
+        "@fontsource/ibm-plex-mono",
+        "@expo-google-fonts/space-grotesk",
+        "@openducktor/theme",
+      ],
+    },
     "apps/marketing-website": {
       project: ["src/**/*.{ts,astro}", "config/**/*.ts", "scripts/**/*.ts"],
+      // src/styles/tokens.css `@import`s the theme.
+      ignoreDependencies: ["@openducktor/theme"],
     },
     "apps/electron": electronKnipConfig,
     "apps/mobile": {

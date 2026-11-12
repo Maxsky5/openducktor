@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { testObserver } from "../test-support/test-observer";
 import { tabState, targetIndex } from "./tabs";
 
 const loadMotion = () =>
@@ -9,6 +10,8 @@ const loadMotion = () =>
     import("./text"),
     import("./dom"),
     import("./loop"),
+    import("./player"),
+    import("./preference"),
   ]);
 let modules: Awaited<ReturnType<typeof loadMotion>>;
 
@@ -98,6 +101,15 @@ describe("scene.run", () => {
     scene.runNow(glide);
     expect(glide.startTime()).toBe(1.5);
   });
+
+  test("timeLeft gives the seconds from the playhead to the end of the scene", () => {
+    const { scene } = motion();
+    scene.endAt(4);
+    scene.timeline.time(3.6);
+    expect(scene.timeLeft()).toBeCloseTo(0.4);
+    scene.timeline.time(4);
+    expect(scene.timeLeft()).toBe(0);
+  });
 });
 
 describe("stream", () => {
@@ -152,5 +164,44 @@ describe("typed queries", () => {
     expect(dom.numberData(line, "wait")).toBe(1.5);
     line.dataset.wait = "soon";
     expect(() => dom.numberData(line, "wait")).toThrow("no number in data-wait");
+  });
+});
+
+describe("watchPlayback", () => {
+  test("plays while the browser reports the view in its zone and the visitor has not paused", () => {
+    const [, , , , , { watchPlayback }, { bindMotionControl }] = modules;
+    const native = globalThis.IntersectionObserver;
+    const Observer = testObserver();
+    globalThis.IntersectionObserver = Observer;
+    const pause = document.createElement("button");
+    const unbind = bindMotionControl(pause);
+    try {
+      const root = document.createElement("div");
+      const states: boolean[] = [];
+      const stop = watchPlayback(root, (running) => states.push(running), { top: 25, bottom: 10 });
+      const [observer, ...others] = Observer.live;
+      if (!observer) throw new Error("watchPlayback created no observer.");
+      expect(others).toEqual([]);
+      expect([...observer.targets]).toEqual([root]);
+      expect(observer.options?.rootMargin).toBe("-25% 0px -10% 0px");
+      expect(root.dataset.motion).toBe("paused");
+
+      Observer.report(root, true);
+      expect(root.dataset.motion).toBe("running");
+      pause.click();
+      expect(root.dataset.motion).toBe("paused");
+      pause.click();
+      expect(root.dataset.motion).toBe("running");
+      Observer.report(root, false);
+      expect(root.dataset.motion).toBe("paused");
+      expect(states).toEqual([false, true, false, true, false]);
+
+      stop();
+      expect(Observer.live.size).toBe(0);
+      expect(root.dataset.motion).toBeUndefined();
+    } finally {
+      unbind();
+      globalThis.IntersectionObserver = native;
+    }
   });
 });

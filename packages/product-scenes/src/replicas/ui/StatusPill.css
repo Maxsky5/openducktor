@@ -46,7 +46,7 @@
     }
     :where([data-theme="dark"]) & .status-pill[data-status="ai_review"] {
       border-color: var(--indigo-800);
-      background: color-mix(in oklch, var(--indigo-950) 50%, transparent);
+      background: color-mix(in oklab, var(--indigo-950) 50%, transparent);
       color: var(--indigo-300);
     }
     .status-pill[data-status="human_review"] {
@@ -56,7 +56,7 @@
     }
     :where([data-theme="dark"]) & .status-pill[data-status="human_review"] {
       border-color: var(--cyan-800);
-      background: color-mix(in oklch, var(--cyan-950) 50%, transparent);
+      background: color-mix(in oklab, var(--cyan-950) 50%, transparent);
       color: var(--cyan-300);
     }
     .status-pill[data-status="closed"] {

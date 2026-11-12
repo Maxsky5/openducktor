@@ -40,10 +40,11 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 |---|---|
 | `apps/electron` | Desktop shell, its host channel listener, preload, shell IPC, and packaging |
 | `apps/marketing-website` | Public Astro website |
+| `apps/docs-website` | Public user documentation, built with Next.js and Fumadocs as a static export |
 | `apps/mobile` | Expo iOS and Android client of a remote host. Read [its README](apps/mobile/README.md) before you change it |
 | `packages/frontend` | Shared React UI |
 | `packages/frontend-core` | Client connections, caches, session projection, recovery, and drafts |
-| `packages/theme` | Desktop theme tokens that the app and the product scenes share |
+| `packages/theme` | Desktop theme tokens that the app and the product scenes share, and the page colors of the websites |
 | `packages/product-scenes` | Animated product scenes of the website and the app tour. Read [its conventions](packages/product-scenes/CONVENTIONS.md) before you change it |
 | `packages/contracts` | Public Zod schemas and data contracts |
 | `packages/core` | Agent ports, ODT tool name helpers, and shared services |

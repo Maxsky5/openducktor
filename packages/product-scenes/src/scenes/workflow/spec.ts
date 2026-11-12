@@ -3,10 +3,10 @@ import { growIn } from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
 import { studioWindow } from "../../replicas/studio/studio";
 import { questionCard } from "../../replicas/transcript/question";
-import { DOCUMENTS, FRAMES, SPEC_SESSION } from "../../sample/studio";
+import { ARTIFACTS, FRAMES, SPEC_SESSION } from "../../sample/studio";
 import { STORY_SESSIONS, studioNav } from "../../sample/studio-nav";
 import type { RowId } from "../../sample/transcripts";
-import { endTurn, runSession, saveDocument, settleSession, waitSession } from "./session";
+import { endTurn, runSession, saveArtifact, settleSession, waitSession } from "./session";
 
 /** The templates of SpecStep.tsx. */
 export type SpecTemplate = "question";
@@ -41,7 +41,7 @@ export function spec(scene: Scene<SpecTemplate>): void {
     },
     "working",
   );
-  studio.panels.setDocument(DOCUMENTS.spec, false);
+  studio.panels.setArtifact(ARTIFACTS.spec, false);
 
   studio.rows.show(row("kickoff"), 0.3);
   studio.rows.tool(row("read-task"), 0.9, 0.35);
@@ -81,11 +81,10 @@ export function spec(scene: Scene<SpecTemplate>): void {
   studio.cursor.hide(resumed + 0.3);
 
   // The agent saves the specification. The Planner becomes available.
-  const saved = saveDocument(
+  const saved = saveArtifact(
     studio,
     row("set-spec"),
     resumed + 1,
-    DOCUMENTS.spec.updated,
     { tones: ["in_progress", "available", "blocked", "blocked"], action: "Start Planner" },
     2.2,
   );

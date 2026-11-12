@@ -1,5 +1,5 @@
 ---
-import { Download, Moon, Pause, Play, Sun } from "@lucide/astro";
+import { BookOpen, Download, Moon, Pause, Play, Sun } from "@lucide/astro";
 import { release } from "../content/release";
 import { links } from "../content/site";
 import Brand from "../ui/Brand.astro";
@@ -30,6 +30,9 @@ const sections = Astro.url.pathname === "/" ? "" : "/";
       >
     </nav>
     <div class="header-actions">
+      <a class="github-link docs-link" aria-label="Docs" href={links.docs}
+        ><BookOpen size={17} /><span>Docs</span></a
+      >
       <a class="github-link" aria-label="GitHub repository" href={links.github}
         ><GithubMark size={17} /><span>GitHub</span></a
       >

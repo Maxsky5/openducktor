@@ -5,6 +5,7 @@ Use this index to find the document for your task.
 ## Start here
 
 - Read [the project README](../README.md) for the product summary, quick install commands, and contribution links.
+- Read [the user documentation](https://doc.openducktor.dev/) for user guides. Its source and publication rules are in [the docs website guide](../apps/docs-website/README.md).
 - Read [the installation guide](installation.md) for install methods, requirements, and update steps.
 - Read [the architecture overview](architecture-overview.md) before you change a cross-package data flow or ownership boundary.
 - Read [the Effect guide](effect.md) before you change a host port, service, adapter, lifecycle, or typed error.

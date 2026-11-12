@@ -2,6 +2,7 @@ import { normalizeSessionErrorMessage } from "../lib/session-error-message";
 import {
   notificationOccurrenceSchema,
   notificationSettingsSchema,
+  type NotificationDeliveryPermission,
   type NotificationDeliveryResult,
   type NotificationOccurrence,
   type NotificationSettings,
@@ -34,7 +35,14 @@ export type NotificationDispatchFailure = {
   repoPath: string;
   message: string;
   osStatus?: Exclude<NotificationDeliveryResult["status"], "shown">;
+  /** The OS permission that blocked a `denied` delivery. */
+  osPermission?: NotificationDeliveryPermission;
 };
+
+type ReportedFailure = Pick<
+  NotificationDispatchFailure,
+  "channel" | "message" | "osStatus" | "osPermission"
+>;
 
 type CreateNotificationPolicyOptions = {
   inApp: Pick<InAppNotificationAdapter, "deliver">;
@@ -61,10 +69,7 @@ export const createNotificationPolicy = ({
   const localOccurrences = new Set<string>();
   const externalOccurrences = new Set<string>();
 
-  const reportFailure = (
-    occurrence: NotificationOccurrence,
-    failure: Pick<NotificationDispatchFailure, "channel" | "message" | "osStatus">,
-  ): void => {
+  const reportFailure = (occurrence: NotificationOccurrence, failure: ReportedFailure): void => {
     onFailure({
       ...failure,
       kind: occurrence.kind,
@@ -112,13 +117,14 @@ export const createNotificationPolicy = ({
           channel: "os",
           run: async () => {
             const result = await os.deliver(copy, occurrence);
-            if (result.status !== "shown") {
-              reportFailure(occurrence, {
-                channel: "os",
-                message: result.message,
-                osStatus: result.status,
-              });
-            }
+            if (result.status === "shown") return;
+            const failure: ReportedFailure = {
+              channel: "os",
+              message: result.message,
+              osStatus: result.status,
+            };
+            if (result.status === "denied") failure.osPermission = result.permission;
+            reportFailure(occurrence, failure);
           },
         });
       }

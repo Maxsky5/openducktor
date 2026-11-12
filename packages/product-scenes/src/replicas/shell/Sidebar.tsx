@@ -65,7 +65,7 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
           </div>
         </div>
         <div className="sb-actions">
-          <span className="sb-kanban" aria-current={kanban ? "true" : undefined}>
+          <span className="sb-kanban" aria-current={kanban ? "true" : undefined} data-kanban="">
             <Columns3 />
             Kanban
           </span>
@@ -74,7 +74,7 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
               <Plus />
               New task
             </span>
-            <span className="sb-create-menu">
+            <span className="sb-create-menu" data-create-trigger="">
               <ChevronDown />
             </span>
           </span>

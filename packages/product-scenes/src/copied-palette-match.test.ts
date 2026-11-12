@@ -1,21 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { matchedRanges, matchesQuery } from "./replicas/palette/match";
 import { type PaletteRow, QUERY, SEARCH_ROWS } from "./sample/palette";
+import { importProduct } from "./test-support/product-source";
 
 type Range = { start: number; end: number };
 type Searched = { label: string; keywords: readonly string[] };
 
-// The imports are dynamic, so the type check of this package does not check the product source.
-const commandPalette = (file: string): string =>
-  new URL(`../../frontend/src/features/command-palette/${file}`, import.meta.url).href;
+const PALETTE = "packages/frontend/src/features/command-palette";
 // SAFETY: command-palette-match-ranges.ts exports this function, and a missing export fails the test.
-const product = (await import(commandPalette("command-palette-match-ranges.ts"))) as {
+const product = await importProduct<{
   matchedRanges: (text: string, query: string) => Range[];
-};
+}>(`${PALETTE}/command-palette-match-ranges.ts`);
 // SAFETY: command-palette-search.ts exports this function, and a missing export fails the test.
-const search = (await import(commandPalette("command-palette-search.ts"))) as {
+const search = await importProduct<{
   filterActions: <Item extends Searched>(items: readonly Item[], query: string) => Item[];
-};
+}>(`${PALETTE}/command-palette-search.ts`);
 
 /** The text and the keywords of a row, as command-palette-search.ts gives them to cmdk. */
 function searched(row: PaletteRow): Searched {

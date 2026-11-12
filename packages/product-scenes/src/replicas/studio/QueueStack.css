@@ -1,0 +1,268 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * agent-chat-message-queue.css in design pixels. The cards stay in normal flow, and negative
+     * margins pile them up, so a card that grows pushes the older cards up. The list is absolute at
+     * the bottom of the stack, so an open stack grows upward over the transcript and the composer
+     * does not move. The pointer of the scene sets `data-hover` in place of :hover.
+     */
+    .qs-stack {
+      --queue-card-height: calc(36 * var(--u));
+      --queue-card-tuck: calc(6 * var(--u));
+      --queue-peek: calc(7 * var(--u));
+      --queue-spread-gap: calc(6 * var(--u));
+      --queue-depth-scale: 0.05;
+      --queue-open: 350ms;
+      --queue-close: 250ms;
+      --queue-fade: 150ms;
+      --queue-content-delay: 60ms;
+      --queue-ease: cubic-bezier(0.22, 1, 0.36, 1);
+      --queue-blur: calc(2 * var(--u));
+      --queue-peeking: min(calc(var(--queue-count) - 1), 2);
+      position: relative;
+      /* Above the transcript. The composer card sits above the stack, so it covers the tucked
+         edge. */
+      z-index: 40;
+      height: calc(
+        var(--queue-card-height) + var(--queue-card-tuck) + var(--queue-peek) * var(--queue-peeking)
+      );
+      margin: 0 calc(12 * var(--u)) calc(var(--queue-card-tuck) * -1);
+      transition: height var(--queue-open) var(--queue-ease);
+    }
+    .qs-stack[data-count="0"] {
+      height: 0;
+      margin-bottom: 0;
+    }
+    /* agent-chat-composer-surface.ts: the composer card sits above the stack (z-50). */
+    .qs-stack + .st-box {
+      z-index: 50;
+    }
+    /* The preflight of the desktop app shows every svg as a block, so an icon has no line box. */
+    :where(.qs-stack) svg {
+      display: block;
+    }
+    .qs-list {
+      position: absolute;
+      inset-inline: 0;
+      bottom: 0;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    /* Later cards paint above earlier ones, so the newest card covers the older ones. */
+    .qs-card {
+      --queue-shown-depth: min(var(--queue-depth), 3);
+      interpolate-size: allow-keywords;
+      height: var(--queue-card-height);
+      /* An older card overlaps the next one, except for its peek. */
+      margin-bottom: calc((var(--queue-card-height) - var(--queue-peek)) * -1);
+      overflow: clip;
+      overflow-clip-margin: calc(2 * var(--u));
+      /* Scale toward the top edge, so the whole peek of an older card stays visible. */
+      transform-origin: 50% 0%;
+      transform: scale(calc(1 - var(--queue-depth-scale) * var(--queue-shown-depth)));
+      opacity: 1;
+      filter: blur(0);
+      transition-property: height, margin-bottom, transform, opacity, filter;
+      transition-duration: var(--queue-close);
+      transition-timing-function: var(--queue-ease);
+    }
+    /* A dashed outline and muted text mark a message that the agent has not received yet. */
+    .qs-surface {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(8 * var(--u));
+      min-height: 100%;
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) dashed var(--input);
+      border-radius: calc(16 * var(--u));
+      background: var(--chat-surface);
+      box-shadow: var(--shadow-xs);
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(20 * var(--u));
+      transition: border-color var(--queue-fade) var(--queue-ease);
+    }
+    /* In an open stack, a stronger outline marks the card that the actions belong to. */
+    .qs-stack[data-spread="true"] .qs-card[data-hover] .qs-surface {
+      border-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+    }
+    .qs-card[data-depth="0"] {
+      height: calc(var(--queue-card-height) + var(--queue-card-tuck));
+      margin-bottom: 0;
+    }
+    .qs-card[data-depth="0"] .qs-surface {
+      padding-bottom: calc(8 * var(--u) + var(--queue-card-tuck));
+    }
+    /* Cards behind the third one wait out of sight until the stack fans out. */
+    .qs-card[data-buried="true"] {
+      margin-bottom: calc(var(--queue-card-height) * -1);
+      opacity: 0;
+    }
+    .qs-stack[data-spread="true"] .qs-card {
+      height: auto;
+      margin-bottom: var(--queue-spread-gap);
+      transform: scale(1);
+      opacity: 1;
+      transition-duration: var(--queue-open);
+    }
+    .qs-stack[data-spread="true"] .qs-card[data-depth="0"] {
+      margin-bottom: 0;
+    }
+    /* A new message rises out of the composer. */
+    @starting-style {
+      .qs-card[data-animate-entry="true"] {
+        height: 0;
+        opacity: 0;
+        filter: blur(var(--queue-blur));
+      }
+    }
+    /* A message that leaves the queue fades out, and the cards around it close the gap. */
+    .qs-stack .qs-card[data-presence="exiting"] {
+      height: 0;
+      margin-bottom: 0;
+      opacity: 0;
+      filter: blur(var(--queue-blur));
+      transition-duration: var(--queue-close);
+    }
+    .qs-content {
+      display: flex;
+      flex: 1;
+      align-items: flex-start;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .qs-glyph {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      height: calc(20 * var(--u));
+    }
+    /* A message on its way shows a spinner in place of the clock. */
+    .qs-busy,
+    .qs-card:not([data-state="queued"]) .qs-wait {
+      display: none;
+    }
+    .qs-card:not([data-state="queued"]) .qs-busy {
+      display: block;
+    }
+    /* The start of the message on one line, or the whole message while the stack is open. */
+    .qs-text {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .qs-stack:is([data-spread="true"], [data-full]) .qs-text {
+      max-height: calc(120 * var(--u));
+      text-overflow: clip;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
+    /* Only the front card shows its content while the stack is closed. */
+    .qs-content,
+    .qs-trailing {
+      transition: opacity var(--queue-fade) var(--queue-ease);
+    }
+    .qs-card:not([data-depth="0"]) :is(.qs-content, .qs-trailing) {
+      opacity: 0;
+    }
+    /* Older cards show their text once they start to move apart, so no two lines cross. */
+    .qs-stack[data-spread="true"] .qs-card :is(.qs-content, .qs-trailing) {
+      opacity: 1;
+      transition-delay: var(--queue-content-delay);
+    }
+    /* The count and the actions share one slot: the count while the stack is closed, the actions
+       of the card under the pointer when it is open. A message on its way shows its state
+       instead. */
+    .qs-trailing {
+      display: grid;
+      flex-shrink: 0;
+      align-items: center;
+      justify-items: end;
+      height: calc(20 * var(--u));
+    }
+    .qs-trailing > * {
+      grid-area: 1 / 1;
+      transition: opacity var(--queue-fade) var(--queue-ease);
+    }
+    .qs-count,
+    .qs-delivery {
+      font-size: calc(11 * var(--u));
+      font-weight: 500;
+    }
+    .qs-card:not([data-depth="0"]) .qs-count,
+    .qs-delivery,
+    .qs-card:not([data-state="queued"]) :is(.qs-count, .qs-actions) {
+      display: none;
+    }
+    .qs-card[data-state="sending"] .qs-delivery[data-for="sending"],
+    .qs-card[data-state="steering"] .qs-delivery[data-for="steering"] {
+      display: block;
+    }
+    .qs-stack[data-spread="true"] .qs-count {
+      opacity: 0;
+      transition-duration: 0s;
+    }
+    .qs-actions {
+      display: flex;
+      align-items: center;
+      gap: calc(2 * var(--u));
+      margin: calc(-2 * var(--u)) 0;
+      opacity: 0;
+      transition-duration: 0s;
+    }
+    .qs-stack[data-spread="true"] .qs-card[data-hover] .qs-actions {
+      opacity: 1;
+    }
+    /* A ghost icon button: size-6 rounded-md. The pointer gives it the muted background. */
+    .qs-action {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .qs-action:has(> [data-queue-tooltip]:not([hidden])) {
+      background: var(--muted);
+      color: var(--foreground);
+    }
+    /* The hint of Steer now: tooltip.tsx on the top side. Radix shifts it to stay in the window,
+       so it ends at the right edge of the actions. Its arrow points at Steer now. */
+    .qs-card:has([data-queue-tooltip]:not([hidden])) {
+      overflow: visible;
+    }
+    .qs-tooltip {
+      position: absolute;
+      right: calc(-52 * var(--u));
+      bottom: calc(100% + 10 * var(--u));
+      z-index: 80;
+      width: max-content;
+      max-width: calc(280 * var(--u));
+      padding: calc(6 * var(--u)) calc(12 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--foreground);
+      color: var(--background);
+      font-size: calc(12 * var(--u));
+      font-weight: 400;
+      line-height: calc(16 * var(--u));
+      text-wrap: balance;
+    }
+    /* A 10 pixel square turned 45 degrees, 2 pixels above the bottom edge: a 5 pixel tip. */
+    .qs-tooltip i {
+      position: absolute;
+      top: 100%;
+      right: calc(59 * var(--u));
+      width: calc(10 * var(--u));
+      height: calc(10 * var(--u));
+      border-radius: calc(2 * var(--u));
+      background: var(--foreground);
+      translate: 0 calc(-7 * var(--u));
+      rotate: 45deg;
+    }
+  }
+}

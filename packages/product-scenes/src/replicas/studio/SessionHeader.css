@@ -110,7 +110,7 @@
     .sh-split-menu {
       padding: 0 calc(6 * var(--u));
       border-left: calc(1 * var(--u)) solid
-        color-mix(in oklch, var(--primary-foreground) 25%, transparent);
+        color-mix(in oklab, var(--primary-foreground) 25%, transparent);
       border-radius: 0 calc(10 * var(--u)) calc(10 * var(--u)) 0;
     }
     .sh-split-menu .lucide {

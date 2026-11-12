@@ -1,0 +1,140 @@
+@layer replica {
+  :where(.stage) {
+    /* The conflict strip of git-conflict-strip.tsx: border-b bg-muted/40 p-2. */
+    .gc-strip {
+      display: grid;
+      gap: calc(8 * var(--u));
+      padding: calc(8 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+      background: color-mix(in oklab, var(--muted) 40%, transparent);
+    }
+    .gc-strip-top {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    .gc-strip-icon {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      padding: calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--warning-border);
+      border-radius: 50%;
+      background: var(--warning-surface);
+      color: var(--warning-muted);
+    }
+    .gc-strip-text {
+      display: grid;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+    }
+    .gc-strip-text p {
+      margin: 0;
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(24 * var(--u));
+    }
+    .gc-strip-text p:first-child {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .gc-strip-text p:first-child b {
+      color: var(--foreground);
+      font-weight: 600;
+    }
+    .gc-strip-text p:last-child b {
+      color: var(--foreground);
+      font-weight: 500;
+    }
+    .gc-count {
+      padding: calc(4 * var(--u)) calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--warning-border);
+      border-radius: 999px;
+      background: var(--warning-surface);
+      color: var(--warning-muted);
+      font-size: calc(12 * var(--u));
+      font-weight: 600;
+      line-height: 1;
+    }
+    .gc-strip-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+    }
+    .gc-actions {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    /* The conflict dialog of git-conflict-dialog.tsx: max-w-xl. */
+    .gc-dialog {
+      width: calc(576 * var(--u));
+    }
+    .gc-dialog .st-dialog-head code {
+      padding: calc(1 * var(--u)) calc(5 * var(--u));
+      border-radius: calc(6 * var(--u));
+      background: var(--muted);
+      color: var(--foreground);
+      font-family: var(--mono);
+      font-size: 0.9em;
+    }
+    .gc-dialog-body {
+      display: grid;
+      gap: calc(8 * var(--u));
+      padding: calc(16 * var(--u)) 0 calc(20 * var(--u));
+      font-size: calc(14 * var(--u));
+    }
+    .gc-dialog-body > b {
+      font-weight: 500;
+    }
+    .gc-dialog-body ul {
+      margin: 0 0 calc(8 * var(--u));
+      padding-left: calc(20 * var(--u));
+      color: var(--muted-foreground);
+      list-style: disc;
+    }
+    .gc-dialog-body pre {
+      margin: 0;
+      padding: calc(12 * var(--u));
+      border-radius: calc(8 * var(--u));
+      background: var(--muted);
+      color: var(--foreground);
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      white-space: pre-wrap;
+    }
+    /* The footer: border-t pt-5, with Close on the left and the conflict actions on the right. */
+    .gc-dialog-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+      padding-top: calc(20 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    /* A narrow stage shows the smaller dialog of StartDialog.css. Below the sm breakpoint, the
+       footer stacks Close under the conflict actions, and its buttons get min-h-11. */
+    @container stage (width <= 699px) {
+      .gc-dialog {
+        width: calc(408 * var(--u));
+      }
+      .gc-dialog-foot {
+        flex-direction: column-reverse;
+        align-items: stretch;
+      }
+      .gc-dialog-foot .gc-actions {
+        justify-content: flex-end;
+      }
+      .gc-dialog-foot .ui-button {
+        height: calc(44 * var(--u));
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+/*
+ * The page colors of the OpenDucktor websites: the marketing website and the documentation. The
+ * page starts light, and `data-theme="dark"` on the page root selects the dark colors. Each site
+ * maps these colors to its own tokens.
+ */
+@layer base {
+  :root {
+    --page: #fafbfe;
+    --page-alt: #f3f6fb;
+    --ink: #192337;
+    --body-ink: #54627a;
+    --line: #dce3ee;
+    --soft: #eef2f8;
+    /* The brand violet of the mark and of the app, the same in both themes. */
+    --brand: #5100ff;
+    --accent: #5100ef;
+    --accent-ink: #4400c9;
+    --button-ink: #fff;
+    /* A tile that sits on the page, such as an icon badge. */
+    --surface: #fff;
+  }
+  :root[data-theme="dark"] {
+    --page: #0d1421;
+    --page-alt: #111a2a;
+    --ink: #eef2f8;
+    --body-ink: #acb8c9;
+    --line: #29354a;
+    --soft: #172133;
+    --accent: #a28aff;
+    --accent-ink: #b9a6ff;
+    --button-ink: #130831;
+    --surface: oklch(0.208 0.042 265.755);
+  }
+}

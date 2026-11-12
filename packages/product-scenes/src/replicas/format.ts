@@ -3,7 +3,7 @@
 /** The context use of a session: the part of the window in use, and the tokens. */
 export type ContextUse = { percent: number; tokens: number };
 
-/** A lane count in the header of a Kanban lane: kanban-column.tsx. */
+/** A lane count in the header of a Kanban lane: kanban-column.tsx and board-lane.tsx of the mobile app. */
 export function laneCountLabel(count: number): string {
   return `${count} ${count === 1 ? "task" : "tasks"}`;
 }

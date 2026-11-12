@@ -66,6 +66,8 @@ For the public Astro website, see [the marketing website guide](apps/marketing-w
 
 The product scenes of the website and the tour are in `packages/product-scenes`. Read [its conventions](packages/product-scenes/CONVENTIONS.md) before you change a scene. After a change to `packages/theme/src/tokens.css`, run `bun run build:theme` in `packages/product-scenes` and commit `packages/product-scenes/styles/theme.css`. A test fails when the file does not match its source.
 
+For the public user documentation, see [the docs website guide](apps/docs-website/README.md). Write user guides there, not in `docs/`. Run `bun run docs:dev` to preview it.
+
 The development commands need no port, channel, or config-directory environment variable. The OS assigns unused ports, and each command prints its resolved URL and development instance ID. Development hosts publish `runtime/dev-instances/<instanceId>/mcp-bridge.json`; packaged and installed production hosts publish `runtime/mcp-bridge.json`.
 
 Electron desktop:

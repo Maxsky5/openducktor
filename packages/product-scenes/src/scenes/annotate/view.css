@@ -1,0 +1,21 @@
+@layer views {
+  :where(.stage) {
+    /* The screenshot of an annotation: the captured element with 8 pixels of the page around it,
+       which the image chip scales to cover its preview. */
+    .av-shot.fn {
+      position: static;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      padding: calc(8 * var(--u));
+      overflow: visible;
+      scale: var(--shot-scale);
+    }
+    .av-shot .fn-empty-subtitle {
+      display: block;
+      width: calc(288 * var(--u));
+      margin: 0;
+      text-align: center;
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type ReactElement,
   type ReactNode,
   type RefObject,
@@ -49,6 +50,13 @@ type SessionPanelSplitProps = {
   main: ReactNode;
   panel: ReactNode;
 };
+
+/**
+ * Hides the separator of a closed panel, and keeps it between the panels at zero size. When the
+ * group registers, the library maps each separator to the panels next to it by their offsets. A
+ * separator with `display: none` has no offset, so it maps to no panels and its arrow keys throw.
+ */
+const HIDDEN_SEPARATOR_STYLE: CSSProperties = { visibility: "hidden", width: 0, height: 0 };
 
 const axisSize = (element: HTMLElement, direction: SplitDirection): number =>
   direction === "horizontal" ? element.offsetWidth : element.offsetHeight;
@@ -223,7 +231,7 @@ export function SessionPanelSplit({
         aria-label={separatorLabel}
         withHandle
         disabled={!showsSeparator}
-        hidden={!showsSeparator}
+        style={showsSeparator ? undefined : HIDDEN_SEPARATOR_STYLE}
       />
       <ResizablePanel
         id={panelId}

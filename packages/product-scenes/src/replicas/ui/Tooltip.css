@@ -1,0 +1,30 @@
+@layer product {
+  :where(.stage) {
+    /* tooltip.tsx: rounded-md bg-foreground px-3 py-1.5 text-xs text-background. */
+    .ui-tip {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 28;
+      padding: calc(6 * var(--u)) calc(12 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--foreground);
+      color: var(--background);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+    }
+    /* A 10 pixel square turned 45 degrees over the top edge: a 5 pixel tip that points up. */
+    .ui-tip i {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      width: calc(10 * var(--u));
+      height: calc(10 * var(--u));
+      border-radius: calc(2 * var(--u));
+      background: var(--foreground);
+      translate: -50% 50%;
+      rotate: 45deg;
+    }
+  }
+}

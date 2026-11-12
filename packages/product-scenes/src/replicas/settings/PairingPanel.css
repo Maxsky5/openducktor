@@ -1,0 +1,291 @@
+@layer replica {
+  :where(.stage) {
+    /* The pairing views: only the view of `data-pairing` shows, and only the selected tab. */
+    .rc-pairing:not([data-pairing="start"]) [data-for="start"],
+    .rc-pairing:not([data-pairing="open"]) [data-for="open"],
+    .rc-pairing:not([data-pairing="paired"]) [data-for="paired"],
+    .rc-panel:not([data-tab="code"]) .rc-code-tab,
+    .rc-panel:not([data-tab="qr"]) .rc-qr-tab {
+      display: none;
+    }
+    /* rounded-xl border bg-card p-5 shadow-xs */
+    .rc-card {
+      display: grid;
+      gap: calc(20 * var(--u));
+      padding: calc(20 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+      background: var(--card);
+      box-shadow: var(--shadow-xs);
+    }
+    .rc-start {
+      display: flex;
+      align-items: center;
+      gap: calc(16 * var(--u));
+    }
+    .rc-start-icon {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(40 * var(--u));
+      height: calc(40 * var(--u));
+      border-radius: 50%;
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    .rc-start-icon[data-paired] {
+      background: var(--success-surface);
+      color: var(--success-icon);
+    }
+    .rc-start-icon .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .rc-start-text,
+    .rc-panel-head,
+    .rc-qr-text {
+      display: grid;
+      flex: 1;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+    }
+    .rc-start-text strong,
+    .rc-panel-head strong {
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .rc-start-text span,
+    .rc-panel-head span,
+    .rc-qr-text span {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(19.5 * var(--u));
+    }
+    .rc-panel-head {
+      gap: calc(2 * var(--u));
+    }
+    .rc-panel-head span {
+      line-height: calc(16 * var(--u));
+    }
+    /* TabsList: h-9 rounded-lg bg-muted p-[3px], two columns. */
+    .rc-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: calc(36 * var(--u));
+      padding: calc(3 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--muted);
+    }
+    .rc-tab {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(6 * var(--u));
+      border: calc(1 * var(--u)) solid transparent;
+      border-radius: calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+    }
+    .rc-tab .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .rc-panel[data-tab="code"] [data-tab-trigger="code"],
+    .rc-panel[data-tab="qr"] [data-tab-trigger="qr"] {
+      border-color: var(--border);
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: var(--shadow-sm);
+    }
+    /* Enter a code: two numbered steps. */
+    .rc-code-tab {
+      display: grid;
+      gap: calc(24 * var(--u));
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .rc-code-tab li {
+      display: grid;
+      grid-template-columns: calc(24 * var(--u)) minmax(0, 1fr);
+      gap: calc(10 * var(--u)) calc(12 * var(--u));
+    }
+    .rc-step-number {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      border-radius: 50%;
+      background: color-mix(in oklab, var(--primary) 10%, transparent);
+      color: var(--primary);
+      font-size: calc(12 * var(--u));
+      font-weight: 600;
+    }
+    :where([data-theme="dark"]) & .rc-step-number {
+      background: color-mix(in oklab, var(--primary) 20%, transparent);
+      color: var(--primary-foreground);
+    }
+    .rc-step-title {
+      align-self: center;
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+    }
+    .rc-step-body {
+      display: flex;
+      grid-column: 2;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .rc-step-stack {
+      display: grid;
+      gap: calc(12 * var(--u));
+    }
+    .rc-address {
+      flex: 1;
+      min-width: 0;
+      padding: calc(6 * var(--u)) calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(8 * var(--u));
+      background: color-mix(in oklab, var(--muted) 40%, transparent);
+      font-family: var(--mono);
+      font-size: calc(13 * var(--u));
+    }
+    .rc-copy.ui-button {
+      flex: 0 0 auto;
+      width: calc(96 * var(--u));
+    }
+    .rc-code-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+    }
+    .rc-code {
+      display: flex;
+      flex: 1;
+      gap: calc(8 * var(--u));
+      max-width: calc(320 * var(--u));
+    }
+    .rc-code-tile {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      max-width: calc(44 * var(--u));
+      height: calc(56 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(8 * var(--u));
+      background: color-mix(in oklab, var(--muted) 50%, transparent);
+      font-family: var(--mono);
+      font-size: calc(30 * var(--u));
+      font-weight: 600;
+    }
+    .rc-code-tile[data-group] {
+      margin-left: calc(18 * var(--u));
+    }
+    .rc-expiry {
+      display: grid;
+      gap: calc(6 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .rc-expiry-bar {
+      display: block;
+      height: calc(6 * var(--u));
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--muted);
+    }
+    .rc-expiry-bar i {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: var(--primary);
+    }
+    /* Scan a QR code: the code on white, the time left, and the text. */
+    .rc-qr-tab {
+      display: grid;
+      justify-items: center;
+      gap: calc(16 * var(--u));
+      text-align: center;
+    }
+    .rc-qr-tab .rc-expiry {
+      width: calc(192 * var(--u));
+    }
+    .rc-qr-box {
+      display: flex;
+      width: calc(192 * var(--u));
+      height: calc(192 * var(--u));
+      padding: calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(8 * var(--u));
+      background: #fff;
+    }
+    .rc-qr {
+      width: 100%;
+      height: 100%;
+    }
+    .rc-qr-text {
+      max-width: calc(320 * var(--u));
+    }
+    .rc-qr-text strong {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+    }
+    /* RemoteNetworkNotice: a closed details element. */
+    .rc-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(8 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border-radius: calc(8 * var(--u));
+      background: color-mix(in oklab, var(--muted) 50%, transparent);
+      color: color-mix(in oklab, var(--foreground) 80%, transparent);
+      font-size: calc(12 * var(--u));
+      line-height: calc(19.5 * var(--u));
+    }
+    .rc-notice span {
+      flex: 1;
+    }
+    .rc-notice .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      margin-top: calc(3 * var(--u));
+    }
+    .rc-panel-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      padding-top: calc(16 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    .rc-waiting {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+    }
+    .rc-waiting i {
+      width: calc(8 * var(--u));
+      height: calc(8 * var(--u));
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 0 calc(3 * var(--u)) color-mix(in oklab, var(--primary) 25%, transparent);
+    }
+    /* Button variant destructiveSoft. */
+    .rc-stop.ui-button {
+      border: calc(1 * var(--u)) solid var(--destructive-border);
+      background: var(--destructive-surface);
+      color: var(--destructive-surface-foreground);
+      box-shadow: none;
+    }
+  }
+}

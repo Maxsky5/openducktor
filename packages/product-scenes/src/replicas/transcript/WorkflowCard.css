@@ -6,7 +6,7 @@
     .st-card[data-running] .st-card-head .st-duration {
       display: none;
     }
-    /* Workflow tool card: set_spec, set_plan, apply_workflow_event, qa_rejected, qa_approved. */
+    /* ODT tool card: Set Spec, Set Plan, Build Completed, Reject QA, Set Pull Request. */
     .st-card {
       margin: calc(8 * var(--u)) 0;
       padding: calc(8 * var(--u)) calc(12 * var(--u));
@@ -26,9 +26,22 @@
       align-items: center;
       gap: calc(8 * var(--u));
     }
+    .st-card-head {
+      flex-wrap: wrap;
+    }
     .st-card-head b {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
       font-size: calc(11 * var(--u));
       font-weight: 600;
+    }
+    /* The pull request shows once the call completes. */
+    .st-card-pr {
+      padding-block: calc(2 * var(--u));
+    }
+    .st-card[data-running] .st-card-pr {
+      display: none;
     }
     .st-pill {
       display: none;
@@ -44,26 +57,7 @@
       display: block;
     }
     .st-card-head .st-time {
-      color: color-mix(in oklch, currentColor 75%, transparent);
-    }
-    .st-card-io {
-      display: grid;
-      gap: calc(6 * var(--u));
-      margin-top: calc(8 * var(--u));
-    }
-    .st-card-io span {
-      display: flex;
-      align-items: center;
-      gap: calc(6 * var(--u));
-      padding: calc(4 * var(--u)) calc(8 * var(--u));
-      border: calc(1 * var(--u)) solid color-mix(in oklch, currentColor 20%, transparent);
-      border-radius: calc(4 * var(--u));
-      background: var(--card);
-      font-size: calc(12 * var(--u));
-      font-weight: 500;
-    }
-    .st-card[data-running] .st-output {
-      display: none;
+      color: color-mix(in oklab, currentColor 75%, transparent);
     }
   }
 }

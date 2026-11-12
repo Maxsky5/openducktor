@@ -24,7 +24,10 @@ export function GitProviderSelector({
   onSelect,
 }: GitProviderSelectorProps): ReactElement {
   return (
-    <fieldset className="grid min-w-0 gap-3 border-b border-border pb-5" disabled={disabled}>
+    <fieldset
+      className="@container grid min-w-0 gap-3 border-b border-border pb-5"
+      disabled={disabled}
+    >
       <legend className="text-sm font-semibold text-foreground">Git provider</legend>
       <p className="mt-1 text-xs text-muted-foreground">
         Optional. Choose which service OpenDucktor uses for pull requests.
@@ -33,7 +36,8 @@ export function GitProviderSelector({
         aria-label="Git provider"
         value={selectedProviderId}
         disabled={disabled}
-        className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4"
+        // The tiles follow the width of the form, not of the window, so a label is never cut.
+        className="grid grid-cols-1 gap-2 @sm:grid-cols-2 @3xl:grid-cols-4"
         onValueChange={(providerId) => {
           const option = gitProviderOptions.find((candidate) => candidate.value === providerId);
           if (option) onSelect(option.value);
