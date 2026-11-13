@@ -34,7 +34,8 @@ import type { ToolRunListItem } from "../transcript-list-items";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { messageTimeLabel } from "../transcript-text";
 import { useDisclosure, useKeptHiddenCalls } from "./disclosure";
-import { DisclosureMarker, Reveal, ToolTiming } from "./row-parts";
+import { FoldReveal } from "./fold-reveal";
+import { DisclosureMarker, ToolTiming } from "./row-parts";
 import { ToolCallIcon } from "./tool-status";
 import { TOOL_STATUS } from "./tool-status-presentation";
 
@@ -115,19 +116,18 @@ export const ToolRunListRow = memo(function ToolRunListRow({
           ))}
         </Text>
       </Touchable>
-      {disclosure.open ? (
-        // The guide line runs under the kind icon of the header, and the calls start under its
-        // label.
-        <Reveal
-          animate={disclosure.pressed}
-          style={[styles.nested, { borderLeftColor: desktop.border }]}
-        >
-          <EarlierCallsBar item={item} earlier={earlier} onChoose={chooseKeptHidden} />
-          {item.rows.slice(earlier.earlierCallCount).map((row) => (
-            <ToolRunLine key={row.key} row={row} enters={!mountRowKeys.has(row.key)} />
-          ))}
-        </Reveal>
-      ) : null}
+      {/* The guide line runs under the kind icon of the header, and the calls start under its
+          label. The calls grow and shrink with the run, and the rows around it move with them. */}
+      <FoldReveal
+        open={disclosure.open}
+        resetKey={item.runKey}
+        style={[styles.nested, { borderLeftColor: desktop.border }]}
+      >
+        <EarlierCallsBar item={item} earlier={earlier} onChoose={chooseKeptHidden} />
+        {item.rows.slice(earlier.earlierCallCount).map((row) => (
+          <ToolRunLine key={row.key} row={row} enters={!mountRowKeys.has(row.key)} />
+        ))}
+      </FoldReveal>
     </View>
   );
 });

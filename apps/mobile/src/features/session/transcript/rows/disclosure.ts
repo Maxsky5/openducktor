@@ -60,6 +60,9 @@ const RowLayoutContext = createContext<(() => void) | null>(null);
 
 export const RowLayoutProvider = RowLayoutContext;
 
+/** Measures the list row again, or null outside a list row. */
+export const useLayoutRow = (): (() => void) | null => use(RowLayoutContext);
+
 const useReaderChoice = (key: string): [ReaderChoice, (choice: ReaderChoice) => void] => {
   const store = use(DisclosureStoreContext);
   if (!store) throw new Error("A disclosure needs the transcript disclosure store.");

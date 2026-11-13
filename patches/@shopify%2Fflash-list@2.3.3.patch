@@ -1,3 +1,21 @@
+diff --git a/dist/FlashListRef.d.ts b/dist/FlashListRef.d.ts
+index 08b83f3e9baf5cf5c2229237b9c0d12fab030a3b..5f2f098c72fe1788c45d2f7fafbe5e7e51a368d3 100644
+--- a/dist/FlashListRef.d.ts
++++ b/dist/FlashListRef.d.ts
+@@ -291,6 +291,13 @@ export interface FlashListRef<T> {
+      * listRef.current?.prepareForLayoutAnimationRender();
+      */
+     prepareForLayoutAnimationRender: () => void;
++    /**
++     * Applies a known change of the size of the item at `index` in the next render, with the
++     * offset correction of the anchor item, so the new size, the new positions, and the scroll
++     * correction mount in one commit. The caller renders the item at its new size in the same
++     * batch.
++     */
++    resizeItem: (index: number, delta: number) => void;
+     /**
+      * Clears the layout cache on update.
+      * Call this when you want to clear the layout cache on update.
 diff --git a/dist/recyclerview/RecyclerView.js b/dist/recyclerview/RecyclerView.js
 index 6799c8a61bff4607633196097da35c7a6975f0b6..9bdab1e3be0889641503619bc61b06001b65734a 100644
 --- a/dist/recyclerview/RecyclerView.js
@@ -27,7 +45,7 @@ index 6799c8a61bff4607633196097da35c7a6975f0b6..9bdab1e3be0889641503619bc61b0600
          const height = Math.max(Math.min(layout.height, (_c = layout.maxHeight) !== null && _c !== void 0 ? _c : Infinity), (_d = layout.minHeight) !== null && _d !== void 0 ? _d : 0);
          if (areDimensionsNotEqual(width, size.width) ||
 diff --git a/dist/recyclerview/hooks/useRecyclerViewController.js b/dist/recyclerview/hooks/useRecyclerViewController.js
-index 08724d1f33824ef563948cff17904d7f497739d4..3f5fccbef698362b4a975e55eecb3506b807d417 100644
+index 08724d1f33824ef563948cff17904d7f497739d4..6a6290c6a8b5cd2058024302c044b18b0aa755c2 100644
 --- a/dist/recyclerview/hooks/useRecyclerViewController.js
 +++ b/dist/recyclerview/hooks/useRecyclerViewController.js
 @@ -1,5 +1,5 @@
@@ -85,6 +103,75 @@ index 08724d1f33824ef563948cff17904d7f497739d4..3f5fccbef698362b4a975e55eecb3506
                              recyclerViewManager.ignoreScrollEvents = true;
                              setTimeout(() => {
                                  recyclerViewManager.ignoreScrollEvents = false;
+@@ -450,6 +468,42 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+                 }
+                 recyclerViewManager.animationOptimizationsEnabled = true;
+             },
++            /**
++             * Applies a known change of the size of the item at `index` in the next render, with
++             * the offset correction of the anchor item, so the new size, the new positions, and the
++             * scroll correction mount in one commit. The caller renders the item at its new size in
++             * the same batch. The list still measures the item after that commit.
++             */
++            resizeItem: (index, delta) => {
++                const layout = recyclerViewManager.tryGetLayout(index);
++                if (!layout || delta === 0) {
++                    return;
++                }
++                const { horizontal } = recyclerViewManager.props;
++                // Each rendered item takes part, so the layout manager places all of them again,
++                // up to the anchor item of the offset correction.
++                const layoutInfo = recyclerViewManager
++                    .getEngagedIndices()
++                    .toArray()
++                    .flatMap((engagedIndex) => {
++                    const engagedLayout = recyclerViewManager.tryGetLayout(engagedIndex);
++                    if (!engagedLayout) {
++                        return [];
++                    }
++                    const change = engagedIndex === index ? delta : 0;
++                    return [
++                        {
++                            index: engagedIndex,
++                            dimensions: horizontal
++                                ? { width: engagedLayout.width + change, height: engagedLayout.height }
++                                : { width: engagedLayout.width, height: engagedLayout.height + change },
++                        },
++                    ];
++                });
++                recyclerViewManager.modifyChildrenLayout(layoutInfo, recyclerViewManager.getDataLength());
++                applyOffsetCorrection();
++                setRenderId((prev) => prev + 1);
++            },
+         };
+     }, [
+         recyclerViewManager,
+@@ -457,6 +511,7 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+         setTimeout,
+         isUnmounted,
+         updateScrollOffsetWithCallback,
++        applyOffsetCorrection,
+     ]);
+     const applyInitialScrollIndex = useCallback(() => {
+         var _a, _b, _c;
+diff --git a/src/FlashListRef.ts b/src/FlashListRef.ts
+index 07bac2aa20ea35ee3e85f0295a54569bc175da59..59b07a73abf7a8e0bfb91d69e0159d823c889d8c 100644
+--- a/src/FlashListRef.ts
++++ b/src/FlashListRef.ts
+@@ -306,6 +306,13 @@ export interface FlashListRef<T> {
+    * listRef.current?.prepareForLayoutAnimationRender();
+    */
+   prepareForLayoutAnimationRender: () => void;
++  /**
++   * Applies a known change of the size of the item at `index` in the next render, with the
++   * offset correction of the anchor item, so the new size, the new positions, and the scroll
++   * correction mount in one commit. The caller renders the item at its new size in the same
++   * batch.
++   */
++  resizeItem: (index: number, delta: number) => void;
+ 
+   /**
+    * Clears the layout cache on update.
 diff --git a/src/recyclerview/RecyclerView.tsx b/src/recyclerview/RecyclerView.tsx
 index 3c25e7e893004932b8a13072e01fe2a940d365d4..b760bb549841e58130a6abf347221b50c87766ef 100644
 --- a/src/recyclerview/RecyclerView.tsx
@@ -114,7 +201,7 @@ index 3c25e7e893004932b8a13072e01fe2a940d365d4..b760bb549841e58130a6abf347221b50
          Math.min(layout.width, layout.maxWidth ?? Infinity),
          layout.minWidth ?? 0
 diff --git a/src/recyclerview/hooks/useRecyclerViewController.tsx b/src/recyclerview/hooks/useRecyclerViewController.tsx
-index 3689830d995ff4f11c9fba6b3f54d9962d481726..c3702bdffb10453ac43c98a101c37c5f7f1dc338 100644
+index 3689830d995ff4f11c9fba6b3f54d9962d481726..707217ad0d2dce65ab4de7286c6ee715c6b18ad1 100644
 --- a/src/recyclerview/hooks/useRecyclerViewController.tsx
 +++ b/src/recyclerview/hooks/useRecyclerViewController.tsx
 @@ -6,7 +6,7 @@ import {
@@ -187,3 +274,57 @@ index 3689830d995ff4f11c9fba6b3f54d9962d481726..c3702bdffb10453ac43c98a101c37c5f
                recyclerViewManager.ignoreScrollEvents = true;
                setTimeout(() => {
                  recyclerViewManager.ignoreScrollEvents = false;
+@@ -563,6 +585,45 @@ export function useRecyclerViewController<T>(
+         }
+         recyclerViewManager.animationOptimizationsEnabled = true;
+       },
++      /**
++       * Applies a known change of the size of the item at `index` in the next render, with the
++       * offset correction of the anchor item, so the new size, the new positions, and the scroll
++       * correction mount in one commit. The caller renders the item at its new size in the same
++       * batch. The list still measures the item after that commit.
++       */
++      resizeItem: (index: number, delta: number) => {
++        const layout = recyclerViewManager.tryGetLayout(index);
++        if (!layout || delta === 0) {
++          return;
++        }
++        const { horizontal } = recyclerViewManager.props;
++        // Each rendered item takes part, so the layout manager places all of them again, up to
++        // the anchor item of the offset correction.
++        const layoutInfo = recyclerViewManager
++          .getEngagedIndices()
++          .toArray()
++          .flatMap((engagedIndex) => {
++            const engagedLayout = recyclerViewManager.tryGetLayout(engagedIndex);
++            if (!engagedLayout) {
++              return [];
++            }
++            const change = engagedIndex === index ? delta : 0;
++            return [
++              {
++                index: engagedIndex,
++                dimensions: horizontal
++                  ? { width: engagedLayout.width + change, height: engagedLayout.height }
++                  : { width: engagedLayout.width, height: engagedLayout.height + change },
++              },
++            ];
++          });
++        recyclerViewManager.modifyChildrenLayout(
++          layoutInfo,
++          recyclerViewManager.getDataLength()
++        );
++        applyOffsetCorrection();
++        setRenderId((prev) => prev + 1);
++      },
+     };
+   }, [
+     recyclerViewManager,
+@@ -570,6 +631,7 @@ export function useRecyclerViewController<T>(
+     setTimeout,
+     isUnmounted,
+     updateScrollOffsetWithCallback,
++    applyOffsetCorrection,
+   ]);
+ 
+   const applyInitialScrollIndex = useCallback(() => {

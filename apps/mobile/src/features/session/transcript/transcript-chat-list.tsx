@@ -8,8 +8,11 @@ import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agen
 import { type FlashListRef, type ListRenderItemInfo, type ViewToken } from "@shopify/flash-list";
 import { FlashList } from "@/ui/flash-list";
 import {
+  type ComponentRef,
   memo,
   type ReactElement,
+  type ReactNode,
+  type Ref,
   type RefObject,
   use,
   useCallback,
@@ -25,11 +28,34 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   findNodeHandle,
+  type LayoutChangeEvent,
   Platform,
+  type StyleProp,
   StyleSheet,
   View,
+  type ViewStyle,
 } from "react-native";
 import { KEYBOARD_DISMISS_ON_DRAG } from "@/ui/keyboard-dismiss";
+import Animated, {
+  Easing,
+  type LayoutAnimation,
+  type LayoutAnimationsValues,
+  useReducedMotion,
+  withTiming,
+} from "react-native-reanimated";
+import { StyleSheet as ThemedStyleSheet } from "react-native-unistyles";
+import {
+  CellIndexProvider,
+  cellStartOffset,
+  createFoldMotionController,
+  FOLD_MOTION_MS,
+  type FoldMotion,
+  type FoldMotionList,
+  FoldMotionListProvider,
+  FoldMotionProvider,
+  useFoldMotion,
+  useFoldMotionList,
+} from "./transcript-fold-motion";
 import { redrawOnScroll } from "../../../../modules/openducktor-scroll";
 import { BOTTOM_EDGE_HEIGHT } from "./transcript-follow";
 import { messageParts } from "./transcript-message-parts";
@@ -87,6 +113,85 @@ const renderItem = ({ item }: ListRenderItemInfo<TranscriptListItem>): ReactElem
   }
 };
 
+/**
+ * A transcript cell. A cell lower on the screen draws over the cells above it, and its surface is
+ * opaque, so the rows under a part that opens or folds cover that part while they move. When the
+ * list moved the cell for a resize, the cell starts at its old place and glides to its new place
+ * on the UI thread.
+ */
+function TranscriptCell({
+  ref,
+  style,
+  onLayout,
+  index,
+  children,
+}: {
+  ref?: Ref<ComponentRef<typeof View>>;
+  style?: StyleProp<ViewStyle>;
+  onLayout?: (event: LayoutChangeEvent) => void;
+  index: number;
+  children?: ReactNode;
+}): ReactElement {
+  const list = useFoldMotionList();
+  const fold = useFoldMotion();
+  const reducedMotion = useReducedMotion();
+  const offset = reducedMotion ? 0 : cellStartOffset(fold, index);
+  // The start offset mounts with the new layout as a plain style, without a layout animation, so
+  // Fabric shows both in one frame. A frame later, the cell gets its layout animation, and a frame
+  // after that, its offset goes back to zero and the animation glides it home.
+  const phase = offset === 0 ? null : (fold?.phase ?? null);
+  const start = useMemo(
+    () => (phase === "start" || phase === "arm" ? { top: offset } : null),
+    [offset, phase],
+  );
+  useEffect(() => {
+    if (!list || !fold || (phase !== "start" && phase !== "arm")) return;
+    const { id } = fold;
+    const frame = requestAnimationFrame(() => list.motions.advance(id));
+    return () => cancelAnimationFrame(frame);
+  }, [fold, list, phase]);
+  const layer = useMemo(
+    () => ({ zIndex: list?.inverted ? -index : index }),
+    [index, list?.inverted],
+  );
+  return (
+    <View ref={ref} style={[style, layer]} onLayout={onLayout}>
+      <Animated.View
+        style={[cellStyles.surface, start]}
+        {...(phase === "arm" || phase === "run" ? GLIDE_HOME : NO_GLIDE)}
+      >
+        <CellIndexProvider value={index}>{children}</CellIndexProvider>
+      </Animated.View>
+    </View>
+  );
+}
+
+/** Starts and ends gently, so no frame moves the rows much more than its neighbors. */
+const GLIDE = { duration: FOLD_MOTION_MS, easing: Easing.bezier(0.4, 0, 0.2, 1) };
+
+/**
+ * The layout animation of the content of a cell. Reanimated runs it in the mount that changes the
+ * layout, so it starts where that mount puts the content. Content that comes back from a start
+ * offset to its place glides there. Any other change, such as a start offset or a new height,
+ * shows at once.
+ */
+const glideHome = (values: LayoutAnimationsValues): LayoutAnimation => {
+  "worklet";
+  const home = values.targetOriginY === 0 && values.currentOriginY !== 0;
+  return {
+    initialValues: {
+      originX: values.targetOriginX,
+      originY: home ? values.currentOriginY : values.targetOriginY,
+      width: values.targetWidth,
+      height: values.targetHeight,
+    },
+    animations: home ? { originY: withTiming(0, GLIDE) } : {},
+  };
+};
+
+const GLIDE_HOME = { layout: glideHome };
+const NO_GLIDE = {};
+
 function TopEdge(): ReactElement {
   const notice = use(TranscriptNoticeContext);
   return notice ? <TranscriptNotice notice={notice} /> : TOP_SPACE;
@@ -133,6 +238,19 @@ export const TranscriptChatList = memo(function TranscriptChatList({
   useLayoutEffect(() => {
     itemsRef.current = list;
   }, [itemsRef, list]);
+
+  // The rows that open or fold move the cells of this list with a FLIP motion.
+  const [foldMotion, setFoldMotion] = useState<FoldMotion | null>(null);
+  const [foldMotions] = useState(() => createFoldMotionController(setFoldMotion));
+  const foldList = useMemo<FoldMotionList>(
+    () => ({
+      motions: foldMotions,
+      inverted: kind === "latest",
+      firstVisibleIndex: () => listRef.current?.computeVisibleIndices().startIndex ?? 0,
+      resizeRow: (index, delta) => listRef.current?.resizeItem(index, delta),
+    }),
+    [foldMotions, kind, listRef],
+  );
 
   // Images and isolated pages load only in the rows near the screen of the list on screen.
   const [visibleRows] = useState(createVisibleRowsStore);
@@ -233,34 +351,44 @@ export const TranscriptChatList = memo(function TranscriptChatList({
       importantForAccessibility={shown ? "auto" : "no-hide-descendants"}
     >
       <TranscriptRowsProvider value={context}>
-        <FlashList
-          ref={listRef}
-          data={items}
-          inverted={kind === "latest"}
-          drawDistance={DRAW_DISTANCE}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          getItemType={getItemType}
-          onLayout={onLayout}
-          onScroll={onScroll}
-          onContentSizeChange={onContentSizeChange}
-          onViewableItemsChanged={onViewableItemsChanged}
-          onScrollEndDrag={onRestShown}
-          onMomentumScrollEnd={onRestShown}
-          // As on desktop, no scroll bar: the list measures rows as they come near.
-          showsVerticalScrollIndicator={false}
-          // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
-          // transcript, and Android gives their taps to the list below them too.
-          keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
-          keyboardShouldPersistTaps="always"
-          accessibilityLabel="Transcript"
-          accessibilityActions={accessibilityActions}
-          onAccessibilityAction={onAccessibilityAction}
-        />
+        <FoldMotionListProvider value={foldList}>
+          <FoldMotionProvider value={foldMotion}>
+            <FlashList
+              ref={listRef}
+              data={items}
+              inverted={kind === "latest"}
+              drawDistance={DRAW_DISTANCE}
+              renderItem={renderItem}
+              CellRendererComponent={TranscriptCell}
+              keyExtractor={keyExtractor}
+              getItemType={getItemType}
+              onLayout={onLayout}
+              onScroll={onScroll}
+              onContentSizeChange={onContentSizeChange}
+              onViewableItemsChanged={onViewableItemsChanged}
+              onScrollEndDrag={onRestShown}
+              onMomentumScrollEnd={onRestShown}
+              // As on desktop, no scroll bar: the list measures rows as they come near.
+              showsVerticalScrollIndicator={false}
+              // A drag closes the keyboard; a tap keeps it. The composer suggestions float over the
+              // transcript, and Android gives their taps to the list below them too.
+              keyboardDismissMode={KEYBOARD_DISMISS_ON_DRAG}
+              keyboardShouldPersistTaps="always"
+              accessibilityLabel="Transcript"
+              accessibilityActions={accessibilityActions}
+              onAccessibilityAction={onAccessibilityAction}
+            />
+          </FoldMotionProvider>
+        </FoldMotionListProvider>
       </TranscriptRowsProvider>
     </View>
   );
 });
+
+// The surface of the screen, so a moving cell covers the cells under it.
+const cellStyles = ThemedStyleSheet.create((theme) => ({
+  surface: { backgroundColor: theme.colors.background },
+}));
 
 // The desktop transcript `pt-4 pb-4`.
 const styles = StyleSheet.create({
