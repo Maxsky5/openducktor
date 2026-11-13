@@ -80,6 +80,8 @@ export const projectContextUsage = (
   return totalTokens > 0 ? { totalTokens, model: modelSelection(last.model) } : null;
 };
 
+const shellExitSchema = z.number().int();
+
 const nativeSkillAttachmentsSchema = z.array(
   z.object({
     id: z.string().trim().min(1),
@@ -403,10 +405,12 @@ const projectAssistantContent = (
   if (metadata) tool.metadata = metadata;
   // OpenCode completes a shell call that exits with an error code. Codex and Claude report it as
   // failed, so it fails here too.
-  const exit = z.number().int().safeParse(metadata?.exit).data;
-  if (tool.toolType === "bash" && state.status === "completed" && isFailedShellExit(exit)) {
-    tool.status = "error";
-    tool.error = shellExitError(exit);
+  if (tool.toolType === "bash" && state.status === "completed") {
+    const exit = shellExitSchema.safeParse(metadata?.exit).data;
+    if (isFailedShellExit(exit)) {
+      tool.status = "error";
+      tool.error = shellExitError(exit);
+    }
   }
   if (
     tool.toolType === "file_edit" &&

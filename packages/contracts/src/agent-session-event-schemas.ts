@@ -169,6 +169,13 @@ export const agentComputerUseSchema = z
   .strict();
 export type AgentComputerUse = z.infer<typeof agentComputerUseSchema>;
 
+/**
+ * The shortest time between two updates of a running tool call that a client shows. An adapter
+ * that sends running updates more often only sends updates that a client replaces before it shows
+ * them.
+ */
+export const RUNNING_TOOL_UPDATE_INTERVAL_MS = 400;
+
 export const agentToolPartSchema = z
   .object({
     kind: z.literal("tool"),

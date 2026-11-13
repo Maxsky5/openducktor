@@ -110,13 +110,15 @@ describe("claude-agent-sdk-history tool projection", () => {
       ],
       () => "2026-10-21T00:00:00.000Z",
     );
-    expect(history[0]?.parts[0]).toMatchObject({
+    const part = history[0]?.parts[0];
+    expect(part).toMatchObject({
       kind: "tool",
       status: "error",
       metadata: { exit: 2 },
       output: "ls: x: No such file or directory",
-      error: "ls: x: No such file or directory",
     });
+    // The clients read the error from the output, so the output does not go to them twice.
+    expect(part).not.toHaveProperty("error");
   });
 
   test("hydrates MCP tool blocks with input, the call time as start, and the result time", () => {

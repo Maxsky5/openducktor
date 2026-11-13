@@ -1,10 +1,18 @@
+import { RUNNING_TOOL_UPDATE_INTERVAL_MS } from "@openducktor/contracts";
 import type { CodexTimedThreadItem } from "./codex-event-mapper";
 import type { CodexNotificationRecord } from "./types";
 
-/** The shortest time between two updates of the output of one running command. */
-export const LIVE_COMMAND_OUTPUT_INTERVAL_MS = 250;
-/** The running output keeps its last characters. The completed command gives all of its output. */
-export const LIVE_COMMAND_OUTPUT_TAIL_LENGTH = 64 * 1024;
+/**
+ * The shortest time between two updates of the output of one running command. A client shows a
+ * running tool update at most this often, so a shorter time only sends updates that it replaces.
+ */
+export const LIVE_COMMAND_OUTPUT_INTERVAL_MS = RUNNING_TOOL_UPDATE_INTERVAL_MS;
+/**
+ * The running output keeps its last characters, about 200 lines: more than a reader sees at once.
+ * Each update sends all of them, so a longer tail sends more bytes each time. The completed
+ * command gives all of its output.
+ */
+export const LIVE_COMMAND_OUTPUT_TAIL_LENGTH = 16 * 1024;
 export const LIVE_COMMAND_OUTPUT_CUT_NOTICE = "[Earlier output is shown when the command ends.]\n";
 
 /** The clock that the buffer uses, so a test can run it by hand. `schedule` returns a cancel. */
@@ -85,9 +93,6 @@ export class CodexLiveCommandOutputs {
         );
         return;
       }
-      case "item/commandExecution/outputDelta":
-        this.append(session, notification.params.itemId, notification.params.delta);
-        return;
       case "item/completed":
         this.finish(session, notification.params.item.id);
         return;
@@ -111,8 +116,9 @@ export class CodexLiveCommandOutputs {
   }
 
   /**
-   * Adds a chunk of output, in the runtime event that brought it. A command that did not start
-   * here, such as one before a restart, has none.
+   * Adds a chunk of output, in the runtime event that brought it. The adapter gives each chunk
+   * here before its event mappers. A command that did not start here, such as one before a
+   * restart, has none.
    */
   append(session: LiveCommandSession, itemId: string, delta: string): void {
     const key = commandKey(session, itemId);

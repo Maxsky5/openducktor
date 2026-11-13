@@ -135,6 +135,13 @@ export type CodexRuntimeLiveSessionMutation = {
   faultRef?: AgentSessionLiveRef;
 };
 
+/** A mutation that changes nothing on the host, so the adapter does not send it. */
+const isEmptyMutation = (mutation: CodexRuntimeLiveSessionMutation): boolean =>
+  mutation.transcriptEvents.length === 0 &&
+  mutation.changedSessionIds.size === 0 &&
+  !mutation.catalogInvalidated &&
+  mutation.fault === undefined;
+
 const receivedAtMsFromRuntimeStreamEvent = (receivedAt: string): number => {
   const receivedAtMs = Date.parse(receivedAt);
   if (!Number.isFinite(receivedAtMs)) {
@@ -408,7 +415,7 @@ export class CodexRuntimeSessionEvents {
   private processLiveCommandUpdate(runtimeId: string, update: () => void): Promise<void> {
     return this.withActiveMutation(runtimeId, async (mutation) => {
       update();
-      if (mutation.transcriptEvents.length === 0 && mutation.changedSessionIds.size === 0) return;
+      if (isEmptyMutation(mutation)) return;
       await this.deps.onLiveSessionMutation?.(mutation);
     });
   }
@@ -449,7 +456,7 @@ export class CodexRuntimeSessionEvents {
             this.deps.onCatalogInvalidated?.({ runtimeId: event.runtimeId, catalog: "skills" }),
         });
       }
-      if (this.deps.onLiveSessionMutation) {
+      if (this.deps.onLiveSessionMutation && !isEmptyMutation(mutation)) {
         deliveries.push({
           label: "live session mutation",
           run: () => this.deps.onLiveSessionMutation?.(mutation),
@@ -845,6 +852,16 @@ export class CodexRuntimeSessionEvents {
           `Cannot route Codex server request for thread '${threadId}' because no retained same-runtime session exists.`,
         );
       }
+      return;
+    }
+    if (notification?.method === "item/commandExecution/outputDelta") {
+      // Codex sends output in many small chunks. A chunk only adds to the running output, which
+      // the buffer shows at its interval, so it skips the event mappers.
+      this.liveCommandOutputs.append(
+        owner.targetSession,
+        notification.params.itemId,
+        notification.params.delta,
+      );
       return;
     }
     if (notification?.method === "turn/diff/updated") {

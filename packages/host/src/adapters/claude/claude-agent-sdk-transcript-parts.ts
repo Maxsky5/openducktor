@@ -96,8 +96,9 @@ export const createClaudeFinishStepPart = ({
 const CLAUDE_EXIT_CODE_LINE = /^Exit code (\d+)(?:\r?\n|$)/;
 
 /**
- * The error of a failed call. A failed shell command gives its exit code as metadata and its
- * output as both its output and its error, as other runtimes give them.
+ * The error of a failed call. A failed shell command gives its exit code as metadata and the text
+ * after the exit code as its output. The clients read the error of a failed call from its output,
+ * so a long output does not go to them twice.
  */
 const applyClaudeToolError = (part: ClaudeToolPart, text: string): void => {
   const exit = part.toolType === "bash" ? CLAUDE_EXIT_CODE_LINE.exec(text) : null;
@@ -112,7 +113,6 @@ const applyClaudeToolError = (part: ClaudeToolPart, text: string): void => {
     return;
   }
   part.output = output;
-  part.error = output;
 };
 
 export const createClaudeCompletedToolPart = ({

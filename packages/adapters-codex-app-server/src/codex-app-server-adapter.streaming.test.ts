@@ -1269,9 +1269,15 @@ describe("CodexAppServerAdapter streaming", () => {
     const ref = codexSessionRuntimeRef("thread/start-runtime-live");
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
     const hostEvents: AgentEvent[] = [];
+    let emptyMutations = 0;
     const { adapter } = createHarness({
       subscribeEvents,
-      onLiveSessionMutation: (mutation) => hostEvents.push(...mutation.transcriptEvents),
+      onLiveSessionMutation: (mutation) => {
+        hostEvents.push(...mutation.transcriptEvents);
+        if (mutation.transcriptEvents.length === 0 && mutation.snapshots.length === 0) {
+          emptyMutations += 1;
+        }
+      },
     });
     await adapter.startSession(codexStartSessionInput());
     await flushCodexAdapterWork();
@@ -1312,6 +1318,8 @@ describe("CodexAppServerAdapter streaming", () => {
         : [],
     );
     expect(outputs.at(-1)).toBe("one\ntwo\nthree\n");
+    // A chunk that waits for the interval changes nothing on the host, so it sends no update.
+    expect(emptyMutations).toBe(0);
   });
 
   test("shows no running output of a command that runs on after its turn", async () => {

@@ -446,6 +446,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionWorkflowScopeSchema",
   "agentStreamPartSchema",
   "agentToolPartSchema",
+  "RUNNING_TOOL_UPDATE_INTERVAL_MS",
   "agentUserMessageDisplayPartSchema",
   "taskAgentSessionsSchema",
   "APP_PLATFORM_VALUES",
