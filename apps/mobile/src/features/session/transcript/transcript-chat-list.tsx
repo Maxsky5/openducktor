@@ -45,6 +45,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { StyleSheet as ThemedStyleSheet } from "react-native-unistyles";
 import {
+  type CellIndex,
   CellIndexProvider,
   cellStartOffset,
   createFoldMotionController,
@@ -53,8 +54,8 @@ import {
   type FoldMotionList,
   FoldMotionListProvider,
   FoldMotionProvider,
+  isBelowPivot,
   useFoldMotion,
-  useFoldMotionList,
 } from "./transcript-fold-motion";
 import { redrawOnScroll } from "../../../../modules/openducktor-scroll";
 import { BOTTOM_EDGE_HEIGHT } from "./transcript-follow";
@@ -114,10 +115,11 @@ const renderItem = ({ item }: ListRenderItemInfo<TranscriptListItem>): ReactElem
 };
 
 /**
- * A transcript cell. A cell lower on the screen draws over the cells above it, and its surface is
- * opaque, so the rows under a part that opens or folds cover that part while they move. When the
- * list moved the cell for a resize, the cell starts at its old place and glides to its new place
- * on the UI thread.
+ * A transcript cell. When the list moved the cell for a resize, the cell starts at its old place
+ * and glides to its new place on the UI thread. While a motion runs, the part of the pivot that
+ * opens or folds lies under its neighbors, and the cells under the pivot on the screen are opaque,
+ * so they cover that part while they move. At rest, a cell has no layer and no surface, so a cell
+ * that the list recycles keeps its place among the native views.
  */
 function TranscriptCell({
   ref,
@@ -132,39 +134,84 @@ function TranscriptCell({
   index: number;
   children?: ReactNode;
 }): ReactElement {
-  const list = useFoldMotionList();
   const fold = useFoldMotion();
   const reducedMotion = useReducedMotion();
-  const offset = reducedMotion ? 0 : cellStartOffset(fold, index);
-  // The start offset mounts with the new layout as a plain style, without a layout animation, so
-  // Fabric shows both in one frame. A frame later, the cell gets its layout animation, and a frame
-  // after that, its offset goes back to zero and the animation glides it home.
-  const phase = offset === 0 ? null : (fold?.phase ?? null);
+  const motion = reducedMotion ? null : fold;
+  const offset = cellStartOffset(motion, index);
+  // The start offset mounts with the new layout as a plain style, so Fabric shows both in one
+  // frame. In the next phase, the offset goes back to zero and the layout animation glides the
+  // cell home.
   const start = useMemo(
-    () => (phase === "start" || phase === "arm" ? { top: offset } : null),
-    [offset, phase],
+    () => (motion?.phase === "start" && offset !== 0 ? { top: offset } : null),
+    [motion?.phase, offset],
   );
-  useEffect(() => {
-    if (!list || !fold || (phase !== "start" && phase !== "arm")) return;
-    const { id } = fold;
-    const frame = requestAnimationFrame(() => list.motions.advance(id));
-    return () => cancelAnimationFrame(frame);
-  }, [fold, list, phase]);
-  const layer = useMemo(
-    () => ({ zIndex: list?.inverted ? -index : index }),
-    [index, list?.inverted],
-  );
+  const indexRef = useRef(index);
+  useLayoutEffect(() => {
+    indexRef.current = index;
+  }, [index]);
   return (
-    <View ref={ref} style={[style, layer]} onLayout={onLayout}>
-      <Animated.View
-        style={[cellStyles.surface, start]}
-        {...(phase === "arm" || phase === "run" ? GLIDE_HOME : NO_GLIDE)}
+    <View
+      ref={ref}
+      style={motion?.pivot === index ? [style, PIVOT_LAYER] : style}
+      onLayout={onLayout}
+    >
+      <CellSurface
+        start={start}
+        glides={motion?.phase === "run" && offset !== 0}
+        opaque={motion !== null && isBelowPivot(motion, index)}
+        cellIndex={indexRef}
       >
-        <CellIndexProvider value={index}>{children}</CellIndexProvider>
-      </Animated.View>
+        {children}
+      </CellSurface>
     </View>
   );
 }
+
+// The pivot lies under the cells around it, so they cover the part that opens or folds.
+const PIVOT_LAYER: ViewStyle = { zIndex: -1 };
+
+type CellSurfaceProps = {
+  start: ViewStyle | null;
+  glides: boolean;
+  opaque: boolean;
+  cellIndex: CellIndex;
+  children?: ReactNode;
+};
+
+/**
+ * The content of a cell. The list renders a cell again each time it moves it, with new children
+ * elements, so the content renders again only when one of its elements or its motion changes.
+ */
+const CellSurface = memo(
+  function CellSurface({
+    start,
+    glides,
+    opaque,
+    cellIndex,
+    children,
+  }: CellSurfaceProps): ReactElement {
+    return (
+      <Animated.View
+        style={[opaque ? cellStyles.surface : null, start]}
+        {...(glides ? GLIDE_HOME : NO_GLIDE)}
+      >
+        <CellIndexProvider value={cellIndex}>{children}</CellIndexProvider>
+      </Animated.View>
+    );
+  },
+  (left, right) =>
+    left.start === right.start &&
+    left.glides === right.glides &&
+    left.opaque === right.opaque &&
+    left.cellIndex === right.cellIndex &&
+    haveSameElements(left.children, right.children),
+);
+
+const haveSameElements = (left: ReactNode, right: ReactNode): boolean => {
+  if (left === right) return true;
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((child, index) => child === right[index]);
+};
 
 /** Starts and ends gently, so no frame moves the rows much more than its neighbors. */
 const GLIDE = { duration: FOLD_MOTION_MS, easing: Easing.bezier(0.4, 0, 0.2, 1) };
@@ -242,6 +289,14 @@ export const TranscriptChatList = memo(function TranscriptChatList({
   // The rows that open or fold move the cells of this list with a FLIP motion.
   const [foldMotion, setFoldMotion] = useState<FoldMotion | null>(null);
   const [foldMotions] = useState(() => createFoldMotionController(setFoldMotion));
+  // The cells mounted their start offsets in the commit before this effect, so the next frame
+  // runs the motion.
+  useEffect(() => {
+    if (foldMotion?.phase !== "start") return;
+    const { id } = foldMotion;
+    const frame = requestAnimationFrame(() => foldMotions.advance(id));
+    return () => cancelAnimationFrame(frame);
+  }, [foldMotion, foldMotions]);
   const foldList = useMemo<FoldMotionList>(
     () => ({
       motions: foldMotions,
@@ -385,7 +440,7 @@ export const TranscriptChatList = memo(function TranscriptChatList({
   );
 });
 
-// The surface of the screen, so a moving cell covers the cells under it.
+// The surface of the screen, so a cell under the pivot covers the part of the pivot that moves.
 const cellStyles = ThemedStyleSheet.create((theme) => ({
   surface: { backgroundColor: theme.colors.background },
 }));

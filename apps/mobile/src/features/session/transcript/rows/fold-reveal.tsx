@@ -45,13 +45,13 @@ export function FoldReveal({
 }>): ReactElement | null {
   const reducedMotion = useReducedMotion();
   const list = useFoldMotionList();
-  const index = useCellIndex();
+  const cellIndex = useCellIndex();
   const layoutRow = useLayoutRow();
   const [mode, setMode] = useRecyclingState<FoldMode>(open ? "open" : "folded", [resetKey]);
   const [shownOpen, setShownOpen] = useRecyclingState(open, [resetKey]);
   const contentHeight = useRef(0);
   const foldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const animates = !reducedMotion && list !== null && index !== null;
+  const animates = !reducedMotion && list !== null && cellIndex !== null;
 
   const clearFoldTimer = useCallback(() => {
     if (foldTimer.current) clearTimeout(foldTimer.current);
@@ -64,7 +64,8 @@ export function FoldReveal({
    */
   const resize = useCallback(
     (delta: number) => {
-      if (!list || index === null) return;
+      if (!list || cellIndex === null) return;
+      const index = cellIndex.current;
       list.motions.start(
         foldMotion({
           id: list.motions.nextId(),
@@ -77,7 +78,7 @@ export function FoldReveal({
       );
       list.resizeRow(index, delta);
     },
-    [index, list],
+    [cellIndex, list],
   );
 
   // A change of `open` after the content showed opens or folds it with the motion.
@@ -127,30 +128,23 @@ export function FoldReveal({
     [mode, resize, setMode],
   );
 
-  switch (mode) {
-    case "folded":
-      return null;
-    case "open":
-      return (
-        <View style={style} onLayout={onContentLayout}>
-          {children}
-        </View>
-      );
-    case "measuring":
-    case "folding":
-      // The content lies over the row from where it starts, so it takes no height of the row.
-      return (
-        <View style={styles.anchor}>
-          <View
-            style={[styles.over, mode === "measuring" && styles.hidden, style]}
-            pointerEvents="none"
-            onLayout={onContentLayout}
-          >
-            {children}
-          </View>
-        </View>
-      );
-  }
+  if (mode === "folded") return null;
+  // While it measures itself or folds, the content lies over the row from where it starts, so it
+  // takes no height of the row. Each mode keeps the same views, so the content does not mount
+  // again in the commit that starts the motion.
+  const over = mode !== "open";
+  return (
+    <View style={over ? styles.anchor : null}>
+      <View
+        collapsable={false}
+        style={[over ? styles.over : null, mode === "measuring" ? styles.hidden : null, style]}
+        pointerEvents={over ? "none" : "auto"}
+        onLayout={onContentLayout}
+      >
+        {children}
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

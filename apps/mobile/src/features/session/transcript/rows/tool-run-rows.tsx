@@ -212,7 +212,10 @@ const SWAP_IN: CSSStyle<ViewStyle> = {
   animationTimingFunction: motion.easeOut,
 };
 
-/** A part that fades in when the value changes after the part mounted. */
+/**
+ * A part that fades in when the value changes after the part mounted. A new value mounts the part
+ * again, so a part that does not fade in is a plain view, which costs less to mount.
+ */
 function SwapIn({
   value,
   style,
@@ -220,13 +223,27 @@ function SwapIn({
 }: PropsWithChildren<{ value: string; style: ViewStyle }>): ReactElement {
   const reducedMotion = useReducedMotion();
   const mountValue = useValueAtMount(value);
-  return (
-    <Animated.View
-      key={value}
-      style={[style, value !== mountValue && !reducedMotion ? SWAP_IN : null]}
-    >
+  return value !== mountValue && !reducedMotion ? (
+    <Animated.View key={value} style={[style, SWAP_IN]}>
       {children}
     </Animated.View>
+  ) : (
+    <View key={value} style={style}>
+      {children}
+    </View>
+  );
+}
+
+/**
+ * The content of a line. A line that came after its run showed fades and rises in. The others,
+ * such as the lines of a run that scrolls into view, are plain views, which cost less to mount.
+ * `enters` does not change for a mounted line.
+ */
+function LineEnter({ enters, children }: PropsWithChildren<{ enters: boolean }>): ReactElement {
+  return enters ? (
+    <Animated.View style={LINE_ENTER}>{children}</Animated.View>
+  ) : (
+    <View>{children}</View>
   );
 }
 
@@ -274,7 +291,7 @@ const ToolRunLine = memo(function ToolRunLine({
       accessibilityHint={readLineHint(line)}
       style={styles.line}
     >
-      <Animated.View style={entersAtMount && !reducedMotion ? LINE_ENTER : null}>
+      <LineEnter enters={entersAtMount && !reducedMotion}>
         {/* The icon and the timing stay on the first line of the call, on its middle. */}
         <View style={styles.firstLine}>
           <ToolCallIcon meta={meta} phase={phase} />
@@ -288,7 +305,7 @@ const ToolRunLine = memo(function ToolRunLine({
           <CallLineEnd row={row} line={line} phase={phase} />
         </View>
         <CallErrorLine errorPreview={line.errorPreview} />
-      </Animated.View>
+      </LineEnter>
     </Touchable>
   );
 });

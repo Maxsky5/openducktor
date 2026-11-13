@@ -10,12 +10,7 @@ export const FOLD_MOTION_MS = 280;
  * the translation goes to zero on the UI thread. A translation never changes the layout, so the
  * scroll anchor stays exact. This is the FLIP technique.
  */
-export type FoldMotionPhase = "start" | "arm" | "run";
-
-const NEXT_PHASE = { start: "arm", arm: "run", run: "run" } as const satisfies Record<
-  FoldMotionPhase,
-  FoldMotionPhase
->;
+export type FoldMotionPhase = "start" | "run";
 
 export type FoldMotion = {
   /** Changes for each motion, so cells start each motion again. */
@@ -29,9 +24,10 @@ export type FoldMotion = {
   /** The start translation of the pivot and the rows over it on screen, in points. */
   readonly pivotOffset: number;
   /**
-   * `start` mounts the start offsets as plain styles with the new layout, in one mount. `arm` then
-   * gives the moved cells their layout animation, and `run` sets their offsets to zero, so the
-   * animation glides them home from where the start mount put them.
+   * `start` mounts the start offsets as plain styles with the new layout, in one mount. A frame
+   * later, `run` gives the moved cells their layout animation and sets their offsets to zero.
+   * Reanimated reads the animation before it mounts that change, so the cells glide home from
+   * where the start mount put them.
    */
   readonly phase: FoldMotionPhase;
 };
@@ -67,11 +63,14 @@ export const foldMotion = ({
   };
 };
 
+/** Whether the cell at `index` is under the pivot on the screen. */
+export const isBelowPivot = (motion: FoldMotion, index: number): boolean =>
+  motion.inverted ? index < motion.pivot : index > motion.pivot;
+
 /** The start translation of the cell at `index`, or 0 for a cell that does not move. */
 export const cellStartOffset = (motion: FoldMotion | null, index: number): number => {
   if (!motion) return 0;
-  const below = motion.inverted ? index < motion.pivot : index > motion.pivot;
-  return below ? motion.belowOffset : motion.pivotOffset;
+  return isBelowPivot(motion, index) ? motion.belowOffset : motion.pivotOffset;
 };
 
 /** Sets the motion that the cells of a list read, as a React state setter does. */
@@ -85,7 +84,7 @@ export type FoldMotionController = {
   /** A new motion ID. */
   nextId: () => number;
   start: (motion: FoldMotion, durationMs: number) => void;
-  /** Moves a motion that the list mounted to its next phase. */
+  /** Runs a motion whose start offsets the list mounted. */
   advance: (id: number) => void;
 };
 
@@ -108,9 +107,7 @@ export const createFoldMotionController = (setMotion: SetFoldMotion): FoldMotion
     },
     advance(id) {
       setMotion((current) =>
-        current?.id === id && current.phase !== "run"
-          ? { ...current, phase: NEXT_PHASE[current.phase] }
-          : current,
+        current?.id === id && current.phase === "start" ? { ...current, phase: "run" } : current,
       );
     },
   };
@@ -143,9 +140,14 @@ export const FoldMotionProvider = FoldMotionContext;
 
 export const useFoldMotion = (): FoldMotion | null => use(FoldMotionContext);
 
-/** The list index of the cell that a row renders in. */
-const CellIndexContext = createContext<number | null>(null);
+/**
+ * The list index of the cell that a row renders in. The cell keeps it current, and a row reads it
+ * only when it resizes, so a change of the index renders no row again.
+ */
+export type CellIndex = { readonly current: number };
+
+const CellIndexContext = createContext<CellIndex | null>(null);
 
 export const CellIndexProvider = CellIndexContext;
 
-export const useCellIndex = (): number | null => use(CellIndexContext);
+export const useCellIndex = (): CellIndex | null => use(CellIndexContext);

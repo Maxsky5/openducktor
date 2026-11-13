@@ -162,16 +162,32 @@ export function ToolCallIcon({
       accessibilityRole="image"
       accessibilityLabel={TOOL_STATUS[phase].label}
     >
-      <Animated.View
-        key={glyph}
-        style={[styles.glyph, glyph !== mountGlyph && !reducedMotion ? SWAP_IN : null]}
-      >
-        {glyph === "bars" ? <ToolRunningBars color={color} /> : null}
-        {glyph === "spinner" ? <LoaderSpinner size={12} color={color} /> : null}
-        {glyph === "tool" ? <Icon name={toolIcon(meta)} size={14} colorValue={color} /> : null}
-      </Animated.View>
+      {glyph !== mountGlyph && !reducedMotion ? (
+        <Animated.View key={glyph} style={[styles.glyph, SWAP_IN]}>
+          <ToolGlyph glyph={glyph} meta={meta} color={color} />
+        </Animated.View>
+      ) : (
+        // The icon that the row mounted with does not fade in, so it is a plain view.
+        <View key={glyph} style={styles.glyph}>
+          <ToolGlyph glyph={glyph} meta={meta} color={color} />
+        </View>
+      )}
     </View>
   );
+}
+
+function ToolGlyph({
+  glyph,
+  meta,
+  color,
+}: {
+  glyph: ToolCallGlyph;
+  meta: Pick<ToolMeta, "tool" | "toolType">;
+  color: string;
+}): ReactElement {
+  if (glyph === "bars") return <ToolRunningBars color={color} />;
+  if (glyph === "spinner") return <LoaderSpinner size={12} color={color} />;
+  return <Icon name={toolIcon(meta)} size={14} colorValue={color} />;
 }
 
 const styles = StyleSheet.create({

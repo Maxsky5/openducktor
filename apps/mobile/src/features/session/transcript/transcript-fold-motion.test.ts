@@ -52,7 +52,7 @@ describe("foldMotion", () => {
 });
 
 describe("createFoldMotionController", () => {
-  test("starts a motion, moves it through its phases once, and ends it after its time", async () => {
+  test("starts a motion, runs it once, and ends it after its time", async () => {
     let motion: FoldMotion | null = null;
     const motions = createFoldMotionController((update) => {
       motion = update(motion);
@@ -67,10 +67,10 @@ describe("createFoldMotionController", () => {
     motions.advance(id + 1);
     expect(motion).toMatchObject({ phase: "start" });
     motions.advance(id);
-    expect(motion).toMatchObject({ phase: "arm" });
-    motions.advance(id);
-    motions.advance(id);
     expect(motion).toMatchObject({ phase: "run" });
+    const running = motion;
+    motions.advance(id);
+    expect(motion).toBe(running);
     expect(motions.nextId()).toBe(id + 1);
     await new Promise((resolve) => setTimeout(resolve, 40));
     expect(motion).toBeNull();
