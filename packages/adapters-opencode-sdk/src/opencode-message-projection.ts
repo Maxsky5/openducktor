@@ -28,6 +28,8 @@ import { deriveToolPreview } from "./tool-preview";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import type { OpencodeSessionContextUsage } from "./opencode-session-runtime-signals";
 import {
+  isFailedShellExit,
+  shellExitError,
   updateShellTool,
   isShellNotice,
   projectShellPart,
@@ -77,6 +79,8 @@ export const projectContextUsage = (
   const totalTokens = tokenTotal(last.tokens);
   return totalTokens > 0 ? { totalTokens, model: modelSelection(last.model) } : null;
 };
+
+const shellExitSchema = z.number().int();
 
 const nativeSkillAttachmentsSchema = z.array(
   z.object({
@@ -399,6 +403,15 @@ const projectAssistantContent = (
   }
   if (state.status === "error") tool.error = state.error.message;
   if (metadata) tool.metadata = metadata;
+  // OpenCode completes a shell call that exits with an error code. Codex and Claude report it as
+  // failed, so it fails here too.
+  if (tool.toolType === "bash" && state.status === "completed") {
+    const exit = shellExitSchema.safeParse(metadata?.exit).data;
+    if (isFailedShellExit(exit)) {
+      tool.status = "error";
+      tool.error = shellExitError(exit);
+    }
+  }
   if (
     tool.toolType === "file_edit" &&
     state.status === "completed" &&

@@ -213,19 +213,28 @@ export type CodexAppServerSubagentThreadItem =
   | CodexAppServerCollabAgentToolCallThreadItem
   | CodexAppServerSubAgentActivityThreadItem;
 
+/** The times that Codex recorded for a thread item, in Unix milliseconds. They stay flat on the wire. */
+const codexAppServerThreadItemTimes = {
+  startedAtMs: codexInt64Schema.nullish(),
+  completedAtMs: codexInt64Schema.nullish(),
+};
+
 export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
   z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("userMessage"),
     id: z.string(),
     clientId: z.string().nullable(),
     content: z.array(codexAppServerUserInputSchema),
   }),
   z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("hookPrompt"),
     id: z.string(),
     fragments: z.array(z.object({ text: z.string(), hookRunId: z.string() })),
   }),
   z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("agentMessage"),
     id: z.string(),
     text: z.string(),
@@ -234,14 +243,21 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
     delivery: z.literal("async").nullable().optional(),
     questions: z.unknown().nullable().optional(),
   }),
-  z.object({ type: z.literal("plan"), id: z.string(), text: z.string() }),
   z.object({
+    ...codexAppServerThreadItemTimes,
+    type: z.literal("plan"),
+    id: z.string(),
+    text: z.string(),
+  }),
+  z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("reasoning"),
     id: z.string(),
     summary: z.array(z.string()),
     content: z.array(z.string()),
   }),
   z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("commandExecution"),
     id: z.string(),
     pluginId: z.string().nullable(),
@@ -257,13 +273,15 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
     durationMs: codexInt64Schema.nullable(),
   }),
   z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("fileChange"),
     id: z.string(),
     changes: z.array(codexAppServerFileUpdateChangeSchema),
     status: z.enum(["inProgress", "completed", "failed", "declined"]),
   }),
-  codexAppServerMcpToolCallThreadItemSchema,
+  codexAppServerMcpToolCallThreadItemSchema.extend(codexAppServerThreadItemTimes),
   z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("dynamicToolCall"),
     id: z.string(),
     namespace: z.string().nullable(),
@@ -274,22 +292,30 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
     success: z.boolean().nullable(),
     durationMs: codexInt64Schema.nullable(),
   }),
-  codexAppServerCollabAgentToolCallThreadItemSchema,
-  codexAppServerSubAgentActivityThreadItemSchema,
+  codexAppServerCollabAgentToolCallThreadItemSchema.extend(codexAppServerThreadItemTimes),
+  codexAppServerSubAgentActivityThreadItemSchema.extend(codexAppServerThreadItemTimes),
   z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("webSearch"),
     id: z.string(),
     query: z.string(),
     action: codexAppServerWebSearchActionSchema.nullable(),
     results: z.array(codexAppServerJsonValueSchema).nullable(),
   }),
-  z.object({ type: z.literal("imageView"), id: z.string(), path: z.string() }),
   z.object({
+    ...codexAppServerThreadItemTimes,
+    type: z.literal("imageView"),
+    id: z.string(),
+    path: z.string(),
+  }),
+  z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("sleep"),
     id: z.string(),
     durationMs: codexUint64Schema,
   }),
   z.object({
+    ...codexAppServerThreadItemTimes,
     type: z.literal("imageGeneration"),
     id: z.string(),
     status: z.string(),
@@ -305,9 +331,23 @@ export const codexAppServerThreadItemSchema = z.discriminatedUnion("type", [
       .nullable(),
     savedPath: z.string().optional(),
   }),
-  z.object({ type: z.literal("enteredReviewMode"), id: z.string(), review: z.string() }),
-  z.object({ type: z.literal("exitedReviewMode"), id: z.string(), review: z.string() }),
-  z.object({ type: z.literal("contextCompaction"), id: z.string() }),
+  z.object({
+    ...codexAppServerThreadItemTimes,
+    type: z.literal("enteredReviewMode"),
+    id: z.string(),
+    review: z.string(),
+  }),
+  z.object({
+    ...codexAppServerThreadItemTimes,
+    type: z.literal("exitedReviewMode"),
+    id: z.string(),
+    review: z.string(),
+  }),
+  z.object({
+    ...codexAppServerThreadItemTimes,
+    type: z.literal("contextCompaction"),
+    id: z.string(),
+  }),
 ]);
 
 export type CodexAppServerThreadItem = z.output<typeof codexAppServerThreadItemSchema>;

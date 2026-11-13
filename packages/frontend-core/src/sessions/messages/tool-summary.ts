@@ -177,8 +177,9 @@ const extractTaskId = (input: AgentToolData | undefined): string | null => {
 };
 
 /**
- * The compact summary of a Tool Call. A cancelled call with error text shows that text. A reader
- * shows the error of a failed call in place of this summary.
+ * The compact summary of a Tool Call. A cancelled call with error text shows that text. The output
+ * and the message text of a failed call hold its error, so they never become its summary: a reader
+ * shows the error on its own line.
  */
 export const buildToolSummary = (
   meta: ToolMeta,
@@ -282,6 +283,10 @@ export const buildToolSummary = (
 
   if (path && lowerTool !== "glob" && lowerTool !== "grep") {
     return compactText(relativizeDisplayPath(path, workingDirectory), 160);
+  }
+
+  if (lifecyclePhase === "failed") {
+    return "";
   }
 
   if (!OUTPUT_IGNORED_TOOL_NAMES.has(lowerTool) && hasNonEmptyText(meta.output)) {

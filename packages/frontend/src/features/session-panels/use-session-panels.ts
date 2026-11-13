@@ -20,6 +20,8 @@ import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-
 import {
   type HostTabKind,
   isHostTabKind,
+  isToolTabKind,
+  isViewTabKind,
   PANEL_TAB_KINDS,
   type PanelId,
   type PanelTabKind,
@@ -40,6 +42,7 @@ import {
   type PanelDropTarget,
   pickPanelTabKind,
   reconcileSessionPanelLayout,
+  removeViewPanelTab,
   type ResolvedHostTab,
   type ResolvedPanelTab,
   type SessionPanelContext,
@@ -50,6 +53,7 @@ import {
   selectedPanelTabId,
   selectPanelTab,
   sessionPanelOwnerKey,
+  showViewPanelTab,
   shownPanelTabs,
 } from "./session-panel-layout";
 import { useSessionPanelLayoutStore } from "./session-panel-layout-store";
@@ -146,6 +150,11 @@ type SessionPanelsInput = {
   shortcutsEnabled?: boolean;
   /** The browser tabs of the owner. Without it, the panels offer no browser tabs and hide saved ones. */
   browser?: SessionPanelBrowserModel | null;
+  /**
+   * The tool call that the transcript shows in the right panel, or null when it shows none. Each new
+   * `revealRevision` selects the tab and opens the right panel. Closing the tab calls `onClose`.
+   */
+  toolCallTab?: { revealRevision: number; onClose: () => void } | null;
 };
 
 type LatestControllerState = LatestPanelState &
@@ -172,7 +181,8 @@ const launcherFor = (
   blocks: LauncherBlocks,
 ): PanelLauncherEntry[] =>
   PANEL_TAB_KINDS.flatMap((kind): PanelLauncherEntry[] => {
-    if (context.unavailableKinds.has(kind)) return [];
+    // A view kind shows what the page opens for a moment, so the launcher does not offer it.
+    if (isViewTabKind(kind) || context.unavailableKinds.has(kind)) return [];
     if (!canPlacePanelTab(layout, context, kind, panel)) return [];
     return [isHostTabKind(kind) ? { kind, ...blocks[kind] } : { kind, disabledReason: null }];
   });
@@ -355,6 +365,7 @@ export function useSessionPanels({
   terminals,
   shortcutsEnabled = true,
   browser = null,
+  toolCallTab = null,
 }: SessionPanelsInput): SessionPanelsModel {
   const isActive = useSessionViewActive();
   const layoutStore = useSessionPanelLayoutStore();
@@ -362,10 +373,13 @@ export function useSessionPanels({
   const isOwnerTerminals = ownerKey !== null && terminals.scopeKey === ownerKey;
   const hasBrowser = browser !== null;
   const ownerBrowser = browser !== null && browser.scopeKey === ownerKey ? browser : null;
-  const allUnavailableKinds = useMemo<ReadonlySet<PanelTabKind>>(
-    () => (hasBrowser ? unavailableKinds : new Set([...unavailableKinds, "browser"])),
-    [hasBrowser, unavailableKinds],
-  );
+  const hasToolCall = toolCallTab !== null;
+  const allUnavailableKinds = useMemo<ReadonlySet<PanelTabKind>>(() => {
+    const kinds = new Set<PanelTabKind>(unavailableKinds);
+    if (!hasBrowser) kinds.add("browser");
+    if (!hasToolCall) kinds.add("tool_call");
+    return kinds;
+  }, [hasBrowser, hasToolCall, unavailableKinds]);
   const context = useMemo<SessionPanelContext>(
     () => ({
       ownerKind: owner?.kind ?? "task",
@@ -442,6 +456,23 @@ export function useSessionPanels({
     },
     [layoutStore],
   );
+  const latestToolCallTab = useRef(toolCallTab);
+  const latestShowRight = useRef(showRight);
+  useLayoutEffect(() => {
+    latestToolCallTab.current = toolCallTab;
+    latestShowRight.current = showRight;
+  });
+  // Each press on a tool call of the transcript shows its tab and the right panel. The tab leaves
+  // when the transcript shows no call.
+  const toolCallRevealRevision = toolCallTab?.revealRevision ?? null;
+  useEffect(() => {
+    if (toolCallRevealRevision === null) {
+      update((current, ctx) => removeViewPanelTab(current, ctx, "tool_call"));
+      return;
+    }
+    update((current, ctx) => showViewPanelTab(current, ctx, "tool_call"));
+    latestShowRight.current();
+  }, [toolCallRevealRevision, update]);
   const { actions: terminalActions, terminalClose } = useSessionPanelTerminalTabs({
     ownerKey,
     latest,
@@ -552,6 +583,7 @@ export function useSessionPanels({
         return;
       }
       update((current, ctx) => closePanelTab(current, ctx, panel, entryId));
+      if (tab.kind === "tool_call") latestToolCallTab.current?.onClose();
     },
     [hostTabActions, update],
   );
@@ -565,6 +597,8 @@ export function useSessionPanels({
         hostTabActions[kind].pick(panel);
         return;
       }
+      // The launcher does not offer view kinds. A page opens them with its own action.
+      if (!isToolTabKind(kind)) return;
       update((current, ctx) => pickPanelTabKind(current, ctx, panel, { kind }));
     },
     [hostTabActions, update],

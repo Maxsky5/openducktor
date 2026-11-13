@@ -766,15 +766,32 @@ describe("Codex app-server protocol", () => {
     });
   });
 
-  test("accepts known unconsumed notifications without weakening consumed payloads", () => {
+  test("parses the output of a running command and rejects one without its text", () => {
+    const params = { threadId: "thread-1", turnId: "turn-1", itemId: "item-1", delta: "output" };
+    expect(
+      codexAppServerRuntimeNotificationSchema.parse({
+        method: "item/commandExecution/outputDelta",
+        params,
+      }),
+    ).toEqual({ method: "item/commandExecution/outputDelta", params });
     expect(
       codexAppServerRuntimeNotificationSchema.safeParse({
         method: "item/commandExecution/outputDelta",
+        params: { threadId: "thread-1", turnId: "turn-1", itemId: "item-1" },
+      }).success,
+    ).toBe(false);
+  });
+
+  test("accepts known unconsumed notifications without weakening consumed payloads", () => {
+    expect(
+      codexAppServerRuntimeNotificationSchema.safeParse({
+        method: "item/commandExecution/terminalInteraction",
         params: {
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "item-1",
-          delta: "output",
+          processId: "process-1",
+          stdin: "y\n",
         },
       }).success,
     ).toBe(true);

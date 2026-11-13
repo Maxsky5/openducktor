@@ -67,6 +67,8 @@ const DEFAULT_SOFT_GUARDRAILS = {
 export const DEFAULT_CHAT_SETTINGS = {
   steerMessagesByDefault: false,
   showThinkingMessages: false,
+  groupToolCalls: true,
+  collapseFinishedToolCalls: true,
   expandFileDiffsByDefault: true,
   diffStyle: "split",
   diffIndicators: "bars",
@@ -572,6 +574,8 @@ export type SettingsRepoConfig = z.infer<typeof settingsRepoConfigSchema>;
 export const chatSettingsSchema = z.object({
   steerMessagesByDefault: z.boolean().default(DEFAULT_CHAT_SETTINGS.steerMessagesByDefault),
   showThinkingMessages: z.boolean().default(DEFAULT_CHAT_SETTINGS.showThinkingMessages),
+  groupToolCalls: z.boolean().default(DEFAULT_CHAT_SETTINGS.groupToolCalls),
+  collapseFinishedToolCalls: z.boolean().default(DEFAULT_CHAT_SETTINGS.collapseFinishedToolCalls),
   expandFileDiffsByDefault: z.boolean().default(DEFAULT_CHAT_SETTINGS.expandFileDiffsByDefault),
   diffStyle: z.enum(CHAT_DIFF_STYLE_VALUES).default(DEFAULT_CHAT_SETTINGS.diffStyle),
   diffIndicators: z.enum(CHAT_DIFF_INDICATOR_VALUES).default(DEFAULT_CHAT_SETTINGS.diffIndicators),

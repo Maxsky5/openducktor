@@ -93,12 +93,18 @@ export type ThemePreference = z.infer<typeof themePreferenceSchema>;
 const devicePreferencesRecordSchema = z.object({
   theme: themePreferenceSchema,
   showReasoning: z.boolean(),
+  // Records from before these preferences group tool calls and fold finished groups, as a new
+  // record does.
+  groupToolCalls: z.boolean().default(true),
+  collapseFinishedToolCalls: z.boolean().default(true),
 });
 export type DevicePreferencesRecord = z.infer<typeof devicePreferencesRecordSchema>;
 
 const DEFAULT_DEVICE_PREFERENCES: DevicePreferencesRecord = {
   theme: "system",
   showReasoning: false,
+  groupToolCalls: true,
+  collapseFinishedToolCalls: true,
 };
 
 const notJsonMessage = (name: string, cause: unknown): string =>

@@ -274,6 +274,12 @@ export const runtimeOptionalSurfaceCapabilitiesSchema = z
     supportsFileStatus: z.boolean(),
     supportsMcpStatus: z.boolean(),
     supportsImageGeneration: z.boolean(),
+    /**
+     * The runtime sends the output of a shell command while the command runs. Codex sends it. The
+     * Claude Agent SDK sends only the run time of a running tool, and OpenCode writes the running
+     * output to a file, so their commands show their output when they end.
+     */
+    supportsRunningCommandOutput: z.boolean(),
     supportsSubagents: z.boolean(),
     supportedSubagentExecutionModes: runtimeSupportedSubagentExecutionModesSchema,
   })

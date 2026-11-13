@@ -11,8 +11,11 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "expo-router";
 import { Platform, useWindowDimensions, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+import { useSessionTarget } from "@/features/session/session-target";
+import { routes, SINGLE_SHEET } from "@/navigation/routes";
 import { useListViewport, ViewportProvider } from "@/rich-content/viewport/use-in-viewport";
 import { NativeParagraphKeyContext } from "@/ui/use-native-paragraph-key";
 import type { JumpToLatestSignal } from "./jump-to-latest-signal";
@@ -25,6 +28,7 @@ import {
   type TranscriptFollowState,
   transcriptContentKey,
 } from "./transcript-follow";
+import { usePublishToolCallSource } from "./tool-call-sources";
 import { TranscriptFullViewSheet } from "./transcript-full-view";
 import type {
   TranscriptListItem,
@@ -49,7 +53,9 @@ import {
   TRANSCRIPT_ACTIONS,
   useTranscriptListJumps,
 } from "./use-transcript-list-jumps";
-import { useRowState } from "./use-transcript-rows";
+import { useRowState, useTranscriptRowsContext } from "./use-transcript-rows";
+import { TranscriptRowsProvider } from "./transcript-rows-context";
+import { createVisibleRowsStore } from "./transcript-visibility";
 
 export type TranscriptListProps = {
   rows: readonly AgentChatTranscriptRow[];
@@ -168,6 +174,32 @@ export function TranscriptList({
   const rowState = useRowState(activeStreamingMessageId, subagentPendingCountBySessionKey);
   const [fullView, setFullView] = useState<TranscriptFullView | null>(null);
   const closeFullView = useCallback(() => setFullView(null), []);
+  const router = useRouter();
+  const { identity, sessionKey } = useSessionTarget();
+  // The details of a call open on a pushed screen, so a swipe returns to the transcript. The route
+  // stays single, so a fast second press does not push a second screen.
+  const openFullView = useCallback(
+    (view: TranscriptFullView) => {
+      if (view.kind !== "tool") {
+        setFullView(view);
+        return;
+      }
+      router.push(routes.toolCall(identity, view.messageId, view.title), SINGLE_SHEET);
+    },
+    [identity, router],
+  );
+  // The sheet sits beside the lists, so it gets its own context with the same session facts.
+  const [sheetVisibleRows] = useState(createVisibleRowsStore);
+  const sheetContext = useTranscriptRowsContext({
+    visibleRows: sheetVisibleRows,
+    rowState,
+    presentToolCall,
+    onOpenSubagent,
+    openFullView,
+  });
+  // The tool call screen above this screen reads the live calls and the session facts from here.
+  const toolCallSource = useMemo(() => ({ context: sheetContext, rows }), [rows, sheetContext]);
+  usePublishToolCallSource(sessionKey, toolCallSource);
   // Images and isolated pages in visible rows check their own position against this viewport.
   const {
     store: viewportStore,
@@ -304,7 +336,7 @@ export function TranscriptList({
                   rowState={rowState}
                   presentToolCall={presentToolCall}
                   onOpenSubagent={onOpenSubagent}
-                  openFullView={setFullView}
+                  openFullView={openFullView}
                   onPlace={placeHandlers[slot]}
                   onRest={onRest}
                   onTopRow={onTopRow}
@@ -321,7 +353,9 @@ export function TranscriptList({
           hasNewActivity={follow.hasNewActivity}
           onJumpToLatest={jumps.jumpToLatest}
         />
-        <TranscriptFullViewSheet view={fullView} onClose={closeFullView} />
+        <TranscriptRowsProvider value={sheetContext}>
+          <TranscriptFullViewSheet view={fullView} onClose={closeFullView} />
+        </TranscriptRowsProvider>
       </View>
     </ViewportProvider>
   );

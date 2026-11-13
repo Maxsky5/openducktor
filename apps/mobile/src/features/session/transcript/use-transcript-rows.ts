@@ -77,9 +77,11 @@ export const useTranscriptRowsContext = ({
       router.push(routes.artifact(workspace.workspaceId, artifactTaskId, code)),
     [router, workspace.workspaceId],
   );
-  const supportsImageGeneration =
-    runtimeDefinitions.find((runtime) => runtime.kind === identity.runtimeKind)?.capabilities
-      .optionalSurfaces.supportsImageGeneration === true;
+  const optionalSurfaces = runtimeDefinitions.find(
+    (runtime) => runtime.kind === identity.runtimeKind,
+  )?.capabilities.optionalSurfaces;
+  const supportsImageGeneration = optionalSurfaces?.supportsImageGeneration === true;
+  const supportsRunningCommandOutput = optionalSurfaces?.supportsRunningCommandOutput === true;
   const taskId = owner.kind === "task" ? owner.taskId : null;
   return useMemo<TranscriptRowsContextValue>(
     () => ({
@@ -95,6 +97,7 @@ export const useTranscriptRowsContext = ({
       presentToolCall,
       modelCatalog,
       supportsImageGeneration,
+      supportsRunningCommandOutput,
       expandFileDiffsByDefault: chatSettings?.expandFileDiffsByDefault ?? true,
       // Transcript images never come from the source issue of the task.
       imageContext: taskId ? { workspaceId: workspace.workspaceId, taskId, issue: null } : null,
@@ -122,6 +125,7 @@ export const useTranscriptRowsContext = ({
       repoPath,
       rowState,
       supportsImageGeneration,
+      supportsRunningCommandOutput,
       taskId,
       visibleRows,
       workspace.workspaceId,

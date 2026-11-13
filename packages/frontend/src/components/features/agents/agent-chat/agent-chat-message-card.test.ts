@@ -482,7 +482,8 @@ describe("AgentChatMessageCard messages", () => {
     expect(html).toContain('title="src/main.ts"');
     expect(html).toContain(">main.ts<");
     expect(html).toContain("bg-sky-200");
-    expect(html).toContain("lucide-file-code-corner");
+    // The chip shows the icon of the file type, as the file tree does.
+    expect(html).toContain('href="#file-tree-builtin-typescript"');
     expect(html).toContain("please");
     expect(html).not.toContain("flex min-w-0 flex-1 flex-wrap justify-start gap-2");
   });

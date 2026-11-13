@@ -51,7 +51,8 @@ export function SettingsSidebar({
           }}
         />
       </div>
-      <div className="hidden space-y-1 md:block">
+      {/* A column of buttons is as wide as its widest label, which sets the width of the sidebar. */}
+      <div className="hidden flex-col gap-1 md:flex">
         {sections.map((entry) => {
           const Icon = entry.icon;
           const sectionErrorCount = errorCountById[entry.id] ?? 0;

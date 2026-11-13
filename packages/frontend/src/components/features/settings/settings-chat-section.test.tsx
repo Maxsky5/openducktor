@@ -112,6 +112,31 @@ describe("settings chat section", () => {
     expect(getLatestChat()).toEqual({ ...chat, showConversationMinimap: false });
   });
 
+  test("edits the tool call grouping switch in the draft", () => {
+    const chat = createChatSettings();
+    const { getLatestChat } = renderSettingsChatSectionWithUpdates(chat);
+
+    expect(screen.getByText("Group tool calls")).toBeDefined();
+    expectSwitchChecked("Group tool calls in session transcripts", true);
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Group tool calls in session transcripts" }),
+    );
+    expect(getLatestChat()).toEqual({ ...chat, groupToolCalls: false });
+  });
+
+  test("edits the finished tool call collapse switch, which needs grouped tool calls", () => {
+    const chat = createChatSettings();
+    const { getLatestChat } = renderSettingsChatSectionWithUpdates(chat);
+
+    const name = "Collapse finished tool call groups in session transcripts";
+    expectSwitchChecked(name, true);
+    fireEvent.click(screen.getByRole("switch", { name }));
+    expect(getLatestChat()).toEqual({ ...chat, collapseFinishedToolCalls: false });
+
+    renderSettingsChatSection(createChatSettings({ groupToolCalls: false }));
+    expect(screen.getAllByRole("switch", { name }).at(-1)?.hasAttribute("disabled")).toBe(true);
+  });
+
   test("renders file diff switch as checked when diffs expand by default", () => {
     const chatSettings = createChatSettings({ expandFileDiffsByDefault: true });
 
@@ -134,7 +159,7 @@ describe("settings chat section", () => {
     renderSettingsChatSection(chatSettings, true);
 
     const switches = screen.getAllByRole("switch");
-    expect(switches).toHaveLength(4);
+    expect(switches).toHaveLength(6);
     expect(switches.every((control) => control.hasAttribute("disabled"))).toBe(true);
   });
 

@@ -125,6 +125,7 @@ export const buildBaseModel = () => ({
     runtimeKind: "opencode" as const,
     presentToolCall: presentRegularToolCall,
     supportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"] as const,
+    supportsRunningCommandOutput: false,
   },
   emptyState: {
     title: "Send a message to start a new session automatically.",

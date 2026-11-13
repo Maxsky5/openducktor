@@ -19,8 +19,15 @@ export type ToolTabKind = (typeof TOOL_TAB_KINDS)[number];
 export const HOST_TAB_KINDS = ["terminal", "browser"] as const;
 export type HostTabKind = (typeof HOST_TAB_KINDS)[number];
 
+/**
+ * Kinds whose tab shows a view that the page opens for a moment, such as the details of a tool
+ * call of the transcript. The layout does not save them, and the launcher does not offer them.
+ */
+export const VIEW_TAB_KINDS = ["tool_call"] as const;
+export type ViewTabKind = (typeof VIEW_TAB_KINDS)[number];
+
 /** All kinds in launcher order. */
-export const PANEL_TAB_KINDS = [...TOOL_TAB_KINDS, ...HOST_TAB_KINDS] as const;
+export const PANEL_TAB_KINDS = [...TOOL_TAB_KINDS, ...HOST_TAB_KINDS, ...VIEW_TAB_KINDS] as const;
 export type PanelTabKind = (typeof PANEL_TAB_KINDS)[number];
 
 export type PanelTabKindRule = {
@@ -99,6 +106,16 @@ export const PANEL_TAB_KIND_RULES = {
     openByDefault: false,
     keepMounted: true,
   },
+  tool_call: {
+    label: "Tool call",
+    description: "Shows the details of a tool call of the transcript.",
+    icon: SquareTerminal,
+    cardinality: "unique",
+    panels: ["right"],
+    owners: ["task", "chat"],
+    openByDefault: false,
+    keepMounted: false,
+  },
 } as const satisfies Record<PanelTabKind, PanelTabKindRule>;
 
 export const isToolTabKind = (value: string): value is ToolTabKind =>
@@ -106,6 +123,9 @@ export const isToolTabKind = (value: string): value is ToolTabKind =>
 
 export const isHostTabKind = (value: string): value is HostTabKind =>
   HOST_TAB_KINDS.some((kind) => kind === value);
+
+export const isViewTabKind = (value: string): value is ViewTabKind =>
+  VIEW_TAB_KINDS.some((kind) => kind === value);
 
 export const PANEL_NAMES = {
   right: "right panel",

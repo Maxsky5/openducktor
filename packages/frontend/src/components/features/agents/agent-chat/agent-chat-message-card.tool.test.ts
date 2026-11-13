@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentToolData, RuntimeKind } from "@openducktor/contracts";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+  createToolDetailsStore,
+  ToolCallSourceContext,
+  type ToolCallSourceContextValue,
+  ToolDetailsStoreContext,
+} from "./agent-chat-tool-details-store";
 import {
   createDefaultTestChatSettings,
   createMessageCardElement,
@@ -11,6 +18,21 @@ import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/
 import { formatTime } from "@openducktor/frontend-core/sessions/messages/message-formatting";
 
 const TAB_ID = "6f1c2a8e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
+
+/** The transcript of the rows, which a press on a row gives to the tool details. */
+const TRANSCRIPT_SOURCE: ToolCallSourceContextValue = {
+  source: {
+    key: "session-1",
+    workingDirectory: "/repo",
+    runtimePresentation: resolveAgentChatRuntimePresentation({
+      runtimeDefinitions: [],
+      runtimeKind: "opencode",
+    }),
+    chatSettings: null,
+    toolPartSession: null,
+  },
+  sessionRef: { current: null },
+};
 
 describe("AgentChatMessageCard tool presentation", () => {
   test("hides approximate hydrated tool timestamps", () => {
@@ -187,11 +209,11 @@ describe("AgentChatMessageCard tool presentation", () => {
     );
 
     const document = new DOMParser().parseFromString(html, "text/html");
-    const line = Array.from(document.querySelectorAll("p")).find(
-      (element) => element.textContent === "Task task-x was not found.",
-    );
-    expect(line?.classList.contains("text-destructive-muted")).toBe(true);
-    expect(html).not.toMatch(/<details\b[^>]*\bopen\b/);
+    const preview = document.querySelector('[data-slot="tool-error-preview"]');
+    expect(document.querySelector('[data-slot="tool-summary"]')?.textContent).toBe("task-x");
+    expect(preview?.textContent).toBe("Task task-x was not found.");
+    expect(preview?.classList.contains("text-destructive-muted")).toBe(true);
+    expect(html).not.toContain("ODT_HOST_BRIDGE_ERROR");
   });
 
   test("keeps regular failed tool errors collapsed", () => {
@@ -220,32 +242,41 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).toContain("command not found");
   });
 
-  test("renders expandable details for regular read_task tool rows", () => {
+  test("opens the details of a regular read_task row in the tool details panel", () => {
     const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-3",
-          role: "tool",
-          content: "Tool read_task completed",
-          timestamp: "2026-02-22T10:20:30.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-3",
-            callId: "call-3",
-            tool: "read_task",
-            toolType: "generic" as const,
-            status: "completed",
-            input: { taskId: "fairnest-97f" },
-            output: '{"task":{"id":"fairnest-97f","title":"Add Facebook login"}}',
-          },
-        },
-      }),
+      createElement(
+        ToolDetailsStoreContext,
+        { value: createToolDetailsStore() },
+        createElement(
+          ToolCallSourceContext,
+          { value: TRANSCRIPT_SOURCE },
+          createMessageCardElement({
+            message: {
+              id: "tool-3",
+              role: "tool",
+              content: "Tool read_task completed",
+              timestamp: "2026-02-22T10:20:30.000Z",
+              meta: {
+                kind: "tool",
+                partId: "part-3",
+                callId: "call-3",
+                tool: "read_task",
+                toolType: "generic" as const,
+                status: "completed",
+                input: { taskId: "fairnest-97f" },
+                output: '{"task":{"id":"fairnest-97f","title":"Add Facebook login"}}',
+              },
+            },
+          }),
+        ),
+      ),
     );
 
-    expect(html).toContain("Input");
-    expect(html).toContain("Output");
-    expect(html).toContain("cursor-pointer");
-    expect(html).toContain("fairnest-97f");
+    const document = new DOMParser().parseFromString(html, "text/html");
+    const row = document.querySelector("button[aria-pressed]");
+    expect(row?.getAttribute("aria-pressed")).toBe("false");
+    expect(row?.textContent).toContain("fairnest-97f");
+    expect(html).not.toContain("Add Facebook login");
   });
 
   const artifactPreviewCases: Array<{
@@ -321,13 +352,15 @@ describe("AgentChatMessageCard tool presentation", () => {
           }),
         }),
       );
-      const summary = new DOMParser().parseFromString(html, "text/html").querySelector("summary");
-      expect(summary?.querySelector("p")?.textContent).toBe("read_task_artifacts");
-      expect(summary?.textContent).toContain(expected);
-      expect(summary?.textContent).not.toContain("Old artifact");
-      expect(summary?.textContent).not.toContain("Returned artifact body");
-      expect(html.includes('aria-label="Running tool"')).toBe(status === "running");
-      expect(html).toContain("Output");
+      const line = new DOMParser()
+        .parseFromString(html, "text/html")
+        .querySelector('[data-slot="tool-line"]');
+      expect(line?.querySelector('[data-slot="tool-name"]')?.textContent).toBe(
+        "read_task_artifacts",
+      );
+      expect(line?.textContent).toContain(expected);
+      expect(line?.textContent).not.toContain("Old artifact");
+      expect(html.includes('aria-label="Running"')).toBe(status === "running");
       expect(html).not.toContain("Returned artifact body");
     },
   );
@@ -510,6 +543,7 @@ describe("AgentChatMessageCard tool presentation", () => {
             odtTool: null,
           }),
           supportedApprovalReplyOutcomes: null,
+          supportsRunningCommandOutput: false,
         },
       }),
     );
@@ -542,11 +576,11 @@ describe("AgentChatMessageCard tool presentation", () => {
       }),
     );
 
-    const summary = new DOMParser().parseFromString(html, "text/html").querySelector("summary");
-    expect(Array.from(summary?.querySelectorAll("p") ?? [], (el) => el.textContent)).toEqual([
-      "read",
+    const document = new DOMParser().parseFromString(html, "text/html");
+    expect(document.querySelector('[data-slot="tool-name"]')?.textContent).toBe("read");
+    expect(document.querySelector('[data-slot="tool-summary"]')?.textContent).toBe(
       "/repo/src/app.ts",
-    ]);
+    );
   });
   test("renders file tool summaries relative to the session working directory", () => {
     const html = renderToStaticMarkup(
@@ -575,7 +609,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     expect(html).not.toContain("/repo/apps/web/src/contexts/AuthContext.tsx");
   });
 
-  test("shows the written-file expand control and its Input and Output boxes", () => {
+  test("shows the written-file card and keeps the Input and Output in the tool details", () => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
@@ -608,8 +642,8 @@ describe("AgentChatMessageCard tool presentation", () => {
       "File diff unavailable. The runtime did not return the applied changes.",
     );
     expect(html).toContain("lucide-chevron-right");
-    expect(html).toContain(">Input</summary>");
-    expect(html).toContain(">Output</summary>");
+    expect(html).not.toContain(">Input</summary>");
+    expect(html).not.toContain("Created file successfully");
   });
 
   test("renders one file edit card per file in a multi-file apply_patch result without a summary description", () => {
@@ -692,18 +726,21 @@ describe("AgentChatMessageCard tool presentation", () => {
       );
       const document = new DOMParser().parseFromString(html, "text/html");
       const text = document.body.textContent;
-      const title = document.querySelector("p");
-      expect(title?.textContent).toBe("execute");
+      expect(document.querySelector('[data-slot="tool-name"]')?.textContent).toBe("execute");
       if (inputStreaming !== undefined) {
-        expect(title?.parentElement?.classList.contains("opacity-50")).toBe(true);
+        expect(
+          document.querySelector('[data-slot="tool-line"]')?.classList.contains("opacity-50"),
+        ).toBe(true);
         expect(html).not.toContain("pending-");
       }
       if (inputStreaming === false) expect(text).toContain("console.log(42)");
       expect(text).not.toContain("Preparing");
       expect(html).not.toContain("border-dashed");
       expect(text).not.toContain("Queued");
-      expect(html.includes('aria-label="Preparing tool"')).toBe(inputStreaming !== false);
-      expect(html).not.toContain('aria-label="Running tool"');
+      // The agent still writes the input of a preparing call. A queued call waits to run.
+      expect(html.includes('aria-label="Preparing"')).toBe(inputStreaming === true);
+      expect(html.includes('aria-label="Pending"')).toBe(inputStreaming !== true);
+      expect(html).not.toContain('aria-label="Running"');
     },
   );
 });

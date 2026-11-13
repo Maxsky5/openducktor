@@ -6,10 +6,8 @@ import type {
 } from "@openducktor/contracts";
 import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
 
-export type CodexTimedThreadItem = CodexAppServerThreadItem & {
-  startedAtMs?: number;
-  completedAtMs?: number;
-};
+/** A thread item with the times that Codex recorded or that its live notifications gave. */
+export type CodexTimedThreadItem = CodexAppServerThreadItem;
 
 export type CodexLiveInput =
   | { kind: "notification"; notification: CodexNotificationRecord }

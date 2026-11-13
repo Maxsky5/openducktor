@@ -76,6 +76,27 @@ const BROWSER_TABS_RECORD = {
 };
 
 describe("session panel layout store", () => {
+  test("does not save the tool call tab, and saves its selection as none", () => {
+    const owner = taskOwner();
+
+    store.update(owner, (layout) => ({
+      ...layout,
+      panels: {
+        right: [
+          { id: "diffs", kind: "diffs" },
+          { id: "tool_call", kind: "tool_call" },
+        ],
+        bottom: [],
+      },
+      selectedRight: { build: "tool_call" },
+    }));
+
+    expect(savedRecord(owner)).toMatchObject({
+      panels: { right: [{ kind: "diffs" }], bottom: [] },
+      selectedRight: { build: null },
+    });
+  });
+
   test("restores a saved layout once and keeps it in memory", () => {
     const owner = taskOwner();
     storage.setItem(

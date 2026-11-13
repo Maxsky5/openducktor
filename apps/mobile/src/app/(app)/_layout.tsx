@@ -1,5 +1,5 @@
 import { Stack } from "expo-router";
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 import {
   choiceSheetOptions,
   compactSheetOptions,
@@ -13,6 +13,10 @@ import { withAndroidHeader } from "@/navigation/stack-header";
 import { useSwipeBackNativeProps } from "@/navigation/swipe-back";
 import { WorkspaceModelCatalogs } from "@/composition/workspace-model-catalogs";
 import { sessionRouteOptions } from "@/features/session/header/session-route-options";
+import {
+  createToolCallSources,
+  ToolCallSourcesProvider,
+} from "@/features/session/transcript/tool-call-sources";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { ConfirmDialogHost } from "@/ui/confirm-dialog";
 
@@ -21,35 +25,38 @@ export default function AppLayout(): ReactElement {
   const theme = useNativeStackTheme();
   const { colors } = useAppTheme();
   const swipeBack = useSwipeBackNativeProps(isPushedScreen);
+  const [toolCallSources] = useState(createToolCallSources);
   return (
     <ConfirmDialogHost scope="navigation">
-      <WorkspaceModelCatalogs />
-      <Stack
-        screenOptions={withAndroidHeader(theme, isPushedScreen)}
-        screenLayout={screenLayout}
-        unstable_nativeProps={swipeBack}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="session" options={sessionRouteOptions} />
-        <Stack.Screen name="work/terminal" options={{ animation: "none" }} />
-        <Stack.Screen name="workspace-switcher" options={sheetOptions("Workspaces")} />
-        <Stack.Screen name="new-task" options={fullSheetOptions("New Task")} />
-        <Stack.Screen name="edit-task" options={fullSheetOptions("Edit Task")} />
-        <Stack.Screen name="import-issues" options={fullSheetOptions("Import Issues")} />
-        <Stack.Screen name="start-session" options={fullSheetOptions("Start Session")} />
-        <Stack.Screen name="approve-task" options={fullSheetOptions("Approve Task")} />
-        <Stack.Screen name="request-changes" options={fullSheetOptions("Request Changes")} />
-        <Stack.Screen name="new-chat" options={fullSheetOptions("New Session")} />
-        <Stack.Screen name="rename-chat" options={compactSheetOptions(colors.surface)} />
-        <Stack.Screen name="archive-chat" options={compactSheetOptions(colors.surface)} />
-        <Stack.Screen name="fork-chat" options={fullSheetOptions("Fork Session")} />
-        <Stack.Screen name="composer-options" options={choiceSheetOptions("Message Options")} />
-        <Stack.Screen name="add-host" options={compactSheetOptions(colors.surface)} />
-        <Stack.Screen
-          name="scan-host"
-          options={{ presentation: "fullScreenModal", title: "Scan QR Code", headerShown: false }}
-        />
-      </Stack>
+      <ToolCallSourcesProvider value={toolCallSources}>
+        <WorkspaceModelCatalogs />
+        <Stack
+          screenOptions={withAndroidHeader(theme, isPushedScreen)}
+          screenLayout={screenLayout}
+          unstable_nativeProps={swipeBack}
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="session" options={sessionRouteOptions} />
+          <Stack.Screen name="work/terminal" options={{ animation: "none" }} />
+          <Stack.Screen name="workspace-switcher" options={sheetOptions("Workspaces")} />
+          <Stack.Screen name="new-task" options={fullSheetOptions("New Task")} />
+          <Stack.Screen name="edit-task" options={fullSheetOptions("Edit Task")} />
+          <Stack.Screen name="import-issues" options={fullSheetOptions("Import Issues")} />
+          <Stack.Screen name="start-session" options={fullSheetOptions("Start Session")} />
+          <Stack.Screen name="approve-task" options={fullSheetOptions("Approve Task")} />
+          <Stack.Screen name="request-changes" options={fullSheetOptions("Request Changes")} />
+          <Stack.Screen name="new-chat" options={fullSheetOptions("New Session")} />
+          <Stack.Screen name="rename-chat" options={compactSheetOptions(colors.surface)} />
+          <Stack.Screen name="archive-chat" options={compactSheetOptions(colors.surface)} />
+          <Stack.Screen name="fork-chat" options={fullSheetOptions("Fork Session")} />
+          <Stack.Screen name="composer-options" options={choiceSheetOptions("Message Options")} />
+          <Stack.Screen name="add-host" options={compactSheetOptions(colors.surface)} />
+          <Stack.Screen
+            name="scan-host"
+            options={{ presentation: "fullScreenModal", title: "Scan QR Code", headerShown: false }}
+          />
+        </Stack>
+      </ToolCallSourcesProvider>
     </ConfirmDialogHost>
   );
 }

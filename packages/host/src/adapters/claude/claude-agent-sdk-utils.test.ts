@@ -188,6 +188,12 @@ describe("toolPartType", () => {
     expect(toolPartType("AskUserQuestion")).toBe("question");
     expect(toolPartType("permission_ask_user_question")).toBe("question");
   });
+
+  test("classifies Claude web tools as web tools, not as file searches", () => {
+    expect(toolPartType("WebSearch")).toBe("web");
+    expect(toolPartType("WebFetch")).toBe("web");
+    expect(toolPartType("Grep")).toBe("search");
+  });
 });
 
 describe("toClaudeMessageFromParts", () => {

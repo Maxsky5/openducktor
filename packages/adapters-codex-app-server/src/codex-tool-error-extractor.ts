@@ -179,5 +179,7 @@ export const codexDynamicToolErrorFromItem = (item: CodexDynamicToolCallItem): s
   dynamicToolErrorFromValue(codexDynamicToolDisplayPayload(item)) ??
   (item.success === false || item.status === "failed" ? "Tool failed" : null);
 
-export const codexFileChangeErrorFromItem = (item: CodexFileChangeItem): string | null =>
-  item.status === "failed" || item.status === "declined" ? "Tool failed" : null;
+export const codexFileChangeErrorFromItem = (item: CodexFileChangeItem): string | null => {
+  if (item.status === "declined") return "The file change was declined.";
+  return item.status === "failed" ? "Tool failed" : null;
+};

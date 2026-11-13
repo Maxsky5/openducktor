@@ -1879,14 +1879,12 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     );
     await Effect.runPromise(prepared.startForwarding());
 
+    // A change of the skills changes the catalog, so the adapter sends the mutation to the host.
     prepared.emitRuntimeEvent({
       runtimeId: runtime.runtimeId,
       kind: "notification",
       receivedAt: "2026-07-16T10:01:30.000Z",
-      message: {
-        method: "thread/status/changed",
-        params: { threadId: ref.externalSessionId, status: { type: "idle" } },
-      },
+      message: { method: "skills/changed", params: {} },
     });
 
     const failure = await backgroundFailure;

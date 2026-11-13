@@ -140,6 +140,7 @@ const TaskResultCard = ({ task }: { task: PublicTaskSummaryTask }) => {
 };
 export const AgentChatTaskTool = ({
   meta,
+  messageId,
   tool,
   timeLabel,
   messageContent,
@@ -147,6 +148,7 @@ export const AgentChatTaskTool = ({
   sessionWorkingDirectory,
 }: {
   meta: ToolMeta;
+  messageId: string;
   tool: AgentChatTaskToolName;
   timeLabel: string;
   messageContent: string;
@@ -160,6 +162,7 @@ export const AgentChatTaskTool = ({
     <section aria-label={tool} className="flex min-w-0 flex-col gap-2">
       <RegularToolMessage
         meta={{ ...meta, preview: summary }}
+        messageId={messageId}
         messageContent={messageContent}
         messageTimestamp={messageTimestamp}
         timeLabel={timeLabel}

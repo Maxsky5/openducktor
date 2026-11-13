@@ -6,7 +6,7 @@ import {
   isWorkflowToolActive,
   readToolTiming,
   readWorkflowToolCard,
-  type WorkflowToolCard,
+  readWorkflowToolDetailsTitle,
   workflowToolStatusLabel,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
@@ -31,11 +31,9 @@ import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
-import { type Disclosure, useDisclosure } from "./disclosure";
-import { TranscriptMarkdown } from "./markdown-blocks";
-import { DisclosureMarker, StatusPill, ToolTiming } from "./row-parts";
+import { StatusPill, ToolTiming } from "./row-parts";
 import { toolIcon } from "./tool-icon";
-import { ToolDetails, type ToolDetailsColors } from "./tool-details";
+import { toolActivity } from "./tool-status-presentation";
 
 type Family = "info" | "pending" | "destructive" | "cancelled" | "success";
 
@@ -99,15 +97,16 @@ const familyColors = (theme: AppTheme, family: Family) => {
  * The desktop `WorkflowToolMessage`: a card in the color of the call phase, with the tool icon,
  * its title, the pull request of the call, the uppercase status pill, and the timing. A workflow
  * event call takes its event as the title. A failed call shows its error message under the header.
- * A press on the title shows the event note as Markdown, then the Input, Output, and Error boxes,
- * all closed.
+ * A press on the title shows the call in the tool details sheet, as for the other tool calls, with
+ * the note of a workflow event.
  *
  * A phone has no document panel beside the transcript, so a call that saves a task document, such
- * as Set Plan, shows Open instead of its Input and Output once the document is saved. A call that
- * saves a file shows Open, which opens the file in its artifact view.
+ * as Set Plan, shows Open once the document is saved. A call that saves a file shows Open, which
+ * opens the file in its artifact view.
  */
 export const WorkflowToolRow = memo(function WorkflowToolRow({
   meta,
+  messageId,
   odtTool = null,
   messageTimestamp,
   timeLabel,
@@ -115,10 +114,11 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
   icon,
   document,
   action,
-  rowKey,
   summary,
 }: {
   meta: ToolMeta;
+  /** The message of the call. A press on the title shows it in the tool details sheet. */
+  messageId: string;
   /** The ODT tool of the call, as `presentToolCall` resolved it. */
   odtTool?: OdtToolName | null | undefined;
   messageTimestamp: string;
@@ -132,10 +132,9 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
   document: HostDocumentKey | null;
   /** A control at the end of the header, such as Open for a saved file. */
   action?: ReactNode;
-  rowKey: string;
 }): ReactElement {
   const theme = useAppTheme();
-  const { onOpenDocument } = useTranscriptRows();
+  const { onOpenDocument, openFullView } = useTranscriptRows();
   const openDocument = document ? onOpenDocument : null;
   const phase = getToolLifecyclePhase(meta);
   const statusLabel = workflowToolStatusLabel(phase);
@@ -143,14 +142,7 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
   const { durationMs } = readToolTiming(meta, messageTimestamp);
   const card = familyColors(theme, CARD_FAMILIES[phase]);
   const pill = familyColors(theme, PILL_FAMILIES[phase]);
-  const toolCard = readWorkflowToolCard({
-    meta,
-    odtTool,
-    displayName,
-    opensDocument: openDocument !== null,
-  });
-  const disclosure = useDisclosure(false, `${rowKey}:details`);
-  const titleDisclosure = toolCard.hasDetails ? disclosure : null;
+  const toolCard = readWorkflowToolCard({ meta, odtTool, displayName });
   const openButton =
     document && openDocument && phase === "completed" ? (
       <OpenDocumentButton document={document} onPress={() => openDocument(document)} />
@@ -158,20 +150,8 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
   // The first header line is as tall as the tallest control on it, so all its items share one
   // center line.
   const lineStyle = openButton || action ? styles.buttonLine : styles.line;
-  // The text color of the phase. Timing is the text at 75%; box outlines are the text at 20%.
+  // The text color of the phase. Timing is the text at 75%.
   const text = card.text;
-  const colors = useMemo<ToolDetailsColors>(
-    () => ({
-      frame: { borderColor: withAlpha(text, 0.2), backgroundColor: theme.desktop.card },
-      text,
-      errorFrame: {
-        borderColor: withAlpha(text, 0.2),
-        backgroundColor: withAlpha(theme.desktop.muted, 0.9),
-      },
-      errorText: text,
-    }),
-    [text, theme.desktop],
-  );
   return (
     <View
       style={[styles.card, { backgroundColor: card.surface, borderColor: card.border }]}
@@ -185,7 +165,13 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
             statusLabel={statusLabel}
             active={active}
             color={text}
-            disclosure={titleDisclosure}
+            onPress={() =>
+              openFullView({
+                kind: "tool",
+                messageId,
+                title: readWorkflowToolDetailsTitle(displayName, toolCard.title),
+              })
+            }
             lineStyle={lineStyle}
           />
           {toolCard.pullRequest ? (
@@ -206,7 +192,7 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
         <View style={[styles.trailing, lineStyle]}>
           <View {...HIDDEN_FROM_SCREEN_READERS}>
             <ToolTiming
-              active={active}
+              activity={toolActivity(phase)}
               durationMs={durationMs}
               timeLabel={timeLabel}
               color={withAlpha(text, 0.75)}
@@ -223,97 +209,41 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
       ) : summary ? (
         <Text style={[styles.summary, { color: withAlpha(text, 0.75) }]}>{summary}</Text>
       ) : null}
-      {titleDisclosure?.open ? (
-        <WorkflowToolBoxes meta={meta} rowKey={rowKey} card={toolCard} colors={colors} />
-      ) : null}
     </View>
   );
 });
 
-/** The title of a card. A card with Input or Output boxes shows them with a press on its title. */
+/** The title of a card. A press on it shows the call in the tool details sheet. */
 function WorkflowToolTitle({
   title,
   statusLabel,
   active,
   color,
-  disclosure,
+  onPress,
   lineStyle,
 }: {
   title: string;
   statusLabel: string | null;
   active: boolean;
   color: string;
-  disclosure: Disclosure | null;
+  onPress: () => void;
   /** The height of the first header line. */
   lineStyle: StyleProp<ViewStyle>;
 }): ReactElement {
-  const label = `${title}, ${statusLabel ? statusLabel.toLowerCase() : "done"}`;
-  const name = <Text style={[styles.name, { color }]}>{title}</Text>;
-  if (!disclosure) {
-    return (
-      <View
-        style={[styles.nameContainer, lineStyle]}
-        accessible
-        accessibilityRole="text"
-        accessibilityLabel={label}
-        accessibilityState={{ busy: active }}
-      >
-        {name}
-      </View>
-    );
-  }
   return (
     <Touchable
       feedback="opacity"
-      onPress={disclosure.toggle}
+      onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint={disclosure.open ? "Hides the details." : "Shows the details."}
-      accessibilityState={{ expanded: disclosure.open, busy: active }}
+      accessibilityLabel={`${title}, ${statusLabel ? statusLabel.toLowerCase() : "done"}`}
+      accessibilityHint="Shows the details."
+      accessibilityState={{ busy: active }}
       hitSlop={{ top: 8, bottom: 8 }}
       containerStyle={[styles.nameContainer, lineStyle]}
       style={styles.nameButton}
     >
-      {name}
-      <DisclosureMarker open={disclosure.open} animated={disclosure.pressed} color={color} />
+      <Text style={[styles.name, { color }]}>{title}</Text>
     </Touchable>
-  );
-}
-
-/**
- * While the title is open, the event note as compact Markdown, then the Input, Output, and Error
- * boxes.
- */
-function WorkflowToolBoxes({
-  meta,
-  rowKey,
-  card,
-  colors,
-}: {
-  meta: ToolMeta;
-  rowKey: string;
-  card: WorkflowToolCard;
-  colors: ToolDetailsColors;
-}): ReactElement {
-  return (
-    <View style={styles.details}>
-      {card.note ? (
-        <TranscriptMarkdown
-          markdown={card.note}
-          revision={`${rowKey}:note`}
-          rowKey={rowKey}
-          variant="compact"
-        />
-      ) : null}
-      <ToolDetails
-        meta={meta}
-        resetKey={rowKey}
-        hasInput={card.showsInput}
-        hasOutput={card.showsOutput}
-        errorText={card.errorDetail}
-        colors={colors}
-      />
-    </View>
   );
 }
 
@@ -337,9 +267,9 @@ export const ArtifactToolRow = memo(function ArtifactToolRow({
   meta: ToolMeta;
   operation: "set" | "delete";
   displayName: string;
+  messageId: string;
   messageTimestamp: string;
   timeLabel: string;
-  rowKey: string;
 }): ReactElement {
   const rawCall = useMemo(
     () => (operation === "set" ? readArtifactToolCall(meta) : null),
@@ -479,5 +409,4 @@ const styles = StyleSheet.create((theme) => ({
   summary: { fontSize: 11, lineHeight: 15 },
   // The desktop error line: `text-[11px] font-medium text-destructive-surface-foreground`.
   error: { ...sansWeight("medium"), fontSize: 11, lineHeight: 15 },
-  details: { gap: theme.space.sm },
 }));

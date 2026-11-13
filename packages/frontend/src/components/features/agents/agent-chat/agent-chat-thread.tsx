@@ -2,9 +2,19 @@ import { AgentChatForkActionsContext } from "./agent-chat-fork-context";
 import type { ToolPartSession } from "@openducktor/frontend-core/queries/agent-session-tool-part";
 import { ToolPartSessionContext } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { AgentChatImageSessionContext } from "./agent-chat-image-session-context";
+import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import type { AgentSessionTodoItem } from "@openducktor/core";
 import { AlertTriangle, Info, LoaderCircle, RefreshCcw, Sparkles } from "lucide-react";
-import { memo, type ReactElement, type RefObject, useMemo, useState } from "react";
+import {
+  memo,
+  type ReactElement,
+  type RefObject,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
@@ -12,7 +22,18 @@ import { pendingInputIdentity } from "@openducktor/frontend-core/lib/pending-inp
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import type { AgentChatUserMessageAnchor } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { AgentChatTurnGroup } from "./agent-chat-turn-group";
+import { AgentChatToolDetailsBeside } from "./agent-chat-tool-details-panel";
+import {
+  createToolDetailsStore,
+  type ToolCallSource,
+  ToolCallSourceContext,
+  type ToolCallSourceContextValue,
+  type ToolDetailsStore,
+  ToolDetailsStoreContext,
+} from "./agent-chat-tool-details-store";
+import { createToolRunFoldStore, ToolRunActionsContext } from "./agent-chat-tool-run-folds";
 import { AgentSessionApprovalCard } from "./agent-session-approval-card";
 import { AgentSessionQuestionCard } from "./agent-session-question-card";
 import { buildQuestionCardKey } from "@openducktor/frontend-core/sessions/pending-input/agent-session-question-keys";
@@ -75,26 +96,9 @@ export function AgentChatThread({
     session ? agentSessionIdentityKey(session) : null,
   ]);
   const collapseResetKey = JSON.stringify([sessionKey, visitKey]);
-  const imageRuntimeKind = session?.runtimeKind;
-  const imageWorkingDirectory = session?.workingDirectory;
-  const imageExternalSessionId = session?.externalSessionId;
-  const imageSessionRef = useMemo(
-    () =>
-      transcript.repoPath && imageRuntimeKind && imageWorkingDirectory && imageExternalSessionId
-        ? {
-            repoPath: transcript.repoPath,
-            runtimeKind: imageRuntimeKind,
-            workingDirectory: imageWorkingDirectory,
-            externalSessionId: imageExternalSessionId,
-          }
-        : null,
-    [transcript.repoPath, imageRuntimeKind, imageWorkingDirectory, imageExternalSessionId],
-  );
-  const toolPartSessionScope = transcriptTarget?.sessionScope ?? null;
-  const toolPartSession = useMemo<ToolPartSession | null>(
-    () => (imageSessionRef ? { ...imageSessionRef, sessionScope: toolPartSessionScope } : null),
-    [imageSessionRef, toolPartSessionScope],
-  );
+  const { imageSessionRef, toolPartSession, toolDetails, ownToolDetails, toolCallSourceContext } =
+    useTranscriptToolCalls({ transcript, sessionKey, runtimePresentation });
+  const [toolRunFolds] = useState(createToolRunFoldStore);
   const {
     messagesContentRef,
     renderedTurns,
@@ -103,12 +107,15 @@ export function AgentChatThread({
     isNearTop,
     scrollToBottom,
     scrollToTop,
+    toolRunActions,
     userMessageAnchors,
     navigation,
   } = useAgentChatRenderedTranscript({
     transcript,
+    runtimePresentation,
     messagesContainerRef,
     scrollToBottomOnSendRef,
+    toolRunFolds,
   });
 
   const hasVisibleTodo = getActionableSessionTodo(getVisibleSessionTodos(todos)) !== null;
@@ -128,65 +135,153 @@ export function AgentChatThread({
     <AgentChatForkActionsContext.Provider value={model.forkActions ?? null}>
       <AgentChatImageSessionContext.Provider value={imageSessionRef}>
         <ToolPartSessionContext value={toolPartSession}>
-          <div className="relative flex min-h-0 flex-1 flex-col">
-            <AgentChatTranscript
-              emptyState={transcriptEmptyState}
-              modelCatalog={modelCatalog}
-              isStarting={isStarting}
-              isSending={isSending}
-              isInteractionEnabled={isInteractionEnabled}
-              subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
-              subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-              transcriptTarget={transcriptTarget}
-              runtimePresentation={runtimePresentation}
-              messagesContainerRef={messagesContainerRef}
-              messagesContentRef={messagesContentRef}
-              renderedTurns={renderedTurns}
-              transcriptNotice={renderedTranscriptNotice}
-              userMessageAnchors={userMessageAnchors}
-              navigation={navigation}
-            />
+          <ToolDetailsStoreContext value={toolDetails}>
+            <ToolCallSourceContext value={toolCallSourceContext}>
+              <ToolRunActionsContext value={toolRunActions}>
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                  {/* Details beside the transcript take the width of its rows, not of its bottom cards. */}
+                  <div className="flex min-h-0 flex-1">
+                    <div className="@container/transcript relative flex min-h-0 min-w-0 flex-1 flex-col">
+                      <AgentChatTranscript
+                        emptyState={transcriptEmptyState}
+                        modelCatalog={modelCatalog}
+                        isStarting={isStarting}
+                        isSending={isSending}
+                        isInteractionEnabled={isInteractionEnabled}
+                        subagentPendingApprovalCountBySessionKey={
+                          subagentPendingApprovalCountBySessionKey
+                        }
+                        subagentPendingQuestionCountBySessionKey={
+                          subagentPendingQuestionCountBySessionKey
+                        }
+                        transcriptTarget={transcriptTarget}
+                        runtimePresentation={runtimePresentation}
+                        messagesContainerRef={messagesContainerRef}
+                        messagesContentRef={messagesContentRef}
+                        renderedTurns={renderedTurns}
+                        transcriptNotice={renderedTranscriptNotice}
+                        userMessageAnchors={userMessageAnchors}
+                        navigation={navigation}
+                      />
+                    </div>
+                    {ownToolDetails ? <AgentChatToolDetailsBeside store={ownToolDetails} /> : null}
+                  </div>
 
-            {hasBottomStack ? (
-              <div className="min-h-0 overflow-y-auto">
-                <AgentChatBottomStack
-                  sessionKey={sessionKey}
-                  collapseResetKey={collapseResetKey}
-                  interruptedTurnResume={interruptedTurnResume}
-                  resumeDisabled={!isInteractionEnabled || isSending || isStarting}
-                  pendingQuestions={pendingQuestionRequests}
-                  pendingApprovals={pendingApprovalRequests}
-                  todos={todos}
-                  canSubmitQuestionAnswers={canSubmitQuestionAnswers}
-                  isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
-                  onSubmitQuestionAnswers={onSubmitQuestionAnswers}
-                  canReplyToApprovals={canReplyToApprovals}
-                  runtimeSupportedApprovalReplyOutcomes={
-                    runtimePresentation.supportedApprovalReplyOutcomes
-                  }
-                  isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
-                  approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
-                  onReplyApproval={onReplyApproval}
-                  sessionAuxiliaryError={sessionAuxiliaryError}
-                  runtimeStatusMessage={runtimeStatusMessage}
-                  todoPanelCollapsed={todoPanelCollapsed}
-                  isSessionWorking={isSessionWorking}
-                  sessionAccentColor={sessionAccentColor}
-                  onToggleTodoPanel={onToggleTodoPanel}
-                />
-              </div>
-            ) : null}
-            {session ? <ScrollToTopButton visible={!isNearTop} onClick={scrollToTop} /> : null}
-            {session ? (
-              <ScrollToBottomButton visible={!isNearBottom} onClick={scrollToBottom} />
-            ) : null}
-          </div>
+                  {hasBottomStack ? (
+                    <div className="min-h-0 overflow-y-auto">
+                      <AgentChatBottomStack
+                        sessionKey={sessionKey}
+                        collapseResetKey={collapseResetKey}
+                        interruptedTurnResume={interruptedTurnResume}
+                        resumeDisabled={!isInteractionEnabled || isSending || isStarting}
+                        pendingQuestions={pendingQuestionRequests}
+                        pendingApprovals={pendingApprovalRequests}
+                        todos={todos}
+                        canSubmitQuestionAnswers={canSubmitQuestionAnswers}
+                        isSubmittingQuestionByRequestId={isSubmittingQuestionByRequestId}
+                        onSubmitQuestionAnswers={onSubmitQuestionAnswers}
+                        canReplyToApprovals={canReplyToApprovals}
+                        runtimeSupportedApprovalReplyOutcomes={
+                          runtimePresentation.supportedApprovalReplyOutcomes
+                        }
+                        isSubmittingApprovalByRequestId={isSubmittingApprovalByRequestId}
+                        approvalReplyErrorByRequestId={approvalReplyErrorByRequestId}
+                        onReplyApproval={onReplyApproval}
+                        sessionAuxiliaryError={sessionAuxiliaryError}
+                        runtimeStatusMessage={runtimeStatusMessage}
+                        todoPanelCollapsed={todoPanelCollapsed}
+                        isSessionWorking={isSessionWorking}
+                        sessionAccentColor={sessionAccentColor}
+                        onToggleTodoPanel={onToggleTodoPanel}
+                      />
+                    </div>
+                  ) : null}
+                  {session ? (
+                    <ScrollToTopButton visible={!isNearTop} onClick={scrollToTop} />
+                  ) : null}
+                  {session ? (
+                    <ScrollToBottomButton visible={!isNearBottom} onClick={scrollToBottom} />
+                  ) : null}
+                </div>
+              </ToolRunActionsContext>
+            </ToolCallSourceContext>
+          </ToolDetailsStoreContext>
         </ToolPartSessionContext>
       </AgentChatImageSessionContext.Provider>
       {model.forkDialog}
     </AgentChatForkActionsContext.Provider>
   );
 }
+
+/** The session facts that the tool calls of a transcript read, and the store of their details. */
+type TranscriptToolCalls = {
+  imageSessionRef: AgentSessionLiveRef | null;
+  toolPartSession: ToolPartSession | null;
+  toolDetails: ToolDetailsStore;
+  /** The store of details that the transcript shows beside itself, without session panels. */
+  ownToolDetails: ToolDetailsStore | null;
+  toolCallSourceContext: ToolCallSourceContextValue;
+};
+
+const useTranscriptToolCalls = ({
+  transcript,
+  sessionKey,
+  runtimePresentation,
+}: {
+  transcript: AgentChatThreadModel["transcript"];
+  sessionKey: string;
+  runtimePresentation: AgentChatThreadModel["runtimePresentation"];
+}): TranscriptToolCalls => {
+  const { session, target: transcriptTarget, repoPath } = transcript;
+  // A page with session panels shows the details of a call in its right panel. Elsewhere, the
+  // transcript shows them beside itself.
+  const pageToolDetails = useContext(ToolDetailsStoreContext);
+  const [ownToolDetails] = useState(createToolDetailsStore);
+  const toolDetails = pageToolDetails ?? ownToolDetails;
+  const runtimeKind = session?.runtimeKind;
+  const workingDirectory = session?.workingDirectory ?? null;
+  const externalSessionId = session?.externalSessionId;
+  const imageSessionRef = useMemo(
+    () =>
+      repoPath && runtimeKind && workingDirectory && externalSessionId
+        ? { repoPath, runtimeKind, workingDirectory, externalSessionId }
+        : null,
+    [repoPath, runtimeKind, workingDirectory, externalSessionId],
+  );
+  const toolPartSessionScope = transcriptTarget?.sessionScope ?? null;
+  const toolPartSession = useMemo<ToolPartSession | null>(
+    () => (imageSessionRef ? { ...imageSessionRef, sessionScope: toolPartSessionScope } : null),
+    [imageSessionRef, toolPartSessionScope],
+  );
+  const chatSettings = useAgentChatSettings();
+  const toolCallSource = useMemo<ToolCallSource>(
+    () => ({
+      key: sessionKey,
+      workingDirectory,
+      runtimePresentation,
+      toolPartSession,
+      chatSettings,
+    }),
+    [chatSettings, runtimePresentation, sessionKey, workingDirectory, toolPartSession],
+  );
+  const sessionRef = useRef(session);
+  const toolCallSourceContext = useMemo<ToolCallSourceContextValue>(
+    () => ({ source: toolCallSource, sessionRef }),
+    [toolCallSource],
+  );
+  // The details of a call of this transcript follow its live messages and its settings.
+  useLayoutEffect(() => {
+    sessionRef.current = session;
+    toolDetails.syncTranscript(toolCallSource, session);
+  }, [session, toolCallSource, toolDetails]);
+  return {
+    imageSessionRef,
+    toolPartSession,
+    toolDetails,
+    ownToolDetails: pageToolDetails ? null : ownToolDetails,
+    toolCallSourceContext,
+  };
+};
 
 type AgentChatTranscriptProps = {
   emptyState: AgentChatThreadModel["emptyState"];

@@ -65,6 +65,7 @@ describe("useAgentChatSurfaceModel", () => {
       runtimeKind: "opencode" as const,
       presentToolCall: presentRegularToolCall,
       supportedApprovalReplyOutcomes: null,
+      supportsRunningCommandOutput: false,
     };
     const transcript = {
       kind: "session" as const,

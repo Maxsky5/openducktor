@@ -18,6 +18,7 @@ import {
   createAgentChatModelFixture,
   createAgentStudioHeaderModelFixture,
 } from "./use-agents-page-shell-model.test-support";
+import { createToolDetailsStore } from "@/components/features/agents/agent-chat/agent-chat-tool-details-store";
 
 function MainChatPreview() {
   const preview = useTaskExecutionFilePreviewController();
@@ -65,6 +66,7 @@ function MainChatPreview() {
       mergedPullRequestModal: null,
     },
     panels: createSessionPanelsFixture(),
+    toolDetails: { store: createToolDetailsStore(), view: null, toolCallTab: null },
   };
   return (
     <>

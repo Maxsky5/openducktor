@@ -19,6 +19,7 @@
     "@openducktor/path-support": "workspace:*",
     "@openducktor/workflows": "workspace:*",
     "@tanstack/react-query": "^5.106.1",
+    "anser": "1.4.10",
     "react": "^19.3.1",
     "zod": "^4.6.7",
     "zustand": "^5.0.16"

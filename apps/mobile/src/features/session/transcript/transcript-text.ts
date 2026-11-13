@@ -1,4 +1,4 @@
-import { formatTime } from "@openducktor/frontend-core/sessions/messages/message-formatting";
+import { readMessageTimeLabel } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 
 /** The most characters that one tool text block shows. Longer text keeps a copy action. */
@@ -29,17 +29,21 @@ export const previewLines = (text: string, limit: number = MAX_INLINE_DIFF_ROWS)
 
 export type DisplayText = { text: string; truncated: boolean; notice: string };
 
-/** Cuts long tool output, so one row cannot stall the list. */
+/**
+ * Cuts long tool output, so one row cannot stall the list. `keep` is the end of the text that
+ * shows: the end of a command output holds its result and its newest lines.
+ */
 export const truncateForDisplay = (
   text: string,
   limit: number = MAX_DISPLAY_CHARACTERS,
+  keep: "start" | "end" = "start",
 ): DisplayText =>
   text.length <= limit
     ? { text, truncated: false, notice: "" }
     : {
-        text: text.slice(0, limit),
+        text: keep === "start" ? text.slice(0, limit) : text.slice(-limit),
         truncated: true,
-        notice: `Showing the first ${limit.toLocaleString("en-US")} of ${text.length.toLocaleString("en-US")} characters. Copy the text to read all of it.`,
+        notice: `Showing the ${keep === "start" ? "first" : "last"} ${limit.toLocaleString("en-US")} of ${text.length.toLocaleString("en-US")} characters. Copy the text to read all of it.`,
       };
 
 // A row formats its time on each render, and the date format is slow on Hermes. Messages do not
@@ -50,7 +54,7 @@ const timeLabels = new WeakMap<AgentChatMessage, string>();
 export const messageTimeLabel = (message: AgentChatMessage): string => {
   let label = timeLabels.get(message);
   if (label === undefined) {
-    label = message.timestampIsApproximate ? "" : formatTime(message.timestamp);
+    label = readMessageTimeLabel(message);
     timeLabels.set(message, label);
   }
   return label;

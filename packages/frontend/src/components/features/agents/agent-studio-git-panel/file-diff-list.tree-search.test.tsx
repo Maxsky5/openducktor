@@ -128,7 +128,7 @@ describe("FileDiffList tree view and search", () => {
     render(<NavigableFileDiffListHarness />);
 
     const rows = screen.getAllByRole("listitem").map((row) => row.textContent);
-    expect(rows).toEqual(["src2+3-2", "lib1+1-1", "a.ts+1-1", "main.ts+2-1", "README.md+3-1"]);
+    expect(rows).toEqual(["src2+3-2", "lib1+1-1", "a.tsM+1-1", "main.tsM+2-1", "README.mdM+3-1"]);
     expect(directoryButton("src").getAttribute("aria-expanded")).toBe("true");
     expect(directoryButton("src").getAttribute("aria-description")).toBe(
       "2 changed files, 3 lines added, 2 lines removed",
@@ -146,7 +146,7 @@ describe("FileDiffList tree view and search", () => {
     expect(label.querySelector("[title]")).toBeNull();
     const nestedRow = nestedFile.parentElement;
     if (!nestedRow) throw new Error("The file toggle has no row.");
-    expect(within(nestedRow).getByTestId("agent-studio-git-file-stats").textContent).toBe("+1-1");
+    expect(within(nestedRow).getByTestId("agent-studio-git-file-stats").textContent).toBe("M+1-1");
   });
 
   test("hides the files of a closed directory and keeps their expanded state", () => {
@@ -186,7 +186,7 @@ describe("FileDiffList tree view and search", () => {
     expect(lineTotalsText()).toBe("+2-1");
     expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual([
       "src1+2-1",
-      "main.ts+2-1",
+      "main.tsM+2-1",
     ]);
     expect(highlightedTexts(directoryButton("src"))).toEqual(["src"]);
     expect(highlightedTexts(fileToggle("src/main.ts"))).toEqual(["main"]);
@@ -217,7 +217,7 @@ describe("FileDiffList tree view and search", () => {
 
     typeSearch("readme");
     expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual([
-      "README.md+3-1",
+      "README.mdM+3-1",
     ]);
   });
 
@@ -681,7 +681,7 @@ describe("FileDiffList tree view and search", () => {
     expect(fileCountText()).toBe("1/1200");
     expect(screen.getAllByRole("listitem").map((row) => row.textContent)).toEqual([
       "packages/package-7/src1+1168-1",
-      "file-1167.ts+1168-1",
+      "file-1167.tsM+1168-1",
     ]);
   });
 });

@@ -44,7 +44,7 @@ function AgentChatInlineFileReferenceChip({
       {...props}
     >
       <span className={AGENT_CHAT_FILE_REFERENCE_CHIP_ICON_CLASS_NAME}>
-        <AgentChatFileReferenceIcon kind={file.kind} />
+        <AgentChatFileReferenceIcon kind={file.kind} path={file.path} />
       </span>
       <span className={AGENT_CHAT_FILE_REFERENCE_CHIP_LABEL_CLASS_NAME}>{label ?? file.name}</span>
     </Badge>
