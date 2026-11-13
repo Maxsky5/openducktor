@@ -18,12 +18,7 @@ import {
   useFoldMotionList,
 } from "../transcript-fold-motion";
 import { useLayoutRow } from "./disclosure";
-
-/**
- * How the content shows: in the row, measuring itself before it opens, over the row while the
- * rows under it cover it as the row folds, or not at all.
- */
-type FoldMode = "open" | "measuring" | "folding" | "folded";
+import { type FoldMode, readFoldStep } from "./fold-reveal-step";
 
 /**
  * Content of a transcript row that opens and folds. When `open` changes after the content showed,
@@ -91,26 +86,32 @@ export function FoldReveal({
       layoutRow?.();
       return;
     }
-    if (nextOpen) {
-      // The content measures itself out of the layout, then the row opens.
-      setMode("measuring");
-      return;
-    }
-    if (mode !== "open" || contentHeight.current === 0) {
-      setMode("folded");
-      return;
-    }
-    // The list measures its rows at the end of this commit. The fold starts after that, so the
-    // measure does not replace the new height that the fold gives the list.
-    const height = contentHeight.current;
-    queueMicrotask(() => {
-      setMode("folding");
-      resize(-height);
-      foldTimer.current = setTimeout(() => {
-        foldTimer.current = null;
+    const step = readFoldStep(mode, nextOpen, contentHeight.current);
+    switch (step.kind) {
+      case "measure":
+        setMode("measuring");
+        return;
+      case "hide":
         setMode("folded");
-      }, FOLD_MOTION_MS);
-    });
+        return;
+      case "reopen":
+      case "fold":
+        // The list measures its rows at the end of this commit. The motion starts after that, so
+        // the measure does not replace the new height that the motion gives the list.
+        queueMicrotask(() => {
+          if (step.kind === "reopen") {
+            setMode("open");
+            resize(step.height);
+            return;
+          }
+          setMode("folding");
+          resize(-step.height);
+          foldTimer.current = setTimeout(() => {
+            foldTimer.current = null;
+            setMode("folded");
+          }, FOLD_MOTION_MS);
+        });
+    }
   });
   useLayoutEffect(() => {
     onOpenChange(open);
