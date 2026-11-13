@@ -171,6 +171,12 @@ An additive optional capability keeps the current protocol version.
 Discovery returns `shell`, `appVersion`, `hostInstanceId`, `hostId`, `accessPolicy: "pairing"`, and supported protocol versions with capability names.
 `hostInstanceId` identifies the live host run; it is not a durable trust identity.
 `hostId` identifies the host approval scope across restarts. It grants no access. Legacy descriptors can be read only to report which peer needs an update. A remote connection requires protocol 8, pairing support, and a stable scoped host ID before the client sends proof.
+`POST /connections` accepts at most 65,536 body bytes, including JSON whitespace. This allows the application hello fields and capability lists with room for future capability names.
+
+The host checks `Content-Length` before reading and counts streamed bytes even when that header is absent or false. An oversized body returns HTTP 400 with the typed `invalid_protocol` refusal, the byte limit, and an action to send a smaller hello without extra fields or padding.
+
+The host cancels the body before parsing or admission and closes the HTTP connection after it sends the refusal. Host and Origin checks run before body reads.
+
 Negotiation sends this client hello:
 
 ```json
