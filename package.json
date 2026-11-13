@@ -58,9 +58,9 @@
     "@types/node": "^26.6.6",
     "eslint-plugin-react-hooks": "7.1.1",
     "husky": "^9.1.7",
-    "knip": "^6.44.1",
-    "oxfmt": "^0.76.0",
-    "oxlint": "^1.91.0",
+    "knip": "^6.45.0",
+    "oxfmt": "^0.78.0",
+    "oxlint": "^1.93.0",
     "typescript": "7.0.2",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
