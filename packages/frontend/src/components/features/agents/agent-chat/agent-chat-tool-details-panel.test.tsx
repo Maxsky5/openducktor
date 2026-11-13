@@ -176,6 +176,47 @@ describe("AgentChatToolDetailsBeside", () => {
     }
   });
 
+  test("shows the last 1,000 lines of a long output, and all of them on request", () => {
+    const output = Array.from({ length: 1_005 }, (_, line) => `line ${line}`).join("\n");
+    const view = render(
+      <Transcript messages={[toolMessage("log", { input: { command: "cat log" }, output })]} />,
+    );
+    try {
+      pressRow(/cat log/);
+      const details = within(panel());
+      expect(details.queryByText("line 4")).toBeNull();
+      expect(details.getByText("line 5")).toBeTruthy();
+      expect(details.getByText("line 1004")).toBeTruthy();
+
+      fireEvent.click(details.getByRole("button", { name: "Show 5 earlier lines" }));
+
+      expect(details.getByText("line 0")).toBeTruthy();
+      expect(details.queryByRole("button", { name: /earlier lines/ })).toBeNull();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("keeps the blocks of the lines that stay when an output drops its first lines", () => {
+    const lines = (from: number, to: number) =>
+      Array.from({ length: to - from }, (_, index) => `line ${from + index}`).join("\n");
+    const call = (output: string) => toolMessage("log", { input: { command: "tail log" }, output });
+    const view = render(<Transcript messages={[call(lines(0, 10))]} />);
+    try {
+      pressRow(/tail log/);
+      const kept = within(panel()).getByText("line 5");
+
+      view.rerender(<Transcript messages={[call(lines(2, 12))]} />);
+
+      const details = within(panel());
+      expect(details.queryByText("line 1")).toBeNull();
+      expect(details.getByText("line 11")).toBeTruthy();
+      expect(details.getByText("line 5")).toBe(kept);
+    } finally {
+      view.unmount();
+    }
+  });
+
   test("keeps a file read between commands in their log, and shows it as a tool call", () => {
     const view = render(
       <Transcript
@@ -664,5 +705,27 @@ describe("createToolDetailsStore", () => {
     store.syncTranscript(after, null);
     expect(store.read().source).toBe(after);
     expect(store.read().messageId).toBe("message-1");
+  });
+
+  test("changes only when the shown call changes, not on each change of the transcript", () => {
+    const store = createToolDetailsStore();
+    const shownSource = source(null);
+    const shown = toolMessage("status", { status: "running", input: { command: "git status" } });
+    const other = toolMessage("test", { input: { command: "bun test" } });
+    const transcript = (messages: AgentChatMessage[]) => ({
+      externalSessionId: "session-1",
+      messages: createSessionMessagesState("session-1", messages),
+    });
+    store.toggle("status", shownSource, transcript([shown]), document.createElement("button"));
+    const listener = mock(() => {});
+    store.subscribe(listener);
+
+    store.syncTranscript(shownSource, transcript([shown, other]));
+    expect(listener).not.toHaveBeenCalled();
+
+    const ended = toolMessage("status", { input: { command: "git status" } });
+    store.syncTranscript(shownSource, transcript([ended, other]));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(store.read().message).toBe(ended);
   });
 });

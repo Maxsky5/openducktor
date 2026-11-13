@@ -1,4 +1,3 @@
-import { getSessionMessages } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { readMessageTimeLabel } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 import {
@@ -17,6 +16,7 @@ import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-or
 import { DismissableLayer } from "@radix-ui/react-dismissable-layer";
 import { X } from "lucide-react";
 import {
+  memo,
   type ReactElement,
   type ReactNode,
   useCallback,
@@ -51,7 +51,7 @@ type ShownToolCall = {
 // The panel tab and the page read the shown call of the same state, so each state finds it once.
 const shownToolCalls = new WeakMap<ToolDetailsState, ShownToolCall | null>();
 
-/** The shown call, live. Recent calls are near the end of the transcript, so it looks there first. */
+/** The shown call, live. */
 const findShownToolCall = (state: ToolDetailsState): ShownToolCall | null => {
   const known = shownToolCalls.get(state);
   if (known !== undefined) return known;
@@ -61,10 +61,8 @@ const findShownToolCall = (state: ToolDetailsState): ShownToolCall | null => {
 };
 
 const readShownToolCall = (state: ToolDetailsState): ShownToolCall | null => {
-  const { messageId, session, source } = state;
-  if (messageId === null || !session || !source) return null;
-  const message = getSessionMessages(session).findLast((item) => item.id === messageId);
-  if (message?.meta?.kind !== "tool") return null;
+  const { message, source } = state;
+  if (!source || message?.meta?.kind !== "tool") return null;
   const { meta } = message;
   if (isShellCommandCall(meta)) {
     const title = readShellCommandName(readShellCommandCall(meta).shownCommand);
@@ -157,8 +155,15 @@ const MissingToolCall = (): ReactElement => (
   </p>
 );
 
-/** The details of the shown call in the tool call tab of the right panel. */
-export function ToolCallPanelTabContent({ store }: { store: ToolDetailsStore }): ReactElement {
+/**
+ * The details of the shown call in the tool call tab of the right panel. The page renders on many
+ * session changes, so the details render only when the store changes.
+ */
+export const ToolCallPanelTabContent = memo(function ToolCallPanelTabContent({
+  store,
+}: {
+  store: ToolDetailsStore;
+}): ReactElement {
   const state = useToolDetailsState(store);
   const shown = findShownToolCall(state);
   return (
@@ -170,7 +175,7 @@ export function ToolCallPanelTabContent({ store }: { store: ToolDetailsStore }):
       )}
     </div>
   );
-}
+});
 
 const readRevealRevision = (state: ToolDetailsState): number | null =>
   state.messageId === null ? null : state.revision;
@@ -225,9 +230,10 @@ const isEditorOutside = (target: EventTarget | null, details: HTMLElement | null
 /**
  * The details of the shown call beside the transcript, for a transcript without session panels,
  * such as the transcript of a Subagent in a dialog. The transcript gets narrower, so the details
- * cover none of its rows.
+ * cover none of its rows. The thread renders on each session change, so the details render only
+ * when the store changes.
  */
-export function AgentChatToolDetailsBeside({
+export const AgentChatToolDetailsBeside = memo(function AgentChatToolDetailsBeside({
   store,
 }: {
   store: ToolDetailsStore;
@@ -280,4 +286,4 @@ export function AgentChatToolDetailsBeside({
       </aside>
     </DismissableLayer>
   );
-}
+});

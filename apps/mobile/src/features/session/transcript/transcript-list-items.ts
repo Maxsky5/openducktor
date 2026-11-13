@@ -130,7 +130,7 @@ export const transcriptListItems = (
     }
   };
   // Each row alone, or a run of consecutive tool run rows.
-  const { segments } = groupToolRuns(rows, classify);
+  const segments = groupToolRuns(rows, classify);
   const addSegments = (ordered: typeof segments): void => {
     for (const segment of ordered) {
       if (segment.kind === "tool_run") addToolRun(segment.index, segment.run);

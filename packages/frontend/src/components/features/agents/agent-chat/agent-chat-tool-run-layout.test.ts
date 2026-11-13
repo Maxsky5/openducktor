@@ -112,6 +112,18 @@ describe("buildToolRunWindowRows", () => {
     ]);
     expect(foldUserMessageAnchors(anchors, "")).toBe(anchors);
   });
+
+  test("keeps the folded anchors while a run after the last user message grows", () => {
+    const anchors = [
+      { rowKey: "row:ask", rowIndex: 0, message: buildMessage("user", "ask") },
+      { rowKey: "row:again", rowIndex: 6, message: buildMessage("user", "again") },
+    ];
+    const folded = foldUserMessageAnchors(anchors, "1:2");
+
+    expect(foldUserMessageAnchors(anchors, "1:2,5:3")).toBe(folded);
+    // A run before a user message that grows moves the message.
+    expect(foldUserMessageAnchors(anchors, "1:3").map((anchor) => anchor.rowIndex)).toEqual([0, 3]);
+  });
 });
 
 describe("buildTurnItems", () => {

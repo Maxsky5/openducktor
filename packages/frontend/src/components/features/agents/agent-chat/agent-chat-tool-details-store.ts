@@ -1,7 +1,11 @@
 import type { ChatSettings } from "@openducktor/contracts";
 import type { ToolPartSession } from "@openducktor/frontend-core/queries/agent-session-tool-part";
-import type { SessionMessageOwner } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import {
+  getSessionMessages,
+  type SessionMessageOwner,
+} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import type { AgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
+import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   createContext,
   type MouseEvent,
@@ -26,8 +30,11 @@ export type ToolDetailsState = {
   /** The message of the tool call that the details show. */
   messageId: string | null;
   source: ToolCallSource | null;
-  /** The live messages of the source transcript. Its thread keeps them current. */
-  session: SessionMessageOwner | null;
+  /**
+   * The live message of the call, or null when the transcript no longer has it. Its thread keeps
+   * it current, and the state changes only when the message changes.
+   */
+  message: AgentChatMessage | null;
   /** The row that showed the call. Focus goes back to it when the details close. */
   trigger: HTMLElement | null;
   /** Counts the presses that showed a call, so the page shows its panel again for each. */
@@ -49,8 +56,8 @@ export type ToolDetailsStore = {
     trigger: HTMLElement,
   ) => void;
   /**
-   * Gives the details the new messages and the new source facts, such as the chat settings, of the
-   * transcript of the shown call.
+   * Gives the details the new message of the shown call and the new source facts, such as the chat
+   * settings, of its transcript. A change of another message changes nothing.
    */
   syncTranscript: (source: ToolCallSource, session: SessionMessageOwner | null) => void;
   close: () => void;
@@ -59,10 +66,17 @@ export type ToolDetailsStore = {
 const closedState = (revision: number): ToolDetailsState => ({
   messageId: null,
   source: null,
-  session: null,
+  message: null,
   trigger: null,
   revision,
 });
+
+// Recent calls are near the end of the transcript, so the search starts there.
+const findMessage = (
+  session: SessionMessageOwner | null,
+  messageId: string,
+): AgentChatMessage | null =>
+  session ? (getSessionMessages(session).findLast((item) => item.id === messageId) ?? null) : null;
 
 export const createToolDetailsStore = (): ToolDetailsStore => {
   let state = closedState(0);
@@ -82,12 +96,14 @@ export const createToolDetailsStore = (): ToolDetailsStore => {
         set(closedState(state.revision));
         return;
       }
-      set({ messageId, source, session, trigger, revision: state.revision + 1 });
+      const message = findMessage(session, messageId);
+      set({ messageId, source, message, trigger, revision: state.revision + 1 });
     },
     syncTranscript: (source, session) => {
-      if (state.source?.key !== source.key) return;
-      if (state.source === source && state.session === session) return;
-      set({ ...state, source, session });
+      if (state.messageId === null || state.source?.key !== source.key) return;
+      const message = findMessage(session, state.messageId);
+      if (state.source === source && state.message === message) return;
+      set({ ...state, source, message });
     },
     close: () => {
       if (state.messageId !== null) set(closedState(state.revision));

@@ -28,7 +28,7 @@ const presentToolCall = resolveAgentChatRuntimePresentation({
 const classify = readToolRunClassifier(presentToolCall);
 
 const segmentsOf = (rows: readonly AgentChatTranscriptRow[]): readonly ToolRunSegment[] =>
-  groupToolRuns(rows, classify).segments;
+  groupToolRuns(rows, classify);
 
 const segmentKeys = (rows: readonly AgentChatTranscriptRow[]): string[] =>
   segmentsOf(rows).map((segment) =>
@@ -99,14 +99,37 @@ describe("groupToolRuns", () => {
     expect(second.run.summary).toMatchObject({ callCount: 1, failedCount: 0, activeCount: 1 });
   });
 
-  test("gives the call and the run of each row that a run holds", () => {
-    const one = shellRow("one");
+  test("groups again only the rows from the first changed row, as a full grouping does", () => {
+    // A classifier of its own starts without the groups of the other tests.
+    const ownClassify: typeof classify = (meta) => classify(meta);
+    const intro = textRow("intro");
+    const status = shellRow("status");
+    const answer = textRow("answer");
+    const before = [intro, status, answer, shellRow("lint"), shellRow("test", "running")];
+    const first = groupToolRuns(before, ownClassify);
 
-    const { callOfRow } = groupToolRuns([textRow("intro"), one, shellRow("two")], classify);
+    const after = [intro, status, answer, before[3]!, shellRow("test"), shellRow("build")];
+    const next = groupToolRuns(after, ownClassify);
 
-    expect([...callOfRow.keys()]).toEqual(["row:one", "row:two"]);
-    expect(callOfRow.get("row:one")?.row).toBe(one);
-    expect(callOfRow.get("row:two")?.run).toBe(callOfRow.get("row:one")?.run);
+    expect(next.slice(0, 3)).toEqual(first.slice(0, 3));
+    for (const index of [0, 1, 2]) expect(next[index]).toBe(first[index]);
+    expect(next).toEqual(groupToolRuns(after, (meta) => classify(meta)));
+    expect(next.at(-1)).toMatchObject({ kind: "tool_run", index: 3 });
+    // A shorter transcript drops the segments of the rows that it lost.
+    expect(groupToolRuns([intro, status], ownClassify)).toEqual(
+      groupToolRuns([intro, status], (meta) => classify(meta)),
+    );
+  });
+
+  test("gives a run the call that comes right after it", () => {
+    const ownClassify: typeof classify = (meta) => classify(meta);
+    const rows = [textRow("intro"), shellRow("one"), shellRow("two")];
+    groupToolRuns(rows, ownClassify);
+
+    const grown = groupToolRuns([...rows, shellRow("three")], ownClassify);
+
+    expect(grown.map((segment) => segment.kind)).toEqual(["row", "tool_run"]);
+    expect(grown[1]?.kind === "tool_run" && grown[1].run.rows.length).toBe(3);
   });
 
   test("keeps the object of a run while its calls do not change", () => {
@@ -309,12 +332,8 @@ describe("groupToolRuns", () => {
   });
 
   test("shows each call as its own row without tool runs", () => {
-    const { segments, callOfRow } = groupToolRuns(
-      [shellRow("status"), shellRow("test")],
-      NO_TOOL_RUNS,
-    );
+    const segments = groupToolRuns([shellRow("status"), shellRow("test")], NO_TOOL_RUNS);
     expect(segments.map((segment) => segment.kind)).toEqual(["row", "row"]);
-    expect(callOfRow.size).toBe(0);
   });
 
   test("names a run of web searches, of file lookups, and of shell calls", () => {

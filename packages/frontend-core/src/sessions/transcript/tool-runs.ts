@@ -361,20 +361,10 @@ export type ToolRun = {
   summary: ToolRunSummary;
 };
 
-/** A call of a tool run, with its run. */
-export type ToolRunCall = { run: ToolRun; row: ToolRunRow };
-
 /** A part of a transcript: a row alone, or a tool run that starts at `index`. */
 export type ToolRunSegment =
   | { kind: "row"; row: AgentChatTranscriptRow; index: number }
   | { kind: "tool_run"; run: ToolRun; index: number };
-
-/** The rows of a transcript in their tool runs. */
-export type ToolRunGroups = {
-  segments: readonly ToolRunSegment[];
-  /** The call of each row that a tool run holds, by the key of the row. */
-  callOfRow: ReadonlyMap<string, ToolRunCall>;
-};
 
 // The runs of the last groups, by classifier and by the first row of each run.
 const knownRuns = new WeakMap<ToolRunClassifier, WeakMap<ToolRunRow, ToolRun>>();
@@ -399,17 +389,59 @@ const readToolRun = (
   return run;
 };
 
+type GroupedRows = {
+  rows: readonly AgentChatTranscriptRow[];
+  segments: readonly ToolRunSegment[];
+};
+
+// The last groups of each classifier. A streamed change gives new objects only to the rows of the
+// messages that changed, so the segments before the first changed row stay.
+const lastGroups = new WeakMap<ToolRunClassifier, GroupedRows>();
+
+/** The index of the first row that differs, or the length of the shorter list. */
+const firstChangedRow = (
+  previous: readonly AgentChatTranscriptRow[],
+  rows: readonly AgentChatTranscriptRow[],
+): number => {
+  const length = Math.min(previous.length, rows.length);
+  for (let index = 0; index < length; index += 1) {
+    if (previous[index] !== rows[index]) return index;
+  }
+  return length;
+};
+
+/** The index of the row after a segment. */
+const segmentEnd = (segment: ToolRunSegment): number =>
+  segment.index + (segment.kind === "row" ? 1 : segment.run.rows.length);
+
+/**
+ * The segments of the last groups that end before `changed`. A run that ends at `changed` can
+ * take the call at `changed`, so it is grouped again.
+ */
+const keptSegments = (last: GroupedRows, changed: number): ToolRunSegment[] => {
+  const kept: ToolRunSegment[] = [];
+  for (const segment of last.segments) {
+    if (segmentEnd(segment) >= changed) break;
+    kept.push(segment);
+  }
+  return kept;
+};
+
 /**
  * The rows of a transcript in their tool runs. Consecutive tool run calls make one run, and a call
- * alone makes a run of one, so its header does not appear when the next call comes.
+ * alone makes a run of one, so its header does not appear when the next call comes. Each event
+ * groups only the rows from its first changed row on.
  */
 export const groupToolRuns = (
   rows: readonly AgentChatTranscriptRow[],
   classify: ToolRunClassifier,
-): ToolRunGroups => {
-  const segments: ToolRunSegment[] = [];
-  const callOfRow = new Map<string, ToolRunCall>();
-  for (let index = 0; index < rows.length;) {
+): readonly ToolRunSegment[] => {
+  const last = lastGroups.get(classify);
+  if (last?.rows === rows) return last.segments;
+  const segments = last ? keptSegments(last, firstChangedRow(last.rows, rows)) : [];
+  const lastSegment = segments.at(-1);
+  let index = lastSegment ? segmentEnd(lastSegment) : 0;
+  while (index < rows.length) {
     const row = rows[index];
     if (!row) break;
     const calls = collectToolRun(rows, index, classify);
@@ -419,12 +451,11 @@ export const groupToolRuns = (
       index += 1;
       continue;
     }
-    const run = readToolRun(first, calls, classify);
-    segments.push({ kind: "tool_run", run, index });
-    for (const call of calls) callOfRow.set(call.key, { run, row: call });
+    segments.push({ kind: "tool_run", run: readToolRun(first, calls, classify), index });
     index += calls.length;
   }
-  return { segments, callOfRow };
+  lastGroups.set(classify, { rows, segments });
+  return segments;
 };
 
 /** A long open run shows this many of its latest calls, under a control that shows the others. */

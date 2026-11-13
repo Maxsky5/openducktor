@@ -13,6 +13,7 @@ import {
   parseTerminalLines,
   readDiffLineTone,
   readTerminalText,
+  type TerminalColor,
   type TerminalTextSegment,
   terminalColorValue,
 } from "@openducktor/frontend-core/sessions/messages/terminal-text";
@@ -24,6 +25,7 @@ import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcr
 import { ArrowDown, Folder, SquareTerminal, WrapText } from "lucide-react";
 import {
   type CSSProperties,
+  memo,
   type ReactElement,
   type ReactNode,
   type RefCallback,
@@ -328,67 +330,170 @@ const lineStyle = (indent: string | null, isFailureLine: boolean): CSSProperties
   };
 };
 
+/** A long output shows its last lines until the reader asks for all of them. */
+const SHOWN_OUTPUT_LINE_COUNT = 1_000;
+
+/** Where the last `count` lines of a text start, or 0 when the text has no more lines. */
+const startOfLastLines = (text: string, count: number): number => {
+  // A last line break does not start a line.
+  let start = text.endsWith("\n") ? text.length - 1 : text.length;
+  for (let line = 0; line < count; line += 1) {
+    const lineBreak = text.lastIndexOf("\n", start - 1);
+    if (lineBreak < 0) return 0;
+    start = lineBreak;
+  }
+  return start + 1;
+};
+
+const countLineBreaks = (text: string, end: number): number => {
+  let count = 0;
+  for (
+    let index = text.indexOf("\n");
+    index >= 0 && index < end;
+    index = text.indexOf("\n", index + 1)
+  ) {
+    count += 1;
+  }
+  return count;
+};
+
+type OutputRun = { segment: TerminalTextSegment; key: string };
+type OutputLineModel = { key: string; indent: string; runs: OutputRun[] };
+
+const isSameColor = (left: TerminalColor | null, right: TerminalColor | null): boolean =>
+  left === right ||
+  (left !== null && right !== null && terminalColorValue(left) === terminalColorValue(right));
+
+const isSameSegment = (left: TerminalTextSegment, right: TerminalTextSegment): boolean =>
+  left.text === right.text &&
+  isSameColor(left.fg, right.fg) &&
+  isSameColor(left.bg, right.bg) &&
+  left.bold === right.bold &&
+  left.dim === right.dim &&
+  left.italic === right.italic &&
+  left.underline === right.underline &&
+  left.strikethrough === right.strikethrough;
+
+type OutputLineProps = {
+  line: OutputLineModel;
+  wrap: boolean;
+  isFailureLine: boolean;
+  /** The output grows while the command runs, and this line is its last line. */
+  hasCursor: boolean;
+};
+
+// Each update of a running command parses its output again, so a line that did not change
+// compares equal and does not render again.
+const isSameOutputLine = (left: OutputLineProps, right: OutputLineProps): boolean =>
+  left.wrap === right.wrap &&
+  left.isFailureLine === right.isFailureLine &&
+  left.hasCursor === right.hasCursor &&
+  left.line.indent === right.line.indent &&
+  left.line.runs.length === right.line.runs.length &&
+  left.line.runs.every((run, index) => {
+    const other = right.line.runs[index];
+    return other !== undefined && isSameSegment(run.segment, other.segment);
+  });
+
+const OutputLine = memo(function OutputLine({
+  line,
+  wrap,
+  isFailureLine,
+  hasCursor,
+}: OutputLineProps): ReactElement {
+  return (
+    <div
+      style={lineStyle(wrap ? line.indent : null, isFailureLine)}
+      {...(isFailureLine
+        ? {
+            "data-failure-line": true,
+            className: "bg-red-500/10 text-red-200 shadow-[inset_2px_0_0_var(--color-red-400)]",
+          }
+        : {})}
+    >
+      {line.runs.length === 0 ? "​" : null}
+      {line.runs.map(({ segment, key }) => (
+        <OutputSegment key={key} segment={segment} />
+      ))}
+      {hasCursor ? <OutputCursor /> : null}
+    </div>
+  );
+}, isSameOutputLine);
+
 /**
  * Command output, one block per line, with the colors and styles that the command wrote. Without
  * wrap, long lines scroll sideways, so code frames and tables keep their columns. The line that
- * says why a command failed shows marked, with its rule in the padding left of the text.
+ * says why a command failed shows marked, with its rule in the padding left of the text. A long
+ * output shows its last lines, which hold its result, until the reader asks for all of them.
  */
 const OutputLines = ({
   text,
   wrap,
-  cursor,
+  isLive,
   failureLine,
 }: {
   text: string;
   wrap: boolean;
-  cursor: ReactNode;
+  isLive: boolean;
+  /** The index of the failure line among all the lines of the text. */
   failureLine: number | null;
 }): ReactElement => {
-  // The lines of one text keep their order, so the place of a line or a run is its key. A plain
-  // diff, as `git show` prints it, gets the colors that `git` gives it in a terminal.
-  const lines = useMemo(() => {
+  const [showsAll, setShowsAll] = useState(false);
+  // A plain diff, as `git show` prints it, gets the colors that `git` gives it in a terminal.
+  const { lines, hiddenLineCount } = useMemo(() => {
+    const start = showsAll ? 0 : startOfLastLines(text, SHOWN_OUTPUT_LINE_COUNT);
     const isDiff = isPlainUnifiedDiff(text);
-    return parseTerminalLines(text).map((runs, line) => {
-      const lineText = runs.map((run) => run.text).join("");
-      const tone = isDiff ? readDiffLineTone(lineText) : null;
-      return {
-        key: `line-${line}`,
-        indent: wrapIndent(lineText),
-        runs: runs.map((segment, run) => ({
-          segment: tone
-            ? { ...segment, fg: { kind: "tone" as const, tone, bright: false } }
-            : segment,
-          key: `run-${run}`,
-        })),
-      };
-    });
-  }, [text]);
+    // The text of a line keys it, so the lines that stay keep their blocks when a running output
+    // drops its first lines.
+    const occurrences = new Map<string, number>();
+    const parsed = parseTerminalLines(start === 0 ? text : text.slice(start)).map(
+      (runs): OutputLineModel => {
+        const lineText = runs.map((run) => run.text).join("");
+        const occurrence = occurrences.get(lineText) ?? 0;
+        occurrences.set(lineText, occurrence + 1);
+        const tone = isDiff ? readDiffLineTone(lineText) : null;
+        return {
+          key: `${occurrence}:${lineText}`,
+          indent: wrapIndent(lineText),
+          runs: runs.map((segment, run) => ({
+            segment: tone
+              ? { ...segment, fg: { kind: "tone" as const, tone, bright: false } }
+              : segment,
+            key: `run-${run}`,
+          })),
+        };
+      },
+    );
+    return { lines: parsed, hiddenLineCount: start === 0 ? 0 : countLineBreaks(text, start) };
+  }, [text, showsAll]);
   const lastLine = lines.length - 1;
   return (
-    <div
-      className={
-        wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "w-max min-w-full whitespace-pre"
-      }
-    >
-      {lines.map(({ key, runs, indent }, index) => (
-        <div
-          key={key}
-          style={lineStyle(wrap ? indent : null, index === failureLine)}
-          {...(index === failureLine
-            ? {
-                "data-failure-line": true,
-                className: "bg-red-500/10 text-red-200 shadow-[inset_2px_0_0_var(--color-red-400)]",
-              }
-            : {})}
+    <>
+      {hiddenLineCount > 0 ? (
+        <button
+          type="button"
+          className="mb-1.5 rounded-sm font-sans text-[11px] font-medium text-[var(--terminal-muted)] underline-offset-2 outline-none hover:text-[var(--terminal-foreground)] hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setShowsAll(true)}
         >
-          {runs.length === 0 ? "​" : null}
-          {runs.map(({ segment, key: runKey }) => (
-            <OutputSegment key={runKey} segment={segment} />
-          ))}
-          {index === lastLine ? cursor : null}
-        </div>
-      ))}
-    </div>
+          {`Show ${plural(hiddenLineCount, "earlier line")}`}
+        </button>
+      ) : null}
+      <div
+        className={
+          wrap ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "w-max min-w-full whitespace-pre"
+        }
+      >
+        {lines.map((line, index) => (
+          <OutputLine
+            key={line.key}
+            line={line}
+            wrap={wrap}
+            isFailureLine={failureLine !== null && index === failureLine - hiddenLineCount}
+            hasCursor={isLive && index === lastLine}
+          />
+        ))}
+      </div>
+    </>
   );
 };
 
@@ -574,7 +679,7 @@ const CommandOutput = ({
           <OutputLines
             text={text}
             wrap={wrap}
-            cursor={cursor}
+            isLive={follow}
             failureLine={failureLine?.index ?? null}
           />
         ) : null}

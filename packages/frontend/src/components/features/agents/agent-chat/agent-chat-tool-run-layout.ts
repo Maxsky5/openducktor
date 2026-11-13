@@ -9,7 +9,7 @@ import {
   readEarlierCalls,
   type ToolRun,
   type ToolRunClassifier,
-  type ToolRunGroups,
+  type ToolRunSegment,
   type ToolRunSummary,
 } from "@openducktor/frontend-core/sessions/transcript/tool-runs";
 
@@ -52,7 +52,7 @@ const NO_RUN_KEYS: ReadonlySet<string> = new Set();
 /** Gives the row window the first row of each tool run in place of all the calls of the run. */
 export const buildToolRunWindowRows = (
   rows: AgentChatTranscriptRow[],
-  { segments }: ToolRunGroups,
+  segments: readonly ToolRunSegment[],
 ): ToolRunWindowRows => {
   const shown: AgentChatTranscriptRow[] = [];
   const runs = new Map<string, ToolRun>();
@@ -82,12 +82,29 @@ export const buildToolRunWindowRows = (
     : { rows: shown, runs, settledRunKeys, layoutKey: layout.join(",") };
 };
 
+// The last folded anchors of each list of anchors. A new call changes the layout of its run, but
+// rarely moves a user message, so the readers of the anchors keep them and read no layout again.
+const lastFoldedAnchors = new WeakMap<AgentChatUserMessageAnchor[], AgentChatUserMessageAnchor[]>();
+
 /** Moves the user message anchors to their rows in a window where tool runs hide their calls. */
 export const foldUserMessageAnchors = (
   anchors: AgentChatUserMessageAnchor[],
   layoutKey: string,
 ): AgentChatUserMessageAnchor[] => {
   if (layoutKey === "") return anchors;
+  const folded = foldAnchorRows(anchors, layoutKey);
+  const previous = lastFoldedAnchors.get(anchors);
+  if (previous?.every((anchor, index) => anchor.rowIndex === folded[index]?.rowIndex)) {
+    return previous;
+  }
+  lastFoldedAnchors.set(anchors, folded);
+  return folded;
+};
+
+const foldAnchorRows = (
+  anchors: AgentChatUserMessageAnchor[],
+  layoutKey: string,
+): AgentChatUserMessageAnchor[] => {
   const folds = layoutKey.split(",").map((pair) => pair.split(":").map(Number));
   return anchors.map((anchor) => {
     let hiddenBefore = 0;
