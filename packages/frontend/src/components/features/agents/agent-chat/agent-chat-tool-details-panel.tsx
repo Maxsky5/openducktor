@@ -6,6 +6,7 @@ import {
   readToolDetailsHeading,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { OdtToolIconKind } from "@openducktor/frontend-core/sessions/messages/odt-tool-call";
+import type { AgentChatToolCallPresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import {
   isShellCommandCall,
   readShellCommandCall,
@@ -43,8 +44,8 @@ type ShownToolCall = {
   title: string;
   /** The icon of an ODT tool, or null for the icon of the tool type. */
   iconKind: OdtToolIconKind | null;
-  /** The Markdown note of a workflow event. */
-  note: string | null;
+  /** How the runtime presents the tool, or null for a shell command. */
+  presentation: AgentChatToolCallPresentation | null;
 };
 
 // The panel tab and the page read the shown call of the same state, so each state finds it once.
@@ -67,13 +68,11 @@ const readShownToolCall = (state: ToolDetailsState): ShownToolCall | null => {
   const { meta } = message;
   if (isShellCommandCall(meta)) {
     const title = readShellCommandName(readShellCommandCall(meta).shownCommand);
-    return { message, meta, isShell: true, title, iconKind: null, note: null };
+    return { message, meta, isShell: true, title, iconKind: null, presentation: null };
   }
-  const heading = readToolDetailsHeading(
-    meta,
-    source.runtimePresentation.presentToolCall(meta.tool, meta.displayLabel),
-  );
-  return { message, meta, isShell: false, ...heading };
+  const presentation = source.runtimePresentation.presentToolCall(meta.tool, meta.displayLabel);
+  const { title, iconKind } = readToolDetailsHeading(meta, presentation);
+  return { message, meta, isShell: false, title, iconKind, presentation };
 };
 
 /** Closes the details, and gives the keyboard focus back to the row that showed them. */
@@ -93,7 +92,7 @@ const ToolCallDetailsBody = ({
   shown: ShownToolCall;
   closeAction?: ReactNode;
 }): ReactElement => {
-  const { message, meta, isShell, title, iconKind, note } = shown;
+  const { message, meta, isShell, title, iconKind, presentation } = shown;
   const timing = { messageTimestamp: message.timestamp, timeLabel: readMessageTimeLabel(message) };
   const sessionFolder = state.source?.workingDirectory ?? null;
   const renderDetails = (shownMeta: ToolMeta): ReactNode => {
@@ -122,6 +121,8 @@ const ToolCallDetailsBody = ({
         />
       );
     }
+    // Compact history cuts a long note, so the note comes from the full call.
+    const note = presentation && readToolDetailsHeading(shownMeta, presentation).note;
     return (
       <ToolCallDetails
         meta={shownMeta}

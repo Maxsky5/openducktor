@@ -540,11 +540,14 @@ const CUT_CALL_SESSION: ToolPartSession = {
   sessionScope: { kind: "repository", workspaceId: "workspace-1" },
 };
 
-const renderCutCall = (readSessionToolPart: AgentOperationsContextValue["readSessionToolPart"]) =>
+const renderCutCall = (
+  readSessionToolPart: AgentOperationsContextValue["readSessionToolPart"],
+  call: AgentChatMessage = cutCall,
+) =>
   render(
     <QueryProvider connection={createTestClientConnection()}>
       <AgentOperationsContext value={createAgentOperationsFixture({ readSessionToolPart })}>
-        <Transcript messages={[cutCall]} toolPartSession={CUT_CALL_SESSION} />
+        <Transcript messages={[call]} toolPartSession={CUT_CALL_SESSION} />
       </AgentOperationsContext>
     </QueryProvider>,
   );
@@ -558,6 +561,33 @@ describe("AgentChatToolDetailsBeside with cut details", () => {
       await act(async () => pressRow(/cat log/));
       expect(await screen.findByText("first characters and the rest of the log")).toBeTruthy();
       expect(read).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("shows the full note of a workflow event when its full call loads", async () => {
+    const input = { taskId: "task-1", eventId: "build-completed" };
+    const cutEvent = toolMessage("event", {
+      tool: "odt_apply_workflow_event",
+      toolType: "workflow",
+      input: { ...input, note: "Login works" },
+      detailsOmitted: { input: true },
+    });
+    const read = mock(async (): Promise<AgentToolPart> => ({
+      kind: "tool",
+      messageId: "event",
+      partId: "event-part",
+      callId: "event-call",
+      tool: "odt_apply_workflow_event",
+      toolType: "workflow",
+      status: "completed",
+      input: { ...input, note: "Login works on every page." },
+    }));
+    const view = renderCutCall(read, cutEvent);
+    try {
+      await act(async () => pressRow(/Build Completed/));
+      expect(await within(panel()).findByText("Login works on every page.")).toBeTruthy();
     } finally {
       view.unmount();
     }
