@@ -1846,9 +1846,8 @@ describe("AgentStudioGitPanel", () => {
     const statsNode = findByTestId(root, "agent-studio-git-file-stats");
     expect(statsNode.props.className).toContain("shrink-0");
     expect(statsNode.props.className).not.toContain("border-l");
-    expect(getNodeText(statsNode)).toContain("+3");
-    expect(getNodeText(statsNode)).toContain("-1");
-    expect(getNodeText(statsNode)).not.toContain("M");
+    // The icon shows the type of the file, so the letter shows the change.
+    expect(getNodeText(statsNode)).toBe("M+3-1");
 
     await act(async () => {
       ensureRenderer(renderer).unmount();

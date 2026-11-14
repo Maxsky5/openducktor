@@ -1,6 +1,12 @@
-/** Sessions, tasks, and work views are pushed screens of the app stack. The other routes are sheets. */
+/**
+ * Sessions, the tool calls of a session, tasks, and work views are pushed screens of the app stack.
+ * The other routes are sheets.
+ */
 export const isPushedScreen = (name: string): boolean =>
-  name === "session" || name.startsWith("task/") || name.startsWith("work/");
+  name === "session" ||
+  name === "tool-call" ||
+  name.startsWith("task/") ||
+  name.startsWith("work/");
 
 /**
  * True when no pushed screen lies above the route in its stack. A sheet above the route leaves it in

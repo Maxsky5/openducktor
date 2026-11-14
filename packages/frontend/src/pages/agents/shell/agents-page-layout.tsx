@@ -14,6 +14,10 @@ import {
   useRef,
 } from "react";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
+import {
+  type PageToolDetails,
+  PageToolDetailsProvider,
+} from "@/features/session-panels/page-tool-details";
 import { AgentStudioHeader } from "@/components/features/agents/agent-studio-header";
 import { SessionRepoActions } from "@/components/features/repository-actions/session-repo-actions";
 import { WorkflowRail } from "@/components/features/agents/agent-studio-header-workflow-rail";
@@ -233,6 +237,7 @@ export type AgentsPageLayoutModel = {
   selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
   modalContent: AgentsPageModalContentModel;
   panels: SessionPanelsModel;
+  toolDetails: PageToolDetails;
 };
 
 type AgentsPageLayoutProps = {
@@ -261,6 +266,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
     selectedFileRefresh,
     modalContent,
     panels,
+    toolDetails,
   } = model;
   const linkRef = useRef<HTMLElement | null>(null);
   const hasSelectedFilePreview = taskExecutionSelectedFilePreviewModel.selectedFile !== null;
@@ -430,7 +436,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
   );
 
   return (
-    <>
+    <PageToolDetailsProvider details={toolDetails}>
       {!panels.right.isVisible && rightPanelBridge ? (
         <AgentsPageRightPanelRuntime
           {...rightPanelBridge.rightPanel}
@@ -454,6 +460,6 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
         workspace={workspaceContent}
         modalContent={modalContentElement}
       />
-    </>
+    </PageToolDetailsProvider>
   );
 }

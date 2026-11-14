@@ -5,10 +5,13 @@ import {
   buildComputerUsePresentation,
   buildQuestionDetailEntries,
   formatToolInput,
+  hasFileEditChanges,
   readToolDetailAvailability,
   readToolFileEdits,
   readRegularToolTiming,
   readWorkflowToolCard,
+  readToolCallName,
+  readToolDetailsHeading,
   regularToolLineName,
   resolveRegularToolSummary,
   workflowToolStatusLabel,
@@ -26,17 +29,19 @@ const meta = (overrides: Partial<ToolMeta> = {}): ToolMeta => ({
 });
 
 describe("tool presentation", () => {
-  test("shows the error of a failed call, and the cancel text when the summary is empty", () => {
-    expect(resolveRegularToolSummary(meta({ status: "error", error: "boom" }), "")).toEqual({
-      text: "boom",
-      isError: true,
-    });
+  test("previews the error of a failed call, and shows the cancel text when the summary is empty", () => {
+    expect(
+      resolveRegularToolSummary(
+        meta({ status: "error", input: { command: "ls" }, error: "boom" }),
+        "",
+      ),
+    ).toEqual({ text: "ls", errorPreview: "boom" });
     expect(
       resolveRegularToolSummary(
         meta({ tool: "unknown_tool", toolType: "generic", status: "error" }),
         "",
       ),
-    ).toEqual({ text: TOOL_CALL_FAILED_MESSAGE, isError: true });
+    ).toEqual({ text: "", errorPreview: TOOL_CALL_FAILED_MESSAGE });
     expect(
       resolveRegularToolSummary(
         meta({
@@ -47,7 +52,7 @@ describe("tool presentation", () => {
         }),
         "",
       ),
-    ).toEqual({ text: "Tool cancelled", isError: false });
+    ).toEqual({ text: "Tool cancelled", errorPreview: null });
   });
 
   describe("readWorkflowToolCard", () => {
@@ -73,13 +78,11 @@ describe("tool presentation", () => {
         | "odt_set_pull_request"
         | "odt_update_task"
         | null = "odt_set_pull_request",
-      opensDocument = false,
     ) =>
       readWorkflowToolCard({
         meta: meta({ tool: odtTool ?? "set_spec", toolType: "workflow", ...overrides }),
         odtTool,
         displayName: "Tool Name",
-        opensDocument,
       });
     const event = (input: NonNullable<ToolMeta["input"]>) =>
       card({ input }, "odt_apply_workflow_event");
@@ -91,7 +94,6 @@ describe("tool presentation", () => {
         iconKind: "workflow",
         note,
         pullRequest: null,
-        hasDetails: true,
       });
       expect(event({ eventId: " build_blocked " }).title).toBe("Build Blocked");
       expect(event({ eventId: "qa" }).title).toBe("Qa");
@@ -126,42 +128,14 @@ describe("tool presentation", () => {
       }
     });
 
-    test("shows the Input and Output of a completed call", () => {
-      expect(card({ input: { taskId: "task-1" }, output: '{"ok":true}' })).toMatchObject({
-        error: null,
-        showsInput: true,
-        showsOutput: true,
-        errorDetail: null,
-        hasDetails: true,
-      });
-    });
-
-    test("shows the JSON of an ODT error once, in the Error box", () => {
+    test("reads the message of an ODT error for the line under the header", () => {
       const error = { message: "Task task-1 already has pull request #141.", detail: envelope };
-      expect(card({ status: "error", error: envelope, output: '{"ok":false}' })).toMatchObject({
-        error,
-        showsOutput: true,
-        errorDetail: envelope,
-      });
-      expect(card({ status: "error", output: envelope })).toMatchObject({
-        error,
-        showsOutput: false,
-        errorDetail: envelope,
-        hasDetails: true,
-      });
-    });
-
-    test("shows plain error text only in the line, with no Error box", () => {
-      const failed = card({ status: "error", error: "build-blocked requires a note." });
-      expect(failed.error?.message).toBe("build-blocked requires a note.");
-      expect(failed.errorDetail).toBeNull();
-      expect(failed.hasDetails).toBe(false);
-    });
-
-    test("shows Open in place of the Input and Output of a call that opens its document", () => {
+      expect(card({ status: "error", error: envelope }).error).toEqual(error);
+      expect(card({ status: "error", output: envelope }).error).toEqual(error);
       expect(
-        card({ input: { taskId: "task-1" }, output: '{"ok":true}' }, null, true),
-      ).toMatchObject({ showsInput: false, showsOutput: false, hasDetails: false });
+        card({ status: "error", error: "build-blocked requires a note." }).error?.message,
+      ).toBe("build-blocked requires a note.");
+      expect(card({ input: { taskId: "task-1" }, output: '{"ok":true}' }).error).toBeNull();
     });
   });
 
@@ -208,6 +182,15 @@ describe("tool presentation", () => {
     expect(edits.diffUnavailable).toBe(true);
   });
 
+  test("shows the changes of an edit only when it has one, so a failed edit shows its input", () => {
+    const input = { file_path: "/repo/src/a.ts", old_string: "one", new_string: "two" };
+    const edit = (status: ToolMeta["status"]) =>
+      meta({ tool: "Edit", toolType: "file_edit", status, input });
+
+    expect(hasFileEditChanges(edit("completed"), "/repo")).toBe(true);
+    expect(hasFileEditChanges(edit("error"), "/repo")).toBe(false);
+  });
+
   test("formats input with paths relative to the working directory", () => {
     expect(formatToolInput({ filePath: "/repo/src/a.ts" }, "/repo")).toContain('"src/a.ts"');
   });
@@ -231,5 +214,74 @@ describe("tool presentation", () => {
     expect(presentation.actionTitle).toBe("Click");
     expect(presentation.screenshotLabel).toBe("Screenshot");
     expect(presentation.hasDetails).toBe(false);
+  });
+});
+
+describe("readToolCallName", () => {
+  test("gives the calls that each runtime names in its own way one common name", () => {
+    expect(readToolCallName(meta({ tool: "Bash", toolType: "bash" }), "Bash")).toBe("bash");
+    expect(readToolCallName(meta({ tool: "shell", toolType: "bash" }), "shell")).toBe("bash");
+    // Codex runs its file lookups as shell commands.
+    const lookup = meta({ tool: "read", toolType: "read", input: { command: "cat a.ts" } });
+    expect(readToolCallName(lookup, "read")).toBe("bash");
+    for (const tool of ["Edit", "Write", "apply_patch"]) {
+      expect(readToolCallName(meta({ tool, toolType: "file_edit" }), tool)).toBe("edit");
+    }
+    expect(readToolCallName(meta({ tool: "Read", toolType: "read" }), "Read")).toBe("Read");
+  });
+});
+
+describe("readToolDetailsHeading", () => {
+  test("names the workflow tool and its event, and keeps the line breaks of the note", () => {
+    const event = meta({
+      tool: "odt_apply_workflow_event",
+      toolType: "workflow",
+      input: {
+        taskId: "task-1",
+        eventId: "build-completed",
+        note: "Login works.\nDesign adjustments: none.\n\n- one\n- two\n```sh\nbun test\nbun lint\n```",
+      },
+    });
+    const presentation = {
+      kind: "workflow",
+      displayName: "Workflow Event",
+      odtTool: "odt_apply_workflow_event",
+    } as const;
+
+    expect(readToolDetailsHeading(event, presentation)).toEqual({
+      title: "Workflow Event · Build Completed",
+      iconKind: "workflow",
+      note: "Login works.  \nDesign adjustments: none.\n\n- one  \n- two  \n```sh\nbun test\nbun lint\n```",
+    });
+    // A tool whose card has no title of its own keeps the name of the tool.
+    const pullRequest = meta({ tool: "odt_set_pull_request", toolType: "workflow" });
+    expect(
+      readToolDetailsHeading(pullRequest, {
+        kind: "workflow",
+        displayName: "Set Pull Request",
+        odtTool: "odt_set_pull_request",
+      }).title,
+    ).toBe("Set Pull Request");
+  });
+
+  test("names the tool and the artifact code of an artifact call", () => {
+    const artifact = meta({
+      tool: "odt_set_task_artifact",
+      toolType: "workflow",
+      input: { taskId: "task-1", code: "spec" },
+    });
+    expect(
+      readToolDetailsHeading(artifact, {
+        kind: "artifact",
+        displayName: "Set Artifact",
+        operation: "set",
+      }),
+    ).toEqual({ title: "Set Artifact · spec", iconKind: null, note: null });
+    expect(
+      readToolDetailsHeading(meta({ tool: "read", toolType: "read" }), {
+        kind: "regular",
+        displayName: "read",
+      }),
+    ).toEqual({ title: "read", iconKind: null, note: null });
   });
 });

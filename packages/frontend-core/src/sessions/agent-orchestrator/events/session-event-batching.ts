@@ -1,3 +1,4 @@
+import { RUNNING_TOOL_UPDATE_INTERVAL_MS } from "@openducktor/contracts";
 import type { SessionEvent } from "./session-event-types";
 
 const IMMEDIATE_SESSION_EVENT_TYPE_LIST = [
@@ -44,7 +45,6 @@ const IMMEDIATE_SESSION_EVENT_TYPES = new Set<SessionEvent["type"]>(
 // Streamed text renders block by block, so an update costs a few milliseconds and a short interval
 // keeps the stream smooth. A tool update changes a whole card, so it waits longer.
 export const TEXT_STREAM_INTERVAL_MS = 100;
-const TOOL_UPDATE_INTERVAL_MS = 400;
 
 const minAssistantPartEmitIntervalMs = (
   event: Extract<QueuedSessionEvent, { type: "assistant_part" }>,
@@ -55,7 +55,7 @@ const minAssistantPartEmitIntervalMs = (
   if (event.part.kind === "tool") {
     return event.part.status === "completed" || event.part.status === "error"
       ? null
-      : TOOL_UPDATE_INTERVAL_MS;
+      : RUNNING_TOOL_UPDATE_INTERVAL_MS;
   }
   return null;
 };

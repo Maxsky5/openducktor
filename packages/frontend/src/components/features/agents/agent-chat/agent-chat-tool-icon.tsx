@@ -4,6 +4,7 @@ import {
   GitPullRequest,
   Globe,
   ListTodo,
+  PencilLine,
   ScrollText,
   Search,
   Terminal,
@@ -48,6 +49,9 @@ export const toolIcon = (
   }
   if (value === "todo") {
     return <ListTodo className="size-3.5" />;
+  }
+  if (value === "file_edit") {
+    return <PencilLine className="size-3.5" />;
   }
   return <Wrench className="size-3.5" />;
 };

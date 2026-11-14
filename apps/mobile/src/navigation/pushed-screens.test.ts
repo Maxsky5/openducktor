@@ -4,8 +4,10 @@ import { isPushedScreen, isRouteInView } from "./pushed-screens";
 const route = (key: string, name: string) => ({ key, name });
 
 describe("isPushedScreen", () => {
-  test("knows sessions, tasks, and work views", () => {
+  test("knows sessions, the tool calls of a session, tasks, and work views", () => {
     expect(isPushedScreen("session")).toBe(true);
+    // A swipe returns from the details of a call to its session.
+    expect(isPushedScreen("tool-call")).toBe(true);
     expect(isPushedScreen("task/[workspaceId]/[taskId]")).toBe(true);
     expect(isPushedScreen("work/changes")).toBe(true);
     expect(isPushedScreen("composer-options")).toBe(false);

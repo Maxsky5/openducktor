@@ -26,14 +26,23 @@ export const ToolMessageTiming = ({
         />
       </span>
     ) : null}
-    {activity === "running" ? (
-      <span role="img" aria-label="Running tool" className="agent-tool-running">
-        <span aria-hidden="true" />
-        <span aria-hidden="true" />
-        <span aria-hidden="true" />
-      </span>
-    ) : null}
+    {activity === "running" ? <ToolRunningBars label="Running tool" /> : null}
     {durationMs !== null ? <span>{formatAgentDuration(durationMs)}</span> : null}
     {timeLabel ? <span>{timeLabel}</span> : null}
+  </span>
+);
+
+/**
+ * The moving bars of a running tool call. With a label, screen readers read it. Without one, the
+ * bars sit next to a label and screen readers skip them.
+ */
+export const ToolRunningBars = ({ label }: { label?: string }): ReactElement => (
+  <span
+    {...(label ? { role: "img", "aria-label": label } : { "aria-hidden": true })}
+    className="agent-tool-running"
+  >
+    <span aria-hidden="true" />
+    <span aria-hidden="true" />
+    <span aria-hidden="true" />
   </span>
 );

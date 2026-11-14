@@ -11,8 +11,9 @@ import { DiffRowView } from "@/rich-content/diff/diff-rows";
 import type { TranscriptFullView } from "./transcript-rows-context";
 
 /**
- * The full diff or file text of a file edit, in a sheet over the transcript. The list renders it
- * beside its rows, so the sheet stays open while new content scrolls the row away.
+ * The full diff or file text of a file edit in a sheet over the transcript. The list renders it
+ * beside its rows, so the sheet stays open while new content scrolls the row away. The details of
+ * a call open on the tool call screen instead.
  */
 export function TranscriptFullViewSheet({
   view,
@@ -21,7 +22,7 @@ export function TranscriptFullViewSheet({
   view: TranscriptFullView | null;
   onClose: () => void;
 }): ReactElement | null {
-  if (!view) return null;
+  if (!view || view.kind === "tool") return null;
   return (
     <InPlaceSheet visible title={view.title} onClose={onClose} scrolls={false}>
       {view.kind === "diff" ? (

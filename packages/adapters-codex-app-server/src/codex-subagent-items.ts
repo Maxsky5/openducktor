@@ -242,7 +242,11 @@ const subagentActivityParts = (
     status: item.kind === "completed" ? "completed" : "running",
     metadata: activityMetadata(item, sourceThreadId),
   };
-  if (item.kind === "completed" && item.completedAtMs !== undefined) {
+  if (
+    item.kind === "completed" &&
+    item.completedAtMs !== undefined &&
+    item.completedAtMs !== null
+  ) {
     link.endedAtMs = item.completedAtMs;
   }
   if (runtimeId) {

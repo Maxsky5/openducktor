@@ -205,6 +205,9 @@ export const toolPartType = (
   if (/^Task(?:Create|Update|Get|List)$/u.test(toolName)) {
     return "todo";
   }
+  if (/^Web(?:Search|Fetch)$/u.test(toolName)) {
+    return "web";
+  }
   if (/bash|shell/i.test(toolName)) {
     return "bash";
   }

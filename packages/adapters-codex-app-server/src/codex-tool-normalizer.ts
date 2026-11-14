@@ -46,6 +46,8 @@ export type CodexToolInvocationMetadata = {
   questions?: CodexToolQuestion[];
   answers?: Record<string, { answers: string[] }>;
   server?: string;
+  /** The exit code of a command. */
+  exit?: number;
 };
 
 export const COMPUTER_USE_MCP_SERVER = "cua_repl";

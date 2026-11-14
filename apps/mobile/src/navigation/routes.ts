@@ -76,6 +76,18 @@ export const routes = {
   task: (workspaceId: string, taskId: string) =>
     ({ pathname: "/task/[workspaceId]/[taskId]", params: { workspaceId, taskId } }) as const,
   session: (params: SessionRouteParams) => ({ pathname: "/session", params }) as const,
+  /** The details of one call of the session screen under it, which keeps its transcript live. */
+  toolCall: (identity: AgentSessionIdentity, messageId: string, title: string) =>
+    ({
+      pathname: "/tool-call",
+      params: {
+        externalSessionId: identity.externalSessionId,
+        runtimeKind: identity.runtimeKind,
+        workingDirectory: identity.workingDirectory,
+        messageId,
+        title,
+      },
+    }) as const,
   /** The Changes view, opened on the scope and the diff of `focus` when given. */
   changes: (owner: WorkOwnerParams, focus?: ChangesFocus) =>
     ({

@@ -1,8 +1,6 @@
 import type { OdtToolName } from "@openducktor/contracts";
-import { ChevronDown } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import {
   getToolDuration,
@@ -10,16 +8,12 @@ import {
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
   readWorkflowToolCard,
-  type WorkflowToolCard,
   workflowToolStatusLabel,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import type { ToolCallError } from "@openducktor/frontend-core/sessions/messages/tool-call-error";
-import { AgentChatMarkdownRenderer } from "./agent-chat-markdown-renderer";
 import { toolIcon } from "./agent-chat-tool-icon";
-import { ToolInputDetails } from "./agent-chat-tool-input-details";
-import { ToolJsonDetails } from "./agent-chat-tool-json-details";
-import { ToolOutputDetails } from "./agent-chat-tool-output-details";
+import { useToolDetailsRow } from "./agent-chat-tool-details-store";
 import { ToolMessageTiming, type ToolMessageActivity } from "./agent-chat-tool-message-timing";
 
 const WORKFLOW_TOOL_APPEARANCE = {
@@ -66,72 +60,74 @@ const WORKFLOW_TOOL_APPEARANCE = {
 
 type WorkflowToolMessageProps = {
   meta: ToolMeta;
+  /** The message of the call. A press on the card shows it in the tool details. */
+  messageId: string;
   /** The ODT tool of the call, as `presentToolCall` resolved it. */
   odtTool?: OdtToolName | null;
   messageTimestamp: string;
   timeLabel: string;
-  sessionWorkingDirectory?: string | null | undefined;
   displayName: string;
   summary?: string;
   icon?: ReactNode;
   action?: ReactNode;
 };
 
+// The title covers the card, so a press anywhere on the card shows the call in the tool details.
+// The card has `px-3 py-2`, so the press area reaches its border.
+const CARD_PRESS_CLASS_NAME =
+  "cursor-pointer text-left outline-none after:absolute after:-inset-x-3 after:-inset-y-2 after:rounded-[5px] after:content-[''] hover:after:bg-current/[0.05] focus-visible:after:ring-2 focus-visible:after:ring-ring";
+const CARD_SHOWN_CLASS_NAME = "after:bg-current/[0.08] after:ring-1 after:ring-current/25";
+
 /**
  * A workflow tool call: a header with the title, the pull request of the call, its status, and
  * its timing; then its summary, or the error message of a failed call. A workflow event call
- * takes its event as the title. A press on the title shows the note of the event as Markdown,
- * then the Input, Output, and Error boxes, all closed.
+ * takes its event as the title. A press on the card shows the call in the tool details, as for
+ * the other tool calls, with the note of a workflow event.
  */
 export const WorkflowToolMessage = ({
   meta,
+  messageId,
   odtTool = null,
   messageTimestamp,
   timeLabel,
-  sessionWorkingDirectory,
   displayName,
   summary,
   icon,
   action,
 }: WorkflowToolMessageProps): ReactElement => {
+  const details = useToolDetailsRow(messageId);
   const lifecyclePhase = getToolLifecyclePhase(meta);
   const statusLabel = workflowToolStatusLabel(lifecyclePhase);
   const { activity, statusClassName, foregroundClassName } =
     WORKFLOW_TOOL_APPEARANCE[lifecyclePhase];
-  const card = readWorkflowToolCard({ meta, odtTool, displayName, opensDocument: false });
-  const { title, hasDetails } = card;
+  const card = readWorkflowToolCard({ meta, odtTool, displayName });
   const titleClassName = cn("min-w-0 break-words text-[11px] font-semibold", foregroundClassName);
 
   return (
-    <Collapsible className="flex min-w-0 flex-col gap-2">
+    <div className="relative flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <div className="flex min-w-0 max-w-full flex-auto flex-wrap items-center gap-2">
           <span aria-hidden="true" className={cn("shrink-0", foregroundClassName)}>
             {icon ?? toolIcon(meta, card.iconKind)}
           </span>
-          {hasDetails ? (
-            // A card with details shows them with a press on its title.
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                aria-label={`${title} details`}
-                className={cn(
-                  "group inline-flex min-w-0 cursor-pointer items-center gap-1 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring",
-                  titleClassName,
-                )}
-              >
-                <span className="min-w-0 break-words">{title}</span>
-                <ChevronDown
-                  aria-hidden="true"
-                  className="size-3 shrink-0 transition-transform motion-reduce:transition-none group-data-[state=open]:rotate-180"
-                />
-              </button>
-            </CollapsibleTrigger>
+          {details ? (
+            <button
+              type="button"
+              aria-pressed={details.isShown}
+              className={cn(
+                titleClassName,
+                CARD_PRESS_CLASS_NAME,
+                details.isShown && CARD_SHOWN_CLASS_NAME,
+              )}
+              onClick={details.onClick}
+            >
+              {card.title}
+            </button>
           ) : (
-            <p className={titleClassName}>{title}</p>
+            <p className={titleClassName}>{card.title}</p>
           )}
           {card.pullRequest ? (
-            <TaskPullRequestLink pullRequest={card.pullRequest} className="py-0.5" />
+            <TaskPullRequestLink pullRequest={card.pullRequest} className="relative py-0.5" />
           ) : null}
           {statusLabel ? (
             <span
@@ -151,20 +147,12 @@ export const WorkflowToolMessage = ({
             timeLabel={timeLabel}
             className="text-current/75 font-normal normal-case"
           />
-          {action}
+          {/* The controls of the card stay above the press area of the card. */}
+          {action ? <div className="relative flex items-center gap-2">{action}</div> : null}
         </div>
       </div>
       <WorkflowToolLine error={card.error} summary={summary} />
-      {hasDetails ? (
-        <CollapsibleContent className="space-y-2">
-          <WorkflowToolDetailBoxes
-            meta={meta}
-            sessionWorkingDirectory={sessionWorkingDirectory}
-            card={card}
-          />
-        </CollapsibleContent>
-      ) : null}
-    </Collapsible>
+    </div>
   );
 };
 
@@ -186,45 +174,3 @@ const WorkflowToolLine = ({
   if (!summary) return null;
   return <p className="min-w-0 break-words text-[11px] text-current/75">{summary}</p>;
 };
-
-/**
- * The details of an open card: the event note as Markdown, then the Input, Output, and Error
- * boxes, all closed.
- */
-const WorkflowToolDetailBoxes = ({
-  meta,
-  sessionWorkingDirectory,
-  card: { note, showsInput, showsOutput, errorDetail },
-}: {
-  meta: ToolMeta;
-  sessionWorkingDirectory?: string | null | undefined;
-  card: WorkflowToolCard;
-}): ReactElement => (
-  <>
-    {note ? <AgentChatMarkdownRenderer markdown={note} variant="compact" /> : null}
-    {showsInput ? (
-      <ToolInputDetails
-        meta={meta}
-        workingDirectory={sessionWorkingDirectory}
-        className="rounded border border-current/20 bg-card"
-        textClassName="text-current"
-      />
-    ) : null}
-    {showsOutput ? (
-      <ToolOutputDetails
-        meta={meta}
-        className="rounded border border-current/20 bg-card"
-        summaryClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
-        bodyClassName="space-y-2 px-2 pb-2 text-[11px]"
-      />
-    ) : null}
-    {errorDetail ? (
-      <ToolJsonDetails
-        label="Error"
-        value={errorDetail}
-        className="rounded border border-current/20 bg-muted/90"
-        titleClassName="cursor-pointer px-2 py-1 text-xs font-medium text-current"
-      />
-    ) : null}
-  </>
-);

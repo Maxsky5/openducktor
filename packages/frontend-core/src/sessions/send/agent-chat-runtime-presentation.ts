@@ -105,5 +105,7 @@ const buildRuntimePresentation = ({
     },
     supportedApprovalReplyOutcomes:
       runtimeDefinition?.capabilities.approvals.supportedReplyOutcomes ?? null,
+    supportsRunningCommandOutput:
+      runtimeDefinition?.capabilities.optionalSurfaces.supportsRunningCommandOutput ?? false,
   };
 };

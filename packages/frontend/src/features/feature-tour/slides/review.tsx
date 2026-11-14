@@ -1,17 +1,15 @@
 import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import type { DiffLineAnnotation } from "@pierre/diffs";
-import { ChevronDown, FileText } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import {
   DiffAnnotationShell,
   DraftCommentCard,
 } from "@/components/features/agents/agent-studio-git-panel/file-diff-comments";
-import {
-  FILE_STATUS_COLOR,
-  FILE_STATUS_ICON,
-} from "@/components/features/agents/agent-studio-git-panel/constants";
+import { FILE_STATUS_COLOR } from "@/components/features/agents/agent-studio-git-panel/constants";
 import { GitInfoHeader } from "@/components/features/agents/agent-studio-git-panel/git-info-header";
 import { PierreFilePairDiffViewer } from "@/components/features/agents/pierre-file-pair-diff-viewer";
+import { FileTypeIcon } from "@/components/ui/file-type-icon";
 import { cn } from "@/lib/utils";
 import { TourPanelTabs, TourStudio } from "../feature-tour-app-parts";
 import { noop, SESSIONS } from "../feature-tour-samples";
@@ -54,8 +52,7 @@ const SESSION = SESSIONS.shortcutReviewBuild;
 /** The file of the sample keyboard shortcut hook. */
 const HOOK_PATH = "src/search/use-search-shortcut.ts";
 
-/** The status icon and color of a modified file, as the Git panel looks them up. */
-const ModifiedIcon = FILE_STATUS_ICON.get("modified") ?? FileText;
+/** The status color of a modified file, as the Git panel looks it up. */
 const MODIFIED_COLOR = FILE_STATUS_COLOR.get("modified") ?? "text-muted-foreground";
 
 const HOOK_LINES = [
@@ -178,9 +175,10 @@ function TourDiffPanel(): ReactElement {
       />
       <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
         <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-        <ModifiedIcon className={cn("size-3.5 shrink-0", MODIFIED_COLOR)} />
+        <FileTypeIcon filePath="use-search-shortcut.ts" className="text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate font-medium">use-search-shortcut.ts</span>
         <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] whitespace-nowrap tabular-nums">
+          <span className={cn("font-semibold", MODIFIED_COLOR)}>M</span>
           <span className="text-green-600 dark:text-green-400">+2</span>
           <span className="text-red-600 dark:text-red-400">-1</span>
         </span>

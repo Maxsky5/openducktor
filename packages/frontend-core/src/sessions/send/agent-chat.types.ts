@@ -65,6 +65,8 @@ export type AgentChatRuntimePresentation = {
   runtimeKind: RuntimeKind | null;
   presentToolCall: (toolName: string, displayLabel?: string) => AgentChatToolCallPresentation;
   supportedApprovalReplyOutcomes: readonly RuntimeApprovalReplyOutcome[] | null;
+  /** The runtime sends the output of a shell command while the command runs. */
+  supportsRunningCommandOutput: boolean;
 };
 
 export type AgentChatInterruptedTurnResumeModel = {

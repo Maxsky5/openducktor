@@ -32,7 +32,8 @@ import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread
 
 enableReactActEnvironment();
 
-const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture();
+// Most tests read the calls of finished runs, so their runs do not fold by themselves.
+const DEFAULT_TEST_CHAT_SETTINGS = createChatSettingsFixture({ collapseFinishedToolCalls: false });
 const RUNTIME_STARTING_NOTICE: AgentChatTranscriptNotice = {
   kind: "runtime_waiting",
   severity: "loading",
@@ -1460,7 +1461,7 @@ describe("AgentChatThread", () => {
     expect(html).not.toContain("Old cached message");
   });
 
-  test("preserves expanded tool details while same-session history load appends messages", async () => {
+  test("keeps the tool details open while same-session history load appends messages", async () => {
     const messages = [
       buildMessage("tool", "Tool read_task completed", {
         id: "tool-1",
@@ -1485,18 +1486,15 @@ describe("AgentChatThread", () => {
       transcript: buildSessionTranscript(session),
     };
 
-    const rendered = render(
-      createElement(AgentChatThread, {
-        model,
-      }),
-    );
+    const rendered = render(createElement(AgentChatThread, { model }));
     await act(flush);
 
-    const toolDetails = rendered.container.querySelector<HTMLDetailsElement>("details.group");
-    if (!toolDetails) {
-      throw new Error("Expected expandable tool details");
+    const toolRow = rendered.container.querySelector<HTMLButtonElement>("button[aria-pressed]");
+    if (!toolRow) {
+      throw new Error("Expected a tool row that opens its details");
     }
-    toolDetails.open = true;
+    await act(async () => toolRow.click());
+    expect(screen.getByRole("complementary").textContent).toContain("Fix chat flicker");
 
     rendered.rerender(
       createElement(AgentChatThread, {
@@ -1518,9 +1516,377 @@ describe("AgentChatThread", () => {
     );
     await act(flush);
 
-    expect(toolDetails.isConnected).toBe(true);
-    expect(toolDetails.open).toBe(true);
+    expect(toolRow.isConnected).toBe(true);
+    expect(toolRow.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("complementary").textContent).toContain("Fix chat flicker");
 
+    rendered.unmount();
+  });
+
+  test("counts every command of a tool run that the row window cuts", async () => {
+    const commands = Array.from({ length: 30 }, (_, index) =>
+      buildMessage("tool", "Tool bash completed", {
+        id: `bash-${index}`,
+        meta: {
+          kind: "tool",
+          partId: `bash-part-${index}`,
+          callId: `bash-call-${index}`,
+          tool: "bash",
+          toolType: "bash",
+          status: "completed",
+          input: { command: `echo ${index}` },
+        },
+      }),
+    );
+    commands[3] = buildMessage("tool", "Tool bash failed", {
+      id: "bash-3",
+      meta: {
+        kind: "tool",
+        partId: "bash-part-3",
+        callId: "bash-call-3",
+        tool: "bash",
+        toolType: "bash",
+        status: "error",
+        input: { command: "echo 3" },
+        error: "Shell command exited with code 1.",
+      },
+    });
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          transcript: buildSessionTranscript(
+            buildSession({ externalSessionId: "session-long-shell-run", messages: commands }),
+          ),
+        },
+      }),
+    );
+    await act(flush);
+
+    expect(rendered.container.querySelectorAll("[data-row-key]").length).toBeLessThan(30);
+    expect(rendered.getByRole("region", { name: "30 commands" }).textContent).toContain("1 failed");
+
+    rendered.unmount();
+  });
+
+  const longRunModel = (commandCount: number, { withAnswer = true } = {}) => {
+    const commands = Array.from({ length: commandCount }, (_, index) =>
+      buildMessage("tool", "Tool bash completed", {
+        id: `check-${index}`,
+        meta: {
+          kind: "tool",
+          partId: `check-part-${index}`,
+          callId: `check-call-${index}`,
+          tool: "bash",
+          toolType: "bash",
+          status: "completed",
+          input: { command: `echo check ${index}` },
+        },
+      }),
+    );
+    return {
+      ...buildBaseModel(),
+      transcript: buildSessionTranscript(
+        buildSession({
+          externalSessionId: "session-folded-run",
+          messages: [
+            buildMessage("user", "Run every check", { id: "user-checks" }),
+            ...commands,
+            ...(withAnswer
+              ? [buildMessage("assistant", "All checks ran.", { id: "assistant-checks" })]
+              : []),
+          ],
+        }),
+      ),
+    };
+  };
+
+  const renderLongRun = (commandCount: number) => {
+    setGlobalWindow(window);
+    return render(
+      createElement(AgentChatThread, {
+        model: { ...longRunModel(commandCount), messagesContainerRef: createRef<HTMLDivElement>() },
+      }),
+    );
+  };
+
+  test("a long tool run at the end of the transcript shows each new call at once", async () => {
+    setGlobalWindow(window);
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    // The agent still runs commands, so the run ends the transcript.
+    const runOf = (commandCount: number) =>
+      createElement(AgentChatThread, {
+        model: { ...longRunModel(commandCount, { withAnswer: false }), messagesContainerRef },
+      });
+    const rendered = render(runOf(7));
+    await act(flush);
+    expect(screen.getByText("echo check 6")).toBeTruthy();
+
+    // Each new call takes the place of the oldest shown call, so the row count stays the same.
+    for (const commandCount of [8, 9]) {
+      rendered.rerender(runOf(commandCount));
+      expect(screen.getByText(`echo check ${commandCount - 1}`)).toBeTruthy();
+      expect(screen.getByText(`echo check ${commandCount - 2}`)).toBeTruthy();
+    }
+    rendered.unmount();
+  });
+
+  test("the message after a long tool run keeps the shown calls of the run mounted", async () => {
+    setGlobalWindow(window);
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const runOf = (commandCount: number, withAnswer: boolean) =>
+      createElement(AgentChatThread, {
+        model: { ...longRunModel(commandCount, { withAnswer }), messagesContainerRef },
+      });
+    const rendered = render(runOf(7, false));
+    await act(flush);
+    // The new calls take the place of the oldest shown calls, so the last row of the window
+    // changes while the row count stays the same.
+    rendered.rerender(runOf(9, false));
+    await act(flush);
+    const latestCall = screen.getByText("echo check 8").closest("li");
+
+    rendered.rerender(runOf(9, true));
+    await act(flush);
+
+    expect(screen.getByText("All checks ran.")).toBeTruthy();
+    expect(screen.getByText("echo check 8").closest("li")).toBe(latestCall);
+    rendered.unmount();
+  });
+
+  test("a tool run of one call has its header, and a running call shows bars for its icon", async () => {
+    setGlobalWindow(window);
+    const rendered = render(
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          transcript: buildSessionTranscript(
+            buildSession({
+              externalSessionId: "session-running-call",
+              messages: [
+                buildMessage("user", "Run the tests", { id: "user-tests" }),
+                buildMessage("tool", "Tool bash running", {
+                  id: "tests",
+                  meta: {
+                    kind: "tool",
+                    partId: "tests-part",
+                    callId: "tests-call",
+                    tool: "bash",
+                    toolType: "bash",
+                    status: "running",
+                    input: { command: "bun test" },
+                  },
+                }),
+              ],
+            }),
+          ),
+        },
+      }),
+    );
+    await act(flush);
+
+    expect(screen.getByRole("button", { name: /1 command/ })).toBeTruthy();
+    expect(
+      screen.getByRole("img", { name: "Running" }).querySelector(".agent-tool-running"),
+    ).toBeTruthy();
+    rendered.unmount();
+  });
+
+  test("a row that a live session adds comes in with a short motion, unlike loaded rows", async () => {
+    setGlobalWindow(window);
+    const animated: Element[] = [];
+    // The rows are HTML elements. Other tests spy on the same prototype, so this one does too.
+    const runAnimation = HTMLElement.prototype.animate;
+    const animate = spyOn(HTMLElement.prototype, "animate").mockImplementation(function (
+      this: HTMLElement,
+      ...args: Parameters<HTMLElement["animate"]>
+    ) {
+      animated.push(this);
+      return runAnimation.apply(this, args);
+    });
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const sessionOf = (messages: ReturnType<typeof buildMessage>[]) =>
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          messagesContainerRef,
+          transcript: buildSessionTranscript(
+            buildSession({ externalSessionId: "session-live-rows", messages }),
+          ),
+        },
+      });
+    const loaded = [
+      buildMessage("user", "Hello", { id: "user-hello" }),
+      buildMessage("assistant", "Hi", { id: "assistant-hi" }),
+    ];
+    const rendered = render(sessionOf(loaded));
+    await act(flush);
+    expect(animated).toEqual([]);
+
+    rendered.rerender(sessionOf([...loaded, buildMessage("user", "Again", { id: "user-again" })]));
+    await act(flush);
+
+    expect(animated.map((element) => element.getAttribute("data-row-key"))).toEqual([
+      expect.stringContaining("user-again"),
+    ]);
+    animate.mockRestore();
+    rendered.unmount();
+  });
+
+  test("a finished tool run folds once a message follows it, and stays open once opened", async () => {
+    setGlobalWindow(window);
+    const command = (status: "running" | "completed") =>
+      buildMessage("tool", "Tool bash", {
+        id: "tests",
+        meta: {
+          kind: "tool",
+          partId: "tests-part",
+          callId: "tests-call",
+          tool: "bash",
+          toolType: "bash",
+          status,
+          input: { command: "bun test" },
+        },
+      });
+    const sessionOf = (messages: ReturnType<typeof buildMessage>[]) =>
+      createElement(
+        AgentChatSettingsProvider,
+        { value: createChatSettingsFixture({ collapseFinishedToolCalls: true }) },
+        createElement(AgentChatThreadComponent, {
+          model: completeThreadModel({
+            ...buildBaseModel(),
+            transcript: buildSessionTranscript(
+              buildSession({ externalSessionId: "session-collapse", messages }),
+            ),
+          }),
+        }),
+      );
+    const ask = buildMessage("user", "Run the tests", { id: "user-tests" });
+    const answer = buildMessage("assistant", "The tests pass.", { id: "answer" });
+    const rendered = render(sessionOf([ask, command("running")]));
+    await act(flush);
+    const header = screen.getByRole("button", { name: /1 command/ });
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+
+    // The run finished, but nothing follows it yet.
+    rendered.rerender(sessionOf([ask, command("completed")]));
+    await act(flush);
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+
+    rendered.rerender(sessionOf([ask, command("completed"), answer]));
+    await act(flush);
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(header);
+    await act(flush);
+    rendered.rerender(
+      sessionOf([ask, command("completed"), answer, buildMessage("user", "Thanks", { id: "u2" })]),
+    );
+    await act(flush);
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    rendered.unmount();
+  });
+
+  test("a long tool run shows its latest calls, and a page of earlier calls on request", async () => {
+    const rendered = renderLongRun(40);
+    await act(flush);
+
+    // The run shows its latest calls under a control, so the answer after it stays in reach.
+    expect(screen.getByText("All checks ran.")).toBeTruthy();
+    expect(screen.getByText("echo check 39")).toBeTruthy();
+    expect(screen.queryByText("echo check 33")).toBeNull();
+    // The call before the latest calls waits hidden above them, to go out when a call comes.
+    expect(screen.getByText("echo check 34").closest("[aria-hidden='true']")).toBeTruthy();
+    const header = screen.getByRole("button", { name: /40 commands/ });
+
+    // The earlier calls show a page at a time, and hide again.
+    fireEvent.click(screen.getByRole("button", { name: "Show 25 of 35 earlier calls" }));
+    await act(flush);
+    expect(screen.getByText("echo check 10")).toBeTruthy();
+    expect(screen.queryByText("echo check 9")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Hide 25 earlier calls" }));
+    await act(flush);
+    expect(screen.queryByText("echo check 10")).toBeNull();
+
+    fireEvent.click(header);
+    await act(flush);
+
+    expect(header.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("All checks ran.")).toBeTruthy();
+    // The calls close like an accordion, and leave once their transition ends.
+    await waitFor(() => expect(screen.queryByText("echo check 39")).toBeNull());
+    // The user message, the run, and the final answer with its turn duration row.
+    expect(rendered.container.querySelectorAll("[data-row-key]")).toHaveLength(4);
+
+    fireEvent.click(header);
+    await act(flush);
+
+    // The run opens again with its latest calls.
+    expect(header.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: "Show 25 of 35 earlier calls" })).toBeTruthy();
+    expect(screen.getByText("echo check 39")).toBeTruthy();
+    rendered.unmount();
+  });
+
+  test("showing every earlier call of a run longer than the row window keeps the rows above it", async () => {
+    const rendered = renderLongRun(80);
+    await act(flush);
+
+    for (const name of [
+      "Show 25 of 75 earlier calls",
+      "Show 25 of 50 earlier calls",
+      "Show 25 earlier calls",
+    ]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      await act(flush);
+    }
+
+    // The window keeps the rows above the run, so nothing above the header moves, and mounts the
+    // first calls under it, up to the most rows that it mounts.
+    expect(screen.queryByRole("button", { name: /Show .* earlier calls/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Hide 75 earlier calls" })).toBeTruthy();
+    expect(screen.getByText("echo check 0")).toBeTruthy();
+    expect(screen.getByText("Run every check")).toBeTruthy();
+    expect(rendered.container.querySelectorAll("[data-row-key]").length).toBeLessThanOrEqual(60);
+    rendered.unmount();
+  });
+
+  test("shows each call as its own tool row when tool call groups are off", async () => {
+    setGlobalWindow(window);
+    const commands = ["bun run lint", "bun run test"].map((command, index) =>
+      buildMessage("tool", "Tool bash completed", {
+        id: `ungrouped-${index}`,
+        meta: {
+          kind: "tool",
+          partId: `ungrouped-part-${index}`,
+          callId: `ungrouped-call-${index}`,
+          tool: "bash",
+          toolType: "bash",
+          status: "completed",
+          input: { command },
+        },
+      }),
+    );
+    const rendered = render(
+      createElement(
+        AgentChatSettingsProvider,
+        { value: createChatSettingsFixture({ groupToolCalls: false }) },
+        createElement(AgentChatThreadComponent, {
+          model: completeThreadModel({
+            ...buildBaseModel(),
+            transcript: buildSessionTranscript(
+              buildSession({
+                messages: [buildMessage("user", "Check it", { id: "user-check" }), ...commands],
+              }),
+            ),
+          }),
+        }),
+      ),
+    );
+    await act(flush);
+
+    expect(screen.queryByRole("button", { name: /2 commands/ })).toBeNull();
+    expect(rendered.container.querySelectorAll('[data-slot="tool-name"]')).toHaveLength(2);
     rendered.unmount();
   });
 

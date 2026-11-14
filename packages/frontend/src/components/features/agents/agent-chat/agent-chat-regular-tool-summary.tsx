@@ -4,11 +4,15 @@ import { getToolLifecyclePhase } from "@openducktor/frontend-core/sessions/messa
 import {
   isRegularToolPreparing,
   readRegularToolTiming,
+  readToolCallFilePath,
+  readToolCallName,
   resolveRegularToolSummary,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
-import { toolIcon } from "./agent-chat-tool-icon";
+import { FileTypeIcon } from "@/components/ui/file-type-icon";
 import { ToolMessageTiming } from "./agent-chat-tool-message-timing";
+import { ToolCallIcon } from "./agent-chat-tool-status";
+import { useValueAtMount } from "./use-value-at-mount";
 
 type RegularToolSummaryProps = {
   meta: ToolMeta;
@@ -17,34 +21,21 @@ type RegularToolSummaryProps = {
   timeLabel: string;
   sessionWorkingDirectory?: string | null | undefined;
   displayName: string;
-  hasExpandableDetails: boolean;
 };
 
-const DEFAULT_TOOL_APPEARANCE = {
-  text: "text-foreground",
-  icon: "text-muted-foreground",
-};
+const TOOL_TEXT_COLORS = {
+  preparing: "text-muted-foreground",
+  queued: "text-muted-foreground",
+  executing: "text-foreground",
+  completed: "text-foreground",
+  failed: "text-destructive-muted",
+  cancelled: "text-cancelled-muted",
+} satisfies Record<ReturnType<typeof getToolLifecyclePhase>, string>;
 
-const PREPARING_TOOL_APPEARANCE = {
-  ...DEFAULT_TOOL_APPEARANCE,
-  text: "text-muted-foreground",
-};
-
-const TOOL_APPEARANCE = {
-  preparing: PREPARING_TOOL_APPEARANCE,
-  executing: DEFAULT_TOOL_APPEARANCE,
-  completed: DEFAULT_TOOL_APPEARANCE,
-  failed: {
-    text: "text-destructive-muted",
-    icon: "text-destructive-accent",
-  },
-  cancelled: {
-    text: "text-cancelled-muted",
-    icon: "text-cancelled-accent",
-  },
-  queued: PREPARING_TOOL_APPEARANCE,
-} satisfies Record<ReturnType<typeof getToolLifecyclePhase>, typeof DEFAULT_TOOL_APPEARANCE>;
-
+/**
+ * The line of a tool call: its icon, name, summary, and timing. A failed call keeps its summary
+ * and shows the first line of its error under it, so its height stays two lines at most.
+ */
 export const RegularToolSummary = ({
   meta,
   messageContent,
@@ -52,41 +43,59 @@ export const RegularToolSummary = ({
   timeLabel,
   sessionWorkingDirectory,
   displayName,
-  hasExpandableDetails,
 }: RegularToolSummaryProps): ReactElement => {
   const lifecyclePhase = getToolLifecyclePhase(meta);
-  const appearance = TOOL_APPEARANCE[lifecyclePhase];
   const summary = resolveRegularToolSummary(meta, messageContent, sessionWorkingDirectory);
-  const { isActive, durationMs } = readRegularToolTiming(meta, messageTimestamp);
-  const activity = lifecyclePhase === "executing" ? "running" : "preparing";
+  const filePath = readToolCallFilePath(meta, sessionWorkingDirectory);
+  const { durationMs } = readRegularToolTiming(meta, messageTimestamp);
+  // A summary or an error that a new state of the call brings fades or opens in.
+  const mountPhase = useValueAtMount(lifecyclePhase);
+  const mountHadError = useValueAtMount(summary.errorPreview !== null);
   return (
-    <div
+    <span
+      data-slot="tool-line"
       className={cn(
-        "flex min-h-6 items-center gap-2 text-xs",
+        "flex min-w-0 flex-col text-xs",
         isRegularToolPreparing(meta) && "opacity-50",
-        hasExpandableDetails ? "cursor-pointer" : "",
-        appearance.text,
+        TOOL_TEXT_COLORS[lifecyclePhase],
       )}
     >
-      <span className={appearance.icon}>{toolIcon(meta)}</span>
-      <p className="shrink-0 font-medium text-current">{displayName}</p>
-      {summary.text.length > 0 ? (
-        <p
+      <span className="flex min-h-6 min-w-0 items-center gap-2">
+        <ToolCallIcon meta={meta} phase={lifecyclePhase} />
+        <span data-slot="tool-name" className="shrink-0 font-medium text-current">
+          {readToolCallName(meta, displayName)}
+        </span>
+        {summary.text.length > 0 ? (
+          <span
+            data-slot="tool-summary"
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1.5",
+              lifecyclePhase !== mountPhase && "tool-line-swap-in",
+            )}
+          >
+            {filePath ? <FileTypeIcon filePath={filePath} /> : null}
+            <span className="min-w-0 truncate text-foreground/75">{summary.text}</span>
+          </span>
+        ) : null}
+        <ToolMessageTiming
+          activity={null}
+          durationMs={durationMs}
+          timeLabel={timeLabel}
+          className="text-foreground/75"
+        />
+      </span>
+      {summary.errorPreview ? (
+        // The line starts under the tool name: the 14 px icon and the 8 px gap.
+        <span
+          data-slot="tool-error-preview"
           className={cn(
-            "min-w-0 flex-1",
-            // The error message of a failed call wraps, so the reader sees all of it.
-            summary.isError ? "break-words text-destructive-muted" : "truncate text-foreground/75",
+            "truncate pb-0.5 pl-[22px] text-[11px] leading-4 text-destructive-muted",
+            !mountHadError && "tool-line-error-in",
           )}
         >
-          {summary.text}
-        </p>
+          {summary.errorPreview}
+        </span>
       ) : null}
-      <ToolMessageTiming
-        activity={isActive ? activity : null}
-        durationMs={durationMs}
-        timeLabel={timeLabel}
-        className="text-foreground/75"
-      />
-    </div>
+    </span>
   );
 };

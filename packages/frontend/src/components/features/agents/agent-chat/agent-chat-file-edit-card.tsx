@@ -1,5 +1,5 @@
 import { DEFAULT_CHAT_SETTINGS } from "@openducktor/contracts";
-import { ChevronDown, ChevronRight, FilePlus, FileText, FileX } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { memo, type ReactElement, useState } from "react";
 import {
   PierreFileViewer,
@@ -7,6 +7,7 @@ import {
 } from "@/components/features/agents/pierre-diff-viewer";
 import { PierreFilePairDiffViewer } from "@/components/features/agents/pierre-file-pair-diff-viewer";
 import { Badge } from "@/components/ui/badge";
+import { FileTypeIcon } from "@/components/ui/file-type-icon";
 import { cn } from "@/lib/utils";
 import type { FileEditData } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
@@ -19,17 +20,14 @@ type AgentChatFileEditCardProps = {
   data: FileEditData;
 };
 
+// The icon shows the type of the file, as the file tree does. The badge shows the change.
 const STATUS_CONFIG = {
-  modified: { icon: FileText, color: "text-blue-400", badge: "M" },
-  added: { icon: FilePlus, color: "text-green-400", badge: "A" },
-  deleted: { icon: FileX, color: "text-red-400", badge: "D" },
+  modified: { color: "text-blue-400", badge: "M" },
+  added: { color: "text-green-400", badge: "A" },
+  deleted: { color: "text-red-400", badge: "D" },
 };
 
-const DEFAULT_CONFIG = {
-  icon: FileText,
-  color: "text-blue-400",
-  badge: "M",
-} as const;
+const DEFAULT_CONFIG = { color: "text-blue-400", badge: "M" } as const;
 
 const FileEditCardHeader = ({
   data,
@@ -42,7 +40,6 @@ const FileEditCardHeader = ({
   const hasContent = data.kind !== "path";
   const status = inferFileEditStatus(data);
   const config = STATUS_CONFIG[status] ?? DEFAULT_CONFIG;
-  const Icon = config.icon;
   const ExpandIcon = isExpanded ? ChevronDown : ChevronRight;
 
   const { fileName, dirName } = splitFileEditPath(data.filePath);
@@ -58,7 +55,7 @@ const FileEditCardHeader = ({
       aria-expanded={hasContent ? isExpanded : undefined}
     >
       {hasContent ? <ExpandIcon className="size-3 shrink-0 text-muted-foreground" /> : null}
-      <Icon className={cn("size-3.5 shrink-0", config.color)} />
+      <FileTypeIcon filePath={data.filePath} className="text-muted-foreground" />
       <span className="flex-1 truncate font-mono text-[11px]">
         {dirName ? <span className="text-muted-foreground">{dirName}/</span> : null}
         <span className="font-semibold">{fileName}</span>
@@ -80,19 +77,23 @@ const FileEditCardHeader = ({
 
 export const AgentChatFileEditCard = memo(function AgentChatFileEditCard({
   data,
-}: AgentChatFileEditCardProps): ReactElement {
+  defaultExpanded,
+}: AgentChatFileEditCardProps & {
+  /** Opens the changes at first. The `expandFileDiffsByDefault` chat setting decides otherwise. */
+  defaultExpanded?: boolean;
+}): ReactElement {
   const chatSettings = useAgentChatSettings() ?? DEFAULT_CHAT_SETTINGS;
-  const { expandFileDiffsByDefault } = chatSettings;
+  const startsExpanded = defaultExpanded ?? chatSettings.expandFileDiffsByDefault;
   const hasContent = data.kind !== "path";
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
-  const isExpanded = hasContent && (userExpanded ?? expandFileDiffsByDefault);
+  const isExpanded = hasContent && (userExpanded ?? startsExpanded);
 
   const handleToggle = (): void => {
     if (!hasContent) {
       return;
     }
 
-    setUserExpanded((prev) => !(prev ?? expandFileDiffsByDefault));
+    setUserExpanded((prev) => !(prev ?? startsExpanded));
   };
 
   return (

@@ -6,7 +6,7 @@ import {
   Copy,
   Ellipsis,
   Eye,
-  FileText,
+  FolderGit2,
   LoaderCircle,
   type LucideIcon,
   MessageSquare,
@@ -39,12 +39,13 @@ import type { DiffScope, GitChangeIntent } from "@openducktor/frontend-core/git/
 import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { arraysEqual } from "@/lib/arrays-equal";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
+import { FileTypeIcon } from "@/components/ui/file-type-icon";
 import { cn } from "@/lib/utils";
 import type { InlineCommentDraft } from "@openducktor/frontend-core/drafts/inline-comment-draft-store";
 import {
   FILE_LIST_ROW_CLASS_NAME,
   FILE_STATUS_COLOR,
-  FILE_STATUS_ICON,
+  FILE_STATUS_LETTER,
   fileListRowStyle,
 } from "./constants";
 import type { FileRow, RowLabel } from "./file-list-rows";
@@ -151,7 +152,6 @@ function FileDiffEntryLabel({ row }: { row: FileRow }): ReactElement {
 }
 
 type RowStatus = {
-  StatusIcon: typeof FileText;
   isConflicted: boolean;
   isExpanded: boolean;
   reserveConflictSlot: boolean;
@@ -352,14 +352,7 @@ function FileDiffEntryHeader({
   onViewFile: ((filePath: string) => void) | null;
 }): ReactElement {
   const { diff } = row;
-  const {
-    StatusIcon,
-    fileCommentCount,
-    isConflicted,
-    isExpanded,
-    reserveConflictSlot,
-    statusColor,
-  } = status;
+  const { fileCommentCount, isConflicted, isExpanded, reserveConflictSlot, statusColor } = status;
   const triggerRef = useRef<HTMLDivElement>(null);
   // A menu must not act on content that changed after it opened, so a change closes it.
   const [menu, setMenu] = useState({ open: false, content: diff.diff, generation: 0 });
@@ -411,7 +404,11 @@ function FileDiffEntryHeader({
             ) : (
               <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
             )}
-            <StatusIcon className={cn("size-3.5 shrink-0", statusColor)} />
+            {diff.type === "submodule" ? (
+              <FolderGit2 className={cn("size-3.5 shrink-0", statusColor)} />
+            ) : (
+              <FileTypeIcon filePath={diff.file} className="text-muted-foreground" />
+            )}
             {isConflicted ? (
               <AlertTriangle
                 className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
@@ -447,6 +444,15 @@ function FileDiffEntryHeader({
               </span>
             ) : null}
             <span className="flex shrink-0 items-center justify-end gap-1 font-mono text-[10px] whitespace-nowrap tabular-nums">
+              {FILE_STATUS_LETTER.has(diff.type) ? (
+                <span
+                  className={cn("font-semibold", statusColor)}
+                  title={diff.type}
+                  data-testid="agent-studio-git-file-status-letter"
+                >
+                  {FILE_STATUS_LETTER.get(diff.type)}
+                </span>
+              ) : null}
               {diff.additions > 0 ? (
                 <span className="text-green-600 dark:text-green-400">+{diff.additions}</span>
               ) : null}
@@ -623,7 +629,6 @@ function FileDiffEntry({
 }: FileDiffEntryProps): ReactElement {
   const { diff } = row;
   const { isConflicted, reserveConflictSlot, isExpanded } = viewState;
-  const StatusIcon = FILE_STATUS_ICON.get(diff.type) ?? FileText;
   const statusColor = FILE_STATUS_COLOR.get(diff.type) ?? "text-muted-foreground";
   const hasDiffContent = diff.diff.trim().length > 0;
 
@@ -649,7 +654,6 @@ function FileDiffEntry({
         row={row}
         viewMode={viewMode}
         status={{
-          StatusIcon,
           fileCommentCount: fileComments.length,
           isConflicted,
           isExpanded,

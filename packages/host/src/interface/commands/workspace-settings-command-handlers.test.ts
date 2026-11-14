@@ -201,6 +201,8 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
             chat: {
               steerMessagesByDefault: false,
               showThinkingMessages: false,
+              groupToolCalls: true,
+              collapseFinishedToolCalls: true,
               expandFileDiffsByDefault: false,
               diffStyle: "split",
               diffIndicators: "bars",

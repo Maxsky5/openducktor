@@ -69,7 +69,7 @@ export const SubagentRow = memo(function SubagentRow({
             {/* A phone has no room for the clock time on this line, so it shows the duration. */}
             <View style={styles.timing}>
               <ToolTiming
-                active={subagent.tone === "running"}
+                activity={subagent.tone === "running" ? "running" : null}
                 durationMs={subagent.durationMs}
                 timeLabel={NO_TIME_LABEL}
               />

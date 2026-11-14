@@ -29,6 +29,8 @@ export const toolIcon = (
       return "globe";
     case "todo":
       return "list-todo";
+    case "file_edit":
+      return "pencil-line";
     default:
       return meta.tool.trim().toLowerCase() === "skill" ? "scroll-text" : "wrench";
   }

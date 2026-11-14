@@ -8,6 +8,7 @@ import {
   createClaudeRunningToolPart,
   decodeClaudeToolUseBlock,
   isClaudeToolUseBlockType,
+  timestampMs,
 } from "./claude-agent-sdk-tool-shapes";
 import {
   createClaudeFinishStepPart,
@@ -154,6 +155,10 @@ export const projectClaudeHistoryAssistantMessage = ({
   const parts: AgentStreamPart[] = [];
   const stopReason = readStringProp(assistantEntry.message, "stop_reason");
   const messageId = responseId ?? entry.uuid;
+  // Claude writes a tool call when the model asks for it, so the entry time is the call start.
+  // An entry without its own time gives no start.
+  const entryTimestamp = readStringProp(entry, "timestamp");
+  const startedAtMs = entryTimestamp ? timestampMs(entryTimestamp) : undefined;
   const hasToolUse = content.some((block) =>
     isClaudeToolUseBlockType(readStringProp(block, "type")),
   );
@@ -174,7 +179,7 @@ export const projectClaudeHistoryAssistantMessage = ({
         index,
       });
       if (toolUse) {
-        parts.push(createClaudeRunningToolPart({ messageId, toolUse }));
+        parts.push(createClaudeRunningToolPart({ messageId, startedAtMs, toolUse }));
         toolMessageIdsByCallId.set(toolUse.callId, messageId);
         toolNamesByCallId.set(toolUse.callId, toolUse.toolName);
         if (toolUse.input) {

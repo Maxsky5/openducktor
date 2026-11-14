@@ -329,6 +329,9 @@ export const projectClaudeHistoryToolResults = ({
     if (existingPart?.preview) {
       completedToolInput.preview = existingPart.preview;
     }
+    if (existingPart?.startedAtMs !== undefined) {
+      completedToolInput.startedAtMs = existingPart.startedAtMs;
+    }
     const { part: ordinaryCompletedPart } = projectClaudeCompletedToolResult(completedToolInput);
     const completedPart = projectClaudeBackgroundToolResult(
       state,

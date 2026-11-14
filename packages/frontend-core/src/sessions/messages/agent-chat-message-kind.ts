@@ -25,6 +25,10 @@ export type AgentChatMessageKind = {
   isRichCardMessage: boolean;
 };
 
+/** The clock time of a message. A message with an approximate time shows none. */
+export const readMessageTimeLabel = (message: AgentChatMessage): string =>
+  message.timestampIsApproximate ? "" : formatTime(message.timestamp);
+
 export const classifyAgentChatMessage = ({
   message,
   toolCallPresentation,
@@ -32,7 +36,7 @@ export const classifyAgentChatMessage = ({
   message: AgentChatMessage;
   toolCallPresentation: AgentChatToolCallPresentation | null;
 }): AgentChatMessageKind => {
-  const timeLabel = message.timestampIsApproximate ? "" : formatTime(message.timestamp);
+  const timeLabel = readMessageTimeLabel(message);
   const meta = message.meta;
   const isReasoningMessage = meta?.kind === "reasoning";
   const isImageGenerationMessage = meta?.kind === "image_generation";

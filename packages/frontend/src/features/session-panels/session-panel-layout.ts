@@ -5,12 +5,14 @@ import {
   HOST_TAB_KINDS,
   type HostTabKind,
   isHostTabKind,
+  isToolTabKind,
   PANEL_TAB_KIND_RULES,
   type PanelId,
   type PanelTabKind,
   type SessionOwnerKind,
   TOOL_TAB_KINDS,
   type ToolTabKind,
+  type ViewTabKind,
 } from "./panel-tab-kinds";
 
 export type SessionPanelOwner =
@@ -33,7 +35,14 @@ type TerminalTabEntry = {
 /** The place of a browser tab. The host saves the tab itself, with its URL and sharing state. */
 export type BrowserTabEntry = { id: string; kind: "browser"; tabId: string };
 type NewTabEntry = { id: string; kind: "new_tab" };
-export type PanelTabEntry = ToolTabEntry | TerminalTabEntry | BrowserTabEntry | NewTabEntry;
+/** The tab of a view that the page opens for a moment. The layout never saves it. */
+type ViewTabEntry = { id: ViewTabKind; kind: ViewTabKind };
+export type PanelTabEntry =
+  | ToolTabEntry
+  | TerminalTabEntry
+  | BrowserTabEntry
+  | NewTabEntry
+  | ViewTabEntry;
 
 export type SessionPanelLayout = {
   panels: PanelEntries;
@@ -75,7 +84,8 @@ export type ResolvedHostTab<Kind extends HostTabKind = HostTabKind> = ResolvedHo
 export type ResolvedPanelTab =
   | { id: string; kind: ToolTabKind }
   | ResolvedHostTab
-  | { id: string; kind: "new_tab" };
+  | { id: string; kind: "new_tab" }
+  | { id: string; kind: ViewTabKind };
 
 export const isResolvedHostTab = (tab: ResolvedPanelTab): tab is ResolvedHostTab =>
   isHostTabKind(tab.kind);
@@ -269,7 +279,7 @@ const insertAt = <Value>(items: readonly Value[], index: number, item: Value): V
 /** Adds the default-open tool tabs that the layout does not have and that the user did not close. */
 const withDefaultToolTabs = (
   panels: PanelEntries,
-  openKinds: Set<ToolTabKind>,
+  openKinds: Set<PanelTabKind>,
   closedKinds: readonly ToolTabKind[],
   ownerKind: SessionOwnerKind,
   unavailableKinds: ReadonlySet<PanelTabKind>,
@@ -301,7 +311,7 @@ export const reconcileSessionPanelLayout = (
   layout: SessionPanelLayout,
   context: SessionPanelContext,
 ): SessionPanelLayout => {
-  const openKinds = new Set<ToolTabKind>();
+  const openKinds = new Set<PanelTabKind>();
   const placedTabIds = { terminal: new Set<string>(), browser: new Set<string>() };
   const reconcilePanel = (panel: PanelId): PanelTabEntry[] =>
     layout.panels[panel].flatMap((entry): PanelTabEntry[] => {
@@ -651,8 +661,30 @@ export const closePanelTab = (
     panel,
     selected.panels[panel].filter((candidate) => candidate.id !== entryId),
   );
-  if (entry.kind === "new_tab" || !PANEL_TAB_KIND_RULES[entry.kind].openByDefault) return next;
+  if (!isToolTabKind(entry.kind) || !PANEL_TAB_KIND_RULES[entry.kind].openByDefault) return next;
   return { ...next, closedKinds: [...next.closedKinds, entry.kind] };
+};
+
+/** Selects the tab of a view kind, and adds it at the end of the right panel when it has none. */
+export const showViewPanelTab = (
+  layout: SessionPanelLayout,
+  context: SessionPanelContext,
+  kind: ViewTabKind,
+): SessionPanelLayout => {
+  const found = findPanelTab(layout, kind);
+  if (found) return withSelection(layout, found.panel, context.selectionKey, kind);
+  const withTab = withPanelEntries(layout, "right", [...layout.panels.right, { id: kind, kind }]);
+  return withSelection(withTab, "right", context.selectionKey, kind);
+};
+
+/** Removes the tab of a view kind. When it was selected, its neighbor takes the selection. */
+export const removeViewPanelTab = (
+  layout: SessionPanelLayout,
+  context: SessionPanelContext,
+  kind: ViewTabKind,
+): SessionPanelLayout => {
+  const found = findPanelTab(layout, kind);
+  return found ? closePanelTab(layout, context, found.panel, kind) : layout;
 };
 
 /** Reorders a tab in its panel, or moves it to the other panel when its kind allows that panel. */

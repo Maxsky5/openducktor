@@ -37,6 +37,10 @@ import { useAgentStudioShellTaskActions } from "./use-agent-studio-shell-task-ac
 import { useAgentsPageOrchestrationShellModel } from "./use-agents-page-orchestration-shell-model";
 import { useAgentsPageRouteSessionModel } from "./use-agents-page-route-session-model";
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
+import {
+  type PageToolDetails,
+  usePageToolDetails,
+} from "@/features/session-panels/page-tool-details";
 
 type AgentsPageShellModel = {
   chatFileLinkOwner: ChatFileLinkOwner;
@@ -61,6 +65,8 @@ type AgentsPageShellModel = {
   selectedFileRefresh: AgentStudioSelectedFileRefreshModel | null;
   modalContent: AgentsPageModalContentModel;
   panels: SessionPanelsModel;
+  /** The tool call that the transcript shows in the right panel. */
+  toolDetails: PageToolDetails;
 };
 
 export function useAgentsPageShellModel(): AgentsPageShellModel {
@@ -178,6 +184,9 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   );
   const browser = useBrowserPanelModel(browserOwner);
   const { canShowPullRequestReview, hasLinkedPullRequest } = orchestration.pullRequestReview;
+  const toolDetails = usePageToolDetails(
+    orchestration.agentChatModel.thread.transcript.displayedSessionKey ?? null,
+  );
   const panels = useSessionPanels({
     owner: panelOwner,
     selectionKey: orchestrationSelection.view.role ?? JSON.stringify(null),
@@ -193,6 +202,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       canShowPullRequestReview && hasLinkedPullRequest ? NO_KINDS : WITHOUT_CI_CHECKS,
     terminals,
     browser,
+    toolCallTab: toolDetails.toolCallTab,
   });
   const buildTools = useAgentsPageBuildTools({
     activeWorkspace,
@@ -290,6 +300,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     selectedFileRefresh,
     modalContent,
     panels,
+    toolDetails,
   };
 }
 

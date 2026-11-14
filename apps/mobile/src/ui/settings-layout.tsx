@@ -195,15 +195,19 @@ export function SettingsSwitchRow({
   description,
   value,
   onValueChange,
+  disabled = false,
 }: {
   title: string;
   description: string;
   value: boolean;
   onValueChange: (value: boolean) => void;
+  /** True while another setting makes this one have no effect, as on desktop. */
+  disabled?: boolean | undefined;
 }): ReactElement {
   return (
     <Touchable
       feedback="highlight"
+      disabled={disabled}
       onPress={() => {
         haptics.selection();
         onValueChange(!value);
@@ -211,7 +215,7 @@ export function SettingsSwitchRow({
       accessibilityRole="switch"
       accessibilityLabel={title}
       accessibilityHint={description}
-      accessibilityState={{ checked: value }}
+      accessibilityState={{ checked: value, disabled }}
       style={styles.row}
     >
       <View style={styles.rowLine}>
@@ -221,7 +225,7 @@ export function SettingsSwitchRow({
             {description}
           </Text>
         </View>
-        <Toggle value={value} />
+        <Toggle value={value} disabled={disabled} />
       </View>
     </Touchable>
   );

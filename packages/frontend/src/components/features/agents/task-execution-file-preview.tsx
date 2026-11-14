@@ -7,7 +7,7 @@ import type {
 import { type FileContents, getFiletypeFromFileName } from "@pierre/diffs";
 import type { EditorFocus } from "@/types/editor-focus";
 import { useQuery } from "@tanstack/react-query";
-import { FileCode2, LoaderCircle, Save, X } from "lucide-react";
+import { LoaderCircle, Save, X } from "lucide-react";
 import {
   memo,
   type ReactElement,
@@ -21,6 +21,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { FileTypeIcon } from "@/components/ui/file-type-icon";
 import {
   Dialog,
   DialogContent,
@@ -413,7 +414,7 @@ function FilePreviewHeader({
   const saveLabel = isSaving ? "Saving file" : "Save file";
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
-      <FileCode2 className="size-4 shrink-0 text-muted-foreground" />
+      <FileTypeIcon filePath={relativePath} className="size-4 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <span className="truncate text-sm font-medium">{relativePath}</span>
         {showsUnsavedIndicator ? (

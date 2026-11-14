@@ -26,6 +26,7 @@ const createElement = (
       runtimeKind: null,
       presentToolCall: presentRegularToolCall,
       supportedApprovalReplyOutcomes: null,
+      supportsRunningCommandOutput: false,
     },
     ...props,
   });

@@ -94,6 +94,7 @@ const createThreadModel = (overrides: Partial<AgentChatThreadModel> = {}): Agent
       runtimeKind: "opencode",
       presentToolCall: presentRegularToolCall,
       supportedApprovalReplyOutcomes: ["approve_once", "approve_session", "reject"],
+      supportsRunningCommandOutput: false,
     },
     isInteractionEnabled: true,
     emptyState: null,
@@ -667,6 +668,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
           runtimeKind: "opencode",
           presentToolCall: presentRegularToolCall,
           supportedApprovalReplyOutcomes: null,
+          supportsRunningCommandOutput: false,
         }}
         subagentPendingApprovalCount={1}
         subagentPendingQuestionCount={1}

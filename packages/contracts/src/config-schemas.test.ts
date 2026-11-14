@@ -50,6 +50,8 @@ const baseRepoConfigInput = {
 const expectedDefaultChatSettings = {
   steerMessagesByDefault: false,
   showThinkingMessages: false,
+  groupToolCalls: true,
+  collapseFinishedToolCalls: true,
   expandFileDiffsByDefault: true,
   diffStyle: "split",
   diffIndicators: "bars",
@@ -915,6 +917,8 @@ describe("config-schemas", () => {
       chat: {
         steerMessagesByDefault: true,
         showThinkingMessages: true,
+        groupToolCalls: true,
+        collapseFinishedToolCalls: true,
         expandFileDiffsByDefault: false,
         diffStyle: "unified",
         diffIndicators: "classic",
@@ -934,6 +938,8 @@ describe("config-schemas", () => {
       chat: {
         steerMessagesByDefault: true,
         showThinkingMessages: false,
+        groupToolCalls: true,
+        collapseFinishedToolCalls: true,
         expandFileDiffsByDefault: false,
         diffStyle: "unified",
         diffIndicators: "none",
@@ -949,6 +955,8 @@ describe("config-schemas", () => {
     expect(parsedSnapshot.chat).toEqual({
       steerMessagesByDefault: true,
       showThinkingMessages: true,
+      groupToolCalls: true,
+      collapseFinishedToolCalls: true,
       expandFileDiffsByDefault: false,
       diffStyle: "unified",
       diffIndicators: "classic",
@@ -960,6 +968,8 @@ describe("config-schemas", () => {
     expect(parsedGlobalConfig.chat).toEqual({
       steerMessagesByDefault: true,
       showThinkingMessages: false,
+      groupToolCalls: true,
+      collapseFinishedToolCalls: true,
       expandFileDiffsByDefault: false,
       diffStyle: "unified",
       diffIndicators: "none",

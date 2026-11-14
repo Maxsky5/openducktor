@@ -194,6 +194,36 @@ describe("agent-chat-message-card-model", () => {
           }),
         ),
       ).toBe(true);
+
+      // The error says why the call stopped, so words in the output of a failed command do not
+      // count.
+      expect(
+        isToolMessageCancelled(
+          createToolMeta({
+            status: "error",
+            error: "Shell command exited with code 1.",
+            output: "dev server stopped",
+          }),
+        ),
+      ).toBe(false);
+
+      // Claude and Codex give the output of a failed command as its error. Its exit code shows
+      // that it ran.
+      expect(
+        isToolMessageCancelled(
+          createToolMeta({
+            status: "error",
+            error: "Aborted (core dumped)\nExit code 1",
+            metadata: { exit: 1 },
+          }),
+        ),
+      ).toBe(false);
+      // A declined command has no exit code, so its message still decides.
+      expect(
+        isToolMessageCancelled(
+          createToolMeta({ status: "error", error: "The command was declined." }),
+        ),
+      ).toBe(true);
     });
 
     test("uses a background task outcome before cancellation words in its failure text", () => {
@@ -259,6 +289,13 @@ describe("agent-chat-message-card-model", () => {
       expect(getToolLifecyclePhase(createToolMeta({ status: "error", error: "boom" }))).toBe(
         "failed",
       );
+      // A declined call never ran, so it does not count as a failure.
+      for (const error of [
+        "The user doesn't want to take this action right now. STOP what you are doing and wait for the user to tell you how to proceed.",
+        "The command was declined.",
+      ]) {
+        expect(getToolLifecyclePhase(createToolMeta({ status: "error", error }))).toBe("cancelled");
+      }
     });
   });
 
@@ -469,26 +506,72 @@ describe("agent-chat-message-card-model", () => {
           resolveRegularToolSummary(
             createToolMeta({ tool, toolType: "workflow", status: "error", error }),
             "",
-          ).text,
+          ).errorPreview,
         ).toBe("Task task-1 was not found.");
       }
     });
 
-    test("marks the summary of a failed call as an error, for any tool", () => {
+    test("keeps the summary of a failed call and adds its error preview, for any tool", () => {
       for (const tool of ["bash", "odt_read_task"]) {
         expect(
           resolveRegularToolSummary(
-            createToolMeta({ tool, status: "error", error: "Not found." }),
+            createToolMeta({ tool, status: "error", title: "Done", error: "Not found." }),
             "",
           ),
-        ).toEqual({ text: "Not found.", isError: true });
+        ).toEqual({ text: "Done", errorPreview: "Not found." });
         expect(
           resolveRegularToolSummary(
             createToolMeta({ tool, status: "completed", title: "Done" }),
             "",
-          ).isError,
-        ).toBe(false);
+          ).errorPreview,
+        ).toBeNull();
       }
+    });
+
+    test("never uses the output or the message text of a failed call as its summary", () => {
+      const failed = createToolMeta({
+        tool: "unknown_tool",
+        toolType: "generic",
+        status: "error",
+        error: "Error: boom",
+        output: "Error: boom",
+      });
+      expect(resolveRegularToolSummary(failed, "Tool unknown_tool failed\n\nError: boom")).toEqual({
+        text: "",
+        errorPreview: "Error: boom",
+      });
+    });
+
+    test("previews the line of a failed command output that names the failure", () => {
+      const preview = (error: string) =>
+        resolveRegularToolSummary(createToolMeta({ status: "error", error }), "").errorPreview;
+      expect(
+        preview(
+          "(node:52808) Warning: The 'NO_COLOR' env is ignored.\nerror TS6053: File 'nofile.ts' not found.",
+        ),
+      ).toBe("error TS6053: File 'nofile.ts' not found.");
+      expect(preview("step one\nError: config file missing\n    at load (index.js:3:9)")).toBe(
+        "Error: config file missing",
+      );
+      // A code frame quotes the source, and a summary only counts the failures.
+      expect(
+        preview(
+          "src/auth.ts:45:7 lint/style/noNonNullAssertion ━━━━━━━━\n\n  ! Forbidden non-null assertion.\n\n    44 │ const user = load();\n  > 45 │ if (!ok) throw new Error('missing');\n\ncheck ━━━━━━━━\n\n  × Some errors were emitted while running checks.\n\nFound 1 error.",
+        ),
+      ).toBe("src/auth.ts:45:7 lint/style/noNonNullAssertion");
+      expect(
+        preview(
+          "Version 5.9.3\nsrc/a.ts(2,51): error TS2307: Cannot find module 'x'.\nFound 1 error in src/a.ts",
+        ),
+      ).toBe("src/a.ts(2,51): error TS2307: Cannot find module 'x'.");
+      expect(preview("\n\nShell command exited with code 2.\n")).toBe(
+        "Shell command exited with code 2.",
+      );
+      expect(preview("Version 5.9.3\n--noEmitOnError  Do not emit output.")).toBe("Version 5.9.3");
+      // A long run of spaces does not stop the search for the failure line.
+      expect(
+        preview(`${" ".repeat(60_000)}x\n${"─".repeat(5_000)} x\nerror: boom at src/a.ts:1:2`),
+      ).toBe("error: boom at src/a.ts:1:2");
     });
 
     const partialArtifactReadCases: Array<{
@@ -520,28 +603,53 @@ describe("agent-chat-message-card-model", () => {
       },
     );
 
+    const FAILED_READ_SUMMARY = "task-1 · spec";
     test.each([
-      { error: "Artifact not found", output: "", expected: "Artifact not found" },
-      { error: "Tool call cancelled by user", output: "", expected: "Tool call cancelled by user" },
+      {
+        error: "Artifact not found",
+        output: "",
+        text: FAILED_READ_SUMMARY,
+        errorPreview: "Artifact not found",
+      },
+      {
+        error: "Tool call cancelled by user",
+        output: "",
+        text: "Tool call cancelled by user",
+        errorPreview: null,
+      },
       {
         error: undefined,
         output: "Tool call cancelled by user",
-        expected: "Tool call cancelled by user",
+        text: "Tool call cancelled by user",
+        errorPreview: null,
       },
-      { error: undefined, output: "Artifact not found", expected: "Artifact not found" },
-      { error: undefined, output: "", expected: "The tool call failed." },
-    ])("keeps artifact failure text before input for $expected", ({ error, output, expected }) => {
-      const meta = createToolMeta({
-        tool: "odt_read_task_artifacts",
-        toolType: "generic",
-        status: "error",
-        input: { taskId: "task-1", codes: ["spec"] },
-        preview: "Old preview",
-        output,
-      });
-      if (error !== undefined) meta.error = error;
-      expect(resolveRegularToolSummary(meta, "").text).toBe(expected);
-    });
+      {
+        error: undefined,
+        output: "Artifact not found",
+        text: FAILED_READ_SUMMARY,
+        errorPreview: "Artifact not found",
+      },
+      {
+        error: undefined,
+        output: "",
+        text: FAILED_READ_SUMMARY,
+        errorPreview: "The tool call failed.",
+      },
+    ])(
+      "shows the artifact failure text $errorPreview with the input summary",
+      ({ error, output, text, errorPreview }) => {
+        const meta = createToolMeta({
+          tool: "odt_read_task_artifacts",
+          toolType: "generic",
+          status: "error",
+          input: { taskId: "task-1", codes: ["spec"] },
+          preview: "Old preview",
+          output,
+        });
+        if (error !== undefined) meta.error = error;
+        expect(resolveRegularToolSummary(meta, "")).toEqual({ text, errorPreview });
+      },
+    );
 
     test.each([
       "mcp__other_server__odt_read_task_artifacts",
@@ -664,7 +772,7 @@ describe("agent-chat-message-card-model", () => {
             error: "boom",
           }),
           "",
-        ).text,
+        ).errorPreview,
       ).toBe("boom");
     });
 
@@ -700,10 +808,10 @@ describe("agent-chat-message-card-model", () => {
           error: longError,
         }),
         "",
-      ).text;
-      expect(errorSummary.startsWith("x".repeat(40))).toBe(true);
-      expect(errorSummary.endsWith("...")).toBe(true);
-      expect(errorSummary.length).toBeLessThanOrEqual(223);
+      ).errorPreview;
+      expect(errorSummary?.startsWith("x".repeat(40))).toBe(true);
+      expect(errorSummary?.endsWith("...")).toBe(true);
+      expect(errorSummary?.length).toBeLessThanOrEqual(223);
 
       const longTitle = "t".repeat(200);
       const titleSummary = buildToolSummary(createToolMeta({ title: longTitle }), "");
@@ -749,8 +857,8 @@ describe("agent-chat-message-card-model", () => {
             error: "Skill not found",
           }),
           "",
-        ).text,
-      ).toBe("Skill not found");
+        ),
+      ).toEqual({ text: "clean-ddd-hexagonal", errorPreview: "Skill not found" });
     });
 
     test("builds search and path summaries", () => {
@@ -1539,7 +1647,7 @@ describe("agent-chat-message-card-model", () => {
       ).toBe("task-77");
     });
 
-    test("preserves read_task error summaries when taskId is present", () => {
+    test("previews read_task errors next to the task ID", () => {
       expect(
         resolveRegularToolSummary(
           createToolMeta({
@@ -1550,8 +1658,8 @@ describe("agent-chat-message-card-model", () => {
             error: "Task not found",
           }),
           "",
-        ).text,
-      ).toBe("Task not found");
+        ),
+      ).toEqual({ text: "task-77", errorPreview: "Task not found" });
     });
 
     test("normalizes read tool paths relative to the session working directory", () => {

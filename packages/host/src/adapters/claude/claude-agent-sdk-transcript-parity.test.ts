@@ -963,6 +963,9 @@ describe("Claude live and hydrated transcript parity", () => {
       },
     });
     const liveEvents: AgentEvent[] = [];
+    const liveSession = createEventTestSession();
+    // A live call gets its start from the tool hooks. History gives the time of the call entry.
+    liveSession.toolStartedAtMsByCallId.set("tool-read-1", Date.parse(timestamp));
 
     handleClaudeSdkMessage({
       emit: (event) => liveEvents.push(event),
@@ -972,7 +975,7 @@ describe("Claude live and hydrated transcript parity", () => {
         modelId: model,
         runtimeKind: "claude",
       }),
-      session: createEventTestSession(),
+      session: liveSession,
       timestamp,
     });
     const history = toClaudeHistoryMessages(
@@ -1049,6 +1052,7 @@ describe("Claude live and hydrated transcript parity", () => {
       liveSession.toolInputsByCallId.set(toolUseId, input);
       liveSession.toolMessageIdsByCallId.set(toolUseId, assistantMessageId);
       liveSession.toolNamesByCallId.set(toolUseId, testCase.tool);
+      liveSession.toolStartedAtMsByCallId.set(toolUseId, Date.parse(timestamp));
 
       handleClaudeUserToolResultMessage({
         emit: (event) => liveEvents.push(event),
@@ -1135,6 +1139,7 @@ describe("Claude live and hydrated transcript parity", () => {
       liveSession.toolInputsByCallId.set(toolUse.id, toolUse.input);
       liveSession.toolMessageIdsByCallId.set(toolUse.id, "ef52161c-2436-476b-8fa0-f4fc1aa35cfa");
       liveSession.toolNamesByCallId.set(toolUse.id, toolUse.name);
+      liveSession.toolStartedAtMsByCallId.set(toolUse.id, Date.parse(timestamp));
     }
 
     handleClaudeUserToolResultMessage({

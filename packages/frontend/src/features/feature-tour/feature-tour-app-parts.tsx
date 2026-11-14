@@ -17,6 +17,9 @@ import { AgentChatSettingsProvider } from "@/components/features/agents/agent-ch
 import { ACTIVE_COMPOSER_CARD_CLASS_NAME } from "@/components/features/agents/agent-chat/agent-chat-composer-surface";
 import { AgentChatComposerSendControl } from "@/components/features/agents/agent-chat/agent-chat-composer-pending-items";
 import { AgentChatThreadRow } from "@/components/features/agents/agent-chat/agent-chat-thread-row";
+import { ToolRunGroup } from "@/components/features/agents/agent-chat/agent-chat-tool-run";
+import { buildToolRunItems } from "@/components/features/agents/agent-chat/agent-chat-tool-run-layout";
+import { readToolRunClassifier } from "@openducktor/frontend-core/sessions/transcript/tool-runs";
 import { ChatWorkflowContext } from "@/components/features/agents/agent-chat/agent-chat-workflow-context";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { AgentStudioHeaderTitle } from "@/components/features/agents/agent-studio-header";
@@ -154,15 +157,25 @@ function TourTranscript({ task, rows, children }: TourTranscriptProps): ReactEle
         {/* Without settings, the transcript uses the default chat settings. */}
         <AgentChatSettingsProvider value={null}>
           <ChatWorkflowContext.Provider value={task}>
-            {rows.map((row) => (
-              <AgentChatThreadRow
-                key={row.key}
-                row={row}
-                isStreamingAssistantMessage={false}
-                sessionIdentity={null}
-                runtimePresentation={CODEX_PRESENTATION}
-              />
-            ))}
+            {buildToolRunItems(rows, readToolRunClassifier(CODEX_PRESENTATION.presentToolCall)).map(
+              (item) =>
+                item.kind === "tool_run" ? (
+                  <ToolRunGroup
+                    key={item.key}
+                    item={item}
+                    runtimePresentation={CODEX_PRESENTATION}
+                    workingDirectory={null}
+                  />
+                ) : (
+                  <AgentChatThreadRow
+                    key={item.key}
+                    row={item.row}
+                    isStreamingAssistantMessage={false}
+                    sessionIdentity={null}
+                    runtimePresentation={CODEX_PRESENTATION}
+                  />
+                ),
+            )}
           </ChatWorkflowContext.Provider>
         </AgentChatSettingsProvider>
       </div>

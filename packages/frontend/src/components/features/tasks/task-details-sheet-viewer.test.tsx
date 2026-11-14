@@ -248,6 +248,7 @@ function renderChatTaskTool(
         <WorkspaceStateContext value={createWorkspaceState()}>
           <TaskSnapshotContext value={snapshot}>
             <AgentChatTaskTool
+              messageId="message-1"
               tool="create_task"
               timeLabel="now"
               messageContent=""

@@ -40,6 +40,7 @@ import {
   codexUserInputListToText,
   codexUserInputsToDisplayParts,
 } from "./codex-user-input-display";
+import { readCodexShellScript } from "./codex-shell-command";
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers/todo";
 import {
@@ -404,22 +405,23 @@ const commandActionToolName = (action: CodexAppServerCommandAction | undefined):
   return "bash";
 };
 
+/**
+ * The input of a command call. The command is the whole script that the agent wrote: the command of
+ * the first action is only one part of a script that runs more than one command.
+ */
 const commandActionInput = (
   action: CodexAppServerCommandAction | undefined,
   command: string,
   cwd: string,
 ) => {
+  const input: CodexCommandActionInput = { command: readCodexShellScript(command), cwd };
   if (!action) {
-    return { command, cwd };
+    return input;
   }
   const path =
     action.type === "read" ? action.path : action.type !== "unknown" ? action.path : null;
   const query = action.type === "search" ? action.query : null;
   const name = action.type === "read" ? action.name : null;
-  const input: CodexCommandActionInput = {
-    command: action.command,
-    cwd,
-  };
 
   if (path) {
     input.path = path;
@@ -573,10 +575,12 @@ const codexCommandExecutionStreamParts = (
   const input = commandActionInput(firstAction, command, cwd);
   const output = value.aggregatedOutput;
   const status = statusFromCodexStatus(value.status);
-  const error = status === "error" ? output : null;
+  // A declined command never ran, so it has no output to give as its error.
+  let error: string | null = null;
+  if (value.status === "declined") error = "The command was declined.";
+  else if (status === "error") error = output;
   const timing = codexToolTimingFields(value, timingOptions);
-
-  return normalizedCodexToolPart({
+  const invocation: NormalizedCodexToolInvocation = {
     messageId,
     partId,
     callId: partId,
@@ -587,7 +591,12 @@ const codexCommandExecutionStreamParts = (
     output,
     error,
     ...timing,
-  });
+  };
+  if (value.exitCode !== null) {
+    invocation.metadata = { exit: value.exitCode };
+  }
+
+  return normalizedCodexToolPart(invocation);
 };
 
 const codexFileChangeStreamParts = (

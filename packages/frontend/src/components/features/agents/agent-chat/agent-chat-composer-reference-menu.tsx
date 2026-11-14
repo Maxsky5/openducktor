@@ -199,7 +199,11 @@ function FileReferenceMenuRow({
       onSelect={() => onSelect(result)}
     >
       <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <AgentChatFileReferenceIcon kind={result.kind} className="text-muted-foreground" />
+        <AgentChatFileReferenceIcon
+          kind={result.kind}
+          path={result.path}
+          className="text-muted-foreground"
+        />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-foreground">{result.name}</span>

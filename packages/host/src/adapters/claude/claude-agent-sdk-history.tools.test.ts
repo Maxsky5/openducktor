@@ -77,7 +77,51 @@ describe("claude-agent-sdk-history tool projection", () => {
     expect(tool).not.toHaveProperty("output");
   });
 
-  test("hydrates MCP tool blocks with input and result timestamps", () => {
+  test("gives the exit code and the output of a failed shell command", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-bash",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "bash-1", name: "Bash", input: { command: "ls x" } }],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "bash-result",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "bash-1",
+                content: "Exit code 2\nls: x: No such file or directory",
+                is_error: true,
+              },
+            ],
+          },
+        }),
+      ],
+      () => "2026-10-21T00:00:00.000Z",
+    );
+    const part = history[0]?.parts[0];
+    expect(part).toMatchObject({
+      kind: "tool",
+      status: "error",
+      metadata: { exit: 2 },
+      output: "ls: x: No such file or directory",
+    });
+    // The clients read the error from the output, so the output does not go to them twice.
+    expect(part).not.toHaveProperty("error");
+  });
+
+  test("hydrates MCP tool blocks with input, the call time as start, and the result time", () => {
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -130,10 +174,10 @@ describe("claude-agent-sdk-history tool projection", () => {
         serverName: "openducktor",
       },
       output: "task details",
+      startedAtMs: Date.parse("2026-06-26T11:03:16.000Z"),
       endedAtMs: Date.parse("2026-06-26T11:03:19.000Z"),
       status: "completed",
     });
-    expect(tool).not.toHaveProperty("startedAtMs");
   });
 
   test("hydrates SDK tool_use_id and tool_name fields without generic tool fallbacks", () => {
@@ -187,10 +231,10 @@ describe("claude-agent-sdk-history tool projection", () => {
       toolType: "read",
       input: { file_path: "apps/api/src/lib/auth.ts" },
       output: "file contents",
+      startedAtMs: Date.parse("2026-06-26T11:03:16.000Z"),
       endedAtMs: Date.parse("2026-06-26T11:03:20.000Z"),
       status: "completed",
     });
-    expect(tool).not.toHaveProperty("startedAtMs");
   });
 
   test("hydrates ordinary Claude Read and Bash tool calls with their results", () => {

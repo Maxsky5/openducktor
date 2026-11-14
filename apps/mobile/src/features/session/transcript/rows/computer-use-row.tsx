@@ -20,6 +20,8 @@ import { useRowVisible } from "../transcript-visibility";
 import { useDisclosure } from "./disclosure";
 import { DisclosureMarker, PreText, ToolTiming } from "./row-parts";
 import { ToolPartLoader, WithFullToolPart } from "./tool-details";
+import { getToolLifecyclePhase } from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
+import { toolActivity } from "./tool-status-presentation";
 
 /**
  * The desktop `ComputerUseToolMessage`: a card with the pointer icon, "Computer Use", the
@@ -60,7 +62,11 @@ export const ComputerUseRow = memo(function ComputerUseRow({
           colorValue={isFailed ? desktop.destructiveAccent : desktop.mutedForeground}
         />
         <Text style={styles.kind}>Computer Use</Text>
-        <ToolTiming active={timing.isActive} durationMs={timing.durationMs} timeLabel={timeLabel} />
+        <ToolTiming
+          activity={timing.isActive ? toolActivity(getToolLifecyclePhase(meta)) : null}
+          durationMs={timing.durationMs}
+          timeLabel={timeLabel}
+        />
         {hasDetails ? (
           <DisclosureMarker
             open={disclosure.open}

@@ -1,5 +1,4 @@
-import { type ReactElement, useState } from "react";
-import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
+import type { ReactElement } from "react";
 import {
   buildQuestionDetailEntries,
   FILE_DIFF_UNAVAILABLE_MESSAGE,
@@ -9,14 +8,16 @@ import {
   readToolFileEdits,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
+import { cn } from "@/lib/utils";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import { RegularToolSummary } from "./agent-chat-regular-tool-summary";
+import { useToolDetailsRow } from "./agent-chat-tool-details-store";
+import { TOOL_ROW_HOVER, TOOL_ROW_SELECTED } from "./agent-chat-tool-row-states";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
-import { ToolInputDetails } from "./agent-chat-tool-input-details";
-import { ToolOutputDetails } from "./agent-chat-tool-output-details";
 
 type RegularToolMessageProps = {
   meta: ToolMeta;
+  messageId: string;
   messageContent: string;
   messageTimestamp: string;
   timeLabel: string;
@@ -24,18 +25,21 @@ type RegularToolMessageProps = {
   displayName: string;
 };
 
+/**
+ * One compact line of a tool call. A press on a call with input, output, or an error shows them
+ * in the tool details panel. Question answers and file edit cards show under the line.
+ */
 export const RegularToolMessage = ({
   meta,
+  messageId,
   messageContent,
   messageTimestamp,
   timeLabel,
   sessionWorkingDirectory,
   displayName,
 }: RegularToolMessageProps): ReactElement => {
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const availability = readToolDetailAvailability(meta);
-  const { hasInput, hasOutput, hasError } = availability;
-  const hasExpandableDetails = hasExpandableToolDetails(availability);
+  const details = useToolDetailsRow(messageId);
+  const hasDetails = hasExpandableToolDetails(readToolDetailAvailability(meta));
   const { edits: fileEditData, diffUnavailable: fileDiffUnavailable } = readToolFileEdits(
     meta,
     sessionWorkingDirectory,
@@ -50,53 +54,23 @@ export const RegularToolMessage = ({
       timeLabel={timeLabel}
       sessionWorkingDirectory={sessionWorkingDirectory}
       displayName={displayName}
-      hasExpandableDetails={hasExpandableDetails}
     />
   );
 
   return (
     <div className="space-y-1 px-1 py-0.5">
-      {hasExpandableDetails ? (
-        <details
-          className="group"
-          onToggle={(event) => {
-            if (event.target === event.currentTarget) setDetailsOpen(event.currentTarget.open);
-          }}
+      {details && hasDetails ? (
+        <button
+          type="button"
+          aria-pressed={details.isShown}
+          className={cn(
+            "relative -mx-2 block w-[calc(100%+1rem)] cursor-pointer rounded-[7px] px-2 text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+            details.isShown ? TOOL_ROW_SELECTED : TOOL_ROW_HOVER,
+          )}
+          onClick={details.onClick}
         >
-          <summary className="list-none rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-            {summaryRow}
-          </summary>
-          <div className="ml-5 mt-1 space-y-2">
-            {hasInput && meta.input ? (
-              <ToolInputDetails
-                meta={meta}
-                workingDirectory={sessionWorkingDirectory}
-                className="rounded border border-border bg-card"
-                textClassName="text-foreground"
-                visible={detailsOpen}
-              />
-            ) : null}
-            {hasOutput ? (
-              <ToolOutputDetails
-                meta={meta}
-                className="rounded border border-border bg-card"
-                summaryClassName="cursor-pointer px-2 py-1 text-xs font-medium text-foreground"
-                bodyClassName="space-y-2 px-2 pb-2 text-[11px] text-foreground"
-                visible={detailsOpen}
-              />
-            ) : null}
-            {hasError && meta.error ? (
-              <details className="rounded border border-destructive-border bg-destructive-surface">
-                <summary className="cursor-pointer px-2 py-1 text-xs font-medium text-destructive-muted">
-                  Error
-                </summary>
-                <pre className="overflow-x-auto whitespace-pre-wrap px-2 pb-2 text-[11px] text-destructive-muted">
-                  {formatRawJsonLikeText(meta.error)}
-                </pre>
-              </details>
-            ) : null}
-          </div>
-        </details>
+          {summaryRow}
+        </button>
       ) : (
         summaryRow
       )}

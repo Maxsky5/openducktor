@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { ODT_BROWSER_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  ODT_BROWSER_TOOL_NAMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import { resolveAgentChatRuntimePresentation } from "./agent-chat-runtime-presentation";
 
 describe("resolveAgentChatRuntimePresentation", () => {
@@ -73,6 +78,24 @@ describe("resolveAgentChatRuntimePresentation", () => {
         action,
       });
     }
+  });
+
+  test("gives the live output of running commands only for a runtime that sends it", () => {
+    const supports = (runtimeKind: "codex" | "claude" | "opencode") =>
+      resolveAgentChatRuntimePresentation({
+        runtimeDefinitions: [
+          CODEX_RUNTIME_DESCRIPTOR,
+          CLAUDE_RUNTIME_DESCRIPTOR,
+          OPENCODE_RUNTIME_DESCRIPTOR,
+        ],
+        runtimeKind,
+      }).supportsRunningCommandOutput;
+
+    expect([supports("codex"), supports("claude"), supports("opencode")]).toEqual([
+      true,
+      false,
+      false,
+    ]);
   });
 
   test("projects tool presentation and approval outcomes above the chat render tree", () => {

@@ -1,3 +1,21 @@
+diff --git a/dist/FlashListRef.d.ts b/dist/FlashListRef.d.ts
+index 08b83f3e9baf5cf5c2229237b9c0d12fab030a3b..5f2f098c72fe1788c45d2f7fafbe5e7e51a368d3 100644
+--- a/dist/FlashListRef.d.ts
++++ b/dist/FlashListRef.d.ts
+@@ -291,6 +291,13 @@ export interface FlashListRef<T> {
+      * listRef.current?.prepareForLayoutAnimationRender();
+      */
+     prepareForLayoutAnimationRender: () => void;
++    /**
++     * Applies a known change of the size of the item at `index` in the next render, with the
++     * offset correction of the anchor item, so the new size, the new positions, and the scroll
++     * correction mount in one commit. The caller renders the item at its new size in the same
++     * batch.
++     */
++    resizeItem: (index: number, delta: number) => void;
+     /**
+      * Clears the layout cache on update.
+      * Call this when you want to clear the layout cache on update.
 diff --git a/dist/recyclerview/RecyclerView.js b/dist/recyclerview/RecyclerView.js
 index 6799c8a61bff4607633196097da35c7a6975f0b6..9bdab1e3be0889641503619bc61b06001b65734a 100644
 --- a/dist/recyclerview/RecyclerView.js
@@ -27,9 +45,16 @@ index 6799c8a61bff4607633196097da35c7a6975f0b6..9bdab1e3be0889641503619bc61b0600
          const height = Math.max(Math.min(layout.height, (_c = layout.maxHeight) !== null && _c !== void 0 ? _c : Infinity), (_d = layout.minHeight) !== null && _d !== void 0 ? _d : 0);
          if (areDimensionsNotEqual(width, size.width) ||
 diff --git a/dist/recyclerview/hooks/useRecyclerViewController.js b/dist/recyclerview/hooks/useRecyclerViewController.js
-index 08724d1f33824ef563948cff17904d7f497739d4..eede0a38ac7b6da5710ed245ba939cbd9ca030de 100644
+index 08724d1f33824ef563948cff17904d7f497739d4..6a6290c6a8b5cd2058024302c044b18b0aa755c2 100644
 --- a/dist/recyclerview/hooks/useRecyclerViewController.js
 +++ b/dist/recyclerview/hooks/useRecyclerViewController.js
+@@ -1,5 +1,5 @@
+ import { useCallback, useImperativeHandle, useMemo, useRef, useState, } from "react";
+-import { I18nManager } from "react-native";
++import { I18nManager, Platform } from "react-native";
+ import { adjustOffsetForRTL } from "../utils/adjustOffsetForRTL";
+ import { PlatformConfig } from "../../native/config/PlatformHelper";
+ import { WarningMessages } from "../../errors/WarningMessages";
 @@ -61,8 +61,13 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
              recyclerViewManager.hasStableDataKeys() &&
              recyclerViewManager.getDataLength() > 0 &&
@@ -46,7 +71,26 @@ index 08724d1f33824ef563948cff17904d7f497739d4..eede0a38ac7b6da5710ed245ba939cbd
              if (firstVisibleIndex !== undefined && firstVisibleIndex >= 0) {
                  firstVisibleItemKey.current =
                      recyclerViewManager.getDataKey(firstVisibleIndex);
-@@ -141,8 +146,11 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+@@ -127,7 +132,17 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+                         // console.log("diff", diff, firstVisibleItemKey.current);
+                         if (PlatformConfig.supportsOffsetCorrection) {
+                             // console.log("scrollBy", diff);
+-                            (_b = scrollAnchorRef.current) === null || _b === void 0 ? void 0 : _b.scrollBy(diff);
++                            // The anchor moves the list from its native offset. An Android list that shrinks
++                            // under the reader at its end clamps that offset first, so the anchor moves only
++                            // the rest. iOS keeps the offset when the content shrinks.
++                            const lastScrollOffset = recyclerViewManager.getAbsoluteLastScrollOffset();
++                            const clampedScrollOffset = Platform.OS === "android"
++                                ? Math.min(lastScrollOffset, recyclerViewManager.getMaxScrollOffset())
++                                : lastScrollOffset;
++                            const anchorShift = lastScrollOffset + diff - clampedScrollOffset;
++                            if (anchorShift !== 0) {
++                                (_b = scrollAnchorRef.current) === null || _b === void 0 ? void 0 : _b.scrollBy(anchorShift);
++                            }
+                         }
+                         else {
+                             const scrollToParams = horizontal
+@@ -141,8 +156,11 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
                                  };
                              (_c = scrollViewRef.current) === null || _c === void 0 ? void 0 : _c.scrollTo(scrollToParams);
                          }
@@ -59,6 +103,75 @@ index 08724d1f33824ef563948cff17904d7f497739d4..eede0a38ac7b6da5710ed245ba939cbd
                              recyclerViewManager.ignoreScrollEvents = true;
                              setTimeout(() => {
                                  recyclerViewManager.ignoreScrollEvents = false;
+@@ -450,6 +468,42 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+                 }
+                 recyclerViewManager.animationOptimizationsEnabled = true;
+             },
++            /**
++             * Applies a known change of the size of the item at `index` in the next render, with
++             * the offset correction of the anchor item, so the new size, the new positions, and the
++             * scroll correction mount in one commit. The caller renders the item at its new size in
++             * the same batch. The list still measures the item after that commit.
++             */
++            resizeItem: (index, delta) => {
++                const layout = recyclerViewManager.tryGetLayout(index);
++                if (!layout || delta === 0) {
++                    return;
++                }
++                const { horizontal } = recyclerViewManager.props;
++                // Each rendered item takes part, so the layout manager places all of them again,
++                // up to the anchor item of the offset correction.
++                const layoutInfo = recyclerViewManager
++                    .getEngagedIndices()
++                    .toArray()
++                    .flatMap((engagedIndex) => {
++                    const engagedLayout = recyclerViewManager.tryGetLayout(engagedIndex);
++                    if (!engagedLayout) {
++                        return [];
++                    }
++                    const change = engagedIndex === index ? delta : 0;
++                    return [
++                        {
++                            index: engagedIndex,
++                            dimensions: horizontal
++                                ? { width: engagedLayout.width + change, height: engagedLayout.height }
++                                : { width: engagedLayout.width, height: engagedLayout.height + change },
++                        },
++                    ];
++                });
++                recyclerViewManager.modifyChildrenLayout(layoutInfo, recyclerViewManager.getDataLength());
++                applyOffsetCorrection();
++                setRenderId((prev) => prev + 1);
++            },
+         };
+     }, [
+         recyclerViewManager,
+@@ -457,6 +511,7 @@ export function useRecyclerViewController(recyclerViewManager, ref, scrollViewRe
+         setTimeout,
+         isUnmounted,
+         updateScrollOffsetWithCallback,
++        applyOffsetCorrection,
+     ]);
+     const applyInitialScrollIndex = useCallback(() => {
+         var _a, _b, _c;
+diff --git a/src/FlashListRef.ts b/src/FlashListRef.ts
+index 07bac2aa20ea35ee3e85f0295a54569bc175da59..59b07a73abf7a8e0bfb91d69e0159d823c889d8c 100644
+--- a/src/FlashListRef.ts
++++ b/src/FlashListRef.ts
+@@ -306,6 +306,13 @@ export interface FlashListRef<T> {
+    * listRef.current?.prepareForLayoutAnimationRender();
+    */
+   prepareForLayoutAnimationRender: () => void;
++  /**
++   * Applies a known change of the size of the item at `index` in the next render, with the
++   * offset correction of the anchor item, so the new size, the new positions, and the scroll
++   * correction mount in one commit. The caller renders the item at its new size in the same
++   * batch.
++   */
++  resizeItem: (index: number, delta: number) => void;
+ 
+   /**
+    * Clears the layout cache on update.
 diff --git a/src/recyclerview/RecyclerView.tsx b/src/recyclerview/RecyclerView.tsx
 index 3c25e7e893004932b8a13072e01fe2a940d365d4..b760bb549841e58130a6abf347221b50c87766ef 100644
 --- a/src/recyclerview/RecyclerView.tsx
@@ -88,9 +201,18 @@ index 3c25e7e893004932b8a13072e01fe2a940d365d4..b760bb549841e58130a6abf347221b50
          Math.min(layout.width, layout.maxWidth ?? Infinity),
          layout.minWidth ?? 0
 diff --git a/src/recyclerview/hooks/useRecyclerViewController.tsx b/src/recyclerview/hooks/useRecyclerViewController.tsx
-index 3689830d995ff4f11c9fba6b3f54d9962d481726..8f5295e391fdc33034a3e322efaaec05e1e6ec98 100644
+index 3689830d995ff4f11c9fba6b3f54d9962d481726..707217ad0d2dce65ab4de7286c6ee715c6b18ad1 100644
 --- a/src/recyclerview/hooks/useRecyclerViewController.tsx
 +++ b/src/recyclerview/hooks/useRecyclerViewController.tsx
+@@ -6,7 +6,7 @@ import {
+   useRef,
+   useState,
+ } from "react";
+-import { I18nManager } from "react-native";
++import { I18nManager, Platform } from "react-native";
+ 
+ import {
+   ScrollToOffsetParams,
 @@ -96,11 +96,15 @@ export function useRecyclerViewController<T>(
        recyclerViewManager.getDataLength() > 0 &&
        recyclerViewManager.shouldMaintainVisibleContentPosition()
@@ -112,7 +234,31 @@ index 3689830d995ff4f11c9fba6b3f54d9962d481726..8f5295e391fdc33034a3e322efaaec05
        if (firstVisibleIndex !== undefined && firstVisibleIndex >= 0) {
          firstVisibleItemKey.current =
            recyclerViewManager.getDataKey(firstVisibleIndex);
-@@ -196,11 +200,14 @@ export function useRecyclerViewController<T>(
+@@ -183,7 +187,22 @@ export function useRecyclerViewController<T>(
+             // console.log("diff", diff, firstVisibleItemKey.current);
+             if (PlatformConfig.supportsOffsetCorrection) {
+               // console.log("scrollBy", diff);
+-              scrollAnchorRef.current?.scrollBy(diff);
++              // The anchor moves the list from its native offset. An Android list that shrinks
++              // under the reader at its end clamps that offset first, so the anchor moves only
++              // the rest. iOS keeps the offset when the content shrinks.
++              const lastScrollOffset =
++                recyclerViewManager.getAbsoluteLastScrollOffset();
++              const clampedScrollOffset =
++                Platform.OS === "android"
++                  ? Math.min(
++                      lastScrollOffset,
++                      recyclerViewManager.getMaxScrollOffset()
++                    )
++                  : lastScrollOffset;
++              const anchorShift = lastScrollOffset + diff - clampedScrollOffset;
++              if (anchorShift !== 0) {
++                scrollAnchorRef.current?.scrollBy(anchorShift);
++              }
+             } else {
+               const scrollToParams = horizontal
+                 ? {
+@@ -196,11 +215,14 @@ export function useRecyclerViewController<T>(
                    };
                scrollViewRef.current?.scrollTo(scrollToParams);
              }
@@ -128,3 +274,57 @@ index 3689830d995ff4f11c9fba6b3f54d9962d481726..8f5295e391fdc33034a3e322efaaec05
                recyclerViewManager.ignoreScrollEvents = true;
                setTimeout(() => {
                  recyclerViewManager.ignoreScrollEvents = false;
+@@ -563,6 +585,45 @@ export function useRecyclerViewController<T>(
+         }
+         recyclerViewManager.animationOptimizationsEnabled = true;
+       },
++      /**
++       * Applies a known change of the size of the item at `index` in the next render, with the
++       * offset correction of the anchor item, so the new size, the new positions, and the scroll
++       * correction mount in one commit. The caller renders the item at its new size in the same
++       * batch. The list still measures the item after that commit.
++       */
++      resizeItem: (index: number, delta: number) => {
++        const layout = recyclerViewManager.tryGetLayout(index);
++        if (!layout || delta === 0) {
++          return;
++        }
++        const { horizontal } = recyclerViewManager.props;
++        // Each rendered item takes part, so the layout manager places all of them again, up to
++        // the anchor item of the offset correction.
++        const layoutInfo = recyclerViewManager
++          .getEngagedIndices()
++          .toArray()
++          .flatMap((engagedIndex) => {
++            const engagedLayout = recyclerViewManager.tryGetLayout(engagedIndex);
++            if (!engagedLayout) {
++              return [];
++            }
++            const change = engagedIndex === index ? delta : 0;
++            return [
++              {
++                index: engagedIndex,
++                dimensions: horizontal
++                  ? { width: engagedLayout.width + change, height: engagedLayout.height }
++                  : { width: engagedLayout.width, height: engagedLayout.height + change },
++              },
++            ];
++          });
++        recyclerViewManager.modifyChildrenLayout(
++          layoutInfo,
++          recyclerViewManager.getDataLength()
++        );
++        applyOffsetCorrection();
++        setRenderId((prev) => prev + 1);
++      },
+     };
+   }, [
+     recyclerViewManager,
+@@ -570,6 +631,7 @@ export function useRecyclerViewController<T>(
+     setTimeout,
+     isUnmounted,
+     updateScrollOffsetWithCallback,
++    applyOffsetCorrection,
+   ]);
+ 
+   const applyInitialScrollIndex = useCallback(() => {

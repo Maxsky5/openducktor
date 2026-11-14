@@ -37,6 +37,7 @@ const DESCRIPTION_PREVIEW_CHARACTERS = 480;
  */
 export const TaskToolRow = memo(function TaskToolRow({
   meta,
+  messageId,
   tool,
   messageContent,
   messageTimestamp,
@@ -44,6 +45,7 @@ export const TaskToolRow = memo(function TaskToolRow({
   rowKey,
 }: {
   meta: ToolMeta;
+  messageId: string;
   tool: AgentChatTaskToolName;
   messageContent: string;
   messageTimestamp: string;
@@ -59,6 +61,7 @@ export const TaskToolRow = memo(function TaskToolRow({
     <View style={styles.section} accessibilityLabel={tool}>
       <ToolCallRow
         meta={summaryMeta}
+        messageId={messageId}
         messageContent={messageContent}
         messageTimestamp={messageTimestamp}
         timeLabel={timeLabel}

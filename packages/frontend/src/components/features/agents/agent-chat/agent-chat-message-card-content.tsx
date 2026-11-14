@@ -452,9 +452,9 @@ const ToolMessageBody = ({
       return (
         <WorkflowToolMessage
           meta={meta}
+          messageId={message.id}
           messageTimestamp={message.timestamp}
           timeLabel={timeLabel}
-          sessionWorkingDirectory={sessionWorkingDirectory}
           displayName={toolCallPresentation.displayName}
           summary={buildToolSummary(meta, message.content)}
           icon={<FileX className="size-3.5" />}
@@ -464,9 +464,9 @@ const ToolMessageBody = ({
     return (
       <ArtifactToolMessage
         meta={meta}
+        messageId={message.id}
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}
-        sessionWorkingDirectory={sessionWorkingDirectory}
       />
     );
   }
@@ -474,10 +474,10 @@ const ToolMessageBody = ({
     return (
       <WorkflowToolMessage
         meta={meta}
+        messageId={message.id}
         odtTool={toolCallPresentation.odtTool}
         messageTimestamp={message.timestamp}
         timeLabel={timeLabel}
-        sessionWorkingDirectory={sessionWorkingDirectory}
         displayName={toolCallPresentation.displayName}
         summary={buildToolSummary(meta, message.content)}
       />
@@ -486,6 +486,7 @@ const ToolMessageBody = ({
   return (
     <RegularToolMessage
       meta={meta}
+      messageId={message.id}
       messageContent={message.content}
       messageTimestamp={message.timestamp}
       timeLabel={timeLabel}
@@ -586,6 +587,7 @@ export const MessageBody = ({
       return (
         <AgentChatTaskTool
           meta={meta}
+          messageId={message.id}
           tool={toolCallPresentation.taskTool}
           timeLabel={timeLabel}
           messageContent={message.content}
