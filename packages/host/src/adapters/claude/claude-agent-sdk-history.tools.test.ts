@@ -391,32 +391,26 @@ describe("claude-agent-sdk-history tool projection", () => {
   });
 
   test("keeps the answers of an AskUserQuestion result in its metadata, one group for each question", () => {
-    const checks = {
-      question: "Which checks should run?",
-      header: "Checks",
-      multiSelect: true,
-      options: [
-        { label: "Lint", description: "Run oxlint" },
-        { label: "Test", description: "Run bun test" },
-      ],
-    };
-    const notes = {
-      question: "Anything else?",
-      header: "Notes",
-      multiSelect: false,
-      options: [{ label: "No", description: "Nothing else" }],
-    };
-    const branch = {
-      question: "Which branch?",
-      header: "Branch",
-      multiSelect: false,
-      options: [{ label: "main", description: "The default branch" }],
-    };
-    const questions = [checks, notes, branch];
+    const option = (label: string) => ({ label, description: `${label} option` });
+    const questions = [
+      {
+        question: "Which checks should run?",
+        header: "Checks",
+        multiSelect: true,
+        options: [option("Lint"), option("Test")],
+      },
+      {
+        question: "Deploy now?",
+        header: "Deploy",
+        multiSelect: true,
+        options: [option("Yes, deploy"), option("No")],
+      },
+      { question: "Anything else?", header: "Notes", multiSelect: false, options: [option("No")] },
+    ];
     const answers = {
-      "Which checks should run?": "Lint, Test",
+      "Which checks should run?": "Lint, Test, Also e2e",
+      "Deploy now?": "Yes, deploy, No",
       "Anything else?": "",
-      "Which branch?": "release, then main",
     };
     const history = toClaudeHistoryMessages(
       [
@@ -465,8 +459,8 @@ describe("claude-agent-sdk-history tool projection", () => {
       toolType: "question",
       status: "completed",
       input: { questions },
-      // A written answer that only looks like joined options stays whole.
-      metadata: { answers: [["Lint", "Test"], [], ["release, then main"]] },
+      // Options split from a written answer, and a label can hold the separator.
+      metadata: { answers: [["Lint", "Test", "Also e2e"], ["Yes, deploy", "No"], []] },
     });
   });
 

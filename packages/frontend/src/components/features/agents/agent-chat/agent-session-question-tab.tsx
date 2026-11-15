@@ -1,9 +1,10 @@
-import { CheckCircle2, CheckSquare, Circle, MessageSquarePlus, Square } from "lucide-react";
+import { CheckSquare, MessageSquarePlus } from "lucide-react";
 import { useId, type HTMLAttributes, type ReactElement } from "react";
 import { Label } from "@/components/ui/label";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { QuestionOptionIcon } from "./agent-chat-question-option-icon";
 import type { AgentQuestionRequest } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   type AgentQuestionDraftEntry,
@@ -19,15 +20,6 @@ type QuestionTabProps = {
   onToggleFreeText: () => void;
   onChangeFreeText: (value: string) => void;
   panelProps?: HTMLAttributes<HTMLDivElement> | undefined;
-};
-
-/** The mark of an option: a box for a multiple choice option, a circle for another option. */
-export const renderOptionIcon = (multiple: boolean, selected: boolean): ReactElement => {
-  const className = selected ? "size-3.5 text-foreground" : "size-3.5 text-muted-foreground";
-  if (multiple) {
-    return selected ? <CheckSquare className={className} /> : <Square className={className} />;
-  }
-  return selected ? <CheckCircle2 className={className} /> : <Circle className={className} />;
 };
 
 export const QuestionTab = ({
@@ -84,7 +76,10 @@ export const QuestionTab = ({
               >
                 <div className="flex flex-1 items-start gap-1.5">
                   <span className="inline-flex size-4 shrink-0 items-center justify-center pt-0.5">
-                    {renderOptionIcon(Boolean(question.multiple), isSelected)}
+                    <QuestionOptionIcon
+                      multiple={Boolean(question.multiple)}
+                      selected={isSelected}
+                    />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-[12px] font-medium leading-4">{option.label}</span>

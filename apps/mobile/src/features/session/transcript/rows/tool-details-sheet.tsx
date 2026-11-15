@@ -1,21 +1,13 @@
 import { plural } from "@openducktor/frontend-core/lib/plural";
-import { ToolFileEdits, ToolOutput, ToolPartSessionProvider } from "./tool-details";
-import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/message-formatting";
+import { ToolFileEdits, ToolPartSessionProvider } from "./tool-details";
 import {
   buildQuestionDetailEntries,
-  formatToolInput,
   hasFileEditChanges,
-  NO_ANSWER_YET_LABEL,
-  type QuestionDetailEntry,
   readToolDetailAvailability,
   readToolDetailsHeading,
   readToolDetailsError,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
-import {
-  type QuestionToolDetail,
-  readQuestionAnswerChoices,
-} from "@openducktor/frontend-core/sessions/messages/question-tool-parser";
 import {
   countTextLines,
   isShellCommandCall,
@@ -31,13 +23,11 @@ import {
   TERMINAL_TONE_COLORS,
   terminalColorValue,
 } from "@openducktor/frontend-core/sessions/messages/terminal-text";
-import { getToolDuration } from "@openducktor/frontend-core/sessions/messages/tool-duration";
 import {
   getToolLifecyclePhase,
   type ToolLifecyclePhase,
 } from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
 import { useToolPartDetails } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
-import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { type ComponentRef, type ReactElement, type ReactNode, useMemo, useRef } from "react";
 import { ScrollView, View } from "react-native";
@@ -52,16 +42,21 @@ import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { messageTimeLabel, truncateForDisplay } from "../transcript-text";
-import { optionIcon } from "../../pending-input/question-option-icon";
-import { useDisclosure } from "./disclosure";
-import { CopyControl, DisclosureMarker, PreText, Reveal } from "./row-parts";
-import { ToolStatusIcon, ToolStatusLabel } from "./tool-status";
+import { CopyControl } from "./row-parts";
+import {
+  DetailsError,
+  type DetailsTiming,
+  StatusLine,
+  ToolCallInputOutput,
+} from "./tool-details-parts";
+import { QuestionToolDetails } from "./tool-question-details";
 
 /**
- * The desktop tool details panel, in a sheet over the transcript: the status, timing, and the
- * command and output of a shell command, or the input, output, and error of another call. The
- * sheet follows the live message, so a running command shows its output as the runtime sends it.
- * The sheet does not scroll its content: each part scrolls by itself, as on desktop.
+ * The desktop tool details panel, in a sheet over the transcript: the status and timing of a call,
+ * then the command and output of a shell command, the changes of a file edit, the questions and
+ * answers of a question tool, or the input, output, and error of another call. The sheet follows
+ * the live message, so a running command shows its output as the runtime sends it. The sheet does
+ * not scroll its content: each part scrolls by itself, as on desktop.
  */
 export function ToolDetailsSheetContent({
   message,
@@ -78,8 +73,6 @@ export function ToolDetailsSheetContent({
   );
 }
 
-type DetailsTiming = { messageTimestamp: string; timeLabel: string };
-
 /** The details of a call by its kind: a shell command, a file edit, a question, or another call. */
 function ShownToolDetails({ meta, ...timing }: { meta: ToolMeta } & DetailsTiming): ReactElement {
   const { workingDirectory } = useTranscriptRows();
@@ -87,7 +80,7 @@ function ShownToolDetails({ meta, ...timing }: { meta: ToolMeta } & DetailsTimin
   if (meta.toolType === "file_edit" && hasFileEditChanges(meta, workingDirectory)) {
     return <FileEditDetails meta={meta} {...timing} />;
   }
-  // A question tool whose questions the parser cannot read shows its input and output.
+  // Parsed questions show as cards. Other question calls show their input and output.
   const questions = buildQuestionDetailEntries(meta);
   if (questions.length > 0) {
     return <QuestionToolDetails meta={meta} questions={questions} {...timing} />;
@@ -144,56 +137,6 @@ function FullDetails({
       >
         <Text style={[styles.meta, styles.retry, { color: desktop.foreground }]}>Retry</Text>
       </Touchable>
-    </View>
-  );
-}
-
-/** The status, run time, clock time, and exit code of a call, on one line. */
-function StatusLine({
-  meta,
-  messageTimestamp,
-  timeLabel,
-  exitCode,
-  timeoutMs,
-  lineCount = 0,
-}: {
-  meta: ToolMeta;
-  exitCode: number | null;
-  timeoutMs: number | null;
-  lineCount?: number;
-} & DetailsTiming): ReactElement {
-  const { desktop } = useAppTheme();
-  const phase = getToolLifecyclePhase(meta);
-  const durationMs = getToolDuration(meta, messageTimestamp);
-  const facts = [
-    durationMs === null ? null : formatAgentDuration(durationMs),
-    timeLabel || null,
-    timeoutMs === null ? null : `Timeout ${formatAgentDuration(timeoutMs)}`,
-    lineCount > 0 ? plural(lineCount, "line") : null,
-  ].filter((fact) => fact !== null);
-  const failedExit = exitCode !== null && exitCode !== 0 ? exitCode : null;
-  return (
-    <View style={styles.statusLine}>
-      <ToolStatusIcon phase={phase} decorative />
-      <ToolStatusLabel phase={phase} style={styles.status} />
-      {failedExit === null ? null : (
-        <Text
-          style={[
-            styles.exitChip,
-            {
-              color: desktop.destructiveSurfaceForeground,
-              backgroundColor: desktop.destructiveSurface,
-            },
-          ]}
-        >
-          exit {failedExit}
-        </Text>
-      )}
-      {facts.map((fact) => (
-        <Text key={fact} style={[styles.meta, { color: desktop.mutedForeground }]}>
-          · {fact}
-        </Text>
-      ))}
     </View>
   );
 }
@@ -456,35 +399,6 @@ function FileEditDetails({
   );
 }
 
-/** The input and the output of a call, each in a block that the reader can copy. */
-function ToolCallInputOutput({ meta }: { meta: ToolMeta }): ReactElement {
-  const { desktop } = useAppTheme();
-  const { workingDirectory } = useTranscriptRows();
-  const { hasInput, hasOutput } = readToolDetailAvailability(meta);
-  const input = useMemo(
-    () => (meta.input && hasInput ? formatToolInput(meta.input, workingDirectory) : ""),
-    [meta.input, hasInput, workingDirectory],
-  );
-  return (
-    <>
-      {input ? (
-        <DetailsBlock label="Input" copyText={input}>
-          <PreText text={input} color={desktop.foreground} />
-        </DetailsBlock>
-      ) : null}
-      {hasOutput ? (
-        <DetailsBlock label="Output" copyText={meta.resultContent ? "" : (meta.output ?? "")}>
-          <ToolOutput
-            content={meta.resultContent}
-            output={() => formatRawJsonLikeText(meta.output ?? "")}
-            color={desktop.foreground}
-          />
-        </DetailsBlock>
-      ) : null}
-    </>
-  );
-}
-
 function ToolCallDetails({
   meta,
   messageTimestamp,
@@ -526,245 +440,6 @@ function ToolCallDetails({
   );
 }
 
-/**
- * The desktop `QuestionToolDetails`: the status and run facts of a question tool, its error, each
- * question with its options and answers, and its raw input and output, closed at first. The sheet
- * title names the tool that the runtime called.
- */
-function QuestionToolDetails({
-  meta,
-  questions,
-  messageTimestamp,
-  timeLabel,
-}: { meta: ToolMeta; questions: QuestionDetailEntry[] } & DetailsTiming): ReactElement {
-  const { desktop } = useAppTheme();
-  const raw = useDisclosure(false, `${meta.callId}:raw`);
-  const { hasInput, hasOutput } = readToolDetailAvailability(meta);
-  const error = readToolDetailsError(meta);
-  return (
-    <ScrollView style={styles.fillHeight} contentContainerStyle={styles.padded}>
-      <StatusLine
-        meta={meta}
-        messageTimestamp={messageTimestamp}
-        timeLabel={timeLabel}
-        exitCode={null}
-        timeoutMs={null}
-      />
-      {error ? <DetailsError error={error} /> : null}
-      {/* A question tool asks a few questions, so they render in the scroll view of the details. */}
-      {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
-      {questions.map(({ key, detail }, index) => (
-        <QuestionCard
-          key={key}
-          detail={detail}
-          position={questions.length > 1 ? `${index + 1} of ${questions.length}` : null}
-        />
-      ))}
-      {hasInput || hasOutput ? (
-        <View style={styles.block}>
-          <Touchable
-            feedback="opacity"
-            onPress={raw.toggle}
-            accessibilityRole="button"
-            accessibilityLabel="Raw input and output"
-            accessibilityState={{ expanded: raw.open }}
-            style={styles.sectionLabel}
-          >
-            <DisclosureMarker
-              open={raw.open}
-              animated={raw.pressed}
-              color={desktop.mutedForeground}
-              size={13}
-            />
-            <Text style={[styles.sectionTitle, { color: desktop.mutedForeground }]}>
-              Raw input and output
-            </Text>
-          </Touchable>
-          {raw.open ? (
-            <Reveal animate={raw.pressed} style={styles.rawBlocks}>
-              <ToolCallInputOutput meta={meta} />
-            </Reveal>
-          ) : null}
-        </View>
-      ) : null}
-    </ScrollView>
-  );
-}
-
-/** One question: its label, its prompt, its options with the chosen ones marked, and the written answers. */
-function QuestionCard({
-  detail,
-  position,
-}: {
-  detail: QuestionToolDetail;
-  position: string | null;
-}): ReactElement {
-  const { desktop } = useAppTheme();
-  const { selectedLabels, customAnswers } = readQuestionAnswerChoices(detail);
-  const isAnswered = detail.answers.length > 0;
-  const facts = [position, detail.header].filter((fact) => fact !== null);
-  return (
-    <View
-      accessibilityLabel={detail.header ?? detail.prompt}
-      style={[styles.questionCard, { borderColor: desktop.border }]}
-    >
-      {facts.length > 0 || detail.multiple ? (
-        <View style={styles.questionFacts}>
-          {facts.length > 0 ? (
-            <Text style={[styles.questionFact, { color: desktop.mutedForeground }]}>
-              {facts.join(" · ").toUpperCase()}
-            </Text>
-          ) : null}
-          {detail.multiple ? (
-            <Text
-              style={[
-                styles.multipleChip,
-                { color: desktop.mutedForeground, borderColor: desktop.border },
-              ]}
-            >
-              Multiple choice
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-      <Text selectable style={[styles.questionPrompt, { color: desktop.foreground }]}>
-        {detail.prompt}
-      </Text>
-      {detail.options.map((option) => {
-        const selected = selectedLabels.has(option.label);
-        return (
-          <View
-            key={option.label}
-            accessibilityLabel={selected ? `${option.label}, chosen` : option.label}
-            style={[
-              styles.option,
-              selected
-                ? { borderColor: desktop.mutedForeground, backgroundColor: desktop.secondary }
-                : { borderColor: desktop.border },
-            ]}
-          >
-            <Icon
-              name={optionIcon(detail.multiple, selected)}
-              size={14}
-              colorValue={selected ? desktop.foreground : desktop.mutedForeground}
-            />
-            <View style={styles.fill}>
-              <Text
-                selectable
-                style={[
-                  styles.optionLabel,
-                  {
-                    color: selected || !isAnswered ? desktop.foreground : desktop.mutedForeground,
-                  },
-                ]}
-              >
-                {option.label}
-              </Text>
-              {option.description ? (
-                <Text
-                  selectable
-                  style={[styles.optionDescription, { color: desktop.mutedForeground }]}
-                >
-                  {option.description}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        );
-      })}
-      {customAnswers.length > 0 ? (
-        <View style={styles.block}>
-          <Text style={[styles.optionDescription, { color: desktop.mutedForeground }]}>
-            {detail.options.length > 0 ? "Other answer" : "Answer"}
-          </Text>
-          {customAnswers.map((answer) => (
-            <Text
-              key={answer}
-              selectable
-              style={[
-                styles.customAnswer,
-                {
-                  color: desktop.foreground,
-                  borderColor: desktop.mutedForeground,
-                  backgroundColor: desktop.secondary,
-                },
-              ]}
-            >
-              {answer}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-      {isAnswered ? null : (
-        <Text style={[styles.meta, styles.noAnswer, { color: desktop.mutedForeground }]}>
-          {NO_ANSWER_YET_LABEL}
-        </Text>
-      )}
-    </View>
-  );
-}
-
-/** The error of a failed call, which the reader can copy. */
-function DetailsError({ error }: { error: string }): ReactElement {
-  const { desktop } = useAppTheme();
-  return (
-    <DetailsBlock label="Error" tone="error" copyText={error}>
-      <PreText text={formatRawJsonLikeText(error)} color={desktop.destructiveMuted} />
-    </DetailsBlock>
-  );
-}
-
-function DetailsBlock({
-  label,
-  tone = "default",
-  copyText,
-  children,
-}: {
-  label: string;
-  tone?: "default" | "error";
-  copyText: string;
-  children: ReactNode;
-}): ReactElement {
-  const { desktop } = useAppTheme();
-  const isError = tone === "error";
-  return (
-    <View style={styles.block}>
-      <View style={styles.sectionHeader}>
-        <Text
-          style={[
-            styles.sectionTitle,
-            styles.fill,
-            { color: isError ? desktop.destructiveMuted : desktop.foreground },
-          ]}
-        >
-          {label}
-        </Text>
-        {copyText ? (
-          <CopyControl
-            text={copyText}
-            what={label}
-            accessibilityLabel={`Copy ${label.toLowerCase()}`}
-            color={desktop.mutedForeground}
-          />
-        ) : null}
-      </View>
-      <View
-        style={[
-          styles.blockFrame,
-          isError
-            ? {
-                borderColor: desktop.destructiveBorder,
-                backgroundColor: desktop.destructiveSurface,
-              }
-            : { borderColor: desktop.border, backgroundColor: desktop.muted },
-        ]}
-      >
-        {children}
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create((theme) => ({
   fillHeight: { flex: 1 },
   padded: {
@@ -780,14 +455,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.space.md,
   },
   description: { ...sansWeight("regular"), fontSize: 13.5, lineHeight: 19 },
-  exitChip: {
-    ...monoWeight("regular"),
-    fontSize: 11.5,
-    lineHeight: 16,
-    paddingHorizontal: 6,
-    borderRadius: theme.radius.xs,
-    overflow: "hidden",
-  },
   // The command area takes at most part of the sheet, so the output keeps room.
   commandArea: { flexGrow: 0, maxHeight: "45%" },
   commandText: { ...monoWeight("regular"), fontSize: 12.5, lineHeight: 19 },
@@ -838,8 +505,6 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.layout.screenPadding,
   },
   retry: sansWeight("medium"),
-  statusLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 },
-  status: { ...sansWeight("medium"), fontSize: 12.5, lineHeight: 18 },
   meta: { ...sansWeight("regular"), fontSize: 12.5, lineHeight: 18 },
   mono: { ...monoWeight("regular"), fontSize: 12.5, lineHeight: 19 },
   small: { fontSize: 11.5, lineHeight: 16 },
@@ -847,52 +512,4 @@ const styles = StyleSheet.create((theme) => ({
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: theme.space.sm },
   sectionTitle: { ...sansWeight("medium"), fontSize: 13, lineHeight: 18 },
   block: { gap: 6 },
-  // The input and output keep the gap of the blocks of the details.
-  rawBlocks: { gap: theme.space.md },
-  questionCard: {
-    gap: theme.space.sm,
-    borderWidth: 1,
-    borderRadius: theme.radius.sm,
-    padding: theme.space.md,
-  },
-  questionFacts: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
-  questionFact: { ...sansWeight("semibold"), fontSize: 11.5, lineHeight: 16, letterSpacing: 0.4 },
-  multipleChip: {
-    ...sansWeight("medium"),
-    fontSize: 11.5,
-    lineHeight: 16,
-    paddingHorizontal: 6,
-    borderWidth: 1,
-    borderRadius: theme.radius.pill,
-    overflow: "hidden",
-  },
-  questionPrompt: { ...sansWeight("medium"), fontSize: 14, lineHeight: 20 },
-  option: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: theme.space.sm,
-    borderWidth: 1,
-    borderRadius: theme.radius.xs,
-    paddingHorizontal: theme.space.md,
-    paddingVertical: 6,
-  },
-  optionLabel: { ...sansWeight("medium"), fontSize: 13, lineHeight: 18 },
-  optionDescription: { ...sansWeight("regular"), fontSize: 12, lineHeight: 16 },
-  customAnswer: {
-    ...sansWeight("regular"),
-    fontSize: 13,
-    lineHeight: 18,
-    borderWidth: 1,
-    borderRadius: theme.radius.xs,
-    paddingHorizontal: theme.space.md,
-    paddingVertical: 6,
-    overflow: "hidden",
-  },
-  noAnswer: { fontStyle: "italic" },
-  blockFrame: {
-    borderWidth: 1,
-    borderRadius: theme.radius.sm,
-    paddingHorizontal: theme.space.md,
-    paddingVertical: theme.space.sm,
-  },
 }));

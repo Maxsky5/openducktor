@@ -121,7 +121,7 @@ const ToolCallDetailsBody = ({
         />
       );
     }
-    // A question tool whose questions the parser cannot read shows its input and output.
+    // Parsed questions show as cards. Other question calls show their input and output.
     const questions = buildQuestionDetailEntries(shownMeta);
     if (questions.length > 0) {
       return (

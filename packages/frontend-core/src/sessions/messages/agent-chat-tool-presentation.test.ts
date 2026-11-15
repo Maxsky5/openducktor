@@ -10,6 +10,7 @@ import {
   readToolFileEdits,
   readRegularToolTiming,
   readWorkflowToolCard,
+  readQuestionAnswerChoices,
   readQuestionAnswerEntries,
   readToolCallName,
   readToolDetailsHeading,
@@ -220,10 +221,38 @@ describe("tool presentation", () => {
     ]);
   });
 
-  test("keys repeated questions apart", () => {
-    expect(buildQuestionDetailEntries(meta({ tool: "question", toolType: "question" }))).toEqual(
-      [],
-    );
+  test("keeps the key of a question when its answer comes, and keys equal prompts apart", () => {
+    const question = (metadata: NonNullable<ToolMeta["metadata"]>) =>
+      meta({
+        tool: "question",
+        toolType: "question",
+        input: { questions: [{ question: "Deploy?" }, { question: "Deploy?" }] },
+        metadata,
+      });
+    const keys = (entries: ReturnType<typeof buildQuestionDetailEntries>) =>
+      entries.map(({ key }) => key);
+
+    const before = keys(buildQuestionDetailEntries(question({})));
+    const after = keys(buildQuestionDetailEntries(question({ answers: [["Yes"], ["No"]] })));
+
+    expect(after).toEqual(before);
+    expect(new Set(before).size).toBe(2);
+  });
+
+  test("splits the answers of a question into chosen options and written answers", () => {
+    const choices = readQuestionAnswerChoices({
+      prompt: "Which checks?",
+      header: null,
+      options: [
+        { label: "Lint", description: null },
+        { label: "Test", description: null },
+      ],
+      multiple: true,
+      answers: ["Lint", "Also run e2e, please"],
+    });
+
+    expect([...choices.selectedLabels]).toEqual(["Lint"]);
+    expect(choices.customAnswers.map(({ value }) => value)).toEqual(["Also run e2e, please"]);
   });
 
   test("builds the Computer Use summary", () => {
@@ -255,10 +284,9 @@ describe("readToolCallName", () => {
     expect(readToolCallName(meta({ tool: "Read", toolType: "read" }), "Read")).toBe("Read");
   });
 
-  test("names the question tool of each runtime Question", () => {
-    for (const tool of ["AskUserQuestion", "request_user_input", "question"]) {
-      expect(readToolCallName(meta({ tool, toolType: "question" }), tool)).toBe("Question");
-    }
+  test("names a question tool Question", () => {
+    const question = meta({ tool: "AskUserQuestion", toolType: "question" });
+    expect(readToolCallName(question, "AskUserQuestion")).toBe("Question");
   });
 });
 

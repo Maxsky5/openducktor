@@ -246,18 +246,18 @@ export const QuestionAnswers = memo(function QuestionAnswers({
   if (entries.length === 0) return null;
   const showsLabels = entries.length > 1;
   return (
-    <View accessibilityLabel="Answers" style={styles.answers}>
+    <View style={styles.answers}>
       {entries.map(({ key, detail }) => {
         const answer = detail.answers.join(", ");
         return (
           <View key={key} style={styles.answerLine}>
             <Icon name="corner-down-right" size={12} colorValue={theme.desktop.mutedForeground} />
             {showsLabels ? (
-              <Text numberOfLines={1} style={styles.answerLabel}>
+              <Text selectable numberOfLines={1} style={styles.answerLabel}>
                 {detail.header ?? detail.prompt}
               </Text>
             ) : null}
-            <Text numberOfLines={1} style={answer ? styles.answer : styles.noAnswer}>
+            <Text selectable numberOfLines={1} style={answer ? styles.answer : styles.noAnswer}>
               {answer || NO_ANSWER_YET_LABEL}
             </Text>
           </View>

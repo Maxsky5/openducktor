@@ -212,24 +212,3 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     answers: entry.answers.length > 0 ? entry.answers : (answerGroups[index] ?? []),
   }));
 };
-
-/** The options that the answers of a question chose, and each answer that the user wrote once. */
-export type QuestionAnswerChoices = {
-  selectedLabels: ReadonlySet<string>;
-  customAnswers: string[];
-};
-
-/** Splits the answers of a question into chosen options and written answers. */
-export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionAnswerChoices => {
-  const labels = new Set(detail.options.map((option) => option.label));
-  const selectedLabels = new Set<string>();
-  const customAnswers = new Set<string>();
-  for (const answer of detail.answers) {
-    if (labels.has(answer)) {
-      selectedLabels.add(answer);
-    } else {
-      customAnswers.add(answer);
-    }
-  }
-  return { selectedLabels, customAnswers: [...customAnswers] };
-};

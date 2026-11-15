@@ -387,18 +387,12 @@ describe("AgentChatMessageCard tool presentation", () => {
     return new DOMParser().parseFromString(html, "text/html");
   };
 
-  test("shows a question tool as Question with its prompt, and its answer under the line", () => {
-    const questions = [{ question: "Which webhook URLs?", header: "Webhooks" }];
+  test("shows the answer of one question alone under the line of a question tool", () => {
     const document = renderQuestionTool({
-      input: { questions },
-      preview: JSON.stringify({ questions }),
+      input: { questions: [{ question: "Which webhook URLs?", header: "Webhooks" }] },
       metadata: { answers: [["Incoming webhooks"]] },
     });
 
-    expect(document.querySelector('[data-slot="tool-name"]')?.textContent).toBe("Question");
-    expect(document.querySelector('[data-slot="tool-summary"]')?.textContent).toBe(
-      "Which webhook URLs?",
-    );
     const answers = document.querySelectorAll('[data-slot="question-answers"] li');
     expect([...answers].map((answer) => answer.textContent)).toEqual(["Incoming webhooks"]);
     expect(document.body.textContent).not.toContain("Questions and answers");
@@ -416,8 +410,6 @@ describe("AgentChatMessageCard tool presentation", () => {
       output: JSON.stringify({ answers: { q1: { answers: ["main"] }, q2: { answers: [] } } }),
     });
 
-    expect(document.querySelector('[data-slot="tool-name"]')?.textContent).toBe("Question");
-    expect(document.querySelector('[data-slot="tool-summary"]')?.textContent).toBe("2 questions");
     const answers = document.querySelectorAll('[data-slot="question-answers"] li');
     expect([...answers].map((answer) => answer.textContent)).toEqual([
       "Branchmain",

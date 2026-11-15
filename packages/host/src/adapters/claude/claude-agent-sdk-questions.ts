@@ -13,7 +13,7 @@ import {
   type ClaudeProtocolObject,
   type ClaudeProtocolValue,
 } from "./claude-agent-sdk-ingress-schemas";
-import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
+import type { ClaudeSessionContext, ClaudeToolInput } from "./claude-agent-sdk-types";
 
 const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 export const CLAUDE_ASK_USER_QUESTION_DIALOG_KINDS = [
@@ -142,23 +142,52 @@ const answerString = (answers: readonly string[]): string =>
     .join(ANSWER_SEPARATOR);
 
 /**
- * The answers of a Claude AskUserQuestion result as one group for each question, in question
- * order. Claude keys each answer by the text of its question and joins its options as
- * `answerString` does, so an answer whose parts are all option labels splits into them. Null when
- * the input has another shape.
+ * Splits an answer that `answerString` joined back into its parts. It reads the answer from the
+ * left and takes the longest option label at each place, so a label can hold the separator. The
+ * text from the first place that starts with no label is one written answer.
  */
-export const readClaudeAskUserQuestionAnswers = (
-  toolInput: ClaudeProtocolObject,
-  answers: ClaudeProtocolObject,
+const splitClaudeAnswer = (answer: string, labels: readonly string[]): string[] => {
+  const longestFirst = [...labels].sort((first, second) => second.length - first.length);
+  const parts: string[] = [];
+  let rest = answer;
+  while (rest.length > 0) {
+    const label = longestFirst.find(
+      (candidate) => rest === candidate || rest.startsWith(`${candidate}${ANSWER_SEPARATOR}`),
+    );
+    if (!label) {
+      parts.push(rest);
+      break;
+    }
+    parts.push(label);
+    rest = rest.slice(label.length + ANSWER_SEPARATOR.length);
+  }
+  return parts;
+};
+
+/**
+ * The answers of a Claude AskUserQuestion result as one group for each question, in question
+ * order. Claude gives them only in its structured result, keyed by the text of each question.
+ * Null for another tool, or for an input or a result of another shape.
+ */
+export const readClaudeAskUserQuestionResultAnswers = (
+  tool: string,
+  input: ClaudeToolInput | undefined,
+  toolUseResult: ClaudeProtocolValue | undefined,
 ): string[][] | null => {
-  const payload = parseClaudeAskUserQuestionInput(toolInput);
+  if (!isClaudeAskUserQuestionTool(tool) || !isClaudeProtocolObject(input)) return null;
+  if (!isClaudeProtocolObject(toolUseResult)) return null;
+  const { answers } = toolUseResult;
+  if (!isClaudeProtocolObject(answers)) return null;
+  const payload = parseClaudeAskUserQuestionInput(input);
   if (!payload) return null;
   return payload.sdkQuestions.map(({ question, options }) => {
     const answer = readString(answers[question]);
-    if (!answer) return [];
-    const labels = new Set(options.map((option) => option.label));
-    const parts = answer.split(ANSWER_SEPARATOR);
-    return parts.every((part) => labels.has(part)) ? parts : [answer];
+    return answer
+      ? splitClaudeAnswer(
+          answer,
+          options.map((option) => option.label),
+        )
+      : [];
   });
 };
 

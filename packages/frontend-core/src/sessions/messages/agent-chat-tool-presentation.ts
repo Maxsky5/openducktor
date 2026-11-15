@@ -330,12 +330,9 @@ export type QuestionDetailEntry = { key: string; detail: QuestionToolDetail };
 /** The questions and answers of a question tool. Empty for another tool. */
 export const buildQuestionDetailEntries = (meta: ToolMeta): QuestionDetailEntry[] => {
   // A question keeps its key when its answer comes, so its row does not mount again.
-  const countsByPrompt = new Map<string, number>();
-  return questionToolDetails(meta).map((detail) => {
-    const count = (countsByPrompt.get(detail.prompt) ?? 0) + 1;
-    countsByPrompt.set(detail.prompt, count);
-    return { key: `${detail.prompt}:${count}`, detail };
-  });
+  return buildContentEntries(questionToolDetails(meta), (detail) => detail.prompt).map(
+    ({ key, value }) => ({ key, detail: value }),
+  );
 };
 
 /**
@@ -347,6 +344,28 @@ export const readQuestionAnswerEntries = (meta: ToolMeta): QuestionDetailEntry[]
   const phase = getToolLifecyclePhase(meta);
   const stopped = phase === "failed" || phase === "cancelled";
   return stopped && entries.every(({ detail }) => detail.answers.length === 0) ? [] : entries;
+};
+
+/** The options that the answers of a question chose, and the answers that the user wrote. */
+export type QuestionAnswerChoices = {
+  selectedLabels: ReadonlySet<string>;
+  /** Each written answer, with a key that keeps equal answers apart. */
+  customAnswers: Array<{ key: string; value: string }>;
+};
+
+/** Splits the answers of a question into chosen options and written answers. */
+export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionAnswerChoices => {
+  const labels = new Set(detail.options.map((option) => option.label));
+  const selectedLabels = new Set<string>();
+  const customAnswers: string[] = [];
+  for (const answer of detail.answers) {
+    if (labels.has(answer)) {
+      selectedLabels.add(answer);
+    } else {
+      customAnswers.push(answer);
+    }
+  }
+  return { selectedLabels, customAnswers: buildContentEntries(customAnswers, (answer) => answer) };
 };
 
 export const NO_ANSWER_YET_LABEL = "No answer yet";

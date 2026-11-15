@@ -1,14 +1,12 @@
 import {
   NO_ANSWER_YET_LABEL,
   type QuestionDetailEntry,
+  readQuestionAnswerChoices,
   readToolDetailAvailability,
   readToolDetailsError,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
-import {
-  type QuestionToolDetail,
-  readQuestionAnswerChoices,
-} from "@openducktor/frontend-core/sessions/messages/question-tool-parser";
+import type { QuestionToolDetail } from "@openducktor/frontend-core/sessions/messages/question-tool-parser";
 import { ChevronRight } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -20,8 +18,8 @@ import {
   ToolCallInputOutput,
   type ToolDetailsTiming,
 } from "./agent-chat-tool-details-content";
+import { QuestionOptionIcon } from "./agent-chat-question-option-icon";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
-import { renderOptionIcon } from "./agent-session-question-tab";
 
 /**
  * One question: its label, its prompt, its options with the chosen ones marked, and the answers
@@ -74,7 +72,7 @@ const QuestionCard = ({
                 )}
               >
                 <span className="flex h-5 shrink-0 items-center">
-                  {renderOptionIcon(detail.multiple, selected)}
+                  <QuestionOptionIcon multiple={detail.multiple} selected={selected} />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-xs leading-5 font-medium break-words">
@@ -97,9 +95,9 @@ const QuestionCard = ({
           <p className="text-[11px] leading-4 font-medium text-muted-foreground">
             {detail.options.length > 0 ? "Other answer" : "Answer"}
           </p>
-          {customAnswers.map((answer) => (
+          {customAnswers.map(({ key, value: answer }) => (
             <AgentChatTranscriptProse
-              key={answer}
+              key={key}
               className="rounded-md border border-muted-foreground bg-secondary px-2.5 py-1.5 text-xs leading-5 text-foreground"
             >
               {answer}

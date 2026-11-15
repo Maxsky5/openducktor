@@ -4,11 +4,9 @@ import {
   type ClaudeTodoState,
   claudeTodoToolPresentation,
 } from "./claude-agent-sdk-todos";
-import { isClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
-import { readClaudeAskUserQuestionAnswers } from "./claude-agent-sdk-questions";
+import { readClaudeAskUserQuestionResultAnswers } from "./claude-agent-sdk-questions";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeDecodedToolResult, ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
-import { toolPartType } from "./claude-agent-sdk-utils";
 
 type CompletedToolPart = Extract<AgentStreamPart, { kind: "tool" }>;
 
@@ -25,23 +23,6 @@ type ProjectClaudeCompletedToolResultInput = {
   startedAtMs?: number;
   state: ClaudeTodoState;
   tool: string;
-};
-
-/**
- * Claude gives the answers of a question tool only in its structured result. The tool part keeps
- * them in its metadata as one group for each question, as OpenCode does.
- */
-const withClaudeQuestionAnswers = (
-  tool: string,
-  input: ClaudeDecodedToolUse["input"],
-  raw: ClaudeDecodedToolResult["raw"],
-  metadata: CompletedToolPart["metadata"],
-): CompletedToolPart["metadata"] => {
-  if (toolPartType(tool) !== "question" || !isClaudeProtocolObject(input)) return metadata;
-  const result = raw.toolUseResult;
-  if (!isClaudeProtocolObject(result) || !isClaudeProtocolObject(result.answers)) return metadata;
-  const answers = readClaudeAskUserQuestionAnswers(input, result.answers);
-  return answers ? { ...metadata, answers } : metadata;
 };
 
 export const projectClaudeCompletedToolResult = ({
@@ -76,7 +57,9 @@ export const projectClaudeCompletedToolResult = ({
   if (!todoPresentation && preview) {
     completedToolInput.preview = preview;
   }
-  const resolvedMetadata = withClaudeQuestionAnswers(tool, input, raw, metadata);
+  // The tool part keeps the answers of a question as OpenCode does: one group for each question.
+  const answers = readClaudeAskUserQuestionResultAnswers(tool, input, raw.toolUseResult);
+  const resolvedMetadata = answers ? { ...metadata, answers } : metadata;
   if (resolvedMetadata) {
     completedToolInput.metadata = resolvedMetadata;
   }
