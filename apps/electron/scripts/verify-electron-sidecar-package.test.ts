@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { runElectronEffect } from "../src/effect/electron-boundary";
@@ -27,6 +27,21 @@ const makeReleaseDirectory = async (): Promise<string> => {
 
 const REQUIRED_SIDECAR_IDS = ["openducktor-mcp"] as const;
 
+/**
+ * Commits the file system journal with an fsync. On Linux, the commit that follows the deletion
+ * of a compiled sidecar can take seconds, so this test waits for it instead of the next test file.
+ */
+const commitDeletions = async (): Promise<void> => {
+  const marker = join(tmpdir(), `openducktor-sidecar-commit-${process.pid}`);
+  const handle = await open(marker, "w");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+    await rm(marker, { force: true });
+  }
+};
+
 afterEach(async () => {
   await Promise.all(
     Array.from(releaseDirectories, (releaseDirectory) =>
@@ -34,6 +49,7 @@ afterEach(async () => {
     ),
   );
   releaseDirectories.clear();
+  await commitDeletions();
 });
 
 const writePackagedSidecar = async ({
