@@ -5,10 +5,13 @@ import type {
   ShortcutPreferences,
   ShortcutActionId,
 } from "@openducktor/contracts";
-import { Search, RotateCcw } from "lucide-react";
+import { Keyboard, LoaderCircle, RotateCcw, SearchX, Users } from "lucide-react";
 import { SettingsShortcutRow } from "./settings-shortcut-row";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Alert } from "@/components/ui/alert";
+import { Combobox } from "@/components/ui/combobox";
+import { Label } from "@/components/ui/label";
+import { ToolbarSearchField } from "@/components/ui/search-field";
 import { readDevicePlatform } from "@/lib/device-platform";
 import { getShellBridge } from "@/lib/shell-bridge";
 import {
@@ -24,6 +27,7 @@ export function SettingsKeyboardShortcutsSection() {
   const { query, save, updatesError } = useShortcutPreferences();
   const catalogue = useShortcutCatalogue(query.data);
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
   const [proposed, setProposed] = useState<ProposedShortcut | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
@@ -64,7 +68,9 @@ export function SettingsKeyboardShortcutsSection() {
   const validationError = query.data
     ? validateShortcuts(query.data, platform, electron, catalogue)
     : null;
+  const loadError = query.error?.message ?? validationError;
   const disabled = save.isPending || preparing || Boolean(recording);
+  const browsingDisabled = disabled || proposed !== null;
   const saveProposed = () => {
     if (proposed && query.data)
       void persist({
@@ -72,42 +78,55 @@ export function SettingsKeyboardShortcutsSection() {
         overrides: { ...query.data.overrides, [proposed.id]: proposed.combination },
       });
   };
+  const categories = useMemo(
+    () => [
+      { value: "", label: "All categories" },
+      ...Array.from(new Set(catalogue.map((entry) => entry.group)), (group) => ({
+        value: group,
+        label: group,
+      })),
+    ],
+    [catalogue],
+  );
   const groups = useMemo(() => {
     const term = search.trim().toLowerCase();
     const result = new Map<string, (typeof catalogue)[number][]>();
     for (const entry of catalogue) {
+      if (category && entry.group !== category) continue;
       if (term && !`${entry.label} ${entry.group}`.toLowerCase().includes(term)) continue;
       const entries = result.get(entry.group) ?? [];
       entries.push(entry);
       result.set(entry.group, entries);
     }
     return result;
-  }, [catalogue, search]);
+  }, [catalogue, category, search]);
   return (
     <section
-      className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6"
+      className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-4 sm:p-6 lg:p-8"
       aria-label="Keyboard shortcuts"
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">Keyboard shortcuts</h2>
-          <p className="text-sm text-muted-foreground">
-            Select a shortcut, then press the keys you want to use.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Shared with clients connected to this host.
-          </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card">
+            <Keyboard className="size-5 text-muted-foreground" aria-hidden="true" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-lg font-semibold tracking-tight">Keyboard shortcuts</h2>
+            <p className="text-sm leading-5 text-muted-foreground">
+              Choose a command, then record a key combination.
+            </p>
+          </div>
         </div>
         <Button
           variant="outline"
           size="sm"
-          disabled={disabled}
+          disabled={browsingDisabled}
           onClick={(event) => {
             opener.current = event.currentTarget;
             setResetOpen(true);
           }}
         >
-          <RotateCcw className="size-3.5" aria-hidden="true" /> Reset all shortcuts
+          <RotateCcw aria-hidden="true" /> Reset all shortcuts
         </Button>
       </div>
       {query.isPending && <p role="status">Loading shortcuts…</p>}
@@ -116,12 +135,9 @@ export function SettingsKeyboardShortcutsSection() {
           {updatesError}
         </p>
       )}
-      {(query.error || validationError) && (
-        <div
-          role="alert"
-          className="flex items-center justify-between gap-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm"
-        >
-          <p>{query.error?.message ?? validationError}</p>
+      {loadError !== null && (
+        <Alert variant="destructive" className="items-center justify-between">
+          <p>{loadError}</p>
           <Button
             variant="outline"
             size="sm"
@@ -130,20 +146,17 @@ export function SettingsKeyboardShortcutsSection() {
           >
             Retry
           </Button>
-        </div>
+        </Alert>
       )}
       {error && (
-        <div
-          role="alert"
-          className="flex items-center justify-between gap-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
-        >
+        <Alert variant="destructive" className="items-center justify-between">
           <span>{error}</span>
           {proposed && (
             <Button variant="outline" size="sm" disabled={disabled} onClick={saveProposed}>
               Retry save
             </Button>
           )}
-        </div>
+        </Alert>
       )}
       {resetOpen && (
         <div
@@ -165,38 +178,75 @@ export function SettingsKeyboardShortcutsSection() {
               Cancel
             </Button>
             <Button
+              variant="destructive"
               size="sm"
               disabled={disabled}
               onClick={() => void persist({ version: 1, overrides: {} })}
             >
+              {save.isPending ? (
+                <LoaderCircle aria-hidden="true" className="animate-spin" />
+              ) : (
+                <RotateCcw aria-hidden="true" />
+              )}
               {save.isPending ? "Resetting…" : "Confirm reset"}
             </Button>
           </div>
         </div>
       )}
-      <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <Input
-          aria-label="Search commands"
-          placeholder="Search shortcuts…"
-          className="pl-9"
-          value={search}
-          disabled={disabled}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+      <div className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem]">
+          <div className="min-w-0">
+            <ToolbarSearchField
+              id="shortcut-search"
+              label="Search commands"
+              placeholder="Search shortcuts…"
+              size="lg"
+              value={search}
+              disabled={browsingDisabled}
+              onValueChange={setSearch}
+            />
+          </div>
+          <div>
+            <Label id="shortcut-category-label" className="sr-only">
+              Shortcut category
+            </Label>
+            <Combobox
+              value={category}
+              options={categories}
+              onValueChange={setCategory}
+              searchable={false}
+              disabled={browsingDisabled}
+              triggerAriaLabelledBy="shortcut-category-label"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end text-xs leading-5 text-muted-foreground">
+          <p className="flex items-center gap-1.5">
+            <Users className="size-3.5" aria-hidden="true" />
+            Shared with clients on this host
+          </p>
+        </div>
       </div>
       {groups.size === 0 && (
-        <p role="status" className="py-8 text-center text-sm text-muted-foreground">
-          No shortcuts match “{search}”.
-        </p>
+        <div
+          role="status"
+          className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-12 text-center"
+        >
+          <SearchX className="mb-1 size-6 text-muted-foreground" aria-hidden="true" />
+          <p className="text-sm font-medium">No shortcuts found</p>
+          <p className="text-xs text-muted-foreground">Try another search or category.</p>
+        </div>
       )}
       {Array.from(groups, ([group, entries]) => (
-        <section key={group} aria-label={group} className="space-y-2">
-          <h3 className="px-1 text-xs font-semibold text-muted-foreground">{group}</h3>
-          <div className="overflow-hidden rounded-lg border border-border divide-y divide-border">
+        <section key={group} aria-label={group} className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-sm font-semibold">{group}</h3>
+              <span className="text-xs tabular-nums text-muted-foreground">{entries.length}</span>
+            </div>
+            <span className="pr-10 text-xs text-muted-foreground">Shortcut</span>
+          </div>
+          <div className="rounded-xl border border-border bg-card [&>div+div]:border-t [&>div+div]:border-border/60 [&>div:first-child]:rounded-t-xl [&>div:last-child]:rounded-b-xl">
             {entries.map((entry) => (
               <SettingsShortcutRow
                 key={entry.id}

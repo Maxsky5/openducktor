@@ -44,6 +44,12 @@ test("records, validates, saves, clears and resets shortcuts through Settings", 
       target: { value: "Toggle sidebar" },
     });
     await record("F8", "F8", true);
+    expect(screen.getByRole("textbox", { name: "Search commands" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(screen.getByRole("button", { name: "Shortcut category" }).hasAttribute("disabled")).toBe(
+      true,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("alert").textContent).toContain("Open diagnostics");
     expect(write).toHaveBeenCalledTimes(0);
@@ -82,6 +88,38 @@ test("records, validates, saves, clears and resets shortcuts through Settings", 
   } finally {
     view.unmount();
     release();
+  }
+});
+
+test("combines category and search filters without changing saved shortcuts", async () => {
+  const write = mock(async (preferences: ShortcutPreferences) => preferences);
+  const connection = createTestClientConnection({
+    client: { workspaceSaveKeyboardShortcuts: write },
+  });
+  connection.queryClient.setQueryData(["keyboard-shortcuts"], { version: 1, overrides: {} });
+  const view = render(
+    <ShortcutTestProviders connection={connection}>
+      <SettingsKeyboardShortcutsSection />
+    </ShortcutTestProviders>,
+  );
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Shortcut category" }));
+    fireEvent.click(screen.getByRole("option", { name: "Workspace" }));
+    expect(screen.queryByRole("button", { name: "Record shortcut for Toggle sidebar" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Record shortcut for New task" })).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search commands" }), {
+      target: { value: "Toggle sidebar" },
+    });
+    expect(screen.getByRole("status").textContent).toContain("No shortcuts found");
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(screen.getByRole("button", { name: "Record shortcut for New task" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Record shortcut for Toggle sidebar" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Shortcut category" }));
+    fireEvent.click(screen.getByRole("option", { name: "All categories" }));
+    expect(screen.getByRole("button", { name: "Record shortcut for Toggle sidebar" })).toBeTruthy();
+    expect(write).not.toHaveBeenCalled();
+  } finally {
+    view.unmount();
   }
 });
 

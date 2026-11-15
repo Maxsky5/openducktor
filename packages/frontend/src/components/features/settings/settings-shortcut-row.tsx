@@ -1,13 +1,15 @@
 import { useRef } from "react";
-import { X } from "lucide-react";
+import { Keyboard, LoaderCircle, Pencil, Plus, Save, X } from "lucide-react";
 import type { AppPlatform, ShortcutCombination } from "@openducktor/contracts";
 import { shortcutLabel } from "@openducktor/frontend-core/shortcuts/key-matching";
 import type { ShortcutCommandDefinition } from "@/features/shortcuts/catalogue";
-import { KeyCaps } from "@/features/command-palette/command-palette-key-caps";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { cn } from "@/lib/utils";
 
 const CONTEXT_LABELS = {
-  app: "Application",
+  app: undefined,
   workspace: "Current workspace",
   task: "Selected task",
   chat: "Selected session",
@@ -25,9 +27,43 @@ function ShortcutKeys({
   platform: AppPlatform;
 }) {
   return combination ? (
-    <KeyCaps keys={shortcutLabel(combination, platform).split(/\+(?!$)/)} />
+    <KbdGroup className="flex-wrap justify-end gap-1">
+      {shortcutLabel(combination, platform)
+        .split(/\+(?!$)/)
+        .map((key) => (
+          <Kbd
+            key={key}
+            className="h-7 min-w-7 rounded-md border-b-2 bg-background px-2 text-xs text-foreground shadow-xs"
+          >
+            {key}
+          </Kbd>
+        ))}
+    </KbdGroup>
   ) : (
     <span className="text-xs text-muted-foreground">Unassigned</span>
+  );
+}
+
+function ShortcutAssignment({
+  current,
+  platform,
+}: {
+  current: ShortcutCombination | null | undefined;
+  platform: AppPlatform;
+}) {
+  if (current === undefined)
+    return <span className="text-xs text-muted-foreground">Unavailable</span>;
+  return (
+    <>
+      {!current && <Plus aria-hidden="true" className="text-muted-foreground" />}
+      <ShortcutKeys combination={current} platform={platform} />
+      {current && (
+        <Pencil
+          aria-hidden="true"
+          className="text-muted-foreground opacity-0 group-hover/shortcut:opacity-100 group-focus-within/shortcut:opacity-100"
+        />
+      )}
+    </>
   );
 }
 
@@ -64,59 +100,69 @@ export function SettingsShortcutRow({
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const editing = recording || proposed !== null;
+  const contextLabel = entry.unavailableReason ?? CONTEXT_LABELS[entry.context];
   return (
-    <div className={editing ? "bg-accent/40" : ""}>
-      <div className="flex min-h-12 items-center gap-3 px-4 py-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{entry.label}</p>
-          {entry.context !== "app" && (
-            <p className="text-xs text-muted-foreground">
-              {entry.unavailableReason ?? CONTEXT_LABELS[entry.context]}
-            </p>
+    <div className={cn("group/shortcut", editing ? "bg-accent/50" : "hover:bg-accent/30")}>
+      <div className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:flex-nowrap">
+        <div className="min-w-0 flex-1 basis-40 sm:basis-auto">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-sm font-medium leading-5">{entry.label}</p>
+            {customized && (
+              <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                Custom
+              </Badge>
+            )}
+          </div>
+          {contextLabel && (
+            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{contextLabel}</p>
           )}
         </div>
-        {customized && <span className="text-xs text-muted-foreground">Custom</span>}
-        <Button
-          ref={trigger}
-          variant="ghost"
-          size="sm"
-          className="min-w-24 justify-end px-2 hover:bg-accent"
-          aria-label={`Record shortcut for ${entry.label}`}
-          title={`Default: ${shortcutLabel(defaultKeys, platform)}. ${entry.allowInput ? "Also available while typing." : "Unavailable while typing or using a terminal."}`}
-          disabled={disabled}
-          onClick={(event) => onRecord(event.currentTarget)}
-        >
-          {current === undefined ? (
-            <span className="text-xs text-muted-foreground">Unavailable</span>
+        <div className="flex max-w-full shrink-0 items-center gap-1">
+          <Button
+            ref={trigger}
+            variant="ghost"
+            size="sm"
+            className="h-auto min-h-9 min-w-0 shrink gap-2 rounded-lg px-2 py-1"
+            aria-label={`Record shortcut for ${entry.label}`}
+            title={`Default: ${shortcutLabel(defaultKeys, platform)}. ${entry.allowInput ? "Also available while typing." : "Unavailable while typing or using a terminal."}`}
+            disabled={disabled}
+            onClick={(event) => onRecord(event.currentTarget)}
+          >
+            <ShortcutAssignment current={current} platform={platform} />
+          </Button>
+          {current ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground hover:text-foreground [@media(hover:hover)]:opacity-0 group-hover/shortcut:opacity-100 group-focus-within/shortcut:opacity-100"
+              aria-label={`Clear shortcut for ${entry.label}`}
+              title="Clear shortcut"
+              disabled={disabled}
+              onClick={() => {
+                if (trigger.current) onClear(trigger.current);
+              }}
+            >
+              <X aria-hidden="true" />
+            </Button>
           ) : (
-            <ShortcutKeys combination={current} platform={platform} />
+            <span className="size-8" aria-hidden="true" />
           )}
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
-          aria-label={`Clear shortcut for ${entry.label}`}
-          title="Clear shortcut"
-          disabled={disabled || !current}
-          onClick={() => {
-            if (trigger.current) onClear(trigger.current);
-          }}
-        >
-          <X className="size-3.5" aria-hidden="true" />
-        </Button>
+        </div>
       </div>
       {editing && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-4 py-3">
-          <div className="space-y-1.5 text-xs text-muted-foreground">
+        <div className="mx-4 mb-4 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-background p-4">
+          <div className="flex min-w-0 flex-col gap-2 text-xs text-muted-foreground">
             {recording ? (
-              <p role="status">
-                {preparing ? "Preparing recorder…" : "Press your shortcut. Escape cancels."}
-              </p>
+              <div className="flex items-center gap-2">
+                <Keyboard className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                <p role="status" className="text-sm font-medium text-foreground">
+                  {preparing ? "Preparing recorder…" : "Press your shortcut. Escape cancels."}
+                </p>
+              </div>
             ) : (
               proposed && (
-                <div className="flex items-center gap-2 text-foreground">
-                  <span>New shortcut</span>
+                <div className="flex flex-wrap items-center gap-3 text-foreground">
+                  <span className="text-sm font-medium">New shortcut</span>
                   <ShortcutKeys combination={proposed.combination} platform={platform} />
                 </div>
               )
@@ -132,6 +178,11 @@ export function SettingsShortcutRow({
             </Button>
             {proposed && (
               <Button size="sm" disabled={disabled} onClick={onSave}>
+                {saving ? (
+                  <LoaderCircle aria-hidden="true" className="animate-spin" />
+                ) : (
+                  <Save aria-hidden="true" />
+                )}
                 {saving ? "Saving…" : "Save"}
               </Button>
             )}
