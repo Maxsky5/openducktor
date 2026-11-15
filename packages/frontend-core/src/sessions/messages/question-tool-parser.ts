@@ -225,7 +225,11 @@ export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionA
   const selectedLabels = new Set<string>();
   const customAnswers = new Set<string>();
   for (const answer of detail.answers) {
-    (labels.has(answer) ? selectedLabels : customAnswers).add(answer);
+    if (labels.has(answer)) {
+      selectedLabels.add(answer);
+    } else {
+      customAnswers.add(answer);
+    }
   }
   return { selectedLabels, customAnswers: [...customAnswers] };
 };
