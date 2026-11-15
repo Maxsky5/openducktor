@@ -37,6 +37,7 @@ import { SettingsSidebar } from "./settings-modal-sidebars";
 import { SettingsModalOpenButton, SettingsModalTrigger } from "./settings-modal-trigger";
 import type { SettingsWorkspaceSelectionPolicy } from "./settings-workspace-selection";
 import { useSettingsModalController } from "./use-settings-modal-controller";
+import { type ShortcutDraft, ShortcutDraftContext, useShortcutDraft } from "./use-shortcut-draft";
 
 import {
   SettingsDialogHandoffContext,
@@ -214,6 +215,8 @@ function SettingsDialog({
     workspaceSelectionPolicy,
     onRuntimeAvailabilityError: handleRuntimeAvailabilityError,
   });
+  // Keyboard shortcuts have their own host API, so their draft saves after the settings snapshot.
+  const shortcutDraft = useShortcutDraft();
   const isPreparing = open && controller.isLoadingSettings && controller.snapshotDraft === null;
   const isInteractionDisabled = isSettingsInteractionDisabled(controller);
   const { runtimeReview } = controller;
@@ -254,13 +257,7 @@ function SettingsDialog({
     onOpenChange(false, navigation);
   }, [navigation, onOpenChange]);
 
-  const handleSave = (): void => {
-    void controller.submit().then((saved) => {
-      if (saved) {
-        close();
-      }
-    });
-  };
+  const form = settingsForm(controller, shortcutDraft, close);
 
   const { isSaving, retainDraft } = controller;
   const dismiss = useCallback((): void => {
@@ -321,25 +318,27 @@ function SettingsDialog({
             />
             <div className="min-h-0 min-w-0 overflow-y-auto">
               <SettingsDialogHandoffContext.Provider value={handoff}>
-                <SettingsModalContent
-                  section={navigation.section}
-                  repositorySection={navigation.repositorySection}
-                  globalPromptView={navigation.globalPromptView}
-                  repoPromptView={navigation.repoPromptView}
-                  selectedReusablePromptId={navigation.selectedReusablePromptId}
-                  selectedCustomAgentRoleId={navigation.selectedCustomAgentRoleId}
-                  onSelectedCustomAgentRoleIdChange={(selectedCustomAgentRoleId) =>
-                    setNavigation((current) => ({ ...current, selectedCustomAgentRoleId }))
-                  }
-                  isInteractionDisabled={isInteractionDisabled}
-                  controller={controller}
-                  onRepositorySectionChange={handleRepositorySectionChange}
-                  onGlobalPromptViewChange={handleGlobalPromptViewChange}
-                  onRepoPromptViewChange={handleRepoPromptViewChange}
-                  onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
-                  contentFocusRequest={focusRequest}
-                  onContentFocusRequestHandled={clearFocusRequest}
-                />
+                <ShortcutDraftContext value={shortcutDraft}>
+                  <SettingsModalContent
+                    section={navigation.section}
+                    repositorySection={navigation.repositorySection}
+                    globalPromptView={navigation.globalPromptView}
+                    repoPromptView={navigation.repoPromptView}
+                    selectedReusablePromptId={navigation.selectedReusablePromptId}
+                    selectedCustomAgentRoleId={navigation.selectedCustomAgentRoleId}
+                    onSelectedCustomAgentRoleIdChange={(selectedCustomAgentRoleId) =>
+                      setNavigation((current) => ({ ...current, selectedCustomAgentRoleId }))
+                    }
+                    isInteractionDisabled={isInteractionDisabled}
+                    controller={controller}
+                    onRepositorySectionChange={handleRepositorySectionChange}
+                    onGlobalPromptViewChange={handleGlobalPromptViewChange}
+                    onRepoPromptViewChange={handleRepoPromptViewChange}
+                    onSelectedReusablePromptIdChange={handleSelectedReusablePromptIdChange}
+                    contentFocusRequest={focusRequest}
+                    onContentFocusRequestHandled={clearFocusRequest}
+                  />
+                </ShortcutDraftContext>
               </SettingsDialogHandoffContext.Provider>
             </div>
           </div>
@@ -347,7 +346,7 @@ function SettingsDialog({
 
         <SettingsModalFooter
           saveState={{
-            isSaving: controller.isSaving,
+            isSaving: form.isSaving,
             isLoadingSettings: controller.isLoadingSettings,
             hasSnapshotDraft: Boolean(controller.snapshotDraft),
             settingsError: controller.settingsError,
@@ -368,7 +367,7 @@ function SettingsDialog({
               controller.hasUnacknowledgedCodexDangerousSettings,
           }}
           errors={{
-            saveError: controller.saveError,
+            saveError: form.saveError,
             catalogError: controller.runtimeDefinitionsError,
             runtimeExecutablesError: controller.runtimeExecutablesError,
           }}
@@ -376,11 +375,8 @@ function SettingsDialog({
             section: navigation.section,
             repositorySection: navigation.repositorySection,
           }}
-          onCancel={() => {
-            controller.discardDraft();
-            close();
-          }}
-          onSave={handleSave}
+          onCancel={form.cancel}
+          onSave={form.save}
         />
       </DialogContent>
       <RuntimeImpactDialog
@@ -412,3 +408,34 @@ const focusActiveSection = (event: Event): void => {
   event.preventDefault();
   active.focus({ preventScroll: true });
 };
+
+/**
+ * Saves or discards the whole Settings form: the settings snapshot, then the keyboard shortcut
+ * draft, which has its own host API. The dialog closes only when both saved.
+ */
+function settingsForm(
+  controller: Pick<
+    ReturnType<typeof useSettingsModalController>,
+    "submit" | "discardDraft" | "isSaving" | "saveError"
+  >,
+  shortcuts: ShortcutDraft,
+  close: () => void,
+) {
+  return {
+    isSaving: controller.isSaving || shortcuts.saving,
+    saveError: controller.saveError ?? shortcuts.saveError,
+    save: () => {
+      void controller
+        .submit()
+        .then((saved) => saved && shortcuts.save())
+        .then((saved) => {
+          if (saved) close();
+        });
+    },
+    cancel: () => {
+      controller.discardDraft();
+      shortcuts.discard();
+      close();
+    },
+  };
+}

@@ -22,6 +22,7 @@ import {
   createTestHostConnection,
 } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
+import { ShortcutPreferencesProvider } from "@/features/shortcuts/shortcut-preferences-provider";
 import { gitQueryKeys } from "@openducktor/frontend-core/queries/git";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { ChecksStateContext, WorkspaceStateContext } from "@/state/app-state-contexts";
@@ -264,7 +265,10 @@ function mountCreation(
               >
                 <RuntimeDefinitionsContext value={definitions}>
                   <HostRuntimeStatusContext value={createHostRuntimeStatusContextValue()}>
-                    <Creation />
+                    {/* The app mounts shortcut preferences around Settings, which this dialog opens. */}
+                    <ShortcutPreferencesProvider>
+                      <Creation />
+                    </ShortcutPreferencesProvider>
                   </HostRuntimeStatusContext>
                 </RuntimeDefinitionsContext>
               </ChecksStateContext>

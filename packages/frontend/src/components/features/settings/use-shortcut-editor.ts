@@ -16,262 +16,211 @@ import {
   type ShortcutShell,
 } from "@/features/shortcuts/catalogue";
 import { typesText, useShortcutRecorder } from "@/features/shortcuts/recording";
-import { useShortcutPreferences } from "@/features/shortcuts/use-shortcut-preferences";
 import { whenChoiceChange, withAssignment } from "./settings-shortcut-model";
+import type { ShortcutDraft } from "./use-shortcut-draft";
 
-type Proposal = { id: ShortcutActionId; combination: ShortcutCombination };
-export type ShortcutProposal = Proposal & {
-  problem: ShortcutProblem | null;
-  /** Other devices of this host where the proposal would not run. */
-  otherDevices: readonly string[];
+/** Recorded keys that cannot go into the draft as they are, with the reason. */
+export type ShortcutProposal = {
+  id: ShortcutActionId;
+  combination: ShortcutCombination;
+  problem: ShortcutProblem;
 };
 
+const RESET: ShortcutPreferences = { version: 1, overrides: {} };
+
 /**
- * The editing state of Keyboard shortcuts: recording, the proposed keys and their problem on this
- * device, saving, and focus return. A change that runs on this device saves at once, except a
- * recorded proposal, which waits for Save.
+ * The editing state of Keyboard shortcuts: recording, keys that need a choice, and focus return.
+ * Every change goes into the Settings draft, which "Save settings" writes.
  */
 export function useShortcutEditor({
   catalogue,
   platform,
   shell,
   heading,
+  draft,
 }: {
   catalogue: readonly ShortcutCommandDefinition[];
   platform: AppPlatform;
   shell: ShortcutShell;
-  /** Takes focus when the control that started an edit is gone, such as a removed row. */
+  /** Takes focus when the control that started an edit is gone. */
   heading: RefObject<HTMLElement | null>;
+  draft: ShortcutDraft;
 }) {
-  const { query, save } = useShortcutPreferences();
-  const [pending, setPending] = useState<Proposal | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [savedId, setSavedId] = useSavedFlash();
+  const [proposal, setProposal] = useState<ShortcutProposal | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  /** The last removal, kept until the next change so the user can undo it. */
-  const [removed, setRemoved] = useState<{
-    id: ShortcutActionId;
-    before: ShortcutPreferences;
-  } | null>(null);
+  /** The command changed last: it stays listed under a filter, and shows its device note. */
+  const [changedId, setChangedId] = useState<ShortcutActionId | null>(null);
   const labelOf = (id: ShortcutActionId) => catalogue.find((entry) => entry.id === id)?.label ?? id;
-  const recorder = useShortcutRecorder({
-    platform,
-    onRecorded: (id, combination) => {
-      setPending({ id, combination });
-      setSaveError(null);
-    },
-    onError: setSaveError,
-  });
-  const busy = save.isPending || recorder.preparing || recorder.recording !== null;
-  const { opener, restoreFocus, focusId, focusOpener } = useEditFocus(heading, !busy && !pending);
-  const cancel = () => {
-    setPending(null);
-    setSaveError(null);
-    setAnnouncement("Change canceled.");
-    focusOpener();
-  };
-  useEscapeToCancel(pending !== null && !save.isPending, cancel);
-  /**
-   * Ends the open edit without moving focus, so another row can start one. Other rows stay
-   * enabled during an edit; dimming the whole list for it made Settings blink.
-   */
-  const stopEditing = async () => {
-    if (recorder.recording || recorder.preparing) await recorder.cancel(false);
-    setPending(null);
-    setSaveError(null);
-  };
-
   const defaultKeysOf = (id: ShortcutActionId) =>
     catalogue.find((entry) => entry.id === id)?.defaultKeys[shell] ?? null;
-  /** The proposed set, and the problem it gives the edited command on this device. */
+  const device = { platform, shell };
+  const opener = useRef<HTMLElement | null>(null);
+  const restoreFocus = useRef(false);
+
+  /** The draft with one assignment changed, and the problem that gives the command here. */
   const candidate = (
+    base: ShortcutPreferences,
     id: ShortcutActionId,
     combination: ShortcutCombination | null,
-    base: ShortcutPreferences | undefined = query.data,
   ) => {
-    if (!base) return null;
     const preferences = withAssignment(base, id, combination, defaultKeysOf(id));
     const compiled = compileShortcuts(preferences, catalogue, platform, shell);
     return { preferences, problem: problemOfCommand(compiled, catalogue, id) };
   };
-
-  const persist = async (preferences: ShortcutPreferences, message: string): Promise<boolean> => {
-    try {
-      await save.mutateAsync(preferences);
-      restoreFocus.current = true;
-      setPending(null);
-      setSaveError(null);
-      setAnnouncement(message);
-      return true;
-    } catch (cause) {
-      setSaveError(cause instanceof Error ? cause.message : String(cause));
-      return false;
-    }
+  const apply = (id: ShortcutActionId, preferences: ShortcutPreferences, message: string) => {
+    draft.update(preferences);
+    setProposal(null);
+    setError(null);
+    setChangedId(id);
+    setAnnouncement(`${message} Save settings to apply it.`);
+    restoreFocus.current = true;
   };
-  const describe = (id: ShortcutActionId, combination: ShortcutCombination | null) =>
-    combination
-      ? `Saved. ${labelOf(id)}: ${spokenShortcut(combination, platform)}.`
-      : `Removed the shortcut for ${labelOf(id)}.`;
-  /** Saves at once when the change works on this device; otherwise shows it as a proposal. */
-  const assign = async (id: ShortcutActionId, combination: ShortcutCombination | null) => {
-    if (save.isPending) return;
-    await stopEditing();
-    const before = query.data;
-    const next = candidate(id, combination);
-    if (!next || !before) return;
+  /** Puts keys into the draft, or shows why they need a choice. */
+  const assign = (
+    base: ShortcutPreferences,
+    id: ShortcutActionId,
+    combination: ShortcutCombination | null,
+  ) => {
+    const next = candidate(base, id, combination);
     if (next.problem && combination) {
-      setPending({ id, combination });
+      setProposal({ id, combination, problem: next.problem });
       return;
     }
-    setRemoved(null);
-    if (!(await persist(next.preferences, describe(id, combination)))) return;
-    if (combination) {
-      setSavedId(id);
-      return;
-    }
-    // The row stays in place with its own Undo, which takes focus, so nothing moves.
+    apply(
+      id,
+      next.preferences,
+      combination
+        ? `${labelOf(id)}: ${spokenShortcut(combination, platform)}.`
+        : `Removed the shortcut for ${labelOf(id)}.`,
+    );
+  };
+  // The recorder reports keys from its own listener, so it reads the latest draft through a ref.
+  const latest = useRef({ draft, assign });
+  useLayoutEffect(() => {
+    latest.current = { draft, assign };
+  });
+  const recorder = useShortcutRecorder({
+    platform,
+    onRecorded: (id, combination) => {
+      const base = latest.current.draft.preferences;
+      if (base) latest.current.assign(base, id, combination);
+    },
+    onError: setError,
+  });
+  const focusOpener = () => {
+    const target = opener.current;
+    if (target?.isConnected) target.focus();
+    else heading.current?.focus();
+  };
+  // Focus returns once the recorder has ended and no proposal is open.
+  const settled = !recorder.preparing && recorder.recording === null && proposal === null;
+  useLayoutEffect(() => {
+    if (!restoreFocus.current || !settled) return;
     restoreFocus.current = false;
-    setRemoved({ id, before });
+    focusOpener();
+  });
+  const closeProposal = () => {
+    setProposal(null);
+    setError(null);
+    setAnnouncement("Change canceled.");
+    focusOpener();
   };
-
-  /** Saves a `when` choice, unless it makes the command unable to run on this device. */
-  const chooseWhen = async (id: ShortcutActionId, when: ShortcutWhen) => {
-    if (save.isPending) return;
-    await stopEditing();
-    const entry = catalogue.find((command) => command.id === id);
-    if (!entry || !query.data) return;
-    const { preferences, problem } = whenChoiceChange(query.data, catalogue, entry, when, {
-      platform,
-      shell,
-    });
-    if (problem) {
-      setSaveError(`${entry.label} cannot run while typing with these keys. ${problem.message}`);
-      return;
-    }
-    setRemoved(null);
-    const scope = when === "always" ? "also while typing" : "only while not typing";
-    if (await persist(preferences, `Saved. ${entry.label} runs ${scope}.`)) setSavedId(id);
-  };
-
-  // Computed only while a proposal is open, which is rare and short.
-  const next = pending && candidate(pending.id, pending.combination);
-  const proposal =
-    pending && next ? proposalOf(pending, next, catalogue, { platform, shell }) : null;
+  useEscapeToCancel(proposal !== null, closeProposal);
 
   return {
     recording: recorder.recording,
     preparing: recorder.preparing,
-    busy,
     proposal,
-    saveError,
-    saving: save.isPending,
-    /** The row being recorded or proposed, which stays listed when the filter or search changes. */
-    editingId: recorder.recording ?? pending?.id ?? null,
+    error,
+    /** The command that stays listed when the filter or search changes. */
+    keptId: recorder.recording ?? proposal?.id ?? changedId,
+    /** Other devices where the last changed keys will not work, such as "on Windows". */
+    changeNote: (id: ShortcutActionId) =>
+      id === changedId && draft.preferences
+        ? otherDeviceProblems(draft.preferences, catalogue, id, device)
+        : [],
     record(id: ShortcutActionId, element: HTMLElement) {
-      if (save.isPending) return;
       opener.current = element;
-      setRemoved(null);
+      setProposal(null);
+      setError(null);
       setAnnouncement("");
-      void stopEditing().then(() => recorder.begin(id, element));
+      // Another row's recording ends first, so one row records at a time.
+      const ended =
+        recorder.recording || recorder.preparing ? recorder.cancel(false) : Promise.resolve();
+      void ended.then(() => recorder.begin(id, element));
     },
     cancel() {
       if (recorder.recording || recorder.preparing) void recorder.cancel();
-      else cancel();
+      else closeProposal();
     },
-    removedId: removed?.id ?? null,
-    /** Ends the chance to undo, such as when the search or filter changes. */
-    forgetRemoval: () => setRemoved(null),
-    undoRemoval() {
-      if (!removed || save.isPending) return;
-      const { id, before } = removed;
-      setRemoved(null);
-      focusId.current = id;
-      void persist(before, `Restored the shortcut for ${labelOf(id)}.`).then(
-        (saved) => saved && setSavedId(id),
+    assign(id: ShortcutActionId, combination: ShortcutCombination | null, element: HTMLElement) {
+      opener.current = element;
+      if (draft.preferences) assign(draft.preferences, id, combination);
+    },
+    /** Gives the proposed keys to their command and removes them from the command that had them. */
+    replace() {
+      const conflict = proposal?.problem.conflict;
+      const base = draft.preferences;
+      if (!proposal || !conflict || !base) return;
+      const cleared = withAssignment(base, conflict.id, null, defaultKeysOf(conflict.id));
+      const next = candidate(cleared, proposal.id, proposal.combination);
+      if (next.problem) {
+        setError(next.problem.message);
+        return;
+      }
+      apply(
+        proposal.id,
+        next.preferences,
+        `${labelOf(proposal.id)}: ${spokenShortcut(proposal.combination, platform)}. ${conflict.label} has no shortcut now.`,
       );
-    },
-    assign(id: ShortcutActionId, combination: ShortcutCombination | null, element?: HTMLElement) {
-      if (element) opener.current = element;
-      void assign(id, combination);
     },
     chooseWhen(id: ShortcutActionId, when: ShortcutWhen, element: HTMLElement) {
       opener.current = element;
-      void chooseWhen(id, when);
-    },
-    saveProposal() {
-      if (!proposal || proposal.problem || !next) return;
-      const { id, combination } = proposal;
-      void persist(next.preferences, describe(id, combination)).then(
-        (saved) => saved && setSavedId(id),
-      );
-    },
-    /** Removes the other command's keys and saves the proposal, after the user chose it. */
-    reassign() {
-      const conflict = proposal?.problem?.conflict;
-      if (!proposal || !query.data || !conflict) return;
-      const cleared = withAssignment(query.data, conflict.id, null, defaultKeysOf(conflict.id));
-      const result = candidate(proposal.id, proposal.combination, cleared);
-      if (result?.problem) {
-        setSaveError(result.problem.message);
+      const entry = catalogue.find((command) => command.id === id);
+      if (!entry || !draft.preferences) return;
+      const change = whenChoiceChange(draft.preferences, catalogue, entry, when, device);
+      if (change.problem) {
+        setError(
+          `${entry.label} cannot run while typing with these keys. ${change.problem.message}`,
+        );
         return;
       }
-      if (!result) return;
-      const { id, combination } = proposal;
-      void persist(
-        result.preferences,
-        `${describe(id, combination)} ${conflict.label} has no shortcut now.`,
-      ).then((saved) => saved && setSavedId(id));
+      const scope = when === "always" ? "also while typing" : "only while not typing";
+      apply(id, change.preferences, `${entry.label} runs ${scope}.`);
     },
-    /** Ends an open edit before the Reset all dialog opens. */
-    stopEditing: () => void stopEditing(),
-    resetAll: () => {
-      setRemoved(null);
-      return persist({ version: 1, overrides: {} }, "All shortcuts reset to their defaults.");
+    resetAll() {
+      if (recorder.recording || recorder.preparing) void recorder.cancel(false);
+      setProposal(null);
+      setError(null);
+      setChangedId(null);
+      draft.update(RESET);
+      setAnnouncement("All shortcuts use their defaults. Save settings to apply them.");
     },
-    savedId,
     /** The live status text for screen readers. */
     announcement: liveStatus({
       recording: recorder.recording && !recorder.preparing ? labelOf(recorder.recording) : null,
       ignored: recorder.recording ? recorder.ignored : null,
-      pending:
-        pending && `${labelOf(pending.id)}: ${spokenShortcut(pending.combination, platform)}.`,
+      proposal: proposal && `${labelOf(proposal.id)}: ${proposal.problem.message}`,
       platform,
       last: announcement,
     }),
     held: recorder.held,
     ignored: recorder.ignored,
-    rememberOpener(element: HTMLElement) {
-      opener.current = element;
-    },
-    focusOpener,
   };
 }
-
-/** A proposal with its problem on this device, or the other devices where it would not run. */
-const proposalOf = (
-  pending: Proposal,
-  next: { preferences: ShortcutPreferences; problem: ShortcutProblem | null },
-  catalogue: readonly ShortcutCommandDefinition[],
-  device: { platform: AppPlatform; shell: ShortcutShell },
-): ShortcutProposal => ({
-  ...pending,
-  problem: next.problem,
-  otherDevices: next.problem
-    ? []
-    : otherDeviceProblems(next.preferences, catalogue, pending.id, device),
-});
 
 /** The text of the screen reader status: the live edit first, then the last change. */
 const liveStatus = ({
   recording,
   ignored,
-  pending,
+  proposal,
   platform,
   last,
 }: {
   recording: string | null;
   ignored: string | null;
-  pending: string | null;
+  proposal: string | null;
   platform: AppPlatform;
   last: string;
 }): string => {
@@ -279,57 +228,10 @@ const liveStatus = ({
   if (ignored)
     return `${ignored} ${typesText(ignored) ? "alone types text" : "needs a modifier"}. Hold ${modifiers} and press a key.`;
   if (recording) return `Recording keys for ${recording}. Press Escape to cancel.`;
-  return pending ?? last;
+  return proposal ?? last;
 };
 
-/** The row that shows "Saved" for a moment after its change saved. */
-function useSavedFlash() {
-  const [savedId, setSavedId] = useState<ShortcutActionId | null>(null);
-  useEffect(() => {
-    if (!savedId) return;
-    const timer = setTimeout(() => setSavedId(null), 2000);
-    return () => clearTimeout(timer);
-  }, [savedId]);
-  return [savedId, setSavedId] as const;
-}
-
-/**
- * Focus after an edit: a row named by `focusId` once it renders, else the control that started
- * the edit, else the heading when that control is gone.
- */
-function useEditFocus(heading: RefObject<HTMLElement | null>, settled: boolean) {
-  const opener = useRef<HTMLElement | null>(null);
-  const restoreFocus = useRef(false);
-  /** A row whose keys take focus once it renders, such as after Undo. */
-  const focusId = useRef<ShortcutActionId | null>(null);
-  const focusOpener = () => {
-    const target = opener.current;
-    if (target?.isConnected && !target.matches(":disabled")) target.focus();
-    else heading.current?.focus();
-  };
-  useLayoutEffect(() => {
-    const row =
-      focusId.current &&
-      document.querySelector<HTMLElement>(`[data-shortcut-id="${CSS.escape(focusId.current)}"]`);
-    if (row && settled) {
-      focusId.current = null;
-      restoreFocus.current = false;
-      row.focus();
-      return;
-    }
-    if (restoreFocus.current && settled) {
-      restoreFocus.current = false;
-      focusOpener();
-      return;
-    }
-    // A removed row can leave the list a render after its save; keep focus inside Settings.
-    if (opener.current && !opener.current.isConnected && document.activeElement === document.body)
-      heading.current?.focus();
-  });
-  return { opener, restoreFocus, focusId, focusOpener };
-}
-
-/** Escape ends a proposal before the Settings dialog sees it, so the dialog stays open. */
+/** Escape closes a proposal before the Settings dialog sees it, so the dialog stays open. */
 function useEscapeToCancel(active: boolean, cancel: () => void) {
   const latest = useRef(cancel);
   useLayoutEffect(() => {

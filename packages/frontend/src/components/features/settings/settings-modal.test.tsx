@@ -32,6 +32,7 @@ import {
   useFeatureTourState,
 } from "@/features/feature-tour/feature-tour-context";
 import { FeatureTourDialogHost } from "@/features/feature-tour/feature-tour-dialog-host";
+import { ShortcutPreferencesProvider } from "@/features/shortcuts/shortcut-preferences-provider";
 import { SettingsModal, SettingsModalProvider } from "./settings-modal";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
@@ -511,15 +512,17 @@ function renderSettings(
   function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryProvider connection={connection}>
-        <WorkspaceStateContext.Provider value={workspaceState}>
-          <ChecksStateContext.Provider value={checksState}>
-            <RuntimeDefinitionsContext.Provider value={runtimeState}>
-              <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
-                {children}
-              </HostRuntimeStatusContext.Provider>
-            </RuntimeDefinitionsContext.Provider>
-          </ChecksStateContext.Provider>
-        </WorkspaceStateContext.Provider>
+        <ShortcutPreferencesProvider>
+          <WorkspaceStateContext.Provider value={workspaceState}>
+            <ChecksStateContext.Provider value={checksState}>
+              <RuntimeDefinitionsContext.Provider value={runtimeState}>
+                <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
+                  {children}
+                </HostRuntimeStatusContext.Provider>
+              </RuntimeDefinitionsContext.Provider>
+            </ChecksStateContext.Provider>
+          </WorkspaceStateContext.Provider>
+        </ShortcutPreferencesProvider>
       </QueryProvider>
     );
   }

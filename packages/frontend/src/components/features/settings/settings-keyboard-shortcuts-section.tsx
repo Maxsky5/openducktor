@@ -3,14 +3,6 @@ import type { AppPlatform } from "@openducktor/contracts";
 import { ChevronDown, RotateCcw, SearchX } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ToolbarSearchField } from "@/components/ui/search-field";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,6 +29,7 @@ import {
 } from "./settings-shortcut-row";
 import { ListHeading } from "./settings-prompt-page-header";
 import { ROW_LIST_CLASS_NAME } from "./settings-prompt-rows";
+import { useShortcutDraftContext } from "./use-shortcut-draft";
 import { useShortcutEditor } from "./use-shortcut-editor";
 
 type Editor = ReturnType<typeof useShortcutEditor>;
@@ -48,23 +41,22 @@ const FILTERS = [
 
 export function SettingsKeyboardShortcutsSection() {
   const { query, updatesError } = useShortcutPreferences();
-  const catalogue = useShortcutCatalogue(query.data);
+  const draft = useShortcutDraftContext();
+  const catalogue = useShortcutCatalogue(draft.preferences);
   const platform = readDevicePlatform();
   const shell: ShortcutShell =
     getShellBridge().browser.surface === "electron" ? "electron" : "browser";
   const heading = useRef<HTMLHeadingElement>(null);
-  const editor = useShortcutEditor({ catalogue, platform, shell, heading });
+  const editor = useShortcutEditor({ catalogue, platform, shell, heading, draft });
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ShortcutFilter>("all");
-  const [resetOpen, setResetOpen] = useState(false);
   const views = useMemo(
-    () => buildCommandViews(catalogue, query.data, platform, shell),
-    [catalogue, query.data, platform, shell],
+    () => buildCommandViews(catalogue, draft.preferences, platform, shell),
+    [catalogue, draft.preferences, platform, shell],
   );
-  const changed = hasChanges(query.data);
+  const changed = hasChanges(draft.preferences);
   const term = searchKey(search);
-  const { removedId, forgetRemoval, editingId } = editor;
-  const kept = editingId ?? removedId;
+  const kept = editor.keptId;
   const groups = useMemo(
     () => groupCommandViews(views, filter, term, kept),
     [views, filter, term, kept],
@@ -72,9 +64,7 @@ export function SettingsKeyboardShortcutsSection() {
 
   const shown: ShortcutFilter = term ? "all" : filter;
   const changeFilter = (next: ShortcutFilter) => {
-    if (next === filter) return;
-    forgetRemoval();
-    setFilter(next);
+    if (next !== filter) setFilter(next);
   };
 
   return (
@@ -88,8 +78,8 @@ export function SettingsKeyboardShortcutsSection() {
           Keyboard shortcuts
         </h3>
         <p className="text-xs text-muted-foreground">
-          Click the keys of a command to change them. Changes apply to every app connected to this
-          host.
+          Click the keys of a command to change them. Saved shortcuts apply to every app connected
+          to this host.
         </p>
       </header>
       <p role="status" aria-live="polite" className="sr-only">
@@ -103,10 +93,7 @@ export function SettingsKeyboardShortcutsSection() {
             placeholder={`Search commands or keys, such as ${platform === "darwin" ? "⌘K" : "Ctrl+K"}`}
             size="lg"
             value={search}
-            onValueChange={(value) => {
-              forgetRemoval();
-              setSearch(value);
-            }}
+            onValueChange={setSearch}
           />
         </div>
         <RadioGroup
@@ -128,15 +115,7 @@ export function SettingsKeyboardShortcutsSection() {
           ))}
         </RadioGroup>
         {changed && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={(event) => {
-              editor.stopEditing();
-              editor.rememberOpener(event.currentTarget);
-              setResetOpen(true);
-            }}
-          >
+          <Button type="button" variant="outline" onClick={editor.resetAll}>
             <RotateCcw data-icon="inline-start" aria-hidden="true" /> Reset all
           </Button>
         )}
@@ -200,16 +179,6 @@ export function SettingsKeyboardShortcutsSection() {
           ))
         )}
       </div>
-
-      <ResetShortcutsDialog
-        open={resetOpen}
-        saving={editor.saving}
-        onOpenChange={setResetOpen}
-        onReset={async () => {
-          if (await editor.resetAll()) setResetOpen(false);
-        }}
-        onClosed={editor.focusOpener}
-      />
     </section>
   );
 }
@@ -232,29 +201,14 @@ function ShortcutNotices({
       {query.error && (
         <Alert variant="destructive" className="items-center justify-between gap-3">
           <p>Shortcuts are turned off until this is fixed. {query.error.message}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={editor.busy}
-            onClick={() => void query.refetch()}
-          >
+          <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
             Retry
           </Button>
         </Alert>
       )}
-      {editor.saveError && (
-        <Alert variant="destructive" className="items-center justify-between gap-3">
-          <p>{editor.saveError}</p>
-          {editor.proposal?.problem === null && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={editor.busy}
-              onClick={editor.saveProposal}
-            >
-              Retry save
-            </Button>
-          )}
+      {editor.error && (
+        <Alert variant="destructive">
+          <p>{editor.error}</p>
         </Alert>
       )}
     </>
@@ -287,7 +241,7 @@ function CommandRow({
           ignored: editor.ignored,
         }
       : proposal?.id === id
-        ? { state: "proposed", ...proposal, saving: editor.saving }
+        ? { state: "proposed", combination: proposal.combination, problem: proposal.problem }
         : null;
   return (
     <SettingsShortcutRow
@@ -304,15 +258,12 @@ function CommandRow({
       onChooseWhen={(when, element) => editor.chooseWhen(id, when, element)}
       disabled={!loaded}
       editor={rowEditor}
-      saved={editor.savedId === id}
-      removed={editor.removedId === id}
-      onUndo={editor.undoRemoval}
+      note={editor.changeNote(id)}
       onRecord={(element) => editor.record(id, element)}
       onClear={(element) => editor.assign(id, null, element)}
       onRestoreDefault={(element) => editor.assign(id, view.defaultKeys, element)}
       onCancel={editor.cancel}
-      onSave={editor.saveProposal}
-      onReassign={editor.reassign}
+      onReplace={editor.replace}
     />
   );
 }
@@ -402,53 +353,6 @@ function FamilyRows({
         </ul>
       )}
     </li>
-  );
-}
-
-function ResetShortcutsDialog({
-  open,
-  saving,
-  onOpenChange,
-  onReset,
-  onClosed,
-}: {
-  open: boolean;
-  saving: boolean;
-  onOpenChange(open: boolean): void;
-  onReset(): void;
-  onClosed(): void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <DialogContent
-        className="max-w-md"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          onClosed();
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>Reset all shortcuts?</DialogTitle>
-          <DialogDescription>
-            This removes every custom key, removed shortcut and When choice on this host, and
-            restores the defaults for everyone connected to it.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={saving}
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="button" variant="destructive" disabled={saving} onClick={onReset}>
-            {saving ? "Resetting…" : "Reset all shortcuts"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

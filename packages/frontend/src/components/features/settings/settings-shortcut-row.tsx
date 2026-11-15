@@ -1,5 +1,5 @@
 import { type ReactNode, useRef } from "react";
-import { Check, ChevronDown, CircleAlert, LoaderCircle, TriangleAlert } from "lucide-react";
+import { ChevronDown, CircleAlert, TriangleAlert } from "lucide-react";
 import type { AppPlatform, ShortcutCombination, ShortcutWhen } from "@openducktor/contracts";
 import {
   shortcutKeyParts,
@@ -53,12 +53,10 @@ export type ShortcutRowEditor =
       ignored: string | null;
     }
   | {
+      /** Recorded keys that need a choice before they go into the draft. */
       state: "proposed";
       combination: ShortcutCombination;
-      problem: ShortcutProblem | null;
-      /** Other devices of this host where the proposal would not run. */
-      otherDevices: readonly string[];
-      saving: boolean;
+      problem: ShortcutProblem;
     };
 
 /** The key button name: the command, its keys in words, and what a press does. */
@@ -72,67 +70,6 @@ const fieldLabel = (
   if (current) return `${label}, ${spokenShortcut(current, platform)}. Change shortcut`;
   return `${label}, no keys. ${current === null ? "Add keys" : "Change shortcut"}`;
 };
-
-/** Undo after a removal, the brief "Saved" check, and Reset and Remove. */
-function IdleControls({
-  label,
-  id,
-  removed,
-  saved,
-  showActions,
-  resetKeys,
-  platform,
-  assigned,
-  onUndo,
-  onRestoreDefault,
-  onClear,
-}: {
-  label: string;
-  id: string;
-  removed: boolean;
-  saved: boolean;
-  showActions: boolean;
-  /** The default keys that Reset restores, when the keys differ from a default. */
-  resetKeys: ShortcutCombination | null;
-  platform: AppPlatform;
-  assigned: boolean;
-  onUndo(): void;
-  onRestoreDefault(): void;
-  onClear(): void;
-}) {
-  if (removed)
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        aria-describedby={`shortcut-removed-${id}`}
-        onClick={onUndo}
-        autoFocus
-      >
-        Undo
-      </Button>
-    );
-  return (
-    <>
-      {showActions && (
-        <RowActions
-          label={label}
-          resetKeys={resetKeys}
-          platform={platform}
-          assigned={assigned}
-          onRestoreDefault={onRestoreDefault}
-          onClear={onClear}
-        />
-      )}
-      {saved && (
-        <span className="flex items-center gap-1 text-xs text-success-muted">
-          <Check aria-hidden="true" className="size-3.5" /> Saved
-        </span>
-      )}
-    </>
-  );
-}
 
 /** One command: its name, its keys, and the inline recorder. Editing stays on one line. */
 export function SettingsShortcutRow({
@@ -148,15 +85,12 @@ export function SettingsShortcutRow({
   whenCustomized,
   disabled,
   editor,
-  saved,
-  removed,
-  onUndo,
+  note,
   onRecord,
   onClear,
   onRestoreDefault,
   onCancel,
-  onSave,
-  onReassign,
+  onReplace,
   onChooseWhen,
 }: {
   entry: ShortcutCommandDefinition;
@@ -173,17 +107,13 @@ export function SettingsShortcutRow({
   whenCustomized: boolean;
   disabled: boolean;
   editor: ShortcutRowEditor | null;
-  /** True for a moment after this row saved, to confirm the change. */
-  saved: boolean;
-  /** True right after its keys were removed: the row offers Undo in place. */
-  removed: boolean;
-  onUndo(): void;
+  /** Other devices where just-changed keys will not work, such as "on Windows". */
+  note: readonly string[];
   onRecord(element: HTMLElement): void;
   onClear(element: HTMLElement): void;
   onRestoreDefault(element: HTMLElement): void;
   onCancel(): void;
-  onSave(): void;
-  onReassign(): void;
+  onReplace(): void;
   onChooseWhen(when: ShortcutWhen, element: HTMLElement): void;
 }) {
   const field = useRef<HTMLButtonElement>(null);
@@ -197,9 +127,8 @@ export function SettingsShortcutRow({
           entry={entry}
           showContext={showContext}
           editor={editor}
-          removed={removed}
+          note={note}
           inactiveReason={inactiveReason}
-          defaultKeys={defaultKeys}
           when={
             whenChoice && !editor ? (
               <WhenPicker entry={entry} disabled={disabled} onChoose={onChooseWhen} />
@@ -209,17 +138,12 @@ export function SettingsShortcutRow({
         />
       </div>
       <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
-        {!editor && (
-          <IdleControls
+        {!editor && !disabled && (
+          <RowActions
             label={entry.label}
-            id={entry.id}
-            removed={removed}
-            saved={saved}
-            showActions={!disabled}
             resetKeys={customized ? defaultKeys : null}
             platform={platform}
             assigned={Boolean(current)}
-            onUndo={onUndo}
             onRestoreDefault={() => field.current && onRestoreDefault(field.current)}
             onClear={() => field.current && onClear(field.current)}
           />
@@ -231,7 +155,7 @@ export function SettingsShortcutRow({
           variant="ghost"
           aria-label={fieldLabel(entry.label, current, proposal?.combination ?? null, platform)}
           aria-pressed={recording}
-          aria-describedby={proposal?.problem ? `shortcut-problem-${entry.id}` : undefined}
+          aria-describedby={proposal ? `shortcut-problem-${entry.id}` : undefined}
           disabled={disabled || current === undefined}
           onClick={(event) => {
             if (!recording) onRecord(event.currentTarget);
@@ -245,16 +169,15 @@ export function SettingsShortcutRow({
             platform={platform}
           />
         </Button>
-        {editor && <EditActions proposal={proposal} onSave={onSave} onCancel={onCancel} />}
+        {editor && <CancelButton onCancel={onCancel} />}
       </div>
-      {proposal?.problem && (
+      {proposal && (
         <ProblemCallout
           id={entry.id}
           label={entry.label}
           proposal={proposal}
-          problem={proposal.problem}
           platform={platform}
-          onReplace={onReassign}
+          onReplace={onReplace}
           onRecordAgain={() => field.current && onRecord(field.current)}
         />
       )}
@@ -295,25 +218,8 @@ const keyFieldClassName = (editor: ShortcutRowEditor | null) =>
     editor && "border border-input bg-card shadow-sm hover:bg-card",
     editor?.state === "recording" && "border-ring",
     editor?.state === "proposed" &&
-      editor.problem &&
       (editor.problem.conflict ? "border-warning-border" : "border-destructive"),
   );
-
-/** Keys inside text: symbols in the system font for the eye, words for screen readers. */
-function KeysText({
-  combination,
-  platform,
-}: {
-  combination: ShortcutCombination;
-  platform: AppPlatform;
-}) {
-  return (
-    <>
-      <span aria-hidden="true">{shortcutLabel(combination, platform)}</span>
-      <span className="sr-only">{spokenShortcut(combination, platform)}</span>
-    </>
-  );
-}
 
 /** The modifiers that a shortcut needs, as text. */
 function ModifierNames({ platform }: { platform: AppPlatform }) {
@@ -331,34 +237,25 @@ function RowDetail({
   entry,
   showContext,
   editor,
-  removed,
+  note,
   inactiveReason,
-  defaultKeys,
   when,
   platform,
 }: {
   entry: ShortcutCommandDefinition;
   showContext: boolean;
   editor: ShortcutRowEditor | null;
-  removed: boolean;
+  note: readonly string[];
   inactiveReason: string | undefined;
-  defaultKeys: ShortcutCombination | null;
   /** The picker of a command whose `when` the user may change. */
   when: ReactNode;
   platform: AppPlatform;
 }) {
-  if (editor && hasEditorDetail(editor))
-    return <EditorDetail editor={editor} platform={platform} />;
-  if (removed)
+  if (editor?.state === "recording") return <RecordingHint editor={editor} platform={platform} />;
+  if (note.length > 0)
     return (
-      <p id={`shortcut-removed-${entry.id}`} className="text-xs leading-5 text-muted-foreground">
-        Shortcut removed
-        {defaultKeys && (
-          <>
-            {" "}
-            · default <KeysText combination={defaultKeys} platform={platform} />
-          </>
-        )}
+      <p className="text-xs leading-5 text-muted-foreground">
+        These keys will not work {joinNames(note)}.
       </p>
     );
   if (inactiveReason)
@@ -391,9 +288,8 @@ function WhenPicker({
   onChoose,
 }: {
   entry: ShortcutCommandDefinition;
-  /** Stays mounted while another edit runs, so focus can return to it after a save. */
   disabled: boolean;
-  /** Receives the trigger, which takes focus back after the save. */
+  /** Receives the trigger, which takes focus back after the change. */
   onChoose(when: ShortcutWhen, trigger: HTMLElement): void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
@@ -429,24 +325,14 @@ function WhenPicker({
   );
 }
 
-/** Guidance while recording, and the problem or reach of proposed keys. */
-/** "A", "A and B", or "A, B and C". */
-const joinNames = (names: readonly string[]) =>
-  names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-
-/** Keys waiting for Save with nothing to report keep the When line, so the row keeps its height. */
-const hasEditorDetail = (editor: ShortcutRowEditor) =>
-  editor.state === "recording" || (editor.problem === null && editor.otherDevices.length > 0);
-
-function EditorDetail({ editor, platform }: { editor: ShortcutRowEditor; platform: AppPlatform }) {
-  if (editor.state === "recording") return <RecordingHint editor={editor} platform={platform} />;
-  if (editor.otherDevices.length === 0) return null;
-  return (
-    <p className="text-xs leading-5 text-muted-foreground">
-      These keys will not work {joinNames(editor.otherDevices)}.
-    </p>
-  );
-}
+/** "A", "A and B", or "A, B and C"; "on A and B" when each name starts with "on". */
+const joinNames = (names: readonly string[]): string => {
+  if (names.length > 1 && names.every((name) => name.startsWith("on ")))
+    return `on ${joinNames(names.map((name) => name.slice(3)))}`;
+  return names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+};
 
 function RecordingHint({
   editor,
@@ -511,60 +397,32 @@ function KeyField({
   );
 }
 
-function EditActions({
-  proposal,
-  onSave,
-  onCancel,
-}: {
-  proposal: Extract<ShortcutRowEditor, { state: "proposed" }> | null;
-  onSave(): void;
-  onCancel(): void;
-}) {
-  const saving = proposal?.saving ?? false;
-  const problem = proposal?.problem ?? null;
+function CancelButton({ onCancel }: { onCancel(): void }) {
   return (
-    <>
-      {proposal && !problem && (
-        <Button
-          type="button"
-          size="sm"
-          aria-disabled={saving}
-          onClick={() => {
-            if (!saving) onSave();
-          }}
-          autoFocus
-        >
-          {saving && <LoaderCircle aria-hidden="true" className="animate-spin" />}
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      )}
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="gap-1.5"
-        disabled={saving}
-        aria-keyshortcuts="Escape"
-        onClick={onCancel}
-      >
-        Cancel
-        <kbd aria-hidden="true" className="font-sans text-[10px] text-muted-foreground">
-          Esc
-        </kbd>
-      </Button>
-    </>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="gap-1.5"
+      aria-keyshortcuts="Escape"
+      onClick={onCancel}
+    >
+      Cancel
+      <kbd aria-hidden="true" className="font-sans text-[10px] text-muted-foreground">
+        Esc
+      </kbd>
+    </Button>
   );
 }
 
 /**
- * Why recorded keys cannot be saved, under the row. A conflict names the command that has the keys
+ * Why recorded keys cannot go into the draft, under the row. A conflict names the command that has the keys
  * and says what Replace does; other problems offer only new keys.
  */
 function ProblemCallout({
   id,
   label,
   proposal,
-  problem,
   platform,
   onReplace,
   onRecordAgain,
@@ -572,11 +430,11 @@ function ProblemCallout({
   id: string;
   label: string;
   proposal: Extract<ShortcutRowEditor, { state: "proposed" }>;
-  problem: ShortcutProblem;
   platform: AppPlatform;
   onReplace(): void;
   onRecordAgain(): void;
 }) {
+  const { problem } = proposal;
   const { conflict } = problem;
   const keys = (
     <span className="mx-0.5 inline-flex align-middle">
@@ -615,15 +473,7 @@ function ProblemCallout({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {conflict && (
-          <Button
-            type="button"
-            size="sm"
-            aria-disabled={proposal.saving}
-            onClick={() => {
-              if (!proposal.saving) onReplace();
-            }}
-            autoFocus
-          >
+          <Button type="button" size="sm" onClick={onReplace} autoFocus>
             Replace
           </Button>
         )}
