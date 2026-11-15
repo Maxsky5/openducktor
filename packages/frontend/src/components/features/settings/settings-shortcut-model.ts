@@ -47,11 +47,11 @@ export type ShortcutGroupItem =
 const FAMILY_LABELS = { session: "Go to session 1–10", workspace: "Go to workspace 1–10" };
 const POSITION_PATTERN = /^(session|workspace)-position-\d+$/;
 const MAC_KEY_WORDS = new Map([
-  ["⌘", "cmd command"],
-  ["⌃", "ctrl control"],
-  ["⌥", "opt option alt"],
-  ["⇧", "shift"],
-  ["↵", "enter return"],
+  ["⌘", ["cmd", "command"]],
+  ["⌃", ["ctrl", "control"]],
+  ["⌥", ["opt", "option", "alt"]],
+  ["⇧", ["shift"]],
+  ["↵", ["enter", "return"]],
 ]);
 
 /** Lower case with spaces and plus signs folded, so "Ctrl+B" and "ctrl b" match. */
@@ -65,8 +65,16 @@ export const searchKey = (value: string) =>
 const keySearchText = (combination: ShortcutCombination | null, platform: AppPlatform) => {
   if (!combination) return "";
   const parts = shortcutKeyParts(combination, platform);
-  const words = parts.map((part) => MAC_KEY_WORDS.get(part) ?? part);
-  return [parts.join(""), parts.join("+"), parts.join(" "), words.join(" ")].join(" ");
+  // One phrase per synonym, so "ctrl b" and "control b" both match the keys ⌃B.
+  const phrases = [0, 1, 2].map((index) =>
+    parts
+      .map((part) => {
+        const names = MAC_KEY_WORDS.get(part);
+        return names ? names[Math.min(index, names.length - 1)] : part;
+      })
+      .join(" "),
+  );
+  return [parts.join(""), parts.join("+"), parts.join(" "), ...phrases].join(" | ");
 };
 
 /** Overrides that equal the default are removed, so "Changed" lists only real changes. */

@@ -201,11 +201,8 @@ export function SettingsShortcutRow({
           inactiveReason={inactiveReason}
           defaultKeys={defaultKeys}
           when={
-            whenChoice && !disabled ? (
-              <WhenPicker
-                entry={entry}
-                onChoose={(when) => field.current && onChooseWhen(when, field.current)}
-              />
+            whenChoice && !editor ? (
+              <WhenPicker entry={entry} disabled={disabled} onChoose={onChooseWhen} />
             ) : null
           }
           platform={platform}
@@ -346,7 +343,8 @@ function RowDetail({
   when: ReactNode;
   platform: AppPlatform;
 }) {
-  if (editor) return <EditorDetail id={entry.id} editor={editor} platform={platform} />;
+  if (editor && hasEditorDetail(editor))
+    return <EditorDetail id={entry.id} editor={editor} platform={platform} />;
   if (removed)
     return (
       <p id={`shortcut-removed-${entry.id}`} className="text-xs text-muted-foreground">
@@ -378,39 +376,46 @@ function RowDetail({
 }
 
 const WHEN_DESCRIPTIONS = {
-  always: "Also while you type in an editor, a terminal or a web page.",
-  "not-typing": "Editors, terminals and web pages keep these keys.",
+  always: "Also while typing in an editor, terminal or page.",
+  "not-typing": "Editors, terminals and pages keep these keys.",
 } as const satisfies Record<ShortcutWhen, string>;
 
 /** The `when` choice of an app-wide command, labeled as the row shows it. */
 function WhenPicker({
   entry,
+  disabled,
   onChoose,
 }: {
   entry: ShortcutCommandDefinition;
-  onChoose(when: ShortcutWhen): void;
+  /** Stays mounted while another edit runs, so focus can return to it after a save. */
+  disabled: boolean;
+  /** Receives the trigger, which takes focus back after the save. */
+  onChoose(when: ShortcutWhen, trigger: HTMLElement): void;
 }) {
+  const trigger = useRef<HTMLButtonElement>(null);
   const current: ShortcutWhen = entry.allowInput ? "always" : "not-typing";
   const labelOf = (when: ShortcutWhen) => whenLabel({ ...entry, allowInput: when === "always" });
   return (
     <Combobox
       value={current}
       searchable={false}
-      wrapOptionLabels
-      className="w-80"
+      className="w-88"
       options={(["always", "not-typing"] as const).map((when) => ({
         value: when,
         label: labelOf(when),
         description: WHEN_DESCRIPTIONS[when],
       }))}
       onValueChange={(value) => {
-        if (value !== current && (value === "always" || value === "not-typing")) onChoose(value);
+        if (value !== current && (value === "always" || value === "not-typing") && trigger.current)
+          onChoose(value, trigger.current);
       }}
       trigger={
         <button
+          ref={trigger}
           type="button"
+          disabled={disabled}
           aria-label={`When ${entry.label} runs: ${labelOf(current)}`}
-          className="-mx-1 inline-flex h-5 items-center gap-1 rounded-md px-1 text-xs text-foreground/80 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="-mx-1 inline-flex h-5 items-center gap-1 rounded-md px-1 text-xs text-foreground/80 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
         >
           {labelOf(current)}
           <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground" />
@@ -421,6 +426,10 @@ function WhenPicker({
 }
 
 /** Guidance while recording, and the problem or reach of proposed keys. */
+/** Keys waiting for Save with nothing to report keep the When line, so the row keeps its height. */
+const hasEditorDetail = (editor: ShortcutRowEditor) =>
+  editor.state === "recording" || editor.problem !== null || editor.otherDevices.length > 0;
+
 function EditorDetail({
   id,
   editor,

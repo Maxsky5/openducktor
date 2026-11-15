@@ -364,13 +364,14 @@ function FamilyRows({
           <span className="text-sm font-medium text-foreground">{family.label}</span>
           <span
             id={`shortcut-family-${family.key}`}
-            className="flex h-5 items-center text-xs text-muted-foreground"
+            className="flex h-5 items-center gap-1.5 text-xs text-muted-foreground"
           >
-            When{" "}
-            <span className="ml-1 text-foreground/80">
+            When
+            <span className="text-foreground/80">
               {firstView ? whenLabel(firstView.entry) : "Always"}
             </span>
-            {family.key === "session" ? " · In sidebar order" : " · In workspace rail order"}
+            <span aria-hidden="true">·</span>
+            {family.key === "session" ? "In sidebar order" : "In workspace rail order"}
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -393,7 +394,7 @@ function FamilyRows({
         </span>
       </button>
       {expanded && (
-        <ul className="divide-y divide-border border-t border-border bg-muted/30 [&>li]:pl-8">
+        <ul className="divide-y divide-border border-t border-border bg-muted/30 [&>li]:min-h-12 [&>li]:py-2 [&>li]:pl-8">
           {family.commands.map((view, index) => (
             <CommandRow
               key={view.entry.id}

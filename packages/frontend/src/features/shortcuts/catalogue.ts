@@ -438,21 +438,18 @@ const FOCUS_WHEN = {
   browser: "A browser tab has focus",
   content: "An item has focus",
 } as const satisfies Record<FocusArea, string>;
-const APP_WHEN = { workspace: "A workspace is open", session: "A session is visible" } as const;
 
 /**
- * When a command runs, for Settings. Commands that do not run while an editor, a terminal or a
- * visited page has focus say so, because typing is the most common reason that a key does nothing.
+ * When a command runs, for Settings. App-wide commands say only whether they run while typing,
+ * because typing is the most common reason that a key does nothing; a workspace or a session that
+ * they need is obvious from their name.
  */
 export const whenLabel = (entry: ShortcutCommandDefinition): string => {
   const { scope } = entry;
   if (scope.kind === "focus") return FOCUS_WHEN[scope.area];
   const record = recordKind(scope);
   if (record) return record === "chat" ? "A session is selected" : "A task is selected";
-  if (scope.kind !== "app") return "Always";
-  const base = scope.needs ? APP_WHEN[scope.needs] : null;
-  if (entry.allowInput) return base ?? "Always";
-  return base ? `${base}, not while typing` : "Not while typing";
+  return entry.allowInput ? "Always" : "Not while typing";
 };
 
 type DeviceKeys = { key: string; ctrl: boolean; meta: boolean; alt: boolean; shift: boolean };
