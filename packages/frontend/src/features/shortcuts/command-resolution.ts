@@ -114,10 +114,13 @@ export const paletteCommandsFor = (
   commands: readonly CommandPalettePageCommand[],
   focus: Element | null,
 ): CommandPalettePageCommand[] => {
+  // The highlighted record's commands only serve its shortcuts. Listing them would move the
+  // highlight, which removes them again, so the list and the registry would never settle.
+  const listed = commands.filter((command) => !command.paletteOnly && !command.localOnly);
   const owners = new Map<ShortcutActionId, CommandPalettePageCommand | null>();
-  for (const command of commands) {
-    if (command.localOnly || owners.has(command.id)) continue;
-    owners.set(command.id, resolvePageCommand(commands, definitionOf(command), focus, true));
+  for (const command of listed) {
+    if (owners.has(command.id)) continue;
+    owners.set(command.id, resolvePageCommand(listed, definitionOf(command), focus, true));
   }
-  return commands.filter((command) => owners.get(command.id) === command);
+  return listed.filter((command) => owners.get(command.id) === command);
 };
