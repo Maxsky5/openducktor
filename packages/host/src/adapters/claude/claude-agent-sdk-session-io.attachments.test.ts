@@ -203,8 +203,9 @@ describe("Claude session I/O attachments and invalid updates", () => {
     }
   });
 
-  test("rejects unsupported live Claude effort changes without mutating session model", async () => {
+  test("rejects an unknown live Claude effort before any SDK call", async () => {
     const applyFlagSettings = mock(async () => {});
+    const setModel = mock(async (_model?: string) => {});
     const session = createClaudeSession({
       model: {
         providerId: "claude",
@@ -212,21 +213,19 @@ describe("Claude session I/O attachments and invalid updates", () => {
         runtimeKind: "claude",
         variant: "high",
       },
-      query: createClaudeQueryFixture({
-        applyFlagSettings,
-        setModel: mock(async (_model?: string) => {}),
-      }),
+      query: createClaudeQueryFixture({ applyFlagSettings, setModel }),
     });
 
     await expect(
       applyClaudeSessionModel(session, {
         providerId: "claude",
-        modelId: "claude-opus-4-6",
+        modelId: "claude-sonnet-4-6",
         runtimeKind: "claude",
-        variant: "max",
+        variant: "turbo",
       }),
-    ).rejects.toThrow("Claude Agent SDK live effort updates do not support 'max'.");
+    ).rejects.toThrow("Claude Agent SDK does not support effort 'turbo'.");
 
+    expect(setModel).not.toHaveBeenCalled();
     expect(applyFlagSettings).not.toHaveBeenCalled();
     expect(session.model?.variant).toBe("high");
   });

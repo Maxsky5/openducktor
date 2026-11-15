@@ -138,11 +138,15 @@ describe("createClaudeAgentSdkService", () => {
       title: "Native title",
       updatedAt: 1,
     });
-    const model = spyOn(nativeSessions, "readClaudeSessionModel").mockResolvedValue({
-      runtimeKind: "claude",
+    const importedModel = {
+      runtimeKind: "claude" as const,
       providerId: "claude",
       modelId: "native-claude",
-    });
+      variant: "max",
+    };
+    const model = spyOn(nativeSessions, "loadClaudeSessionModel").mockReturnValue(
+      Effect.succeed(importedModel),
+    );
     const loadTodos = spyOn(todos, "loadClaudeTodos").mockReturnValue(Effect.succeed([]));
     const create = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
       async (request) => {
@@ -154,6 +158,7 @@ describe("createClaudeAgentSdkService", () => {
           startedMessage: "Imported session",
         });
         expect(request.input.sessionScope).toEqual(workspaceScope);
+        expect(request.input.model).toEqual(importedModel);
         const session = createSession({ input: request.input, runtimeId: request.runtimeId });
         request.sessionStore.set(session);
         return session.summary;
@@ -171,7 +176,7 @@ describe("createClaudeAgentSdkService", () => {
       const source = await Effect.runPromise(
         service.inspectSessionForImport({ ...ref, sessionScope: workspaceScope }, "runtime"),
       );
-      expect(source.selectedModel?.modelId).toBe("native-claude");
+      expect(source.selectedModel).toEqual(importedModel);
       expect(create).not.toHaveBeenCalled();
       expect(store.get(ref.externalSessionId)).toBeUndefined();
       await Effect.runPromise(source.attach);

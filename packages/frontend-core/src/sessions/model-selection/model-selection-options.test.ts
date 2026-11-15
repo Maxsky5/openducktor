@@ -61,48 +61,8 @@ describe("model-selection-options", () => {
     expect(options.agentProfileOptions).toEqual([{ value: "build-agent", label: "build-agent" }]);
   });
 
-  test("filters active-session variants to live-updatable options", () => {
-    const options = resolveModelSelectionOptions({
-      liveSession: true,
-      selectionCatalog: {
-        ...makeCatalogWithProfile(),
-        models: [
-          {
-            id: "anthropic/claude-sonnet",
-            providerId: "anthropic",
-            providerName: "Anthropic",
-            modelId: "claude-sonnet",
-            modelName: "Claude Sonnet",
-            variants: ["low", "medium", "high", "xhigh", "max"],
-            liveSessionUpdates: {
-              profile: false,
-              variants: ["low", "medium", "high", "xhigh"],
-            },
-          },
-        ],
-      },
-      selectedModelSelection: {
-        runtimeKind: "claude",
-        providerId: "anthropic",
-        modelId: "claude-sonnet",
-        variant: "high",
-      },
-    });
-
-    expect(options.variantOptions.map((option) => option.value)).toEqual([
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-    ]);
-  });
-
-  test.each(
-    [["low", "medium", "high", "xhigh", "max"], ["low", "medium", "high", "xhigh"], []].map(
-      (variants) => ({ variants }),
-    ),
-  )(
-    "keeps accepted effort visible when the catalog omits it or disallows live changes: $variants",
+  test.each([["low", "medium", "high", "xhigh"], []].map((variants) => ({ variants })))(
+    "keeps accepted effort visible when the catalog omits it: $variants",
     ({ variants }) => {
       const options = resolveModelSelectionOptions({
         liveSession: true,
@@ -116,10 +76,7 @@ describe("model-selection-options", () => {
               modelId: "claude-sonnet",
               modelName: "Claude Sonnet",
               variants,
-              liveSessionUpdates: {
-                profile: false,
-                variants: ["low", "medium", "high", "xhigh"],
-              },
+              liveSessionUpdates: { profile: false },
             },
           ],
         },

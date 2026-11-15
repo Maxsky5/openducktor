@@ -1,16 +1,7 @@
 import type { AgentModelDescriptor } from "../types/agent-orchestrator";
 
-export const resolveModelSelectionPolicy = (
+/** Tells whether a session can change its profile. A model can forbid it in a live session. */
+export const canChangeLiveProfile = (
   model: AgentModelDescriptor | null,
   liveSession: boolean,
-) => {
-  const variants = model?.variants ?? [];
-  const liveVariants = liveSession ? model?.liveSessionUpdates?.variants : undefined;
-  const allowedVariants = liveVariants ? new Set(liveVariants) : null;
-  return {
-    canChangeProfile: !liveSession || model?.liveSessionUpdates?.profile !== false,
-    variants: allowedVariants
-      ? variants.filter((variant) => allowedVariants.has(variant))
-      : variants,
-  };
-};
+): boolean => !liveSession || model?.liveSessionUpdates?.profile !== false;

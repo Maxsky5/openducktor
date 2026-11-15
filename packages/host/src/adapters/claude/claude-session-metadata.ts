@@ -1,7 +1,13 @@
-import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
+import { getSessionInfo, listSessions } from "@anthropic-ai/claude-agent-sdk";
 import { type SessionRef } from "@openducktor/core";
-import { z } from "zod";
 import type { AgentSessionModelSelection, WorkspaceSessionExternal } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { readLatestHistoryAssistantModel } from "./claude-agent-sdk-history-entry";
+import {
+  loadClaudeSessionMessages,
+  type ClaudeHistoryReadFailure,
+} from "./claude-agent-sdk-history-messages";
+import type { ClaudeTranscriptReader } from "./claude-transcript-reader";
 
 const metadata = (
   row: Awaited<ReturnType<typeof listSessions>>[number],
@@ -43,15 +49,12 @@ export const getClaudeSessionMetadata = async (
   return value;
 };
 
-export const readClaudeSessionModel = async (
+/** Reads the model and effort of the latest root reply. SDK session messages omit the effort. */
+export const loadClaudeSessionModel = (
   ref: SessionRef,
-): Promise<AgentSessionModelSelection | null> => {
-  const messages = await getSessionMessages(ref.externalSessionId, { dir: ref.workingDirectory });
-  for (const entry of messages.toReversed()) {
-    if (entry.type !== "assistant") continue;
-    const { model: modelId } = z.object({ model: z.string().optional() }).parse(entry.message);
-    if (modelId && modelId !== "<synthetic>")
-      return { runtimeKind: "claude", providerId: "claude", modelId };
-  }
-  return null;
-};
+  reader: ClaudeTranscriptReader,
+): Effect.Effect<AgentSessionModelSelection | null, ClaudeHistoryReadFailure> =>
+  loadClaudeSessionMessages(
+    { ...ref, runtimeKind: "claude", runtimePolicy: { kind: "claude" } },
+    { reader },
+  ).pipe(Effect.map(readLatestHistoryAssistantModel));

@@ -1,6 +1,7 @@
 import { isClaudeEffortLevel } from "./claude-effort";
-import type { AgentModelSelection } from "@openducktor/core";
+import type { AgentSessionModelSelection } from "@openducktor/contracts";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
+import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-schemas";
 import { isClaudeSyntheticAssistantMessage } from "./claude-agent-sdk-local-commands";
 import { readStringProp } from "./claude-agent-sdk-utils";
 
@@ -18,12 +19,12 @@ export const readHistorySessionId = (entry: ClaudeHistoryMessage): string =>
 export const readHistoryAssistantModel = (
   entry: ClaudeHistoryMessage,
   model: string | undefined,
-): AgentModelSelection | undefined => {
+): AgentSessionModelSelection | undefined => {
   if (entry.type !== "assistant" || isClaudeSyntheticAssistantMessage(entry)) {
     return undefined;
   }
   if (!model) return undefined;
-  const selection: AgentModelSelection = {
+  const selection: AgentSessionModelSelection = {
     providerId: "claude",
     modelId: model,
     runtimeKind: "claude",
@@ -31,6 +32,21 @@ export const readHistoryAssistantModel = (
   const effort = readStringProp(entry, "perTurnEffort") ?? readStringProp(entry, "effort");
   if (effort && isClaudeEffortLevel(effort)) selection.variant = effort;
   return selection;
+};
+
+/** The model and effort of the latest root assistant reply. */
+export const readLatestHistoryAssistantModel = (
+  messages: readonly ClaudeHistoryMessage[],
+): AgentSessionModelSelection | null => {
+  for (const entry of messages.toReversed()) {
+    if (entry.type !== "assistant" || isNestedHistoryEntry(entry)) continue;
+    const model = readHistoryAssistantModel(
+      entry,
+      parseClaudeHistoryAssistantEntry(entry).message.model,
+    );
+    if (model) return model;
+  }
+  return null;
 };
 
 export const isNestedHistoryEntry = (entry: ClaudeHistoryMessage): boolean => {

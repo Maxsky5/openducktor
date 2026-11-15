@@ -47,7 +47,6 @@ export const agentModelDescriptorSchema = z
     liveSessionUpdates: z
       .object({
         profile: z.boolean().optional(),
-        variants: z.array(z.string()).optional(),
       })
       .strict()
       .optional(),

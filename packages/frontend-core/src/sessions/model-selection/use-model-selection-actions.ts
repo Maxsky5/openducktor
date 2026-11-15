@@ -5,7 +5,7 @@ import {
   resolveModelSelectionForPair,
   resolveModelSelectionForProfileChange,
   resolveModelSelectionForVariantChange,
-  resolveModelSelectionPolicy,
+  canChangeLiveProfile,
 } from "@openducktor/core";
 import { useCallback, useRef } from "react";
 import type { ModelPickerValue } from "./model-picker-model";
@@ -103,10 +103,7 @@ export const useModelSelectionActions = ({
       }
       void applySelection((currentSelection) => {
         const selectedModel = findSelectedCatalogModel(selectionCatalog, currentSelection);
-        if (
-          !resolveModelSelectionPolicy(selectedModel, loadedSessionIdentity !== null)
-            .canChangeProfile
-        ) {
+        if (!canChangeLiveProfile(selectedModel, loadedSessionIdentity !== null)) {
           return null;
         }
         return resolveModelSelectionForProfileChange({
@@ -136,13 +133,7 @@ export const useModelSelectionActions = ({
         if (!resolvedPair) {
           return null;
         }
-        const { model, selection: modelSelection } = resolvedPair;
-        const { variants } = resolveModelSelectionPolicy(model, loadedSessionIdentity !== null);
-        const { variant: _defaultVariant, ...selectionWithoutVariant } = modelSelection;
-        const nextSelection: AgentModelSelection = { ...selectionWithoutVariant };
-        if (variants[0]) {
-          nextSelection.variant = variants[0];
-        }
+        const nextSelection = resolvedPair.selection;
         if (currentSelection?.speed && !nextSelection.speed) {
           feedback.show(
             "info",
@@ -179,8 +170,7 @@ export const useModelSelectionActions = ({
     (variant: string): Promise<void> =>
       applySelection((currentSelection) => {
         const selectedModel = findSelectedCatalogModel(selectionCatalog, currentSelection);
-        const policy = resolveModelSelectionPolicy(selectedModel, loadedSessionIdentity !== null);
-        if (loadedSessionIdentity && selectedModel && !policy.variants.includes(variant)) {
+        if (loadedSessionIdentity && selectedModel && !selectedModel.variants.includes(variant)) {
           return null;
         }
         return resolveModelSelectionForVariantChange({

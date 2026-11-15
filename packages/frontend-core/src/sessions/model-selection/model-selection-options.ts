@@ -1,7 +1,7 @@
 import {
   type AgentModelCatalog,
   type AgentModelSelection,
-  resolveModelSelectionPolicy,
+  canChangeLiveProfile,
 } from "@openducktor/core";
 import { toPrimaryAgentOptions } from "./catalog-select-options";
 import type { SelectOption } from "../../lib/select-option";
@@ -23,7 +23,6 @@ export const resolveModelSelectionOptions = ({
   selectedModelSelection: AgentModelSelection | null;
 }): ModelSelectionOptions => {
   const selectedModelEntry = findModelEntry(selectionCatalog, selectedModelSelection);
-  const policy = resolveModelSelectionPolicy(selectedModelEntry, liveSession);
   const profileOptions = toAgentProfileOptions(
     selectionCatalog,
     selectedModelSelection,
@@ -31,7 +30,7 @@ export const resolveModelSelectionOptions = ({
   );
   return {
     selectedModelEntry,
-    agentProfileOptions: policy.canChangeProfile
+    agentProfileOptions: canChangeLiveProfile(selectedModelEntry, liveSession)
       ? profileOptions
       : profileOptions.map((option) => ({
           ...option,
@@ -126,7 +125,7 @@ const toVariantOptions = (
     }
     return [];
   }
-  const { variants } = resolveModelSelectionPolicy(selectedModelEntry, liveSession);
+  const { variants } = selectedModelEntry;
   const options: SelectOption[] = variants.map((variant) => ({
     value: variant,
     label: variant,

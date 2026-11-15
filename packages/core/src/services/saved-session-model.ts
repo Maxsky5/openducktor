@@ -9,13 +9,14 @@ import {
 import {
   findCatalogModel,
   normalizeCatalogSpeed,
+  normalizeCatalogVariant,
   normalizeVisibleCatalogProfileId,
   pickVisibleCatalogDefaultProfileId,
   resolveSavedModelAlias,
   STANDARD_SPEED,
   withSpeed,
 } from "./model-catalog-selection";
-import { resolveModelSelectionPolicy } from "./model-selection-policy";
+import { canChangeLiveProfile } from "./model-selection-policy";
 
 type SendBlockReason = "model" | "profile";
 type RepairChoice =
@@ -153,7 +154,6 @@ const pickSessionRepair = (
     return { selection: null, blockedReason: "model" };
   }
   const model = findCatalogModel(selectionCatalog, selection);
-  const policy = resolveModelSelectionPolicy(model, true);
   // The host keeps the saved profile when an update omits it.
   const profileId = savedSelection.profileId
     ? (normalizeVisibleCatalogProfileId(selectionCatalog, savedSelection.profileId) ??
@@ -162,15 +162,12 @@ const pickSessionRepair = (
     : selection.profileId;
   if (
     (savedSelection.profileId && !profileId) ||
-    (!policy.canChangeProfile && profileId !== savedSelection.profileId)
+    (!canChangeLiveProfile(model, true) && profileId !== savedSelection.profileId)
   ) {
     return { selection: null, blockedReason: "profile" };
   }
 
-  const variant =
-    selection.variant && policy.variants.includes(selection.variant)
-      ? selection.variant
-      : policy.variants[0];
+  const variant = model ? normalizeCatalogVariant(model, selection.variant) : undefined;
   if (model && model.variants.length > 0 && !variant) {
     return { selection: null, blockedReason: "model" };
   }

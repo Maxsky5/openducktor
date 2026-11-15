@@ -32,7 +32,7 @@ import {
   toSessionError,
 } from "./claude-agent-sdk-session-lifecycle";
 import {
-  assertClaudeSessionModelUpdateSupported,
+  assertClaudeSessionProfileUnchanged,
   toClaudeFlagSettings,
 } from "./claude-agent-sdk-session-model";
 import { toClaudeDisplayParts, toClaudeUserMessageEvent } from "./claude-agent-sdk-session-shape";
@@ -65,7 +65,7 @@ export const applyClaudeSessionModel = async (
 ): Promise<void> => {
   assertAcceptingMessages(session);
   const nextModel = model ?? undefined;
-  assertClaudeSessionModelUpdateSupported(session, nextModel);
+  assertClaudeSessionProfileUnchanged(session, nextModel);
 
   const previousModel = session.model;
   const modelChanged = force || previousModel?.modelId !== nextModel?.modelId;
@@ -75,6 +75,8 @@ export const applyClaudeSessionModel = async (
     speed: force || previousModel === undefined || previousModel.speed !== nextModel?.speed,
   };
   const settingsChanged = changed.effort || changed.speed;
+  // Build the settings before the query changes, so a bad effort or speed fails first.
+  const nextSettings = toClaudeFlagSettings(nextModel, changed);
   try {
     if (modelChanged) {
       workStartGuard?.assertCurrent();
@@ -85,9 +87,7 @@ export const applyClaudeSessionModel = async (
     }
     if (settingsChanged) {
       workStartGuard?.assertCurrent();
-      const changing = session.query.applyFlagSettings(
-        toClaudeFlagSettings(nextModel, session.externalSessionId, changed),
-      );
+      const changing = session.query.applyFlagSettings(nextSettings);
       onWorkIssued?.();
       await changing;
       assertAcceptingMessages(session);
@@ -99,9 +99,7 @@ export const applyClaudeSessionModel = async (
     const rollbackFailures: string[] = [];
     if (settingsChanged) {
       try {
-        await session.query.applyFlagSettings(
-          toClaudeFlagSettings(previousModel, session.externalSessionId, changed),
-        );
+        await session.query.applyFlagSettings(toClaudeFlagSettings(previousModel, changed));
       } catch (rollbackCause) {
         rollbackFailures.push(`settings: ${errorMessage(rollbackCause)}`);
       }

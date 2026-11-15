@@ -23,7 +23,6 @@ const catalog: AgentModelCatalog = {
       modelName: "Opus 5.5",
       aliases: ["opus"],
       variants: ["low", "max"],
-      liveSessionUpdates: { variants: ["low"] },
     },
   ],
   defaultModelsByProvider: { claude: "claude-opus-5-5" },

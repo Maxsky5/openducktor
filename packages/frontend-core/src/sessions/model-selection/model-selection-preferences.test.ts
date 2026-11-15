@@ -47,19 +47,6 @@ const CATALOG: AgentModelCatalog = {
   ],
 };
 
-const LIVE_UPDATE_CATALOG: AgentModelCatalog = {
-  ...CATALOG,
-  models: CATALOG.models.map((model) =>
-    model.modelId === "gpt-5"
-      ? {
-          ...model,
-          variants: ["default", "high", "max"],
-          liveSessionUpdates: { variants: ["default", "high"] },
-        }
-      : model,
-  ),
-};
-
 describe("model-selection-preferences", () => {
   test("resolves chat composer runtime kind from selected session, draft, caller default, then runtime default", () => {
     const defaultSelection = {
@@ -282,30 +269,6 @@ describe("model-selection-preferences", () => {
       selectionCatalog: CATALOG,
       selectedModelSelection: unknownSessionModel,
       selectionForNewSession: unknownSessionModel,
-    });
-  });
-
-  test("preserves the current loaded-session variant even when it cannot be selected live", () => {
-    const selectedSessionModel = {
-      runtimeKind: "opencode" as const,
-      providerId: "openai",
-      modelId: "gpt-5",
-      variant: "max",
-    };
-
-    expect(
-      resolveChatComposerModelSelections({
-        source: {
-          kind: "session",
-          modelCatalog: LIVE_UPDATE_CATALOG,
-          selectedSessionModel,
-        },
-        defaultSelection: null,
-      }),
-    ).toEqual({
-      selectionCatalog: LIVE_UPDATE_CATALOG,
-      selectedModelSelection: selectedSessionModel,
-      selectionForNewSession: selectedSessionModel,
     });
   });
 

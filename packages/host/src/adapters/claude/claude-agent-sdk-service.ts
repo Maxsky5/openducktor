@@ -12,7 +12,7 @@ import {
   resumeRetainedClaudeSession,
   updateClaudeSessionTitle,
 } from "./claude-session-title-update";
-import { getClaudeSessionMetadata, readClaudeSessionModel } from "./claude-session-metadata";
+import { getClaudeSessionMetadata, loadClaudeSessionModel } from "./claude-session-metadata";
 import { requireClaudeSession, resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -309,27 +309,26 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       const metadata = yield* fromPromise("claudeRuntime.getSessionMetadata", () =>
         getClaudeSessionMetadata(request),
       );
-      const selectedModel = yield* fromPromise("claudeRuntime.readSessionModel", () =>
-        readClaudeSessionModel(request),
+      const selectedModel = yield* loadClaudeSessionModel(request, this.historyReader).pipe(
+        Effect.mapError((cause) => toClaudeServiceError("claudeRuntime.readSessionModel", cause)),
       );
+      const input: ClaudeSessionInput = {
+        ...request,
+        runtimeKind: "claude",
+        runtimePolicy: { kind: "claude" },
+        systemPrompt: "",
+      };
+      // Like a stored session resume, start the live session with the model and its effort.
+      if (selectedModel) input.model = selectedModel;
       return {
         metadata,
         selectedModel,
-        attach: this.createSession(
-          {
-            ...request,
-            runtimeKind: "claude",
-            runtimePolicy: { kind: "claude" },
-            systemPrompt: "",
-          },
-          runtimeId,
-          {
-            externalSessionId: request.externalSessionId,
-            options: { resume: request.externalSessionId },
-            preserveNativeSettings: true,
-            startedMessage: "Imported session",
-          },
-        ),
+        attach: this.createSession(input, runtimeId, {
+          externalSessionId: request.externalSessionId,
+          options: { resume: request.externalSessionId },
+          preserveNativeSettings: true,
+          startedMessage: "Imported session",
+        }),
       };
     });
   }

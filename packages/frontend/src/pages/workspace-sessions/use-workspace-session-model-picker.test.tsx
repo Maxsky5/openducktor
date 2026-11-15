@@ -149,7 +149,7 @@ test("live model picker retains a disabled runtime and refreshes when catalog or
 }, 5000);
 
 test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
-  "$kind picker applies live restrictions only after native startup",
+  "$kind picker applies live profile restrictions only after native startup",
   async (descriptor) => {
     const catalog: AgentModelCatalog = {
       models: [
@@ -160,7 +160,7 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
           modelId: "model",
           modelName: "Model",
           variants: ["high", "max"],
-          liveSessionUpdates: { profile: false, variants: ["high"] },
+          liveSessionUpdates: { profile: false },
         },
       ],
       defaultModelsByProvider: {},
@@ -235,7 +235,10 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
         externalSessionId: "native-1",
       };
       await harness.update({ ...target, identity });
-      expect(harness.getLatest().variantOptions.map((option) => option.value)).toEqual(["high"]);
+      expect(harness.getLatest().variantOptions.map((option) => option.value)).toEqual([
+        "high",
+        "max",
+      ]);
       expect(harness.getLatest().agentProfileOptions).toEqual([
         expect.objectContaining({
           value: "build",
@@ -248,13 +251,10 @@ test.each([CLAUDE_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR])(
           description: "Start a new session to change the agent profile.",
         }),
       ]);
-      await harness.run((state) => {
-        state.handleSelectVariant("max");
-        state.handleSelectAgentProfile("review");
-      });
+      await harness.run((state) => state.handleSelectAgentProfile("review"));
       expect(update).not.toHaveBeenCalled();
-      await harness.run((state) => state.handleSelectVariant("high"));
-      expect(update).toHaveBeenCalledWith(identity, expect.objectContaining({ variant: "high" }));
+      await harness.run((state) => state.handleSelectVariant("max"));
+      expect(update).toHaveBeenCalledWith(identity, expect.objectContaining({ variant: "max" }));
     } finally {
       await harness.unmount();
     }

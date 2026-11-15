@@ -35,10 +35,7 @@ const claudeCatalog: AgentModelCatalog = {
       modelName: "Claude Opus 4.6",
       variants: ["low", "medium", "high", "xhigh", "max"],
       speedLevels: [{ id: "fast", label: "Fast" }],
-      liveSessionUpdates: {
-        profile: false,
-        variants: ["low", "medium", "high", "xhigh"],
-      },
+      liveSessionUpdates: { profile: false },
     },
   ],
   defaultModelsByProvider: {
@@ -73,7 +70,7 @@ const multiModelCatalog: AgentModelCatalog = {
       id: "claude/claude-sonnet-4-6",
       modelId: "claude-sonnet-4-6",
       variants: ["medium", "high"],
-      liveSessionUpdates: { profile: false, variants: ["medium", "high"] },
+      liveSessionUpdates: { profile: false },
       speedLevels: [{ id: "fast", label: "Fast" }],
     },
   ],
@@ -112,13 +109,13 @@ describe("useModelSelectionActions", () => {
     await harness.unmount();
   });
 
-  test("blocks live variant changes when model metadata disallows them", async () => {
+  test("blocks live variant changes that the model does not report", async () => {
     const updateAgentSessionModel = mock(async () => {});
     const harness = createHarness(createBaseProps({ updateAgentSessionModel }));
 
     await harness.mount();
     await harness.run((state) => {
-      state.handleSelectVariant("max");
+      state.handleSelectVariant("turbo");
     });
 
     expect(updateAgentSessionModel).not.toHaveBeenCalled();
@@ -131,12 +128,12 @@ describe("useModelSelectionActions", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.handleSelectVariant("xhigh");
+      state.handleSelectVariant("max");
     });
 
     expect(updateAgentSessionModel).toHaveBeenCalledWith(loadedClaudeSession, {
       ...claudeSelection,
-      variant: "xhigh",
+      variant: "max",
     });
     await harness.unmount();
   });
@@ -198,55 +195,6 @@ describe("useModelSelectionActions", () => {
       providerId: "claude",
       modelId: "claude-opus-4-6",
       variant: "low",
-    });
-    await harness.unmount();
-  });
-
-  test("chooses a supported variant when changing a live session model", async () => {
-    const updateAgentSessionModel = mock(async () => {});
-    const selectionCatalog: AgentModelCatalog = {
-      ...claudeCatalog,
-      models: [
-        ...claudeCatalog.models,
-        {
-          id: "claude/claude-sonnet-4-6",
-          providerId: "claude",
-          providerName: "Claude",
-          modelId: "claude-sonnet-4-6",
-          modelName: "Claude Sonnet 4.6",
-          variants: ["max", "high"],
-          liveSessionUpdates: {
-            profile: false,
-            variants: ["high"],
-          },
-        },
-      ],
-    };
-    const harness = createHarness(
-      createBaseProps({
-        selectionCatalog,
-        updateAgentSessionModel,
-      }),
-    );
-
-    await harness.mount();
-    await harness.run((state) => {
-      state.handleSelectModelPair(
-        {
-          runtimeKind: "claude",
-          providerId: "claude",
-          modelId: "claude-sonnet-4-6",
-        },
-        selectionCatalog,
-      );
-    });
-
-    expect(updateAgentSessionModel).toHaveBeenCalledWith(loadedClaudeSession, {
-      runtimeKind: "claude",
-      providerId: "claude",
-      modelId: "claude-sonnet-4-6",
-      variant: "high",
-      profileId: "orchestrator",
     });
     await harness.unmount();
   });
