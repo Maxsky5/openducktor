@@ -1,8 +1,16 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { ChildProcess, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
+import {
+  createEffectHostCommandRouter,
+  toPromiseHostCommandRouter,
+} from "../../interface/router/host-command-router";
+import { causeToHostBoundaryError, HostOperationError } from "../../effect/host-errors";
+import type { SystemCommandRunOptions } from "../../ports/system-command-port";
 import { createSystemCommandRunner } from "./system-command-runner";
 
 const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> => {
@@ -14,7 +22,206 @@ const withTempDir = async (run: (root: string) => Promise<void>): Promise<void> 
   }
 };
 
+type CommandChildFixture = {
+  args: string[];
+  ready: Promise<void>;
+  readonly child: ChildProcess | undefined;
+  readonly closed: boolean;
+};
+
+const withCommandChild = async (
+  failTermination: boolean,
+  run: (fixture: CommandChildFixture) => Promise<void>,
+): Promise<void> => {
+  const marker = randomUUID();
+  const originalEmit = ChildProcess.prototype.emit;
+  let child: ChildProcess | undefined;
+  let closed = false;
+  let onReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    onReady = resolve;
+  });
+  let resolveClose!: () => void;
+  const closure = new Promise<void>((resolve) => {
+    resolveClose = resolve;
+  });
+  const onClose = () => {
+    closed = true;
+    resolveClose();
+  };
+  const spy = spyOn(ChildProcess.prototype, "emit").mockImplementation(function (
+    this: ChildProcess,
+    event: string | symbol,
+    ...args: unknown[]
+  ) {
+    const result = originalEmit.call(this, event, ...args);
+    if (event !== "spawn" || this.spawnargs.at(-1) !== marker) return result;
+    // Capture only the child launched with this fixture's unique argument.
+    // oxlint-disable-next-line typescript/no-this-alias
+    child = this;
+    this.once("close", onClose);
+    this.stdout?.once("data", onReady);
+    if (failTermination) this.kill = () => false;
+    return result;
+  });
+  let teardownTimeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await run({
+      args: [
+        "-e",
+        "process.on('SIGTERM',()=>{});process.stdout.write('ready');setInterval(()=>{process.stdout.write('x');process.stderr.write('y')},10);setTimeout(()=>process.exit(0),4000)",
+        marker,
+      ],
+      ready,
+      get child() {
+        return child;
+      },
+      get closed() {
+        return closed;
+      },
+    });
+  } finally {
+    try {
+      if (child && !closed) {
+        ChildProcess.prototype.kill.call(child, "SIGKILL");
+        await Promise.race([
+          closure,
+          new Promise<never>((_, reject) => {
+            teardownTimeout = setTimeout(
+              () => reject(new Error(`Test child ${child?.pid} did not close after SIGKILL.`)),
+              1000,
+            );
+          }),
+        ]);
+      }
+    } finally {
+      clearTimeout(teardownTimeout);
+      child?.stdout?.off("data", onReady);
+      child?.off("close", onClose);
+      spy.mockRestore();
+    }
+  }
+};
+
 describe("createSystemCommandRunner", () => {
+  test("isolates termination failure and awaits emergency child closure", async () => {
+    let ownedPid: number | undefined;
+    await withCommandChild(true, async (fixture) => {
+      const unrelated = spawn(process.execPath, ["-e", "setTimeout(()=>process.exit(0),4000)"], {
+        stdio: "ignore",
+      });
+      const unrelatedClosed = new Promise<void>((resolve) =>
+        unrelated.once("close", () => resolve()),
+      );
+      try {
+        await new Promise<void>((resolve) => unrelated.once("spawn", () => resolve()));
+        expect(unrelated.kill("SIGKILL")).toBe(true);
+      } finally {
+        ChildProcess.prototype.kill.call(unrelated, "SIGKILL");
+        await unrelatedClosed;
+      }
+      const exit = await Effect.runPromiseExit(
+        createSystemCommandRunner().runCommandAllowFailure(process.execPath, fixture.args, {
+          maxStdoutBytes: 8,
+        }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      ownedPid = fixture.child?.pid;
+      expect(ownedPid).toBeDefined();
+      expect(() => process.kill(ownedPid!, 0)).not.toThrow();
+    });
+    expect(() => process.kill(ownedPid!, 0)).toThrow();
+  });
+
+  for (const path of ["timeout", "interruption", "overflow"] as const) {
+    test(`awaits process and stream closure after ${path}`, async () => {
+      await withCommandChild(false, async (fixture) => {
+        const options: SystemCommandRunOptions = { timeoutMs: path === "timeout" ? 300 : 3000 };
+        if (path === "overflow") options.maxStdoutBytes = 8;
+        const fiber = Effect.runFork(
+          createSystemCommandRunner().runCommandAllowFailure(
+            process.execPath,
+            fixture.args,
+            options,
+          ),
+        );
+        try {
+          await fixture.ready;
+          const { child } = fixture;
+          if (path === "interruption") await Effect.runPromise(Fiber.interrupt(fiber));
+          const exit = await Effect.runPromise(Fiber.await(fiber));
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(fixture.closed).toBe(true);
+          expect(child?.stdout?.destroyed).toBe(true);
+          expect(child?.stderr?.destroyed).toBe(true);
+          expect(child?.stdout?.listenerCount("data")).toBe(0);
+          expect(child?.stderr?.listenerCount("data")).toBe(0);
+          expect(child?.listenerCount("error")).toBe(0);
+          expect(child?.listenerCount("close")).toBe(0);
+          expect(() => process.kill(child!.pid!, 0)).toThrow();
+        } finally {
+          await Effect.runPromise(Fiber.interrupt(fiber));
+        }
+      });
+    });
+  }
+
+  for (const [failurePath, expectedMessage] of [
+    ["timeout", "Timed out running"],
+    ["overflow", "more than 8 bytes"],
+    ["interruption", "interrupted"],
+  ] as const) {
+    test(`reports ${failurePath} and cleanup failure to the host caller`, async () => {
+      await withCommandChild(true, async (fixture) => {
+        const options: SystemCommandRunOptions = {
+          timeoutMs: failurePath === "timeout" ? 100 : 3000,
+        };
+        if (failurePath === "overflow") options.maxStdoutBytes = 8;
+        const effectRouter = createEffectHostCommandRouter({
+          handlers: {
+            system_get_platform: () =>
+              createSystemCommandRunner()
+                .runCommandAllowFailure(process.execPath, fixture.args, options)
+                .pipe(Effect.as("darwin")),
+          },
+        });
+        let error: unknown;
+        if (failurePath === "interruption") {
+          const fiber = Effect.runFork(effectRouter.invoke("system_get_platform"));
+          await fixture.ready;
+          await Effect.runPromise(Fiber.interrupt(fiber));
+          const exit = await Effect.runPromise(Fiber.await(fiber));
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+            error = causeToHostBoundaryError(exit.cause);
+          }
+        } else {
+          error = await toPromiseHostCommandRouter(effectRouter)
+            .invoke("system_get_platform")
+            .then(
+              () => null,
+              (cause: unknown) => cause,
+            );
+        }
+        expect(error).toBeInstanceOf(HostOperationError);
+        if (error instanceof HostOperationError) {
+          expect(error.message).toContain(expectedMessage);
+          expect(error.message).toContain("Failed to stop command");
+          expect(error.details).toMatchObject({ command: process.execPath });
+          if (failurePath === "timeout") {
+            expect(error.operation).toBe("systemCommand.runCommandAllowFailure");
+            expect(error.details).toMatchObject({ timeoutMs: 100 });
+          }
+        }
+        const { child } = fixture;
+        expect(child?.stdout?.destroyed).toBe(true);
+        expect(child?.stderr?.destroyed).toBe(true);
+        expect(child?.stderr?.listenerCount("data")).toBe(0);
+      });
+    });
+  }
+
   test("returns binary stdout as base64 and stops oversized output", async () => {
     const port = createSystemCommandRunner({
       readEnv: () => process.env,
