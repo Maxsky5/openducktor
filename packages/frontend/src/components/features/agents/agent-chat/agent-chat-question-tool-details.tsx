@@ -1,6 +1,6 @@
 import {
-  buildQuestionDetailEntries,
   NO_ANSWER_YET_LABEL,
+  type QuestionDetailEntry,
   readToolDetailAvailability,
   readToolDetailsError,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
@@ -159,6 +159,7 @@ const RawCallData = ({
  */
 export const QuestionToolDetails = ({
   meta,
+  questions,
   title,
   workingDirectory,
   closeAction,
@@ -166,12 +167,13 @@ export const QuestionToolDetails = ({
   timeLabel,
 }: {
   meta: ToolMeta;
+  /** The questions of the call, which the parser read from it. */
+  questions: QuestionDetailEntry[];
   /** The name of the tool that the runtime called, such as `AskUserQuestion`. */
   title: string;
   workingDirectory: string | null;
   closeAction?: ReactNode;
 } & ToolDetailsTiming): ReactElement => {
-  const entries = buildQuestionDetailEntries(meta);
   const error = readToolDetailsError(meta);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -186,11 +188,11 @@ export const QuestionToolDetails = ({
         />
         {error ? <DetailsError error={error} /> : null}
         <section aria-label="Questions" className="space-y-2">
-          {entries.map(({ key, detail }, index) => (
+          {questions.map(({ key, detail }, index) => (
             <QuestionCard
               key={key}
               detail={detail}
-              position={entries.length > 1 ? `${index + 1} of ${entries.length}` : null}
+              position={questions.length > 1 ? `${index + 1} of ${questions.length}` : null}
             />
           ))}
         </section>

@@ -6,6 +6,7 @@ import {
   formatToolInput,
   hasFileEditChanges,
   NO_ANSWER_YET_LABEL,
+  type QuestionDetailEntry,
   readToolDetailAvailability,
   readToolDetailsHeading,
   readToolDetailsError,
@@ -13,7 +14,6 @@ import {
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import {
   type QuestionToolDetail,
-  questionToolDetails,
   readQuestionAnswerChoices,
 } from "@openducktor/frontend-core/sessions/messages/question-tool-parser";
 import {
@@ -53,7 +53,7 @@ import { MarkdownView } from "@/rich-content/markdown/markdown-view";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
 import { monoWeight, sansWeight } from "@/theme/tokens";
-import { Icon } from "@/ui/icon";
+import { Icon, type IconName } from "@/ui/icon";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
@@ -92,8 +92,10 @@ function ShownToolDetails({ meta, ...timing }: { meta: ToolMeta } & DetailsTimin
   if (meta.toolType === "file_edit" && hasFileEditChanges(meta, workingDirectory)) {
     return <FileEditDetails meta={meta} {...timing} />;
   }
-  if (meta.toolType === "question" && questionToolDetails(meta).length > 0) {
-    return <QuestionToolDetails meta={meta} {...timing} />;
+  // A question tool whose questions the parser cannot read shows its input and output.
+  const questions = buildQuestionDetailEntries(meta);
+  if (questions.length > 0) {
+    return <QuestionToolDetails meta={meta} questions={questions} {...timing} />;
   }
   return <ToolCallDetails meta={meta} {...timing} />;
 }
@@ -545,12 +547,12 @@ function ToolCallDetails({
  */
 function QuestionToolDetails({
   meta,
+  questions,
   messageTimestamp,
   timeLabel,
-}: { meta: ToolMeta } & DetailsTiming): ReactElement {
+}: { meta: ToolMeta; questions: QuestionDetailEntry[] } & DetailsTiming): ReactElement {
   const { desktop } = useAppTheme();
   const [rawOpen, setRawOpen] = useState(false);
-  const entries = buildQuestionDetailEntries(meta);
   const { hasInput, hasOutput } = readToolDetailAvailability(meta);
   const error = readToolDetailsError(meta);
   return (
@@ -569,11 +571,11 @@ function QuestionToolDetails({
       ) : null}
       {/* A question tool asks a few questions, so they render in the scroll view of the details. */}
       {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
-      {entries.map(({ key, detail }, index) => (
+      {questions.map(({ key, detail }, index) => (
         <QuestionCard
           key={key}
           detail={detail}
-          position={entries.length > 1 ? `${index + 1} of ${entries.length}` : null}
+          position={questions.length > 1 ? `${index + 1} of ${questions.length}` : null}
         />
       ))}
       {hasInput || hasOutput ? (
@@ -597,6 +599,12 @@ function QuestionToolDetails({
     </ScrollView>
   );
 }
+
+/** The desktop `OptionIcon`: a box for a multiple choice option, a circle for another option. */
+const optionIcon = (multiple: boolean, selected: boolean): IconName => {
+  if (multiple) return selected ? "check-square" : "square";
+  return selected ? "circle-check" : "circle";
+};
 
 /** One question: its label, its prompt, its options with the chosen ones marked, and the written answers. */
 function QuestionCard({
@@ -639,13 +647,6 @@ function QuestionCard({
       </Text>
       {detail.options.map((option) => {
         const selected = selectedLabels.has(option.label);
-        const icon = detail.multiple
-          ? selected
-            ? "check-square"
-            : "square"
-          : selected
-            ? "circle-check"
-            : "circle";
         return (
           <View
             key={option.label}
@@ -658,7 +659,7 @@ function QuestionCard({
             ]}
           >
             <Icon
-              name={icon}
+              name={optionIcon(detail.multiple, selected)}
               size={14}
               colorValue={selected ? desktop.foreground : desktop.mutedForeground}
             />

@@ -484,6 +484,29 @@ describe("AgentChatToolDetailsBeside", () => {
     expect(details.getByText("Output")).toBeTruthy();
   });
 
+  test("shows the input and output of a question tool whose questions it cannot read", () => {
+    render(
+      <Transcript
+        messages={[
+          toolMessage("ask", {
+            tool: "question",
+            toolType: "question",
+            input: { form: "unknown shape" },
+            output: "Answered",
+          }),
+        ]}
+      />,
+    );
+
+    pressRow(/Question/);
+
+    const details = within(panel());
+    expect(details.getByRole("heading", { name: "question" })).toBeTruthy();
+    expect(details.queryByRole("region", { name: "Questions" })).toBeNull();
+    expect(details.getByText("Input")).toBeTruthy();
+    expect(details.getByText("Answered")).toBeTruthy();
+  });
+
   test("shows the output of a running command live only when its runtime sends it", () => {
     const running = toolMessage("build", {
       status: "running",

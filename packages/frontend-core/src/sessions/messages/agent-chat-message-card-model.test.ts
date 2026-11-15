@@ -495,7 +495,7 @@ describe("agent-chat-message-card-model", () => {
       ]);
     });
 
-    test("splits answers into chosen options and written answers", () => {
+    test("splits answers into chosen options and written answers, each written answer once", () => {
       const detail = {
         prompt: "Which checks?",
         header: null,
@@ -505,7 +505,7 @@ describe("agent-chat-message-card-model", () => {
           { label: "Build", description: null },
         ],
         multiple: true,
-        answers: ["Lint, Test", "Also run e2e, please"],
+        answers: ["Lint, Test", "Also run e2e, please", "Also run e2e, please"],
       };
 
       const choices = readQuestionAnswerChoices(detail);

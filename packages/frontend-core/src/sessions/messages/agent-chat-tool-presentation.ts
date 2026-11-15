@@ -328,10 +328,11 @@ export const readToolCallFilePath = (
   return edits.length === 1 ? (edits[0]?.filePath ?? null) : null;
 };
 
-/** The questions and answers of a question tool, with keys that stay the same across renders. */
-export const buildQuestionDetailEntries = (
-  meta: ToolMeta,
-): Array<{ key: string; detail: QuestionToolDetail }> => {
+/** A question of a question tool, with a key that stays the same across renders. */
+export type QuestionDetailEntry = { key: string; detail: QuestionToolDetail };
+
+/** The questions and answers of a question tool. Empty for another tool. */
+export const buildQuestionDetailEntries = (meta: ToolMeta): QuestionDetailEntry[] => {
   const countsByBaseKey = new Map<string, number>();
   return questionToolDetails(meta).map((detail) => {
     const baseKey = `${meta.callId}:question:${detail.prompt}:${detail.answers.join("|")}`;
@@ -345,9 +346,7 @@ export const buildQuestionDetailEntries = (
  * The questions whose answers show under the line of a question tool. A call that failed or
  * stopped without an answer shows none: its line shows why.
  */
-export const readQuestionAnswerEntries = (
-  meta: ToolMeta,
-): Array<{ key: string; detail: QuestionToolDetail }> => {
+export const readQuestionAnswerEntries = (meta: ToolMeta): QuestionDetailEntry[] => {
   const entries = buildQuestionDetailEntries(meta);
   const phase = getToolLifecyclePhase(meta);
   const stopped = phase === "failed" || phase === "cancelled";

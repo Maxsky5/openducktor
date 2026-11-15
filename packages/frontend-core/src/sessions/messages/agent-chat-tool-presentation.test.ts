@@ -10,6 +10,7 @@ import {
   readToolFileEdits,
   readRegularToolTiming,
   readWorkflowToolCard,
+  readQuestionAnswerEntries,
   readToolCallName,
   readToolDetailsHeading,
   regularToolLineName,
@@ -193,6 +194,30 @@ describe("tool presentation", () => {
 
   test("formats input with paths relative to the working directory", () => {
     expect(formatToolInput({ filePath: "/repo/src/a.ts" }, "/repo")).toContain('"src/a.ts"');
+  });
+
+  test("shows the answers of a question call, unless it failed or stopped without an answer", () => {
+    const question = (status: ToolMeta["status"], answers: string[][]) =>
+      meta({
+        tool: "question",
+        toolType: "question",
+        status,
+        input: { questions: [{ question: "First?" }, { question: "Second?" }] },
+        metadata: { answers },
+      });
+    const prompts = (entries: ReturnType<typeof readQuestionAnswerEntries>) =>
+      entries.map(({ detail }) => detail.prompt);
+
+    expect(prompts(readQuestionAnswerEntries(question("running", [])))).toEqual([
+      "First?",
+      "Second?",
+    ]);
+    expect(readQuestionAnswerEntries(question("error", []))).toEqual([]);
+    // A call that stopped after one answer keeps every question, so the reader sees what is missing.
+    expect(prompts(readQuestionAnswerEntries(question("error", [["Yes"], []])))).toEqual([
+      "First?",
+      "Second?",
+    ]);
   });
 
   test("keys repeated questions apart", () => {

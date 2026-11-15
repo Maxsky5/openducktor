@@ -111,7 +111,8 @@ const collectQuestionDetails = (value: AgentToolValue | undefined): QuestionTool
       prompt,
       header: header === prompt ? null : header,
       options: readQuestionOptions(entry.options),
-      // Claude names the flag `multiSelect`, and OpenCode and Codex name it `multiple`.
+      // Claude `AskUserQuestion` names the flag `multiSelect`. The OpenCode `Question.Prompt` schema
+      // and the Codex questions of the adapter name it `multiple`.
       multiple: entry.multiple === true || entry.multiSelect === true,
       answers: normalizeAnswerValues(
         entry.answers ?? entry.answer ?? entry.response ?? entry.responses,
@@ -255,7 +256,7 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
   }));
 };
 
-/** The options that the answers of a question chose, and the answers that the user wrote. */
+/** The options that the answers of a question chose, and each answer that the user wrote once. */
 export type QuestionAnswerChoices = {
   selectedLabels: ReadonlySet<string>;
   customAnswers: string[];
@@ -269,7 +270,7 @@ export type QuestionAnswerChoices = {
 export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionAnswerChoices => {
   const labels = new Set(detail.options.map((option) => option.label));
   const selectedLabels = new Set<string>();
-  const customAnswers: string[] = [];
+  const customAnswers = new Set<string>();
   for (const answer of detail.answers) {
     if (labels.has(answer)) {
       selectedLabels.add(answer);
@@ -280,7 +281,7 @@ export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionA
       for (const part of parts) selectedLabels.add(part);
       continue;
     }
-    customAnswers.push(answer);
+    customAnswers.add(answer);
   }
-  return { selectedLabels, customAnswers };
+  return { selectedLabels, customAnswers: [...customAnswers] };
 };

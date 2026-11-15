@@ -1,11 +1,11 @@
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { readMessageTimeLabel } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 import {
+  buildQuestionDetailEntries,
   hasFileEditChanges,
   readToolDetailsHeading,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { OdtToolIconKind } from "@openducktor/frontend-core/sessions/messages/odt-tool-call";
-import { questionToolDetails } from "@openducktor/frontend-core/sessions/messages/question-tool-parser";
 import type { AgentChatToolCallPresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import {
   isShellCommandCall,
@@ -121,10 +121,13 @@ const ToolCallDetailsBody = ({
         />
       );
     }
-    if (shownMeta.toolType === "question" && questionToolDetails(shownMeta).length > 0) {
+    // A question tool whose questions the parser cannot read shows its input and output.
+    const questions = buildQuestionDetailEntries(shownMeta);
+    if (questions.length > 0) {
       return (
         <QuestionToolDetails
           meta={shownMeta}
+          questions={questions}
           title={title}
           workingDirectory={sessionFolder}
           closeAction={closeAction}

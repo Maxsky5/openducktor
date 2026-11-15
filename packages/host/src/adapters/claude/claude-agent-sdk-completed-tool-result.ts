@@ -73,7 +73,7 @@ export const projectClaudeCompletedToolResult = ({
   if (!todoPresentation && preview) {
     completedToolInput.preview = preview;
   }
-  const resolvedMetadata = isError ? metadata : withClaudeQuestionAnswers(tool, raw, metadata);
+  const resolvedMetadata = withClaudeQuestionAnswers(tool, raw, metadata);
   if (resolvedMetadata) {
     completedToolInput.metadata = resolvedMetadata;
   }
