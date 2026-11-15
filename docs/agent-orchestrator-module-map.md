@@ -440,7 +440,7 @@ Rules:
 - Pass selected identity and loaded session as separate facts. Do not make a composer session copy.
 - Use the selected key for thread layout and autofocus. Do not derive it again from loaded state.
 - Validate runtime, provider, and model against the target catalog before a model update.
-- Apply live model restrictions only when a native session identity exists. `resolveModelSelectionPolicy` in core supplies the same profile and variant rules to visible options and selection actions. A saved workspace draft still uses startup model options.
+- Apply live model restrictions only when a native session identity exists. `canChangeLiveProfile` in core supplies the same live profile rule to visible options and selection actions. A saved workspace draft still uses startup model options.
 - The shared host command updates the native model, saves the durable choice, then publishes metadata. If the save fails, restore the previous native model before releasing the owner permit. A publication failure after a successful save must not roll back the native model.
 - Core model-selection services own pure runtime, profile, variant, speed, and saved-choice rules. Client presentation and host enforcement use these rules.
 - Task and workspace composers present accepted session settings. The selected chat creates or reattaches its session before enabling Send. Model, effort, speed, and profile changes use the explicit settings operation. Send never chooses or repairs them.

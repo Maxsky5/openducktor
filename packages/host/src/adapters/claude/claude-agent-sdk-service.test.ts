@@ -3,8 +3,6 @@ import { createClaudeServiceFixture as createService } from "./claude-agent-sdk-
 import * as todos from "./claude-agent-sdk-todos";
 import * as sessionFactory from "./claude-agent-sdk-session-factory";
 import * as nativeSessions from "./claude-session-metadata";
-import * as historyMessages from "./claude-agent-sdk-history-messages";
-import { claudeHistoryMessagesFixture } from "./claude-agent-sdk-history-test-messages";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import * as realClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
@@ -140,29 +138,15 @@ describe("createClaudeAgentSdkService", () => {
       title: "Native title",
       updatedAt: 1,
     });
-    const reply = (uuid: string, model: string, effort: string, isSidechain: boolean) => ({
-      type: "assistant",
-      uuid,
-      sessionId: "session-1",
-      isSidechain,
-      effort,
-      perTurnEffort: effort,
-      message: { id: uuid, model, role: "assistant", content: [{ type: "text", text: "Done." }] },
-    });
-    const transcript = spyOn(historyMessages, "loadClaudeSessionMessages").mockReturnValue(
-      Effect.succeed(
-        claudeHistoryMessagesFixture([
-          reply("root-reply", "native-claude", "max", false),
-          reply("subagent-reply", "subagent-claude", "low", true),
-        ]),
-      ),
-    );
     const importedModel = {
       runtimeKind: "claude" as const,
       providerId: "claude",
       modelId: "native-claude",
       variant: "max",
     };
+    const model = spyOn(nativeSessions, "loadClaudeSessionModel").mockReturnValue(
+      Effect.succeed(importedModel),
+    );
     const loadTodos = spyOn(todos, "loadClaudeTodos").mockReturnValue(Effect.succeed([]));
     const create = spyOn(sessionFactory, "createClaudeAgentSdkSession").mockImplementation(
       async (request) => {
@@ -200,7 +184,7 @@ describe("createClaudeAgentSdkService", () => {
       expect(store.get(ref.externalSessionId)).toBeDefined();
     } finally {
       metadata.mockRestore();
-      transcript.mockRestore();
+      model.mockRestore();
       loadTodos.mockRestore();
       create.mockRestore();
       await Effect.runPromise(service.dispose());

@@ -8,7 +8,7 @@ import { promptSettingsOf, type PromptSettings, type TaskWorkflow } from "@opend
 import {
   resolveSavedSessionModel,
   isSameSelection,
-  resolveModelSelectionPolicy,
+  canChangeLiveProfile,
   findCatalogModel,
   resolveSavedModelAlias,
 } from "@openducktor/core";
@@ -137,8 +137,7 @@ export const createSessionTurnPreparation = (deps: {
           });
         if (previous !== undefined && current) {
           const model = findCatalogModel(catalog, current);
-          const policy = resolveModelSelectionPolicy(model, true);
-          if (!policy.canChangeProfile && current.profileId !== previous?.profileId)
+          if (!canChangeLiveProfile(model, true) && current.profileId !== previous?.profileId)
             return yield* new HostValidationError({
               field: "profile",
               message:
@@ -147,12 +146,12 @@ export const createSessionTurnPreparation = (deps: {
           if (
             current.variant !== previous?.variant &&
             current.variant &&
-            !policy.variants.includes(current.variant)
+            !model?.variants.includes(current.variant)
           )
             return yield* new HostValidationError({
               field: "model",
               message:
-                "This runtime cannot apply this variant to a live session. Select a permitted variant or start a new session.",
+                "The model does not support this variant. Select a variant of the model or start a new session.",
             });
         }
         return decision.selection;

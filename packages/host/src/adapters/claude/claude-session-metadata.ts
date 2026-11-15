@@ -1,6 +1,13 @@
 import { getSessionInfo, listSessions } from "@anthropic-ai/claude-agent-sdk";
 import { type SessionRef } from "@openducktor/core";
-import type { WorkspaceSessionExternal } from "@openducktor/contracts";
+import type { AgentSessionModelSelection, WorkspaceSessionExternal } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { readLatestHistoryAssistantModel } from "./claude-agent-sdk-history-entry";
+import {
+  loadClaudeSessionMessages,
+  type ClaudeHistoryReadFailure,
+} from "./claude-agent-sdk-history-messages";
+import type { ClaudeTranscriptReader } from "./claude-transcript-reader";
 
 const metadata = (
   row: Awaited<ReturnType<typeof listSessions>>[number],
@@ -41,3 +48,13 @@ export const getClaudeSessionMetadata = async (
     throw new Error("Claude conversation directory changed or is unknown. Reload sessions.");
   return value;
 };
+
+/** Reads the model and effort of the latest root reply. SDK session messages omit the effort. */
+export const loadClaudeSessionModel = (
+  ref: SessionRef,
+  reader: ClaudeTranscriptReader,
+): Effect.Effect<AgentSessionModelSelection | null, ClaudeHistoryReadFailure> =>
+  loadClaudeSessionMessages(
+    { ...ref, runtimeKind: "claude", runtimePolicy: { kind: "claude" } },
+    { reader },
+  ).pipe(Effect.map(readLatestHistoryAssistantModel));

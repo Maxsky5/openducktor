@@ -1,10 +1,6 @@
 import type { SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Effect } from "effect";
-import {
-  AgentRuntimeQueryError,
-  type LoadAgentSessionHistoryInput,
-  type SessionRef,
-} from "@openducktor/core";
+import { AgentRuntimeQueryError, type LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { z } from "zod";
 import {
   errorMessage,
@@ -21,14 +17,11 @@ import {
 import {
   CLAUDE_TRANSCRIPT_MISSING_MESSAGE,
   readClaudeTranscript,
-  type ClaudeTranscriptReader,
   type ClaudeTranscriptReadOptions,
   type ClaudeTranscriptReadFailure,
   type ClaudeTranscriptSource,
 } from "./claude-transcript-reader";
 import { readText } from "./claude-agent-sdk-utils";
-import { readLatestHistoryAssistantModel } from "./claude-agent-sdk-history-entry";
-import type { AgentSessionModelSelection } from "@openducktor/contracts";
 
 type ClaudeHistoryEntry = {
   uuid?: string;
@@ -201,13 +194,3 @@ export const loadClaudeSessionMessages = (
   options: ClaudeTranscriptReadOptions = {},
 ): Effect.Effect<readonly ClaudeHistoryMessage[], ClaudeHistoryReadFailure> =>
   loadClaudeHistoryProjectionInput(input, options).pipe(Effect.map((result) => result.messages));
-
-/** Reads the model and effort of the latest root reply. SDK session messages omit the effort. */
-export const loadClaudeSessionModel = (
-  ref: SessionRef,
-  reader: ClaudeTranscriptReader,
-): Effect.Effect<AgentSessionModelSelection | null, ClaudeHistoryReadFailure> =>
-  loadClaudeSessionMessages(
-    { ...ref, runtimeKind: "claude", runtimePolicy: { kind: "claude" } },
-    { reader },
-  ).pipe(Effect.map(readLatestHistoryAssistantModel));

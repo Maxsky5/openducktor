@@ -12,8 +12,7 @@ import {
   resumeRetainedClaudeSession,
   updateClaudeSessionTitle,
 } from "./claude-session-title-update";
-import { getClaudeSessionMetadata } from "./claude-session-metadata";
-import { loadClaudeSessionModel } from "./claude-agent-sdk-history-messages";
+import { getClaudeSessionMetadata, loadClaudeSessionModel } from "./claude-session-metadata";
 import { requireClaudeSession, resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";

@@ -75,6 +75,7 @@ export const applyClaudeSessionModel = async (
     speed: force || previousModel === undefined || previousModel.speed !== nextModel?.speed,
   };
   const settingsChanged = changed.effort || changed.speed;
+  // Build the settings before the query changes, so a bad effort or speed fails first.
   const nextSettings = toClaudeFlagSettings(nextModel, changed);
   try {
     if (modelChanged) {
