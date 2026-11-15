@@ -64,6 +64,14 @@ test("preserves sparse defaults, cleared bindings, and unavailable workflow assi
   expect(shortcutPreferencesSchema.parse({ version: 1, overrides: {} }).overrides).toEqual({});
 });
 
+test("keeps when choices and rejects an unknown choice", () => {
+  const preferences = { version: 1, overrides: {}, when: { sidebar: "not-typing" } };
+  expect(shortcutPreferencesSchema.parse(preferences)).toEqual(preferences);
+  expect(
+    shortcutPreferencesSchema.safeParse({ ...preferences, when: { sidebar: "sometimes" } }).success,
+  ).toBe(false);
+});
+
 test("rejects the device-specific shape and combinations without a modifier", () => {
   const { mod: _mod, ...deviceKeys } = combination;
   for (const palette of [

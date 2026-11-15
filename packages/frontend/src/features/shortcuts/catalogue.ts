@@ -11,6 +11,7 @@ import {
   type ShortcutCombination,
   type ShortcutPosition,
   type ShortcutPreferences,
+  type ShortcutWhen,
   shortcutSignature,
 } from "@openducktor/contracts";
 import { shortcutLabel } from "@openducktor/frontend-core/shortcuts/key-labels";
@@ -48,7 +49,10 @@ export type ShortcutCommandDefinition = {
   label: string;
   group: string;
   scope: ShortcutScope;
+  /** Runs while an editor, a terminal or a visited page has focus, after the user's `when` choice. */
   allowInput: boolean;
+  /** `allowInput` before the user's choice. Only its default keys may replace a protected key. */
+  defaultAllowInput: boolean;
   defaultKeys: Record<ShortcutShell, ShortcutCombination | null>;
   unavailableReason?: string;
 };
@@ -347,6 +351,7 @@ const toDefinition = (id: BuiltinShortcutActionId): ShortcutCommandDefinition =>
     group: spec.group,
     scope: spec.scope,
     allowInput: spec.allowInput === true,
+    defaultAllowInput: spec.allowInput === true,
     defaultKeys:
       keys === undefined
         ? { electron: null, browser: null }
@@ -376,6 +381,7 @@ export const workflowCommandDefinition = (
     group: unavailableReason ? "Unavailable workflows" : "Task workflow",
     scope: { kind: "workflow", workflowId },
     allowInput: false,
+    defaultAllowInput: false,
     defaultKeys: { electron: null, browser: null },
   };
   if (unavailableReason) definition.unavailableReason = unavailableReason;
@@ -390,6 +396,23 @@ export const effectiveShortcut = (
   Object.hasOwn(preferences.overrides, command.id)
     ? (preferences.overrides[command.id] ?? null)
     : command.defaultKeys[shell];
+
+/**
+ * Users choose `when` only for app-wide commands; other scopes never run while typing. The palette
+ * toggle always runs, so a choice would not change it.
+ */
+export const canChooseWhen = (command: ShortcutCommandDefinition): boolean =>
+  command.scope.kind === "app" && command.id !== "palette";
+export const whenOf = (command: ShortcutCommandDefinition): ShortcutWhen =>
+  command.allowInput ? "always" : "not-typing";
+/** The command with the saved `when` choice applied. */
+export const withWhen = (
+  command: ShortcutCommandDefinition,
+  preferences: ShortcutPreferences,
+): ShortcutCommandDefinition => {
+  const when = canChooseWhen(command) ? preferences.when?.[command.id] : undefined;
+  return when ? { ...command, allowInput: when === "always" } : command;
+};
 
 const recordKind = (scope: ShortcutScope) =>
   scope.kind === "record" ? scope.record : scope.kind === "workflow" ? "task" : null;
@@ -409,22 +432,27 @@ export const scopesCanCoexist = (left: ShortcutScope, right: ShortcutScope): boo
 export const runsInPalette = (command: ShortcutCommandDefinition): boolean =>
   command.id === "palette" || recordKind(command.scope) !== null;
 
-const SCOPE_LABELS = {
-  panel: "When a panel has focus",
-  git: "In the Git panel",
-  browser: "In a browser tab",
-  content: "On the focused item",
-  task: "On the selected task",
-  chat: "On the selected session",
-} as const satisfies Record<FocusArea | "task" | "chat", string>;
+const FOCUS_WHEN = {
+  panel: "A panel has focus",
+  git: "The Git panel has focus",
+  browser: "A browser tab has focus",
+  content: "An item has focus",
+} as const satisfies Record<FocusArea, string>;
+const APP_WHEN = { workspace: "A workspace is open", session: "A session is visible" } as const;
+
 /**
- * When a command runs, for Settings. App-wide commands have none: a workspace or a session view
- * that they need is always obvious.
+ * When a command runs, for Settings. Commands that do not run while an editor, a terminal or a
+ * visited page has focus say so, because typing is the most common reason that a key does nothing.
  */
-export const scopeLabel = (scope: ShortcutScope): string | undefined => {
-  if (scope.kind === "app") return undefined;
-  if (scope.kind === "focus") return SCOPE_LABELS[scope.area];
-  return SCOPE_LABELS[recordKind(scope) ?? "task"];
+export const whenLabel = (entry: ShortcutCommandDefinition): string => {
+  const { scope } = entry;
+  if (scope.kind === "focus") return FOCUS_WHEN[scope.area];
+  const record = recordKind(scope);
+  if (record) return record === "chat" ? "A session is selected" : "A task is selected";
+  if (scope.kind !== "app") return "Always";
+  const base = scope.needs ? APP_WHEN[scope.needs] : null;
+  if (entry.allowInput) return base ?? "Always";
+  return base ? `${base}, not while typing` : "Not while typing";
 };
 
 type DeviceKeys = { key: string; ctrl: boolean; meta: boolean; alt: boolean; shift: boolean };
@@ -515,8 +543,11 @@ const problemOf = (
   const keys = { key, ...resolved };
   if (shellReserved(keys, platform, shell))
     return `${label} is reserved by the ${shell === "browser" ? "browser" : "system"}.`;
+  // The specification approves only the default keys of a command that runs while typing by default.
   const approvedException =
-    command.allowInput && sameShortcut(combination, command.defaultKeys[shell]);
+    command.allowInput &&
+    command.defaultAllowInput &&
+    sameShortcut(combination, command.defaultKeys[shell]);
   const reason = approvedException ? null : protectedInputReason(keys, platform);
   if (
     reason &&
@@ -541,8 +572,9 @@ export const compileShortcuts = (
   const bySignature = new Map<string, ShortcutBinding[]>();
   const byId = new Map<ShortcutActionId, ShortcutBinding>();
   const problems = new Map<ShortcutActionId, ShortcutProblem>();
-  for (const command of catalogue) {
-    if (command.unavailableReason) continue;
+  for (const entry of catalogue) {
+    if (entry.unavailableReason) continue;
+    const command = withWhen(entry, preferences);
     const combination = effectiveShortcut(command, preferences, shell);
     if (!combination) continue;
     const message = problemOf(command, combination, platform, shell);

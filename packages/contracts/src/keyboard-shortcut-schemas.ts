@@ -20,10 +20,16 @@ export const shortcutCombinationSchema = z
     shift: z.boolean(),
   })
   .refine((value) => value.mod || value.ctrl || value.alt, "Use Command, Control or Alt.");
+/** When an app-wide shortcut runs: also while typing in an editor, terminal or visited page, or not. */
+export const SHORTCUT_WHEN_VALUES = ["always", "not-typing"] as const;
+export const shortcutWhenSchema = z.enum(SHORTCUT_WHEN_VALUES);
 export const shortcutPreferencesSchema = z.strictObject({
   version: z.literal(1),
   overrides: z.partialRecord(shortcutActionIdSchema, shortcutCombinationSchema.nullable()),
+  /** Only choices that differ from the command's default. */
+  when: z.partialRecord(shortcutActionIdSchema, shortcutWhenSchema).optional(),
 });
+export type ShortcutWhen = z.infer<typeof shortcutWhenSchema>;
 export type ShortcutKey = z.infer<typeof shortcutKeySchema>;
 export type ShortcutCombination = z.infer<typeof shortcutCombinationSchema>;
 export type ShortcutPreferences = z.infer<typeof shortcutPreferencesSchema>;

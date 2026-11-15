@@ -1,6 +1,6 @@
-import { useRef } from "react";
-import { Check, CircleAlert, LoaderCircle } from "lucide-react";
-import type { AppPlatform, ShortcutCombination } from "@openducktor/contracts";
+import { type ReactNode, useRef } from "react";
+import { Check, ChevronDown, CircleAlert, LoaderCircle } from "lucide-react";
+import type { AppPlatform, ShortcutCombination, ShortcutWhen } from "@openducktor/contracts";
 import {
   shortcutKeyParts,
   shortcutLabel,
@@ -8,10 +8,12 @@ import {
 } from "@openducktor/frontend-core/shortcuts/key-labels";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Badge } from "@/components/ui/badge";
+import { Combobox } from "@/components/ui/combobox";
 import {
-  scopeLabel,
   type ShortcutCommandDefinition,
   type ShortcutProblem,
+  whenLabel,
 } from "@/features/shortcuts/catalogue";
 import { typesText } from "@/features/shortcuts/recording";
 import { cn } from "@/lib/utils";
@@ -26,9 +28,12 @@ export function ShortcutKeycaps({
 }) {
   return (
     <>
-      <KbdGroup aria-hidden="true">
+      <KbdGroup aria-hidden="true" className="gap-1">
         {shortcutKeyParts(combination, platform).map((key, index) => (
-          <Kbd key={`${index}-${key}`} className="text-foreground">
+          <Kbd
+            key={`${index}-${key}`}
+            className="h-6 min-w-6 rounded-md px-1.5 text-xs text-foreground"
+          >
             {key}
           </Kbd>
         ))}
@@ -75,7 +80,8 @@ function IdleControls({
   removed,
   saved,
   showActions,
-  canReset,
+  resetKeys,
+  platform,
   assigned,
   onUndo,
   onRestoreDefault,
@@ -86,7 +92,9 @@ function IdleControls({
   removed: boolean;
   saved: boolean;
   showActions: boolean;
-  canReset: boolean;
+  /** The default keys that Reset restores, when the keys differ from a default. */
+  resetKeys: ShortcutCombination | null;
+  platform: AppPlatform;
   assigned: boolean;
   onUndo(): void;
   onRestoreDefault(): void;
@@ -110,7 +118,8 @@ function IdleControls({
       {showActions && (
         <RowActions
           label={label}
-          canReset={canReset}
+          resetKeys={resetKeys}
+          platform={platform}
           assigned={assigned}
           onRestoreDefault={onRestoreDefault}
           onClear={onClear}
@@ -135,6 +144,8 @@ export function SettingsShortcutRow({
   inactiveReason,
   defaultKeys,
   customized,
+  whenChoice,
+  whenCustomized,
   disabled,
   editor,
   saved,
@@ -146,6 +157,7 @@ export function SettingsShortcutRow({
   onCancel,
   onSave,
   onReassign,
+  onChooseWhen,
 }: {
   entry: ShortcutCommandDefinition;
   label: string;
@@ -156,6 +168,9 @@ export function SettingsShortcutRow({
   inactiveReason: string | undefined;
   defaultKeys: ShortcutCombination | null;
   customized: boolean;
+  /** The user may change when the command runs. */
+  whenChoice: boolean;
+  whenCustomized: boolean;
   disabled: boolean;
   editor: ShortcutRowEditor | null;
   /** True for a moment after this row saved, to confirm the change. */
@@ -169,23 +184,30 @@ export function SettingsShortcutRow({
   onCancel(): void;
   onSave(): void;
   onReassign(): void;
+  onChooseWhen(when: ShortcutWhen, element: HTMLElement): void;
 }) {
   const field = useRef<HTMLButtonElement>(null);
   const recording = editor?.state === "recording";
   const proposal = editor?.state === "proposed" ? editor : null;
   return (
-    <li className="group/row flex min-h-12 list-none flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2">
-      <div className="flex min-w-40 flex-1 flex-col gap-0.5">
-        <p className="text-sm font-medium break-words text-foreground">{label}</p>
+    <li className="group/row flex min-h-16 list-none flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+      <div className="flex min-w-48 flex-1 flex-col gap-1">
+        <RowTitle label={label} badge={changeBadge(customized, whenCustomized, current)} />
         <RowDetail
           entry={entry}
           showContext={showContext}
           editor={editor}
           removed={removed}
           inactiveReason={inactiveReason}
-          customized={customized}
-          current={current}
           defaultKeys={defaultKeys}
+          when={
+            whenChoice && !disabled ? (
+              <WhenPicker
+                entry={entry}
+                onChoose={(when) => field.current && onChooseWhen(when, field.current)}
+              />
+            ) : null
+          }
           platform={platform}
         />
       </div>
@@ -197,7 +219,8 @@ export function SettingsShortcutRow({
             removed={removed}
             saved={saved}
             showActions={!disabled}
-            canReset={customized && defaultKeys !== null}
+            resetKeys={customized ? defaultKeys : null}
+            platform={platform}
             assigned={Boolean(current)}
             onUndo={onUndo}
             onRestoreDefault={() => field.current && onRestoreDefault(field.current)}
@@ -216,13 +239,7 @@ export function SettingsShortcutRow({
           onClick={(event) => {
             if (!recording) onRecord(event.currentTarget);
           }}
-          className={cn(
-            "h-8 min-w-16 justify-end gap-1 px-2 font-normal",
-            // While editing, the keys look like a field: the input chrome, and its focus border.
-            editor && "border border-input bg-card shadow-sm hover:bg-card",
-            recording && "border-ring",
-            proposal?.problem && "border-destructive",
-          )}
+          className={keyFieldClassName(editor)}
         >
           <KeyField
             editor={editor}
@@ -245,6 +262,41 @@ export function SettingsShortcutRow({
     </li>
   );
 }
+
+/** "Removed" when the user cleared default keys, "Custom" for any other change. */
+const changeBadge = (
+  customized: boolean,
+  whenCustomized: boolean,
+  current: ShortcutCombination | null | undefined,
+): string | null => {
+  if (customized && current === null) return "Removed";
+  return customized || whenCustomized ? "Custom" : null;
+};
+
+function RowTitle({ label, badge }: { label: string; badge: string | null }) {
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-sm font-medium break-words text-foreground">
+      {label}
+      {badge && (
+        <Badge
+          variant="outline"
+          className="rounded-md px-1.5 py-0 text-[11px] font-normal text-muted-foreground"
+        >
+          {badge}
+        </Badge>
+      )}
+    </p>
+  );
+}
+
+/** While editing, the keys look like a field: the input chrome, and its focus border. */
+const keyFieldClassName = (editor: ShortcutRowEditor | null) =>
+  cn(
+    "h-8 min-w-16 justify-end gap-1 px-2 font-normal",
+    editor && "border border-input bg-card shadow-sm hover:bg-card",
+    editor?.state === "recording" && "border-ring",
+    editor?.state === "proposed" && editor.problem && "border-destructive",
+  );
 
 /** Keys inside text: symbols in the system font for the eye, words for screen readers. */
 function KeysText({
@@ -273,16 +325,15 @@ function ModifierNames({ platform }: { platform: AppPlatform }) {
   );
 }
 
-/** One quiet line under the name: guidance, a problem, the context, or a change. */
+/** One quiet line under the name: guidance, a problem, or when the command runs. */
 function RowDetail({
   entry,
   showContext,
   editor,
   removed,
   inactiveReason,
-  customized,
-  current,
   defaultKeys,
+  when,
   platform,
 }: {
   entry: ShortcutCommandDefinition;
@@ -290,9 +341,9 @@ function RowDetail({
   editor: ShortcutRowEditor | null;
   removed: boolean;
   inactiveReason: string | undefined;
-  customized: boolean;
-  current: ShortcutCombination | null | undefined;
   defaultKeys: ShortcutCombination | null;
+  /** The picker of a command whose `when` the user may change. */
+  when: ReactNode;
   platform: AppPlatform;
 }) {
   if (editor) return <EditorDetail id={entry.id} editor={editor} platform={platform} />;
@@ -315,36 +366,57 @@ function RowDetail({
         Off on this device. {inactiveReason}
       </p>
     );
-  const context = entry.unavailableReason ?? (showContext ? scopeLabel(entry.scope) : undefined);
-  const change = customized ? (
-    <ChangeText current={current} defaultKeys={defaultKeys} platform={platform} />
-  ) : null;
-  if (!context && !change) return null;
+  if (entry.unavailableReason)
+    return <p className="text-xs text-muted-foreground">{entry.unavailableReason}</p>;
+  if (!showContext) return null;
   return (
-    <p className="text-xs text-muted-foreground">
-      {context}
-      {context && change && " · "}
-      {change}
-    </p>
+    <div className="flex h-5 items-center gap-1.5 text-xs text-muted-foreground">
+      When
+      {when ?? <span className="text-foreground/80">{whenLabel(entry)}</span>}
+    </div>
   );
 }
 
-/** How changed keys differ from the default. */
-function ChangeText({
-  current,
-  defaultKeys,
-  platform,
+const WHEN_DESCRIPTIONS = {
+  always: "Also while you type in an editor, a terminal or a web page.",
+  "not-typing": "Editors, terminals and web pages keep these keys.",
+} as const satisfies Record<ShortcutWhen, string>;
+
+/** The `when` choice of an app-wide command, labeled as the row shows it. */
+function WhenPicker({
+  entry,
+  onChoose,
 }: {
-  current: ShortcutCombination | null | undefined;
-  defaultKeys: ShortcutCombination | null;
-  platform: AppPlatform;
+  entry: ShortcutCommandDefinition;
+  onChoose(when: ShortcutWhen): void;
 }) {
-  if (!defaultKeys) return <>Added by you</>;
+  const current: ShortcutWhen = entry.allowInput ? "always" : "not-typing";
+  const labelOf = (when: ShortcutWhen) => whenLabel({ ...entry, allowInput: when === "always" });
   return (
-    <>
-      {current ? "Changed from " : "Removed, default "}
-      <KeysText combination={defaultKeys} platform={platform} />
-    </>
+    <Combobox
+      value={current}
+      searchable={false}
+      wrapOptionLabels
+      className="w-80"
+      options={(["always", "not-typing"] as const).map((when) => ({
+        value: when,
+        label: labelOf(when),
+        description: WHEN_DESCRIPTIONS[when],
+      }))}
+      onValueChange={(value) => {
+        if (value !== current && (value === "always" || value === "not-typing")) onChoose(value);
+      }}
+      trigger={
+        <button
+          type="button"
+          aria-label={`When ${entry.label} runs: ${labelOf(current)}`}
+          className="-mx-1 inline-flex h-5 items-center gap-1 rounded-md px-1 text-xs text-foreground/80 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {labelOf(current)}
+          <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground" />
+        </button>
+      }
+    />
   );
 }
 
@@ -537,29 +609,31 @@ function EditActions({
 /** Reset and Remove appear on hover or keyboard focus, so idle rows stay quiet. */
 function RowActions({
   label,
-  canReset,
+  resetKeys,
+  platform,
   assigned,
   onRestoreDefault,
   onClear,
 }: {
   label: string;
-  canReset: boolean;
+  resetKeys: ShortcutCombination | null;
+  platform: AppPlatform;
   assigned: boolean;
   onRestoreDefault(): void;
   onClear(): void;
 }) {
   return (
     <div className="flex items-center opacity-0 transition-opacity duration-150 group-focus-within/row:opacity-100 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100">
-      {canReset && (
+      {resetKeys && (
         <Button
           type="button"
           variant="ghost"
           size="sm"
           className="text-muted-foreground hover:text-foreground"
-          aria-label={`Reset shortcut for ${label} to its default`}
+          aria-label={`Reset shortcut for ${label} to its default, ${spokenShortcut(resetKeys, platform)}`}
           onClick={onRestoreDefault}
         >
-          Reset
+          Reset to <span aria-hidden="true">{shortcutLabel(resetKeys, platform)}</span>
         </Button>
       )}
       {assigned && (

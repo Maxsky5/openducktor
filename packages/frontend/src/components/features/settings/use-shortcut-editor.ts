@@ -5,6 +5,7 @@ import type {
   ShortcutActionId,
   ShortcutCombination,
   ShortcutPreferences,
+  ShortcutWhen,
 } from "@openducktor/contracts";
 import {
   compileShortcuts,
@@ -16,7 +17,7 @@ import {
 } from "@/features/shortcuts/catalogue";
 import { typesText, useShortcutRecorder } from "@/features/shortcuts/recording";
 import { useShortcutPreferences } from "@/features/shortcuts/use-shortcut-preferences";
-import { withAssignment } from "./settings-shortcut-model";
+import { withAssignment, withWhenChoice } from "./settings-shortcut-model";
 
 type Proposal = { id: ShortcutActionId; combination: ShortcutCombination };
 export type ShortcutProposal = Proposal & {
@@ -122,6 +123,25 @@ export function useShortcutEditor({
     setRemoved({ id, before });
   };
 
+  /** Saves a `when` choice, unless it makes the command unable to run on this device. */
+  const chooseWhen = async (id: ShortcutActionId, when: ShortcutWhen) => {
+    const entry = catalogue.find((command) => command.id === id);
+    const before = query.data;
+    if (!entry || !before) return;
+    const preferences = withWhenChoice(before, entry, when);
+    // Only the command's own problem counts; a conflict elsewhere does not depend on this choice.
+    const problemIn = (candidate: ShortcutPreferences) =>
+      compileShortcuts(candidate, catalogue, platform, shell).problems.get(id);
+    const problem = problemIn(preferences);
+    if (problem && !problemIn(before)) {
+      setSaveError(`${entry.label} cannot run while typing with these keys. ${problem.message}`);
+      return;
+    }
+    setRemoved(null);
+    const scope = when === "always" ? "also while typing" : "only while not typing";
+    if (await persist(preferences, `Saved. ${entry.label} runs ${scope}.`)) setSavedId(id);
+  };
+
   // Computed only while a proposal is open, which is rare and short.
   const next = pending && candidate(pending.id, pending.combination);
   const proposal: ShortcutProposal | null =
@@ -169,6 +189,10 @@ export function useShortcutEditor({
     assign(id: ShortcutActionId, combination: ShortcutCombination | null, element?: HTMLElement) {
       if (element) opener.current = element;
       void assign(id, combination);
+    },
+    chooseWhen(id: ShortcutActionId, when: ShortcutWhen, element: HTMLElement) {
+      opener.current = element;
+      void chooseWhen(id, when);
     },
     saveProposal() {
       if (!proposal || proposal.problem || !next) return;

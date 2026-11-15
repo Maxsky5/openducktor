@@ -12,9 +12,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ToolbarSearchField } from "@/components/ui/search-field";
-import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
+import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { ShortcutShell } from "@/features/shortcuts/catalogue";
+import { type ShortcutShell, whenLabel } from "@/features/shortcuts/catalogue";
 import { spokenShortcut } from "@openducktor/frontend-core/shortcuts/key-labels";
 import { useShortcutCatalogue } from "@/features/shortcuts/use-shortcut-catalogue";
 import { useShortcutPreferences } from "@/features/shortcuts/use-shortcut-preferences";
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import {
   buildCommandViews,
   groupCommandViews,
+  hasChanges,
   type ShortcutCommandView,
   type ShortcutFamily,
   type ShortcutFilter,
@@ -41,8 +42,8 @@ import { useShortcutEditor } from "./use-shortcut-editor";
 type Editor = ReturnType<typeof useShortcutEditor>;
 
 const FILTERS = [
-  { value: "in-use", label: "With keys" },
   { value: "all", label: "All commands" },
+  { value: "assigned", label: "Assigned" },
 ] as const satisfies readonly { value: ShortcutFilter; label: string }[];
 
 export function SettingsKeyboardShortcutsSection() {
@@ -54,13 +55,13 @@ export function SettingsKeyboardShortcutsSection() {
   const heading = useRef<HTMLHeadingElement>(null);
   const editor = useShortcutEditor({ catalogue, platform, shell, heading });
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<ShortcutFilter>("in-use");
+  const [filter, setFilter] = useState<ShortcutFilter>("all");
   const [resetOpen, setResetOpen] = useState(false);
   const views = useMemo(
     () => buildCommandViews(catalogue, query.data, platform, shell),
     [catalogue, query.data, platform, shell],
   );
-  const changed = views.some((view) => view.customized);
+  const changed = hasChanges(query.data);
   const term = searchKey(search);
   const { removedId, forgetRemoval } = editor;
   const groups = useMemo(
@@ -109,25 +110,24 @@ export function SettingsKeyboardShortcutsSection() {
             }}
           />
         </div>
-        <SegmentedControlRoot
-          size="sm"
+        <RadioGroup
           aria-label={term ? "Show: a search shows all commands" : "Show"}
-          className="rounded-lg"
+          orientation="horizontal"
+          data-variant="segmented"
+          className="grid h-9 grid-cols-2 items-center gap-1 rounded-lg bg-muted p-1"
+          value={shown}
+          disabled={browsingDisabled || term !== ""}
+          onValueChange={(value) => {
+            const next = FILTERS.find((option) => option.value === value);
+            if (next) changeFilter(next.value);
+          }}
         >
           {FILTERS.map((option) => (
-            <SegmentedControlItem
-              key={option.value}
-              active={shown === option.value}
-              size="sm"
-              grow="hug"
-              disabled={browsingDisabled || term !== ""}
-              inactiveClassName="text-foreground/70 hover:text-foreground"
-              onClick={() => changeFilter(option.value)}
-            >
+            <RadioGroupSegmentItem key={option.value} value={option.value} className="px-3">
               {option.label}
-            </SegmentedControlItem>
+            </RadioGroupSegmentItem>
           ))}
-        </SegmentedControlRoot>
+        </RadioGroup>
         {changed && (
           <Button
             type="button"
@@ -160,7 +160,7 @@ export function SettingsKeyboardShortcutsSection() {
               </>
             ) : (
               <>
-                <p className="text-sm font-medium text-foreground">No command has keys</p>
+                <p className="text-sm font-medium text-foreground">No command has an assignment</p>
                 <Button
                   type="button"
                   variant="outline"
@@ -300,6 +300,9 @@ function CommandRow({
       inactiveReason={view.inactiveReason}
       defaultKeys={view.defaultKeys}
       customized={view.customized}
+      whenChoice={view.whenChoice}
+      whenCustomized={view.whenCustomized}
+      onChooseWhen={(when, element) => editor.chooseWhen(id, when, element)}
       disabled={
         (editor.busy && editor.recording !== id && proposal?.id !== id) ||
         (proposal !== null && proposal.id !== id) ||
@@ -337,7 +340,8 @@ function FamilyRows({
   );
   const expanded = opened || editing;
   const disabled = !editing && (editor.busy || editor.proposal !== null);
-  const first = family.commands[0]?.current;
+  const firstView = family.commands[0];
+  const first = firstView?.current;
   const last = family.commands.at(-1)?.current;
   const assigned = family.commands.filter((view) => view.current).length;
   const lastKey = last && { ...last, mod: false, ctrl: false, alt: false, shift: false };
@@ -354,12 +358,19 @@ function FamilyRows({
         aria-describedby={`shortcut-family-${family.key}`}
         disabled={disabled}
         onClick={() => setOpened(!expanded)}
-        className="group/family flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none disabled:opacity-50"
+        className="group/family flex min-h-16 w-full items-center gap-4 px-4 py-3 text-left outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none disabled:opacity-50"
       >
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="text-sm font-medium text-foreground">{family.label}</span>
-          <span id={`shortcut-family-${family.key}`} className="text-xs text-muted-foreground">
-            {family.key === "session" ? "In sidebar order" : "In workspace rail order"}
+          <span
+            id={`shortcut-family-${family.key}`}
+            className="flex h-5 items-center text-xs text-muted-foreground"
+          >
+            When{" "}
+            <span className="ml-1 text-foreground/80">
+              {firstView ? whenLabel(firstView.entry) : "Always"}
+            </span>
+            {family.key === "session" ? " · In sidebar order" : " · In workspace rail order"}
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -425,8 +436,8 @@ function ResetShortcutsDialog({
         <DialogHeader>
           <DialogTitle>Reset all shortcuts?</DialogTitle>
           <DialogDescription>
-            This removes every custom and removed shortcut on this host, and restores the defaults
-            for everyone connected to it.
+            This removes every custom key, removed shortcut and When choice on this host, and
+            restores the defaults for everyone connected to it.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

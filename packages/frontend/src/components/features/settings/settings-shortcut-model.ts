@@ -4,17 +4,20 @@ import {
   type ShortcutActionId,
   type ShortcutCombination,
   type ShortcutPreferences,
+  type ShortcutWhen,
 } from "@openducktor/contracts";
 import { shortcutKeyParts } from "@openducktor/frontend-core/shortcuts/key-labels";
 import {
+  canChooseWhen,
   compileShortcuts,
   effectiveShortcut,
+  withWhen,
   type ShortcutCommandDefinition,
   type ShortcutShell,
 } from "@/features/shortcuts/catalogue";
 
-/** "in-use" lists commands with keys; "all" lists every command. Search always covers all. */
-export type ShortcutFilter = "in-use" | "all";
+/** "assigned" lists commands with keys; "all" lists every command. Search always covers all. */
+export type ShortcutFilter = "all" | "assigned";
 
 /** One command as Settings shows it on this device. */
 export type ShortcutCommandView = {
@@ -24,6 +27,10 @@ export type ShortcutCommandView = {
   current: ShortcutCombination | null | undefined;
   defaultKeys: ShortcutCombination | null;
   customized: boolean;
+  /** The user may change when the command runs. */
+  whenChoice: boolean;
+  /** The `when` choice differs from the default. */
+  whenCustomized: boolean;
   /** Why the saved assignment does not run on this device. */
   inactiveReason: string | undefined;
   search: string;
@@ -72,8 +79,28 @@ export const withAssignment = (
   const overrides = { ...preferences.overrides };
   if (sameShortcut(combination, defaultKeys)) delete overrides[id];
   else overrides[id] = combination;
-  return { version: 1, overrides };
+  return { ...preferences, overrides };
 };
+
+/** A `when` choice equal to the default is removed, so the saved document lists only changes. */
+export const withWhenChoice = (
+  preferences: ShortcutPreferences,
+  command: ShortcutCommandDefinition,
+  when: ShortcutWhen,
+): ShortcutPreferences => {
+  const choices = { ...preferences.when };
+  if (when === (command.defaultAllowInput ? "always" : "not-typing")) delete choices[command.id];
+  else choices[command.id] = when;
+  return { ...preferences, when: choices };
+};
+
+/** True when Reset all would change something. */
+export const hasChanges = (preferences: ShortcutPreferences | undefined) =>
+  Boolean(
+    preferences &&
+    (Object.keys(preferences.overrides).length > 0 ||
+      Object.keys(preferences.when ?? {}).length > 0),
+  );
 
 export const buildCommandViews = (
   catalogue: readonly ShortcutCommandDefinition[],
@@ -82,7 +109,8 @@ export const buildCommandViews = (
   shell: ShortcutShell,
 ): ShortcutCommandView[] => {
   const compiled = preferences ? compileShortcuts(preferences, catalogue, platform, shell) : null;
-  return catalogue.map((entry) => {
+  return catalogue.map((raw) => {
+    const entry = preferences ? withWhen(raw, preferences) : raw;
     const current = preferences ? effectiveShortcut(entry, preferences, shell) : undefined;
     return {
       entry,
@@ -92,6 +120,8 @@ export const buildCommandViews = (
       current,
       defaultKeys: entry.defaultKeys[shell],
       customized: Boolean(preferences && Object.hasOwn(preferences.overrides, entry.id)),
+      whenChoice: canChooseWhen(entry),
+      whenCustomized: entry.allowInput !== entry.defaultAllowInput,
       inactiveReason: compiled?.problems.get(entry.id)?.message,
       search: searchKey(
         `${entry.label} ${entry.group} ${keySearchText(current ?? null, platform)}`,
@@ -116,7 +146,7 @@ export const groupCommandViews = (
   for (const view of views) {
     const hidden = term
       ? !view.search.includes(term)
-      : filter === "in-use" && !view.current && view.entry.id !== kept;
+      : filter === "assigned" && !view.current && view.entry.id !== kept;
     if (hidden) continue;
     const items = groups.get(view.entry.group) ?? [];
     groups.set(view.entry.group, items);

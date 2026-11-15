@@ -126,6 +126,23 @@ test.each(["t", "v", "y"])("protects macOS Control+%s editing while typing", (ke
   );
 });
 
+test("applies the when choice of an app command, and keeps approved defaults only by default", () => {
+  const compiled = (preferences: ShortcutPreferences) =>
+    compileShortcuts(preferences, SHORTCUT_COMMANDS, "darwin", "electron");
+  // Ctrl+B replaces backward movement only because the specification approves that default.
+  expect(compiled(prefs({})).byId.get("sidebar")?.command.allowInput).toBe(true);
+  const notTyping = compiled({ ...prefs({}), when: { sidebar: "not-typing" } });
+  expect(notTyping.byId.get("sidebar")?.command.allowInput).toBe(false);
+  expect(notTyping.problems.size).toBe(0);
+
+  // Control+T edits text, so a command that also runs while typing cannot use it.
+  const controlT = prefs({ diagnostics: keys("t", { ctrl: true }) });
+  expect(problem(controlT, "diagnostics")).toBeUndefined();
+  expect(problem({ ...controlT, when: { diagnostics: "always" } }, "diagnostics")).toContain(
+    "Control-key editing",
+  );
+});
+
 test("keeps a Control+Option number row on macOS and turns it off where AltGr types", () => {
   const recorded = recordShortcut(
     {
