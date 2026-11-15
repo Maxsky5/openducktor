@@ -127,10 +127,12 @@ const createLogger = () => {
   return { errors, infos, logger };
 };
 
+// Each input gives the process environment, so setup does not start a slow login shell.
 const createFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
   configDirScope: "test",
   mcpBridgeDiscoveryMode: "production",
   onBackgroundFailure: () => Effect.void,
+  processEnv: process.env,
   runtimeDistribution: {
     ...createRuntimeDistribution(),
     get mode(): "source" {
@@ -149,6 +151,7 @@ const createAssemblyFailingRouterInput = (): CreateNodeHostCommandRouterInput =>
   },
   mcpBridgeDiscoveryMode: "production",
   onBackgroundFailure: () => Effect.void,
+  processEnv: process.env,
   runtimeDistribution: createRuntimeDistribution(),
   runtimeStarter: unusedRuntimeStarter,
   taskEventPublicationReporter: { report: () => Effect.void },

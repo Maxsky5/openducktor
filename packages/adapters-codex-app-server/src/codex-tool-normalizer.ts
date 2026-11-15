@@ -63,7 +63,7 @@ export type CodexToolQuestion = {
 };
 
 /** What the transcript keeps in place of the answer of a secret question. Codex gets the answer. */
-export const CODEX_HIDDEN_ANSWER = "[hidden]";
+const CODEX_HIDDEN_ANSWER = "[hidden]";
 
 /**
  * The answers of a question tool part, by question ID. The transcript keeps each answer, but it

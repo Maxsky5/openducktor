@@ -180,14 +180,15 @@ export const readClaudeAskUserQuestionResultAnswers = (
   if (!isClaudeProtocolObject(answers)) return null;
   const payload = parseClaudeAskUserQuestionInput(input);
   if (!payload) return null;
-  return payload.sdkQuestions.map(({ question, options }) => {
+  return payload.sdkQuestions.map(({ question, options, multiSelect }) => {
     const answer = readString(answers[question]);
-    return answer
-      ? splitClaudeAnswer(
-          answer,
-          options.map((option) => option.label),
-        )
-      : [];
+    if (!answer) return [];
+    // A single choice answer is one option or one written text, so it never splits.
+    if (!multiSelect) return [answer];
+    return splitClaudeAnswer(
+      answer,
+      options.map((option) => option.label),
+    );
   });
 };
 

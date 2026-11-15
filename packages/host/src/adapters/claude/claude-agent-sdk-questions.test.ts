@@ -114,10 +114,14 @@ describe("createClaudeUserDialogHandler", () => {
         },
       ],
     };
-    const result = { questions: input.questions, answers: { "Which branch?": "main, please" } };
+    const result = {
+      questions: input.questions,
+      answers: { "Which branch?": "main, but only after review" },
+    };
 
+    // A single choice answer that starts with a label is one written answer.
     expect(readClaudeAskUserQuestionResultAnswers("AskUserQuestion", input, result)).toEqual([
-      ["main", "please"],
+      ["main, but only after review"],
     ]);
     expect(readClaudeAskUserQuestionResultAnswers("user_question", input, result)).toBeNull();
     expect(readClaudeAskUserQuestionResultAnswers("AskUserQuestion", input, "Answered")).toBeNull();

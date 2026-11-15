@@ -113,7 +113,7 @@ export function DetailsError({ error }: { error: string }): ReactElement {
   );
 }
 
-export function DetailsBlock({
+function DetailsBlock({
   label,
   tone = "default",
   copyText,
