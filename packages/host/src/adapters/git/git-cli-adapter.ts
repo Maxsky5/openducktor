@@ -322,8 +322,8 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
         status: () => status(workingDirectory, context),
       });
     },
-    getWorktreeStatusSummaryData(workingDirectory, targetBranch, diffScope, context) {
-      return buildWorktreeStatusSummaryData(runner, workingDirectory, targetBranch, diffScope, {
+    getWorktreeStatusSummaryData(workingDirectory, targetBranch, _diffScope, context) {
+      return buildWorktreeStatusSummaryData(runner, workingDirectory, targetBranch, {
         branch: () => branch(workingDirectory, context),
         status: () => status(workingDirectory, context),
       });
