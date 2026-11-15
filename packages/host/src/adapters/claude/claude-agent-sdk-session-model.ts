@@ -1,8 +1,8 @@
 import type { Query } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentModelSelection } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
-import { toClaudeEffort } from "./claude-effort";
 import type { ClaudeSession } from "./claude-agent-sdk-types";
+import { toClaudeEffort } from "./claude-effort";
 import { CLAUDE_FAST_SPEED_LEVEL } from "./claude-speed-metadata";
 
 /** Returns the explicit fast-mode flag, so native defaults cannot select another speed. */
