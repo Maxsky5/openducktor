@@ -13,8 +13,7 @@ import {
   updateClaudeSessionTitle,
 } from "./claude-session-title-update";
 import { getClaudeSessionMetadata } from "./claude-session-metadata";
-import { loadClaudeSessionMessages } from "./claude-agent-sdk-history-messages";
-import { readLatestHistoryAssistantModel } from "./claude-agent-sdk-history-entry";
+import { loadClaudeSessionModel } from "./claude-agent-sdk-history-messages";
 import { requireClaudeSession, resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -311,21 +310,21 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       const metadata = yield* fromPromise("claudeRuntime.getSessionMetadata", () =>
         getClaudeSessionMetadata(request),
       );
-      const session = {
-        ...request,
-        runtimeKind: "claude" as const,
-        runtimePolicy: { kind: "claude" as const },
-      };
-      // The SDK session messages omit the effort, so read the native transcript as the history does.
-      const messages = yield* loadClaudeSessionMessages(session, {
-        reader: this.historyReader,
-      }).pipe(
+      const selectedModel = yield* loadClaudeSessionModel(request, this.historyReader).pipe(
         Effect.mapError((cause) => toClaudeServiceError("claudeRuntime.readSessionModel", cause)),
       );
+      const input: ClaudeSessionInput = {
+        ...request,
+        runtimeKind: "claude",
+        runtimePolicy: { kind: "claude" },
+        systemPrompt: "",
+      };
+      // Like a stored session resume, start the live session with the model and its effort.
+      if (selectedModel) input.model = selectedModel;
       return {
         metadata,
-        selectedModel: readLatestHistoryAssistantModel(messages),
-        attach: this.createSession({ ...session, systemPrompt: "" }, runtimeId, {
+        selectedModel,
+        attach: this.createSession(input, runtimeId, {
           externalSessionId: request.externalSessionId,
           options: { resume: request.externalSessionId },
           preserveNativeSettings: true,
