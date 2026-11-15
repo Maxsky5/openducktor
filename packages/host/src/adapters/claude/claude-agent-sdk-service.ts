@@ -12,7 +12,9 @@ import {
   resumeRetainedClaudeSession,
   updateClaudeSessionTitle,
 } from "./claude-session-title-update";
-import { getClaudeSessionMetadata, readClaudeSessionModel } from "./claude-session-metadata";
+import { getClaudeSessionMetadata } from "./claude-session-metadata";
+import { loadClaudeSessionMessages } from "./claude-agent-sdk-history-messages";
+import { readLatestHistoryAssistantModel } from "./claude-agent-sdk-history-entry";
 import { requireClaudeSession, resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -309,27 +311,26 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
       const metadata = yield* fromPromise("claudeRuntime.getSessionMetadata", () =>
         getClaudeSessionMetadata(request),
       );
-      const selectedModel = yield* fromPromise("claudeRuntime.readSessionModel", () =>
-        readClaudeSessionModel(request),
+      const session = {
+        ...request,
+        runtimeKind: "claude" as const,
+        runtimePolicy: { kind: "claude" as const },
+      };
+      // The SDK session messages omit the effort, so read the native transcript as the history does.
+      const messages = yield* loadClaudeSessionMessages(session, {
+        reader: this.historyReader,
+      }).pipe(
+        Effect.mapError((cause) => toClaudeServiceError("claudeRuntime.readSessionModel", cause)),
       );
       return {
         metadata,
-        selectedModel,
-        attach: this.createSession(
-          {
-            ...request,
-            runtimeKind: "claude",
-            runtimePolicy: { kind: "claude" },
-            systemPrompt: "",
-          },
-          runtimeId,
-          {
-            externalSessionId: request.externalSessionId,
-            options: { resume: request.externalSessionId },
-            preserveNativeSettings: true,
-            startedMessage: "Imported session",
-          },
-        ),
+        selectedModel: readLatestHistoryAssistantModel(messages),
+        attach: this.createSession({ ...session, systemPrompt: "" }, runtimeId, {
+          externalSessionId: request.externalSessionId,
+          options: { resume: request.externalSessionId },
+          preserveNativeSettings: true,
+          startedMessage: "Imported session",
+        }),
       };
     });
   }
