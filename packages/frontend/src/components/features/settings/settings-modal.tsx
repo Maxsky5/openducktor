@@ -295,6 +295,7 @@ function SettingsDialog({
         // of the open section, never the dialog itself.
         className="flex h-[90vh] max-h-[90vh] max-w-7xl flex-col overflow-clip p-0"
         onCloseAutoFocus={onCloseAutoFocus}
+        onOpenAutoFocus={focusActiveSection}
       >
         <DialogHeader className="shrink-0 border-b border-border px-6 pb-4 pt-6 pr-14">
           <DialogTitle>Settings</DialogTitle>
@@ -401,3 +402,13 @@ function SettingsDialog({
     </Dialog>
   );
 }
+
+/** Opening on a section, such as from a deep link, focuses that section rather than the first. */
+const focusActiveSection = (event: Event): void => {
+  const content = event.currentTarget;
+  if (!(content instanceof HTMLElement)) return;
+  const active = content.querySelector<HTMLElement>('[aria-current="page"]');
+  if (!active) return;
+  event.preventDefault();
+  active.focus({ preventScroll: true });
+};

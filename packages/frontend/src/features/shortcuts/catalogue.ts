@@ -410,18 +410,19 @@ export const runsInPalette = (command: ShortcutCommandDefinition): boolean =>
   command.id === "palette" || recordKind(command.scope) !== null;
 
 const SCOPE_LABELS = {
-  workspace: "Current workspace",
-  session: "Active session",
-  panel: "Focused panel",
-  git: "Git panel",
-  browser: "Browser tab",
-  content: "Focused item",
-  task: "Selected task",
-  chat: "Selected session",
-} as const satisfies Record<FocusArea | "task" | "chat" | "workspace" | "session", string>;
-/** The context a command needs, for Settings. App-wide commands have none. */
+  panel: "When a panel has focus",
+  git: "In the Git panel",
+  browser: "In a browser tab",
+  content: "On the focused item",
+  task: "On the selected task",
+  chat: "On the selected session",
+} as const satisfies Record<FocusArea | "task" | "chat", string>;
+/**
+ * When a command runs, for Settings. App-wide commands have none: a workspace or a session view
+ * that they need is always obvious.
+ */
 export const scopeLabel = (scope: ShortcutScope): string | undefined => {
-  if (scope.kind === "app") return scope.needs && SCOPE_LABELS[scope.needs];
+  if (scope.kind === "app") return undefined;
   if (scope.kind === "focus") return SCOPE_LABELS[scope.area];
   return SCOPE_LABELS[recordKind(scope) ?? "task"];
 };

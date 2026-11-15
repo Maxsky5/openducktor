@@ -13,12 +13,8 @@ import {
   type ShortcutShell,
 } from "@/features/shortcuts/catalogue";
 
-export type ShortcutFilter = "all" | "assigned" | "changed";
-export const SHORTCUT_FILTERS: { value: ShortcutFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "assigned", label: "Assigned" },
-  { value: "changed", label: "Changed" },
-];
+/** "in-use" lists commands with keys; "all" lists every command. Search always covers all. */
+export type ShortcutFilter = "in-use" | "all";
 
 /** One command as Settings shows it on this device. */
 export type ShortcutCommandView = {
@@ -48,7 +44,7 @@ const MAC_KEY_WORDS = new Map([
   ["⌃", "ctrl control"],
   ["⌥", "opt option alt"],
   ["⇧", "shift"],
-  ["↩", "enter return"],
+  ["↵", "enter return"],
 ]);
 
 /** Lower case with spaces and plus signs folded, so "Ctrl+B" and "ctrl b" match. */
@@ -105,26 +101,29 @@ export const buildCommandViews = (
 };
 
 export const countCommandViews = (views: readonly ShortcutCommandView[]) => ({
+  "in-use": views.filter((view) => view.current).length,
   all: views.length,
-  assigned: views.filter((view) => view.current).length,
   changed: views.filter((view) => view.customized).length,
 });
 
 /**
- * The visible commands by group. With no search and no filter, the ten positions of each list
- * fold into one family row.
+ * The visible commands by group. Without a search, the ten positions of each list fold into one
+ * family row.
  */
 export const groupCommandViews = (
   views: readonly ShortcutCommandView[],
   filter: ShortcutFilter,
   term: string,
+  /** A command whose keys were just removed; it keeps its place so its Undo stays put. */
+  kept: ShortcutActionId | null = null,
 ): Map<string, ShortcutGroupItem[]> => {
-  const fold = filter === "all" && term === "";
+  const fold = term === "";
   const groups = new Map<string, ShortcutGroupItem[]>();
   for (const view of views) {
-    if (filter === "assigned" && !view.current) continue;
-    if (filter === "changed" && !view.customized) continue;
-    if (term && !view.search.includes(term)) continue;
+    const hidden = term
+      ? !view.search.includes(term)
+      : filter === "in-use" && !view.current && view.entry.id !== kept;
+    if (hidden) continue;
     const items = groups.get(view.entry.group) ?? [];
     groups.set(view.entry.group, items);
     const family = fold && POSITION_PATTERN.test(view.entry.id) ? familyKey(view) : null;
@@ -140,6 +139,11 @@ export const groupCommandViews = (
         family: { key: family, label: FAMILY_LABELS[family], commands: [view] },
       });
   }
+  // Commands with keys come first in each group, so the list reads like a cheat sheet.
+  const hasKeys = (item: ShortcutGroupItem) =>
+    item.kind === "family" || Boolean(item.command.current);
+  for (const items of groups.values())
+    items.sort((left, right) => Number(hasKeys(right)) - Number(hasKeys(left)));
   return groups;
 };
 

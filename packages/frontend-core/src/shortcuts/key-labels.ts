@@ -6,7 +6,7 @@ import {
 } from "@openducktor/contracts";
 
 const MAC_KEY_NAMES = new Map([
-  ["enter", "↩"],
+  ["enter", "↵"],
   ["tab", "⇥"],
   ["backspace", "⌫"],
   ["delete", "⌦"],
@@ -94,3 +94,28 @@ export const ariaKeyShortcut = (
   );
   return parts.join("+");
 };
+
+const SPOKEN_KEYS = new Map([
+  ["⌘", "Command"],
+  ["⌃", "Control"],
+  ["⌥", "Option"],
+  ["⇧", "Shift"],
+  ["↵", "Return"],
+  ["⇥", "Tab"],
+  ["⌫", "Delete"],
+  ["⌦", "Forward Delete"],
+  ["↑", "Up Arrow"],
+  ["↓", "Down Arrow"],
+  ["←", "Left Arrow"],
+  ["→", "Right Arrow"],
+  ["Esc", "Escape"],
+  ["PgUp", "Page Up"],
+  ["PgDn", "Page Down"],
+  ["Del", "Delete"],
+]);
+
+/** Words a screen reader can say, such as "Shift Command K", since symbols read poorly. */
+export const spokenShortcut = (combination: ShortcutCombination, platform: AppPlatform): string =>
+  shortcutKeyParts(combination, platform)
+    .map((part) => SPOKEN_KEYS.get(part) ?? part)
+    .join(" ");

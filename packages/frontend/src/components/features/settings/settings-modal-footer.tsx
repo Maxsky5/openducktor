@@ -20,22 +20,22 @@ export function SettingsModalFooter({
   onCancel,
   onSave,
 }: SettingsModalFooterProps): ReactElement {
-  if (location.section === "remote-access" || location.section === "keyboard-shortcuts") {
+  if (location.section === "keyboard-shortcuts") {
+    return (
+      <DialogFooter className="mt-0 flex-row items-center justify-end border-t border-border px-6 py-4">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Done
+        </Button>
+      </DialogFooter>
+    );
+  }
+  if (location.section === "remote-access") {
     return (
       <DialogFooter className="mt-0 flex-row items-center justify-start gap-4 border-t border-border px-6 py-4">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={location.section !== "keyboard-shortcuts" && saveState.isSaving}
-          onClick={onCancel}
-        >
+        <Button type="button" variant="outline" disabled={saveState.isSaving} onClick={onCancel}>
           Cancel
         </Button>
-        <p className="text-xs text-muted-foreground">
-          {location.section === "keyboard-shortcuts"
-            ? "Each shortcut saves for this host when you confirm it."
-            : "Remote control changes save immediately."}
-        </p>
+        <p className="text-xs text-muted-foreground">Remote control changes save immediately.</p>
       </DialogFooter>
     );
   }

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import type { AppPlatform, ShortcutActionId, ShortcutCombination } from "@openducktor/contracts";
+import type {
+  AppPlatform,
+  ShortcutActionId,
+  ShortcutCombination,
+  ShortcutInput,
+} from "@openducktor/contracts";
 import { recordShortcut } from "@openducktor/contracts";
 import { shortcutInputFromEvent } from "./dom-input";
 import { shortcutRecording } from "./recording-store";
@@ -18,6 +23,11 @@ export function useShortcutRecorder({
     recording: null,
     preparing: false,
   });
+  /** The modifiers held now, and a key pressed without one, so the recorder shows it listens. */
+  const [keys, setKeys] = useState<{ held: string[]; ignored: string | null }>({
+    held: [],
+    ignored: null,
+  });
   const lifetime = useRef<{
     mounted: boolean;
     request: { id: ShortcutActionId; opener: HTMLElement } | null;
@@ -33,7 +43,8 @@ export function useShortcutRecorder({
     restoreFocus.current.focus();
     restoreFocus.current = null;
   }, [status]);
-  const cancel = useCallback(async () => {
+  /** `returnFocus` is false after a capture: the proposal that shows next takes focus. */
+  const cancel = useCallback(async (returnFocus = true) => {
     const request = lifetime.current.request;
     if (!request) return;
     lifetime.current.request = null;
@@ -45,7 +56,7 @@ export function useShortcutRecorder({
         reportFailure.current(cause instanceof Error ? cause.message : String(cause));
     } finally {
       if (lifetime.current.mounted) {
-        restoreFocus.current = request.opener;
+        if (returnFocus) restoreFocus.current = request.opener;
         setStatus({ recording: null, preparing: false });
       }
     }
@@ -71,7 +82,7 @@ export function useShortcutRecorder({
   useEffect(() => {
     const owner = lifetime.current;
     owner.mounted = true;
-    const blur = () => void cancel();
+    const blur = () => void cancel(true);
     window.addEventListener("blur", blur);
     return () => {
       window.removeEventListener("blur", blur);
@@ -94,13 +105,54 @@ export function useShortcutRecorder({
         void cancel();
         return;
       }
-      const combination = recordShortcut(shortcutInputFromEvent(event), platform);
-      if (!combination) return;
+      const input = shortcutInputFromEvent(event);
+      const held = heldModifiers(input, platform);
+      const combination = event.type === "keydown" ? recordShortcut(input, platform) : null;
+      if (!combination) {
+        const modifierOnly = MODIFIER_KEYS.has(event.key);
+        setKeys((current) => ({
+          held,
+          ignored:
+            event.type === "keydown" && !modifierOnly && held.length === 0
+              ? keyName(event.key)
+              : modifierOnly
+                ? current.ignored
+                : null,
+        }));
+        return;
+      }
+      setKeys({ held: [], ignored: null });
       recorded(request.id, combination);
-      void cancel();
+      void cancel(false);
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    window.addEventListener("keyup", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keyup", onKey, true);
+      setKeys({ held: [], ignored: null });
+    };
   }, [status, platform, cancel]);
-  return { ...status, begin, cancel };
+  return { ...status, ...keys, begin, cancel };
 }
+
+const MODIFIER_KEYS = new Set(["Control", "Meta", "Alt", "AltGraph", "Shift"]);
+
+/** The held modifiers as keycap glyphs or names, in the platform order. */
+const heldModifiers = (input: ShortcutInput, platform: AppPlatform): string[] => {
+  const mac = platform === "darwin";
+  return [
+    input.ctrl && (mac ? "⌃" : "Ctrl"),
+    input.alt && (mac ? "⌥" : "Alt"),
+    input.shift && (mac ? "⇧" : "Shift"),
+    input.meta && mac && "⌘",
+  ].filter((part): part is string => Boolean(part));
+};
+
+/** A key as people name it: "Space", "D", or a named key such as "Tab". */
+const keyName = (key: string): string =>
+  key === " " ? "Space" : Array.from(key).length === 1 ? key.toUpperCase() : key;
+
+/** True when a key types text by itself, so the hint can say why it is not a shortcut. */
+export const typesText = (name: string): boolean =>
+  name === "Space" || Array.from(name).length === 1;
