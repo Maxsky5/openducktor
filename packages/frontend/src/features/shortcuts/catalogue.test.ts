@@ -102,12 +102,7 @@ test("names the other devices where Mod and Control assignments collide", () => 
       platform: "darwin",
       shell: "electron",
     }),
-  ).toEqual([
-    "the desktop app on Windows",
-    "the browser on Windows",
-    "the desktop app on Linux",
-    "the browser on Linux",
-  ]);
+  ).toEqual(["on Windows", "on Linux"]);
 });
 
 test.each(["backspace", "delete", "arrowleft", "arrowright", "arrowup", "arrowdown"])(

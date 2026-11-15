@@ -622,18 +622,24 @@ const DEVICES = [
   ["win32", "Windows"],
   ["linux", "Linux"],
 ] as const;
-/** The other devices where a command would be inactive, such as "the browser on Windows". */
+/**
+ * The other devices where a command would be inactive, such as "on Windows" when it fails in both
+ * apps there, or "in the browser on Linux".
+ */
 export const otherDeviceProblems = (
   preferences: ShortcutPreferences,
   catalogue: readonly ShortcutCommandDefinition[],
   id: ShortcutActionId,
   current: { platform: AppPlatform; shell: ShortcutShell },
 ): string[] =>
-  DEVICES.flatMap(([platform, name]) =>
-    (["electron", "browser"] as const).flatMap((shell) =>
-      (platform !== current.platform || shell !== current.shell) &&
-      problemOfCommand(compileShortcuts(preferences, catalogue, platform, shell), catalogue, id)
-        ? [`${shell === "electron" ? "the desktop app" : "the browser"} on ${name}`]
-        : [],
-    ),
-  );
+  DEVICES.flatMap(([platform, name]) => {
+    const failing = (["electron", "browser"] as const).filter(
+      (shell) =>
+        (platform !== current.platform || shell !== current.shell) &&
+        problemOfCommand(compileShortcuts(preferences, catalogue, platform, shell), catalogue, id),
+    );
+    if (failing.length === 2) return [`on ${name}`];
+    return failing.map(
+      (shell) => `in ${shell === "electron" ? "the desktop app" : "the browser"} on ${name}`,
+    );
+  });

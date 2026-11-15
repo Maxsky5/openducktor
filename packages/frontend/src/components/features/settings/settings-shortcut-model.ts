@@ -102,6 +102,24 @@ export const withWhenChoice = (
   return { ...preferences, when: choices };
 };
 
+/**
+ * A `when` choice and the problem it would cause the command on this device. Only the command's
+ * own new problem counts; a conflict elsewhere does not depend on the choice.
+ */
+export const whenChoiceChange = (
+  preferences: ShortcutPreferences,
+  catalogue: readonly ShortcutCommandDefinition[],
+  command: ShortcutCommandDefinition,
+  when: ShortcutWhen,
+  device: { platform: AppPlatform; shell: ShortcutShell },
+) => {
+  const next = withWhenChoice(preferences, command, when);
+  const problemIn = (candidate: ShortcutPreferences) =>
+    compileShortcuts(candidate, catalogue, device.platform, device.shell).problems.get(command.id);
+  const problem = problemIn(next);
+  return { preferences: next, problem: problem && !problemIn(preferences) ? problem : null };
+};
+
 /** True when Reset all would change something. */
 export const hasChanges = (preferences: ShortcutPreferences | undefined) =>
   Boolean(
@@ -146,15 +164,15 @@ export const groupCommandViews = (
   views: readonly ShortcutCommandView[],
   filter: ShortcutFilter,
   term: string,
-  /** A command whose keys were just removed; it keeps its place so its Undo stays put. */
+  /** A command being edited or just removed; it stays listed so the edit or its Undo stays put. */
   kept: ShortcutActionId | null = null,
 ): Map<string, ShortcutGroupItem[]> => {
   const fold = term === "";
   const groups = new Map<string, ShortcutGroupItem[]>();
   for (const view of views) {
-    const hidden = term
-      ? !view.search.includes(term)
-      : filter === "assigned" && !view.current && view.entry.id !== kept;
+    const hidden =
+      view.entry.id !== kept &&
+      (term ? !view.search.includes(term) : filter === "assigned" && !view.current);
     if (hidden) continue;
     const items = groups.get(view.entry.group) ?? [];
     groups.set(view.entry.group, items);

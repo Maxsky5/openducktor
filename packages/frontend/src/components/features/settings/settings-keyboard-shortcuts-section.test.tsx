@@ -54,16 +54,34 @@ test("records keys, shows a conflict before saving, and reassigns after an expli
   const write = renderSection();
   await record("Open diagnostics", { key: "b", code: "KeyB", ctrlKey: true });
 
-  expect(screen.getByRole("alert").textContent).toContain("Used by Toggle sidebar.");
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toContain("is already the shortcut for Toggle sidebar");
+  expect(alert.textContent).toContain("removes them from Toggle sidebar");
   expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  // Replace has focus, so Enter confirms the explicit choice.
+  const replace = screen.getByRole("button", { name: "Replace" });
+  await waitFor(() => expect(document.activeElement).toBe(replace));
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Move keys here" }));
+    fireEvent.click(replace);
   });
   expect(write).toHaveBeenCalledTimes(1);
   expect(write.mock.calls[0]![0].overrides).toEqual({
     diagnostics: keys("b", { mod: true }),
     sidebar: null,
   });
+});
+
+test("keeps other rows usable during an edit, and moves the edit to the row clicked next", async () => {
+  renderSection();
+  await record("Open diagnostics", { key: "b", code: "KeyB", ctrlKey: true });
+  expect(screen.getByRole("alert")).toBeTruthy();
+  // Other rows stay enabled; dimming the whole list for an edit made Settings blink.
+  expect(field("Show tour").hasAttribute("disabled")).toBe(false);
+  fireEvent.click(field("Show tour"));
+  await waitFor(() =>
+    expect(screen.getByRole("status").textContent).toContain("Recording keys for Show tour"),
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 test("saves a recorded shortcut and returns focus to its keys", async () => {

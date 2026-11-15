@@ -1,5 +1,5 @@
 import { type ReactNode, useRef } from "react";
-import { Check, ChevronDown, CircleAlert, LoaderCircle } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, LoaderCircle, TriangleAlert } from "lucide-react";
 import type { AppPlatform, ShortcutCombination, ShortcutWhen } from "@openducktor/contracts";
 import {
   shortcutKeyParts,
@@ -245,17 +245,19 @@ export function SettingsShortcutRow({
             platform={platform}
           />
         </Button>
-        {editor && (
-          <EditActions
-            id={entry.id}
-            proposal={proposal}
-            onSave={onSave}
-            onReassign={onReassign}
-            onRecordAgain={() => field.current && onRecord(field.current)}
-            onCancel={onCancel}
-          />
-        )}
+        {editor && <EditActions proposal={proposal} onSave={onSave} onCancel={onCancel} />}
       </div>
+      {proposal?.problem && (
+        <ProblemCallout
+          id={entry.id}
+          label={entry.label}
+          proposal={proposal}
+          problem={proposal.problem}
+          platform={platform}
+          onReplace={onReassign}
+          onRecordAgain={() => field.current && onRecord(field.current)}
+        />
+      )}
     </li>
   );
 }
@@ -292,7 +294,9 @@ const keyFieldClassName = (editor: ShortcutRowEditor | null) =>
     "h-8 min-w-16 justify-end gap-1 px-2 font-normal",
     editor && "border border-input bg-card shadow-sm hover:bg-card",
     editor?.state === "recording" && "border-ring",
-    editor?.state === "proposed" && editor.problem && "border-destructive",
+    editor?.state === "proposed" &&
+      editor.problem &&
+      (editor.problem.conflict ? "border-warning-border" : "border-destructive"),
   );
 
 /** Keys inside text: symbols in the system font for the eye, words for screen readers. */
@@ -344,10 +348,10 @@ function RowDetail({
   platform: AppPlatform;
 }) {
   if (editor && hasEditorDetail(editor))
-    return <EditorDetail id={entry.id} editor={editor} platform={platform} />;
+    return <EditorDetail editor={editor} platform={platform} />;
   if (removed)
     return (
-      <p id={`shortcut-removed-${entry.id}`} className="text-xs text-muted-foreground">
+      <p id={`shortcut-removed-${entry.id}`} className="text-xs leading-5 text-muted-foreground">
         Shortcut removed
         {defaultKeys && (
           <>
@@ -359,13 +363,13 @@ function RowDetail({
     );
   if (inactiveReason)
     return (
-      <p className="flex items-center gap-1.5 text-xs text-warning-muted">
+      <p className="flex items-center gap-1.5 text-xs leading-5 text-warning-muted">
         <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
         Off on this device. {inactiveReason}
       </p>
     );
   if (entry.unavailableReason)
-    return <p className="text-xs text-muted-foreground">{entry.unavailableReason}</p>;
+    return <p className="text-xs leading-5 text-muted-foreground">{entry.unavailableReason}</p>;
   if (!showContext) return null;
   return (
     <div className="flex h-5 items-center gap-1.5 text-xs text-muted-foreground">
@@ -426,48 +430,20 @@ function WhenPicker({
 }
 
 /** Guidance while recording, and the problem or reach of proposed keys. */
+/** "A", "A and B", or "A, B and C". */
+const joinNames = (names: readonly string[]) =>
+  names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
 /** Keys waiting for Save with nothing to report keep the When line, so the row keeps its height. */
 const hasEditorDetail = (editor: ShortcutRowEditor) =>
-  editor.state === "recording" || editor.problem !== null || editor.otherDevices.length > 0;
+  editor.state === "recording" || (editor.problem === null && editor.otherDevices.length > 0);
 
-function EditorDetail({
-  id,
-  editor,
-  platform,
-}: {
-  id: string;
-  editor: ShortcutRowEditor;
-  platform: AppPlatform;
-}) {
+function EditorDetail({ editor, platform }: { editor: ShortcutRowEditor; platform: AppPlatform }) {
   if (editor.state === "recording") return <RecordingHint editor={editor} platform={platform} />;
-  const { problem } = editor;
-  if (problem?.conflict)
-    return (
-      <p
-        id={`shortcut-problem-${id}`}
-        role="alert"
-        className="text-xs break-words text-muted-foreground"
-      >
-        <span className="text-destructive-surface-foreground">
-          Used by {problem.conflict.label}.
-        </span>{" "}
-        Moving the keys removes them there.
-      </p>
-    );
-  if (problem)
-    return (
-      <p
-        id={`shortcut-problem-${id}`}
-        role="alert"
-        className="text-xs text-destructive-surface-foreground"
-      >
-        {problem.message}
-      </p>
-    );
   if (editor.otherDevices.length === 0) return null;
   return (
-    <p className="text-xs text-muted-foreground">
-      These keys will not work in {editor.otherDevices.join(", ")}.
+    <p className="text-xs leading-5 text-muted-foreground">
+      These keys will not work {joinNames(editor.otherDevices)}.
     </p>
   );
 }
@@ -482,12 +458,12 @@ function RecordingHint({
   const { ignored } = editor;
   if (!ignored)
     return (
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs leading-5 text-muted-foreground">
         Hold <ModifierNames platform={platform} /> and press a key.
       </p>
     );
   return (
-    <p className="text-xs text-warning-muted">
+    <p className="text-xs leading-5 text-warning-muted">
       {typesText(ignored) ? (
         <>
           Add <ModifierNames platform={platform} />. {ignored} alone types text.
@@ -516,11 +492,8 @@ function KeyField({
   if (editor?.state === "recording")
     return (
       <span className="px-1 text-xs text-foreground">
-        {editor.preparing
-          ? "Starting…"
-          : editor.held.length > 0
-            ? `${editor.held.join(" ")} …`
-            : "Press keys…"}
+        {/* The recorder gets ready in a moment; a separate "Starting" text only flashed. */}
+        {editor.held.length > 0 ? `${editor.held.join(" ")} …` : "Press keys…"}
       </span>
     );
   if (editor) return <ShortcutKeycaps combination={editor.combination} platform={platform} />;
@@ -539,18 +512,12 @@ function KeyField({
 }
 
 function EditActions({
-  id,
   proposal,
   onSave,
-  onReassign,
-  onRecordAgain,
   onCancel,
 }: {
-  id: string;
   proposal: Extract<ShortcutRowEditor, { state: "proposed" }> | null;
   onSave(): void;
-  onReassign(): void;
-  onRecordAgain(): void;
   onCancel(): void;
 }) {
   const saving = proposal?.saving ?? false;
@@ -571,32 +538,6 @@ function EditActions({
           {saving ? "Saving…" : "Save"}
         </Button>
       )}
-      {problem?.conflict && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          aria-disabled={saving}
-          aria-describedby={`shortcut-problem-${id}`}
-          onClick={() => {
-            if (!saving) onReassign();
-          }}
-          autoFocus
-        >
-          Move keys here
-        </Button>
-      )}
-      {problem && (
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={onRecordAgain}
-          autoFocus={!problem.conflict}
-        >
-          Try other keys
-        </Button>
-      )}
       <Button
         type="button"
         variant="ghost"
@@ -612,6 +553,91 @@ function EditActions({
         </kbd>
       </Button>
     </>
+  );
+}
+
+/**
+ * Why recorded keys cannot be saved, under the row. A conflict names the command that has the keys
+ * and says what Replace does; other problems offer only new keys.
+ */
+function ProblemCallout({
+  id,
+  label,
+  proposal,
+  problem,
+  platform,
+  onReplace,
+  onRecordAgain,
+}: {
+  id: string;
+  label: string;
+  proposal: Extract<ShortcutRowEditor, { state: "proposed" }>;
+  problem: ShortcutProblem;
+  platform: AppPlatform;
+  onReplace(): void;
+  onRecordAgain(): void;
+}) {
+  const { conflict } = problem;
+  const keys = (
+    <span className="mx-0.5 inline-flex align-middle">
+      <ShortcutKeycaps combination={proposal.combination} platform={platform} />
+    </span>
+  );
+  return (
+    <div
+      id={`shortcut-problem-${id}`}
+      role="alert"
+      className={cn(
+        "flex basis-full flex-col gap-3 rounded-md border px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between",
+        conflict
+          ? "border-warning-border bg-warning-surface text-warning-surface-foreground"
+          : "border-destructive-border bg-destructive-surface text-destructive-surface-foreground",
+      )}
+    >
+      <div className="flex min-w-0 items-start gap-2.5">
+        <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <p className="text-sm leading-6 font-medium">
+            {conflict ? (
+              <>
+                {keys} is already the shortcut for {conflict.label}
+              </>
+            ) : (
+              <>You cannot use {keys}</>
+            )}
+          </p>
+          <p className="text-xs">
+            {conflict
+              ? `Replace gives these keys to ${label} and removes them from ${conflict.label}.`
+              : problem.message}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {conflict && (
+          <Button
+            type="button"
+            size="sm"
+            aria-disabled={proposal.saving}
+            onClick={() => {
+              if (!proposal.saving) onReplace();
+            }}
+            autoFocus
+          >
+            Replace
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={onRecordAgain}
+          autoFocus={!conflict}
+        >
+          Record other keys
+        </Button>
+      </div>
+    </div>
   );
 }
 

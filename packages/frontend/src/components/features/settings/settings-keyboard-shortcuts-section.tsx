@@ -63,12 +63,12 @@ export function SettingsKeyboardShortcutsSection() {
   );
   const changed = hasChanges(query.data);
   const term = searchKey(search);
-  const { removedId, forgetRemoval } = editor;
+  const { removedId, forgetRemoval, editingId } = editor;
+  const kept = editingId ?? removedId;
   const groups = useMemo(
-    () => groupCommandViews(views, filter, term, removedId),
-    [views, filter, term, removedId],
+    () => groupCommandViews(views, filter, term, kept),
+    [views, filter, term, kept],
   );
-  const browsingDisabled = editor.busy || editor.proposal !== null;
 
   const shown: ShortcutFilter = term ? "all" : filter;
   const changeFilter = (next: ShortcutFilter) => {
@@ -103,7 +103,6 @@ export function SettingsKeyboardShortcutsSection() {
             placeholder={`Search commands or keys, such as ${platform === "darwin" ? "⌘K" : "Ctrl+K"}`}
             size="lg"
             value={search}
-            disabled={browsingDisabled}
             onValueChange={(value) => {
               forgetRemoval();
               setSearch(value);
@@ -116,7 +115,7 @@ export function SettingsKeyboardShortcutsSection() {
           data-variant="segmented"
           className="grid h-9 grid-cols-2 items-center gap-1 rounded-lg bg-muted p-1"
           value={shown}
-          disabled={browsingDisabled || term !== ""}
+          disabled={term !== ""}
           onValueChange={(value) => {
             const next = FILTERS.find((option) => option.value === value);
             if (next) changeFilter(next.value);
@@ -132,8 +131,8 @@ export function SettingsKeyboardShortcutsSection() {
           <Button
             type="button"
             variant="outline"
-            disabled={browsingDisabled}
             onClick={(event) => {
+              editor.stopEditing();
               editor.rememberOpener(event.currentTarget);
               setResetOpen(true);
             }}
@@ -303,11 +302,7 @@ function CommandRow({
       whenChoice={view.whenChoice}
       whenCustomized={view.whenCustomized}
       onChooseWhen={(when, element) => editor.chooseWhen(id, when, element)}
-      disabled={
-        (editor.busy && editor.recording !== id && proposal?.id !== id) ||
-        (proposal !== null && proposal.id !== id) ||
-        !loaded
-      }
+      disabled={!loaded}
       editor={rowEditor}
       saved={editor.savedId === id}
       removed={editor.removedId === id}
@@ -339,7 +334,6 @@ function FamilyRows({
     (view) => view.entry.id === editor.recording || view.entry.id === editor.proposal?.id,
   );
   const expanded = opened || editing;
-  const disabled = !editing && (editor.busy || editor.proposal !== null);
   const firstView = family.commands[0];
   const first = firstView?.current;
   const last = family.commands.at(-1)?.current;
@@ -356,7 +350,6 @@ function FamilyRows({
         aria-expanded={expanded}
         aria-label={`${family.label}, ${summary}`}
         aria-describedby={`shortcut-family-${family.key}`}
-        disabled={disabled}
         onClick={() => setOpened(!expanded)}
         className="group/family flex min-h-16 w-full items-center gap-4 px-4 py-3 text-left outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none disabled:opacity-50"
       >
