@@ -39,27 +39,22 @@ import {
 import { useToolPartDetails } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
-import {
-  type ComponentRef,
-  type ReactElement,
-  type ReactNode,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ComponentRef, type ReactElement, type ReactNode, useMemo, useRef } from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { MarkdownView } from "@/rich-content/markdown/markdown-view";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
 import { monoWeight, sansWeight } from "@/theme/tokens";
-import { Icon, type IconName } from "@/ui/icon";
+import { Icon } from "@/ui/icon";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { messageTimeLabel, truncateForDisplay } from "../transcript-text";
-import { CopyControl, DisclosureMarker, PreText } from "./row-parts";
+import { optionIcon } from "../../pending-input/question-option-icon";
+import { useDisclosure } from "./disclosure";
+import { CopyControl, DisclosureMarker, PreText, Reveal } from "./row-parts";
 import { ToolStatusIcon, ToolStatusLabel } from "./tool-status";
 
 /**
@@ -445,7 +440,6 @@ function FileEditDetails({
   messageTimestamp,
   timeLabel,
 }: { meta: ToolMeta } & DetailsTiming): ReactElement {
-  const { desktop } = useAppTheme();
   const error = readToolDetailsError(meta);
   return (
     <ScrollView style={styles.fillHeight} contentContainerStyle={styles.padded}>
@@ -456,11 +450,7 @@ function FileEditDetails({
         exitCode={null}
         timeoutMs={null}
       />
-      {error ? (
-        <DetailsBlock label="Error" tone="error" copyText={error}>
-          <PreText text={formatRawJsonLikeText(error)} color={desktop.destructiveMuted} />
-        </DetailsBlock>
-      ) : null}
+      {error ? <DetailsError error={error} /> : null}
       <ToolFileEdits meta={meta} resetKey={`details:${meta.callId}`} open />
     </ScrollView>
   );
@@ -526,11 +516,7 @@ function ToolCallDetails({
         </View>
       ) : null}
       <ToolCallInputOutput meta={meta} />
-      {error ? (
-        <DetailsBlock label="Error" tone="error" copyText={error}>
-          <PreText text={formatRawJsonLikeText(error)} color={desktop.destructiveMuted} />
-        </DetailsBlock>
-      ) : null}
+      {error ? <DetailsError error={error} /> : null}
       {hasInput || hasOutput || error ? null : (
         <Text style={[styles.meta, { color: desktop.mutedForeground }]}>
           The tool call has no input or output.
@@ -552,7 +538,7 @@ function QuestionToolDetails({
   timeLabel,
 }: { meta: ToolMeta; questions: QuestionDetailEntry[] } & DetailsTiming): ReactElement {
   const { desktop } = useAppTheme();
-  const [rawOpen, setRawOpen] = useState(false);
+  const raw = useDisclosure(false, `${meta.callId}:raw`);
   const { hasInput, hasOutput } = readToolDetailAvailability(meta);
   const error = readToolDetailsError(meta);
   return (
@@ -564,11 +550,7 @@ function QuestionToolDetails({
         exitCode={null}
         timeoutMs={null}
       />
-      {error ? (
-        <DetailsBlock label="Error" tone="error" copyText={error}>
-          <PreText text={formatRawJsonLikeText(error)} color={desktop.destructiveMuted} />
-        </DetailsBlock>
-      ) : null}
+      {error ? <DetailsError error={error} /> : null}
       {/* A question tool asks a few questions, so they render in the scroll view of the details. */}
       {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
       {questions.map(({ key, detail }, index) => (
@@ -582,29 +564,32 @@ function QuestionToolDetails({
         <View style={styles.block}>
           <Touchable
             feedback="opacity"
-            onPress={() => setRawOpen((open) => !open)}
+            onPress={raw.toggle}
             accessibilityRole="button"
             accessibilityLabel="Raw input and output"
-            accessibilityState={{ expanded: rawOpen }}
+            accessibilityState={{ expanded: raw.open }}
             style={styles.sectionLabel}
           >
-            <DisclosureMarker open={rawOpen} animated color={desktop.mutedForeground} size={13} />
+            <DisclosureMarker
+              open={raw.open}
+              animated={raw.pressed}
+              color={desktop.mutedForeground}
+              size={13}
+            />
             <Text style={[styles.sectionTitle, { color: desktop.mutedForeground }]}>
               Raw input and output
             </Text>
           </Touchable>
-          {rawOpen ? <ToolCallInputOutput meta={meta} /> : null}
+          {raw.open ? (
+            <Reveal animate={raw.pressed} style={styles.rawBlocks}>
+              <ToolCallInputOutput meta={meta} />
+            </Reveal>
+          ) : null}
         </View>
       ) : null}
     </ScrollView>
   );
 }
-
-/** The desktop `OptionIcon`: a box for a multiple choice option, a circle for another option. */
-const optionIcon = (multiple: boolean, selected: boolean): IconName => {
-  if (multiple) return selected ? "check-square" : "square";
-  return selected ? "circle-check" : "circle";
-};
 
 /** One question: its label, its prompt, its options with the chosen ones marked, and the written answers. */
 function QuestionCard({
@@ -716,6 +701,16 @@ function QuestionCard({
         </Text>
       )}
     </View>
+  );
+}
+
+/** The error of a failed call, which the reader can copy. */
+function DetailsError({ error }: { error: string }): ReactElement {
+  const { desktop } = useAppTheme();
+  return (
+    <DetailsBlock label="Error" tone="error" copyText={error}>
+      <PreText text={formatRawJsonLikeText(error)} color={desktop.destructiveMuted} />
+    </DetailsBlock>
   );
 }
 
@@ -852,6 +847,8 @@ const styles = StyleSheet.create((theme) => ({
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: theme.space.sm },
   sectionTitle: { ...sansWeight("medium"), fontSize: 13, lineHeight: 18 },
   block: { gap: 6 },
+  // The input and output keep the gap of the blocks of the details.
+  rawBlocks: { gap: theme.space.md },
   questionCard: {
     gap: theme.space.sm,
     borderWidth: 1,

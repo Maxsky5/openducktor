@@ -150,8 +150,6 @@ export const readToolDetailsHeading = (
   if (presentation.kind === "artifact" && presentation.operation === "set") {
     return { title: readArtifactToolCall(meta).title, iconKind: null, note: null };
   }
-  // The transcript names each question tool `Question`, so its details name the tool of the runtime.
-  if (meta.toolType === "question") return { title: meta.tool, iconKind: null, note: null };
   return { title: presentation.displayName, iconKind: null, note: null };
 };
 
@@ -266,8 +264,6 @@ export const resolveRegularToolSummary = (
 export const isRegularToolPreparing = (meta: ToolMeta): boolean =>
   meta.status === "pending" && meta.inputStreaming !== undefined;
 
-const QUESTION_TOOL_NAME = "Question";
-
 /**
  * The name of a tool call in the transcript. Each runtime names its tools in its own way, so a
  * shell command shows as `bash`, a call that edits files, such as `Edit`, `Write`, or
@@ -277,7 +273,7 @@ const QUESTION_TOOL_NAME = "Question";
 export const readToolCallName = (meta: ToolMeta, displayName: string): string => {
   if (isShellCommandCall(meta)) return "bash";
   if (meta.toolType === "file_edit") return "edit";
-  if (meta.toolType === "question") return QUESTION_TOOL_NAME;
+  if (meta.toolType === "question") return "Question";
   return displayName;
 };
 
@@ -333,12 +329,12 @@ export type QuestionDetailEntry = { key: string; detail: QuestionToolDetail };
 
 /** The questions and answers of a question tool. Empty for another tool. */
 export const buildQuestionDetailEntries = (meta: ToolMeta): QuestionDetailEntry[] => {
-  const countsByBaseKey = new Map<string, number>();
+  // A question keeps its key when its answer comes, so its row does not mount again.
+  const countsByPrompt = new Map<string, number>();
   return questionToolDetails(meta).map((detail) => {
-    const baseKey = `${meta.callId}:question:${detail.prompt}:${detail.answers.join("|")}`;
-    const nextCount = (countsByBaseKey.get(baseKey) ?? 0) + 1;
-    countsByBaseKey.set(baseKey, nextCount);
-    return { key: `${baseKey}:${nextCount}`, detail };
+    const count = (countsByPrompt.get(detail.prompt) ?? 0) + 1;
+    countsByPrompt.set(detail.prompt, count);
+    return { key: `${detail.prompt}:${count}`, detail };
   });
 };
 

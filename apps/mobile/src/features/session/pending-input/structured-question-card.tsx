@@ -26,6 +26,7 @@ import {
   type QuestionFlowStep,
   type QuestionFlowView,
 } from "./question-flow";
+import { optionIcon } from "./question-option-icon";
 import { RequestCard } from "./request-card";
 import { RequestFailureBox, RequestFeedbackBox, RequestStatusLine } from "./request-feedback";
 
@@ -388,12 +389,6 @@ function SummaryRow({
     </Touchable>
   );
 }
-
-/** The desktop option icon: a check box or a radio circle, in the foreground when selected. */
-const optionIcon = (multiple: boolean, selected: boolean): IconName => {
-  if (multiple) return selected ? "check-square" : "square";
-  return selected ? "circle-check" : "circle";
-};
 
 function OptionRow({
   label,

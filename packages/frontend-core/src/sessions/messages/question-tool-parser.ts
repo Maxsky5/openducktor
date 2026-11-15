@@ -122,27 +122,6 @@ const collectQuestionDetails = (value: AgentToolValue | undefined): QuestionTool
   }, []);
 };
 
-/**
- * Claude gives the answers as a record with the text of each question as its key. A record with a
- * key for a prompt gives the answers of each question by its prompt, so a question without an
- * answer keeps its place. Null for answers of another shape.
- */
-const readAnswersByPrompt = (
-  candidates: Array<AgentToolValue | undefined>,
-  questions: readonly QuestionToolDetail[],
-): string[][] | null => {
-  for (const candidate of candidates) {
-    if (!isAgentToolData(candidate)) continue;
-    const answersByPrompt = new Map(
-      Object.entries(candidate).map(([key, value]) => [key.trim(), value]),
-    );
-    if (questions.some(({ prompt }) => answersByPrompt.has(prompt))) {
-      return questions.map(({ prompt }) => normalizeAnswerValues(answersByPrompt.get(prompt)));
-    }
-  }
-  return null;
-};
-
 const normalizeAnswerGroups = (value: AgentToolValue | undefined): string[][] => {
   if (Array.isArray(value)) {
     return value.map((entry) => normalizeAnswerValues(entry));
@@ -158,27 +137,19 @@ const normalizeAnswerGroups = (value: AgentToolValue | undefined): string[][] =>
     value.result ??
     value.value;
   if (nested === undefined) {
-    return Object.values(value).reduce<string[][]>((groups, entry) => {
-      const answers = normalizeAnswerValues(entry);
-      if (answers.length > 0) {
-        groups.push(answers);
-      }
-      return groups;
-    }, []);
+    return Object.values(value).map((entry) => normalizeAnswerValues(entry));
   }
   return normalizeAnswerGroups(nested);
 };
 
+/**
+ * The answer groups of the first candidate with an answer, one group for each question. A question
+ * without an answer keeps its empty group, so the next answers stay with their questions.
+ */
 const firstNonEmptyAnswerGroups = (candidates: Array<AgentToolValue | undefined>): string[][] => {
   for (const candidate of candidates) {
-    const groups = normalizeAnswerGroups(candidate).reduce<string[][]>((nextGroups, entry) => {
-      const answers = entry.filter((value) => value.trim().length > 0);
-      if (answers.length > 0) {
-        nextGroups.push(answers);
-      }
-      return nextGroups;
-    }, []);
-    if (groups.length > 0) {
+    const groups = normalizeAnswerGroups(candidate);
+    if (groups.some((answers) => answers.length > 0)) {
       return groups;
     }
   }
@@ -216,16 +187,6 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
   }
 
   const outputRecord = parsedOutput && isAgentToolData(parsedOutput) ? parsedOutput : undefined;
-  const answersByPrompt = readAnswersByPrompt(
-    [outputRecord?.answers, metadataRecord?.answers, inputRecord?.answers],
-    questions,
-  );
-  if (answersByPrompt) {
-    return questions.map((entry, index) => ({
-      ...entry,
-      answers: entry.answers.length > 0 ? entry.answers : (answersByPrompt[index] ?? []),
-    }));
-  }
   const answerGroups = firstNonEmptyAnswerGroups([
     outputRecord,
     outputRecord?.answers,
@@ -246,10 +207,6 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     inputRecord?.response,
   ]);
 
-  if (answerGroups.length === 0) {
-    return questions;
-  }
-
   return questions.map((entry, index) => ({
     ...entry,
     answers: entry.answers.length > 0 ? entry.answers : (answerGroups[index] ?? []),
@@ -262,26 +219,13 @@ export type QuestionAnswerChoices = {
   customAnswers: string[];
 };
 
-/**
- * Splits the answers of a question into chosen options and written answers. Claude joins the
- * options of a multiple choice answer with `, `, so an answer whose parts are all option labels
- * chooses each of them.
- */
+/** Splits the answers of a question into chosen options and written answers. */
 export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionAnswerChoices => {
   const labels = new Set(detail.options.map((option) => option.label));
   const selectedLabels = new Set<string>();
   const customAnswers = new Set<string>();
   for (const answer of detail.answers) {
-    if (labels.has(answer)) {
-      selectedLabels.add(answer);
-      continue;
-    }
-    const parts = answer.split(", ");
-    if (parts.length > 1 && parts.every((part) => labels.has(part))) {
-      for (const part of parts) selectedLabels.add(part);
-      continue;
-    }
-    customAnswers.add(answer);
+    (labels.has(answer) ? selectedLabels : customAnswers).add(answer);
   }
   return { selectedLabels, customAnswers: [...customAnswers] };
 };

@@ -255,13 +255,9 @@ describe("readToolCallName", () => {
     expect(readToolCallName(meta({ tool: "Read", toolType: "read" }), "Read")).toBe("Read");
   });
 
-  test("names the question tool of each runtime Question, and its details name the tool", () => {
+  test("names the question tool of each runtime Question", () => {
     for (const tool of ["AskUserQuestion", "request_user_input", "question"]) {
-      const question = meta({ tool, toolType: "question" });
-      expect(readToolCallName(question, tool)).toBe("Question");
-      expect(
-        readToolDetailsHeading(question, { kind: "regular", displayName: "Question" }),
-      ).toEqual({ title: tool, iconKind: null, note: null });
+      expect(readToolCallName(meta({ tool, toolType: "question" }), tool)).toBe("Question");
     }
   });
 });

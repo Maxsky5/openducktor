@@ -9,7 +9,7 @@ import {
   type QuestionToolDetail,
   readQuestionAnswerChoices,
 } from "@openducktor/frontend-core/sessions/messages/question-tool-parser";
-import { CheckCircle2, CheckSquare, ChevronRight, Circle, Square } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -21,20 +21,7 @@ import {
   type ToolDetailsTiming,
 } from "./agent-chat-tool-details-content";
 import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
-
-const OptionIcon = ({
-  multiple,
-  selected,
-}: {
-  multiple: boolean;
-  selected: boolean;
-}): ReactElement => {
-  const className = cn("size-3.5", selected ? "text-foreground" : "text-muted-foreground");
-  if (multiple) {
-    return selected ? <CheckSquare className={className} /> : <Square className={className} />;
-  }
-  return selected ? <CheckCircle2 className={className} /> : <Circle className={className} />;
-};
+import { renderOptionIcon } from "./agent-session-question-tab";
 
 /**
  * One question: its label, its prompt, its options with the chosen ones marked, and the answers
@@ -87,7 +74,7 @@ const QuestionCard = ({
                 )}
               >
                 <span className="flex h-5 shrink-0 items-center">
-                  <OptionIcon multiple={detail.multiple} selected={selected} />
+                  {renderOptionIcon(detail.multiple, selected)}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-xs leading-5 font-medium break-words">

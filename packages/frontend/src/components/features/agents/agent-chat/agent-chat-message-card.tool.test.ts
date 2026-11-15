@@ -392,7 +392,7 @@ describe("AgentChatMessageCard tool presentation", () => {
     const document = renderQuestionTool({
       input: { questions },
       preview: JSON.stringify({ questions }),
-      metadata: { answers: { "Which webhook URLs?": "Incoming webhooks" } },
+      metadata: { answers: [["Incoming webhooks"]] },
     });
 
     expect(document.querySelector('[data-slot="tool-name"]')?.textContent).toBe("Question");

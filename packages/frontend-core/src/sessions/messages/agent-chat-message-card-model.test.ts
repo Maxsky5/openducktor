@@ -479,20 +479,26 @@ describe("agent-chat-message-card-model", () => {
       ]);
     });
 
-    test("reads Claude answers by the text of each question, so a skipped question keeps its place", () => {
-      const details = questionToolDetails(
-        createToolMeta({
-          tool: "AskUserQuestion",
-          toolType: "question",
-          input: { questions: [{ question: "First?" }, { question: "Second?" }] },
-          metadata: { answers: { "Second?": "Yes", "First?": "" } },
-        }),
-      );
-
-      expect(details.map(({ prompt, answers }) => ({ prompt, answers }))).toEqual([
+    test("keeps the place of a question without an answer in grouped answers", () => {
+      const prompts = (answers: NonNullable<ToolMeta["metadata"]>) =>
+        questionToolDetails(
+          createToolMeta({
+            tool: "question",
+            toolType: "question",
+            input: { questions: [{ question: "First?" }, { question: "Second?" }] },
+            metadata: answers,
+          }),
+        ).map(({ prompt, answers }) => ({ prompt, answers }));
+      const expected = [
         { prompt: "First?", answers: [] },
         { prompt: "Second?", answers: ["Yes"] },
-      ]);
+      ];
+
+      // OpenCode and Claude give a group for each question, and Codex a record by question id.
+      expect(prompts({ answers: [[], ["Yes"]] })).toEqual(expected);
+      expect(prompts({ answers: { q1: { answers: [] }, q2: { answers: ["Yes"] } } })).toEqual(
+        expected,
+      );
     });
 
     test("splits answers into chosen options and written answers, each written answer once", () => {
@@ -505,7 +511,7 @@ describe("agent-chat-message-card-model", () => {
           { label: "Build", description: null },
         ],
         multiple: true,
-        answers: ["Lint, Test", "Also run e2e, please", "Also run e2e, please"],
+        answers: ["Lint", "Test", "Also run e2e, please", "Also run e2e, please"],
       };
 
       const choices = readQuestionAnswerChoices(detail);

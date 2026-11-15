@@ -390,8 +390,8 @@ describe("claude-agent-sdk-history tool projection", () => {
     });
   });
 
-  test("keeps the answers of an AskUserQuestion result in the metadata of its tool part", () => {
-    const question = {
+  test("keeps the answers of an AskUserQuestion result in its metadata, one group for each question", () => {
+    const checks = {
       question: "Which checks should run?",
       header: "Checks",
       multiSelect: true,
@@ -400,7 +400,24 @@ describe("claude-agent-sdk-history tool projection", () => {
         { label: "Test", description: "Run bun test" },
       ],
     };
-    const answers = { "Which checks should run?": "Lint, Test" };
+    const notes = {
+      question: "Anything else?",
+      header: "Notes",
+      multiSelect: false,
+      options: [{ label: "No", description: "Nothing else" }],
+    };
+    const branch = {
+      question: "Which branch?",
+      header: "Branch",
+      multiSelect: false,
+      options: [{ label: "main", description: "The default branch" }],
+    };
+    const questions = [checks, notes, branch];
+    const answers = {
+      "Which checks should run?": "Lint, Test",
+      "Anything else?": "",
+      "Which branch?": "release, then main",
+    };
     const history = toClaudeHistoryMessages(
       [
         toSessionMessage({
@@ -415,7 +432,7 @@ describe("claude-agent-sdk-history tool projection", () => {
                 type: "tool_use",
                 id: "question-1",
                 name: "AskUserQuestion",
-                input: { questions: [question] },
+                input: { questions },
               },
             ],
           },
@@ -436,7 +453,7 @@ describe("claude-agent-sdk-history tool projection", () => {
               },
             ],
           },
-          toolUseResult: { questions: [question], answers },
+          toolUseResult: { questions, answers },
         }),
       ],
       () => "2026-11-15T00:00:00.000Z",
@@ -447,8 +464,9 @@ describe("claude-agent-sdk-history tool projection", () => {
       tool: "AskUserQuestion",
       toolType: "question",
       status: "completed",
-      input: { questions: [question] },
-      metadata: { answers },
+      input: { questions },
+      // A written answer that only looks like joined options stays whole.
+      metadata: { answers: [["Lint", "Test"], [], ["release, then main"]] },
     });
   });
 

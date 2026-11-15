@@ -21,7 +21,8 @@ type QuestionTabProps = {
   panelProps?: HTMLAttributes<HTMLDivElement> | undefined;
 };
 
-const renderOptionIcon = (multiple: boolean, selected: boolean): ReactElement => {
+/** The mark of an option: a box for a multiple choice option, a circle for another option. */
+export const renderOptionIcon = (multiple: boolean, selected: boolean): ReactElement => {
   const className = selected ? "size-3.5 text-foreground" : "size-3.5 text-muted-foreground";
   if (multiple) {
     return selected ? <CheckSquare className={className} /> : <Square className={className} />;

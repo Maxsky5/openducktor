@@ -153,7 +153,7 @@ describe("handleClaudeSdkMessage tool events", () => {
           tool: "AskUserQuestion",
           toolType: "question",
           status: "completed",
-          metadata: { answers },
+          metadata: { answers: [["main"]] },
         }),
       }),
     );

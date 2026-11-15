@@ -132,11 +132,35 @@ const parseClaudeAskUserQuestionInput = (
   return { sdkQuestions, eventQuestions };
 };
 
+// Claude takes one text for each answer, so the options of a multiple choice answer join with it.
+const ANSWER_SEPARATOR = ", ";
+
 const answerString = (answers: readonly string[]): string =>
   answers
     .map((answer) => answer.trim())
     .filter(Boolean)
-    .join(", ");
+    .join(ANSWER_SEPARATOR);
+
+/**
+ * The answers of a Claude AskUserQuestion result as one group for each question, in question
+ * order. Claude keys each answer by the text of its question and joins its options as
+ * `answerString` does, so an answer whose parts are all option labels splits into them. Null when
+ * the input has another shape.
+ */
+export const readClaudeAskUserQuestionAnswers = (
+  toolInput: ClaudeProtocolObject,
+  answers: ClaudeProtocolObject,
+): string[][] | null => {
+  const payload = parseClaudeAskUserQuestionInput(toolInput);
+  if (!payload) return null;
+  return payload.sdkQuestions.map(({ question, options }) => {
+    const answer = readString(answers[question]);
+    if (!answer) return [];
+    const labels = new Set(options.map((option) => option.label));
+    const parts = answer.split(ANSWER_SEPARATOR);
+    return parts.every((part) => labels.has(part)) ? parts : [answer];
+  });
+};
 
 export const buildClaudeAskUserQuestionResult = ({
   answers,

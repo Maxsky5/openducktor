@@ -7,7 +7,6 @@ import {
   isRegularToolPreparing,
   readRegularToolTiming,
   readToolDetailAvailability,
-  readToolDetailsHeading,
   regularToolLineName,
   resolveRegularToolSummary,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
@@ -51,7 +50,7 @@ export const ToolCallRow = memo(function ToolCallRow({
   displayName: string;
   rowKey: string;
 }): ReactElement {
-  const { workingDirectory, openFullView, presentToolCall } = useTranscriptRows();
+  const { workingDirectory, openFullView } = useTranscriptRows();
   const phase = getToolLifecyclePhase(meta);
   const expandable = hasExpandableToolDetails(readToolDetailAvailability(meta));
   const summary = resolveRegularToolSummary(meta, messageContent, workingDirectory);
@@ -72,16 +71,7 @@ export const ToolCallRow = memo(function ToolCallRow({
         durationMs={timing.durationMs}
         timeLabel={timeLabel}
         onPress={
-          expandable
-            ? () =>
-                openFullView({
-                  kind: "tool",
-                  messageId,
-                  // A question tool shows as `Question`, so its details name the tool of the runtime.
-                  title: readToolDetailsHeading(meta, presentToolCall(meta.tool, meta.displayLabel))
-                    .title,
-                })
-            : null
+          expandable ? () => openFullView({ kind: "tool", messageId, title: displayName }) : null
         }
         accessibilityLabel={`${name}${summary.text.length > 0 ? `: ${summary.text}` : ""}${stateLabel}${errorLabel}`}
       />

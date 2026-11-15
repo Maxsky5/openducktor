@@ -447,13 +447,7 @@ describe("AgentChatToolDetailsBeside", () => {
               ],
             },
             output: 'Your questions have been answered: "Which checks should run?"="Lint, Test".',
-            metadata: {
-              answers: {
-                "Which checks should run?": "Lint, Test",
-                "Which branch?": "release/2.0",
-                "Anything else?": "",
-              },
-            },
+            metadata: { answers: [["Lint", "Test"], ["release/2.0"], []] },
           }),
         ]}
       />,
