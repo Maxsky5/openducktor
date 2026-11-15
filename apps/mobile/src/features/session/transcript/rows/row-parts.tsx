@@ -283,7 +283,7 @@ export function DetailsBox({
   textColor: string;
   /** Adds a copy control to the open summary. The box reads the text only while it is open. */
   copyText?: (() => string) | undefined;
-  /** A hairline between the summary and the content, as the questions box. */
+  /** A hairline between the summary and the content. */
   divided?: boolean;
   children: ReactNode;
 }): ReactElement {
@@ -363,9 +363,6 @@ export const StatusPill = memo(function StatusPill({
     </View>
   );
 });
-
-/** The inset of tool details: the desktop `px-1` of the tool container and the `ml-5` of the details. */
-export const LINE_DETAILS_INSET = 24;
 
 const LINE_GAP = 8;
 

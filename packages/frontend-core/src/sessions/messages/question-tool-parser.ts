@@ -5,8 +5,18 @@ import { hasNonEmptyText } from "./tool-lifecycle";
 
 const questionJsonValueSchema = z.json();
 
+export type QuestionToolOption = {
+  label: string;
+  description: string | null;
+};
+
 export type QuestionToolDetail = {
   prompt: string;
+  /** The short label of the question, such as `Auth method`, when the prompt is another text. */
+  header: string | null;
+  options: QuestionToolOption[];
+  /** The question takes one or more of its options. */
+  multiple: boolean;
   answers: string[];
 };
 
@@ -30,10 +40,7 @@ const parseJsonIfPossible = (value: string | undefined): AgentToolValue | undefi
   }
 };
 
-const readQuestionPrompt = (value: AgentToolValue | undefined): string | null => {
-  if (!isAgentToolData(value)) {
-    return null;
-  }
+const readQuestionPrompt = (value: AgentToolData): string | null => {
   const candidates = [
     value.question,
     value.prompt,
@@ -66,27 +73,73 @@ const normalizeAnswerValues = (value: AgentToolValue | undefined): string[] => {
   );
 };
 
+const readQuestionOptions = (value: AgentToolValue | undefined): QuestionToolOption[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry): QuestionToolOption[] => {
+    if (hasNonEmptyText(entry)) {
+      return [{ label: entry.trim(), description: null }];
+    }
+    if (!isAgentToolData(entry) || !hasNonEmptyText(entry.label)) {
+      return [];
+    }
+    const { description } = entry;
+    return [
+      {
+        label: entry.label.trim(),
+        description: hasNonEmptyText(description) ? description.trim() : null,
+      },
+    ];
+  });
+};
+
 const collectQuestionDetails = (value: AgentToolValue | undefined): QuestionToolDetail[] => {
   if (!Array.isArray(value)) {
     return [];
   }
   return value.reduce<QuestionToolDetail[]>((details, entry) => {
+    if (!isAgentToolData(entry)) {
+      return details;
+    }
     const prompt = readQuestionPrompt(entry);
     if (!prompt) {
       return details;
     }
-    if (!isAgentToolData(entry)) {
-      return details;
-    }
-    const answers = normalizeAnswerValues(
-      entry.answers ?? entry.answer ?? entry.response ?? entry.responses,
-    );
+    const header = hasNonEmptyText(entry.header) ? entry.header.trim() : null;
     details.push({
       prompt,
-      answers,
+      header: header === prompt ? null : header,
+      options: readQuestionOptions(entry.options),
+      // Claude names the flag `multiSelect`, and OpenCode and Codex name it `multiple`.
+      multiple: entry.multiple === true || entry.multiSelect === true,
+      answers: normalizeAnswerValues(
+        entry.answers ?? entry.answer ?? entry.response ?? entry.responses,
+      ),
     });
     return details;
   }, []);
+};
+
+/**
+ * Claude gives the answers as a record with the text of each question as its key. A record with a
+ * key for a prompt gives the answers of each question by its prompt, so a question without an
+ * answer keeps its place. Null for answers of another shape.
+ */
+const readAnswersByPrompt = (
+  candidates: Array<AgentToolValue | undefined>,
+  questions: readonly QuestionToolDetail[],
+): string[][] | null => {
+  for (const candidate of candidates) {
+    if (!isAgentToolData(candidate)) continue;
+    const answersByPrompt = new Map(
+      Object.entries(candidate).map(([key, value]) => [key.trim(), value]),
+    );
+    if (questions.some(({ prompt }) => answersByPrompt.has(prompt))) {
+      return questions.map(({ prompt }) => normalizeAnswerValues(answersByPrompt.get(prompt)));
+    }
+  }
+  return null;
 };
 
 const normalizeAnswerGroups = (value: AgentToolValue | undefined): string[][] => {
@@ -162,6 +215,16 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
   }
 
   const outputRecord = parsedOutput && isAgentToolData(parsedOutput) ? parsedOutput : undefined;
+  const answersByPrompt = readAnswersByPrompt(
+    [outputRecord?.answers, metadataRecord?.answers, inputRecord?.answers],
+    questions,
+  );
+  if (answersByPrompt) {
+    return questions.map((entry, index) => ({
+      ...entry,
+      answers: entry.answers.length > 0 ? entry.answers : (answersByPrompt[index] ?? []),
+    }));
+  }
   const answerGroups = firstNonEmptyAnswerGroups([
     outputRecord,
     outputRecord?.answers,
@@ -187,7 +250,37 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
   }
 
   return questions.map((entry, index) => ({
-    prompt: entry.prompt,
+    ...entry,
     answers: entry.answers.length > 0 ? entry.answers : (answerGroups[index] ?? []),
   }));
+};
+
+/** The options that the answers of a question chose, and the answers that the user wrote. */
+export type QuestionAnswerChoices = {
+  selectedLabels: ReadonlySet<string>;
+  customAnswers: string[];
+};
+
+/**
+ * Splits the answers of a question into chosen options and written answers. Claude joins the
+ * options of a multiple choice answer with `, `, so an answer whose parts are all option labels
+ * chooses each of them.
+ */
+export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionAnswerChoices => {
+  const labels = new Set(detail.options.map((option) => option.label));
+  const selectedLabels = new Set<string>();
+  const customAnswers: string[] = [];
+  for (const answer of detail.answers) {
+    if (labels.has(answer)) {
+      selectedLabels.add(answer);
+      continue;
+    }
+    const parts = answer.split(", ");
+    if (parts.length > 1 && parts.every((part) => labels.has(part))) {
+      for (const part of parts) selectedLabels.add(part);
+      continue;
+    }
+    customAnswers.push(answer);
+  }
+  return { selectedLabels, customAnswers };
 };

@@ -11,6 +11,12 @@ describe("toolIcon", () => {
     }
   });
 
+  test("uses the question icon for the question tool of each runtime", () => {
+    expect(
+      renderToStaticMarkup(toolIcon({ tool: "AskUserQuestion", toolType: "question" })),
+    ).toContain("lucide-circle-question-mark");
+  });
+
   test("keeps the wrench icon for other generic tools", () => {
     expect(
       renderToStaticMarkup(toolIcon({ tool: "custom_runtime_tool", toolType: "generic" })),

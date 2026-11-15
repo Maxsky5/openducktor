@@ -5,6 +5,7 @@ import {
   readToolDetailsHeading,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { OdtToolIconKind } from "@openducktor/frontend-core/sessions/messages/odt-tool-call";
+import { questionToolDetails } from "@openducktor/frontend-core/sessions/messages/question-tool-parser";
 import type { AgentChatToolCallPresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import {
   isShellCommandCall,
@@ -25,6 +26,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { FileEditDetails } from "./agent-chat-file-edit-details";
+import { QuestionToolDetails } from "./agent-chat-question-tool-details";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { ShellCommandDetails } from "./agent-chat-shell-command-details";
 import { ToolCallDetails } from "./agent-chat-tool-details-content";
@@ -111,6 +113,17 @@ const ToolCallDetailsBody = ({
     if (shownMeta.toolType === "file_edit" && hasFileEditChanges(shownMeta, sessionFolder)) {
       return (
         <FileEditDetails
+          meta={shownMeta}
+          title={title}
+          workingDirectory={sessionFolder}
+          closeAction={closeAction}
+          {...timing}
+        />
+      );
+    }
+    if (shownMeta.toolType === "question" && questionToolDetails(shownMeta).length > 0) {
+      return (
+        <QuestionToolDetails
           meta={shownMeta}
           title={title}
           workingDirectory={sessionFolder}

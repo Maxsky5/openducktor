@@ -7,6 +7,7 @@ import {
   isRegularToolPreparing,
   readRegularToolTiming,
   readToolDetailAvailability,
+  readToolDetailsHeading,
   regularToolLineName,
   resolveRegularToolSummary,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
@@ -16,7 +17,7 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { ToolErrorPreview, ToolLine } from "./row-parts";
-import { QuestionDetails, ToolFileEdits } from "./tool-details";
+import { QuestionAnswers, ToolFileEdits } from "./tool-details";
 
 const PATH_TOOL_TYPES: ReadonlySet<ToolMeta["toolType"]> = new Set(["read", "list", "file_edit"]);
 
@@ -50,7 +51,7 @@ export const ToolCallRow = memo(function ToolCallRow({
   displayName: string;
   rowKey: string;
 }): ReactElement {
-  const { workingDirectory, openFullView } = useTranscriptRows();
+  const { workingDirectory, openFullView, presentToolCall } = useTranscriptRows();
   const phase = getToolLifecyclePhase(meta);
   const expandable = hasExpandableToolDetails(readToolDetailAvailability(meta));
   const summary = resolveRegularToolSummary(meta, messageContent, workingDirectory);
@@ -71,12 +72,21 @@ export const ToolCallRow = memo(function ToolCallRow({
         durationMs={timing.durationMs}
         timeLabel={timeLabel}
         onPress={
-          expandable ? () => openFullView({ kind: "tool", messageId, title: displayName }) : null
+          expandable
+            ? () =>
+                openFullView({
+                  kind: "tool",
+                  messageId,
+                  // A question tool shows as `Question`, so its details name the tool of the runtime.
+                  title: readToolDetailsHeading(meta, presentToolCall(meta.tool, meta.displayLabel))
+                    .title,
+                })
+            : null
         }
         accessibilityLabel={`${name}${summary.text.length > 0 ? `: ${summary.text}` : ""}${stateLabel}${errorLabel}`}
       />
       {summary.errorPreview === null ? null : <ToolErrorPreview text={summary.errorPreview} />}
-      <QuestionDetails meta={meta} resetKey={rowKey} />
+      <QuestionAnswers meta={meta} />
       <ToolFileEdits meta={meta} resetKey={rowKey} />
     </View>
   );

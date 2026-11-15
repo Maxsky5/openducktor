@@ -52,6 +52,7 @@ export const LUCIDE_GLYPHS = {
   cloud: "\u{e088}",
   "cloud-off": "\u{e08d}",
   copy: "\u{e09e}",
+  "corner-down-right": "\u{e0a2}",
   cpu: "\u{e0a9}",
   database: "\u{e0ad}",
   "dollar-sign": "\u{e0b1}",

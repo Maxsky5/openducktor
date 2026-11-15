@@ -390,6 +390,68 @@ describe("claude-agent-sdk-history tool projection", () => {
     });
   });
 
+  test("keeps the answers of an AskUserQuestion result in the metadata of its tool part", () => {
+    const question = {
+      question: "Which checks should run?",
+      header: "Checks",
+      multiSelect: true,
+      options: [
+        { label: "Lint", description: "Run oxlint" },
+        { label: "Test", description: "Run bun test" },
+      ],
+    };
+    const answers = { "Which checks should run?": "Lint, Test" };
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-question",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "question-1",
+                name: "AskUserQuestion",
+                input: { questions: [question] },
+              },
+            ],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "question-result",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "question-1",
+                content:
+                  'Your questions have been answered: "Which checks should run?"="Lint, Test". You can now continue with these answers in mind.',
+              },
+            ],
+          },
+          toolUseResult: { questions: [question], answers },
+        }),
+      ],
+      () => "2026-11-15T00:00:00.000Z",
+    );
+
+    expect(history[0]?.parts[0]).toMatchObject({
+      kind: "tool",
+      tool: "AskUserQuestion",
+      toolType: "question",
+      status: "completed",
+      input: { questions: [question] },
+      metadata: { answers },
+    });
+  });
+
   test("hydrates real Claude Edit top-level toolUseResult patches without dropping output", () => {
     const history = toClaudeHistoryMessages(
       [

@@ -150,6 +150,8 @@ export const readToolDetailsHeading = (
   if (presentation.kind === "artifact" && presentation.operation === "set") {
     return { title: readArtifactToolCall(meta).title, iconKind: null, note: null };
   }
+  // The transcript names each question tool `Question`, so its details name the tool of the runtime.
+  if (meta.toolType === "question") return { title: meta.tool, iconKind: null, note: null };
   return { title: presentation.displayName, iconKind: null, note: null };
 };
 
@@ -264,14 +266,18 @@ export const resolveRegularToolSummary = (
 export const isRegularToolPreparing = (meta: ToolMeta): boolean =>
   meta.status === "pending" && meta.inputStreaming !== undefined;
 
+const QUESTION_TOOL_NAME = "Question";
+
 /**
  * The name of a tool call in the transcript. Each runtime names its tools in its own way, so a
- * shell command shows as `bash`, and a call that edits files, such as `Edit`, `Write`, or
- * `apply_patch`, shows as `edit`. The details of the call show the name of the tool.
+ * shell command shows as `bash`, a call that edits files, such as `Edit`, `Write`, or
+ * `apply_patch`, shows as `edit`, and a question tool, such as `AskUserQuestion` or
+ * `request_user_input`, shows as `Question`. The details of the call show the name of the tool.
  */
 export const readToolCallName = (meta: ToolMeta, displayName: string): string => {
   if (isShellCommandCall(meta)) return "bash";
   if (meta.toolType === "file_edit") return "edit";
+  if (meta.toolType === "question") return QUESTION_TOOL_NAME;
   return displayName;
 };
 
@@ -333,6 +339,19 @@ export const buildQuestionDetailEntries = (
     countsByBaseKey.set(baseKey, nextCount);
     return { key: `${baseKey}:${nextCount}`, detail };
   });
+};
+
+/**
+ * The questions whose answers show under the line of a question tool. A call that failed or
+ * stopped without an answer shows none: its line shows why.
+ */
+export const readQuestionAnswerEntries = (
+  meta: ToolMeta,
+): Array<{ key: string; detail: QuestionToolDetail }> => {
+  const entries = buildQuestionDetailEntries(meta);
+  const phase = getToolLifecyclePhase(meta);
+  const stopped = phase === "failed" || phase === "cancelled";
+  return stopped && entries.every(({ detail }) => detail.answers.length === 0) ? [] : entries;
 };
 
 export const NO_ANSWER_YET_LABEL = "No answer yet";

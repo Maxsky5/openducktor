@@ -4,8 +4,10 @@ import {
   type ClaudeTodoState,
   claudeTodoToolPresentation,
 } from "./claude-agent-sdk-todos";
+import { isClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeDecodedToolResult, ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
+import { toolPartType } from "./claude-agent-sdk-utils";
 
 type CompletedToolPart = Extract<AgentStreamPart, { kind: "tool" }>;
 
@@ -22,6 +24,21 @@ type ProjectClaudeCompletedToolResultInput = {
   startedAtMs?: number;
   state: ClaudeTodoState;
   tool: string;
+};
+
+/**
+ * Claude gives the answers of a question tool only in its structured result, as a record with the
+ * text of each question as its key. The tool part keeps them in its metadata, as OpenCode does.
+ */
+const withClaudeQuestionAnswers = (
+  tool: string,
+  raw: ClaudeDecodedToolResult["raw"],
+  metadata: CompletedToolPart["metadata"],
+): CompletedToolPart["metadata"] => {
+  if (toolPartType(tool) !== "question") return metadata;
+  const result = raw.toolUseResult;
+  if (!isClaudeProtocolObject(result) || !isClaudeProtocolObject(result.answers)) return metadata;
+  return { ...metadata, answers: result.answers };
 };
 
 export const projectClaudeCompletedToolResult = ({
@@ -56,8 +73,9 @@ export const projectClaudeCompletedToolResult = ({
   if (!todoPresentation && preview) {
     completedToolInput.preview = preview;
   }
-  if (metadata) {
-    completedToolInput.metadata = metadata;
+  const resolvedMetadata = isError ? metadata : withClaudeQuestionAnswers(tool, raw, metadata);
+  if (resolvedMetadata) {
+    completedToolInput.metadata = resolvedMetadata;
   }
   if (startedAtMs !== undefined) {
     completedToolInput.startedAtMs = startedAtMs;

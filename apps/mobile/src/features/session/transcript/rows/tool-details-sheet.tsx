@@ -2,13 +2,20 @@ import { plural } from "@openducktor/frontend-core/lib/plural";
 import { ToolFileEdits, ToolOutput, ToolPartSessionProvider } from "./tool-details";
 import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/message-formatting";
 import {
+  buildQuestionDetailEntries,
   formatToolInput,
   hasFileEditChanges,
+  NO_ANSWER_YET_LABEL,
   readToolDetailAvailability,
   readToolDetailsHeading,
   readToolDetailsError,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
+import {
+  type QuestionToolDetail,
+  questionToolDetails,
+  readQuestionAnswerChoices,
+} from "@openducktor/frontend-core/sessions/messages/question-tool-parser";
 import {
   countTextLines,
   isShellCommandCall,
@@ -32,7 +39,14 @@ import {
 import { useToolPartDetails } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
 import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
-import { type ComponentRef, type ReactElement, type ReactNode, useMemo, useRef } from "react";
+import {
+  type ComponentRef,
+  type ReactElement,
+  type ReactNode,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { MarkdownView } from "@/rich-content/markdown/markdown-view";
@@ -45,7 +59,7 @@ import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { messageTimeLabel, truncateForDisplay } from "../transcript-text";
-import { CopyControl, PreText } from "./row-parts";
+import { CopyControl, DisclosureMarker, PreText } from "./row-parts";
 import { ToolStatusIcon, ToolStatusLabel } from "./tool-status";
 
 /**
@@ -71,12 +85,15 @@ export function ToolDetailsSheetContent({
 
 type DetailsTiming = { messageTimestamp: string; timeLabel: string };
 
-/** The details of a call by its kind: a shell command, a file edit, or another call. */
+/** The details of a call by its kind: a shell command, a file edit, a question, or another call. */
 function ShownToolDetails({ meta, ...timing }: { meta: ToolMeta } & DetailsTiming): ReactElement {
   const { workingDirectory } = useTranscriptRows();
   if (isShellCommandCall(meta)) return <ShellCommandDetails meta={meta} {...timing} />;
   if (meta.toolType === "file_edit" && hasFileEditChanges(meta, workingDirectory)) {
     return <FileEditDetails meta={meta} {...timing} />;
+  }
+  if (meta.toolType === "question" && questionToolDetails(meta).length > 0) {
+    return <QuestionToolDetails meta={meta} {...timing} />;
   }
   return <ToolCallDetails meta={meta} {...timing} />;
 }
@@ -447,20 +464,45 @@ function FileEditDetails({
   );
 }
 
+/** The input and the output of a call, each in a block that the reader can copy. */
+function ToolCallInputOutput({ meta }: { meta: ToolMeta }): ReactElement {
+  const { desktop } = useAppTheme();
+  const { workingDirectory } = useTranscriptRows();
+  const { hasInput, hasOutput } = readToolDetailAvailability(meta);
+  const input = useMemo(
+    () => (meta.input && hasInput ? formatToolInput(meta.input, workingDirectory) : ""),
+    [meta.input, hasInput, workingDirectory],
+  );
+  return (
+    <>
+      {input ? (
+        <DetailsBlock label="Input" copyText={input}>
+          <PreText text={input} color={desktop.foreground} />
+        </DetailsBlock>
+      ) : null}
+      {hasOutput ? (
+        <DetailsBlock label="Output" copyText={meta.resultContent ? "" : (meta.output ?? "")}>
+          <ToolOutput
+            content={meta.resultContent}
+            output={() => formatRawJsonLikeText(meta.output ?? "")}
+            color={desktop.foreground}
+          />
+        </DetailsBlock>
+      ) : null}
+    </>
+  );
+}
+
 function ToolCallDetails({
   meta,
   messageTimestamp,
   timeLabel,
 }: { meta: ToolMeta } & DetailsTiming): ReactElement {
   const { desktop } = useAppTheme();
-  const { workingDirectory, presentToolCall } = useTranscriptRows();
+  const { presentToolCall } = useTranscriptRows();
   // A workflow event shows its note before its input, as on desktop.
   const { note } = readToolDetailsHeading(meta, presentToolCall(meta.tool, meta.displayLabel));
   const { hasInput, hasOutput } = readToolDetailAvailability(meta);
-  const input = useMemo(
-    () => (meta.input && hasInput ? formatToolInput(meta.input, workingDirectory) : ""),
-    [meta.input, hasInput, workingDirectory],
-  );
   const error = readToolDetailsError(meta);
   return (
     <ScrollView style={styles.fillHeight} contentContainerStyle={styles.padded}>
@@ -481,31 +523,198 @@ function ToolCallDetails({
           <MarkdownView markdown={note} selectable />
         </View>
       ) : null}
-      {input ? (
-        <DetailsBlock label="Input" copyText={input}>
-          <PreText text={input} color={desktop.foreground} />
-        </DetailsBlock>
-      ) : null}
-      {hasOutput ? (
-        <DetailsBlock label="Output" copyText={meta.resultContent ? "" : (meta.output ?? "")}>
-          <ToolOutput
-            content={meta.resultContent}
-            output={() => formatRawJsonLikeText(meta.output ?? "")}
-            color={desktop.foreground}
-          />
-        </DetailsBlock>
-      ) : null}
+      <ToolCallInputOutput meta={meta} />
       {error ? (
         <DetailsBlock label="Error" tone="error" copyText={error}>
           <PreText text={formatRawJsonLikeText(error)} color={desktop.destructiveMuted} />
         </DetailsBlock>
       ) : null}
-      {input || hasOutput || error ? null : (
+      {hasInput || hasOutput || error ? null : (
         <Text style={[styles.meta, { color: desktop.mutedForeground }]}>
           The tool call has no input or output.
         </Text>
       )}
     </ScrollView>
+  );
+}
+
+/**
+ * The desktop `QuestionToolDetails`: the status and run facts of a question tool, its error, each
+ * question with its options and answers, and its raw input and output, closed at first. The sheet
+ * title names the tool that the runtime called.
+ */
+function QuestionToolDetails({
+  meta,
+  messageTimestamp,
+  timeLabel,
+}: { meta: ToolMeta } & DetailsTiming): ReactElement {
+  const { desktop } = useAppTheme();
+  const [rawOpen, setRawOpen] = useState(false);
+  const entries = buildQuestionDetailEntries(meta);
+  const { hasInput, hasOutput } = readToolDetailAvailability(meta);
+  const error = readToolDetailsError(meta);
+  return (
+    <ScrollView style={styles.fillHeight} contentContainerStyle={styles.padded}>
+      <StatusLine
+        meta={meta}
+        messageTimestamp={messageTimestamp}
+        timeLabel={timeLabel}
+        exitCode={null}
+        timeoutMs={null}
+      />
+      {error ? (
+        <DetailsBlock label="Error" tone="error" copyText={error}>
+          <PreText text={formatRawJsonLikeText(error)} color={desktop.destructiveMuted} />
+        </DetailsBlock>
+      ) : null}
+      {/* A question tool asks a few questions, so they render in the scroll view of the details. */}
+      {/* react-doctor-disable-next-line react-doctor/rn-no-scrollview-mapped-list */}
+      {entries.map(({ key, detail }, index) => (
+        <QuestionCard
+          key={key}
+          detail={detail}
+          position={entries.length > 1 ? `${index + 1} of ${entries.length}` : null}
+        />
+      ))}
+      {hasInput || hasOutput ? (
+        <View style={styles.block}>
+          <Touchable
+            feedback="opacity"
+            onPress={() => setRawOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityLabel="Raw input and output"
+            accessibilityState={{ expanded: rawOpen }}
+            style={styles.sectionLabel}
+          >
+            <DisclosureMarker open={rawOpen} animated color={desktop.mutedForeground} size={13} />
+            <Text style={[styles.sectionTitle, { color: desktop.mutedForeground }]}>
+              Raw input and output
+            </Text>
+          </Touchable>
+          {rawOpen ? <ToolCallInputOutput meta={meta} /> : null}
+        </View>
+      ) : null}
+    </ScrollView>
+  );
+}
+
+/** One question: its label, its prompt, its options with the chosen ones marked, and the written answers. */
+function QuestionCard({
+  detail,
+  position,
+}: {
+  detail: QuestionToolDetail;
+  position: string | null;
+}): ReactElement {
+  const { desktop } = useAppTheme();
+  const { selectedLabels, customAnswers } = readQuestionAnswerChoices(detail);
+  const isAnswered = detail.answers.length > 0;
+  const facts = [position, detail.header].filter((fact) => fact !== null);
+  return (
+    <View
+      accessibilityLabel={detail.header ?? detail.prompt}
+      style={[styles.questionCard, { borderColor: desktop.border }]}
+    >
+      {facts.length > 0 || detail.multiple ? (
+        <View style={styles.questionFacts}>
+          {facts.length > 0 ? (
+            <Text style={[styles.questionFact, { color: desktop.mutedForeground }]}>
+              {facts.join(" · ").toUpperCase()}
+            </Text>
+          ) : null}
+          {detail.multiple ? (
+            <Text
+              style={[
+                styles.multipleChip,
+                { color: desktop.mutedForeground, borderColor: desktop.border },
+              ]}
+            >
+              Multiple choice
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+      <Text selectable style={[styles.questionPrompt, { color: desktop.foreground }]}>
+        {detail.prompt}
+      </Text>
+      {detail.options.map((option) => {
+        const selected = selectedLabels.has(option.label);
+        const icon = detail.multiple
+          ? selected
+            ? "check-square"
+            : "square"
+          : selected
+            ? "circle-check"
+            : "circle";
+        return (
+          <View
+            key={option.label}
+            accessibilityLabel={selected ? `${option.label}, chosen` : option.label}
+            style={[
+              styles.option,
+              selected
+                ? { borderColor: desktop.mutedForeground, backgroundColor: desktop.secondary }
+                : { borderColor: desktop.border },
+            ]}
+          >
+            <Icon
+              name={icon}
+              size={14}
+              colorValue={selected ? desktop.foreground : desktop.mutedForeground}
+            />
+            <View style={styles.fill}>
+              <Text
+                selectable
+                style={[
+                  styles.optionLabel,
+                  {
+                    color: selected || !isAnswered ? desktop.foreground : desktop.mutedForeground,
+                  },
+                ]}
+              >
+                {option.label}
+              </Text>
+              {option.description ? (
+                <Text
+                  selectable
+                  style={[styles.optionDescription, { color: desktop.mutedForeground }]}
+                >
+                  {option.description}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        );
+      })}
+      {customAnswers.length > 0 ? (
+        <View style={styles.block}>
+          <Text style={[styles.optionDescription, { color: desktop.mutedForeground }]}>
+            {detail.options.length > 0 ? "Other answer" : "Answer"}
+          </Text>
+          {customAnswers.map((answer) => (
+            <Text
+              key={answer}
+              selectable
+              style={[
+                styles.customAnswer,
+                {
+                  color: desktop.foreground,
+                  borderColor: desktop.mutedForeground,
+                  backgroundColor: desktop.secondary,
+                },
+              ]}
+            >
+              {answer}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+      {isAnswered ? null : (
+        <Text style={[styles.meta, styles.noAnswer, { color: desktop.mutedForeground }]}>
+          {NO_ANSWER_YET_LABEL}
+        </Text>
+      )}
+    </View>
   );
 }
 
@@ -642,6 +851,46 @@ const styles = StyleSheet.create((theme) => ({
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: theme.space.sm },
   sectionTitle: { ...sansWeight("medium"), fontSize: 13, lineHeight: 18 },
   block: { gap: 6 },
+  questionCard: {
+    gap: theme.space.sm,
+    borderWidth: 1,
+    borderRadius: theme.radius.sm,
+    padding: theme.space.md,
+  },
+  questionFacts: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  questionFact: { ...sansWeight("semibold"), fontSize: 11.5, lineHeight: 16, letterSpacing: 0.4 },
+  multipleChip: {
+    ...sansWeight("medium"),
+    fontSize: 11.5,
+    lineHeight: 16,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderRadius: theme.radius.pill,
+    overflow: "hidden",
+  },
+  questionPrompt: { ...sansWeight("medium"), fontSize: 14, lineHeight: 20 },
+  option: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.space.sm,
+    borderWidth: 1,
+    borderRadius: theme.radius.xs,
+    paddingHorizontal: theme.space.md,
+    paddingVertical: 6,
+  },
+  optionLabel: { ...sansWeight("medium"), fontSize: 13, lineHeight: 18 },
+  optionDescription: { ...sansWeight("regular"), fontSize: 12, lineHeight: 16 },
+  customAnswer: {
+    ...sansWeight("regular"),
+    fontSize: 13,
+    lineHeight: 18,
+    borderWidth: 1,
+    borderRadius: theme.radius.xs,
+    paddingHorizontal: theme.space.md,
+    paddingVertical: 6,
+    overflow: "hidden",
+  },
+  noAnswer: { fontStyle: "italic" },
   blockFrame: {
     borderWidth: 1,
     borderRadius: theme.radius.sm,

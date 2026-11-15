@@ -23,6 +23,7 @@ import {
   toSingleLineMarkdown,
 } from "./agent-chat-message-card-model";
 import { resolveRegularToolSummary } from "./agent-chat-tool-presentation";
+import { readQuestionAnswerChoices } from "./question-tool-parser";
 
 type ToolMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
 
@@ -300,6 +301,14 @@ describe("agent-chat-message-card-model", () => {
   });
 
   describe("question tool parsing", () => {
+    const plainQuestion = (prompt: string, answers: string[]) => ({
+      prompt,
+      header: null,
+      options: [],
+      multiple: false,
+      answers,
+    });
+
     test("returns empty details for non-question tools and empty question payloads", () => {
       expect(questionToolDetails(createToolMeta({ tool: "read" }))).toEqual([]);
       expect(
@@ -345,7 +354,7 @@ describe("agent-chat-message-card-model", () => {
           }),
         }),
       );
-      expect(details).toEqual([{ prompt: "Choose role", answers: ["planner"] }]);
+      expect(details).toEqual([plainQuestion("Choose role", ["planner"])]);
     });
 
     test("uses metadata questions and normalizes object answer groups", () => {
@@ -363,7 +372,7 @@ describe("agent-chat-message-card-model", () => {
         }),
       );
 
-      expect(details).toEqual([{ prompt: "Environment?", answers: ["staging"] }]);
+      expect(details).toEqual([plainQuestion("Environment?", ["staging"])]);
     });
 
     test("uses output questions and nested response answer groups", () => {
@@ -379,8 +388,8 @@ describe("agent-chat-message-card-model", () => {
       );
 
       expect(details).toEqual([
-        { prompt: "Pick first", answers: ["alpha"] },
-        { prompt: "Pick second", answers: ["beta"] },
+        plainQuestion("Pick first", ["alpha"]),
+        plainQuestion("Pick second", ["beta"]),
       ]);
     });
 
@@ -396,7 +405,7 @@ describe("agent-chat-message-card-model", () => {
         }),
       );
 
-      expect(details).toEqual([{ prompt: "Approve?", answers: ["yes"] }]);
+      expect(details).toEqual([plainQuestion("Approve?", ["yes"])]);
     });
 
     test("returns prompts with empty answers when no answer groups exist", () => {
@@ -409,7 +418,7 @@ describe("agent-chat-message-card-model", () => {
           },
         }),
       );
-      expect(details).toEqual([{ prompt: "Anything else?", answers: [] }]);
+      expect(details).toEqual([plainQuestion("Anything else?", [])]);
     });
 
     test("ignores malformed question entries before valid prompts", () => {
@@ -423,11 +432,108 @@ describe("agent-chat-message-card-model", () => {
         }),
       );
 
-      expect(details).toEqual([{ prompt: "Final prompt", answers: [] }]);
+      expect(details).toEqual([plainQuestion("Final prompt", [])]);
+    });
+    test("reads the header, options, and multiple choice flag of each question", () => {
+      const details = questionToolDetails(
+        createToolMeta({
+          tool: "AskUserQuestion",
+          toolType: "question",
+          input: {
+            questions: [
+              {
+                question: "Which checks?",
+                header: "Checks",
+                multiSelect: true,
+                options: [{ label: "Lint", description: "Run oxlint" }, { label: "Test" }],
+              },
+              {
+                question: "Which branch?",
+                header: "Which branch?",
+                multiple: false,
+                options: ["main"],
+              },
+            ],
+          },
+        }),
+      );
+
+      expect(details).toEqual([
+        {
+          prompt: "Which checks?",
+          header: "Checks",
+          options: [
+            { label: "Lint", description: "Run oxlint" },
+            { label: "Test", description: null },
+          ],
+          multiple: true,
+          answers: [],
+        },
+        {
+          prompt: "Which branch?",
+          header: null,
+          options: [{ label: "main", description: null }],
+          multiple: false,
+          answers: [],
+        },
+      ]);
+    });
+
+    test("reads Claude answers by the text of each question, so a skipped question keeps its place", () => {
+      const details = questionToolDetails(
+        createToolMeta({
+          tool: "AskUserQuestion",
+          toolType: "question",
+          input: { questions: [{ question: "First?" }, { question: "Second?" }] },
+          metadata: { answers: { "Second?": "Yes", "First?": "" } },
+        }),
+      );
+
+      expect(details.map(({ prompt, answers }) => ({ prompt, answers }))).toEqual([
+        { prompt: "First?", answers: [] },
+        { prompt: "Second?", answers: ["Yes"] },
+      ]);
+    });
+
+    test("splits answers into chosen options and written answers", () => {
+      const detail = {
+        prompt: "Which checks?",
+        header: null,
+        options: [
+          { label: "Lint", description: null },
+          { label: "Test", description: null },
+          { label: "Build", description: null },
+        ],
+        multiple: true,
+        answers: ["Lint, Test", "Also run e2e, please"],
+      };
+
+      const choices = readQuestionAnswerChoices(detail);
+
+      expect([...choices.selectedLabels]).toEqual(["Lint", "Test"]);
+      expect(choices.customAnswers).toEqual(["Also run e2e, please"]);
     });
   });
 
   describe("tool summary builder", () => {
+    test("summarizes a question tool by its prompt or its question count, never its raw input", () => {
+      const question = (questions: Array<{ question: string }>) =>
+        createToolMeta({
+          tool: "AskUserQuestion",
+          toolType: "question",
+          input: { questions },
+          preview: JSON.stringify({ questions }),
+        });
+
+      expect(buildToolSummary(question([{ question: "Which webhook URLs?" }]), "")).toBe(
+        "Which webhook URLs?",
+      );
+      expect(buildToolSummary(question([{ question: "One?" }, { question: "Two?" }]), "")).toBe(
+        "2 questions",
+      );
+      expect(buildToolSummary(question([]), "")).toBe("");
+    });
+
     test("previews deployed task document history from its input", () => {
       expect(
         buildToolSummary(
