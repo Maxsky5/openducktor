@@ -18,6 +18,7 @@ describe("questionToolDetails", () => {
     header: null,
     options: [],
     multiple: false,
+    secret: false,
     answers,
   });
 
@@ -161,6 +162,7 @@ describe("questionToolDetails", () => {
               question: "Which branch?",
               header: "Which branch?",
               multiple: false,
+              secret: false,
               options: ["main"],
             },
           ],
@@ -177,6 +179,7 @@ describe("questionToolDetails", () => {
           { label: "Test", description: null },
         ],
         multiple: true,
+        secret: false,
         answers: [],
       },
       {
@@ -184,6 +187,7 @@ describe("questionToolDetails", () => {
         header: null,
         options: [{ label: "main", description: null }],
         multiple: false,
+        secret: false,
         answers: [],
       },
     ]);

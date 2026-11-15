@@ -17,6 +17,8 @@ export type QuestionToolDetail = {
   options: QuestionToolOption[];
   /** The question takes one or more of its options. */
   multiple: boolean;
+  /** The answer is private, such as a password, so clients hide it. */
+  secret: boolean;
   answers: string[];
 };
 
@@ -114,6 +116,7 @@ const collectQuestionDetails = (value: AgentToolValue | undefined): QuestionTool
       // Claude `AskUserQuestion` names the flag `multiSelect`. The OpenCode `Question.Prompt` schema
       // and the Codex questions of the adapter name it `multiple`.
       multiple: entry.multiple === true || entry.multiSelect === true,
+      secret: entry.secret === true,
       answers: normalizeAnswerValues(
         entry.answers ?? entry.answer ?? entry.response ?? entry.responses,
       ),

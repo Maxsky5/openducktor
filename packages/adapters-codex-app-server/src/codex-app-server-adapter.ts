@@ -144,6 +144,7 @@ import {
 import { CodexThreadInventoryReader } from "./codex-thread-inventory";
 import {
   requireNormalizedCodexToolInvocation,
+  toCodexShownAnswers,
   toCodexToolQuestions,
 } from "./codex-tool-normalizer";
 import {
@@ -1949,7 +1950,13 @@ export class CodexAppServerAdapter
           return [questionId, { answers: answerSet }] as const;
         }),
       );
-      const output = JSON.stringify({ answers });
+      // Codex gets every answer, but the transcript hides the answer of a secret question.
+      const shownAnswers = toCodexShownAnswers(
+        pending.request.questions,
+        answers,
+        pending.questionIds,
+      );
+      const output = JSON.stringify({ answers: shownAnswers });
       const questions = toCodexToolQuestions(pending.request.questions);
       const timestamp = new Date().toISOString();
       const part = requireNormalizedCodexToolInvocation({
@@ -1964,7 +1971,7 @@ export class CodexAppServerAdapter
           codexServerRequest: true,
           requestId: input.requestId,
           questions,
-          answers,
+          answers: shownAnswers,
         },
       });
       completedQuestionEvent = {

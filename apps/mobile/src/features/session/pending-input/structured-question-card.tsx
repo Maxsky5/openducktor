@@ -525,7 +525,9 @@ function QuestionStep({
             accessibilityLabel="Free text answer"
             value={entry?.freeText ?? ""}
             editable={!disabled}
-            multiline
+            // A secret answer, such as a password, is masked while the user types it.
+            secureTextEntry={question.secret === true}
+            multiline={question.secret !== true}
             placeholder="Write your answer..."
             placeholderTextColor={theme.desktop.mutedForeground}
             selectionColor={theme.colors.selection}

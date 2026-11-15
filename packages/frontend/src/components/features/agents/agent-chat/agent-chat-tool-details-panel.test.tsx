@@ -478,6 +478,33 @@ describe("AgentChatToolDetailsBeside", () => {
     expect(details.getByText("Output")).toBeTruthy();
   });
 
+  test("shows the answer of a secret question as hidden in the row and the details", () => {
+    render(
+      <Transcript
+        messages={[
+          toolMessage("ask", {
+            tool: "request_user_input",
+            toolType: "question",
+            input: {
+              questions: [
+                { header: "Token", question: "Paste the token", options: [], secret: true },
+              ],
+            },
+            output: JSON.stringify({ answers: { token: { answers: ["[hidden]"] } } }),
+          }),
+        ]}
+      />,
+    );
+
+    const answers = screen.getByRole("list", { name: "Answers" });
+    expect(answers.textContent).toContain("Hidden answer");
+    pressRow(/Question/);
+
+    const details = within(panel());
+    expect(details.getByRole("article", { name: "Token" }).textContent).toContain("Hidden answer");
+    expect(details.queryByText("Other answer")).toBeNull();
+  });
+
   test("shows the input and output of a question tool whose questions it cannot read", () => {
     render(
       <Transcript

@@ -129,6 +129,9 @@ export const agentQuestionTitle = (
 
 export const NO_ANSWER_PREVIEW = "No answer yet";
 
+/** What a client shows in place of the answer of a secret question, such as a password. */
+export const HIDDEN_ANSWER_LABEL = "Hidden answer";
+
 /** The answer that a summary shows for one question, with option labels instead of values. */
 export const formatAgentQuestionAnswerPreview = (
   question: AgentQuestionRequest["questions"][number],
@@ -139,14 +142,12 @@ export const formatAgentQuestionAnswerPreview = (
       question.options.find((option) => (option.value ?? option.label) === value)?.label ?? value,
   );
   const freeText = entry?.useFreeText ? (entry.freeText ?? "").trim() : "";
-  if (!question.multiple) {
-    if (freeText.length > 0) {
-      return freeText;
-    }
-    return selection[0] ?? NO_ANSWER_PREVIEW;
-  }
   const answers = [...selection, ...(freeText.length > 0 ? [freeText] : [])];
-  return answers.length > 0 ? answers.join(", ") : NO_ANSWER_PREVIEW;
+  if (answers.length === 0) return NO_ANSWER_PREVIEW;
+  if (question.secret) return HIDDEN_ANSWER_LABEL;
+  // A single choice question shows its free text in place of its option.
+  if (!question.multiple) return freeText || (selection[0] ?? NO_ANSWER_PREVIEW);
+  return answers.join(", ");
 };
 
 /** The footer hint of a Structured Question. */

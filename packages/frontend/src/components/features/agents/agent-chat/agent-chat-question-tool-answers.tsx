@@ -1,6 +1,7 @@
 import {
   NO_ANSWER_YET_LABEL,
   readQuestionAnswerEntries,
+  readQuestionAnswerText,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { CornerDownRight } from "lucide-react";
@@ -21,7 +22,7 @@ export const QuestionToolAnswers = ({ meta }: { meta: ToolMeta }): ReactElement 
     // The answers start under the tool name: the 14 px icon and the 8 px gap.
     <ul aria-label="Answers" data-slot="question-answers" className="space-y-0.5 pl-[22px]">
       {entries.map(({ key, detail }) => {
-        const answer = detail.answers.join(", ");
+        const answer = readQuestionAnswerText(detail);
         return (
           <li
             key={key}

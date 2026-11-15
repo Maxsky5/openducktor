@@ -2,6 +2,7 @@ import {
   NO_ANSWER_YET_LABEL,
   type QuestionDetailEntry,
   readQuestionAnswerChoices,
+  readQuestionAnswerText,
   readToolDetailAvailability,
   readToolDetailsError,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
@@ -195,9 +196,10 @@ function QuestionCard({
           ))}
         </View>
       ) : null}
-      {isAnswered ? null : (
+      {/* A secret question shows that its answer is hidden. */}
+      {isAnswered && !detail.secret ? null : (
         <Text style={[styles.meta, styles.noAnswer, { color: desktop.mutedForeground }]}>
-          {NO_ANSWER_YET_LABEL}
+          {readQuestionAnswerText(detail) || NO_ANSWER_YET_LABEL}
         </Text>
       )}
     </View>

@@ -6,6 +6,7 @@ import type {
   OdtToolName,
   PullRequest,
 } from "@openducktor/contracts";
+import { HIDDEN_ANSWER_LABEL } from "../pending-input/agent-session-question-draft";
 import { buildContentEntries } from "../transcript/agent-chat-content-keys";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData, type FileEditData } from "./file-edit-tool";
@@ -353,8 +354,12 @@ export type QuestionAnswerChoices = {
   customAnswers: Array<{ key: string; value: string }>;
 };
 
-/** Splits the answers of a question into chosen options and written answers. */
+/**
+ * Splits the answers of a question into chosen options and written answers. A secret question
+ * shows no answer: the runtime keeps only a mark in place of it.
+ */
 export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionAnswerChoices => {
+  if (detail.secret) return { selectedLabels: new Set(), customAnswers: [] };
   const labels = new Set(detail.options.map((option) => option.label));
   const selectedLabels = new Set<string>();
   const customAnswers: string[] = [];
@@ -369,6 +374,15 @@ export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionA
 };
 
 export const NO_ANSWER_YET_LABEL = "No answer yet";
+
+/**
+ * The answer of a question as one line: its answers, or `Hidden answer` for a secret question.
+ * Empty for a question without an answer.
+ */
+export const readQuestionAnswerText = (detail: QuestionToolDetail): string => {
+  if (detail.answers.length === 0) return "";
+  return detail.secret ? HIDDEN_ANSWER_LABEL : detail.answers.join(", ");
+};
 
 /** Tool input as indented JSON, with paths shown relative to the working directory. */
 export const formatToolInput = (input: AgentToolData, workingDirectory?: string | null): string =>

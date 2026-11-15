@@ -58,7 +58,29 @@ export type CodexToolQuestion = {
   options: Array<{ label: string; description: string }>;
   multiple?: boolean;
   custom?: boolean;
+  /** The answer is private, such as a password. */
+  secret?: boolean;
 };
+
+/** What the transcript keeps in place of the answer of a secret question. Codex gets the answer. */
+export const CODEX_HIDDEN_ANSWER = "[hidden]";
+
+/**
+ * The answers of a question tool part, by question ID. The transcript keeps each answer, but it
+ * keeps `CODEX_HIDDEN_ANSWER` for a secret question, so the answer reaches no client or screen.
+ */
+export const toCodexShownAnswers = (
+  questions: AgentPendingQuestionRequest["questions"],
+  answers: Record<string, { answers: string[] }>,
+  questionIds: readonly string[],
+): Record<string, { answers: string[] }> =>
+  Object.fromEntries(
+    questionIds.map((questionId, index) => {
+      const answerSet = answers[questionId]?.answers ?? [];
+      const hidden = questions[index]?.secret === true && answerSet.length > 0;
+      return [questionId, { answers: hidden ? [CODEX_HIDDEN_ANSWER] : answerSet }];
+    }),
+  );
 
 export const toCodexToolQuestions = (
   questions: AgentPendingQuestionRequest["questions"],
@@ -77,6 +99,9 @@ export const toCodexToolQuestions = (
     }
     if (question.custom !== undefined) {
       codexQuestion.custom = question.custom;
+    }
+    if (question.secret) {
+      codexQuestion.secret = true;
     }
     return codexQuestion;
   });

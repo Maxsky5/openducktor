@@ -1,5 +1,6 @@
 import { CheckSquare, MessageSquarePlus } from "lucide-react";
 import { useId, type HTMLAttributes, type ReactElement } from "react";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Textarea } from "@/components/ui/textarea";
@@ -123,14 +124,28 @@ export const QuestionTab = ({
           <Label htmlFor={answerId} className="text-[11px] font-normal text-muted-foreground">
             Free text answer
           </Label>
-          <Textarea
-            id={answerId}
-            value={entry?.freeText ?? ""}
-            disabled={disabled}
-            className="min-h-16 bg-card text-sm"
-            placeholder="Write your answer..."
-            onChange={(event) => onChangeFreeText(event.currentTarget.value)}
-          />
+          {question.secret ? (
+            // A secret answer, such as a password, is masked while the user types it.
+            <Input
+              id={answerId}
+              type="password"
+              autoComplete="off"
+              value={entry?.freeText ?? ""}
+              disabled={disabled}
+              className="bg-card text-sm"
+              placeholder="Write your answer..."
+              onChange={(event) => onChangeFreeText(event.currentTarget.value)}
+            />
+          ) : (
+            <Textarea
+              id={answerId}
+              value={entry?.freeText ?? ""}
+              disabled={disabled}
+              className="min-h-16 bg-card text-sm"
+              placeholder="Write your answer..."
+              onChange={(event) => onChangeFreeText(event.currentTarget.value)}
+            />
+          )}
         </div>
       ) : null}
     </div>

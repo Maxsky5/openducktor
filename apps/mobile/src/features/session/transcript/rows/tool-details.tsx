@@ -4,6 +4,7 @@ import {
   FILE_DIFF_UNAVAILABLE_MESSAGE,
   NO_ANSWER_YET_LABEL,
   readQuestionAnswerEntries,
+  readQuestionAnswerText,
   readToolFileEdits,
   toolResultContentEntries,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
@@ -248,7 +249,7 @@ export const QuestionAnswers = memo(function QuestionAnswers({
   return (
     <View style={styles.answers}>
       {entries.map(({ key, detail }) => {
-        const answer = detail.answers.join(", ");
+        const answer = readQuestionAnswerText(detail);
         return (
           <View key={key} style={styles.answerLine}>
             <Icon name="corner-down-right" size={12} colorValue={theme.desktop.mutedForeground} />

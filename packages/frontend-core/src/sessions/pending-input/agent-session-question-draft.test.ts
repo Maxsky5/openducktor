@@ -141,6 +141,14 @@ describe("question presentation", () => {
     ).toBe("Other");
   });
 
+  test("hides the answer of a secret question in the preview", () => {
+    const secret = { ...question, multiple: false, options: [], secret: true };
+    const typed = { selectedOptionValues: [], freeText: "s3cr3t", useFreeText: true };
+
+    expect(formatAgentQuestionAnswerPreview(secret, typed)).toBe("Hidden answer");
+    expect(formatAgentQuestionAnswerPreview(secret, undefined)).toBe("No answer yet");
+  });
+
   test("tells whether the answers are complete", () => {
     expect(agentQuestionCompletionText(true)).toBe("All questions answered.");
     expect(agentQuestionCompletionText(false)).toBe("Answer all questions to confirm.");

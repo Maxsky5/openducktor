@@ -12,6 +12,7 @@ import {
   readWorkflowToolCard,
   readQuestionAnswerChoices,
   readQuestionAnswerEntries,
+  readQuestionAnswerText,
   readToolCallName,
   readToolDetailsHeading,
   regularToolLineName,
@@ -239,6 +240,26 @@ describe("tool presentation", () => {
     expect(new Set(before).size).toBe(2);
   });
 
+  test("hides the answer of a secret question, and keeps the answers of another question", () => {
+    const question = (secret: boolean) =>
+      buildQuestionDetailEntries(
+        meta({
+          tool: "request_user_input",
+          toolType: "question",
+          input: { questions: [{ question: "Token?", secret, options: [] }] },
+          output: JSON.stringify({ answers: { token: { answers: ["[hidden]"] } } }),
+        }),
+      )[0]?.detail;
+    const secret = question(true);
+    const plain = question(false);
+    if (!secret || !plain) throw new Error("expected one question");
+
+    expect(secret.secret).toBe(true);
+    expect(readQuestionAnswerText(secret)).toBe("Hidden answer");
+    expect(readQuestionAnswerChoices(secret).customAnswers).toEqual([]);
+    expect(readQuestionAnswerText(plain)).toBe("[hidden]");
+  });
+
   test("splits the answers of a question into chosen options and written answers", () => {
     const choices = readQuestionAnswerChoices({
       prompt: "Which checks?",
@@ -248,6 +269,7 @@ describe("tool presentation", () => {
         { label: "Test", description: null },
       ],
       multiple: true,
+      secret: false,
       answers: ["Lint", "Also run e2e, please"],
     });
 
