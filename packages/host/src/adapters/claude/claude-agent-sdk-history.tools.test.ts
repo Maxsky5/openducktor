@@ -390,6 +390,80 @@ describe("claude-agent-sdk-history tool projection", () => {
     });
   });
 
+  test("keeps the answers of an AskUserQuestion result in its metadata, one group for each question", () => {
+    const option = (label: string) => ({ label, description: `${label} option` });
+    const questions = [
+      {
+        question: "Which checks should run?",
+        header: "Checks",
+        multiSelect: true,
+        options: [option("Lint"), option("Test")],
+      },
+      {
+        question: "Deploy now?",
+        header: "Deploy",
+        multiSelect: true,
+        options: [option("Yes, deploy"), option("No")],
+      },
+      { question: "Anything else?", header: "Notes", multiSelect: false, options: [option("No")] },
+    ];
+    const answers = {
+      "Which checks should run?": "Lint, Test, Also e2e",
+      "Deploy now?": "Yes, deploy, No",
+      "Anything else?": "",
+    };
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-question",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "question-1",
+                name: "AskUserQuestion",
+                input: { questions },
+              },
+            ],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "question-result",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "question-1",
+                content:
+                  'Your questions have been answered: "Which checks should run?"="Lint, Test". You can now continue with these answers in mind.',
+              },
+            ],
+          },
+          toolUseResult: { questions, answers },
+        }),
+      ],
+      () => "2026-11-15T00:00:00.000Z",
+    );
+
+    expect(history[0]?.parts[0]).toMatchObject({
+      kind: "tool",
+      tool: "AskUserQuestion",
+      toolType: "question",
+      status: "completed",
+      input: { questions },
+      // Options split from a written answer, and a label can hold the separator.
+      metadata: { answers: [["Lint", "Test", "Also e2e"], ["Yes, deploy", "No"], []] },
+    });
+  });
+
   test("hydrates real Claude Edit top-level toolUseResult patches without dropping output", () => {
     const history = toClaudeHistoryMessages(
       [

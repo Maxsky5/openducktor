@@ -4,6 +4,7 @@ import {
   type ClaudeTodoState,
   claudeTodoToolPresentation,
 } from "./claude-agent-sdk-todos";
+import { readClaudeAskUserQuestionResultAnswers } from "./claude-agent-sdk-questions";
 import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-parts";
 import type { ClaudeDecodedToolResult, ClaudeDecodedToolUse } from "./claude-agent-sdk-tool-shapes";
 
@@ -56,8 +57,11 @@ export const projectClaudeCompletedToolResult = ({
   if (!todoPresentation && preview) {
     completedToolInput.preview = preview;
   }
-  if (metadata) {
-    completedToolInput.metadata = metadata;
+  // The tool part keeps the answers of a question as OpenCode does: one group for each question.
+  const answers = readClaudeAskUserQuestionResultAnswers(tool, input, raw.toolUseResult);
+  const resolvedMetadata = answers ? { ...metadata, answers } : metadata;
+  if (resolvedMetadata) {
+    completedToolInput.metadata = resolvedMetadata;
   }
   if (startedAtMs !== undefined) {
     completedToolInput.startedAtMs = startedAtMs;

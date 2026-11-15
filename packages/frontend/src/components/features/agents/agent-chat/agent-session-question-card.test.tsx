@@ -121,6 +121,28 @@ describe("AgentSessionQuestionCard", () => {
       await harness.unmount();
     }
   });
+  test("masks the answer of a secret question and submits it as typed", async () => {
+    const request = buildRequest({
+      questions: [
+        { header: "Token", question: "Paste the deploy token", options: [], secret: true },
+      ],
+    });
+    const onSubmit = mock<CardProps["onSubmit"]>(async () => {});
+    const harness = createCardHarness({ request, onSubmit });
+    await harness.mount();
+    try {
+      const input = screen.getByLabelText("Free text answer");
+      expect(input.getAttribute("type")).toBe("password");
+      await act(async () => {
+        fireEvent.change(input, { target: { value: "s3cr3t" } });
+      });
+      await harness.clickButtonByText("Confirm Answers");
+      expect(onSubmit).toHaveBeenCalledWith("request-1", [["s3cr3t"]]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("submits native option values and permits an unanswered optional field", async () => {
     const request = buildRequest({
       questions: [

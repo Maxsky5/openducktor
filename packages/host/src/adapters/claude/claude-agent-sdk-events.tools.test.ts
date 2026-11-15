@@ -88,6 +88,77 @@ describe("handleClaudeSdkMessage tool events", () => {
     ]);
   });
 
+  test("keeps the answers of a live AskUserQuestion result in the metadata of its tool part", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession();
+    const question = {
+      question: "Which branch?",
+      header: "Branch",
+      multiSelect: false,
+      options: [{ label: "main", description: "The default branch" }],
+    };
+    const answers = { "Which branch?": "main" };
+    const send = (timestamp: string, message: Parameters<typeof claudeSdkMessageFixture>[0]) =>
+      handleClaudeSdkMessage({
+        session,
+        timestamp,
+        modelSelection: (model) => ({
+          providerId: "claude",
+          modelId: model,
+          runtimeKind: "claude",
+        }),
+        emit: (event) => events.push(event),
+        message: claudeSdkMessageFixture(message),
+      });
+
+    send("2026-11-15T03:00:00.000Z", {
+      type: "assistant",
+      uuid: "6f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f",
+      session_id: "session-1",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "question-1",
+            name: "AskUserQuestion",
+            input: { questions: [question] },
+          },
+        ],
+      },
+    });
+    send("2026-11-15T03:00:05.000Z", {
+      type: "user",
+      uuid: "7a1b2c3d-4e5f-4a6b-9c8d-1e2f3a4b5c6d",
+      session_id: "session-1",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "question-1",
+            content: 'Your questions have been answered: "Which branch?"="main".',
+          },
+        ],
+      },
+      tool_use_result: { questions: [question], answers },
+    });
+
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({
+        type: "assistant_part",
+        part: expect.objectContaining({
+          callId: "question-1",
+          tool: "AskUserQuestion",
+          toolType: "question",
+          status: "completed",
+          metadata: { answers: [["main"]] },
+        }),
+      }),
+    );
+  });
+
   test("emits completed tool parts for Claude MCP tool result content blocks", () => {
     const events: AgentEvent[] = [];
     const session = createSession();

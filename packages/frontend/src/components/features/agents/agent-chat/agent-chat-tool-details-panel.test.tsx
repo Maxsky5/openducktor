@@ -419,6 +419,115 @@ describe("AgentChatToolDetailsBeside", () => {
     expect(panel().textContent).toContain("ODT_HOST_BRIDGE_ERROR");
   });
 
+  test("shows each question of a question tool with its options and answers, under the tool name", () => {
+    render(
+      <Transcript
+        messages={[
+          toolMessage("ask", {
+            tool: "AskUserQuestion",
+            toolType: "question",
+            input: {
+              questions: [
+                {
+                  question: "Which checks should run?",
+                  header: "Checks",
+                  multiSelect: true,
+                  options: [
+                    { label: "Lint", description: "Run oxlint" },
+                    { label: "Test", description: "Run bun test" },
+                    { label: "Build", description: "Build every package" },
+                  ],
+                },
+                {
+                  question: "Which branch?",
+                  header: "Branch",
+                  options: [{ label: "main", description: "The default branch" }],
+                },
+                { question: "Anything else?", header: "Notes", options: [] },
+              ],
+            },
+            output: 'Your questions have been answered: "Which checks should run?"="Lint, Test".',
+            metadata: { answers: [["Lint", "Test"], ["release/2.0"], []] },
+          }),
+        ]}
+      />,
+    );
+
+    pressRow(/Question/);
+
+    const details = within(panel());
+    expect(details.getByRole("heading", { name: "AskUserQuestion" })).toBeTruthy();
+    const checks = within(details.getByRole("article", { name: "Checks" }));
+    expect(checks.getByText("1 of 3 · Checks")).toBeTruthy();
+    expect(checks.getByText("Multiple choice")).toBeTruthy();
+    expect(checks.getByText("Run oxlint")).toBeTruthy();
+    const chosen = checks
+      .getAllByRole("listitem")
+      .filter((option) => option.textContent?.includes("(chosen)"))
+      .map((option) => option.textContent);
+    expect(chosen).toEqual(["Lint (chosen)Run oxlint", "Test (chosen)Run bun test"]);
+    const branch = within(details.getByRole("article", { name: "Branch" }));
+    expect(branch.getByText("Other answer")).toBeTruthy();
+    expect(branch.getByText("release/2.0")).toBeTruthy();
+    const notes = within(details.getByRole("article", { name: "Notes" }));
+    expect(notes.getByText("No answer yet")).toBeTruthy();
+    // The raw data stays closed until the reader opens it.
+    expect(details.queryByText("Input")).toBeNull();
+    fireEvent.click(details.getByRole("button", { name: "Raw input and output" }));
+    expect(details.getByText("Input")).toBeTruthy();
+    expect(details.getByText("Output")).toBeTruthy();
+  });
+
+  test("shows the answer of a secret question as hidden in the row and the details", () => {
+    render(
+      <Transcript
+        messages={[
+          toolMessage("ask", {
+            tool: "request_user_input",
+            toolType: "question",
+            input: {
+              questions: [
+                { header: "Token", question: "Paste the token", options: [], secret: true },
+              ],
+            },
+            output: JSON.stringify({ answers: { token: { answers: ["[hidden]"] } } }),
+          }),
+        ]}
+      />,
+    );
+
+    const answers = screen.getByRole("list", { name: "Answers" });
+    expect(answers.textContent).toContain("Hidden answer");
+    pressRow(/Question/);
+
+    const details = within(panel());
+    expect(details.getByRole("article", { name: "Token" }).textContent).toContain("Hidden answer");
+    expect(details.queryByText("Other answer")).toBeNull();
+  });
+
+  test("shows the input and output of a question tool whose questions it cannot read", () => {
+    render(
+      <Transcript
+        messages={[
+          toolMessage("ask", {
+            tool: "question",
+            toolType: "question",
+            input: { form: "unknown shape" },
+            output: "Answered",
+          }),
+        ]}
+      />,
+    );
+
+    pressRow(/Question/);
+
+    const details = within(panel());
+    expect(details.getByRole("heading", { name: "question" })).toBeTruthy();
+    expect(details.queryByRole("region", { name: "Questions" })).toBeNull();
+    expect(details.getByText("Input")).toBeTruthy();
+    expect(details.getByText("Answered")).toBeTruthy();
+  });
+
   test("shows the output of a running command live only when its runtime sends it", () => {
     const running = toolMessage("build", {
       status: "running",

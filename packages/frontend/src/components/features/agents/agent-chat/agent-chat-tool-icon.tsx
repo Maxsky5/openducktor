@@ -1,4 +1,5 @@
 import {
+  CircleHelp,
   FileText,
   Folder,
   GitPullRequest,
@@ -52,6 +53,9 @@ export const toolIcon = (
   }
   if (value === "file_edit") {
     return <PencilLine className="size-3.5" />;
+  }
+  if (value === "question") {
+    return <CircleHelp className="size-3.5" />;
   }
   return <Wrench className="size-3.5" />;
 };

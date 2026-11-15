@@ -1,9 +1,10 @@
 import { useRecyclingState } from "@shopify/flash-list";
 import type { AgentNativeFileReference, AgentToolResultContent } from "@openducktor/contracts";
 import {
-  buildQuestionDetailEntries,
   FILE_DIFF_UNAVAILABLE_MESSAGE,
   NO_ANSWER_YET_LABEL,
+  readQuestionAnswerEntries,
+  readQuestionAnswerText,
   readToolFileEdits,
   toolResultContentEntries,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
@@ -21,14 +22,14 @@ import { readDataUri } from "@/platform/data-uri";
 import { useResourceFiles } from "@/platform/resource-files-context";
 import { shareDeviceFile } from "@/rich-content/images/use-image-actions";
 import { useAppTheme } from "@/theme/app-theme-context";
-import { withAlpha } from "@/theme/color-alpha";
 import { monoWeight, sansWeight } from "@/theme/tokens";
+import { Icon } from "@/ui/icon";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { FileEditView } from "./file-edit-view";
-import { DetailsBox, LINE_DETAILS_INSET, PreText } from "./row-parts";
+import { PreText } from "./row-parts";
 
 /**
  * Renders `children` with the call. When compact history cut the call, it renders the cut call
@@ -232,39 +233,37 @@ function DownloadAttachment({
 }
 
 /**
- * The desktop questions box of a question tool: `ml-5 rounded border bg-muted/90`, with each
- * prompt in medium text and its answers, or "No answer yet" in muted italic text.
+ * The desktop `QuestionToolAnswers`: one line for each question under the tool line, with the
+ * answer of one question alone, or the label or prompt of each of several questions before its
+ * answer. The tool details show the options and the full text.
  */
-export const QuestionDetails = memo(function QuestionDetails({
+export const QuestionAnswers = memo(function QuestionAnswers({
   meta,
-  resetKey,
 }: {
   meta: ToolMeta;
-  resetKey: string;
 }): ReactElement | null {
   const theme = useAppTheme();
-  const entries = useMemo(() => buildQuestionDetailEntries(meta), [meta]);
+  const entries = useMemo(() => readQuestionAnswerEntries(meta), [meta]);
   if (entries.length === 0) return null;
+  const showsLabels = entries.length > 1;
   return (
-    <View style={styles.questions}>
-      <DetailsBox
-        label="Questions and answers"
-        resetKey={`${resetKey}:questions`}
-        frameStyle={styles.questionsFrame}
-        textColor={theme.desktop.foreground}
-        divided
-      >
-        {entries.map(({ key, detail }) => (
-          <View key={key} style={styles.question}>
-            <Text selectable style={styles.prompt}>
-              {detail.prompt}
-            </Text>
-            <Text selectable style={detail.answers.length > 0 ? styles.answer : styles.noAnswer}>
-              {detail.answers.length > 0 ? detail.answers.join(", ") : NO_ANSWER_YET_LABEL}
+    <View style={styles.answers}>
+      {entries.map(({ key, detail }) => {
+        const answer = readQuestionAnswerText(detail);
+        return (
+          <View key={key} style={styles.answerLine}>
+            <Icon name="corner-down-right" size={12} colorValue={theme.desktop.mutedForeground} />
+            {showsLabels ? (
+              <Text selectable numberOfLines={1} style={styles.answerLabel}>
+                {detail.header ?? detail.prompt}
+              </Text>
+            ) : null}
+            <Text selectable numberOfLines={1} style={answer ? styles.answer : styles.noAnswer}>
+              {answer || NO_ANSWER_YET_LABEL}
             </Text>
           </View>
-        ))}
-      </DetailsBox>
+        );
+      })}
     </View>
   );
 });
@@ -310,28 +309,29 @@ const styles = StyleSheet.create((theme) => ({
   download: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start" },
   downloadText: { textDecorationLine: "underline" },
   loading: { flexDirection: "row", alignItems: "center", gap: 6 },
-  questions: { paddingLeft: LINE_DETAILS_INSET, paddingRight: theme.space.xs },
-  questionsFrame: {
-    borderColor: theme.desktop.border,
-    backgroundColor: withAlpha(theme.desktop.muted, 0.9),
-  },
-  question: { gap: 2 },
-  prompt: {
-    ...sansWeight("medium"),
-    fontSize: 13,
+  // Under the tool name: the line padding, the 14-point icon, and the 8-point gap.
+  answers: { gap: 2, paddingLeft: theme.space.xs + 14 + 8, paddingRight: theme.space.xs },
+  answerLine: { flexDirection: "row", alignItems: "center", gap: 6 },
+  answerLabel: {
+    ...sansWeight("regular"),
+    fontSize: 12.5,
     lineHeight: 18,
-    color: theme.desktop.foreground,
+    flexShrink: 0,
+    maxWidth: "40%",
+    color: theme.desktop.mutedForeground,
   },
   answer: {
     ...sansWeight("regular"),
-    fontSize: 13,
+    fontSize: 12.5,
     lineHeight: 18,
+    flexShrink: 1,
     color: theme.desktop.foreground,
   },
   noAnswer: {
     ...sansWeight("regular"),
-    fontSize: 13,
+    fontSize: 12.5,
     lineHeight: 18,
+    flexShrink: 1,
     fontStyle: "italic",
     color: theme.desktop.mutedForeground,
   },

@@ -12,7 +12,6 @@ import {
 import {
   createDefaultTestChatSettings,
   createMessageCardElement,
-  LONG_TRANSCRIPT_SAMPLE,
 } from "./agent-chat-message-card-test-harness";
 import { resolveAgentChatRuntimePresentation } from "@openducktor/frontend-core/sessions/send/agent-chat-runtime-presentation";
 import { formatTime } from "@openducktor/frontend-core/sessions/messages/message-formatting";
@@ -365,58 +364,57 @@ describe("AgentChatMessageCard tool presentation", () => {
     },
   );
 
-  test("wraps long unbroken question tool prompts", () => {
+  const renderQuestionTool = (meta: Partial<ToolMeta>) => {
     const html = renderToStaticMarkup(
       createMessageCardElement({
         message: {
-          id: "tool-question-long-prompt",
+          id: "tool-question",
           role: "tool",
           content: "Tool question completed",
           timestamp: "2026-02-22T10:20:30.000Z",
           meta: {
             kind: "tool",
-            partId: "part-question-long-prompt",
-            callId: "call-question-long-prompt",
-            tool: "ask_question",
+            partId: "part-question",
+            callId: "call-question",
+            tool: "AskUserQuestion",
             toolType: "question",
             status: "completed",
-            input: { questions: [{ prompt: LONG_TRANSCRIPT_SAMPLE }] },
-            output: '{"answers":[["yes"]]}',
+            ...meta,
           },
         },
       }),
     );
+    return new DOMParser().parseFromString(html, "text/html");
+  };
 
-    expect(html).toContain("Questions and answers");
-    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
-    expect(html).toContain("break-words font-medium text-foreground");
+  test("shows the answer of one question alone under the line of a question tool", () => {
+    const document = renderQuestionTool({
+      input: { questions: [{ question: "Which webhook URLs?", header: "Webhooks" }] },
+      metadata: { answers: [["Incoming webhooks"]] },
+    });
+
+    const answers = document.querySelectorAll('[data-slot="question-answers"] li');
+    expect([...answers].map((answer) => answer.textContent)).toEqual(["Incoming webhooks"]);
+    expect(document.body.textContent).not.toContain("Questions and answers");
   });
 
-  test("wraps long unbroken question tool answers", () => {
-    const html = renderToStaticMarkup(
-      createMessageCardElement({
-        message: {
-          id: "tool-question-long-answer",
-          role: "tool",
-          content: "Tool question completed",
-          timestamp: "2026-02-22T10:20:30.000Z",
-          meta: {
-            kind: "tool",
-            partId: "part-question-long-answer",
-            callId: "call-question-long-answer",
-            tool: "ask_question",
-            toolType: "question",
-            status: "completed",
-            input: { questions: [{ prompt: "Confirm deployment?" }] },
-            output: JSON.stringify({ answers: [[LONG_TRANSCRIPT_SAMPLE]] }),
-          },
-        },
-      }),
-    );
+  test("shows the label and the answer of each question of a question tool", () => {
+    const document = renderQuestionTool({
+      tool: "request_user_input",
+      input: {
+        questions: [
+          { header: "Branch", question: "Which branch?" },
+          { header: "Checks", question: "Which checks?" },
+        ],
+      },
+      output: JSON.stringify({ answers: { q1: { answers: ["main"] }, q2: { answers: [] } } }),
+    });
 
-    expect(html).toContain("Questions and answers");
-    expect(html).toContain(LONG_TRANSCRIPT_SAMPLE);
-    expect(html).toContain("whitespace-pre-wrap break-words text-foreground");
+    const answers = document.querySelectorAll('[data-slot="question-answers"] li');
+    expect([...answers].map((answer) => answer.textContent)).toEqual([
+      "Branchmain",
+      "ChecksNo answer yet",
+    ]);
   });
 
   type ToolRow = {

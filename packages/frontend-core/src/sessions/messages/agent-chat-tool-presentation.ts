@@ -6,6 +6,7 @@ import type {
   OdtToolName,
   PullRequest,
 } from "@openducktor/contracts";
+import { HIDDEN_ANSWER_LABEL } from "../pending-input/agent-session-question-draft";
 import { buildContentEntries } from "../transcript/agent-chat-content-keys";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
 import { extractAllFileEditData, type FileEditData } from "./file-edit-tool";
@@ -266,12 +267,14 @@ export const isRegularToolPreparing = (meta: ToolMeta): boolean =>
 
 /**
  * The name of a tool call in the transcript. Each runtime names its tools in its own way, so a
- * shell command shows as `bash`, and a call that edits files, such as `Edit`, `Write`, or
- * `apply_patch`, shows as `edit`. The details of the call show the name of the tool.
+ * shell command shows as `bash`, a call that edits files, such as `Edit`, `Write`, or
+ * `apply_patch`, shows as `edit`, and a question tool, such as `AskUserQuestion` or
+ * `request_user_input`, shows as `Question`. The details of the call show the name of the tool.
  */
 export const readToolCallName = (meta: ToolMeta, displayName: string): string => {
   if (isShellCommandCall(meta)) return "bash";
   if (meta.toolType === "file_edit") return "edit";
+  if (meta.toolType === "question") return "Question";
   return displayName;
 };
 
@@ -322,20 +325,64 @@ export const readToolCallFilePath = (
   return edits.length === 1 ? (edits[0]?.filePath ?? null) : null;
 };
 
-/** The questions and answers of a question tool, with keys that stay the same across renders. */
-export const buildQuestionDetailEntries = (
-  meta: ToolMeta,
-): Array<{ key: string; detail: QuestionToolDetail }> => {
-  const countsByBaseKey = new Map<string, number>();
-  return questionToolDetails(meta).map((detail) => {
-    const baseKey = `${meta.callId}:question:${detail.prompt}:${detail.answers.join("|")}`;
-    const nextCount = (countsByBaseKey.get(baseKey) ?? 0) + 1;
-    countsByBaseKey.set(baseKey, nextCount);
-    return { key: `${baseKey}:${nextCount}`, detail };
-  });
+/** A question of a question tool, with a key that stays the same across renders. */
+export type QuestionDetailEntry = { key: string; detail: QuestionToolDetail };
+
+/** The questions and answers of a question tool. Empty for another tool. */
+export const buildQuestionDetailEntries = (meta: ToolMeta): QuestionDetailEntry[] => {
+  // A question keeps its key when its answer comes, so its row does not mount again.
+  return buildContentEntries(questionToolDetails(meta), (detail) => detail.prompt).map(
+    ({ key, value }) => ({ key, detail: value }),
+  );
+};
+
+/**
+ * The questions whose answers show under the line of a question tool. A call that failed or
+ * stopped without an answer shows none: its line shows why.
+ */
+export const readQuestionAnswerEntries = (meta: ToolMeta): QuestionDetailEntry[] => {
+  const entries = buildQuestionDetailEntries(meta);
+  const phase = getToolLifecyclePhase(meta);
+  const stopped = phase === "failed" || phase === "cancelled";
+  return stopped && entries.every(({ detail }) => detail.answers.length === 0) ? [] : entries;
+};
+
+/** The options that the answers of a question chose, and the answers that the user wrote. */
+export type QuestionAnswerChoices = {
+  selectedLabels: ReadonlySet<string>;
+  /** Each written answer, with a key that keeps equal answers apart. */
+  customAnswers: Array<{ key: string; value: string }>;
+};
+
+/**
+ * Splits the answers of a question into chosen options and written answers. A secret question
+ * shows no answer: the runtime keeps only a mark in place of it.
+ */
+export const readQuestionAnswerChoices = (detail: QuestionToolDetail): QuestionAnswerChoices => {
+  if (detail.secret) return { selectedLabels: new Set(), customAnswers: [] };
+  const labels = new Set(detail.options.map((option) => option.label));
+  const selectedLabels = new Set<string>();
+  const customAnswers: string[] = [];
+  for (const answer of detail.answers) {
+    if (labels.has(answer)) {
+      selectedLabels.add(answer);
+    } else {
+      customAnswers.push(answer);
+    }
+  }
+  return { selectedLabels, customAnswers: buildContentEntries(customAnswers, (answer) => answer) };
 };
 
 export const NO_ANSWER_YET_LABEL = "No answer yet";
+
+/**
+ * The answer of a question as one line: its answers, or `Hidden answer` for a secret question.
+ * Empty for a question without an answer.
+ */
+export const readQuestionAnswerText = (detail: QuestionToolDetail): string => {
+  if (detail.answers.length === 0) return "";
+  return detail.secret ? HIDDEN_ANSWER_LABEL : detail.answers.join(", ");
+};
 
 /** Tool input as indented JSON, with paths shown relative to the working directory. */
 export const formatToolInput = (input: AgentToolData, workingDirectory?: string | null): string =>

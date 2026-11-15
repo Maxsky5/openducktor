@@ -1,6 +1,7 @@
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { readMessageTimeLabel } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
 import {
+  buildQuestionDetailEntries,
   hasFileEditChanges,
   readToolDetailsHeading,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
@@ -25,6 +26,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { FileEditDetails } from "./agent-chat-file-edit-details";
+import { QuestionToolDetails } from "./agent-chat-question-tool-details";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
 import { ShellCommandDetails } from "./agent-chat-shell-command-details";
 import { ToolCallDetails } from "./agent-chat-tool-details-content";
@@ -112,6 +114,20 @@ const ToolCallDetailsBody = ({
       return (
         <FileEditDetails
           meta={shownMeta}
+          title={title}
+          workingDirectory={sessionFolder}
+          closeAction={closeAction}
+          {...timing}
+        />
+      );
+    }
+    // Parsed questions show as cards. Other question calls show their input and output.
+    const questions = buildQuestionDetailEntries(shownMeta);
+    if (questions.length > 0) {
+      return (
+        <QuestionToolDetails
+          meta={shownMeta}
+          questions={questions}
           title={title}
           workingDirectory={sessionFolder}
           closeAction={closeAction}

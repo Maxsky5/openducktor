@@ -18,6 +18,8 @@ const agentSessionQuestionItemSchema = z
     multiple: z.boolean().optional(),
     custom: z.boolean().optional(),
     required: z.boolean().optional(),
+    /** The answer is private, such as a password: clients mask it while the user types it. */
+    secret: z.boolean().optional(),
   })
   .strict();
 

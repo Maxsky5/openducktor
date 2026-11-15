@@ -26,6 +26,7 @@ import {
   type QuestionFlowStep,
   type QuestionFlowView,
 } from "./question-flow";
+import { optionIcon } from "./question-option-icon";
 import { RequestCard } from "./request-card";
 import { RequestFailureBox, RequestFeedbackBox, RequestStatusLine } from "./request-feedback";
 
@@ -389,12 +390,6 @@ function SummaryRow({
   );
 }
 
-/** The desktop option icon: a check box or a radio circle, in the foreground when selected. */
-const optionIcon = (multiple: boolean, selected: boolean): IconName => {
-  if (multiple) return selected ? "check-square" : "square";
-  return selected ? "circle-check" : "circle";
-};
-
 function OptionRow({
   label,
   description,
@@ -530,7 +525,9 @@ function QuestionStep({
             accessibilityLabel="Free text answer"
             value={entry?.freeText ?? ""}
             editable={!disabled}
-            multiline
+            // A secret answer, such as a password, is masked while the user types it.
+            secureTextEntry={question.secret === true}
+            multiline={question.secret !== true}
             placeholder="Write your answer..."
             placeholderTextColor={theme.desktop.mutedForeground}
             selectionColor={theme.colors.selection}

@@ -1,19 +1,17 @@
 import type { ReactElement } from "react";
 import {
-  buildQuestionDetailEntries,
   FILE_DIFF_UNAVAILABLE_MESSAGE,
   hasExpandableToolDetails,
-  NO_ANSWER_YET_LABEL,
   readToolDetailAvailability,
   readToolFileEdits,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-tool-presentation";
 import type { ToolMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
 import { cn } from "@/lib/utils";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
+import { QuestionToolAnswers } from "./agent-chat-question-tool-answers";
 import { RegularToolSummary } from "./agent-chat-regular-tool-summary";
 import { useToolDetailsRow } from "./agent-chat-tool-details-store";
 import { TOOL_ROW_HOVER, TOOL_ROW_SELECTED } from "./agent-chat-tool-row-states";
-import { AgentChatTranscriptProse } from "./agent-chat-transcript-prose";
 
 type RegularToolMessageProps = {
   meta: ToolMeta;
@@ -44,7 +42,6 @@ export const RegularToolMessage = ({
     meta,
     sessionWorkingDirectory,
   );
-  const questionDetailRenderEntries = buildQuestionDetailEntries(meta);
 
   const summaryRow = (
     <RegularToolSummary
@@ -75,29 +72,7 @@ export const RegularToolMessage = ({
         summaryRow
       )}
 
-      {questionDetailRenderEntries.length > 0 ? (
-        <details className="ml-5 rounded border border-border bg-muted/90">
-          <summary className="cursor-pointer px-2 py-1 text-[11px] font-medium text-foreground">
-            Questions and answers
-          </summary>
-          <div className="space-y-2 border-t border-border p-2 text-xs text-foreground">
-            {questionDetailRenderEntries.map(({ key, detail }) => (
-              <div key={key} className="space-y-0.5">
-                <AgentChatTranscriptProse className="font-medium text-foreground">
-                  {detail.prompt}
-                </AgentChatTranscriptProse>
-                <AgentChatTranscriptProse
-                  className={
-                    detail.answers.length > 0 ? "text-foreground" : "italic text-muted-foreground"
-                  }
-                >
-                  {detail.answers.length > 0 ? detail.answers.join(", ") : NO_ANSWER_YET_LABEL}
-                </AgentChatTranscriptProse>
-              </div>
-            ))}
-          </div>
-        </details>
-      ) : null}
+      <QuestionToolAnswers meta={meta} />
 
       {fileEditData.map((data) => (
         <AgentChatFileEditCard key={data.filePath} data={data} />

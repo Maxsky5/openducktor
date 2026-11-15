@@ -7,6 +7,8 @@ import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
 import { relativizeDisplayPath, relativizeSearchSummary } from "./tool-path-utils";
 import { compactText, stripToolPrefix } from "./tool-text-utils";
 import { ODT_TOOL_CARDS, readOdtToolName } from "./odt-tool-call";
+import { questionToolDetails } from "./question-tool-parser";
+import { plural } from "../../lib/plural";
 
 const OUTPUT_IGNORED_TOOL_NAMES = new Set([
   "read",
@@ -171,6 +173,17 @@ const normalizeDisplaySummary = (
   return relativizeDisplayPath(summary, workingDirectory);
 };
 
+/**
+ * Each runtime gives its questions in its own shape, so the summary reads the parsed questions:
+ * the prompt of one question, or the count of several questions. Each question shows its answer
+ * under the line.
+ */
+const summarizeQuestions = (meta: ToolMeta): string => {
+  const questions = questionToolDetails(meta);
+  if (questions.length > 1) return plural(questions.length, "question");
+  return questions[0] ? compactText(questions[0].prompt, 160) : "";
+};
+
 const extractTaskId = (input: AgentToolData | undefined): string | null => {
   const taskId = input?.taskId;
   return hasNonEmptyText(taskId) ? taskId.trim() : null;
@@ -217,6 +230,7 @@ export const buildToolSummary = (
   }
   if (odtTool !== null && ODT_TOOL_CARDS.has(odtTool)) return "";
   if (lifecyclePhase === "preparing") return "";
+  if (toolType === "question") return summarizeQuestions(meta);
   const fileEditData =
     toolType === "file_edit" ? extractAllFileEditData(meta, workingDirectory) : [];
 

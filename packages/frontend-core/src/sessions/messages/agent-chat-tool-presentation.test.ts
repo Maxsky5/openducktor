@@ -10,6 +10,9 @@ import {
   readToolFileEdits,
   readRegularToolTiming,
   readWorkflowToolCard,
+  readQuestionAnswerChoices,
+  readQuestionAnswerEntries,
+  readQuestionAnswerText,
   readToolCallName,
   readToolDetailsHeading,
   regularToolLineName,
@@ -195,10 +198,83 @@ describe("tool presentation", () => {
     expect(formatToolInput({ filePath: "/repo/src/a.ts" }, "/repo")).toContain('"src/a.ts"');
   });
 
-  test("keys repeated questions apart", () => {
-    expect(buildQuestionDetailEntries(meta({ tool: "question", toolType: "question" }))).toEqual(
-      [],
-    );
+  test("shows the answers of a question call, unless it failed or stopped without an answer", () => {
+    const question = (status: ToolMeta["status"], answers: string[][]) =>
+      meta({
+        tool: "question",
+        toolType: "question",
+        status,
+        input: { questions: [{ question: "First?" }, { question: "Second?" }] },
+        metadata: { answers },
+      });
+    const prompts = (entries: ReturnType<typeof readQuestionAnswerEntries>) =>
+      entries.map(({ detail }) => detail.prompt);
+
+    expect(prompts(readQuestionAnswerEntries(question("running", [])))).toEqual([
+      "First?",
+      "Second?",
+    ]);
+    expect(readQuestionAnswerEntries(question("error", []))).toEqual([]);
+    // A call that stopped after one answer keeps every question, so the reader sees what is missing.
+    expect(prompts(readQuestionAnswerEntries(question("error", [["Yes"], []])))).toEqual([
+      "First?",
+      "Second?",
+    ]);
+  });
+
+  test("keeps the key of a question when its answer comes, and keys equal prompts apart", () => {
+    const question = (metadata: NonNullable<ToolMeta["metadata"]>) =>
+      meta({
+        tool: "question",
+        toolType: "question",
+        input: { questions: [{ question: "Deploy?" }, { question: "Deploy?" }] },
+        metadata,
+      });
+    const keys = (entries: ReturnType<typeof buildQuestionDetailEntries>) =>
+      entries.map(({ key }) => key);
+
+    const before = keys(buildQuestionDetailEntries(question({})));
+    const after = keys(buildQuestionDetailEntries(question({ answers: [["Yes"], ["No"]] })));
+
+    expect(after).toEqual(before);
+    expect(new Set(before).size).toBe(2);
+  });
+
+  test("hides the answer of a secret question, and keeps the answers of another question", () => {
+    const question = (secret: boolean) =>
+      buildQuestionDetailEntries(
+        meta({
+          tool: "request_user_input",
+          toolType: "question",
+          input: { questions: [{ question: "Token?", secret, options: [] }] },
+          output: JSON.stringify({ answers: { token: { answers: ["[hidden]"] } } }),
+        }),
+      )[0]?.detail;
+    const secret = question(true);
+    const plain = question(false);
+    if (!secret || !plain) throw new Error("expected one question");
+
+    expect(secret.secret).toBe(true);
+    expect(readQuestionAnswerText(secret)).toBe("Hidden answer");
+    expect(readQuestionAnswerChoices(secret).customAnswers).toEqual([]);
+    expect(readQuestionAnswerText(plain)).toBe("[hidden]");
+  });
+
+  test("splits the answers of a question into chosen options and written answers", () => {
+    const choices = readQuestionAnswerChoices({
+      prompt: "Which checks?",
+      header: null,
+      options: [
+        { label: "Lint", description: null },
+        { label: "Test", description: null },
+      ],
+      multiple: true,
+      secret: false,
+      answers: ["Lint", "Also run e2e, please"],
+    });
+
+    expect([...choices.selectedLabels]).toEqual(["Lint"]);
+    expect(choices.customAnswers.map(({ value }) => value)).toEqual(["Also run e2e, please"]);
   });
 
   test("builds the Computer Use summary", () => {
@@ -228,6 +304,11 @@ describe("readToolCallName", () => {
       expect(readToolCallName(meta({ tool, toolType: "file_edit" }), tool)).toBe("edit");
     }
     expect(readToolCallName(meta({ tool: "Read", toolType: "read" }), "Read")).toBe("Read");
+  });
+
+  test("names a question tool Question", () => {
+    const question = meta({ tool: "AskUserQuestion", toolType: "question" });
+    expect(readToolCallName(question, "AskUserQuestion")).toBe("Question");
   });
 });
 

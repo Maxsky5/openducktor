@@ -110,6 +110,39 @@ export const DetailsStatusLine = ({
   );
 };
 
+/** The input and the output of a call, each in a block that the reader can copy. */
+export const ToolCallInputOutput = ({
+  meta,
+  workingDirectory,
+}: {
+  meta: ToolMeta;
+  workingDirectory: string | null;
+}): ReactElement => {
+  const { hasInput, hasOutput } = readToolDetailAvailability(meta);
+  const input = useMemo(
+    () => (meta.input && hasInput ? formatToolInput(meta.input, workingDirectory) : ""),
+    [meta.input, hasInput, workingDirectory],
+  );
+  return (
+    <>
+      {input ? (
+        <DetailsBlock label="Input" copyText={input} kind="input">
+          <pre className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{input}</pre>
+        </DetailsBlock>
+      ) : null}
+      {hasOutput ? (
+        <DetailsBlock
+          label="Output"
+          copyText={meta.resultContent ? "" : (meta.output ?? "")}
+          kind="output"
+        >
+          <AgentToolResultContentView content={meta.resultContent} output={meta.output} />
+        </DetailsBlock>
+      ) : null}
+    </>
+  );
+};
+
 /** The input, output, and error of a tool call that is not a shell command. */
 export const ToolCallDetails = ({
   meta,
@@ -133,10 +166,6 @@ export const ToolCallDetails = ({
   closeAction?: ReactNode;
 } & ToolDetailsTiming): ReactElement => {
   const { hasInput, hasOutput } = readToolDetailAvailability(meta);
-  const input = useMemo(
-    () => (meta.input && hasInput ? formatToolInput(meta.input, workingDirectory) : ""),
-    [meta.input, hasInput, workingDirectory],
-  );
   const error = readToolDetailsError(meta);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -158,21 +187,8 @@ export const ToolCallDetails = ({
             <AgentChatMarkdownRenderer markdown={note} variant="compact" />
           </section>
         ) : null}
-        {input ? (
-          <DetailsBlock label="Input" copyText={input} kind="input">
-            <pre className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{input}</pre>
-          </DetailsBlock>
-        ) : null}
-        {hasOutput ? (
-          <DetailsBlock
-            label="Output"
-            copyText={meta.resultContent ? "" : (meta.output ?? "")}
-            kind="output"
-          >
-            <AgentToolResultContentView content={meta.resultContent} output={meta.output} />
-          </DetailsBlock>
-        ) : null}
-        {input || hasOutput || error || note ? null : (
+        <ToolCallInputOutput meta={meta} workingDirectory={workingDirectory} />
+        {hasInput || hasOutput || error || note ? null : (
           <p className="text-xs leading-5 text-muted-foreground">
             The tool call has no input or output.
           </p>

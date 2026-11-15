@@ -16,7 +16,7 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { ToolErrorPreview, ToolLine } from "./row-parts";
-import { QuestionDetails, ToolFileEdits } from "./tool-details";
+import { QuestionAnswers, ToolFileEdits } from "./tool-details";
 
 const PATH_TOOL_TYPES: ReadonlySet<ToolMeta["toolType"]> = new Set(["read", "list", "file_edit"]);
 
@@ -76,7 +76,7 @@ export const ToolCallRow = memo(function ToolCallRow({
         accessibilityLabel={`${name}${summary.text.length > 0 ? `: ${summary.text}` : ""}${stateLabel}${errorLabel}`}
       />
       {summary.errorPreview === null ? null : <ToolErrorPreview text={summary.errorPreview} />}
-      <QuestionDetails meta={meta} resetKey={rowKey} />
+      <QuestionAnswers meta={meta} />
       <ToolFileEdits meta={meta} resetKey={rowKey} />
     </View>
   );

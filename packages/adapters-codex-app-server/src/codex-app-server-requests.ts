@@ -437,6 +437,9 @@ export const parseQuestionRequest = (request: CodexQuestionRequest) => {
     if (rawQuestion.isOther) {
       question.custom = true;
     }
+    if (rawQuestion.isSecret) {
+      question.secret = true;
+    }
     return question;
   });
 

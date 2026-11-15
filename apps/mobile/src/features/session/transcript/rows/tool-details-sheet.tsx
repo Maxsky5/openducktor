@@ -1,8 +1,7 @@
 import { plural } from "@openducktor/frontend-core/lib/plural";
-import { ToolFileEdits, ToolOutput, ToolPartSessionProvider } from "./tool-details";
-import { formatRawJsonLikeText } from "@openducktor/frontend-core/sessions/messages/message-formatting";
+import { ToolFileEdits, ToolPartSessionProvider } from "./tool-details";
 import {
-  formatToolInput,
+  buildQuestionDetailEntries,
   hasFileEditChanges,
   readToolDetailAvailability,
   readToolDetailsHeading,
@@ -24,13 +23,11 @@ import {
   TERMINAL_TONE_COLORS,
   terminalColorValue,
 } from "@openducktor/frontend-core/sessions/messages/terminal-text";
-import { getToolDuration } from "@openducktor/frontend-core/sessions/messages/tool-duration";
 import {
   getToolLifecyclePhase,
   type ToolLifecyclePhase,
 } from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
 import { useToolPartDetails } from "@openducktor/frontend-core/sessions/messages/use-tool-part-details";
-import { formatAgentDuration } from "@openducktor/frontend-core/sessions/transcript/format-agent-duration";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { type ComponentRef, type ReactElement, type ReactNode, useMemo, useRef } from "react";
 import { ScrollView, View } from "react-native";
@@ -45,14 +42,21 @@ import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { messageTimeLabel, truncateForDisplay } from "../transcript-text";
-import { CopyControl, PreText } from "./row-parts";
-import { ToolStatusIcon, ToolStatusLabel } from "./tool-status";
+import { CopyControl } from "./row-parts";
+import {
+  DetailsError,
+  type DetailsTiming,
+  StatusLine,
+  ToolCallInputOutput,
+} from "./tool-details-parts";
+import { QuestionToolDetails } from "./tool-question-details";
 
 /**
- * The desktop tool details panel, in a sheet over the transcript: the status, timing, and the
- * command and output of a shell command, or the input, output, and error of another call. The
- * sheet follows the live message, so a running command shows its output as the runtime sends it.
- * The sheet does not scroll its content: each part scrolls by itself, as on desktop.
+ * The desktop tool details panel, in a sheet over the transcript: the status and timing of a call,
+ * then the command and output of a shell command, the changes of a file edit, the questions and
+ * answers of a question tool, or the input, output, and error of another call. The sheet follows
+ * the live message, so a running command shows its output as the runtime sends it. The sheet does
+ * not scroll its content: each part scrolls by itself, as on desktop.
  */
 export function ToolDetailsSheetContent({
   message,
@@ -69,14 +73,17 @@ export function ToolDetailsSheetContent({
   );
 }
 
-type DetailsTiming = { messageTimestamp: string; timeLabel: string };
-
-/** The details of a call by its kind: a shell command, a file edit, or another call. */
+/** The details of a call by its kind: a shell command, a file edit, a question, or another call. */
 function ShownToolDetails({ meta, ...timing }: { meta: ToolMeta } & DetailsTiming): ReactElement {
   const { workingDirectory } = useTranscriptRows();
   if (isShellCommandCall(meta)) return <ShellCommandDetails meta={meta} {...timing} />;
   if (meta.toolType === "file_edit" && hasFileEditChanges(meta, workingDirectory)) {
     return <FileEditDetails meta={meta} {...timing} />;
+  }
+  // Parsed questions show as cards. Other question calls show their input and output.
+  const questions = buildQuestionDetailEntries(meta);
+  if (questions.length > 0) {
+    return <QuestionToolDetails meta={meta} questions={questions} {...timing} />;
   }
   return <ToolCallDetails meta={meta} {...timing} />;
 }
@@ -130,56 +137,6 @@ function FullDetails({
       >
         <Text style={[styles.meta, styles.retry, { color: desktop.foreground }]}>Retry</Text>
       </Touchable>
-    </View>
-  );
-}
-
-/** The status, run time, clock time, and exit code of a call, on one line. */
-function StatusLine({
-  meta,
-  messageTimestamp,
-  timeLabel,
-  exitCode,
-  timeoutMs,
-  lineCount = 0,
-}: {
-  meta: ToolMeta;
-  exitCode: number | null;
-  timeoutMs: number | null;
-  lineCount?: number;
-} & DetailsTiming): ReactElement {
-  const { desktop } = useAppTheme();
-  const phase = getToolLifecyclePhase(meta);
-  const durationMs = getToolDuration(meta, messageTimestamp);
-  const facts = [
-    durationMs === null ? null : formatAgentDuration(durationMs),
-    timeLabel || null,
-    timeoutMs === null ? null : `Timeout ${formatAgentDuration(timeoutMs)}`,
-    lineCount > 0 ? plural(lineCount, "line") : null,
-  ].filter((fact) => fact !== null);
-  const failedExit = exitCode !== null && exitCode !== 0 ? exitCode : null;
-  return (
-    <View style={styles.statusLine}>
-      <ToolStatusIcon phase={phase} decorative />
-      <ToolStatusLabel phase={phase} style={styles.status} />
-      {failedExit === null ? null : (
-        <Text
-          style={[
-            styles.exitChip,
-            {
-              color: desktop.destructiveSurfaceForeground,
-              backgroundColor: desktop.destructiveSurface,
-            },
-          ]}
-        >
-          exit {failedExit}
-        </Text>
-      )}
-      {facts.map((fact) => (
-        <Text key={fact} style={[styles.meta, { color: desktop.mutedForeground }]}>
-          · {fact}
-        </Text>
-      ))}
     </View>
   );
 }
@@ -426,7 +383,6 @@ function FileEditDetails({
   messageTimestamp,
   timeLabel,
 }: { meta: ToolMeta } & DetailsTiming): ReactElement {
-  const { desktop } = useAppTheme();
   const error = readToolDetailsError(meta);
   return (
     <ScrollView style={styles.fillHeight} contentContainerStyle={styles.padded}>
@@ -437,11 +393,7 @@ function FileEditDetails({
         exitCode={null}
         timeoutMs={null}
       />
-      {error ? (
-        <DetailsBlock label="Error" tone="error" copyText={error}>
-          <PreText text={formatRawJsonLikeText(error)} color={desktop.destructiveMuted} />
-        </DetailsBlock>
-      ) : null}
+      {error ? <DetailsError error={error} /> : null}
       <ToolFileEdits meta={meta} resetKey={`details:${meta.callId}`} open />
     </ScrollView>
   );
@@ -453,14 +405,10 @@ function ToolCallDetails({
   timeLabel,
 }: { meta: ToolMeta } & DetailsTiming): ReactElement {
   const { desktop } = useAppTheme();
-  const { workingDirectory, presentToolCall } = useTranscriptRows();
+  const { presentToolCall } = useTranscriptRows();
   // A workflow event shows its note before its input, as on desktop.
   const { note } = readToolDetailsHeading(meta, presentToolCall(meta.tool, meta.displayLabel));
   const { hasInput, hasOutput } = readToolDetailAvailability(meta);
-  const input = useMemo(
-    () => (meta.input && hasInput ? formatToolInput(meta.input, workingDirectory) : ""),
-    [meta.input, hasInput, workingDirectory],
-  );
   const error = readToolDetailsError(meta);
   return (
     <ScrollView style={styles.fillHeight} contentContainerStyle={styles.padded}>
@@ -481,82 +429,14 @@ function ToolCallDetails({
           <MarkdownView markdown={note} selectable />
         </View>
       ) : null}
-      {input ? (
-        <DetailsBlock label="Input" copyText={input}>
-          <PreText text={input} color={desktop.foreground} />
-        </DetailsBlock>
-      ) : null}
-      {hasOutput ? (
-        <DetailsBlock label="Output" copyText={meta.resultContent ? "" : (meta.output ?? "")}>
-          <ToolOutput
-            content={meta.resultContent}
-            output={() => formatRawJsonLikeText(meta.output ?? "")}
-            color={desktop.foreground}
-          />
-        </DetailsBlock>
-      ) : null}
-      {error ? (
-        <DetailsBlock label="Error" tone="error" copyText={error}>
-          <PreText text={formatRawJsonLikeText(error)} color={desktop.destructiveMuted} />
-        </DetailsBlock>
-      ) : null}
-      {input || hasOutput || error ? null : (
+      <ToolCallInputOutput meta={meta} />
+      {error ? <DetailsError error={error} /> : null}
+      {hasInput || hasOutput || error ? null : (
         <Text style={[styles.meta, { color: desktop.mutedForeground }]}>
           The tool call has no input or output.
         </Text>
       )}
     </ScrollView>
-  );
-}
-
-function DetailsBlock({
-  label,
-  tone = "default",
-  copyText,
-  children,
-}: {
-  label: string;
-  tone?: "default" | "error";
-  copyText: string;
-  children: ReactNode;
-}): ReactElement {
-  const { desktop } = useAppTheme();
-  const isError = tone === "error";
-  return (
-    <View style={styles.block}>
-      <View style={styles.sectionHeader}>
-        <Text
-          style={[
-            styles.sectionTitle,
-            styles.fill,
-            { color: isError ? desktop.destructiveMuted : desktop.foreground },
-          ]}
-        >
-          {label}
-        </Text>
-        {copyText ? (
-          <CopyControl
-            text={copyText}
-            what={label}
-            accessibilityLabel={`Copy ${label.toLowerCase()}`}
-            color={desktop.mutedForeground}
-          />
-        ) : null}
-      </View>
-      <View
-        style={[
-          styles.blockFrame,
-          isError
-            ? {
-                borderColor: desktop.destructiveBorder,
-                backgroundColor: desktop.destructiveSurface,
-              }
-            : { borderColor: desktop.border, backgroundColor: desktop.muted },
-        ]}
-      >
-        {children}
-      </View>
-    </View>
   );
 }
 
@@ -575,14 +455,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.space.md,
   },
   description: { ...sansWeight("regular"), fontSize: 13.5, lineHeight: 19 },
-  exitChip: {
-    ...monoWeight("regular"),
-    fontSize: 11.5,
-    lineHeight: 16,
-    paddingHorizontal: 6,
-    borderRadius: theme.radius.xs,
-    overflow: "hidden",
-  },
   // The command area takes at most part of the sheet, so the output keeps room.
   commandArea: { flexGrow: 0, maxHeight: "45%" },
   commandText: { ...monoWeight("regular"), fontSize: 12.5, lineHeight: 19 },
@@ -633,8 +505,6 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.layout.screenPadding,
   },
   retry: sansWeight("medium"),
-  statusLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 },
-  status: { ...sansWeight("medium"), fontSize: 12.5, lineHeight: 18 },
   meta: { ...sansWeight("regular"), fontSize: 12.5, lineHeight: 18 },
   mono: { ...monoWeight("regular"), fontSize: 12.5, lineHeight: 19 },
   small: { fontSize: 11.5, lineHeight: 16 },
@@ -642,10 +512,4 @@ const styles = StyleSheet.create((theme) => ({
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: theme.space.sm },
   sectionTitle: { ...sansWeight("medium"), fontSize: 13, lineHeight: 18 },
   block: { gap: 6 },
-  blockFrame: {
-    borderWidth: 1,
-    borderRadius: theme.radius.sm,
-    paddingHorizontal: theme.space.md,
-    paddingVertical: theme.space.sm,
-  },
 }));

@@ -57,6 +57,7 @@ export const ICONS = {
   cloud: "cloud",
   "cloud-off": "cloud-off",
   copy: "copy",
+  "corner-down-right": "corner-down-right",
   cpu: "cpu",
   database: "database",
   "dollar-sign": "dollar-sign",

@@ -31,6 +31,8 @@ export const toolIcon = (
       return "list-todo";
     case "file_edit":
       return "pencil-line";
+    case "question":
+      return "circle-help";
     default:
       return meta.tool.trim().toLowerCase() === "skill" ? "scroll-text" : "wrench";
   }

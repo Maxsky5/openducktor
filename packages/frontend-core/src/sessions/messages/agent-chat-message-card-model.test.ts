@@ -16,7 +16,6 @@ import {
   isFileEditTool,
   isToolMessageCancelled,
   isToolMessageFailure,
-  questionToolDetails,
   roleLabel,
   SYSTEM_PROMPT_PREFIX,
   stripToolPrefix,
@@ -299,135 +298,25 @@ describe("agent-chat-message-card-model", () => {
     });
   });
 
-  describe("question tool parsing", () => {
-    test("returns empty details for non-question tools and empty question payloads", () => {
-      expect(questionToolDetails(createToolMeta({ tool: "read" }))).toEqual([]);
-      expect(
-        questionToolDetails(
-          createToolMeta({
-            tool: "question_parser",
-            toolType: "generic" as const,
-            metadata: { questions: [{ question: "Should be ignored" }] },
-          }),
-        ),
-      ).toEqual([]);
-      expect(
-        questionToolDetails(
-          createToolMeta({ tool: "question", toolType: "question", output: "{broken" }),
-        ),
-      ).toEqual([]);
-      expect(
-        questionToolDetails(
-          createToolMeta({ tool: "question", toolType: "question", output: "plain text" }),
-        ),
-      ).toEqual([]);
-      expect(
-        questionToolDetails(
-          createToolMeta({ tool: "question", toolType: "question", metadata: {} }),
-        ),
-      ).toEqual([]);
-    });
-
-    test("prefers input questions over metadata and output questions", () => {
-      const details = questionToolDetails(
-        createToolMeta({
-          tool: "QUESTION",
-          toolType: "question",
-          input: {
-            questions: [{ question: "Choose role", answers: ["planner"] }],
-          },
-          metadata: {
-            questions: [{ question: "Ignored metadata question" }],
-          },
-          output: JSON.stringify({
-            questions: [{ question: "Ignored output question" }],
-            answers: [["build"]],
-          }),
-        }),
-      );
-      expect(details).toEqual([{ prompt: "Choose role", answers: ["planner"] }]);
-    });
-
-    test("uses metadata questions and normalizes object answer groups", () => {
-      const details = questionToolDetails(
-        createToolMeta({
-          tool: "my_question",
-          toolType: "question",
-          metadata: {
-            questions: [{ title: "Environment?" }],
-            answers: {
-              first: [" staging ", " "],
-              second: "prod",
-            },
-          },
-        }),
-      );
-
-      expect(details).toEqual([{ prompt: "Environment?", answers: ["staging"] }]);
-    });
-
-    test("uses output questions and nested response answer groups", () => {
-      const details = questionToolDetails(
-        createToolMeta({
-          tool: "question",
-          toolType: "question",
-          output: JSON.stringify({
-            questions: [{ header: "Pick first" }, { label: "Pick second" }],
-            response: [{ value: "alpha" }, { value: ["beta", "  "] }],
-          }),
-        }),
-      );
-
-      expect(details).toEqual([
-        { prompt: "Pick first", answers: ["alpha"] },
-        { prompt: "Pick second", answers: ["beta"] },
-      ]);
-    });
-
-    test("falls back to metadata answer groups when output answers are absent", () => {
-      const details = questionToolDetails(
-        createToolMeta({
-          tool: "question",
-          toolType: "question",
-          metadata: {
-            questions: [{ question: "Approve?" }],
-            answers: [["yes"]],
-          },
-        }),
-      );
-
-      expect(details).toEqual([{ prompt: "Approve?", answers: ["yes"] }]);
-    });
-
-    test("returns prompts with empty answers when no answer groups exist", () => {
-      const details = questionToolDetails(
-        createToolMeta({
-          tool: "question",
-          toolType: "question",
-          input: {
-            questions: [{ question: "Anything else?" }],
-          },
-        }),
-      );
-      expect(details).toEqual([{ prompt: "Anything else?", answers: [] }]);
-    });
-
-    test("ignores malformed question entries before valid prompts", () => {
-      const details = questionToolDetails(
-        createToolMeta({
-          tool: "question",
-          toolType: "question",
-          metadata: {
-            questions: [null, { foo: "bar" }, { question: "Final prompt" }],
-          },
-        }),
-      );
-
-      expect(details).toEqual([{ prompt: "Final prompt", answers: [] }]);
-    });
-  });
-
   describe("tool summary builder", () => {
+    test("summarizes a question tool by its prompt or its question count, never its raw input", () => {
+      const question = (questions: Array<{ question: string }>) =>
+        createToolMeta({
+          tool: "AskUserQuestion",
+          toolType: "question",
+          input: { questions },
+          preview: JSON.stringify({ questions }),
+        });
+
+      expect(buildToolSummary(question([{ question: "Which webhook URLs?" }]), "")).toBe(
+        "Which webhook URLs?",
+      );
+      expect(buildToolSummary(question([{ question: "One?" }, { question: "Two?" }]), "")).toBe(
+        "2 questions",
+      );
+      expect(buildToolSummary(question([]), "")).toBe("");
+    });
+
     test("previews deployed task document history from its input", () => {
       expect(
         buildToolSummary(

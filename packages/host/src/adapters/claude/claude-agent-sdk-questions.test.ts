@@ -3,6 +3,7 @@ import type { AgentEvent } from "@openducktor/core";
 import {
   createClaudeUserDialogHandler,
   isClaudeAskUserQuestionTool,
+  readClaudeAskUserQuestionResultAnswers,
 } from "./claude-agent-sdk-questions";
 import { AsyncInputQueue } from "./claude-agent-sdk-queue";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
@@ -100,6 +101,30 @@ describe("createClaudeUserDialogHandler", () => {
     expect(isClaudeAskUserQuestionTool(" askuserquestion ")).toBe(true);
     expect(isClaudeAskUserQuestionTool("ASKUSERQUESTION")).toBe(true);
     expect(isClaudeAskUserQuestionTool("mcp__example__AskUserQuestion")).toBe(false);
+  });
+
+  test("reads AskUserQuestion result answers only for the built-in question tool", () => {
+    const input = {
+      questions: [
+        {
+          question: "Which branch?",
+          header: "Branch",
+          multiSelect: false,
+          options: [{ label: "main", description: "The default branch" }],
+        },
+      ],
+    };
+    const result = {
+      questions: input.questions,
+      answers: { "Which branch?": "main, but only after review" },
+    };
+
+    // A single choice answer that starts with a label is one written answer.
+    expect(readClaudeAskUserQuestionResultAnswers("AskUserQuestion", input, result)).toEqual([
+      ["main, but only after review"],
+    ]);
+    expect(readClaudeAskUserQuestionResultAnswers("user_question", input, result)).toBeNull();
+    expect(readClaudeAskUserQuestionResultAnswers("AskUserQuestion", input, "Answered")).toBeNull();
   });
 
   test("rejects non-JSON question dialog payloads before publishing a question", async () => {

@@ -13,7 +13,7 @@ import {
   type ClaudeProtocolObject,
   type ClaudeProtocolValue,
 } from "./claude-agent-sdk-ingress-schemas";
-import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
+import type { ClaudeSessionContext, ClaudeToolInput } from "./claude-agent-sdk-types";
 
 const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 export const CLAUDE_ASK_USER_QUESTION_DIALOG_KINDS = [
@@ -132,11 +132,65 @@ const parseClaudeAskUserQuestionInput = (
   return { sdkQuestions, eventQuestions };
 };
 
+// Claude takes one text for each answer, so the options of a multiple choice answer join with it.
+const ANSWER_SEPARATOR = ", ";
+
 const answerString = (answers: readonly string[]): string =>
   answers
     .map((answer) => answer.trim())
     .filter(Boolean)
-    .join(", ");
+    .join(ANSWER_SEPARATOR);
+
+/**
+ * Splits an answer that `answerString` joined back into its parts. It reads the answer from the
+ * left and takes the longest option label at each place, so a label can hold the separator. The
+ * text from the first place that starts with no label is one written answer.
+ */
+const splitClaudeAnswer = (answer: string, labels: readonly string[]): string[] => {
+  const longestFirst = [...labels].sort((first, second) => second.length - first.length);
+  const parts: string[] = [];
+  let rest = answer;
+  while (rest.length > 0) {
+    const label = longestFirst.find(
+      (candidate) => rest === candidate || rest.startsWith(`${candidate}${ANSWER_SEPARATOR}`),
+    );
+    if (!label) {
+      parts.push(rest);
+      break;
+    }
+    parts.push(label);
+    rest = rest.slice(label.length + ANSWER_SEPARATOR.length);
+  }
+  return parts;
+};
+
+/**
+ * The answers of a Claude AskUserQuestion result as one group for each question, in question
+ * order. Claude gives them only in its structured result, keyed by the text of each question.
+ * Null for another tool, or for an input or a result of another shape.
+ */
+export const readClaudeAskUserQuestionResultAnswers = (
+  tool: string,
+  input: ClaudeToolInput | undefined,
+  toolUseResult: ClaudeProtocolValue | undefined,
+): string[][] | null => {
+  if (!isClaudeAskUserQuestionTool(tool) || !isClaudeProtocolObject(input)) return null;
+  if (!isClaudeProtocolObject(toolUseResult)) return null;
+  const { answers } = toolUseResult;
+  if (!isClaudeProtocolObject(answers)) return null;
+  const payload = parseClaudeAskUserQuestionInput(input);
+  if (!payload) return null;
+  return payload.sdkQuestions.map(({ question, options, multiSelect }) => {
+    const answer = readString(answers[question]);
+    if (!answer) return [];
+    // A single choice answer is one option or one written text, so it never splits.
+    if (!multiSelect) return [answer];
+    return splitClaudeAnswer(
+      answer,
+      options.map((option) => option.label),
+    );
+  });
+};
 
 export const buildClaudeAskUserQuestionResult = ({
   answers,

@@ -8,8 +8,6 @@ export {
   stripToolPrefix,
   toSingleLineMarkdown,
 } from "./message-formatting";
-export type { QuestionToolDetail } from "./question-tool-parser";
-export { questionToolDetails } from "./question-tool-parser";
 export {
   getToolLifecyclePhase,
   hasNonEmptyInput,

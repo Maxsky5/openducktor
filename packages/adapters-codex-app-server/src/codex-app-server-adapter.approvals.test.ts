@@ -379,6 +379,79 @@ describe("CodexAppServerAdapter approvals", () => {
     }
   });
 
+  test("sends a secret answer to Codex and keeps it out of the transcript", async () => {
+    const respondServerRequest = mock(async () => undefined);
+    const streamListeners: RuntimeListener[] = [];
+    const subscribeEvents = mock((_runtimeId: string, listener) => {
+      streamListeners.push((event) => listener(withRuntimeReceivedAt(event)));
+      return () => undefined;
+    });
+    const { adapter } = createHarness({ respondServerRequest, subscribeEvents });
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    await adapter.subscribeEvents(codexSessionRuntimeRef("thread/start-runtime-live"), (event) =>
+      events.push(event),
+    );
+    streamListeners[0]?.({
+      runtimeId: "runtime-live",
+      kind: "server_request",
+      message: {
+        id: 74,
+        method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_TOOL_REQUEST_USER_INPUT,
+        params: {
+          autoResolutionMs: null,
+          isBlocking: true,
+          threadId: "thread/start-runtime-live",
+          turnId: "turn-secret-question",
+          itemId: "question-item",
+          questions: [
+            {
+              id: "token",
+              header: "Token",
+              question: "Paste the deploy token",
+              isOther: false,
+              isSecret: true,
+              options: null,
+            },
+            {
+              id: "region",
+              header: "Region",
+              question: "Which region?",
+              isOther: false,
+              isSecret: false,
+              options: null,
+            },
+          ],
+        },
+      },
+    });
+    const question = await waitForEvent(events, isQuestionRequiredEvent);
+    expect(question.questions.map(({ secret }) => secret)).toEqual([true, undefined]);
+
+    const completed = await adapter.replyLiveQuestion({
+      runtimeId: "runtime-live",
+      externalSessionId: "thread/start-runtime-live",
+      requestId: question.requestId,
+      answers: [["s3cr3t"], ["eu-west"]],
+    });
+
+    expect(respondServerRequest).toHaveBeenCalledWith(
+      "runtime-live",
+      74,
+      { answers: { token: { answers: ["s3cr3t"] }, region: { answers: ["eu-west"] } } },
+      undefined,
+    );
+    expect(JSON.stringify(completed)).not.toContain("s3cr3t");
+    expect(completed).toMatchObject({
+      type: "assistant_part",
+      part: {
+        output: JSON.stringify({
+          answers: { token: { answers: ["[hidden]"] }, region: { answers: ["eu-west"] } },
+        }),
+      },
+    });
+  });
+
   test("rejects a concurrent duplicate reply to one pending question", async () => {
     const firstReplyStarted = createDeferred<void>();
     const allowFirstReply = createDeferred<void>();

@@ -17,8 +17,21 @@ import { join, resolve } from "node:path";
 const script = resolve(import.meta.dir, "../install.sh");
 const roots: string[] = [];
 const unixTest = process.platform === "win32" ? test.skip : test;
+// The installer refuses to touch an OpenDucktor app that a machine already has, from
+// /Applications or from Homebrew, so these cases run only on a Mac without one.
+const homebrewManagesOpenDucktor = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].some(
+  (brew) =>
+    existsSync(brew) &&
+    spawnSync(brew, ["list", "--cask", "--versions"], { encoding: "utf8" })
+      .stdout.split("\n")
+      .some((line) => line.startsWith("openducktor ")),
+);
 const macTest =
-  process.platform === "darwin" && !existsSync("/Applications/OpenDucktor.app") ? test : test.skip;
+  process.platform === "darwin" &&
+  !existsSync("/Applications/OpenDucktor.app") &&
+  !homebrewManagesOpenDucktor
+    ? test
+    : test.skip;
 
 // Each case runs the installer as a child process. On a busy machine one run can take over five
 // seconds, which is the default test timeout.

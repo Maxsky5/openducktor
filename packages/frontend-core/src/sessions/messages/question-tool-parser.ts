@@ -5,8 +5,20 @@ import { hasNonEmptyText } from "./tool-lifecycle";
 
 const questionJsonValueSchema = z.json();
 
+export type QuestionToolOption = {
+  label: string;
+  description: string | null;
+};
+
 export type QuestionToolDetail = {
   prompt: string;
+  /** The short label of the question, such as `Auth method`, when the prompt is another text. */
+  header: string | null;
+  options: QuestionToolOption[];
+  /** The question takes one or more of its options. */
+  multiple: boolean;
+  /** The answer is private, such as a password, so clients hide it. */
+  secret: boolean;
   answers: string[];
 };
 
@@ -30,10 +42,7 @@ const parseJsonIfPossible = (value: string | undefined): AgentToolValue | undefi
   }
 };
 
-const readQuestionPrompt = (value: AgentToolValue | undefined): string | null => {
-  if (!isAgentToolData(value)) {
-    return null;
-  }
+const readQuestionPrompt = (value: AgentToolData): string | null => {
   const candidates = [
     value.question,
     value.prompt,
@@ -66,24 +75,51 @@ const normalizeAnswerValues = (value: AgentToolValue | undefined): string[] => {
   );
 };
 
+const readQuestionOptions = (value: AgentToolValue | undefined): QuestionToolOption[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry): QuestionToolOption[] => {
+    if (hasNonEmptyText(entry)) {
+      return [{ label: entry.trim(), description: null }];
+    }
+    if (!isAgentToolData(entry) || !hasNonEmptyText(entry.label)) {
+      return [];
+    }
+    const { description } = entry;
+    return [
+      {
+        label: entry.label.trim(),
+        description: hasNonEmptyText(description) ? description.trim() : null,
+      },
+    ];
+  });
+};
+
 const collectQuestionDetails = (value: AgentToolValue | undefined): QuestionToolDetail[] => {
   if (!Array.isArray(value)) {
     return [];
   }
   return value.reduce<QuestionToolDetail[]>((details, entry) => {
+    if (!isAgentToolData(entry)) {
+      return details;
+    }
     const prompt = readQuestionPrompt(entry);
     if (!prompt) {
       return details;
     }
-    if (!isAgentToolData(entry)) {
-      return details;
-    }
-    const answers = normalizeAnswerValues(
-      entry.answers ?? entry.answer ?? entry.response ?? entry.responses,
-    );
+    const header = hasNonEmptyText(entry.header) ? entry.header.trim() : null;
     details.push({
       prompt,
-      answers,
+      header: header === prompt ? null : header,
+      options: readQuestionOptions(entry.options),
+      // Claude `AskUserQuestion` names the flag `multiSelect`. The OpenCode `Question.Prompt` schema
+      // and the Codex questions of the adapter name it `multiple`.
+      multiple: entry.multiple === true || entry.multiSelect === true,
+      secret: entry.secret === true,
+      answers: normalizeAnswerValues(
+        entry.answers ?? entry.answer ?? entry.response ?? entry.responses,
+      ),
     });
     return details;
   }, []);
@@ -104,27 +140,19 @@ const normalizeAnswerGroups = (value: AgentToolValue | undefined): string[][] =>
     value.result ??
     value.value;
   if (nested === undefined) {
-    return Object.values(value).reduce<string[][]>((groups, entry) => {
-      const answers = normalizeAnswerValues(entry);
-      if (answers.length > 0) {
-        groups.push(answers);
-      }
-      return groups;
-    }, []);
+    return Object.values(value).map((entry) => normalizeAnswerValues(entry));
   }
   return normalizeAnswerGroups(nested);
 };
 
+/**
+ * The answer groups of the first candidate with an answer, one group for each question. A question
+ * without an answer keeps its empty group, so the next answers stay with their questions.
+ */
 const firstNonEmptyAnswerGroups = (candidates: Array<AgentToolValue | undefined>): string[][] => {
   for (const candidate of candidates) {
-    const groups = normalizeAnswerGroups(candidate).reduce<string[][]>((nextGroups, entry) => {
-      const answers = entry.filter((value) => value.trim().length > 0);
-      if (answers.length > 0) {
-        nextGroups.push(answers);
-      }
-      return nextGroups;
-    }, []);
-    if (groups.length > 0) {
+    const groups = normalizeAnswerGroups(candidate);
+    if (groups.some((answers) => answers.length > 0)) {
       return groups;
     }
   }
@@ -182,12 +210,8 @@ export const questionToolDetails = (meta: ToolMeta): QuestionToolDetail[] => {
     inputRecord?.response,
   ]);
 
-  if (answerGroups.length === 0) {
-    return questions;
-  }
-
   return questions.map((entry, index) => ({
-    prompt: entry.prompt,
+    ...entry,
     answers: entry.answers.length > 0 ? entry.answers : (answerGroups[index] ?? []),
   }));
 };
