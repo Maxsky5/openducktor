@@ -232,6 +232,34 @@ describe("Claude session I/O attachments and invalid updates", () => {
     expect(session.model?.variant).toBe("max");
   });
 
+  test("rejects an unknown live Claude effort without mutating the session model", async () => {
+    const applyFlagSettings = mock(async () => {});
+    const session = createClaudeSession({
+      model: {
+        providerId: "claude",
+        modelId: "claude-opus-4-6",
+        runtimeKind: "claude",
+        variant: "high",
+      },
+      query: createClaudeQueryFixture({
+        applyFlagSettings,
+        setModel: mock(async (_model?: string) => {}),
+      }),
+    });
+
+    await expect(
+      applyClaudeSessionModel(session, {
+        providerId: "claude",
+        modelId: "claude-opus-4-6",
+        runtimeKind: "claude",
+        variant: "turbo",
+      }),
+    ).rejects.toThrow("Claude Agent SDK does not support effort 'turbo'.");
+
+    expect(applyFlagSettings).not.toHaveBeenCalled();
+    expect(session.model?.variant).toBe("high");
+  });
+
   test("rolls back the SDK model when a combined model and effort update fails", async () => {
     const setModel = mock(async (_model?: string) => {});
     const applyFlagSettings = mock(
