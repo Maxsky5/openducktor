@@ -1,8 +1,8 @@
 /**
  * Parses Markdown into top-level blocks. Streamed text grows at its end, so each update parses
- * only the last two blocks again: new text on the last line can join them.
+ * only the last two blocks, or the last two items of a list, again. New text can join them.
  */
-import type { Definition, FootnoteDefinition, Nodes, RootContent } from "mdast";
+import type { Definition, FootnoteDefinition, List, Nodes, RootContent } from "mdast";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { SKIP, visit } from "unist-util-visit";
@@ -42,12 +42,19 @@ export type ParsedMarkdown = {
 
 /**
  * Parses `markdown`. When the text before the second-to-last block of `previous` is unchanged,
- * the function keeps the blocks in that text and parses only the rest.
+ * the function keeps the blocks in that text and parses only the rest. In an append-only list,
+ * it also keeps the items before the last two items.
  */
 export const parseMarkdown = (
   markdown: string,
   previous: ParsedMarkdown | null,
 ): ParsedMarkdown => {
+  if (previous) {
+    const listTail = parseListTail(markdown, previous);
+    if (listTail) {
+      return listTail;
+    }
+  }
   const tailStart = previous?.blocks.at(-2)?.start ?? 0;
   if (previous === null || !markdown.startsWith(previous.markdown.slice(0, tailStart))) {
     return { markdown, ...parseTail(markdown, 0, []) };
@@ -68,6 +75,85 @@ export const parseMarkdown = (
 // The syntax of the other views that show math. Math syntax keeps a display equation with blank
 // lines in one block.
 const markdownParser = unified().use(remarkParse).use(MATH_REMARK_PLUGINS);
+
+// Offsets belong to the parse that made each node. Keep restart offsets in whole-text coordinates.
+type ListTail = { start: number; prefixSpread: boolean };
+const listTails = new WeakMap<ParsedBlock, ListTail>();
+
+/** A list can join a following partial item, so consider either of the last two blocks. */
+const parseListTail = (markdown: string, previous: ParsedMarkdown): ParsedMarkdown | null => {
+  const lastIndex = previous.blocks.length - 1;
+  const lastBlock = previous.blocks[lastIndex];
+  const blockIndex = lastBlock && listTails.has(lastBlock) ? lastIndex : lastIndex - 1;
+  const block = previous.blocks[blockIndex];
+  const restart = block && listTails.get(block);
+  if (
+    !block ||
+    block.node.type !== "list" ||
+    restart === undefined ||
+    block.node.children.length <= 2 ||
+    !markdown.startsWith(previous.markdown)
+  ) {
+    return null;
+  }
+  const itemIndex = block.node.children.length - 2;
+  // Task-list math can make local definitions whose source is the whole list, without item offsets.
+  if (previous.definitions.some((entry) => entry.start >= block.start && !definesForText(entry))) {
+    return null;
+  }
+
+  const tail = parseTail(markdown, restart.start, previous.definitions);
+  const first = tail.blocks[0];
+  if (!first || first.node.type !== "list") {
+    return null;
+  }
+  const definitions = [
+    ...previous.definitions.filter(({ start }) => start < restart.start),
+    ...tail.definitions,
+  ];
+  if (
+    tail.definitions.some((entry) => !definesForText(entry)) ||
+    definedIdsKey(definitions) !== definedIdsKey(previous.definitions)
+  ) {
+    return { markdown, ...parseTail(markdown, 0, []) };
+  }
+
+  const node: typeof block.node = {
+    ...block.node,
+    spread: restart.prefixSpread || first.node.spread,
+    children: [...block.node.children.slice(0, itemIndex), ...first.node.children],
+  };
+  const joined: ParsedBlock = {
+    ...first,
+    start: block.start,
+    text: markdown.slice(block.start, first.start + first.text.length),
+    node,
+    ...readBlockFacts(node),
+  };
+  const nextRestart = listTails.get(first);
+  if (nextRestart) {
+    listTails.set(joined, {
+      ...nextRestart,
+      prefixSpread: restart.prefixSpread || nextRestart.prefixSpread,
+    });
+  }
+  return {
+    markdown,
+    blocks: [...previous.blocks.slice(0, blockIndex), joined, ...tail.blocks.slice(1)],
+    definitions,
+  };
+};
+
+/** Includes the fixed gap before the second-last item, where the next parse starts. */
+const listPrefixSpread = (list: List): boolean =>
+  list.children.slice(1, -1).some((item, index) => {
+    const previousEnd = list.children[index]?.position?.end.line;
+    const itemStart = item.position?.start.line;
+    if (previousEnd === undefined || itemStart === undefined) {
+      throw new Error("remark-parse returned a list item without source lines.");
+    }
+    return itemStart > previousEnd + 1;
+  });
 
 /**
  * Parses the text from `tailStart` on. Stub definitions for the identifiers in `definitions` come
@@ -92,13 +178,25 @@ const parseTail = (
       const { start, end } = readOffsets(node, prefix.length);
       const lineStart = index === 0 ? 0 : tail.lastIndexOf("\n", start - 1) + 1;
       const blockText = tail.slice(lineStart, end);
-      return {
+      const block: ParsedBlock = {
         text: blockText,
         start: tailStart + lineStart,
         node,
         ...readBlockFacts(node),
         openFenceCode: index === nodes.length - 1 ? readOpenFenceCode(node, blockText) : null,
       };
+      const item = node.type === "list" ? node.children.at(-2) : undefined;
+      if (node.type === "list" && item) {
+        const itemStart = readOffsets(item, prefix.length).start;
+        listTails.set(block, {
+          start:
+            tailStart +
+            Math.max(tail.lastIndexOf("\n", itemStart - 1), tail.lastIndexOf("\r", itemStart - 1)) +
+            1,
+          prefixSpread: listPrefixSpread(node),
+        });
+      }
+      return block;
     }),
     definitions: nodes.flatMap((node) => readDefinitions(node, tail, prefix.length, tailStart)),
   };

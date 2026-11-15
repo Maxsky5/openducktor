@@ -26,6 +26,24 @@ const blockFacts = ({ blocks, definitions }: ParsedMarkdown) => ({
 });
 
 describe("parseMarkdown", () => {
+  test("keeps finished list items when text grows in the last items", () => {
+    const text = "Intro\n\n- one\n- two\n- three\n- four\n- five";
+    const first = parseMarkdown(text, null);
+    const second = parseMarkdown(`${text}\n- six`, first);
+    const before = first.blocks.at(-1)?.node;
+    const after = second.blocks.at(-1)?.node;
+    if (before?.type !== "list" || after?.type !== "list") {
+      throw new Error("Expected a list");
+    }
+
+    expect(after.children).toHaveLength(6);
+    expect(after.children[0]).toBe(before.children[0]);
+    expect(after.children[2]).toBe(before.children[2]);
+    expect(after.children.at(-1)).toMatchObject({
+      children: [{ type: "paragraph", children: [{ type: "text", value: "six" }] }],
+    });
+  });
+
   test("splits top-level blocks without the blank lines between them", () => {
     const markdown =
       "# Title\n\nIntro text.\n\n```mermaid\ngraph TD\n\n  A --> B\n```\n\n- one\n- two";
@@ -100,6 +118,7 @@ describe("parseMarkdown", () => {
   });
 
   test.each([
+    "- one\n- two\n- three\n- four\n- [ ] $$\n  x = 1\n  $$\n\n  > [r]: /docs\n\n  See [r].\n- six\n- seven",
     "Intro with **bold**.\n\n```mermaid\ngraph TD\n  A --> B\n```\n\n1. one\n2. two\n\n3. three\n\nEnd",
     "- item\n\n  ```ts\n  code\n\n```\n\n> quote\nlazy\n\nfoo\n===\n\n    indented\n\n    code\n\npara",
     "| a | b |\n| - | - |\n| 1 | 2 |\nrow\n\n<!--\ncomment\n\nstill comment\n-->\n\nvisible",

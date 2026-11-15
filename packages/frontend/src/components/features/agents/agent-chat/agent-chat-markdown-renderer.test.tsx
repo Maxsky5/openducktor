@@ -68,6 +68,41 @@ describe("AgentChatMarkdownRenderer", () => {
     }
   });
 
+  test.each([
+    ["tight", "- one\n- two\n- three\n- four\n\n-", 0],
+    ["loose prefix", "- one\n\n- two\n- three\n- four\n- five\n- six\n\n-", 6],
+    ["loose boundary", "- one\n- two\n- three\n\n- four\n\n-", 4],
+    ["loose item", "- one\n- two\n\n  Continuation.\n- three\n- four\n\n-", 5],
+  ])("keeps %s list spacing when an empty tail item becomes a rule", (_, source, paragraphs) => {
+    for (const lineEnding of ["\n", "\r\n", "\r"]) {
+      const before = source.replaceAll("\n", lineEnding);
+      const complete = `${before}--`;
+      const rendered = render(chatMarkdown(before.slice(0, before.indexOf("- four")), true));
+      const fresh = render(chatMarkdown(complete));
+
+      try {
+        expect(fresh.container.querySelectorAll("li > p")).toHaveLength(paragraphs);
+        rendered.rerender(chatMarkdown(before, true));
+        for (const [markdown, streaming] of [
+          [complete, true],
+          [complete, false],
+          [`${complete}${lineEnding}${lineEnding}After`, true],
+          [`${complete}${lineEnding}${lineEnding}After`, false],
+        ] as const) {
+          rendered.rerender(chatMarkdown(markdown, streaming));
+
+          expect(rendered.container.querySelector("ul")?.outerHTML).toBe(
+            fresh.container.querySelector("ul")?.outerHTML,
+          );
+          expect(rendered.container.querySelector("hr")).not.toBeNull();
+        }
+      } finally {
+        rendered.unmount();
+        fresh.unmount();
+      }
+    }
+  });
+
   test("renders an in-progress fenced code block as code while streaming", async () => {
     const rendered = render(chatMarkdown("```ts\nconst value = 1;", true));
 
@@ -325,7 +360,8 @@ describe("AgentChatMarkdownRenderer", () => {
   // A math block can load the KaTeX module first, which can take more than 1 s in a full test run.
   test("keeps a diagram mounted when math first appears in its block", async () => {
     const diagramSpy = await spyOnDiagramRender();
-    const list = "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Value";
+    const list =
+      "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Two\n3. Three\n4. Four\n5. Value";
     const rendered = render(chatMarkdown(list, true));
 
     try {
@@ -423,8 +459,9 @@ describe("AgentChatMarkdownRenderer", () => {
   ])("draws a diagram once when its list joins the next item %s", async (_, drawFirst) => {
     const pendingSvg = Promise.withResolvers<string>();
     const diagramSpy = await spyOnDiagramRender(pendingSvg.promise);
-    const list = "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```";
-    const rendered = render(chatMarkdown(`${list}\n2`, true));
+    const list =
+      "1. Draw it:\n\n   ```mermaid\n   graph TD\n   A --> B\n   ```\n2. Two\n3. Three\n4. Four";
+    const rendered = render(chatMarkdown(`${list}\n5`, true));
 
     try {
       await waitFor(() => expect(diagramSpy).toHaveBeenCalledTimes(1), { timeout: 500 });
@@ -434,7 +471,7 @@ describe("AgentChatMarkdownRenderer", () => {
         await waitForDiagram(rendered.container);
       }
 
-      for (const suffix of ["2. Next item", "2. Next item\n\nAfter"]) {
+      for (const suffix of ["5. Next item", "5. Next item\n\nAfter"]) {
         rendered.rerender(chatMarkdown(`${list}\n${suffix}`, true));
       }
       await act(async () => {
