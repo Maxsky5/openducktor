@@ -6,10 +6,40 @@ import {
   createClaudeQueryFixture,
   createClaudeSession,
 } from "./claude-agent-sdk-session-io.test-support";
+import type { ClaudeSession } from "./claude-agent-sdk-types";
 
 const MESSAGE_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("Claude session I/O model changes", () => {
+  test("applies a live Claude max effort change", async () => {
+    const applyFlagSettings = mock(
+      async (_settings: Parameters<ClaudeSession["query"]["applyFlagSettings"]>[0]) => {},
+    );
+    const session = createClaudeSession({
+      model: {
+        providerId: "claude",
+        modelId: "claude-opus-4-6",
+        runtimeKind: "claude",
+        variant: "high",
+      },
+      query: createClaudeQueryFixture({
+        applyFlagSettings,
+        setModel: mock(async (_model?: string) => {}),
+      }),
+    });
+
+    await applyClaudeSessionModel(session, {
+      providerId: "claude",
+      modelId: "claude-opus-4-6",
+      runtimeKind: "claude",
+      variant: "max",
+    });
+
+    expect(applyFlagSettings).toHaveBeenCalledTimes(1);
+    expect(applyFlagSettings).toHaveBeenCalledWith({ effortLevel: "max" });
+    expect(session.model?.variant).toBe("max");
+  });
+
   test("does not change the query creation system prompt on later sends", async () => {
     const queue = new AsyncInputQueue<SDKUserMessage>();
     const session = createClaudeSession({ queue });

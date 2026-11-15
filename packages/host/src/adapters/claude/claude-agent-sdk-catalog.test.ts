@@ -10,7 +10,6 @@ import {
   CLAUDE_RUNTIME_DESCRIPTOR,
   MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
 } from "@openducktor/contracts";
-import { resolveModelSelectionPolicy } from "@openducktor/core";
 import {
   type ClaudeCatalogQueryFactory,
   loadClaudeModelCatalog,
@@ -52,10 +51,6 @@ describe("toClaudeModelDescriptor", () => {
       },
       variants: ["low", "medium", "high", "xhigh", "max"],
       liveSessionUpdates: { profile: false },
-    });
-    expect(resolveModelSelectionPolicy(descriptor, true)).toEqual({
-      canChangeProfile: false,
-      variants: ["low", "medium", "high", "xhigh", "max"],
     });
   });
 

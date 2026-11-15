@@ -39,7 +39,6 @@ const catalog = agentModelCatalogSchema.parse({
       modelId: "current",
       modelName: "Current",
       variants: ["low", "high"],
-      liveSessionUpdates: { variants: ["low"] },
     },
   ],
   defaultModelsByProvider: { provider: "current" },
@@ -108,13 +107,12 @@ describe("session turn preparation", () => {
     expect(settingsReads.snapshot).not.toHaveBeenCalled();
   });
 
-  test("preserves a valid saved variant while blocking an explicit forbidden live change", async () => {
+  test("preserves a valid saved variant and accepts a live change to a catalog variant", async () => {
     const { preparation } = setup();
     expect(await Effect.runPromise(preparation.model(target, selected))).toEqual(selected);
-    const result = await Effect.runPromise(
-      Effect.result(preparation.model(target, selected, { ...selected, variant: "low" })),
-    );
-    expect(result._tag).toBe("Failure");
+    expect(
+      await Effect.runPromise(preparation.model(target, selected, { ...selected, variant: "low" })),
+    ).toEqual(selected);
   });
 
   test.each([{ profiles: [] }, { profiles: [{ name: "replacement", mode: "primary" as const }] }])(
@@ -158,7 +156,6 @@ describe("session turn preparation", () => {
     modelId: "claude-opus-5-5",
     modelName: "Opus 5.5",
     variants: ["low", "max"],
-    liveSessionUpdates: { variants: ["low"] },
   };
 
   describe("saved alias selections", () => {

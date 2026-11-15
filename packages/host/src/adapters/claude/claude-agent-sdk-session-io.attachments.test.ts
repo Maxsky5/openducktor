@@ -203,35 +203,6 @@ describe("Claude session I/O attachments and invalid updates", () => {
     }
   });
 
-  test("applies a live Claude max effort change", async () => {
-    const applyFlagSettings = mock(
-      async (_settings: Parameters<ClaudeSession["query"]["applyFlagSettings"]>[0]) => {},
-    );
-    const session = createClaudeSession({
-      model: {
-        providerId: "claude",
-        modelId: "claude-opus-4-6",
-        runtimeKind: "claude",
-        variant: "high",
-      },
-      query: createClaudeQueryFixture({
-        applyFlagSettings,
-        setModel: mock(async (_model?: string) => {}),
-      }),
-    });
-
-    await applyClaudeSessionModel(session, {
-      providerId: "claude",
-      modelId: "claude-opus-4-6",
-      runtimeKind: "claude",
-      variant: "max",
-    });
-
-    expect(applyFlagSettings).toHaveBeenCalledTimes(1);
-    expect(applyFlagSettings).toHaveBeenCalledWith({ effortLevel: "max" });
-    expect(session.model?.variant).toBe("max");
-  });
-
   test("rejects an unknown live Claude effort without mutating the session model", async () => {
     const applyFlagSettings = mock(async () => {});
     const session = createClaudeSession({

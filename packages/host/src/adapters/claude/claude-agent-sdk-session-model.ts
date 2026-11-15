@@ -26,11 +26,10 @@ export const toClaudeFlagSettings = (
   return settings;
 };
 
-export const assertClaudeSessionModelUpdateSupported = (
+export const assertClaudeSessionProfileUnchanged = (
   session: ClaudeSession,
-  model: AgentModelSelection | null | undefined,
+  nextModel: AgentModelSelection | undefined,
 ): void => {
-  const nextModel = model ?? undefined;
   const previousProfileId = session.model?.profileId ?? null;
   const nextProfileId = nextModel?.profileId ?? null;
   if (previousProfileId !== nextProfileId) {
@@ -44,9 +43,4 @@ export const assertClaudeSessionModelUpdateSupported = (
       },
     });
   }
-
-  if (session.model?.variant !== nextModel?.variant && nextModel?.variant) {
-    toClaudeEffort(nextModel.variant);
-  }
-  toClaudeFastMode(nextModel);
 };
