@@ -164,6 +164,115 @@ const fixture = async (barrier?: MutationBarrier) => {
   };
 };
 
+test("bounds negotiation bytes before parsing or admission and cancels rejected bodies", async () => {
+  const f = await fixture();
+  const authorize = spyOn(f.options.admission, "authorize");
+  try {
+    for (const declared of ["4194304", "1", undefined]) {
+      let reads = 0;
+      let cancelled = false;
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            if (reads === 257) {
+              controller.close();
+              return;
+            }
+            reads++;
+            controller.enqueue(
+              new TextEncoder().encode(reads === 1 ? JSON.stringify(hello) : " ".repeat(16384)),
+            );
+          },
+          cancel() {
+            cancelled = true;
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      const response = await f.work.handle(
+        new Request(`${f.base}/connections`, {
+          method: "POST",
+          headers: {
+            host: "machine.test",
+            "content-type": "application/json",
+            ...(declared && { "content-length": declared }),
+          },
+          body,
+        }),
+        f.server,
+      );
+      expect(response?.status).toBe(400);
+      const result = remoteNegotiationResultSchema.parse(await response?.json());
+      expect(result.status).toBe("rejected");
+      if (result.status === "rejected") {
+        expect(result.failure.code).toBe("invalid_protocol");
+        expect(result.failure.message).toContain("65536");
+        expect(result.failure.nextAction).toContain("hello");
+      }
+      expect(reads).toBeLessThanOrEqual(declared === "4194304" ? 0 : 5);
+      expect(cancelled).toBe(true);
+      expect(body.locked).toBe(false);
+    }
+    for (const headers of [
+      { host: "evil.test" },
+      { host: "machine.test", origin: "https://evil.test" },
+    ]) {
+      let reads = 0;
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull() {
+            reads++;
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      const response = await f.work.handle(
+        new Request(`${f.base}/connections`, {
+          method: "POST",
+          headers,
+          body,
+        }),
+        f.server,
+      );
+      expect(response?.status).toBe(403);
+      expect(reads).toBe(0);
+      await body.cancel();
+    }
+    expect(authorize).not.toHaveBeenCalled();
+  } finally {
+    authorize.mockRestore();
+    await f.close();
+  }
+});
+
+test("accepts a hello at the byte limit and refuses one extra UTF-8 byte", async () => {
+  const f = await fixture();
+  try {
+    const json = JSON.stringify({ ...hello, appVersion: "é" });
+    const body = json + " ".repeat(65536 - Buffer.byteLength(json));
+    expect(
+      (
+        await fetch(`${f.base}/connections`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await fetch(`${f.base}/connections`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: body + " ",
+        })
+      ).status,
+    ).toBe(400);
+  } finally {
+    await f.close();
+  }
+});
+
 test("negotiates across app releases and refuses bypass, origins, missing capabilities and expired headers", async () => {
   const f = await fixture();
   try {
