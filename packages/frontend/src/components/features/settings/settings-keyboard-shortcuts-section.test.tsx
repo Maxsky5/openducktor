@@ -45,7 +45,7 @@ const fieldName = (label: string) => new RegExp(`^${label}, .*(Change shortcut|A
 const field = (label: string) => screen.getByRole("button", { name: fieldName(label) });
 const queryField = (label: string) => screen.queryByRole("button", { name: fieldName(label) });
 const record = async (label: string, event: Partial<KeyboardEventInit>) => {
-  if (!queryField(label)) fireEvent.click(screen.getByRole("radio", { name: /^All/ }));
+  if (!queryField(label)) fireEvent.click(screen.getByRole("button", { name: "All commands" }));
   fireEvent.click(field(label));
   await waitFor(() => expect(screen.getByRole("status").textContent).toContain("Recording keys"));
   fireEvent.keyDown(window, event);
@@ -145,13 +145,17 @@ test("lists shortcuts in use first and finds any command by name or keys", () =>
   const write = renderSection();
   expect(field("Toggle sidebar")).toBeTruthy();
   expect(queryField("Open diagnostics")).toBeNull();
-  fireEvent.click(screen.getByRole("radio", { name: /^All/ }));
+  fireEvent.click(screen.getByRole("button", { name: "All commands" }));
   expect(field("Open diagnostics")).toBeTruthy();
-  fireEvent.click(screen.getByRole("radio", { name: /With keys/ }));
+  fireEvent.click(screen.getByRole("button", { name: "With keys" }));
   fireEvent.change(screen.getByRole("textbox", { name: "Search commands" }), {
     target: { value: "diagnostics" },
   });
   expect(field("Open diagnostics")).toBeTruthy();
+  // A search lists every command, and the filter shows that until the search is cleared.
+  const all = screen.getByRole("button", { name: "All commands" });
+  expect(all.getAttribute("aria-pressed")).toBe("true");
+  expect(all.hasAttribute("disabled")).toBe(true);
   fireEvent.change(screen.getByRole("textbox", { name: "Search commands" }), {
     target: { value: "ctrl b" },
   });

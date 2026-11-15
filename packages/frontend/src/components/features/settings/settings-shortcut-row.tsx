@@ -7,6 +7,7 @@ import {
   spokenShortcut,
 } from "@openducktor/frontend-core/shortcuts/key-labels";
 import { Button } from "@/components/ui/button";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import {
   scopeLabel,
   type ShortcutCommandDefinition,
@@ -15,33 +16,25 @@ import {
 import { typesText } from "@/features/shortcuts/recording";
 import { cn } from "@/lib/utils";
 
-/**
- * Keycaps with a key edge, spoken as words. The system font draws ⌘ ⇧ ⌥ ⌃, which the app font
- * lacks, so every glyph shares one size and baseline.
- */
+/** The keys as design-system keycaps, spoken as words. */
 export function ShortcutKeycaps({
   combination,
   platform,
-  className,
 }: {
   combination: ShortcutCombination;
   platform: AppPlatform;
-  className?: string;
 }) {
   return (
-    <span className={cn("inline-flex items-center gap-1", className)}>
-      <span aria-hidden="true" className="inline-flex items-center gap-1">
+    <>
+      <KbdGroup aria-hidden="true">
         {shortcutKeyParts(combination, platform).map((key, index) => (
-          <kbd
-            key={`${index}-${key}`}
-            className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[5px] border border-input bg-muted px-1.5 font-[system-ui,-apple-system,'Segoe_UI',sans-serif] text-[11px] leading-none font-medium text-foreground/90 tabular-nums shadow-[inset_0_-1px_0_var(--input)]"
-          >
+          <Kbd key={`${index}-${key}`} className="text-foreground">
             {key}
-          </kbd>
+          </Kbd>
         ))}
-      </span>
+      </KbdGroup>
       <span className="sr-only">{spokenShortcut(combination, platform)}</span>
-    </span>
+    </>
   );
 }
 
@@ -105,7 +98,6 @@ function IdleControls({
         type="button"
         size="sm"
         variant="outline"
-        className="h-7"
         aria-describedby={`shortcut-removed-${id}`}
         onClick={onUndo}
         autoFocus
@@ -182,14 +174,9 @@ export function SettingsShortcutRow({
   const recording = editor?.state === "recording";
   const proposal = editor?.state === "proposed" ? editor : null;
   return (
-    <li
-      className={cn(
-        "group/row flex min-h-10 list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-1.5 transition-colors",
-        editor ? "bg-muted/60" : "hover:bg-muted/40",
-      )}
-    >
-      <div className="min-w-40 flex-1">
-        <p className="text-sm break-words text-foreground">{label}</p>
+    <li className="group/row flex min-h-12 list-none flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2">
+      <div className="flex min-w-40 flex-1 flex-col gap-0.5">
+        <p className="text-sm font-medium break-words text-foreground">{label}</p>
         <RowDetail
           entry={entry}
           showContext={showContext}
@@ -202,7 +189,7 @@ export function SettingsShortcutRow({
           platform={platform}
         />
       </div>
-      <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+      <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
         {!editor && (
           <IdleControls
             label={entry.label}
@@ -229,7 +216,13 @@ export function SettingsShortcutRow({
           onClick={(event) => {
             if (!recording) onRecord(event.currentTarget);
           }}
-          className="h-7 gap-1 rounded-md px-1 font-normal hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-pressed:focus-visible:ring-0"
+          className={cn(
+            "h-8 min-w-16 justify-end gap-1 px-2 font-normal",
+            // While editing, the keys look like a field: the input chrome, and its focus border.
+            editor && "border border-input bg-card shadow-sm hover:bg-card",
+            recording && "border-ring",
+            proposal?.problem && "border-destructive",
+          )}
         >
           <KeyField
             editor={editor}
@@ -253,9 +246,6 @@ export function SettingsShortcutRow({
   );
 }
 
-/** One quiet line under the name: a warning, other devices, the context, or a change. */
-const GLYPH_FONT = "font-[system-ui,-apple-system,'Segoe_UI',sans-serif]";
-
 /** Keys inside text: symbols in the system font for the eye, words for screen readers. */
 function KeysText({
   combination,
@@ -266,9 +256,7 @@ function KeysText({
 }) {
   return (
     <>
-      <span aria-hidden="true" className={GLYPH_FONT}>
-        {shortcutLabel(combination, platform)}
-      </span>
+      <span aria-hidden="true">{shortcutLabel(combination, platform)}</span>
       <span className="sr-only">{spokenShortcut(combination, platform)}</span>
     </>
   );
@@ -279,9 +267,7 @@ function ModifierNames({ platform }: { platform: AppPlatform }) {
   if (platform !== "darwin") return <>Ctrl or Alt</>;
   return (
     <>
-      <span aria-hidden="true" className={GLYPH_FONT}>
-        ⌘ ⌃ or ⌥
-      </span>
+      <span aria-hidden="true">⌘ ⌃ or ⌥</span>
       <span className="sr-only">Command, Control or Option</span>
     </>
   );
@@ -312,7 +298,7 @@ function RowDetail({
   if (editor) return <EditorDetail id={entry.id} editor={editor} platform={platform} />;
   if (removed)
     return (
-      <p id={`shortcut-removed-${entry.id}`} className="mt-0.5 text-xs text-muted-foreground">
+      <p id={`shortcut-removed-${entry.id}`} className="text-xs text-muted-foreground">
         Shortcut removed
         {defaultKeys && (
           <>
@@ -324,7 +310,7 @@ function RowDetail({
     );
   if (inactiveReason)
     return (
-      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-warning-muted">
+      <p className="flex items-center gap-1.5 text-xs text-warning-muted">
         <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
         Off on this device. {inactiveReason}
       </p>
@@ -335,7 +321,7 @@ function RowDetail({
   ) : null;
   if (!context && !change) return null;
   return (
-    <p className="mt-0.5 text-xs text-muted-foreground">
+    <p className="text-xs text-muted-foreground">
       {context}
       {context && change && " · "}
       {change}
@@ -379,7 +365,7 @@ function EditorDetail({
       <p
         id={`shortcut-problem-${id}`}
         role="alert"
-        className="mt-0.5 text-xs break-words text-muted-foreground"
+        className="text-xs break-words text-muted-foreground"
       >
         <span className="text-destructive-surface-foreground">
           Used by {problem.conflict.label}.
@@ -392,14 +378,14 @@ function EditorDetail({
       <p
         id={`shortcut-problem-${id}`}
         role="alert"
-        className="mt-0.5 text-xs text-destructive-surface-foreground"
+        className="text-xs text-destructive-surface-foreground"
       >
         {problem.message}
       </p>
     );
   if (editor.otherDevices.length === 0) return null;
   return (
-    <p className="mt-0.5 text-xs text-muted-foreground">
+    <p className="text-xs text-muted-foreground">
       These keys will not work in {editor.otherDevices.join(", ")}.
     </p>
   );
@@ -415,12 +401,12 @@ function RecordingHint({
   const { ignored } = editor;
   if (!ignored)
     return (
-      <p className="mt-0.5 text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Hold <ModifierNames platform={platform} /> and press a key.
       </p>
     );
   return (
-    <p className="mt-0.5 text-xs text-warning-muted">
+    <p className="text-xs text-warning-muted">
       {typesText(ignored) ? (
         <>
           Add <ModifierNames platform={platform} />. {ignored} alone types text.
@@ -448,14 +434,7 @@ function KeyField({
 }) {
   if (editor?.state === "recording")
     return (
-      <span className="flex h-[22px] min-w-24 items-center justify-center gap-2 rounded-[5px] bg-primary/15 px-2 text-xs text-foreground ring-1 ring-ring ring-inset">
-        <span
-          aria-hidden="true"
-          className={cn(
-            "size-1.5 rounded-full bg-primary",
-            !editor.preparing && "motion-safe:animate-pulse",
-          )}
-        />
+      <span className="px-1 text-xs text-foreground">
         {editor.preparing
           ? "Starting…"
           : editor.held.length > 0
@@ -463,19 +442,7 @@ function KeyField({
             : "Press keys…"}
       </span>
     );
-  if (editor)
-    return (
-      <span
-        className={cn(
-          "rounded-md px-1 py-0.5 ring-1 ring-inset",
-          editor.problem
-            ? "bg-destructive-surface ring-destructive-border"
-            : "bg-primary/10 ring-primary/40",
-        )}
-      >
-        <ShortcutKeycaps combination={editor.combination} platform={platform} />
-      </span>
-    );
+  if (editor) return <ShortcutKeycaps combination={editor.combination} platform={platform} />;
   if (current === undefined) return <span className="text-xs text-muted-foreground">—</span>;
   if (current === null)
     return (
@@ -484,11 +451,9 @@ function KeyField({
       </span>
     );
   return (
-    <ShortcutKeycaps
-      combination={current}
-      platform={platform}
-      className={cn(inactive && "[&_kbd]:bg-transparent [&_kbd]:text-muted-foreground")}
-    />
+    <span className={cn(inactive && "opacity-50")}>
+      <ShortcutKeycaps combination={current} platform={platform} />
+    </span>
   );
 }
 
@@ -515,7 +480,6 @@ function EditActions({
         <Button
           type="button"
           size="sm"
-          className="h-7"
           aria-disabled={saving}
           onClick={() => {
             if (!saving) onSave();
@@ -531,7 +495,6 @@ function EditActions({
           type="button"
           size="sm"
           variant="outline"
-          className="h-7"
           aria-disabled={saving}
           aria-describedby={`shortcut-problem-${id}`}
           onClick={() => {
@@ -547,7 +510,6 @@ function EditActions({
           type="button"
           size="sm"
           variant="ghost"
-          className="h-7"
           onClick={onRecordAgain}
           autoFocus={!problem.conflict}
         >
@@ -558,7 +520,7 @@ function EditActions({
         type="button"
         variant="ghost"
         size="sm"
-        className="h-7 gap-1.5"
+        className="gap-1.5"
         disabled={saving}
         aria-keyshortcuts="Escape"
         onClick={onCancel}
@@ -587,12 +549,12 @@ function RowActions({
   onClear(): void;
 }) {
   return (
-    <div className="flex items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100">
+    <div className="flex items-center opacity-0 transition-opacity duration-150 group-focus-within/row:opacity-100 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100">
       {canReset && (
         <Button
           type="button"
           variant="ghost"
-          size="xs"
+          size="sm"
           className="text-muted-foreground hover:text-foreground"
           aria-label={`Reset shortcut for ${label} to its default`}
           onClick={onRestoreDefault}
@@ -604,7 +566,7 @@ function RowActions({
         <Button
           type="button"
           variant="ghost"
-          size="xs"
+          size="sm"
           className="text-muted-foreground hover:text-foreground"
           aria-label={`Remove shortcut for ${label}`}
           onClick={onClear}

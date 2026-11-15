@@ -100,12 +100,6 @@ export const buildCommandViews = (
   });
 };
 
-export const countCommandViews = (views: readonly ShortcutCommandView[]) => ({
-  "in-use": views.filter((view) => view.current).length,
-  all: views.length,
-  changed: views.filter((view) => view.customized).length,
-});
-
 /**
  * The visible commands by group. Without a search, the ten positions of each list fold into one
  * family row.

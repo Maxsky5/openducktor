@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ToolbarSearchField } from "@/components/ui/search-field";
-import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
+import { SegmentedControlItem, SegmentedControlRoot } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ShortcutShell } from "@/features/shortcuts/catalogue";
 import { spokenShortcut } from "@openducktor/frontend-core/shortcuts/key-labels";
@@ -23,7 +23,6 @@ import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import {
   buildCommandViews,
-  countCommandViews,
   groupCommandViews,
   type ShortcutCommandView,
   type ShortcutFamily,
@@ -35,9 +34,16 @@ import {
   ShortcutKeycaps,
   type ShortcutRowEditor,
 } from "./settings-shortcut-row";
+import { ListHeading } from "./settings-prompt-page-header";
+import { ROW_LIST_CLASS_NAME } from "./settings-prompt-rows";
 import { useShortcutEditor } from "./use-shortcut-editor";
 
 type Editor = ReturnType<typeof useShortcutEditor>;
+
+const FILTERS = [
+  { value: "in-use", label: "With keys" },
+  { value: "all", label: "All commands" },
+] as const satisfies readonly { value: ShortcutFilter; label: string }[];
 
 export function SettingsKeyboardShortcutsSection() {
   const { query, updatesError } = useShortcutPreferences();
@@ -54,7 +60,7 @@ export function SettingsKeyboardShortcutsSection() {
     () => buildCommandViews(catalogue, query.data, platform, shell),
     [catalogue, query.data, platform, shell],
   );
-  const counts = useMemo(() => countCommandViews(views), [views]);
+  const changed = views.some((view) => view.customized);
   const term = searchKey(search);
   const { removedId, forgetRemoval } = editor;
   const groups = useMemo(
@@ -63,47 +69,38 @@ export function SettingsKeyboardShortcutsSection() {
   );
   const browsingDisabled = editor.busy || editor.proposal !== null;
 
+  const shown: ShortcutFilter = term ? "all" : filter;
+  const changeFilter = (next: ShortcutFilter) => {
+    if (next === filter) return;
+    forgetRemoval();
+    setFilter(next);
+  };
+
   return (
     <section aria-label="Keyboard shortcuts" className="grid gap-4 p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-2">
-          <h3
-            ref={heading}
-            tabIndex={-1}
-            className="text-sm font-semibold text-foreground outline-none"
-          >
-            Keyboard shortcuts
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            Click keys to change them. Changes apply to every app connected to this host.
-          </p>
-        </div>
-        {counts.changed > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="shrink-0 text-muted-foreground"
-            disabled={browsingDisabled}
-            onClick={(event) => {
-              editor.rememberOpener(event.currentTarget);
-              setResetOpen(true);
-            }}
-          >
-            <RotateCcw aria-hidden="true" /> Reset all
-          </Button>
-        )}
-      </div>
+      <header className="space-y-2">
+        <h3
+          ref={heading}
+          tabIndex={-1}
+          className="text-sm font-semibold text-foreground outline-none"
+        >
+          Keyboard shortcuts
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Click the keys of a command to change them. Changes apply to every app connected to this
+          host.
+        </p>
+      </header>
       <p role="status" aria-live="polite" className="sr-only">
         {editor.announcement}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="min-w-48 flex-1">
+        <div className="min-w-56 flex-1">
           <ToolbarSearchField
             id="shortcut-search"
             label="Search commands"
-            placeholder={`Search all commands or keys, such as ${platform === "darwin" ? "⌘K" : "Ctrl+K"}`}
-            size="md"
+            placeholder={`Search commands or keys, such as ${platform === "darwin" ? "⌘K" : "Ctrl+K"}`}
+            size="lg"
             value={search}
             disabled={browsingDisabled}
             onValueChange={(value) => {
@@ -112,52 +109,74 @@ export function SettingsKeyboardShortcutsSection() {
             }}
           />
         </div>
-        {term ? (
-          <span className="text-xs text-muted-foreground">Searching all {counts.all} commands</span>
-        ) : (
-          <RadioGroup
-            aria-label="Show"
-            orientation="horizontal"
-            data-variant="segmented"
-            className="flex h-8 w-auto shrink-0 items-center gap-0.5 rounded-lg bg-muted p-0.5"
-            value={filter}
+        <SegmentedControlRoot
+          size="sm"
+          aria-label={term ? "Show: a search shows all commands" : "Show"}
+          className="rounded-lg"
+        >
+          {FILTERS.map((option) => (
+            <SegmentedControlItem
+              key={option.value}
+              active={shown === option.value}
+              size="sm"
+              grow="hug"
+              disabled={browsingDisabled || term !== ""}
+              inactiveClassName="text-foreground/70 hover:text-foreground"
+              onClick={() => changeFilter(option.value)}
+            >
+              {option.label}
+            </SegmentedControlItem>
+          ))}
+        </SegmentedControlRoot>
+        {changed && (
+          <Button
+            type="button"
+            variant="outline"
             disabled={browsingDisabled}
-            onValueChange={(value) => {
-              if (value !== "in-use" && value !== "all") return;
-              forgetRemoval();
-              setFilter(value);
+            onClick={(event) => {
+              editor.rememberOpener(event.currentTarget);
+              setResetOpen(true);
             }}
           >
-            <RadioGroupSegmentItem value="in-use" className="h-7 gap-1.5 px-2.5 whitespace-nowrap">
-              With keys <span className="font-normal tabular-nums">{counts["in-use"]}</span>
-            </RadioGroupSegmentItem>
-            <RadioGroupSegmentItem value="all" className="h-7 gap-1.5 px-2.5 whitespace-nowrap">
-              All <span className="font-normal tabular-nums">{counts.all}</span>
-            </RadioGroupSegmentItem>
-          </RadioGroup>
+            <RotateCcw data-icon="inline-start" aria-hidden="true" /> Reset all
+          </Button>
         )}
       </div>
 
-      <div className="grid gap-5">
+      <div className="flex flex-col gap-6">
         <ShortcutNotices editor={editor} updatesError={updatesError} />
         {query.isPending ? (
           <ShortcutListSkeleton />
         ) : groups.size === 0 ? (
           <div
             role="status"
-            className="flex flex-col items-center gap-2 rounded-md border border-dashed border-border px-4 py-10 text-center"
+            className="flex flex-col items-center gap-1 rounded-md border border-dashed border-border px-4 py-10 text-center"
           >
-            <SearchX className="mb-1 size-6 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm font-medium">{term ? "No match" : "No shortcuts"}</p>
-            <p className="text-xs text-muted-foreground">
-              Try another search, or show all shortcuts.
-            </p>
+            <SearchX className="mb-2 size-5 text-muted-foreground" aria-hidden="true" />
+            {term ? (
+              <>
+                <p className="text-sm font-medium text-foreground">No commands match</p>
+                <p className="text-xs text-muted-foreground">Search for another command or key.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-foreground">No command has keys</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => changeFilter("all")}
+                >
+                  Show all commands
+                </Button>
+              </>
+            )}
           </div>
         ) : (
           Array.from(groups, ([group, items]) => (
-            <section key={group} aria-label={group} className="grid gap-2">
-              <h4 className="text-xs font-medium text-muted-foreground">{group}</h4>
-              <ul className="divide-y divide-border overflow-hidden rounded-md border border-border bg-card">
+            <section key={group} aria-label={group} className="flex flex-col gap-2">
+              <ListHeading title={group} />
+              <ul className={ROW_LIST_CLASS_NAME}>
                 {items.map((item) =>
                   item.kind === "command" ? (
                     <CommandRow
@@ -180,19 +199,6 @@ export function SettingsKeyboardShortcutsSection() {
               </ul>
             </section>
           ))
-        )}
-        {!term && filter === "in-use" && counts.all > counts["in-use"] && !query.isPending && (
-          <button
-            type="button"
-            disabled={browsingDisabled}
-            onClick={() => {
-              forgetRemoval();
-              setFilter("all");
-            }}
-            className="justify-self-start rounded-sm text-xs text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-          >
-            {counts.all - counts["in-use"]} more commands have no keys. Show all
-          </button>
         )}
       </div>
 
@@ -330,6 +336,7 @@ function FamilyRows({
     (view) => view.entry.id === editor.recording || view.entry.id === editor.proposal?.id,
   );
   const expanded = opened || editing;
+  const disabled = !editing && (editor.busy || editor.proposal !== null);
   const first = family.commands[0]?.current;
   const last = family.commands.at(-1)?.current;
   const assigned = family.commands.filter((view) => view.current).length;
@@ -345,23 +352,21 @@ function FamilyRows({
         aria-expanded={expanded}
         aria-label={`${family.label}, ${summary}`}
         aria-describedby={`shortcut-family-${family.key}`}
+        disabled={disabled}
         onClick={() => setOpened(!expanded)}
-        className="group/family flex min-h-10 w-full items-center gap-3 px-4 py-1.5 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset aria-expanded:bg-muted/40"
+        className="group/family flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none disabled:opacity-50"
       >
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm text-foreground">{family.label}</span>
-          <span
-            id={`shortcut-family-${family.key}`}
-            className="block text-xs text-muted-foreground"
-          >
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-sm font-medium text-foreground">{family.label}</span>
+          <span id={`shortcut-family-${family.key}`} className="text-xs text-muted-foreground">
             {family.key === "session" ? "In sidebar order" : "In workspace rail order"}
           </span>
         </span>
-        <span className="flex h-7 shrink-0 items-center gap-1 px-1 text-xs text-muted-foreground">
+        <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
           {first && lastKey && assigned === family.commands.length ? (
             <>
               <ShortcutKeycaps combination={first} platform={platform} />
-              <span aria-hidden="true">–</span>
+              <span aria-hidden="true">to</span>
               <ShortcutKeycaps combination={lastKey} platform={platform} />
             </>
           ) : (
@@ -370,14 +375,14 @@ function FamilyRows({
           <ChevronDown
             aria-hidden="true"
             className={cn(
-              "ml-1 size-3.5 shrink-0 text-muted-foreground transition-transform group-hover/family:text-foreground motion-reduce:transition-none",
+              "ml-1.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out group-hover/family:text-foreground motion-reduce:transition-none",
               expanded && "rotate-180",
             )}
           />
         </span>
       </button>
       {expanded && (
-        <ul className="divide-y divide-border/50 border-t border-border/50 bg-muted/20 [&>li]:min-h-9 [&>li]:py-1 [&>li]:pl-8">
+        <ul className="divide-y divide-border border-t border-border bg-muted/30 [&>li]:pl-8">
           {family.commands.map((view, index) => (
             <CommandRow
               key={view.entry.id}
@@ -445,12 +450,12 @@ function ResetShortcutsDialog({
 function ShortcutListSkeleton() {
   return (
     <div role="status" aria-label="Loading shortcuts" className="flex flex-col gap-2">
-      <Skeleton className="h-4 w-16" />
-      <div className="divide-y divide-border rounded-md border border-border bg-card">
+      <Skeleton className="h-5 w-24" />
+      <div className={ROW_LIST_CLASS_NAME}>
         {Array.from({ length: 6 }, (_, index) => (
           <div key={index} className="flex h-12 items-center justify-between gap-3 px-4">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-6 w-16" />
+            <Skeleton className="h-5 w-44" />
+            <Skeleton className="h-5 w-12" />
           </div>
         ))}
       </div>
