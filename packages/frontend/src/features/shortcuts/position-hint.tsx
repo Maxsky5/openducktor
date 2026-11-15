@@ -1,7 +1,7 @@
 import { SHORTCUT_POSITIONS } from "@openducktor/contracts";
 import { CommandPaletteContext } from "../command-palette/command-palette-context";
-import { defaultShortcut } from "./catalogue";
-import { shortcutLabel } from "@openducktor/frontend-core/shortcuts/key-matching";
+import { commandDefinition } from "./catalogue";
+import { shortcutLabel } from "@openducktor/frontend-core/shortcuts/key-labels";
 import { createContext, use } from "react";
 import { useShortcutLabel } from "./use-shortcut-label";
 import { Kbd } from "@/components/ui/kbd";
@@ -32,8 +32,8 @@ export function PositionHint({
   const id = number ? (`${family}-position-${number}` as const) : undefined;
   const label = useShortcutLabel(id);
   const platform = use(CommandPaletteContext)?.platform;
-  const defaultLabel =
-    platform && id ? shortcutLabel(defaultShortcut(id, platform, false), platform) : null;
+  const defaultKeys = id ? commandDefinition(id)?.defaultKeys.browser : null;
+  const defaultLabel = platform && defaultKeys ? shortcutLabel(defaultKeys, platform) : null;
   let hint = label ?? "—";
   if (label === defaultLabel) {
     const digit = String(position % 10);

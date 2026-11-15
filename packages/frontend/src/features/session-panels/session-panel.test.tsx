@@ -143,7 +143,7 @@ describe("SessionPanel", () => {
         "task-edit": {
           key: { kind: "logical", key: "F9" },
           ctrl: true,
-          meta: false,
+          mod: false,
           alt: false,
           shift: true,
         },
@@ -161,8 +161,7 @@ describe("SessionPanel", () => {
         run: edit,
       });
       useShortcutDispatch({
-        platform: "darwin",
-        actions: [],
+        platform: "linux",
         isOpen: false,
         open: () => {},
         close: () => {},
@@ -256,7 +255,7 @@ describe("SessionPanel", () => {
           >
             <CommandPaletteContext
               value={{
-                platform: "darwin",
+                platform: "linux",
                 open: () => {},
                 registerPageCommand,
                 runPageCommand: focusComposer,
@@ -529,7 +528,7 @@ describe("SessionPanel", () => {
         <CommandPaletteContext
           value={{
             open: () => {},
-            platform: "darwin",
+            platform: "linux",
             registerPageCommand: () => () => {},
           }}
         >
@@ -661,7 +660,7 @@ describe("SessionPanel", () => {
         <CommandPaletteContext
           value={{
             open: () => {},
-            platform: "darwin",
+            platform: "linux",
             registerPageCommand: () => () => {},
           }}
         >

@@ -7,7 +7,7 @@ import type { ShortcutPreferences } from "@openducktor/contracts";
 import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { SidebarNavigation } from "@/components/layout/sidebar/sidebar-navigation";
-import {} from "../command-palette/command-palette-registry";
+import { useCommandPalettePageCommands } from "../command-palette/command-palette-context";
 import { ShortcutButton } from "./shortcut-controls";
 import { useShortcutDispatch } from "./use-shortcut-dispatch";
 import { useShortcutPreferences } from "./use-shortcut-preferences";
@@ -22,7 +22,7 @@ test("shared controls follow committed assignments across the palette subtree an
     },
   });
   connection.queryClient.setQueryData(["keyboard-shortcuts"], { version: 1, overrides: {} });
-  const ids = ["new-task", "kanban"];
+  const ids = ["new-task", "kanban"] as const;
   const remapped: ShortcutPreferences = {
     version: 1,
     overrides: Object.fromEntries(
@@ -30,28 +30,19 @@ test("shared controls follow committed assignments across the palette subtree an
         id,
         {
           key: { kind: "logical", key: `F${index + 9}` },
+          mod: false,
           ctrl: true,
-          meta: false,
           alt: false,
           shift: true,
         },
       ]),
     ),
   };
+  const appCommands = ids.map((id) => ({ id, run: () => {}, localOnly: true, appWide: true }));
   function RoutingOwner() {
+    useCommandPalettePageCommands(appCommands);
     useShortcutDispatch({
-      platform: "darwin",
-      actions: ids.map((id) => ({
-        key: `action:${id}`,
-        label: id,
-        workspaceName: null,
-        icon: null,
-        keywords: [],
-        suggested: false,
-        disabledReason: null,
-        checked: false,
-        run: () => {},
-      })),
+      platform: "linux",
       isOpen: false,
       open: () => {},
       close: () => {},
@@ -123,7 +114,7 @@ test("only the focused message advertises and receives its fork shortcut", async
       "message-fork": {
         key: { kind: "logical", key: "F9" },
         ctrl: true,
-        meta: false,
+        mod: false,
         alt: false,
         shift: true,
       },
@@ -132,8 +123,7 @@ test("only the focused message advertises and receives its fork shortcut", async
   const calls: string[] = [];
   function Routing() {
     useShortcutDispatch({
-      platform: "darwin",
-      actions: [],
+      platform: "linux",
       isOpen: false,
       open: () => {},
       close: () => {},

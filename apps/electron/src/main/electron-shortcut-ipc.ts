@@ -2,11 +2,11 @@ import type { BrowserWindow, IpcMain, Input, IpcMainInvokeEvent, WebContents } f
 import {
   electronShortcutRulesSchema,
   type ElectronShortcutRules,
-  type ShortcutInput,
-  type ShortcutCombination,
   type EmbeddedShortcutEvent,
+  holdsShortcutMod,
+  inputSignature,
+  type ShortcutInput,
 } from "@openducktor/contracts";
-import { matchesShortcut } from "@openducktor/frontend-core/shortcuts/key-matching";
 import {
   ELECTRON_SHORTCUT_APPLY_CHANNEL,
   ELECTRON_SHORTCUT_EVENT_CHANNEL,
@@ -32,20 +32,9 @@ const toInput = (
   composing: input.isComposing === true,
   repeat: input.isAutoRepeat === true,
 });
-const matchesNativeClaim = (combination: ShortcutCombination, input: ShortcutInput): boolean =>
-  matchesShortcut(combination, { ...input, repeat: false }, platform);
-const isReservedClose = (rules: ElectronShortcutRules, input: ShortcutInput): boolean =>
-  rules.reservePanelCloseModW &&
-  matchesNativeClaim(
-    {
-      key: { kind: "logical", key: "w" },
-      ctrl: platform !== "darwin",
-      meta: platform === "darwin",
-      alt: false,
-      shift: false,
-    },
-    { ...input, composing: false },
-  );
+/** Repeats keep their claim, so a held shortcut never falls through to a menu accelerator. */
+const claimedSignature = (input: ShortcutInput): string | null =>
+  inputSignature({ ...input, repeat: false }, platform);
 const publish = (
   renderer: WebContents,
   sourceTabId: string | null,
@@ -72,8 +61,13 @@ export const focusShortcutGuest = (guestId: number): void => {
     identity && identity.windowId !== null ? windows.get(identity.windowId) : undefined;
   if (routing && identity) publish(routing.window.webContents, identity.tabId, { type: "focus" });
 };
+/**
+ * Routes a key of a focused browser guest. A claimed key never reaches a menu accelerator, such
+ * as Close Window for Mod+W; only a key with a route for this guest leaves the page.
+ */
 export const routeGuestShortcut = (
   guestId: number,
+  guest: Pick<WebContents, "setIgnoreMenuShortcuts">,
   event: { preventDefault(): void },
   rawInput: Parameters<typeof toInput>[0],
 ): boolean => {
@@ -82,18 +76,22 @@ export const routeGuestShortcut = (
     identity && identity.windowId !== null ? windows.get(identity.windowId) : undefined;
   if (!routing || !identity) return false;
   const input = toInput(rawInput);
-  const showHints = (platform === "darwin" ? input.meta : input.ctrl) && !input.composing;
+  const showHints = holdsShortcutMod(input, platform);
   if (showHints !== (guestHintStates.get(guestId) ?? false)) {
     guestHintStates.set(guestId, showHints);
     publish(routing.window.webContents, identity.tabId, { type: "key-state", input });
   }
-  if (routing.rules.recording) return false;
-  const route = routing.rules.guestRoutes.find((route) =>
-    matchesNativeClaim(route.combination, input),
+  const signature = claimedSignature(input);
+  guest.setIgnoreMenuShortcuts(
+    routing.rules.recording || (signature !== null && routing.rules.claims.includes(signature)),
   );
-  if (!route && !isReservedClose(routing.rules, input)) return false;
+  if (routing.rules.recording || signature === null) return false;
+  const route = routing.rules.guestRoutes[identity.tabId]?.find(
+    (candidate) => candidate.signature === signature,
+  );
+  if (!route) return false;
   event.preventDefault();
-  if (route && matchesShortcut(route.combination, input, platform))
+  if (!input.repeat)
     publish(routing.window.webContents, identity.tabId, {
       type: "invoke",
       revision: routing.rules.revision,
@@ -122,11 +120,9 @@ export function registerElectronShortcutIpc(
     windows.delete(event.sender.id);
     const rules = electronShortcutRulesSchema.parse(raw);
     const onInput = (_event: Electron.Event, rawInput: Input) => {
-      const input = toInput(rawInput);
+      const signature = claimedSignature(toInput(rawInput));
       window.webContents.setIgnoreMenuShortcuts(
-        rules.recording ||
-          isReservedClose(rules, input) ||
-          rules.suppressMenuFor.some((combination) => matchesNativeClaim(combination, input)),
+        rules.recording || (signature !== null && rules.claims.includes(signature)),
       );
     };
     const onBlur = () => {

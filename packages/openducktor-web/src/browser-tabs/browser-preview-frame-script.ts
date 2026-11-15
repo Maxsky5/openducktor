@@ -1,5 +1,6 @@
-import { matchesShortcut } from "@openducktor/frontend-core/shortcuts/key-matching";
 import {
+  holdsShortcutMod,
+  inputSignature,
   BROWSER_FRAME_COMMAND_FIELD,
   BROWSER_FRAME_MESSAGE_MARK,
   BROWSER_FRAME_SHORTCUT_RULES_FIELD,
@@ -34,7 +35,8 @@ export const browserPreviewFrameScript = (input: {
   const appOrigin = APP_ORIGINS.includes(ancestor) ? ancestor : APP_ORIGINS[0];
   const nav = window.navigation;
   const post = (message) => window.parent.postMessage({ [MARK]: 1, ...message }, appOrigin);
-  const matchesShortcut = ${matchesShortcut.toString()};
+  const inputSignature = ${inputSignature.toString()};
+  const holdsShortcutMod = ${holdsShortcutMod.toString()};
   const SHORTCUT_RULES = ${JSON.stringify(BROWSER_FRAME_SHORTCUT_RULES_FIELD)};
   const platform = /mac|iphone|ipad/i.test(navigator.platform) ? "darwin" : /^win/i.test(navigator.platform) ? "win32" : "linux";
   let shortcutRules = { revision: 0, routes: [] };
@@ -42,12 +44,13 @@ export const browserPreviewFrameScript = (input: {
   let hintState = false;
   const key = (event) => {
     const received = input(event);
-    const showHints = (platform === "darwin" ? received.meta : received.ctrl) && !received.composing;
+    const showHints = holdsShortcutMod(received, platform);
     if (hintState !== showHints) {
       hintState = showHints;
       post({ type: "shortcut", event: { type: "key-state", input: received } });
     }
-    const route = shortcutRules.routes.find((route) => matchesShortcut(route.combination, received, platform));
+    const signature = inputSignature(received, platform);
+    const route = signature && shortcutRules.routes.find((route) => route.signature === signature);
     if (!route) return;
     event.preventDefault(); event.stopImmediatePropagation();
     post({ type: "shortcut", event: { type: "invoke", revision: shortcutRules.revision, commandId: route.commandId, input: received } });

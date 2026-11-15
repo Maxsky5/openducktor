@@ -1,4 +1,4 @@
-import { useShortcutLabel } from "../shortcuts/use-shortcut-label";
+import { useShortcutKeys } from "../shortcuts/use-shortcut-label";
 import { Search } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,9 @@ export function CommandPaletteTrigger({
   className?: string;
 }): ReactElement {
   const { open } = useCommandPalette();
-  const shortcut = useShortcutLabel("palette");
-  const keys = shortcut?.split(/\+(?!$)/);
-  const keyShortcuts = shortcut
-    ?.replace("⌘", "Meta")
-    .replace("Ctrl", "Control")
-    .replace("Option", "Alt");
+  const shortcut = useShortcutKeys("palette");
+  const keys = shortcut?.keys;
+  const keyShortcuts = shortcut?.aria;
   if (compact) {
     return (
       <TooltipProvider>

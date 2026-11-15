@@ -175,6 +175,11 @@ export class FakeGuest extends EventEmitter implements ElectronBrowserGuest {
     this.backgroundThrottling = allowed;
   }
 
+  ignoreMenuShortcuts = false;
+  setIgnoreMenuShortcuts(ignore: boolean): void {
+    this.ignoreMenuShortcuts = ignore;
+  }
+
   close(): void {
     this.closed += 1;
     this.destroy();

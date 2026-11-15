@@ -2,8 +2,17 @@ import { describe, expect, test } from "bun:test";
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
-  "BUILTIN_SHORTCUT_ACTIONS",
+  "BUILTIN_SHORTCUT_ACTION_IDS",
   "SHORTCUT_POSITIONS",
+  "SHORTCUT_DIGITS",
+  "NAMED_SHORTCUT_KEYS",
+  "isShortcutKey",
+  "resolveShortcutModifiers",
+  "shortcutSignature",
+  "inputSignature",
+  "holdsShortcutMod",
+  "recordShortcut",
+  "sameShortcut",
   "builtinShortcutActionIdSchema",
   "shortcutActionIdSchema",
   "workflowShortcutActionIdSchema",

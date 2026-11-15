@@ -54,13 +54,9 @@ function harness() {
   cleanups.push(() => handlers.get(ELECTRON_SHORTCUT_RELEASE_CHANNEL)!(event));
   return { contents, messages, apply, event, handlers, ignored: () => ignored };
 }
-const combination = {
-  key: { kind: "logical" as const, key: "p" },
-  ctrl: true,
-  meta: false,
-  alt: false,
-  shift: true,
-};
+const signature = "ctrl+shift:p";
+const closeSignature = process.platform === "darwin" ? "meta:w" : "ctrl:w";
+const guestRoute = { commandId: "new-task" as const, signature };
 const input = {
   type: "keyDown" as const,
   key: "p",
@@ -73,10 +69,17 @@ const input = {
 const rules = (revision = 1): ElectronShortcutRules => ({
   revision,
   recording: false,
-  reservePanelCloseModW: false,
-  suppressMenuFor: [combination],
-  guestRoutes: [{ commandId: "new-task", combination }],
+  claims: [signature],
+  guestRoutes: { "tab-a": [guestRoute], "tab-c": [guestRoute], "tab-b": [guestRoute] },
 });
+const guest = () => {
+  const state = { ignored: false };
+  return Object.assign(state, {
+    setIgnoreMenuShortcuts: (value: boolean) => {
+      state.ignored = value;
+    },
+  });
+};
 
 describe("window shortcut routing", () => {
   test("suppresses menus without invoking renderer commands and replaces listeners on edits", () => {
@@ -91,9 +94,9 @@ describe("window shortcut routing", () => {
     expect(h.ignored()).toBe(false);
   });
 
-  test("keeps held app menu chords and the close-window reservation consumed without repeating the action", () => {
+  test("keeps held claims away from menus, and a claimed key without a guest route stays with the page", () => {
     const h = harness();
-    h.apply({ ...rules(), reservePanelCloseModW: true });
+    h.apply({ ...rules(), claims: [signature, closeSignature] });
     h.contents.emit("before-input-event", {}, { ...input, isAutoRepeat: true });
     expect(h.ignored()).toBe(true);
     const close = {
@@ -110,21 +113,24 @@ describe("window shortcut routing", () => {
     const release = bindShortcutGuest(883, () => ({ windowId: h.event.sender.id, tabId: "tab-c" }));
     cleanups.push(release);
     let prevented = 0;
+    const page = guest();
     expect(
       routeGuestShortcut(
         883,
+        page,
         { preventDefault: () => prevented++ },
         { ...input, isAutoRepeat: true },
       ),
     ).toBe(true);
-    expect(routeGuestShortcut(883, { preventDefault: () => prevented++ }, close)).toBe(true);
-    expect(prevented).toBe(2);
+    expect(routeGuestShortcut(883, page, { preventDefault: () => prevented++ }, close)).toBe(false);
+    expect(page.ignored).toBe(true);
+    expect(prevented).toBe(1);
     expect(h.messages.filter((message) => message.event.type === "invoke")).toHaveLength(0);
   });
 
   test("ordinary guest typing sends no hint messages and modifier transitions send one each", () => {
     const h = harness();
-    h.apply({ ...rules(), guestRoutes: [] });
+    h.apply({ ...rules(), guestRoutes: {} });
     cleanups.push(bindShortcutGuest(884, () => ({ windowId: h.event.sender.id, tabId: "typing" })));
     const event = {
       preventDefault() {
@@ -132,8 +138,14 @@ describe("window shortcut routing", () => {
       },
     };
     for (const key of ["a", "b", "c"]) {
-      routeGuestShortcut(884, event, { ...input, key, control: false, meta: false, shift: false });
-      routeGuestShortcut(884, event, {
+      routeGuestShortcut(884, guest(), event, {
+        ...input,
+        key,
+        control: false,
+        meta: false,
+        shift: false,
+      });
+      routeGuestShortcut(884, guest(), event, {
         ...input,
         type: "keyUp",
         key,
@@ -149,11 +161,16 @@ describe("window shortcut routing", () => {
       meta: process.platform === "darwin",
       shift: false,
     };
-    routeGuestShortcut(884, event, held);
-    routeGuestShortcut(884, event, { ...held, key: "a" });
-    routeGuestShortcut(884, event, { ...held, key: "a", type: "keyUp" });
+    routeGuestShortcut(884, guest(), event, held);
+    routeGuestShortcut(884, guest(), event, { ...held, key: "a" });
+    routeGuestShortcut(884, guest(), event, { ...held, key: "a", type: "keyUp" });
     expect(h.messages.map((message) => message.event.type)).toEqual(["key-state"]);
-    routeGuestShortcut(884, event, { ...held, type: "keyUp", control: false, meta: false });
+    routeGuestShortcut(884, guest(), event, {
+      ...held,
+      type: "keyUp",
+      control: false,
+      meta: false,
+    });
     expect(h.messages.map((message) => message.event.type)).toEqual(["key-state", "key-state"]);
   });
 
@@ -163,16 +180,22 @@ describe("window shortcut routing", () => {
     const release = bindShortcutGuest(881, () => ({ windowId: h.event.sender.id, tabId: "tab-a" }));
     cleanups.push(release);
     let prevented = 0;
-    expect(routeGuestShortcut(881, { preventDefault: () => prevented++ }, input)).toBe(true);
+    expect(routeGuestShortcut(881, guest(), { preventDefault: () => prevented++ }, input)).toBe(
+      true,
+    );
     expect(prevented).toBe(1);
     expect(h.messages.at(-1)).toMatchObject({
       sourceTabId: "tab-a",
       event: { type: "invoke", revision: 7, commandId: "new-task" },
     });
-    h.apply({ ...rules(8), guestRoutes: [] });
-    expect(routeGuestShortcut(881, { preventDefault: () => prevented++ }, input)).toBe(false);
+    h.apply({ ...rules(8), guestRoutes: {} });
+    expect(routeGuestShortcut(881, guest(), { preventDefault: () => prevented++ }, input)).toBe(
+      false,
+    );
     release();
-    expect(routeGuestShortcut(881, { preventDefault: () => prevented++ }, input)).toBe(false);
+    expect(routeGuestShortcut(881, guest(), { preventDefault: () => prevented++ }, input)).toBe(
+      false,
+    );
     expect(prevented).toBe(1);
   });
 
@@ -187,6 +210,7 @@ describe("window shortcut routing", () => {
     expect(
       routeGuestShortcut(
         882,
+        guest(),
         {
           preventDefault: () => {
             throw new Error("Recording claimed a guest command");

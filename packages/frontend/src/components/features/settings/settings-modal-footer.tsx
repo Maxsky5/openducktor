@@ -32,7 +32,9 @@ export function SettingsModalFooter({
           Cancel
         </Button>
         <p className="text-xs text-muted-foreground">
-          Changes in this section use their own save controls.
+          {location.section === "keyboard-shortcuts"
+            ? "Each shortcut saves for this host when you confirm it."
+            : "Remote control changes save immediately."}
         </p>
       </DialogFooter>
     );

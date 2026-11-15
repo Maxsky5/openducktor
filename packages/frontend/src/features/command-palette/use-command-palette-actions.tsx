@@ -1,5 +1,5 @@
-import { commandDefinition, commandIdFromPalette } from "../shortcuts/catalogue";
-import type { ShortcutActionId } from "@openducktor/contracts";
+import { commandDefinition } from "../shortcuts/catalogue";
+import { shortcutActionIdSchema, type ShortcutActionId } from "@openducktor/contracts";
 import {
   type KanbanTaskCardView,
   THEME_PREFERENCE_VALUES,
@@ -78,7 +78,11 @@ const TASK_CARD_VIEW_KEYWORDS = {
 } satisfies Record<KanbanTaskCardView, readonly string[]>;
 
 export type ActionArgs = {
-  shortcutsOnly?: boolean;
+  /**
+   * Read task store and provider readiness only from the cache. The always-mounted app command
+   * owner uses it, so navigation starts no readiness reads; the open palette fetches them.
+   */
+  cachedReadiness?: boolean;
   /** The selected workspace of the scope. Without it, workspace actions use the active one. */
   scopeWorkspace: WorkspaceRecord | null;
   query: string;
@@ -118,7 +122,7 @@ function useMergeCheckDisabledReason(openWorkspaceCount: number): string | null 
 /** Every app action of the palette. Workspace actions run in the target workspace. */
 export function useCommandPaletteActions({
   scopeWorkspace,
-  shortcutsOnly = false,
+  cachedReadiness = false,
   openScopeChoice,
   query,
   shell,
@@ -142,16 +146,16 @@ export function useCommandPaletteActions({
   const repoPath = target?.repoPath ?? null;
   const taskStoreCheck = useQuery({
     ...taskStoreCheckQueryOptionsOrSkip(target),
-    enabled: !shortcutsOnly && target !== null,
+    enabled: !cachedReadiness && target !== null,
   });
   const gitProvider = useQuery({
     ...repositoryGitProviderContextQueryOptionsOrSkip(target),
-    enabled: !shortcutsOnly && target !== null,
+    enabled: !cachedReadiness && target !== null,
   });
   const mergeCheckDisabledReason = useMergeCheckDisabledReason(workspaces.length);
 
   return useMemo(() => {
-    const icon = (Icon: typeof Plus): ReactNode => (shortcutsOnly ? null : renderIcon(Icon));
+    const icon = renderIcon;
     const appAction = (
       key:
         | ShortcutActionId
@@ -168,11 +172,13 @@ export function useCommandPaletteActions({
         disabledReason?: string | null;
       } = {},
     ): PaletteAction => {
-      const id = options.label ? undefined : commandIdFromPalette(`action:${key}`);
-      const label = options.label ?? (id ? commandDefinition(id)?.label : undefined);
+      const shortcutId = shortcutActionIdSchema.safeParse(key).data;
+      const label =
+        options.label ?? (shortcutId ? commandDefinition(shortcutId)?.label : undefined);
       if (!label) throw new Error(`Palette action ${key} has no label.`);
       return {
         key: `action:${key}`,
+        shortcutId,
         label,
         workspaceName: null,
         icon: actionIcon,
@@ -300,7 +306,7 @@ export function useCommandPaletteActions({
       ),
     );
 
-    const workspaceSwitches = shortcutsOnly
+    const workspaceSwitches = cachedReadiness
       ? []
       : workspaces
           .filter((workspace) => workspace.workspaceId !== activeWorkspace?.workspaceId)
@@ -390,20 +396,21 @@ export function useCommandPaletteActions({
         () => shell.setSidebarOpen(!shell.isSidebarOpen),
         { label: shell.isSidebarOpen ? "Hide sidebar" : "Show sidebar" },
       ),
-      ...pageCommands.map((command) =>
-        appAction(
+      ...pageCommands.map((command) => ({
+        ...appAction(
           `page:${command.id}`,
           icon(command.icon),
           command.keywords,
           command.resolveRun?.() ?? command.run,
           { label: command.label },
         ),
-      ),
+        shortcutId: command.id,
+      })),
     ];
 
     return { actions, createFromQuery };
   }, [
-    shortcutsOnly,
+    cachedReadiness,
     target,
     syncTarget,
     syncDisabledReason,

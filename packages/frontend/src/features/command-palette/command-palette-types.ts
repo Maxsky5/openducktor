@@ -23,8 +23,11 @@ export type CommandPalettePageCommand = {
   isVisible?: () => boolean;
   disabledReason?: () => string | null;
   ownsInput?: boolean;
+  /** Not listed by the palette: an action of one local view, or an app command below. */
   localOnly?: boolean;
   paletteOnly?: boolean;
+  /** Registered by the app command owner. A page owner of the same command comes first. */
+  appWide?: boolean;
 };
 
 export type CommandPaletteCommandRegistration = Omit<
@@ -41,6 +44,8 @@ export type CommandPaletteShell = {
 
 export type PaletteAction = {
   key: string;
+  /** The shortcut command that this action runs, for its key caps. */
+  shortcutId?: ShortcutActionId | undefined;
   label: string;
   /** The target workspace of a workspace action. */
   workspaceName: string | null;

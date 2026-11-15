@@ -1,8 +1,19 @@
 import type { ShortcutActionId } from "@openducktor/contracts";
 import { use, useSyncExternalStore } from "react";
 import { CommandPaletteRegistryContext } from "../command-palette/command-palette-registry";
+import type { ShortcutControlLabel } from "./shortcut-label-store";
 const emptySnapshot = () => null;
 const noSubscription = () => () => {};
+/** The published keycaps of an app-wide assignment, or null when it cannot run here. */
+export function useShortcutKeys(id: ShortcutActionId): ShortcutControlLabel | null {
+  const store = use(CommandPaletteRegistryContext)?.shortcutLabels;
+  return useSyncExternalStore(
+    store?.subscribe ?? noSubscription,
+    () => store?.getSnapshot().get(id) ?? null,
+    emptySnapshot,
+  );
+}
+
 export function useShortcutLabel(
   id: ShortcutActionId | undefined,
   purpose: "assignment" | "control" = "assignment",

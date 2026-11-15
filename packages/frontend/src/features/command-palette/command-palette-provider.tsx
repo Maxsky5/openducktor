@@ -3,7 +3,7 @@ import {
   CommandPaletteRegistryContext,
   useCommandPaletteCommands,
 } from "./command-palette-registry";
-import { resolvePageCommand } from "../shortcuts/command-resolution";
+import { paletteCommandsFor, runRegisteredCommand } from "../shortcuts/command-resolution";
 
 import "../shortcuts/position-hints.css";
 import {
@@ -18,11 +18,11 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
-import { ShortcutDispatcher } from "../shortcuts/shortcut-dispatcher";
+import { AppShortcutCommands, ShortcutDispatcher } from "../shortcuts/shortcut-dispatcher";
 import type { WorkspaceScopeAction, WorkspaceScopeTarget } from "@/types/workspace-scope";
 import { CommandPaletteContext, type CommandPaletteContextValue } from "./command-palette-context";
 import { CommandPaletteDialog } from "./command-palette-dialog";
-import type { CommandPalettePageCommand, CommandPaletteShell } from "./command-palette-types";
+import type { CommandPaletteShell } from "./command-palette-types";
 import { MergeCheckDialog } from "./merge-check-dialog";
 import { PullRequestSyncDialog } from "./pull-request-sync-dialog";
 import { useRecentItems } from "./recent-items";
@@ -98,11 +98,8 @@ export function CommandPaletteProvider({
   }, []);
 
   const runPageCommand = useCallback(
-    (id: ShortcutActionId) => {
-      const command = resolvePageCommand(registry.pageCommands, id, document.activeElement, false);
-      const run = command?.resolveRun ? command.resolveRun() : command?.run;
-      run?.();
-    },
+    (id: ShortcutActionId) =>
+      runRegisteredCommand(registry.pageCommands, id, document.activeElement),
     [registry],
   );
 
@@ -111,32 +108,22 @@ export function CommandPaletteProvider({
     [open, platform, registerPageCommand, runPageCommand],
   );
   const previousFocus = useCallback(() => previousFocusRef.current, []);
-  const paletteCommands: CommandPalettePageCommand[] = [];
-  if (isOpen) {
-    const resolvedCommands = new Map<ShortcutActionId, CommandPalettePageCommand | null>();
-    for (const command of pageCommands) {
-      if (command.localOnly) continue;
-      if (!resolvedCommands.has(command.id))
-        resolvedCommands.set(
-          command.id,
-          resolvePageCommand(pageCommands, command.id, previousFocusRef.current, true),
-        );
-      if (resolvedCommands.get(command.id) === command) paletteCommands.push(command);
-    }
-  }
+  const paletteCommands = isOpen ? paletteCommandsFor(pageCommands, previousFocusRef.current) : [];
 
   return (
     <CommandPaletteContext value={value}>
+      <AppShortcutCommands
+        shell={shell}
+        runIntent={runIntent}
+        openScopeChoice={openScopeChoice}
+        previousFocus={previousFocus}
+      />
       <ShortcutDispatcher
         platform={platform}
-        shell={shell}
         isOpen={isOpen}
         open={open}
         close={close}
         runAfterClose={runAfterClose}
-        runIntent={runIntent}
-        openScopeChoice={openScopeChoice}
-        previousFocus={previousFocus}
       />
       {children}
       <CommandPaletteDialog

@@ -1,67 +1,62 @@
-import type { ElectronShortcutRules, EmbeddedShortcutEvent } from "@openducktor/contracts";
-import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
-import type { EmbeddedShortcutListener } from "./embedded-sources";
+import type {
+  ElectronShortcutRules,
+  EmbeddedShortcutEvent,
+  ShortcutRoute,
+} from "@openducktor/contracts";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { getShellBridge } from "@/lib/shell-bridge";
+import type { EmbeddedShortcutListener } from "./embedded-sources";
 
-export type NativeShortcutRoutes = Omit<ElectronShortcutRules, "revision" | "recording">;
-/** Owns native subscriptions, acknowledgements and recording-mode installation. */
+export type NativeShortcutRoutes = {
+  claims: readonly string[];
+  guestRoutes: Readonly<Record<string, readonly ShortcutRoute[]>>;
+};
+
+/**
+ * Installs the Electron window rules: the claimed signatures, the routes of each browser guest,
+ * and recording mode. Renderer dispatch does not wait for main; only guest invocations must come
+ * from the current rules.
+ */
 export function useNativeShortcutRouting({
   enabled,
-  retryRevision,
-  routesVersion,
-  readRoutes,
+  routes,
   recording,
+  retryRevision,
   onInput,
 }: {
   enabled: boolean;
+  routes: NativeShortcutRoutes;
+  recording: boolean;
   retryRevision: number;
-  routesVersion: object;
-  readRoutes(): NativeShortcutRoutes;
-  recording: RefObject<boolean>;
   onInput: EmbeddedShortcutListener;
 }) {
   const bridge = enabled ? getShellBridge().shortcuts : undefined;
-  const control = useRef<{
-    alive: boolean;
-    revision: number;
-    acknowledged: number | null;
-    rules: ElectronShortcutRules | null;
-  }>({ alive: false, revision: 0, acknowledged: null, rules: null });
-  const [status, setStatus] = useState<{ ready: boolean; error: string | null }>({
-    ready: false,
-    error: null,
-  });
+  const control = useRef({ alive: false, revision: 0, acknowledged: -1, installed: "" });
+  const [error, setError] = useState<string | null>(null);
   const apply = useCallback(
-    async (routes: NativeShortcutRoutes, active: boolean) => {
+    async (next: NativeShortcutRoutes, active: boolean): Promise<void> => {
+      if (!bridge) throw new Error("The desktop shortcut bridge is unavailable. Restart the app.");
       const owner = control.current;
-      const rules = { ...routes, revision: ++owner.revision, recording: active };
-      owner.rules = rules;
-      owner.acknowledged = null;
-      if (!bridge) {
-        const error = "The desktop shortcut bridge is unavailable. Restart the app.";
-        setStatus({ ready: false, error });
-        return error;
-      }
-      setStatus((previous) => (previous.ready ? { ...previous, ready: false } : previous));
+      const rules: ElectronShortcutRules = {
+        revision: ++owner.revision,
+        recording: active,
+        claims: [...next.claims],
+        guestRoutes: Object.fromEntries(
+          Object.entries(next.guestRoutes).map(([tabId, list]) => [tabId, [...list]]),
+        ),
+      };
+      owner.installed = JSON.stringify([next, active]);
       try {
         await bridge.apply(rules);
         if (owner.alive && owner.revision === rules.revision) {
           owner.acknowledged = rules.revision;
-          setStatus({ ready: true, error: null });
+          setError(null);
         }
-        return null;
       } catch (cause) {
-        const error = cause instanceof Error ? cause.message : String(cause);
-        if (owner.alive && owner.revision === rules.revision) setStatus({ ready: false, error });
-        return error;
+        owner.installed = "";
+        const message = cause instanceof Error ? cause.message : String(cause);
+        if (owner.alive && owner.revision === rules.revision) setError(message);
+        throw new Error(message);
       }
     },
     [bridge],
@@ -71,80 +66,42 @@ export function useNativeShortcutRouting({
       const owner = control.current;
       const { event, sourceTabId } = message;
       if (!owner.alive) return;
-      if (event.type === "blur") recording.current = false;
-      const ready = owner.acknowledged === owner.revision;
-      if (event.type === "invoke" && (!ready || event.revision !== owner.revision)) return;
-      onInput(sourceTabId, event, ready);
+      const current = owner.acknowledged === owner.revision;
+      if (event.type === "invoke" && (!current || event.revision !== owner.revision)) return;
+      onInput(sourceTabId, event, current);
     },
   );
   useEffect(() => {
+    if (!bridge) return;
     const owner = control.current;
     owner.alive = true;
-    const release = bridge?.subscribe(receive);
+    const release = bridge.subscribe(receive);
     return () => {
       owner.alive = false;
       owner.revision++;
-      owner.acknowledged = null;
-      owner.rules = null;
-      release?.();
-      bridge?.release();
+      owner.installed = "";
+      release();
+      bridge.release();
     };
   }, [bridge]);
-  const readRoutesRef = useRef(readRoutes);
+  const latest = useRef({ routes, recording });
   useLayoutEffect(() => {
-    readRoutesRef.current = readRoutes;
+    latest.current = { routes, recording };
   });
-  const install = useCallback(
-    (force: boolean) => {
-      if (!enabled) return;
-      const routes = readRoutesRef.current();
-      const previous = control.current.rules;
-      if (
-        !force &&
-        previous &&
-        JSON.stringify([
-          previous.suppressMenuFor,
-          previous.guestRoutes,
-          previous.reservePanelCloseModW,
-          previous.recording,
-        ]) ===
-          JSON.stringify([
-            routes.suppressMenuFor,
-            routes.guestRoutes,
-            routes.reservePanelCloseModW,
-            recording.current,
-          ])
-      )
-        return;
-      void apply(routes, recording.current);
-    },
-    [enabled, apply, recording],
-  );
   const lastRetry = useRef(retryRevision);
   useEffect(() => {
+    if (!enabled) return;
     const force = lastRetry.current !== retryRevision;
     lastRetry.current = retryRevision;
-    install(force);
-  }, [routesVersion, retryRevision, install]);
-  const prepareRecording = useCallback(
-    async (active: boolean) => {
-      if (!enabled) return;
-      const rules = control.current.rules;
-      if (!rules) throw new Error("Desktop shortcut routing is unavailable. Restart the app.");
-      const error = await apply(rules, active);
-      if (error) throw new Error(error);
-    },
-    [enabled, apply],
-  );
+    if (!force && control.current.installed === JSON.stringify([routes, recording])) return;
+    apply(routes, recording).catch(() => {});
+  }, [enabled, routes, recording, retryRevision, apply]);
   return {
-    get ready() {
-      return !enabled || control.current.acknowledged === control.current.revision;
-    },
-    error: enabled ? status.error : null,
-    get reservePanelCloseModW() {
-      return control.current.rules?.reservePanelCloseModW ?? false;
-    },
-    refresh: () => install(false),
-    prepareRecording,
+    error: enabled ? error : null,
+    /** Installs recording mode now and resolves once main uses it. */
+    prepareRecording: useCallback(
+      (active: boolean) => (enabled ? apply(latest.current.routes, active) : Promise.resolve()),
+      [enabled, apply],
+    ),
   };
 }

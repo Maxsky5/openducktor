@@ -13,6 +13,8 @@ import { createNotificationCommandHandlers } from "../../interface/commands/noti
 import { createAutopilotCommandHandlers } from "../../interface/commands/autopilot-command-handlers";
 import type { AutopilotService } from "../../application/autopilot/autopilot-service";
 import { createAutopilotService } from "../../application/autopilot/autopilot-service";
+import { createKeyboardShortcutSettingsService } from "../../application/keyboard-shortcuts/keyboard-shortcut-settings-service";
+import { createKeyboardShortcutCommandHandlers } from "../../interface/commands/keyboard-shortcut-command-handlers";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { createNodeLocalToolCommandHandlers } from "./node-local-tool-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
@@ -326,6 +328,10 @@ export const assembleNodeEffectHostCommandRouter = (
     onBackgroundFailure,
   });
   autopilot = autopilotService;
+  const keyboardShortcutSettingsService = createKeyboardShortcutSettingsService({
+    settingsConfig,
+    publish: (payload) => eventBus?.publish({ channel: "openducktor://run-event", payload }),
+  });
   const pullRequestReviewService = createPullRequestReviewService({
     resolver: gitProviderResolver,
     taskReader: taskStore,
@@ -465,12 +471,8 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createTerminalCommandHandlers(terminalService),
     ...createBrowserCommandHandlers(browserService),
     ...createRepoActionCommandHandlers(repoActionService),
-    ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService, () =>
-      eventBus?.publish({
-        channel: "openducktor://run-event",
-        payload: { type: "keyboard_shortcuts_saved" },
-      }),
-    ),
+    ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService),
+    ...createKeyboardShortcutCommandHandlers(keyboardShortcutSettingsService),
     ...createWorkspaceLifecycleCommandHandlers(workspaceSettingsService, workspaceLifecycleService),
   };
   const router = createEffectHostCommandRouter({

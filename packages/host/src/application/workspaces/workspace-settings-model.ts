@@ -1,6 +1,5 @@
 import {
   type AgentModelFavorite,
-  type ShortcutPreferences,
   type CustomAgentRole,
   type CustomAgentRoleInput,
   DEFAULT_BRANCH_PREFIX,
@@ -54,10 +53,6 @@ export type WorkspaceSettingsError =
   | SettingsConfigError;
 
 export type WorkspaceSettingsService = {
-  readKeyboardShortcuts(): Effect.Effect<ShortcutPreferences, WorkspaceSettingsError>;
-  saveKeyboardShortcuts(
-    preferences: ShortcutPreferences,
-  ): Effect.Effect<ShortcutPreferences, WorkspaceSettingsError>;
   readRemoteAccessSettings(): Effect.Effect<RemoteAccessSettings, WorkspaceSettingsError>;
   saveRemoteAccessSettings(
     settings: RemoteAccessSettings,

@@ -224,14 +224,6 @@ export const createWorkspaceSettingsServiceTestDouble = <
     "workspace settings service",
     "readRemoteAccessSettings",
   ),
-  readKeyboardShortcuts: unexpectedEffectCall(
-    "workspace settings service",
-    "readKeyboardShortcuts",
-  ),
-  saveKeyboardShortcuts: unexpectedEffectCall(
-    "workspace settings service",
-    "saveKeyboardShortcuts",
-  ),
   saveRemoteAccessSettings: unexpectedEffectCall(
     "workspace settings service",
     "saveRemoteAccessSettings",

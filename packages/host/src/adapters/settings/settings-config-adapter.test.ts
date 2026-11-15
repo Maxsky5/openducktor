@@ -4,6 +4,7 @@ import { settingsSnapshotSaveInputSchema } from "@openducktor/contracts";
 import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { createKeyboardShortcutSettingsService } from "../../application/keyboard-shortcuts/keyboard-shortcut-settings-service";
 import { createOpenCodeCreationSettings } from "../../application/workspaces/opencode-creation-settings";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -39,14 +40,21 @@ describe("settings config files", () => {
           fixture.settingsConfig,
           builtinTaskWorkflows,
         );
+        const shortcuts = createKeyboardShortcutSettingsService({
+          settingsConfig: fixture.settingsConfig,
+          publish: () => {},
+        });
         const preferences = { version: 1 as const, overrides: { palette: null } };
-        await Effect.runPromise(service.saveKeyboardShortcuts(preferences));
+        await Effect.runPromise(shortcuts.save(preferences));
         await Effect.runPromise(service.setTheme("dark"));
-        const restarted = createWorkspaceSettingsService(
-          createSettingsConfigAdapter({ configPath, sharedSettings: fixture.database }),
-          builtinTaskWorkflows,
-        );
-        expect(await Effect.runPromise(restarted.readKeyboardShortcuts())).toEqual(preferences);
+        const restarted = createKeyboardShortcutSettingsService({
+          settingsConfig: createSettingsConfigAdapter({
+            configPath,
+            sharedSettings: fixture.database,
+          }),
+          publish: () => {},
+        });
+        expect(await Effect.runPromise(restarted.read())).toEqual(preferences);
         expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({
           keyboardShortcuts: preferences,
           theme: "dark",
@@ -69,15 +77,15 @@ describe("settings config files", () => {
           configPath,
           JSON.stringify({ ...raw, keyboardShortcuts: { version: 99, overrides: {} } }),
         );
-        const service = createWorkspaceSettingsService(
-          fixture.settingsConfig,
-          builtinTaskWorkflows,
-        );
-        const result = await Effect.runPromise(Effect.result(service.readKeyboardShortcuts()));
+        const service = createKeyboardShortcutSettingsService({
+          settingsConfig: fixture.settingsConfig,
+          publish: () => {},
+        });
+        const result = await Effect.runPromise(Effect.result(service.read()));
         expect(result._tag).toBe("Failure");
         expect(JSON.parse(await readFile(configPath, "utf8")).keyboardShortcuts.version).toBe(99);
-        await Effect.runPromise(service.saveKeyboardShortcuts({ version: 1, overrides: {} }));
-        expect(await Effect.runPromise(service.readKeyboardShortcuts())).toEqual({
+        await Effect.runPromise(service.save({ version: 1, overrides: {} }));
+        expect(await Effect.runPromise(service.read())).toEqual({
           version: 1,
           overrides: {},
         });

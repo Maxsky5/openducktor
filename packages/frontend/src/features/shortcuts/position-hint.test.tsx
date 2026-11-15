@@ -6,7 +6,7 @@ import { CommandPaletteContext } from "../command-palette/command-palette-contex
 import { PositionHint } from "./position-hint";
 
 test.each([
-  { platform: "darwin", family: "workspace", position: 1, label: "⌘+Shift+1", hint: "⇧ 1" },
+  { platform: "darwin", family: "workspace", position: 1, label: "⇧⌘1", hint: "⇧ 1" },
   {
     platform: "win32",
     family: "workspace",
@@ -14,7 +14,7 @@ test.each([
     label: "Ctrl+Shift+0",
     hint: "Shift 0",
   },
-  { platform: "darwin", family: "session", position: 10, label: "⌘+0", hint: "0" },
+  { platform: "darwin", family: "session", position: 10, label: "⌘0", hint: "0" },
   { platform: "darwin", family: "workspace", position: 2, label: "Ctrl+F9", hint: "Ctrl+F9" },
   { platform: "darwin", family: "workspace", position: 2, label: null, hint: "—" },
   { platform: "darwin", family: "session", position: 11, label: null, hint: "11" },

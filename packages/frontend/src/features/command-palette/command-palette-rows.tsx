@@ -1,5 +1,4 @@
 import { useShortcutLabel } from "../shortcuts/use-shortcut-label";
-import { commandIdFromPalette } from "../shortcuts/catalogue";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { Check, ChevronRight, MessagesSquare } from "lucide-react";
 import { type ComponentProps, type ReactElement, type ReactNode, useId } from "react";
@@ -119,7 +118,7 @@ export function ActionRow({
   query: string;
   onSelect: () => void;
 }): ReactElement {
-  const shortcut = useShortcutLabel(commandIdFromPalette(item.key));
+  const shortcut = useShortcutLabel(item.shortcutId);
   return (
     <PaletteOption
       value={item.key}

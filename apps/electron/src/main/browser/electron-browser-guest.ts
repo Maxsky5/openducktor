@@ -70,6 +70,7 @@ export type ElectronBrowserGuest = {
   close(): void;
   focus(): void;
   setBackgroundThrottling(allowed: boolean): void;
+  setIgnoreMenuShortcuts(ignore: boolean): void;
   setWindowOpenHandler(handler: (details: GuestWindowOpenDetails) => GuestWindowOpenResponse): void;
   listenerCount(eventName: typeof RUN_DIALOG_EVENT): number;
   removeAllListeners(eventName: typeof RUN_DIALOG_EVENT): void;
@@ -209,7 +210,7 @@ export const prepareBrowserGuest = async (
       });
       guest.on("before-input-event", (event, input) => {
         if (!active) return;
-        if (routeGuestShortcut(guest.id, event, input)) return;
+        if (routeGuestShortcut(guest.id, guest, event, input)) return;
         if (input.type !== "keyDown") {
           return;
         }

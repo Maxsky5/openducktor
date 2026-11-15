@@ -125,6 +125,8 @@ export function useFrameShortcutRouting({
       return Boolean(source && control.current.installations.get(source)?.status === "ready");
     },
     refresh: () => install(false),
+    /** Changes whenever a source's installation state changes. */
+    installations: states,
     error: Array.from(states.values()).find((state) => state.error)?.error ?? null,
   };
 }

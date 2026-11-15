@@ -45,7 +45,6 @@ const renderBar = ({
   function ShortcutOwner({ children }: PropsWithChildren) {
     useShortcutDispatch({
       platform,
-      actions: [],
       isOpen: false,
       open: () => {},
       close: () => {},
@@ -136,7 +135,7 @@ describe("KanbanBoardFilterBar search", () => {
           "focus-task-search": {
             key: { kind: "logical", key: "F2" },
             ctrl: true,
-            meta: false,
+            mod: false,
             alt: false,
             shift: true,
           },

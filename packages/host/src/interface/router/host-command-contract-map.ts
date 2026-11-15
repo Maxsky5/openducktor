@@ -2,6 +2,7 @@ import type { createWorkflowReadCommandHandlers } from "../commands/workflow-rea
 import type { createWorkspaceSessionLaunchCommandHandlers } from "../commands/workspace-session-launch-command-handlers";
 import type { createNotificationCommandHandlers } from "../commands/notification-command-handlers";
 import type { createAutopilotCommandHandlers } from "../commands/autopilot-command-handlers";
+import type { createKeyboardShortcutCommandHandlers } from "../commands/keyboard-shortcut-command-handlers";
 import type { createBrowserCommandHandlers } from "../commands/browser-command-handlers";
 import type { createWorkspaceSessionImportCommandHandlers } from "../commands/workspace-session-import-command-handlers";
 import type { createWorkspaceProviderSetupCommandHandlers } from "../commands/workspace-provider-setup-command-handlers";
@@ -43,6 +44,7 @@ type AllHostCommandHandlers = ReturnType<typeof createWorkflowReadCommandHandler
   ReturnType<typeof createWorkspaceSessionLaunchCommandHandlers> &
   ReturnType<typeof createNotificationCommandHandlers> &
   ReturnType<typeof createAutopilotCommandHandlers> &
+  ReturnType<typeof createKeyboardShortcutCommandHandlers> &
   ReturnType<typeof createBrowserCommandHandlers> &
   ReturnType<typeof createGeneratedImageCommandHandlers> &
   ReturnType<typeof createWorkspaceProviderSetupCommandHandlers> &

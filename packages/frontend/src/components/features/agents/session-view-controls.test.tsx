@@ -31,7 +31,7 @@ const recordingPalette = (shortcutLabel?: (id: string) => string | null) => {
       new Map(
         (["bottom-panel", "right-panel"] as const).flatMap((id) => {
           const label = shortcutLabel?.(id);
-          return label ? [[id, { label, owner: null }]] : [];
+          return label ? [[id, { label, keys: [], aria: "", owner: null }]] : [];
         }),
       ),
     );

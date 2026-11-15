@@ -30,7 +30,6 @@ afterEach(cleanup);
 function Input() {
   useShortcutDispatch({
     platform: "darwin",
-    actions: [],
     isOpen: false,
     open: () => {},
     close: () => {},
@@ -113,7 +112,7 @@ test("an assigned session workflow action uses the visible header handler and it
       [`workflow:${task.taskWorkflow.definition.id}:build_start`]: {
         key: { kind: "logical", key: "F9" },
         ctrl: true,
-        meta: false,
+        mod: false,
         alt: false,
         shift: true,
       },

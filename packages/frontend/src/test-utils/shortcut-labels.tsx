@@ -22,7 +22,14 @@ function PublishLabels({ labels }: { labels: Record<string, string | null> }) {
     registry.shortcutLabels!.replace(
       new Map(
         Object.entries(labels).flatMap(([id, label]) =>
-          label ? [[shortcutActionIdSchema.parse(id), { label, owner: null }]] : [],
+          label
+            ? [
+                [
+                  shortcutActionIdSchema.parse(id),
+                  { label, keys: label.split("+"), aria: label, owner: null },
+                ],
+              ]
+            : [],
         ),
       ),
     );

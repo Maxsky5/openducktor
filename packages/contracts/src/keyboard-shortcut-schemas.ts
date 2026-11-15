@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { shortcutActionIdSchema } from "./shortcut-actions";
 export * from "./shortcut-actions";
+export * from "./keyboard-shortcut-keys";
 
 export const shortcutKeySchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("logical"), key: z.string().min(1).max(32) }),
@@ -9,15 +10,16 @@ export const shortcutKeySchema = z.discriminatedUnion("kind", [
     digit: z.enum(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]),
   }),
 ]);
+/** Portable keys: `mod` is Command on macOS and Control elsewhere; `ctrl` is Control everywhere. */
 export const shortcutCombinationSchema = z
   .strictObject({
     key: shortcutKeySchema,
+    mod: z.boolean(),
     ctrl: z.boolean(),
-    meta: z.boolean(),
     alt: z.boolean(),
     shift: z.boolean(),
   })
-  .refine((value) => value.ctrl || value.meta || value.alt, "Use Control, Command or Alt.");
+  .refine((value) => value.mod || value.ctrl || value.alt, "Use Command, Control or Alt.");
 export const shortcutPreferencesSchema = z.strictObject({
   version: z.literal(1),
   overrides: z.partialRecord(shortcutActionIdSchema, shortcutCombinationSchema.nullable()),
@@ -39,9 +41,10 @@ export const shortcutInputSchema = z.strictObject({
   repeat: z.boolean(),
 });
 export type ShortcutInput = z.infer<typeof shortcutInputSchema>;
+/** A device signature from `shortcutSignature`, and the command it runs. */
 export const shortcutRouteSchema = z.strictObject({
+  signature: z.string().min(1),
   commandId: shortcutActionIdSchema,
-  combination: shortcutCombinationSchema,
 });
 export const embeddedShortcutRulesSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
@@ -63,12 +66,17 @@ export type ShortcutRoute = z.infer<typeof shortcutRouteSchema>;
 export type EmbeddedShortcutRules = z.infer<typeof embeddedShortcutRulesSchema>;
 export type EmbeddedShortcutEvent = z.infer<typeof embeddedShortcutEventSchema>;
 
+/**
+ * The window rules of Electron main. `claims` are the signatures of every active assignment: main
+ * keeps native menu accelerators from taking them and leaves them to the renderer. `guestRoutes`
+ * run in focused browser guests, where the renderer does not receive keys.
+ */
 export const electronShortcutRulesSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
   recording: z.boolean(),
-  suppressMenuFor: z.array(shortcutCombinationSchema),
-  reservePanelCloseModW: z.boolean(),
-  guestRoutes: z.array(shortcutRouteSchema),
+  claims: z.array(z.string().min(1)),
+  /** The routes of each browser guest, by tab ID. */
+  guestRoutes: z.record(z.string(), z.array(shortcutRouteSchema)),
 });
 export type ElectronShortcutRules = z.infer<typeof electronShortcutRulesSchema>;
 export interface ElectronShortcutBridge {

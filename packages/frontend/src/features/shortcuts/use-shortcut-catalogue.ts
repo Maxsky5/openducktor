@@ -1,38 +1,45 @@
-import { workflowShortcutActionIdSchema, type ShortcutPreferences } from "@openducktor/contracts";
-import { workflowShortcutActionId } from "@openducktor/contracts";
-import { useMemo } from "react";
+import {
+  type ShortcutPreferences,
+  workflowShortcutActionId,
+  workflowShortcutActionIdSchema,
+} from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { workflowCatalogQueryOptions } from "@openducktor/frontend-core/queries/workflows";
-import { SHORTCUT_COMMANDS, type ShortcutCommandDefinition } from "./catalogue";
+import {
+  SHORTCUT_COMMANDS,
+  type ShortcutCommandDefinition,
+  workflowCommandDefinition,
+} from "./catalogue";
+
+/** Built-in commands, the workflow actions of this host, and saved unavailable workflow keys. */
 export function useShortcutCatalogue(
   preferences?: ShortcutPreferences,
 ): readonly ShortcutCommandDefinition[] {
   const { data } = useQuery(workflowCatalogQueryOptions());
   return useMemo(() => {
-    const workflowCommands = data
-      ? Array.from(data.workflows.values()).flatMap((workflow) =>
-          workflow.definition.actions.map((action) => ({
-            id: workflowShortcutActionId(workflow.definition.id, action.id),
-            label: action.label ?? action.id,
-            group: "Task workflow",
-            context: "task" as const,
-            allowInput: false,
-          })),
-        )
-      : [];
-    const available = new Map(workflowCommands.map((command) => [command.id, command]));
+    const available = new Map<string, ShortcutCommandDefinition>();
+    for (const workflow of data?.workflows.values() ?? [])
+      for (const action of workflow.definition.actions) {
+        const id = workflowShortcutActionId(workflow.definition.id, action.id);
+        available.set(
+          id,
+          workflowCommandDefinition(id, workflow.definition.id, action.label ?? action.id),
+        );
+      }
     const unavailable: ShortcutCommandDefinition[] = [];
     for (const key of Object.keys(preferences?.overrides ?? {})) {
       const id = workflowShortcutActionIdSchema.safeParse(key).data;
       if (!id || available.has(id)) continue;
-      unavailable.push({
-        id,
-        label: id,
-        group: "Unavailable workflows",
-        context: "task",
-        allowInput: false,
-        unavailableReason: "This workflow action is not available on this host.",
-      });
+      const [workflowId = "", actionId = ""] = id.slice("workflow:".length).split(":");
+      unavailable.push(
+        workflowCommandDefinition(
+          id,
+          decodeURIComponent(workflowId),
+          decodeURIComponent(actionId),
+          "This workflow action is not available on this host.",
+        ),
+      );
     }
     return [...SHORTCUT_COMMANDS, ...available.values(), ...unavailable];
   }, [data, preferences]);

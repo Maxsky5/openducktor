@@ -1,6 +1,7 @@
 import { QueryProvider } from "@/test-utils/query-provider";
 import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
 import type { CommandPalettePageCommand } from "@/features/command-palette/command-palette-types";
+import { commandDefinition } from "@/features/shortcuts/catalogue";
 import { resolvePageCommand } from "@/features/shortcuts/command-resolution";
 import { SessionViewContext } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { ReactNode } from "react";
@@ -334,7 +335,12 @@ describe("AgentChatMessageQueue", () => {
       [Symbol.iterator]: () => [new DOMRect()][Symbol.iterator](),
     });
     const command = () =>
-      resolvePageCommand([...commands.values()], "session-resume-queue", button, false);
+      resolvePageCommand(
+        [...commands.values()],
+        commandDefinition("session-resume-queue")!,
+        button,
+        false,
+      );
     try {
       expect(command()).not.toBeNull();
       act(() => command()!.run());

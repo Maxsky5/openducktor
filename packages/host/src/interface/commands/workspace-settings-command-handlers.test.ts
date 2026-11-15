@@ -21,47 +21,6 @@ const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 describe("createWorkspaceSettingsCommandHandlers", () => {
-  test("publishes a shortcut change only after a validated save commits", async () => {
-    const order: string[] = [];
-    let fail = true;
-    const service = createWorkspaceSettingsServiceTestDouble({
-      saveKeyboardShortcuts: (preferences) =>
-        Effect.suspend(() => {
-          order.push("save");
-          if (fail)
-            return Effect.fail(
-              new HostOperationError({ operation: "save-shortcuts", message: "Disk is full." }),
-            );
-          order.push("commit");
-          return Effect.succeed(preferences);
-        }),
-    });
-    const router = createHostCommandRouter({
-      handlers: createWorkspaceSettingsCommandHandlers(
-        service,
-        createHostRuntimeServiceTestDouble(),
-        () => order.push("publish"),
-      ),
-    });
-    await expect(
-      router.invoke("workspace_save_keyboard_shortcuts", {
-        preferences: { version: 99, overrides: {} },
-      }),
-    ).rejects.toThrow();
-    expect(order).toEqual([]);
-    await expect(
-      router.invoke("workspace_save_keyboard_shortcuts", {
-        preferences: { version: 1, overrides: {} },
-      }),
-    ).rejects.toThrow("Disk is full.");
-    expect(order).toEqual(["save"]);
-    fail = false;
-    await router.invoke("workspace_save_keyboard_shortcuts", {
-      preferences: { version: 1, overrides: {} },
-    });
-    expect(order).toEqual(["save", "save", "commit", "publish"]);
-  });
-
   test("validates sidebar grouping before dispatch and returns the saved mode", async () => {
     const snapshot = settingsSnapshotSchema.parse({
       theme: "light",
