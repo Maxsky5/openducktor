@@ -27,11 +27,7 @@ import {
   startupTitle,
 } from "./startup-summary";
 
-// Modal forms and sheets must keep control of their footer buttons.
-const toasterStyle: CSSProperties = { zIndex: 40 };
-
 const startupToasterStyle: CSSProperties = {
-  ...toasterStyle,
   // Bottom toasts grow upward. A reversed scroll origin keeps older cards reachable.
   display: "flex",
   flexDirection: "column-reverse",
@@ -49,7 +45,7 @@ export function AppToaster(): ReactElement {
       offset={16}
       mobileOffset={16}
       visibleToasts={startupVisible ? Infinity : 5}
-      style={startupVisible ? startupToasterStyle : toasterStyle}
+      style={startupVisible ? startupToasterStyle : {}}
       className="overscroll-contain [&>[data-sonner-toast]]:pointer-events-auto"
     />
   );
