@@ -52,7 +52,7 @@ describe("toClaudeModelDescriptor", () => {
       variants: ["low", "medium", "high", "xhigh", "max"],
       liveSessionUpdates: {
         profile: false,
-        variants: ["low", "medium", "high", "xhigh"],
+        variants: ["low", "medium", "high", "xhigh", "max"],
       },
     });
   });

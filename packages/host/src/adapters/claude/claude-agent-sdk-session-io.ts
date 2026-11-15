@@ -85,9 +85,7 @@ export const applyClaudeSessionModel = async (
     }
     if (settingsChanged) {
       workStartGuard?.assertCurrent();
-      const changing = session.query.applyFlagSettings(
-        toClaudeFlagSettings(nextModel, session.externalSessionId, changed),
-      );
+      const changing = session.query.applyFlagSettings(toClaudeFlagSettings(nextModel, changed));
       onWorkIssued?.();
       await changing;
       assertAcceptingMessages(session);
@@ -99,9 +97,7 @@ export const applyClaudeSessionModel = async (
     const rollbackFailures: string[] = [];
     if (settingsChanged) {
       try {
-        await session.query.applyFlagSettings(
-          toClaudeFlagSettings(previousModel, session.externalSessionId, changed),
-        );
+        await session.query.applyFlagSettings(toClaudeFlagSettings(previousModel, changed));
       } catch (rollbackCause) {
         rollbackFailures.push(`settings: ${errorMessage(rollbackCause)}`);
       }

@@ -218,7 +218,7 @@ export const toClaudeModelDescriptor = (
     variants: [...(model.supportedEffortLevels ?? [])],
     liveSessionUpdates: {
       profile: false,
-      variants: (model.supportedEffortLevels ?? []).filter((variant) => variant !== "max"),
+      variants: [...(model.supportedEffortLevels ?? [])],
     },
     attachmentSupport: {
       image: true,
