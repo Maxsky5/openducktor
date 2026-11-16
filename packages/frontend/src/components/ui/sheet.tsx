@@ -97,15 +97,14 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("space-y-1.5 pr-8", className)} {...props} />;
 }
 
-/** The action bar at the bottom of a sheet. Toasts stay above it while the sheet is open. */
-function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
-  const isOpen = useDialogOpen("SheetFooter", "Sheet");
+/** The action bar at the bottom of a sheet. Toasts stay above it while it is on the screen. */
+function SheetFooter({ className, ...props }: Omit<React.ComponentProps<"div">, "ref">) {
   return (
     <div
       data-slot="sheet-footer"
       className={cn("flex-none border-t border-border bg-card px-5 py-3", className)}
       {...props}
-      ref={isOpen ? reserveToasterInset : undefined}
+      ref={reserveToasterInset}
     />
   );
 }
