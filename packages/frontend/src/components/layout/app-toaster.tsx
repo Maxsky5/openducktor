@@ -5,15 +5,19 @@ import { useToasterBottomInset } from "@/components/ui/toaster-inset";
 
 const EDGE_OFFSET = 16;
 
-const startupToasterStyle = (bottomOffset: number): CSSProperties => ({
-  // Bottom toasts grow upward. A reversed scroll origin keeps older cards reachable.
-  display: "flex",
-  flexDirection: "column-reverse",
-  height: `calc(100dvh - ${EDGE_OFFSET + bottomOffset}px)`,
-  maxHeight: `calc(100dvh - ${EDGE_OFFSET + bottomOffset}px)`,
-  overflowY: "auto",
-  pointerEvents: "none",
-});
+const startupToasterStyle = (bottomOffset: number): CSSProperties => {
+  // The stack fills the screen between the top and bottom offsets.
+  const height = `calc(100dvh - ${EDGE_OFFSET + bottomOffset}px)`;
+  return {
+    // Bottom toasts grow upward. A reversed scroll origin keeps older cards reachable.
+    display: "flex",
+    flexDirection: "column-reverse",
+    height,
+    maxHeight: height,
+    overflowY: "auto",
+    pointerEvents: "none",
+  };
+};
 
 /**
  * Shows every app notification above the page, sheets, and dialogs. Toasts stay above the bottom
