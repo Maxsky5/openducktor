@@ -41,12 +41,11 @@ const FILTERS = [
   { value: "assigned", label: "Assigned" },
 ] as const satisfies readonly { value: ShortcutFilter; label: string }[];
 
-/** `disabled` is true while the Settings form loads or saves; the shortcut save counts too. */
+/** `disabled` is true while the Settings form loads or saves, the shortcut save included. */
 export function SettingsKeyboardShortcutsSection({ disabled }: { disabled: boolean }) {
   const { query, updatesError } = useShortcutPreferences();
   const draft = useShortcutDraftContext();
-  const busy = disabled || draft.saving;
-  const editable = Boolean(draft.preferences) && !busy;
+  const editable = Boolean(draft.preferences) && !disabled;
   const catalogue = useShortcutCatalogue(draft.preferences);
   const platform = readDevicePlatform();
   const shell = currentShortcutShell();
@@ -126,7 +125,7 @@ export function SettingsKeyboardShortcutsSection({ disabled }: { disabled: boole
       </div>
 
       <div className="flex flex-col gap-6">
-        <ShortcutNotices editor={editor} updatesError={updatesError} busy={busy} />
+        <ShortcutNotices editor={editor} updatesError={updatesError} disabled={disabled} />
         <ShortcutList
           pending={query.isPending}
           groups={groups}
@@ -213,11 +212,11 @@ function ShortcutList({
 function ShortcutNotices({
   editor,
   updatesError,
-  busy,
+  disabled,
 }: {
   editor: Editor;
   updatesError: string | null;
-  busy: boolean;
+  disabled: boolean;
 }) {
   const { query } = useShortcutPreferences();
   const draft = useShortcutDraftContext();
@@ -236,7 +235,7 @@ function ShortcutNotices({
               Retry
             </Button>
             {!draft.preferences && (
-              <Button variant="outline" size="sm" disabled={busy} onClick={editor.resetAll}>
+              <Button variant="outline" size="sm" disabled={disabled} onClick={editor.resetAll}>
                 Reset all
               </Button>
             )}

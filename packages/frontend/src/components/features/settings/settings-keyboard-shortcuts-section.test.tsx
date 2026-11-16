@@ -34,7 +34,7 @@ function SettingsForm() {
   const draft = useShortcutDraft();
   return (
     <ShortcutDraftContext value={draft}>
-      <SettingsKeyboardShortcutsSection disabled={false} />
+      <SettingsKeyboardShortcutsSection disabled={draft.saving} />
       <button type="button" onClick={() => void draft.save()}>
         Save settings
       </button>

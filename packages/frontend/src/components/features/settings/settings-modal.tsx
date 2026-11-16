@@ -218,7 +218,7 @@ function SettingsDialog({
   // Keyboard shortcuts have their own host API, so their draft saves after the settings snapshot.
   const shortcutDraft = useShortcutDraft();
   const isPreparing = open && controller.isLoadingSettings && controller.snapshotDraft === null;
-  const isInteractionDisabled = isSettingsInteractionDisabled(controller);
+  const isInteractionDisabled = isSettingsInteractionDisabled(controller) || shortcutDraft.saving;
   const { runtimeReview } = controller;
   const sectionPresentation = settingsSectionPresentation(
     navigation.section,
@@ -259,7 +259,9 @@ function SettingsDialog({
 
   const form = settingsForm(controller, shortcutDraft, close);
 
-  const { isSaving, retainDraft } = controller;
+  // The shortcut save runs after the settings save, so Settings stays open until both finish.
+  const { isSaving } = form;
+  const { retainDraft } = controller;
   const dismiss = useCallback((): void => {
     if (isSaving) return;
     retainDraft();
