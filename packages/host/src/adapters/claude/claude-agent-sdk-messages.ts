@@ -226,6 +226,37 @@ const encodeClaudeFileReference = (path: string): string => {
   return `@"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 };
 
+const appendClaudePromptPart = (
+  text: string,
+  part: Exclude<AgentUserMessagePart, { kind: "attachment" }>,
+): string => {
+  switch (part.kind) {
+    case "text":
+      return text + part.text;
+    case "slash_command": {
+      const trigger = readText(part.command.trigger);
+      if (!trigger) {
+        throw new HostValidationError({
+          field: "parts",
+          message: "Claude Agent SDK runtime cannot encode a slash command without a trigger.",
+          details: { partKind: part.kind, commandId: part.command.id },
+        });
+      }
+      return text + `/${trigger}`;
+    }
+    case "skill_mention":
+      return text + `/${part.skill.name}`;
+    case "subagent_reference":
+      throw new HostValidationError({
+        field: "parts",
+        message: "Claude Agent SDK runtime does not support explicit subagent references.",
+        details: { partKind: part.kind, subagent: part.subagent.name },
+      });
+    case "file_reference":
+      return text + encodeClaudeFileReference(part.file.path);
+  }
+};
+
 export const encodeClaudePromptTextWithSourceRanges = (parts: AgentUserMessagePart[]) => {
   let text = "";
   let previousPart: AgentUserMessagePart | null = null;
@@ -247,35 +278,7 @@ export const encodeClaudePromptTextWithSourceRanges = (parts: AgentUserMessagePa
     }
 
     const sourceStart = text.length;
-    switch (part.kind) {
-      case "text":
-        text += part.text;
-        break;
-      case "slash_command": {
-        const trigger = readText(part.command.trigger);
-        if (!trigger) {
-          throw new HostValidationError({
-            field: "parts",
-            message: "Claude Agent SDK runtime cannot encode a slash command without a trigger.",
-            details: { partKind: part.kind, commandId: part.command.id },
-          });
-        }
-        text += `/${trigger}`;
-        break;
-      }
-      case "skill_mention":
-        text += `/${part.skill.name}`;
-        break;
-      case "subagent_reference":
-        throw new HostValidationError({
-          field: "parts",
-          message: "Claude Agent SDK runtime does not support explicit subagent references.",
-          details: { partKind: part.kind, subagent: part.subagent.name },
-        });
-      case "file_reference":
-        text += encodeClaudeFileReference(part.file.path);
-        break;
-    }
+    text = appendClaudePromptPart(text, part);
     if (part.kind !== "text") {
       sourceTextByPartIndex[index] = {
         value: text.slice(sourceStart),
@@ -323,42 +326,13 @@ export const toClaudeMessageFromParts = async (
       text += " ";
     }
 
-    switch (part.kind) {
-      case "text":
-        text += part.text;
-        break;
-      case "slash_command": {
-        const trigger = readText(part.command.trigger);
-        if (!trigger) {
-          throw new HostValidationError({
-            field: "parts",
-            message: "Claude Agent SDK runtime cannot encode a slash command without a trigger.",
-            details: { partKind: part.kind, commandId: part.command.id },
-          });
-        }
-        text += `/${trigger}`;
-        break;
-      }
-      case "skill_mention":
-        text += `/${part.skill.name}`;
-        break;
-      case "subagent_reference":
-        throw new HostValidationError({
-          field: "parts",
-          message: "Claude Agent SDK runtime does not support explicit subagent references.",
-          details: { partKind: part.kind, subagent: part.subagent.name },
-        });
-      case "file_reference":
-        text += encodeClaudeFileReference(part.file.path);
-        break;
-      case "attachment":
-        flushText();
-        {
-          const encodedAttachment = await toClaudeAttachmentBlock(part.attachment, attachmentBytes);
-          attachmentBytes += encodedAttachment.sizeBytes;
-          content.push(encodedAttachment.block);
-        }
-        break;
+    if (part.kind === "attachment") {
+      flushText();
+      const encodedAttachment = await toClaudeAttachmentBlock(part.attachment, attachmentBytes);
+      attachmentBytes += encodedAttachment.sizeBytes;
+      content.push(encodedAttachment.block);
+    } else {
+      text = appendClaudePromptPart(text, part);
     }
     previousPart = part;
   }
