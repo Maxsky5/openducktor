@@ -2,6 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Effect } from "effect";
+import { openSqliteDatabase } from "./sqlite-driver";
 
 const tempDirectories = new Set<string>();
 const sqliteInfrastructureDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -105,4 +107,17 @@ test("openSqliteDatabase supports the Node runtime adapter", async () => {
     child.kill();
     await child.exited;
   }
+});
+
+test("openSqliteDatabase releases a Bun connection on close while a statement is alive", async () => {
+  const databasePath = path.join(await makeTempDirectory(), "database.sqlite");
+  const database = await Effect.runPromise(openSqliteDatabase(databasePath, "bun"));
+  await Effect.runPromise(database.exec("create table sample (value integer not null)"));
+  const insert = await Effect.runPromise(database.prepare("insert into sample (value) values (?)"));
+
+  await Effect.runPromise(database.close());
+
+  // Windows cannot remove the database file while SQLite keeps the connection open.
+  const write = await Effect.runPromise(Effect.result(insert.run(1)));
+  expect(write._tag).toBe("Failure");
 });

@@ -234,7 +234,9 @@ const adaptNodeStatement = (statement: NodeSqliteStatement): SqliteStatement => 
 });
 
 const adaptBunDatabase = (database: BunSqliteDatabase): SqliteDatabase => ({
-  close: () => runSqliteOperation("sqlite.bunDatabase.close", () => database.close()),
+  // `true` finalizes open statements and releases the file now. Without it, the file stays open
+  // until the statements are garbage collected, and Windows cannot remove it.
+  close: () => runSqliteOperation("sqlite.bunDatabase.close", () => database.close(true)),
   exec: (sql) => runSqliteOperation("sqlite.bunDatabase.exec", () => database.exec(sql)),
   inTransaction: () =>
     runSqliteOperation("sqlite.bunDatabase.inTransaction", () => database.inTransaction),
