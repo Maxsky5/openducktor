@@ -1,6 +1,11 @@
 import type { GitDiffScope, GitCurrentBranch } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { GitFileStatus, GitPortError } from "../../ports/git-port";
+import type {
+  GitFileStatus,
+  GitPortError,
+  GitWorktreeStatusData,
+  GitWorktreeStatusSummaryData,
+} from "../../ports/git-port";
 import { type GitCommandRunner, requireNonEmptyEffect } from "./git-command-runner";
 import { buildFileDiffs, loadBranchChangesDiffPayload, loadDiffPayload } from "./git-diff";
 import { fileStatusCounts, getCurrentBranchUnchecked, getStatusUnchecked } from "./git-status";
@@ -82,16 +87,20 @@ export const buildWorktreeStatusData = (
     branch: () => getCurrentBranchUnchecked(runner, workingDirectory),
     status: () => getStatusUnchecked(runner, workingDirectory),
   },
-) =>
+): Effect.Effect<GitWorktreeStatusData, GitPortError> =>
   Effect.gen(function* () {
     const context = yield* readWorktreeStatusContext(runner, workingDirectory, targetBranch, reads);
     const { effectiveTargetBranch, fileStatuses } = context;
-    const rawDiffPayload =
-      diffScope === "target"
-        ? effectiveTargetBranch
-          ? yield* loadBranchChangesDiffPayload(runner, workingDirectory, effectiveTargetBranch)
-          : undefined
-        : yield* loadDiffPayload(runner, workingDirectory);
+    let rawDiffPayload;
+    if (diffScope !== "target") {
+      rawDiffPayload = yield* loadDiffPayload(runner, workingDirectory);
+    } else if (effectiveTargetBranch) {
+      rawDiffPayload = yield* loadBranchChangesDiffPayload(
+        runner,
+        workingDirectory,
+        effectiveTargetBranch,
+      );
+    }
     const fileDiffs = rawDiffPayload
       ? yield* buildFileDiffs(
           runner,
@@ -112,7 +121,7 @@ export const buildWorktreeStatusSummaryData = (
     branch: () => getCurrentBranchUnchecked(runner, workingDirectory),
     status: () => getStatusUnchecked(runner, workingDirectory),
   },
-) =>
+): Effect.Effect<GitWorktreeStatusSummaryData, GitPortError> =>
   Effect.gen(function* () {
     const context = yield* readWorktreeStatusContext(runner, workingDirectory, targetBranch, reads);
     return yield* finishWorktreeStatus(runner, workingDirectory, context, {
