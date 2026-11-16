@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { ReactNode } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import {
   createTaskCardFixture,
@@ -8,9 +9,12 @@ import {
   CLOSE_TASK_ACTION,
   type CoreTaskAction,
 } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
+import { Sheet } from "@/components/ui/sheet";
 import { TaskDetailsSheetFooter } from "./task-details-sheet-footer";
 
 enableReactActEnvironment();
+
+const wrapper = ({ children }: { children: ReactNode }) => <Sheet open>{children}</Sheet>;
 
 describe("TaskDetailsSheetFooter", () => {
   test("omits workflow actions when no workflow actions are available", () => {
@@ -21,6 +25,7 @@ describe("TaskDetailsSheetFooter", () => {
         includeActions={["human_approve", "human_request_changes", "open_builder", "build_start"]}
         onWorkflowAction={() => {}}
       />,
+      { wrapper },
     );
 
     expect(screen.queryByText("More")).toBeNull();
@@ -38,6 +43,7 @@ describe("TaskDetailsSheetFooter", () => {
         onWorkflowAction={() => {}}
         onDeleteSelect={() => {}}
       />,
+      { wrapper },
     );
 
     expect(screen.getByText("More")).toBeDefined();
@@ -59,6 +65,7 @@ describe("TaskDetailsSheetFooter", () => {
         historicalSessionRoles={["spec", "planner"]}
         onWorkflowAction={() => {}}
       />,
+      { wrapper },
     );
 
     expect(screen.getByText("Open Builder")).toBeDefined();
@@ -81,6 +88,7 @@ describe("TaskDetailsSheetFooter", () => {
         onCoreTaskAction={() => {}}
         onDeleteSelect={() => {}}
       />,
+      { wrapper },
     );
 
     fireEvent.click(screen.getByText("More"));
@@ -105,6 +113,7 @@ describe("TaskDetailsSheetFooter", () => {
         onWorkflowAction={onWorkflowAction}
         onCoreTaskAction={onCoreTaskAction}
       />,
+      { wrapper },
     );
 
     fireEvent.click(screen.getByText("More"));
@@ -126,6 +135,7 @@ describe("TaskDetailsSheetFooter", () => {
         onWorkflowAction={() => {}}
         onDeleteSelect={() => {}}
       />,
+      { wrapper },
     );
 
     expect(screen.queryByText("Open Builder")).toBeNull();
@@ -148,6 +158,7 @@ describe("TaskDetailsSheetFooter", () => {
         onCoreTaskAction={() => {}}
         onDeleteSelect={() => {}}
       />,
+      { wrapper },
     );
 
     fireEvent.click(screen.getByText("More"));
@@ -172,6 +183,7 @@ describe("TaskDetailsSheetFooter", () => {
         onRemoveWorktreeSelect={onRemoveWorktreeSelect}
         onDeleteSelect={() => {}}
       />,
+      { wrapper },
     );
 
     fireEvent.click(screen.getByText("More"));
