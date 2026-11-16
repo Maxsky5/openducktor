@@ -1,3 +1,4 @@
+import { useMinuteClockLabel } from "@openducktor/frontend-core/lib/relative-time";
 import type { RuntimeWorkingDirectoryRef, WorkspaceSession } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Archive, ArrowUpRight, Bot, CircleAlert, Folder, MessagesSquare } from "lucide-react";
@@ -36,14 +37,12 @@ import { SESSION_MENU_LABELS } from "@openducktor/frontend-core/workspace-sessio
 
 export function SessionPreviewContent({
   entry,
-  now,
   titleId,
   onOpen,
   onOpenDialog,
   onCloseAutoFocus,
 }: {
   entry: SessionNavigationEntry;
-  now: number;
   titleId: string;
   onOpen: (target?: SessionNavigationTarget) => void;
   onOpenDialog: () => void;
@@ -54,7 +53,7 @@ export function SessionPreviewContent({
   const selectedRole = entry.target.kind === "task_session" ? entry.target.role : null;
   const selectedStepId = details.steps.find((step) => step.role === selectedRole)?.id ?? null;
   const task = entry.context.kind === "task" ? entry.context.task : null;
-  const time = sessionEntryTimeText(entry, now);
+  const time = useMinuteClockLabel((now) => sessionEntryTimeText(entry, now));
   const statusIssue = entry.status.kind === "unavailable" ? entry.status.reason : entry.fault;
   return (
     <>

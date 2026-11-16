@@ -8,7 +8,6 @@ import { SessionNavigationRail } from "./session-navigation-rail";
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import {
   betaWorkspace,
-  NOW,
   navigationModel,
   taskSessionEntry,
   workspaceSessionEntry,
@@ -32,7 +31,7 @@ describe("session selection", () => {
       const onOpen = mock((_entry: SessionNavigationEntry) => {});
       render(
         <SessionNavigationTestProvider selection={selection}>
-          <Component model={model} now={NOW} onOpen={onOpen} onRetry={() => {}} />
+          <Component model={model} onOpen={onOpen} onRetry={() => {}} />
         </SessionNavigationTestProvider>,
       );
       const row = screen.getByRole("button", { name: /Task builder/ });

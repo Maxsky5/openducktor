@@ -1,6 +1,6 @@
 import { useRecordCommands } from "../shortcuts/use-record-commands";
 import type { AppPlatform, WorkspaceRecord } from "@openducktor/contracts";
-import { type ReactElement, useRef, useState } from "react";
+import { type ReactElement, useLayoutEffect, useRef, useState } from "react";
 import { Command, CommandList } from "@/components/ui/command";
 import {
   Dialog,
@@ -25,11 +25,21 @@ import { CommandPaletteInput } from "./command-palette-input";
 import { CommandPaletteReply } from "./command-palette-reply";
 import { MainResults, RowActionResults } from "./command-palette-results";
 import { CommandPaletteScope, type PaletteScope, usePaletteScope } from "./command-palette-scope";
-import type { CommandPalettePageCommand, CommandPaletteShell } from "./command-palette-types";
+import type {
+  CommandPalettePageCommand,
+  CommandPaletteShell,
+  PaletteAction,
+  PaletteChat,
+  PaletteTask,
+} from "./command-palette-types";
 import { useCommandPaletteActions } from "./use-command-palette-actions";
 import { type CommandPaletteData, useCommandPaletteData } from "./use-command-palette-data";
 import { useCommandPaletteMainList } from "./use-command-palette-main-list";
-import { highlightOf, useCommandPaletteNavigation } from "./use-command-palette-navigation";
+import {
+  highlightOf,
+  type PaletteRowEntry,
+  useCommandPaletteNavigation,
+} from "./use-command-palette-navigation";
 import { usePaletteRowList } from "./use-command-palette-row-list";
 import { useCommandPaletteRunners, usePaletteTaskViews } from "./use-command-palette-runners";
 import type { WorkspaceIntent } from "./use-workspace-intent-runner";
@@ -128,6 +138,17 @@ function CommandPaletteView({
     taskViewOf,
   });
   const rowListOpen = rowList !== null;
+  // The memoized results get callbacks that keep their identity and call the latest handlers.
+  const latestHandlers = useRef({ runners, showActions: nav.showActions });
+  useLayoutEffect(() => {
+    latestHandlers.current = { runners, showActions: nav.showActions };
+  });
+  const [resultHandlers] = useState(() => ({
+    runAction: (action: PaletteAction) => latestHandlers.current.runners.runAction(action),
+    openTask: (task: PaletteTask) => latestHandlers.current.runners.openTask(task),
+    openChat: (chat: PaletteChat) => latestHandlers.current.runners.openChat(chat),
+    showActions: (entry: PaletteRowEntry) => latestHandlers.current.showActions(entry),
+  }));
   useRecordCommands(
     open && highlight.entry && (highlight.entry.kind === "task" || highlight.entry.kind === "chat")
       ? highlight.entry
@@ -263,10 +284,10 @@ function CommandPaletteView({
                   query={nav.query}
                   showWorkspace={scope.workspace === null}
                   createFromQuery={createFromQuery}
-                  onRunAction={runners.runAction}
-                  onOpenTask={runners.openTask}
-                  onShowActions={nav.showActions}
-                  onOpenChat={runners.openChat}
+                  onRunAction={resultHandlers.runAction}
+                  onOpenTask={resultHandlers.openTask}
+                  onShowActions={resultHandlers.showActions}
+                  onOpenChat={resultHandlers.openChat}
                 />
               )}
             </CommandList>

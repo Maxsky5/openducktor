@@ -57,22 +57,40 @@ export function useCommandPaletteMainList({
     () => new Map(data.chats.map((chat) => [chat.key, chat])),
     [data.chats],
   );
-  const groups = searchQuery
-    ? searchGroups({
-        actions: rankActions(actions, searchQuery),
-        tasks: taskMatches,
-        chats: chatMatches,
-      })
-    : emptyQueryGroups({
-        actions,
-        needsYouKeys: data.needsYouKeys,
-        recentItems,
-        taskByKey,
-        chatByKey,
-        loadedWorkspaceIds: data.loadedWorkspaceIds,
-      });
-  const entries = groups.flatMap((group) => group.entries);
-  const enabledValues = entries.filter(isEnabledEntry).map(entryValue);
-  if (createFromQuery?.disabledReason === null) enabledValues.push(createFromQuery.key);
+  // A highlight move renders the palette again; the groups stay the same, so the rows can skip.
+  const groups = useMemo(
+    () =>
+      searchQuery
+        ? searchGroups({
+            actions: rankActions(actions, searchQuery),
+            tasks: taskMatches,
+            chats: chatMatches,
+          })
+        : emptyQueryGroups({
+            actions,
+            needsYouKeys: data.needsYouKeys,
+            recentItems,
+            taskByKey,
+            chatByKey,
+            loadedWorkspaceIds: data.loadedWorkspaceIds,
+          }),
+    [
+      searchQuery,
+      actions,
+      taskMatches,
+      chatMatches,
+      data.needsYouKeys,
+      recentItems,
+      taskByKey,
+      chatByKey,
+      data.loadedWorkspaceIds,
+    ],
+  );
+  const { entries, enabledValues } = useMemo(() => {
+    const entries = groups.flatMap((group) => group.entries);
+    const enabledValues = entries.filter(isEnabledEntry).map(entryValue);
+    if (createFromQuery?.disabledReason === null) enabledValues.push(createFromQuery.key);
+    return { entries, enabledValues };
+  }, [groups, createFromQuery]);
   return { groups, entries, enabledValues, taskByKey, chatByKey };
 }

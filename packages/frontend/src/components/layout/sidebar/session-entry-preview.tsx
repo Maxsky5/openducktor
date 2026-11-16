@@ -51,13 +51,11 @@ export function SessionPreviewProvider({ children }: { children: ReactNode }): R
 export function SessionEntryPreview({
   entry,
   isVisible,
-  now,
   onOpen,
   children,
 }: {
   entry: SessionNavigationEntry;
   isVisible: boolean;
-  now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
   children: ReactElement;
 }): ReactElement {
@@ -213,7 +211,6 @@ export function SessionEntryPreview({
         >
           <SessionPreviewContent
             entry={entry}
-            now={now}
             titleId={titleId}
             onOpenDialog={() => {
               keyboard.current = false;

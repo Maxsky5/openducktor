@@ -3,7 +3,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { SessionNavigationList } from "./session-navigation-list.test-view";
 import { SessionNavigationRail } from "./session-navigation-rail";
-import { NOW, navigationModel, workspaceSessionEntry } from "./session-navigation.test-support";
+import { navigationModel, workspaceSessionEntry } from "./session-navigation.test-support";
 
 const moving = workspaceSessionEntry("moving");
 const kept = workspaceSessionEntry("kept");
@@ -17,7 +17,7 @@ const pendingAnimation = () => {
 
 const list = (model: ReturnType<typeof navigationModel>) => (
   <SessionNavigationTestProvider selection={{ entryKey: moving.key, visibleKey: moving.key }}>
-    <SessionNavigationList model={model} now={NOW} onOpen={() => {}} onRetry={() => {}} />
+    <SessionNavigationList model={model} onOpen={() => {}} onRetry={() => {}} />
   </SessionNavigationTestProvider>
 );
 
@@ -30,7 +30,7 @@ describe("Session navigation presence", () => {
     async (_mode, Component) => {
       const navigation = (model: ReturnType<typeof navigationModel>) => (
         <SessionNavigationTestProvider selection={{ entryKey: moving.key, visibleKey: moving.key }}>
-          <Component model={model} now={NOW} onOpen={() => {}} onRetry={() => {}} />
+          <Component model={model} onOpen={() => {}} onRetry={() => {}} />
         </SessionNavigationTestProvider>
       );
       const view = render(navigation(navigationModel({}, { isLoading: true })));

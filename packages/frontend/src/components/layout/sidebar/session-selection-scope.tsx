@@ -1,8 +1,13 @@
 import type { SidebarSessionGrouping } from "@openducktor/contracts";
-import { type ReactElement, type ReactNode, useMemo } from "react";
+import { type ReactElement, type ReactNode, useLayoutEffect, useMemo, useState } from "react";
 import { useVisibleSessionTarget } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import type { SessionNavigationModel } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
-import { SessionSelectionContext, selectSessionEntry } from "./session-navigation-selection";
+import {
+  createSessionSelectionStore,
+  type SessionSelection,
+  SessionSelectionContext,
+  selectSessionEntry,
+} from "./session-navigation-selection";
 import { useRevealSelectedSession } from "./use-reveal-selected-session";
 
 /**
@@ -27,7 +32,7 @@ export function SessionSelectionScope({
   const selection = useMemo(() => ({ visibleKey, entryKey }), [visibleKey, entryKey]);
   const scrollRegionRef = useRevealSelectedSession(model, selection, mode);
   return (
-    <SessionSelectionContext value={selection}>
+    <SessionSelectionProvider selection={selection}>
       <div
         ref={scrollRegionRef}
         className={className}
@@ -35,6 +40,20 @@ export function SessionSelectionScope({
       >
         {children}
       </div>
-    </SessionSelectionContext>
+    </SessionSelectionProvider>
   );
+}
+
+/** Gives the rows a selection store that follows `selection`. */
+export function SessionSelectionProvider({
+  selection,
+  children,
+}: {
+  selection: SessionSelection;
+  children: ReactNode;
+}): ReactElement {
+  const [store] = useState(() => createSessionSelectionStore(selection));
+  // Before paint, so a switch shows the new selection in the same frame.
+  useLayoutEffect(() => store.set(selection), [store, selection]);
+  return <SessionSelectionContext value={store}>{children}</SessionSelectionContext>;
 }

@@ -14,7 +14,8 @@ import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/session
 import { SessionReadStateProvider } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
 import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import { SessionMenuProvider } from "./session-menu-provider";
-import { type SessionSelection, SessionSelectionContext } from "./session-navigation-selection";
+import type { SessionSelection } from "./session-navigation-selection";
+import { SessionSelectionProvider } from "./session-selection-scope";
 
 const observer = createWorkspaceActivityObserverStub();
 const runtimeStatus = createHostRuntimeStatusContextValue();
@@ -49,7 +50,9 @@ export function SessionNavigationTestProvider({
           <VisibleSessionTargetProvider>
             <SessionReadStateProvider visibility={documentVisibility}>
               <SessionMenuProvider>
-                <SessionSelectionContext value={selection}>{children}</SessionSelectionContext>
+                <SessionSelectionProvider selection={selection}>
+                  {children}
+                </SessionSelectionProvider>
               </SessionMenuProvider>
             </SessionReadStateProvider>
           </VisibleSessionTargetProvider>

@@ -16,7 +16,6 @@ import {
   alphaWorkspace,
   betaWorkspace,
   navigationModel,
-  NOW,
   taskSessionEntry,
   workspaceSessionEntry,
 } from "./session-navigation.test-support";
@@ -90,7 +89,6 @@ describe("session command activity", () => {
         <SessionNavigationTestProvider>
           <SessionNavigationList
             model={navigationModel({ recent: entries })}
-            now={NOW}
             onOpen={() => {}}
             onRetry={() => {}}
           />

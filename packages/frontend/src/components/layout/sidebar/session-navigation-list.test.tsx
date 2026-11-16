@@ -1,6 +1,15 @@
 import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  setSystemTime,
+  test,
+} from "bun:test";
 import * as cssPresence from "@/components/ui/css-presence";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
@@ -29,20 +38,21 @@ const renderList = (
 ) =>
   render(
     <SessionNavigationTestProvider selection={{ entryKey: selectedKey, visibleKey: selectedKey }}>
-      <SessionNavigationList model={model} now={NOW} onOpen={onOpen} onRetry={onRetry} />
+      <SessionNavigationList model={model} onOpen={onOpen} onRetry={onRetry} />
     </SessionNavigationTestProvider>,
   );
 
 describe("SessionNavigationList", () => {
+  // Rows read the minute clock, so the sample times are relative to a fixed system time.
+  beforeEach(() => setSystemTime(new Date(NOW)));
+  afterEach(() => setSystemTime());
   test("a new selection marks the rows without rendering the groups again", () => {
     const entries = [workspaceSessionEntry("first"), workspaceSessionEntry("second")];
     const model = navigationModel({ recent: entries });
     const onOpen = () => {};
     const onRetry = () => {};
     // As in the sidebar, the list element stays the same while the selection changes.
-    const listElement = (
-      <SessionNavigationList model={model} now={NOW} onOpen={onOpen} onRetry={onRetry} />
-    );
+    const listElement = <SessionNavigationList model={model} onOpen={onOpen} onRetry={onRetry} />;
     const list = (selectedKey: string) => (
       <SessionNavigationTestProvider selection={{ entryKey: selectedKey, visibleKey: selectedKey }}>
         {listElement}
@@ -326,12 +336,7 @@ describe("SessionNavigationList", () => {
 
     view.rerender(
       <SessionNavigationTestProvider>
-        <SessionNavigationList
-          model={navigationModel({})}
-          now={NOW}
-          onOpen={() => {}}
-          onRetry={() => {}}
-        />
+        <SessionNavigationList model={navigationModel({})} onOpen={() => {}} onRetry={() => {}} />
       </SessionNavigationTestProvider>,
     );
     expect(screen.queryByRole("status")).toBeNull();

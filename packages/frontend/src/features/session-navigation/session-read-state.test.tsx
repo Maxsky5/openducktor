@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useMemo, useState } from "react";
 import { SessionNavigationList } from "@/components/layout/sidebar/session-navigation-list.test-view";
 import { SessionNavigationRail } from "@/components/layout/sidebar/session-navigation-rail";
-import { SessionSelectionContext } from "@/components/layout/sidebar/session-navigation-selection";
+import { SessionSelectionProvider } from "@/components/layout/sidebar/session-selection-scope";
 import { SessionMenuProvider } from "@/components/layout/sidebar/session-menu-provider";
 import {
   alphaWorkspace,
@@ -212,16 +212,15 @@ const createHarness = ({ taskSession = false, unbound = false, noSessions = fals
     const Navigation = rail ? SessionNavigationRail : SessionNavigationList;
     const selectedKey = target ? sessionNavigationTargetKey(target) : null;
     return (
-      <SessionSelectionContext value={{ entryKey: selectedKey, visibleKey: selectedKey }}>
+      <SessionSelectionProvider selection={{ entryKey: selectedKey, visibleKey: selectedKey }}>
         <Navigation
           model={model}
-          now={NOW}
           onOpen={(entry: SessionNavigationEntry) => {
             if (allowNavigation) setTarget(entry.target);
           }}
           onRetry={() => {}}
         />
-      </SessionSelectionContext>
+      </SessionSelectionProvider>
     );
   }
   const runtimeStatus = createHostRuntimeStatusContextValue();

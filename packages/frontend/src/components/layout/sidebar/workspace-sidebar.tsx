@@ -30,7 +30,6 @@ import { useSessionGrouping } from "@openducktor/frontend-core/sessions/navigati
 import { useSessionNavigationModel } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-model";
 import { useVisibleSessionControls } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { useWatchSessionBlockers } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
-import { useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
@@ -166,7 +165,6 @@ export function WorkspaceSidebar({
   const { model, retrySource } = useSessionNavigationModel(scopedWorkspaces, grouping);
   useWatchSessionBlockers(model);
   const { readVisible } = useVisibleSessionControls();
-  const now = useMinuteClock();
   const listScopeKey =
     scope === "all" ? scope : `${scope}:${activeWorkspace?.workspaceId ?? "none"}`;
 
@@ -332,7 +330,6 @@ export function WorkspaceSidebar({
                 model={model}
                 collapsedGroups={scopedCollapsed}
                 onToggleGroup={toggleGroup}
-                now={now}
                 onOpen={openEntry}
                 onRetry={retrySource}
                 footer={
@@ -391,7 +388,6 @@ export function WorkspaceSidebar({
               <SessionNavigationRail
                 key={listScopeKey}
                 model={model}
-                now={now}
                 onOpen={openEntry}
                 onRetry={retrySource}
               />

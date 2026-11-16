@@ -17,7 +17,7 @@ import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { SessionNavigationList } from "./session-navigation-list.test-view";
 import { SessionNavigationRail } from "./session-navigation-rail";
-import { SessionSelectionContext } from "./session-navigation-selection";
+import { SessionSelectionProvider } from "./session-selection-scope";
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import {
   betaWorkspace,
@@ -70,16 +70,11 @@ function MenuHarness({
         {location.search}
       </output>
       <Link to="/kanban">Kanban</Link>
-      <SessionSelectionContext
-        value={{ entryKey: selected?.key ?? null, visibleKey: selected?.key ?? null }}
+      <SessionSelectionProvider
+        selection={{ entryKey: selected?.key ?? null, visibleKey: selected?.key ?? null }}
       >
-        <List
-          model={navigationModel({ recent: visible })}
-          now={NOW}
-          onOpen={onOpen}
-          onRetry={() => {}}
-        />
-      </SessionSelectionContext>
+        <List model={navigationModel({ recent: visible })} onOpen={onOpen} onRetry={() => {}} />
+      </SessionSelectionProvider>
     </>
   );
 }

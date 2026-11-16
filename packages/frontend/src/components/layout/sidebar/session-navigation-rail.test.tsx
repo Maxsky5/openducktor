@@ -1,5 +1,5 @@
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { SessionNavigationRail } from "./session-navigation-rail";
@@ -20,11 +20,14 @@ const renderRail = (
 ) =>
   render(
     <SessionNavigationTestProvider selection={{ entryKey: selectedKey, visibleKey: selectedKey }}>
-      <SessionNavigationRail onRetry={onRetry} model={model} now={NOW} onOpen={onOpen} />
+      <SessionNavigationRail onRetry={onRetry} model={model} onOpen={onOpen} />
     </SessionNavigationTestProvider>,
   );
 
 describe("SessionNavigationRail", () => {
+  // Rows read the minute clock, so the sample times are relative to a fixed system time.
+  beforeEach(() => setSystemTime(new Date(NOW)));
+  afterEach(() => setSystemTime());
   test("keeps the three groups with counts and one icon per session", () => {
     renderRail(
       navigationModel({

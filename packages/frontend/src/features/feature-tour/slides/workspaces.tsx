@@ -183,7 +183,7 @@ function TourSidebar({ modifier }: { modifier: string }): ReactElement {
                       <SessionRowContent
                         entry={entry}
                         unread={false}
-                        now={SAMPLE_NOW}
+                        sampleNow={SAMPLE_NOW}
                         readStatusId={`tour-${entry.key}`}
                         commandCount={0}
                         isSelected={false}
