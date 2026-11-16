@@ -3,6 +3,7 @@
 @import "./components/ui/dialog.css";
 @import "./components/ui/popover.css";
 @import "./components/ui/sheet.css";
+@import "./components/ui/toaster-inset.css";
 @import "./components/ui/tooltip.css";
 @import "./components/ui/icon-swap.css";
 @import "./components/ui/css-presence.css";
