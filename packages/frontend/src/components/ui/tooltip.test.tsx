@@ -42,3 +42,60 @@ describe("TooltipProvider", () => {
     expect(nextTooltip?.getAttribute("data-state")).toBe("instant-open");
   });
 });
+
+describe("Tooltip mounting", () => {
+  test("mounts its content only once it opens", async () => {
+    let contentRenders = 0;
+    function Content() {
+      contentRenders += 1;
+      return <>Open a new terminal</>;
+    }
+    render(
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>New terminal</TooltipTrigger>
+          <TooltipContent>
+            <Content />
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>,
+    );
+    expect(contentRenders).toBe(0);
+    expect(document.querySelector('[data-slot="tooltip-content"]')).toBeNull();
+    fireEvent.pointerMove(screen.getByText("New terminal"), { pointerType: "mouse" });
+    await waitFor(() => expect(getTooltipState()).toBe("delayed-open"), { timeout: 500 });
+    expect(contentRenders).toBeGreaterThan(0);
+  });
+
+  test("a nested provider with the same settings shares the open delay of its parent", async () => {
+    render(
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>New terminal</TooltipTrigger>
+          <TooltipContent>Open a new terminal</TooltipContent>
+        </Tooltip>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>Close terminal</TooltipTrigger>
+            <TooltipContent>Close this terminal</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </TooltipProvider>,
+    );
+    const firstTrigger = screen.getByText("New terminal");
+    fireEvent.pointerMove(firstTrigger, { pointerType: "mouse" });
+    await waitFor(() => expect(getTooltipState()).toBe("delayed-open"), { timeout: 500 });
+    fireEvent.pointerLeave(firstTrigger, { pointerType: "mouse" });
+    fireEvent.pointerMove(document, { clientX: 500, clientY: 500 });
+    fireEvent.pointerMove(screen.getByText("Close terminal"), { pointerType: "mouse" });
+    // One provider: the second tooltip opens at once, as in one group.
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByText("Close this terminal")[0]
+          ?.closest('[data-slot="tooltip-content"]')
+          ?.getAttribute("data-state"),
+      ).toBe("instant-open"),
+    );
+  });
+});
