@@ -31,7 +31,6 @@ test.each([
         value={{
           platform: item.platform,
           open: () => {},
-          registerPageCommand: () => () => {},
         }}
       >
         <PositionHint family={item.family} position={item.position} />

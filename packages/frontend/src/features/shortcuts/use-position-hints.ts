@@ -1,9 +1,29 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { AppPlatform } from "@openducktor/contracts";
-export function usePositionHints(platform: AppPlatform, active: boolean): void {
+
+const hide = () => document.documentElement.removeAttribute("data-shortcut-hints");
+
+/**
+ * The only writer of the position hints. They show while Mod is held and `active` is true: shortcuts
+ * are loaded, nothing records, and no dialog is open. App keys report here directly; the returned
+ * function takes the Mod state of keys from embedded browser pages and preview frames.
+ */
+export function usePositionHints(
+  platform: AppPlatform,
+  active: boolean,
+): (holdingMod: boolean) => void {
+  const activeRef = useRef(active);
+  useLayoutEffect(() => {
+    activeRef.current = active;
+    if (!active) hide();
+  }, [active]);
+  const report = useCallback((holdingMod: boolean) => {
+    if (holdingMod && activeRef.current)
+      document.documentElement.setAttribute("data-shortcut-hints", "true");
+    else hide();
+  }, []);
   useEffect(() => {
     let composing = false;
-    const hide = () => document.documentElement.removeAttribute("data-shortcut-hints");
     const state = (event: KeyboardEvent) => {
       const modifierKey = event.key === (platform === "darwin" ? "Meta" : "Control");
       const mod = modifierKey
@@ -11,9 +31,7 @@ export function usePositionHints(platform: AppPlatform, active: boolean): void {
         : platform === "darwin"
           ? event.metaKey
           : event.ctrlKey;
-      if (mod && !composing && active)
-        document.documentElement.setAttribute("data-shortcut-hints", "true");
-      else hide();
+      report(mod && !composing);
     };
     const start = () => {
       composing = true;
@@ -35,5 +53,6 @@ export function usePositionHints(platform: AppPlatform, active: boolean): void {
       window.removeEventListener("compositionstart", start, true);
       window.removeEventListener("compositionend", end, true);
     };
-  }, [platform, active]);
+  }, [platform, report]);
+  return report;
 }

@@ -143,20 +143,31 @@ export const builtinShortcutActionIdSchema = z.enum(BUILTIN_SHORTCUT_ACTION_IDS)
 export const workflowShortcutActionId = (workflowId: string, actionId: string) =>
   `workflow:${encodeURIComponent(workflowId)}:${encodeURIComponent(actionId)}` as const;
 
+/** The workflow and action of a canonical workflow shortcut ID, or null for any other value. */
+export const parseWorkflowShortcutActionId = (
+  value: string,
+): { workflowId: string; actionId: string } | null => {
+  if (!value.startsWith("workflow:")) return null;
+  const parts = value.slice("workflow:".length).split(":");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  try {
+    const workflowId = decodeURIComponent(parts[0]);
+    const actionId = decodeURIComponent(parts[1]);
+    return workflowShortcutActionId(workflowId, actionId) === value
+      ? { workflowId, actionId }
+      : null;
+  } catch {
+    // SAFETY: decodeURIComponent throws only for malformed escapes, which no canonical ID has.
+    return null;
+  }
+};
+
 export const workflowShortcutActionIdSchema = z
   .templateLiteral(["workflow:", z.string().min(1), ":", z.string().min(1)])
-  .refine((value) => {
-    const parts = value.slice("workflow:".length).split(":");
-    if (parts.length !== 2 || !parts[0] || !parts[1]) return false;
-    try {
-      return (
-        workflowShortcutActionId(decodeURIComponent(parts[0]), decodeURIComponent(parts[1])) ===
-        value
-      );
-    } catch {
-      return false;
-    }
-  }, "Use a canonical workflow action ID.");
+  .refine(
+    (value) => parseWorkflowShortcutActionId(value) !== null,
+    "Use a canonical workflow action ID.",
+  );
 export type WorkflowShortcutActionId = z.infer<typeof workflowShortcutActionIdSchema>;
 export const shortcutActionIdSchema = z.union([
   builtinShortcutActionIdSchema,

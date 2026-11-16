@@ -5,13 +5,8 @@ import {
   type ShortcutCombination,
   type ShortcutPreferences,
 } from "@openducktor/contracts";
-import {
-  compileShortcuts,
-  otherDeviceProblems,
-  SHORTCUT_COMMANDS,
-  scopesCanCoexist,
-  workflowCommandDefinition,
-} from "./catalogue";
+import { SHORTCUT_COMMANDS, scopesCanCoexist, workflowCommandDefinition } from "./catalogue";
+import { compileShortcuts, otherDeviceProblems } from "./compile-shortcuts";
 
 const keys = (key: string, modifiers: Partial<ShortcutCombination>): ShortcutCombination => ({
   key: { kind: "logical", key },
@@ -125,9 +120,9 @@ test("applies the when choice of an app command, and keeps approved defaults onl
   const compiled = (preferences: ShortcutPreferences) =>
     compileShortcuts(preferences, SHORTCUT_COMMANDS, "darwin", "electron");
   // Ctrl+B replaces backward movement only because the specification approves that default.
-  expect(compiled(prefs({})).byId.get("sidebar")?.command.allowInput).toBe(true);
+  expect(compiled(prefs({})).byId.get("sidebar")?.command.when).toBe("always");
   const notTyping = compiled({ ...prefs({}), when: { sidebar: "not-typing" } });
-  expect(notTyping.byId.get("sidebar")?.command.allowInput).toBe(false);
+  expect(notTyping.byId.get("sidebar")?.command.when).toBe("not-typing");
   expect(notTyping.problems.size).toBe(0);
 
   // Control+T edits text, so a command that also runs while typing cannot use it.

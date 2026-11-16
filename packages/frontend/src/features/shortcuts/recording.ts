@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import type {
-  AppPlatform,
-  ShortcutActionId,
-  ShortcutCombination,
-  ShortcutInput,
-} from "@openducktor/contracts";
+import type { AppPlatform, ShortcutActionId, ShortcutCombination } from "@openducktor/contracts";
 import { recordShortcut } from "@openducktor/contracts";
+import { modifierKeyParts } from "@openducktor/frontend-core/shortcuts/key-labels";
 import { shortcutInputFromEvent } from "./dom-input";
 import { shortcutRecording } from "./recording-store";
 
@@ -106,7 +102,7 @@ export function useShortcutRecorder({
         return;
       }
       const input = shortcutInputFromEvent(event);
-      const held = heldModifiers(input, platform);
+      const held = modifierKeyParts(input, platform);
       const combination = event.type === "keydown" ? recordShortcut(input, platform) : null;
       if (!combination) {
         const modifierOnly = MODIFIER_KEYS.has(event.key);
@@ -142,17 +138,6 @@ export function useShortcutRecorder({
 }
 
 const MODIFIER_KEYS = new Set(["Control", "Meta", "Alt", "AltGraph", "Shift"]);
-
-/** The held modifiers as keycap glyphs or names, in the platform order. */
-const heldModifiers = (input: ShortcutInput, platform: AppPlatform): string[] => {
-  const mac = platform === "darwin";
-  return [
-    input.ctrl && (mac ? "⌃" : "Ctrl"),
-    input.alt && (mac ? "⌥" : "Alt"),
-    input.shift && (mac ? "⇧" : "Shift"),
-    input.meta && mac && "⌘",
-  ].filter((part): part is string => Boolean(part));
-};
 
 /** A key as people name it: "Space", "D", or a named key such as "Tab". */
 const keyName = (key: string): string =>

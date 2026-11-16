@@ -84,13 +84,13 @@ test("changing another command label does not rerender an unchanged control", ()
   );
   try {
     act(() =>
-      registry.shortcutLabels!.replace(
+      registry.shortcutLabels.replace(
         new Map([["sidebar", { label: "Ctrl+B", keys: [], aria: "", owner: null }]]),
       ),
     );
     const before = renders;
     act(() =>
-      registry.shortcutLabels!.replace(
+      registry.shortcutLabels.replace(
         new Map([
           ["sidebar", { label: "Ctrl+B", keys: [], aria: "", owner: null }],
           ["task-edit", { label: "Ctrl+E", keys: [], aria: "", owner: "task-1" }],

@@ -13,7 +13,7 @@ type CommandPaletteRegistry = {
   registerPageCommand(command: CommandPalettePageCommand): () => void;
   /** `unlisted` is true when only commands that the palette never lists changed. */
   invalidatePageCommands(unlisted: boolean): void;
-  shortcutLabels?: ReturnType<typeof createShortcutLabelStore>;
+  shortcutLabels: ReturnType<typeof createShortcutLabelStore>;
 };
 
 export const CommandPaletteRegistryContext = createContext<CommandPaletteRegistry | null>(null);

@@ -7,10 +7,13 @@ import {
   type ShortcutWhen,
 } from "@openducktor/contracts";
 import { shortcutKeyParts } from "@openducktor/frontend-core/shortcuts/key-labels";
+import { compileShortcuts } from "@/features/shortcuts/compile-shortcuts";
 import {
   canChooseWhen,
-  compileShortcuts,
   effectiveShortcut,
+  type FocusArea,
+  recordKind,
+  type ShortcutScope,
   withWhen,
   type ShortcutCommandDefinition,
   type ShortcutShell,
@@ -97,7 +100,7 @@ export const withWhenChoice = (
   when: ShortcutWhen,
 ): ShortcutPreferences => {
   const choices = { ...preferences.when };
-  if (when === (command.defaultAllowInput ? "always" : "not-typing")) delete choices[command.id];
+  if (when === command.defaultWhen) delete choices[command.id];
   else choices[command.id] = when;
   return { ...preferences, when: choices };
 };
@@ -147,7 +150,7 @@ export const buildCommandViews = (
       defaultKeys: entry.defaultKeys[shell],
       customized: Boolean(preferences && Object.hasOwn(preferences.overrides, entry.id)),
       whenChoice: canChooseWhen(entry),
-      whenCustomized: entry.allowInput !== entry.defaultAllowInput,
+      whenCustomized: entry.when !== entry.defaultWhen,
       inactiveReason: compiled?.problems.get(entry.id)?.message,
       search: searchKey(
         `${entry.label} ${entry.group} ${keySearchText(current ?? null, platform)}`,
@@ -199,3 +202,22 @@ export const groupCommandViews = (
 
 const familyKey = (view: ShortcutCommandView): ShortcutFamily["key"] =>
   view.entry.id.startsWith("session-") ? "session" : "workspace";
+
+const FOCUS_WHEN = {
+  panel: "A panel has focus",
+  git: "The Git panel has focus",
+  browser: "A browser tab has focus",
+  content: "An item has focus",
+} as const satisfies Record<FocusArea, string>;
+
+/**
+ * When a command runs, for Settings. App-wide commands say only whether they run while typing,
+ * because typing is the most common reason that a key does nothing; a workspace or a session that
+ * they need is obvious from their name.
+ */
+export const whenLabel = (scope: ShortcutScope, when: ShortcutWhen): string => {
+  if (scope.kind === "focus") return FOCUS_WHEN[scope.area];
+  const record = recordKind(scope);
+  if (record) return record === "chat" ? "A session is selected" : "A task is selected";
+  return when === "always" ? "Always" : "Not while typing";
+};

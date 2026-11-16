@@ -3,16 +3,12 @@ import { Command } from "lucide-react";
 import { commandDefinition } from "../shortcuts/catalogue";
 import type { AppPlatform, ShortcutActionId } from "@openducktor/contracts";
 import { createContext, use, useEffect, useLayoutEffect, useRef } from "react";
-import type {
-  CommandPalettePageCommand,
-  CommandPaletteCommandRegistration,
-} from "./command-palette-types";
+import type { CommandPaletteCommandRegistration } from "./command-palette-types";
 
 export type CommandPaletteContextValue = {
   open: () => void;
   runPageCommand?: (id: ShortcutActionId) => void;
   /** Add a command while the page is mounted. The returned function removes it. */
-  registerPageCommand: (command: CommandPalettePageCommand) => () => void;
   /** The platform of this device. Key caps depend on it. */
   platform: AppPlatform | null;
 };

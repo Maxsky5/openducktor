@@ -42,26 +42,37 @@ const keyName = (key: ShortcutCombination["key"], platform: AppPlatform): string
   return Array.from(key.key).length === 1 ? key.key.toUpperCase() : namedKey(key.key);
 };
 
-/** Keycaps in the platform's conventional order: ⌃⌥⇧⌘ on macOS, Ctrl Alt Shift elsewhere. */
+/**
+ * Modifier keycaps in the platform's conventional order: ⌃⌥⇧⌘ on macOS, Ctrl Alt Shift elsewhere.
+ * Outside macOS, Meta is not a shortcut modifier, so it has no keycap.
+ */
+export const modifierKeyParts = (
+  { ctrl, meta, alt, shift }: { ctrl: boolean; meta: boolean; alt: boolean; shift: boolean },
+  platform: AppPlatform,
+): string[] => {
+  const mac = platform === "darwin";
+  const parts: string[] = [];
+  if (ctrl) parts.push(mac ? "⌃" : "Ctrl");
+  if (alt) parts.push(mac ? "⌥" : "Alt");
+  if (shift) parts.push(mac ? "⇧" : "Shift");
+  if (meta && mac) parts.push("⌘");
+  return parts;
+};
+
+/** Keycaps in the platform's conventional order, then the key. */
 export const shortcutKeyParts = (
   combination: ShortcutCombination,
   platform: AppPlatform,
-): string[] => {
-  const { ctrl, meta, alt, shift } = resolveShortcutModifiers(combination, platform);
-  const parts: string[] = [];
-  if (platform === "darwin") {
-    if (ctrl) parts.push("⌃");
-    if (alt) parts.push("⌥");
-    if (shift) parts.push("⇧");
-    if (meta) parts.push("⌘");
-  } else {
-    if (ctrl) parts.push("Ctrl");
-    if (alt) parts.push("Alt");
-    if (shift) parts.push("Shift");
-  }
-  parts.push(keyName(combination.key, platform));
-  return parts;
-};
+): string[] => [
+  ...modifierKeyParts(resolveShortcutModifiers(combination, platform), platform),
+  keyName(combination.key, platform),
+];
+
+/** The modifiers that a recorded shortcut needs, as keycaps and as spoken words. */
+export const recordingModifierNames = (platform: AppPlatform) =>
+  platform === "darwin"
+    ? { keys: "⌘ ⌃ or ⌥", words: "Command, Control or Option" }
+    : { keys: "Ctrl or Alt", words: "Ctrl or Alt" };
 
 export const shortcutLabel = (
   combination: ShortcutCombination | null,

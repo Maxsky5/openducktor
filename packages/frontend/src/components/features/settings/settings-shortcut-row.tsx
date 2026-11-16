@@ -1,7 +1,13 @@
 import { memo, type ReactNode, useRef } from "react";
 import { ChevronDown, CircleAlert, TriangleAlert } from "lucide-react";
-import type { AppPlatform, ShortcutCombination, ShortcutWhen } from "@openducktor/contracts";
 import {
+  type AppPlatform,
+  SHORTCUT_WHEN_VALUES,
+  type ShortcutCombination,
+  type ShortcutWhen,
+} from "@openducktor/contracts";
+import {
+  recordingModifierNames,
   shortcutKeyParts,
   shortcutLabel,
   spokenShortcut,
@@ -10,11 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
-import {
-  type ShortcutCommandDefinition,
-  type ShortcutProblem,
-  whenLabel,
-} from "@/features/shortcuts/catalogue";
+import type { ShortcutCommandDefinition } from "@/features/shortcuts/catalogue";
+import type { ShortcutProblem } from "@/features/shortcuts/compile-shortcuts";
+import { whenLabel } from "./settings-shortcut-model";
 import { typesText } from "@/features/shortcuts/recording";
 import type { ShortcutRowActions } from "./use-shortcut-editor";
 import { cn } from "@/lib/utils";
@@ -223,11 +227,12 @@ const keyFieldClassName = (editor: ShortcutRowEditor | null) =>
 
 /** The modifiers that a shortcut needs, as text. */
 function ModifierNames({ platform }: { platform: AppPlatform }) {
-  if (platform !== "darwin") return <>Ctrl or Alt</>;
+  const { keys, words } = recordingModifierNames(platform);
+  if (keys === words) return <>{words}</>;
   return (
     <>
-      <span aria-hidden="true">⌘ ⌃ or ⌥</span>
-      <span className="sr-only">Command, Control or Option</span>
+      <span aria-hidden="true">{keys}</span>
+      <span className="sr-only">{words}</span>
     </>
   );
 }
@@ -271,7 +276,7 @@ function RowDetail({
   return (
     <div className="flex h-5 items-center gap-1.5 text-xs text-muted-foreground">
       When
-      {when ?? <span className="text-foreground/80">{whenLabel(entry)}</span>}
+      {when ?? <span className="text-foreground/80">{whenLabel(entry.scope, entry.when)}</span>}
     </div>
   );
 }
@@ -293,21 +298,21 @@ function WhenPicker({
   onChoose(when: ShortcutWhen, trigger: HTMLElement): void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
-  const current: ShortcutWhen = entry.allowInput ? "always" : "not-typing";
-  const labelOf = (when: ShortcutWhen) => whenLabel({ ...entry, allowInput: when === "always" });
+  const current = entry.when;
+  const labelOf = (when: ShortcutWhen) => whenLabel(entry.scope, when);
   return (
     <Combobox
       value={current}
       searchable={false}
       className="w-88"
-      options={(["always", "not-typing"] as const).map((when) => ({
+      options={SHORTCUT_WHEN_VALUES.map((when) => ({
         value: when,
         label: labelOf(when),
         description: WHEN_DESCRIPTIONS[when],
       }))}
       onValueChange={(value) => {
-        if (value !== current && (value === "always" || value === "not-typing") && trigger.current)
-          onChoose(value, trigger.current);
+        const when = SHORTCUT_WHEN_VALUES.find((option) => option === value);
+        if (when && when !== current && trigger.current) onChoose(when, trigger.current);
       }}
       trigger={
         <button

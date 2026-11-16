@@ -17,13 +17,17 @@ import {
   useSyncExternalStore,
 } from "react";
 import { hasOpenDialog, openDialogCount, subscribeOpenDialogs } from "@/components/ui/open-dialogs";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { currentShortcutShell } from "./catalogue";
 import {
   CommandPaletteRegistryContext,
   useCommandPaletteCommands,
 } from "../command-palette/command-palette-registry";
 import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
-import { type CompiledShortcuts, compileShortcuts, type ShortcutBinding } from "./catalogue";
+import {
+  type CompiledShortcuts,
+  compileShortcuts,
+  type ShortcutBinding,
+} from "./compile-shortcuts";
 import { isTyping, resolveShortcutOwner } from "./command-resolution";
 import { shortcutInputFromEvent } from "./dom-input";
 import { shortcutRecording } from "./recording-store";
@@ -155,19 +159,15 @@ export function useShortcutDispatch({
     shortcutRecording.isActive,
   );
   const preferences = useShortcutPreferences();
-  const electron = getShellBridge().browser.surface === "electron";
+  const shell = currentShortcutShell();
+  const electron = shell === "electron";
   const catalogue = useShortcutCatalogue(preferences.query.data);
   const compiled = useMemo(
     () =>
       preferences.query.data
-        ? compileShortcuts(
-            preferences.query.data,
-            catalogue,
-            platform,
-            electron ? "electron" : "browser",
-          )
+        ? compileShortcuts(preferences.query.data, catalogue, platform, shell)
         : null,
-    [preferences.query.data, catalogue, platform, electron],
+    [preferences.query.data, catalogue, platform, shell],
   );
   const state = useMemo<DispatchState>(
     () => ({
@@ -201,6 +201,7 @@ export function useShortcutDispatch({
     latest.current.refreshFrames();
     latest.current.publishLabels();
   }, []);
+  const reportHints = usePositionHints(platform, Boolean(compiled) && !recording && overlays === 0);
   const onEmbeddedInput = (
     tabId: string | null,
     event: EmbeddedShortcutEvent,
@@ -208,22 +209,12 @@ export function useShortcutDispatch({
   ) => {
     if (event.type === "blur") {
       if (tabId === null) shortcutRecording.ended();
-      document.documentElement.removeAttribute("data-shortcut-hints");
+      reportHints(false);
       return;
     }
     const focus = tabId === null ? document.activeElement : sourceFocus(tabId);
-    if (event.type === "key-state") {
-      if (
-        focus &&
-        current &&
-        compiled &&
-        holdsShortcutMod(event.input, platform) &&
-        !shortcutRecording.isActive() &&
-        overlays === 0
-      )
-        document.documentElement.setAttribute("data-shortcut-hints", "true");
-      else document.documentElement.removeAttribute("data-shortcut-hints");
-    }
+    if (event.type === "key-state")
+      reportHints(Boolean(focus && current && holdsShortcutMod(event.input, platform)));
     if (event.type !== "invoke") {
       focusInput(focus);
       return;
@@ -269,8 +260,6 @@ export function useShortcutDispatch({
     window.addEventListener("keydown", listener, { capture: true });
     return () => window.removeEventListener("keydown", listener, { capture: true });
   }, []);
-
-  usePositionHints(platform, Boolean(compiled) && !recording && overlays === 0);
 
   // Labels follow focus, so focus changes publish them directly instead of rendering this owner.
   const labelStore = registry.shortcutLabels;

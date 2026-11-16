@@ -14,15 +14,12 @@ import { SessionViewControls } from "./session-view-controls";
 /** A palette that keeps the page commands that are registered now. */
 const recordingPalette = (shortcutLabel?: (id: string) => string | null) => {
   const commands = new Map<string, CommandPalettePageCommand>();
-  const value: CommandPaletteContextValue = {
-    open: () => {},
-    platform: null,
-    registerPageCommand: (command) => {
-      commands.set(command.id, command);
-      return () => {
-        if (commands.get(command.id) === command) commands.delete(command.id);
-      };
-    },
+  const value: CommandPaletteContextValue = { open: () => {}, platform: null };
+  const registerPageCommand = (command: CommandPalettePageCommand) => {
+    commands.set(command.id, command);
+    return () => {
+      if (commands.get(command.id) === command) commands.delete(command.id);
+    };
   };
 
   const wrap = (element: ReactElement): ReactElement => {
@@ -43,7 +40,7 @@ const recordingPalette = (shortcutLabel?: (id: string) => string | null) => {
           shortcutLabels,
           subscribe: () => () => {},
           invalidatePageCommands: () => {},
-          registerPageCommand: value.registerPageCommand,
+          registerPageCommand,
         }}
       >
         <CommandPaletteContext value={value}>{element}</CommandPaletteContext>

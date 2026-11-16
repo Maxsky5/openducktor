@@ -18,6 +18,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "shortcutActionIdSchema",
   "workflowShortcutActionIdSchema",
   "workflowShortcutActionId",
+  "parseWorkflowShortcutActionId",
   "electronShortcutRulesSchema",
   "shortcutKeySchema",
   "shortcutCombinationSchema",

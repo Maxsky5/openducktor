@@ -6,12 +6,11 @@ import { Button } from "@/components/ui/button";
 import { ToolbarSearchField } from "@/components/ui/search-field";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type ShortcutShell, whenLabel } from "@/features/shortcuts/catalogue";
+import { currentShortcutShell } from "@/features/shortcuts/catalogue";
 import { spokenShortcut } from "@openducktor/frontend-core/shortcuts/key-labels";
 import { useShortcutCatalogue } from "@/features/shortcuts/use-shortcut-catalogue";
 import { useShortcutPreferences } from "@/features/shortcuts/use-shortcut-preferences";
 import { readDevicePlatform } from "@/lib/device-platform";
-import { getShellBridge } from "@/lib/shell-bridge";
 import { cn } from "@/lib/utils";
 import {
   buildCommandViews,
@@ -21,6 +20,7 @@ import {
   type ShortcutFamily,
   type ShortcutFilter,
   searchKey,
+  whenLabel,
 } from "./settings-shortcut-model";
 import {
   SettingsShortcutRow,
@@ -44,8 +44,7 @@ export function SettingsKeyboardShortcutsSection() {
   const draft = useShortcutDraftContext();
   const catalogue = useShortcutCatalogue(draft.preferences);
   const platform = readDevicePlatform();
-  const shell: ShortcutShell =
-    getShellBridge().browser.surface === "electron" ? "electron" : "browser";
+  const shell = currentShortcutShell();
   const heading = useRef<HTMLHeadingElement>(null);
   const editor = useShortcutEditor({ catalogue, platform, shell, heading, draft });
   const [search, setSearch] = useState("");
@@ -307,7 +306,7 @@ function FamilyRows({
           >
             When
             <span className="text-foreground/80">
-              {firstView ? whenLabel(firstView.entry) : "Always"}
+              {firstView ? whenLabel(firstView.entry.scope, firstView.entry.when) : "Always"}
             </span>
             <span aria-hidden="true">·</span>
             {family.key === "session" ? "In sidebar order" : "In workspace rail order"}

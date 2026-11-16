@@ -1,3 +1,4 @@
+import { createShortcutLabelStore } from "@/features/shortcuts/shortcut-label-store";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
 import type { CommandPalettePageCommand } from "@/features/command-palette/command-palette-types";
@@ -301,6 +302,7 @@ describe("AgentChatMessageQueue", () => {
     const registry = {
       pageCommands: [],
       listedCommands: [],
+      shortcutLabels: createShortcutLabelStore(),
       subscribe: () => () => {},
       invalidatePageCommands: () => {},
       registerPageCommand: (command: CommandPalettePageCommand) => {

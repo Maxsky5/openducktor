@@ -1,6 +1,6 @@
 import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
 import { isUnlisted } from "../command-palette/command-palette-registry";
-import type { ShortcutActionId } from "@openducktor/contracts";
+import { parseWorkflowShortcutActionId, type ShortcutActionId } from "@openducktor/contracts";
 import {
   commandDefinition,
   runsInPalette,
@@ -56,7 +56,7 @@ export const resolvePageCommand = (
   focus: Element | null,
   { palette, typing }: { palette: boolean; typing: boolean },
 ): CommandPalettePageCommand | null => {
-  const blockedByTyping = typing && !definition.allowInput;
+  const blockedByTyping = typing && definition.when !== "always";
   const candidates = commandsWithId(commands, definition.id).filter((command) => {
     if (command.paletteOnly && !palette) return false;
     if (blockedByTyping && !command.ownsInput) return false;
@@ -122,8 +122,13 @@ export const resolveShortcutOwner = (
 };
 
 /** The catalogue definition of a registration; a workflow action is defined by its host. */
-const definitionOf = (command: CommandPalettePageCommand): ShortcutCommandDefinition =>
-  commandDefinition(command.id) ?? workflowCommandDefinition(command.id, "", command.label);
+const definitionOf = (command: CommandPalettePageCommand): ShortcutCommandDefinition => {
+  const builtin = commandDefinition(command.id);
+  if (builtin) return builtin;
+  const workflow = parseWorkflowShortcutActionId(command.id);
+  if (!workflow) throw new Error(`Shortcut action ${command.id} is not a known command.`);
+  return workflowCommandDefinition(command.id, workflow.workflowId, command.label);
+};
 
 /** Runs the one eligible owner of a command outside the palette, such as from a menu. */
 export const runRegisteredCommand = (

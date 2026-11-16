@@ -1,5 +1,8 @@
 import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { spokenShortcut } from "@openducktor/frontend-core/shortcuts/key-labels";
+import {
+  recordingModifierNames,
+  spokenShortcut,
+} from "@openducktor/frontend-core/shortcuts/key-labels";
 import type {
   AppPlatform,
   ShortcutActionId,
@@ -7,14 +10,13 @@ import type {
   ShortcutPreferences,
   ShortcutWhen,
 } from "@openducktor/contracts";
+import type { ShortcutCommandDefinition, ShortcutShell } from "@/features/shortcuts/catalogue";
 import {
   compileShortcuts,
   otherDeviceProblems,
   problemOfCommand,
-  type ShortcutCommandDefinition,
   type ShortcutProblem,
-  type ShortcutShell,
-} from "@/features/shortcuts/catalogue";
+} from "@/features/shortcuts/compile-shortcuts";
 import { typesText, useShortcutRecorder } from "@/features/shortcuts/recording";
 import { whenChoiceChange, withAssignment } from "./settings-shortcut-model";
 import type { ShortcutDraft } from "./use-shortcut-draft";
@@ -255,7 +257,7 @@ const liveStatus = ({
   platform: AppPlatform;
   last: string;
 }): string => {
-  const modifiers = platform === "darwin" ? "Command, Control or Option" : "Ctrl or Alt";
+  const modifiers = recordingModifierNames(platform).words;
   if (ignored)
     return `${ignored} ${typesText(ignored) ? "alone types text" : "needs a modifier"}. Hold ${modifiers} and press a key.`;
   if (recording) return `Recording keys for ${recording}. Press Escape to cancel.`;

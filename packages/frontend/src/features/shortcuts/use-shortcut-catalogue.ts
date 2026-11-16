@@ -1,7 +1,7 @@
 import {
   type ShortcutPreferences,
   workflowShortcutActionId,
-  workflowShortcutActionIdSchema,
+  parseWorkflowShortcutActionId,
 } from "@openducktor/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -29,14 +29,15 @@ export function useShortcutCatalogue(
       }
     const unavailable: ShortcutCommandDefinition[] = [];
     for (const key of Object.keys(preferences?.overrides ?? {})) {
-      const id = workflowShortcutActionIdSchema.safeParse(key).data;
-      if (!id || available.has(id)) continue;
-      const [workflowId = "", actionId = ""] = id.slice("workflow:".length).split(":");
+      const parsed = parseWorkflowShortcutActionId(key);
+      if (!parsed) continue;
+      const id = workflowShortcutActionId(parsed.workflowId, parsed.actionId);
+      if (available.has(id)) continue;
       unavailable.push(
         workflowCommandDefinition(
           id,
-          decodeURIComponent(workflowId),
-          decodeURIComponent(actionId),
+          parsed.workflowId,
+          parsed.actionId,
           "This workflow action is not available on this host.",
         ),
       );

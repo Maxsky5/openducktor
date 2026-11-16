@@ -1,3 +1,4 @@
+import { createShortcutLabelStore } from "@/features/shortcuts/shortcut-label-store";
 import { ShortcutLabels } from "@/test-utils/shortcut-labels";
 import { Command } from "lucide-react";
 import { useCommandPalettePageCommand } from "../command-palette/command-palette-context";
@@ -249,6 +250,7 @@ describe("SessionPanel", () => {
             value={{
               pageCommands: [],
               listedCommands: [],
+              shortcutLabels: createShortcutLabelStore(),
               subscribe: () => () => {},
               invalidatePageCommands: () => {},
               registerPageCommand,
@@ -258,7 +260,6 @@ describe("SessionPanel", () => {
               value={{
                 platform: "linux",
                 open: () => {},
-                registerPageCommand,
                 runPageCommand: focusComposer,
               }}
             >
@@ -530,7 +531,6 @@ describe("SessionPanel", () => {
           value={{
             open: () => {},
             platform: "linux",
-            registerPageCommand: () => () => {},
           }}
         >
           <SessionPanel
@@ -662,7 +662,6 @@ describe("SessionPanel", () => {
           value={{
             open: () => {},
             platform: "linux",
-            registerPageCommand: () => () => {},
           }}
         >
           <SessionViewContext value={{ id: "view", isActive: isShown }}>

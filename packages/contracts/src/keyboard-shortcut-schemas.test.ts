@@ -3,6 +3,8 @@ import {
   embeddedShortcutEventSchema,
   holdsShortcutMod,
   inputSignature,
+  isShortcutKey,
+  NAMED_SHORTCUT_KEYS,
   recordShortcut,
   shortcutPreferencesSchema,
   shortcutRouteSchema,
@@ -174,4 +176,18 @@ describe("portable combinations", () => {
       for (const platform of ["darwin", "win32", "linux"] as const)
         expect(serialized(press, platform)).toBe(inputSignature(press, platform));
   });
+});
+
+test("every key that Settings accepts can also run", () => {
+  // `inputSignature` keeps its own key list because preview frames embed its source text.
+  const keys = [
+    ...NAMED_SHORTCUT_KEYS,
+    ...Array.from({ length: 24 }, (_, index) => `F${index + 1}`),
+  ];
+  for (const key of keys) {
+    expect(isShortcutKey(key)).toBe(true);
+    expect(inputSignature(input({ ctrl: true, key, code: key }), "linux")).not.toBeNull();
+  }
+  expect(isShortcutKey("F25")).toBe(false);
+  expect(inputSignature(input({ ctrl: true, key: "F25", code: "F25" }), "linux")).toBeNull();
 });
