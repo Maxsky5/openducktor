@@ -1,6 +1,11 @@
 import type { GitDiffScope, GitCurrentBranch } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { GitFileStatus, GitPortError } from "../../ports/git-port";
+import type {
+  GitFileStatus,
+  GitPortError,
+  GitWorktreeStatusData,
+  GitWorktreeStatusSummaryData,
+} from "../../ports/git-port";
 import { type GitCommandRunner, requireNonEmptyEffect } from "./git-command-runner";
 import { buildFileDiffs, loadBranchChangesDiffPayload, loadDiffPayload } from "./git-diff";
 import { fileStatusCounts, getCurrentBranchUnchecked, getStatusUnchecked } from "./git-status";
@@ -15,6 +20,64 @@ type WorktreeReads = {
   branch: () => Effect.Effect<GitCurrentBranch, GitPortError>;
   status: () => Effect.Effect<GitFileStatus[], GitPortError>;
 };
+const readWorktreeStatusContext = (
+  runner: GitCommandRunner,
+  workingDirectory: string,
+  targetBranch: string,
+  reads: WorktreeReads,
+) =>
+  Effect.gen(function* () {
+    const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
+    const currentBranch = yield* reads.branch();
+    const upstreamTarget = yield* resolveTrackedUpstreamReference(
+      runner,
+      workingDirectory,
+      currentBranch.name,
+    );
+    const effectiveTargetBranch = resolveEffectiveTargetBranch(target, upstreamTarget);
+    const fileStatuses = yield* reads.status();
+    return { target, currentBranch, upstreamTarget, effectiveTargetBranch, fileStatuses };
+  });
+
+const finishWorktreeStatus = <Details extends object>(
+  runner: GitCommandRunner,
+  workingDirectory: string,
+  {
+    currentBranch,
+    upstreamTarget,
+    effectiveTargetBranch,
+    fileStatuses,
+  }: Effect.Success<ReturnType<typeof readWorktreeStatusContext>>,
+  details: Details,
+) =>
+  Effect.gen(function* () {
+    const targetAheadBehind = yield* commitsAgainstTargetOrDefault(
+      runner,
+      workingDirectory,
+      effectiveTargetBranch,
+    );
+    const upstreamAheadBehind = yield* resolveUpstreamAheadBehind(
+      runner,
+      workingDirectory,
+      upstreamTarget,
+      currentBranch.revision,
+    );
+    const gitConflict = yield* loadRebaseConflictContext(
+      runner,
+      workingDirectory,
+      currentBranch,
+      fileStatuses,
+    );
+    const status = {
+      currentBranch,
+      fileStatuses,
+      ...details,
+      targetAheadBehind,
+      upstreamAheadBehind,
+    };
+    return gitConflict ? { ...status, gitConflict } : status;
+  });
+
 export const buildWorktreeStatusData = (
   runner: GitCommandRunner,
   workingDirectory: string,
@@ -24,23 +87,20 @@ export const buildWorktreeStatusData = (
     branch: () => getCurrentBranchUnchecked(runner, workingDirectory),
     status: () => getStatusUnchecked(runner, workingDirectory),
   },
-) =>
+): Effect.Effect<GitWorktreeStatusData, GitPortError> =>
   Effect.gen(function* () {
-    const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
-    const currentBranch = yield* reads.branch();
-    const upstreamTarget = yield* resolveTrackedUpstreamReference(
-      runner,
-      workingDirectory,
-      currentBranch.name,
-    );
-    const effectiveTargetBranch = resolveEffectiveTargetBranch(target, upstreamTarget);
-    const fileStatuses = yield* reads.status();
-    const rawDiffPayload =
-      diffScope === "target"
-        ? effectiveTargetBranch
-          ? yield* loadBranchChangesDiffPayload(runner, workingDirectory, effectiveTargetBranch)
-          : undefined
-        : yield* loadDiffPayload(runner, workingDirectory);
+    const context = yield* readWorktreeStatusContext(runner, workingDirectory, targetBranch, reads);
+    const { effectiveTargetBranch, fileStatuses } = context;
+    let rawDiffPayload;
+    if (diffScope !== "target") {
+      rawDiffPayload = yield* loadDiffPayload(runner, workingDirectory);
+    } else if (effectiveTargetBranch) {
+      rawDiffPayload = yield* loadBranchChangesDiffPayload(
+        runner,
+        workingDirectory,
+        effectiveTargetBranch,
+      );
+    }
     const fileDiffs = rawDiffPayload
       ? yield* buildFileDiffs(
           runner,
@@ -50,75 +110,21 @@ export const buildWorktreeStatusData = (
           rawDiffPayload.diff,
         )
       : [];
-    const targetAheadBehind = yield* commitsAgainstTargetOrDefault(
-      runner,
-      workingDirectory,
-      effectiveTargetBranch,
-    );
-    const upstreamAheadBehind = yield* resolveUpstreamAheadBehind(
-      runner,
-      workingDirectory,
-      upstreamTarget,
-      currentBranch.revision,
-    );
-    const gitConflict = yield* loadRebaseConflictContext(
-      runner,
-      workingDirectory,
-      currentBranch,
-      fileStatuses,
-    );
-    const status = {
-      currentBranch,
-      fileStatuses,
-      fileDiffs,
-      targetAheadBehind,
-      upstreamAheadBehind,
-    };
-    return gitConflict ? { ...status, gitConflict } : status;
+    return yield* finishWorktreeStatus(runner, workingDirectory, context, { fileDiffs });
   });
+
 export const buildWorktreeStatusSummaryData = (
   runner: GitCommandRunner,
   workingDirectory: string,
   targetBranch: string,
-  _diffScope: GitDiffScope,
   reads: WorktreeReads = {
     branch: () => getCurrentBranchUnchecked(runner, workingDirectory),
     status: () => getStatusUnchecked(runner, workingDirectory),
   },
-) =>
+): Effect.Effect<GitWorktreeStatusSummaryData, GitPortError> =>
   Effect.gen(function* () {
-    const target = yield* requireNonEmptyEffect(targetBranch, "target branch");
-    const currentBranch = yield* reads.branch();
-    const upstreamTarget = yield* resolveTrackedUpstreamReference(
-      runner,
-      workingDirectory,
-      currentBranch.name,
-    );
-    const effectiveTargetBranch = resolveEffectiveTargetBranch(target, upstreamTarget);
-    const fileStatuses = yield* reads.status();
-    const targetAheadBehind = yield* commitsAgainstTargetOrDefault(
-      runner,
-      workingDirectory,
-      effectiveTargetBranch,
-    );
-    const upstreamAheadBehind = yield* resolveUpstreamAheadBehind(
-      runner,
-      workingDirectory,
-      upstreamTarget,
-      currentBranch.revision,
-    );
-    const gitConflict = yield* loadRebaseConflictContext(
-      runner,
-      workingDirectory,
-      currentBranch,
-      fileStatuses,
-    );
-    const status = {
-      currentBranch,
-      fileStatuses,
-      fileStatusCounts: fileStatusCounts(fileStatuses),
-      targetAheadBehind,
-      upstreamAheadBehind,
-    };
-    return gitConflict ? { ...status, gitConflict } : status;
+    const context = yield* readWorktreeStatusContext(runner, workingDirectory, targetBranch, reads);
+    return yield* finishWorktreeStatus(runner, workingDirectory, context, {
+      fileStatusCounts: fileStatusCounts(context.fileStatuses),
+    });
   });

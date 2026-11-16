@@ -378,6 +378,70 @@ describe("createGitCliAdapter", () => {
       }),
     );
   });
+  test("builds a worktree summary with counts and omits diff and conflict fields", async () => {
+    const git = createGitCliAdapter({
+      runner: createRunner({
+        "branch --show-current": "feature/summary\n",
+        "rev-parse HEAD": "abc123\n",
+        "status --porcelain=v1 -z --untracked-files=all --find-renames":
+          "M  staged.ts\0 M unstaged.ts\0",
+        "rev-list --count --left-right --end-of-options origin/main...HEAD": "1 2\n",
+        "rev-list --count abc123 --not --remotes": "3\n",
+      }),
+    });
+    const summary = await Effect.runPromise(
+      git.getWorktreeStatusSummaryData("/repo", "origin/main", "target"),
+    );
+    expect(summary).toEqual({
+      currentBranch: { name: "feature/summary", detached: false, revision: "abc123" },
+      fileStatuses: [
+        { path: "staged.ts", status: "modified", staged: true },
+        { path: "unstaged.ts", status: "modified", staged: false },
+      ],
+      fileStatusCounts: { total: 2, staged: 1, unstaged: 1 },
+      targetAheadBehind: { ahead: 2, behind: 1 },
+      upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
+    });
+  });
+  test.each(["full", "summary"] as const)(
+    "%s worktree status rejects an empty target before Git reads",
+    async (statusKind) => {
+      const calls: string[] = [];
+      const git = createGitCliAdapter({
+        runner: (_directory, args) => {
+          calls.push(args.join(" "));
+          return Effect.succeed({ ok: false, stdout: "", stderr: "unexpected Git read" });
+        },
+      });
+      const result =
+        statusKind === "full"
+          ? Effect.runPromise(git.getWorktreeStatusData("/repo", "", "target"))
+          : Effect.runPromise(git.getWorktreeStatusSummaryData("/repo", "", "target"));
+      await expect(result).rejects.toThrow("target branch");
+      expect(calls).toEqual([]);
+    },
+  );
+  test("reports a diff failure before reading ahead and behind counts", async () => {
+    const calls: string[] = [];
+    const outputs = createRunner({
+      "branch --show-current": "feature/errors\n",
+      "rev-parse HEAD": "abc123\n",
+      "merge-base --end-of-options origin/main HEAD": "base123\n",
+    });
+    const git = createGitCliAdapter({
+      runner: (directory, args) => {
+        calls.push(args.join(" "));
+        if (args[0] === "diff" || args[0] === "rev-list") {
+          return Effect.succeed({ ok: false, stdout: "", stderr: `${args[0]} failed` });
+        }
+        return outputs(directory, args);
+      },
+    });
+    await expect(
+      Effect.runPromise(git.getWorktreeStatusData("/repo", "origin/main", "target")),
+    ).rejects.toThrow("diff failed");
+    expect(calls.some((command) => command.startsWith("rev-list "))).toBe(false);
+  });
   test("returns commit counts ahead and behind a target branch", async () => {
     const git = createGitCliAdapter({
       runner: createRunner({
