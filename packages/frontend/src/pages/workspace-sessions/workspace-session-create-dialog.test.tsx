@@ -37,7 +37,8 @@ import {
   createSettingsSnapshotFixture,
   createWorkspaceRecordFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { AppToaster, StartupNotifications } from "@/features/session-startup/session-startup-stack";
+import { AppToaster } from "@/components/layout/app-toaster";
+import { StartupNotifications } from "@/features/session-startup/session-startup-stack";
 import { WorkspaceSessionCreateDialog } from "./workspace-session-create-dialog";
 import { repoConfigFixture } from "@openducktor/frontend-core/test-support/repo-config-fixture";
 

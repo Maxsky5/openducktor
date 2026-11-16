@@ -21,7 +21,8 @@ import {
 } from "@/components/layout/workspace-preview-transition-guard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StartupDialogProgress } from "./session-startup-dialog-progress";
-import { AppToaster, StartupNotifications } from "./session-startup-stack";
+import { AppToaster } from "@/components/layout/app-toaster";
+import { StartupNotifications } from "./session-startup-stack";
 import { useOpenStartupSession } from "./use-open-startup-session";
 import { useStartupDialogAttempt, useStartupDialogClose } from "./use-startup-dialog-attempt";
 

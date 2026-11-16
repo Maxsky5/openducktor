@@ -17,7 +17,7 @@ import {
   WorkspacePreviewRouteGuard,
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
-import { AppToaster } from "@/features/session-startup/session-startup-stack";
+import { AppToaster } from "@/components/layout/app-toaster";
 import { loadNotFoundPage } from "@/pages";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { SessionsPage } from "@/pages/sessions/sessions-page";
