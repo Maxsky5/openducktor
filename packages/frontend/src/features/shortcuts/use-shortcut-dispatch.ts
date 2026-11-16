@@ -21,7 +21,7 @@ import { currentShortcutShell } from "./catalogue";
 import {
   CommandPaletteRegistryContext,
   useCommandPaletteCommands,
-} from "../command-palette/command-palette-registry";
+} from "../command-palette/command-palette-registry-context";
 import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
 import {
   type CompiledShortcuts,
@@ -101,9 +101,15 @@ const invocationFor = (
   return null;
 };
 
-const embeddedRoutes = (state: DispatchState, focus: Element): ShortcutRoute[] =>
+/**
+ * A preview page can forge its key messages, so it reaches only commands that run while typing by
+ * default. A command that the user sets to run while typing, such as Send message, stays out.
+ */
+const pageMayRun = (binding: ShortcutBinding): boolean => binding.command.defaultWhen === "always";
+
+const embeddedRoutes = (state: DispatchState, focus: Element, page: boolean): ShortcutRoute[] =>
   Array.from(state.compiled?.byId.values() ?? []).flatMap((binding) =>
-    invocationOf(state, binding, focus, true)
+    (!page || pageMayRun(binding)) && invocationOf(state, binding, focus, true)
       ? [{ signature: binding.signature, commandId: binding.command.id }]
       : [],
   );
@@ -114,7 +120,7 @@ const nativeRoutesOf = (state: DispatchState): NativeShortcutRoutes => {
   const guestRoutes: Record<string, ShortcutRoute[]> = {};
   for (const element of document.querySelectorAll<HTMLElement>("[data-browser-tab-id]")) {
     const tabId = element.getAttribute("data-browser-tab-id");
-    if (tabId) guestRoutes[tabId] = embeddedRoutes(state, element);
+    if (tabId) guestRoutes[tabId] = embeddedRoutes(state, element, false);
   }
   return { claims: Array.from(state.compiled.bySignature.keys()), guestRoutes };
 };
@@ -206,6 +212,7 @@ export function useShortcutDispatch({
     tabId: string | null,
     event: EmbeddedShortcutEvent,
     current: boolean,
+    page: boolean,
   ) => {
     if (event.type === "blur") {
       if (tabId === null) shortcutRecording.ended();
@@ -221,7 +228,11 @@ export function useShortcutDispatch({
     }
     if (!current || tabId === null || !focus?.isConnected) return;
     const binding = compiled?.byId.get(event.commandId);
-    if (binding && binding.signature === inputSignature(event.input, platform))
+    if (
+      binding &&
+      (!page || pageMayRun(binding)) &&
+      binding.signature === inputSignature(event.input, platform)
+    )
       invocationOf(state, binding, focus, true)?.run();
   };
 
@@ -231,15 +242,15 @@ export function useShortcutDispatch({
     readRoutes: () => nativeRoutesOf(state),
     recording,
     retryRevision,
-    onInput: onEmbeddedInput,
+    onInput: (tabId, event, current) => onEmbeddedInput(tabId, event, current, false),
   });
   const frames = useFrameShortcutRouting({
     retryRevision,
     routesVersion: state,
-    onInput: onEmbeddedInput,
+    onInput: (tabId, event, current) => onEmbeddedInput(tabId, event, current, true),
     readRoutes: (tabId) => {
       const focus = sourceFocus(tabId);
-      return focus ? embeddedRoutes(state, focus) : [];
+      return focus ? embeddedRoutes(state, focus, true) : [];
     },
   });
   const { prepareRecording } = native;
@@ -307,13 +318,14 @@ export function useShortcutDispatch({
   }, [electron, focusInput]);
   useLayoutEffect(() => () => labelStore?.replace(new Map()), [labelStore]);
 
+  // Only unreadable preferences turn every shortcut off; other failures affect one source.
+  const sourceError = preferences.updatesError ?? native.error ?? frames.error;
+  let inputError: string | null = null;
+  if (preferences.query.error)
+    inputError = `Keyboard shortcuts are off. ${preferences.query.error.message}`;
+  else if (sourceError) inputError = `Some keyboard shortcuts are unavailable. ${sourceError}`;
   return {
-    inputError:
-      preferences.query.error?.message ??
-      preferences.updatesError ??
-      native.error ??
-      frames.error ??
-      null,
+    inputError,
     retry: () => {
       if (preferences.query.error) void preferences.query.refetch();
       else setRetryRevision((value) => value + 1);

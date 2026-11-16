@@ -80,6 +80,16 @@ test("lets exclusive scopes share keys and keeps coexisting scopes apart", () =>
       "git-refresh",
     ),
   ).toContain("Close current panel tab");
+  // A content item can have focus inside the Git view, so the two areas share no keys.
+  expect(
+    problem(
+      prefs({
+        "content-external": keys("f9", { mod: true, shift: true }),
+        "git-refresh": keys("f9", { mod: true, shift: true }),
+      }),
+      "content-external",
+    ),
+  ).toContain("Refresh Git");
   expect(
     scopesCanCoexist({ kind: "workflow", workflowId: "a" }, { kind: "workflow", workflowId: "b" }),
   ).toBe(false);

@@ -1,6 +1,6 @@
 import { createShortcutLabelStore } from "@/features/shortcuts/shortcut-label-store";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
+import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry-context";
 import type { CommandPalettePageCommand } from "@/features/command-palette/command-palette-types";
 import { commandDefinition } from "@/features/shortcuts/catalogue";
 import { resolvePageCommand } from "@/features/shortcuts/command-resolution";

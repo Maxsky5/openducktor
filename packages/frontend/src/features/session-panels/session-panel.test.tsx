@@ -6,7 +6,8 @@ import { ShortcutButton } from "../shortcuts/shortcut-controls";
 import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { useShortcutDispatch } from "../shortcuts/use-shortcut-dispatch";
-import { CommandPaletteRegistryContext } from "../command-palette/command-palette-registry";
+import { trackOpenDialog } from "@/components/ui/open-dialogs";
+import { CommandPaletteRegistryContext } from "../command-palette/command-palette-registry-context";
 import { CommandPaletteContext } from "../command-palette/command-palette-context";
 import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
 import { describe, expect, mock, spyOn, test } from "bun:test";
@@ -297,6 +298,16 @@ describe("SessionPanel", () => {
         } else {
           await waitFor(() => expect(focusComposer).toHaveBeenCalledWith("focus-composer"));
         }
+        // A later dialog must not move the focus again.
+        const elsewhere = document.createElement("button");
+        document.body.append(elsewhere);
+        act(() => elsewhere.focus());
+        trackOpenDialog(Symbol("later dialog"))();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        expect(document.activeElement === elsewhere).toBe(true);
+        expect(focusComposer).toHaveBeenCalledTimes(hasRemainingTab ? 0 : 1);
+        elsewhere.remove();
       } finally {
         view.unmount();
         layout?.mockRestore();

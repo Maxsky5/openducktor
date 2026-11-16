@@ -429,8 +429,12 @@ export const recordKind = (scope: ShortcutScope) =>
 
 /** True when both commands can be eligible at once, so they cannot share keys. */
 export const scopesCanCoexist = (left: ShortcutScope, right: ShortcutScope): boolean => {
+  // A panel holds every other area, and a content item can have focus inside any of them.
   if (left.kind === "focus" && right.kind === "focus")
-    return left.area === right.area || left.area === "panel" || right.area === "panel";
+    return (
+      left.area === right.area ||
+      [left.area, right.area].some((area) => area === "panel" || area === "content")
+    );
   if (left.kind === "workflow" && right.kind === "workflow")
     return left.workflowId === right.workflowId;
   const leftRecord = recordKind(left);

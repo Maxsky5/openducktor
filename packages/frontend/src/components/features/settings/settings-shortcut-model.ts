@@ -48,7 +48,14 @@ export type ShortcutGroupItem =
   | { kind: "family"; family: ShortcutFamily };
 
 const FAMILY_LABELS = { session: "Go to session 1–10", workspace: "Go to workspace 1–10" };
-const POSITION_PATTERN = /^(session|workspace)-position-\d+$/;
+const POSITION_PATTERN = /^(session|workspace)-position-(\d+)$/;
+
+/** The row label of a position command, such as "Session 3", from its id. */
+export const positionRowLabel = (id: ShortcutActionId): string | undefined => {
+  const match = POSITION_PATTERN.exec(id);
+  if (!match) return undefined;
+  return `${match[1] === "session" ? "Session" : "Workspace"} ${match[2]}`;
+};
 const MAC_KEY_WORDS = new Map([
   ["⌘", ["cmd", "command"]],
   ["⌃", ["ctrl", "control"]],

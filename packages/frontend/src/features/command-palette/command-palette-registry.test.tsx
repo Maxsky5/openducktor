@@ -6,11 +6,11 @@ import { expect, test, spyOn } from "bun:test";
 import { act, render } from "@testing-library/react";
 import { Command } from "lucide-react";
 import { use, useRef, Activity } from "react";
+import { CommandPaletteRegistryProvider } from "./command-palette-registry";
 import {
   CommandPaletteRegistryContext,
-  CommandPaletteRegistryProvider,
   useCommandPaletteCommands,
-} from "./command-palette-registry";
+} from "./command-palette-registry-context";
 
 test("command updates publish fresh snapshots without rerendering registration owners", async () => {
   let renders = 0;

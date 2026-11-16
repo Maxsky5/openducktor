@@ -1,9 +1,7 @@
 import { shortcutActionIdSchema } from "@openducktor/contracts";
 import { use, useLayoutEffect, type PropsWithChildren } from "react";
-import {
-  CommandPaletteRegistryContext,
-  CommandPaletteRegistryProvider,
-} from "@/features/command-palette/command-palette-registry";
+import { CommandPaletteRegistryProvider } from "@/features/command-palette/command-palette-registry";
+import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry-context";
 
 export function ShortcutLabels({
   labels,

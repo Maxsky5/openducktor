@@ -64,7 +64,7 @@ export const ShortcutDispatcher = memo(function ShortcutDispatcher(props: {
       role="alert"
       className="fixed right-3 bottom-3 z-50 flex max-w-md flex-col gap-2 rounded-lg border border-destructive-border bg-card p-3 text-sm shadow-lg"
     >
-      <p>Keyboard shortcuts are off. {inputError}</p>
+      <p>{inputError}</p>
       <div className="flex justify-end gap-2">
         <button type="button" className="text-xs underline" onClick={retry}>
           Retry

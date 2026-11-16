@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import type { AppPlatform } from "@openducktor/contracts";
+import type { AppPlatform, ShortcutActionId } from "@openducktor/contracts";
 import { ChevronDown, RotateCcw, SearchX } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,11 @@ import {
   buildCommandViews,
   groupCommandViews,
   hasChanges,
+  positionRowLabel,
   type ShortcutCommandView,
   type ShortcutFamily,
   type ShortcutFilter,
+  type ShortcutGroupItem,
   searchKey,
   whenLabel,
 } from "./settings-shortcut-model";
@@ -39,9 +41,12 @@ const FILTERS = [
   { value: "assigned", label: "Assigned" },
 ] as const satisfies readonly { value: ShortcutFilter; label: string }[];
 
-export function SettingsKeyboardShortcutsSection() {
+/** `disabled` is true while the Settings form loads or saves; the shortcut save counts too. */
+export function SettingsKeyboardShortcutsSection({ disabled }: { disabled: boolean }) {
   const { query, updatesError } = useShortcutPreferences();
   const draft = useShortcutDraftContext();
+  const busy = disabled || draft.saving;
+  const editable = Boolean(draft.preferences) && !busy;
   const catalogue = useShortcutCatalogue(draft.preferences);
   const platform = readDevicePlatform();
   const shell = currentShortcutShell();
@@ -114,82 +119,108 @@ export function SettingsKeyboardShortcutsSection() {
           ))}
         </RadioGroup>
         {changed && (
-          <Button type="button" variant="outline" onClick={editor.resetAll}>
+          <Button type="button" variant="outline" disabled={!editable} onClick={editor.resetAll}>
             <RotateCcw data-icon="inline-start" aria-hidden="true" /> Reset all
           </Button>
         )}
       </div>
 
       <div className="flex flex-col gap-6">
-        <ShortcutNotices editor={editor} updatesError={updatesError} />
-        {query.isPending ? (
-          <ShortcutListSkeleton />
-        ) : groups.size === 0 ? (
-          <div
-            role="status"
-            className="flex flex-col items-center gap-1 rounded-md border border-dashed border-border px-4 py-10 text-center"
-          >
-            <SearchX className="mb-2 size-5 text-muted-foreground" aria-hidden="true" />
-            {term ? (
-              <>
-                <p className="text-sm font-medium text-foreground">No commands match</p>
-                <p className="text-xs text-muted-foreground">Search for another command or key.</p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-foreground">No command has an assignment</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-3"
-                  onClick={() => changeFilter("all")}
-                >
-                  Show all commands
-                </Button>
-              </>
-            )}
-          </div>
-        ) : (
-          Array.from(groups, ([group, items]) => (
-            <section key={group} aria-label={group} className="flex flex-col gap-2">
-              <ListHeading title={group} />
-              <ul className={ROW_LIST_CLASS_NAME}>
-                {items.map((item) =>
-                  item.kind === "command" ? (
-                    <CommandRow
-                      key={item.command.entry.id}
-                      view={item.command}
-                      editor={editor}
-                      platform={platform}
-                      loaded={Boolean(query.data)}
-                    />
-                  ) : (
-                    <FamilyRows
-                      key={item.family.key}
-                      family={item.family}
-                      editor={editor}
-                      platform={platform}
-                      loaded={Boolean(query.data)}
-                    />
-                  ),
-                )}
-              </ul>
-            </section>
-          ))
-        )}
+        <ShortcutNotices editor={editor} updatesError={updatesError} busy={busy} />
+        <ShortcutList
+          pending={query.isPending}
+          groups={groups}
+          term={term}
+          onShowAll={() => changeFilter("all")}
+          editor={editor}
+          platform={platform}
+          disabled={!editable}
+        />
       </div>
     </section>
   );
 }
 
+/** The loading state, the empty state, or the commands by group. */
+function ShortcutList({
+  pending,
+  groups,
+  term,
+  onShowAll,
+  editor,
+  platform,
+  disabled,
+}: {
+  pending: boolean;
+  groups: ReadonlyMap<string, ShortcutGroupItem[]>;
+  term: string;
+  onShowAll(): void;
+  editor: Editor;
+  platform: AppPlatform;
+  disabled: boolean;
+}) {
+  if (pending) return <ShortcutListSkeleton />;
+  if (groups.size === 0)
+    return (
+      <div
+        role="status"
+        className="flex flex-col items-center gap-1 rounded-md border border-dashed border-border px-4 py-10 text-center"
+      >
+        <SearchX className="mb-2 size-5 text-muted-foreground" aria-hidden="true" />
+        {term ? (
+          <>
+            <p className="text-sm font-medium text-foreground">No commands match</p>
+            <p className="text-xs text-muted-foreground">Search for another command or key.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-medium text-foreground">No command has an assignment</p>
+            <Button type="button" variant="outline" className="mt-3" onClick={onShowAll}>
+              Show all commands
+            </Button>
+          </>
+        )}
+      </div>
+    );
+  return Array.from(groups, ([group, items]) => (
+    <section key={group} aria-label={group} className="flex flex-col gap-2">
+      <ListHeading title={group} />
+      <ul className={ROW_LIST_CLASS_NAME}>
+        {items.map((item) =>
+          item.kind === "command" ? (
+            <CommandRow
+              key={item.command.entry.id}
+              view={item.command}
+              editor={editor}
+              platform={platform}
+              disabled={disabled}
+            />
+          ) : (
+            <FamilyRows
+              key={item.family.key}
+              family={item.family}
+              editor={editor}
+              platform={platform}
+              disabled={disabled}
+            />
+          ),
+        )}
+      </ul>
+    </section>
+  ));
+}
+
 function ShortcutNotices({
   editor,
   updatesError,
+  busy,
 }: {
   editor: Editor;
   updatesError: string | null;
+  busy: boolean;
 }) {
   const { query } = useShortcutPreferences();
+  const draft = useShortcutDraftContext();
   return (
     <>
       {updatesError && (
@@ -200,9 +231,16 @@ function ShortcutNotices({
       {query.error && (
         <Alert variant="destructive" className="items-center justify-between gap-3">
           <p>Shortcuts are turned off until this is fixed. {query.error.message}</p>
-          <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
-            Retry
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
+              Retry
+            </Button>
+            {!draft.preferences && (
+              <Button variant="outline" size="sm" disabled={busy} onClick={editor.resetAll}>
+                Reset all
+              </Button>
+            )}
+          </div>
         </Alert>
       )}
       {editor.error && (
@@ -214,34 +252,37 @@ function ShortcutNotices({
   );
 }
 
+/** The edit state of one row: recording, a proposal with a problem, or none. */
+const rowEditorOf = (editor: Editor, id: ShortcutActionId): ShortcutRowEditor | null => {
+  if (editor.recording === id)
+    return {
+      state: "recording",
+      preparing: editor.preparing,
+      held: editor.held,
+      ignored: editor.ignored,
+    };
+  const { proposal } = editor;
+  if (proposal?.id === id)
+    return { state: "proposed", combination: proposal.combination, problem: proposal.problem };
+  return null;
+};
+
 function CommandRow({
   view,
   editor,
   platform,
-  loaded,
+  disabled,
   label = view.label,
   showContext = true,
 }: {
   view: ShortcutCommandView;
   editor: Editor;
   platform: AppPlatform;
-  loaded: boolean;
-  label?: string;
+  disabled: boolean;
+  label?: string | undefined;
   showContext?: boolean;
 }) {
   const id = view.entry.id;
-  const { proposal } = editor;
-  const rowEditor: ShortcutRowEditor | null =
-    editor.recording === id
-      ? {
-          state: "recording",
-          preparing: editor.preparing,
-          held: editor.held,
-          ignored: editor.ignored,
-        }
-      : proposal?.id === id
-        ? { state: "proposed", combination: proposal.combination, problem: proposal.problem }
-        : null;
   return (
     <SettingsShortcutRow
       entry={view.entry}
@@ -254,8 +295,8 @@ function CommandRow({
       customized={view.customized}
       whenChoice={view.whenChoice}
       whenCustomized={view.whenCustomized}
-      disabled={!loaded}
-      editor={rowEditor}
+      disabled={disabled}
+      editor={rowEditorOf(editor, id)}
       note={editor.changeNote(id)}
       actions={editor.actions}
     />
@@ -267,12 +308,12 @@ function FamilyRows({
   family,
   editor,
   platform,
-  loaded,
+  disabled,
 }: {
   family: ShortcutFamily;
   editor: Editor;
   platform: AppPlatform;
-  loaded: boolean;
+  disabled: boolean;
 }) {
   const [opened, setOpened] = useState(false);
   const editing = family.commands.some(
@@ -333,14 +374,14 @@ function FamilyRows({
       </button>
       {expanded && (
         <ul className="divide-y divide-border border-t border-border bg-muted/30 [&>li]:min-h-12 [&>li]:py-2 [&>li]:pl-8">
-          {family.commands.map((view, index) => (
+          {family.commands.map((view) => (
             <CommandRow
               key={view.entry.id}
               view={view}
               editor={editor}
               platform={platform}
-              loaded={loaded}
-              label={`${family.key === "session" ? "Session" : "Workspace"} ${index + 1}`}
+              disabled={disabled}
+              label={positionRowLabel(view.entry.id)}
               showContext={false}
             />
           ))}

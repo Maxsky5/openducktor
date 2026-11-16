@@ -1,5 +1,5 @@
 import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
-import { isUnlisted } from "../command-palette/command-palette-registry";
+import { isUnlisted } from "../command-palette/command-palette-registry-context";
 import { parseWorkflowShortcutActionId, type ShortcutActionId } from "@openducktor/contracts";
 import {
   commandDefinition,

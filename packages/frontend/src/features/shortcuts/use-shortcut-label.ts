@@ -1,6 +1,6 @@
 import type { ShortcutActionId } from "@openducktor/contracts";
 import { use, useSyncExternalStore } from "react";
-import { CommandPaletteRegistryContext } from "../command-palette/command-palette-registry";
+import { CommandPaletteRegistryContext } from "../command-palette/command-palette-registry-context";
 import type { ShortcutControlLabel } from "./shortcut-label-store";
 const emptySnapshot = () => null;
 const noSubscription = () => () => {};

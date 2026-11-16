@@ -1,6 +1,6 @@
 import { ShortcutButton, useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
 import { useSessionNavigationShortcuts } from "@/features/shortcuts/use-session-navigation-shortcuts";
-import { SessionPositionsContext } from "@/features/shortcuts/position-hint";
+import { SessionPositionsContext } from "@/features/shortcuts/session-positions-context";
 import { PanelLeftClose, PanelLeftOpen, TriangleAlert } from "lucide-react";
 import {
   type ReactElement,

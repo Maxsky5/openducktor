@@ -115,7 +115,7 @@ export const SessionPanel = memo(function SessionPanel({
     const focusRemainingTab = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        if (!shortcutActive || hasOpenDialog()) return;
+        if (!pendingShortcutClose.current || !shortcutActive || hasOpenDialog()) return;
         pendingShortcutClose.current = null;
         const focus = Array.from(
           root.current?.querySelectorAll<HTMLElement>(

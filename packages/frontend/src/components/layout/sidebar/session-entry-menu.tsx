@@ -1,6 +1,6 @@
 import { Archive, Copy, Folder, Mail, MailOpen, Pencil } from "lucide-react";
 import { useRef, type ReactElement } from "react";
-import { useCommandPaletteCommands } from "@/features/command-palette/command-palette-registry";
+import { useCommandPaletteCommands } from "@/features/command-palette/command-palette-registry-context";
 import { paletteChatKey } from "@/features/command-palette/command-palette-row-keys";
 import { ShortcutMenuItem } from "@/features/shortcuts/shortcut-controls";
 import {

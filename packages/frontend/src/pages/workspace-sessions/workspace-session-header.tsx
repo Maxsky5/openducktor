@@ -1,4 +1,4 @@
-import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
+import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry-context";
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { useCommandPalettePageCommands } from "@/features/command-palette/command-palette-context";
 import {

@@ -91,7 +91,8 @@ export function SettingsModalContent({
     updateGlobalPromptLayers,
   } = controller;
 
-  if (section === "keyboard-shortcuts") return <SettingsKeyboardShortcutsSection />;
+  if (section === "keyboard-shortcuts")
+    return <SettingsKeyboardShortcutsSection disabled={isInteractionDisabled} />;
   if (settingsError && !snapshotDraft) {
     return (
       <div

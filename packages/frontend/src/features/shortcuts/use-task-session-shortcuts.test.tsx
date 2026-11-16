@@ -11,7 +11,6 @@ import {
   createTaskCardFixture,
   createTaskWorkflowActionsFixture,
 } from "@/test-utils/shared-test-fixtures";
-import {} from "../command-palette/command-palette-registry";
 import { useShortcutDispatch } from "./use-shortcut-dispatch";
 import { TaskSessionShortcuts } from "./task-session-shortcuts";
 

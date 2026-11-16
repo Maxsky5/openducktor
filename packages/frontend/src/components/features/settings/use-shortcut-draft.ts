@@ -28,7 +28,8 @@ export function useShortcutDraft(): ShortcutDraft {
   const [draft, setDraft] = useState<ShortcutPreferences | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const saved = query.data;
-  const dirty = Boolean(draft && saved && !samePreferences(draft, saved));
+  // Without saved preferences, as after an invalid file, any draft is a Reset all to save.
+  const dirty = Boolean(draft && (!saved || !samePreferences(draft, saved)));
   const { mutateAsync } = save;
   const persist = useCallback(async (): Promise<boolean> => {
     if (!draft || !dirty) return true;

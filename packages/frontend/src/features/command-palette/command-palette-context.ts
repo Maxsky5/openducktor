@@ -1,4 +1,4 @@
-import { CommandPaletteRegistryContext, isUnlisted } from "./command-palette-registry";
+import { CommandPaletteRegistryContext, isUnlisted } from "./command-palette-registry-context";
 import { Command } from "lucide-react";
 import { commandDefinition } from "../shortcuts/catalogue";
 import type { AppPlatform, ShortcutActionId } from "@openducktor/contracts";

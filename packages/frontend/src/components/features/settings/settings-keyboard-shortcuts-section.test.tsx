@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ShortcutCombination, ShortcutPreferences } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { shortcutRecording } from "@/features/shortcuts/recording-store";
@@ -34,7 +34,7 @@ function SettingsForm() {
   const draft = useShortcutDraft();
   return (
     <ShortcutDraftContext value={draft}>
-      <SettingsKeyboardShortcutsSection />
+      <SettingsKeyboardShortcutsSection disabled={false} />
       <button type="button" onClick={() => void draft.save()}>
         Save settings
       </button>
@@ -45,8 +45,11 @@ function SettingsForm() {
   );
 }
 
-const renderSection = (overrides: ShortcutPreferences["overrides"] = {}) => {
-  const write = mock(async (preferences: ShortcutPreferences) => preferences);
+const renderSection = (
+  overrides: ShortcutPreferences["overrides"] = {},
+  save = async (preferences: ShortcutPreferences) => preferences,
+) => {
+  const write = mock(save);
   const connection = createTestClientConnection({
     client: { workspaceSaveKeyboardShortcuts: write },
   });
@@ -235,4 +238,50 @@ test("explains a key pressed without a modifier and keeps recording", async () =
   fireEvent.keyDown(window, { key: "F7", code: "F7", ctrlKey: true });
   await waitFor(() => expect(field("Open diagnostics").textContent).toContain("Ctrl F7"));
   expect(write).not.toHaveBeenCalled();
+});
+
+test("names each position row by its own position when the filter hides some", () => {
+  renderSection({ "session-position-1": null });
+  fireEvent.click(screen.getByRole("radio", { name: "Assigned" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Go to session 1–10/ }));
+  expect(field("Select session at position 2").closest("li")?.textContent).toContain("Session 2");
+  expect(screen.queryByText("Session 1")).toBeNull();
+});
+
+test("locks the shortcuts while Save settings writes them", async () => {
+  const pending = Promise.withResolvers<ShortcutPreferences>();
+  const write = renderSection({}, () => pending.promise);
+  fireEvent.click(screen.getByRole("button", { name: "Remove shortcut for Toggle sidebar" }));
+  await saveSettings();
+  expect(write).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(field("Toggle sidebar").hasAttribute("disabled")).toBe(true));
+  expect(screen.getByRole("button", { name: "Reset all" }).hasAttribute("disabled")).toBe(true);
+  await act(async () => pending.resolve({ version: 1, overrides: { sidebar: null } }));
+  await waitFor(() => expect(field("Toggle sidebar").hasAttribute("disabled")).toBe(false));
+});
+
+test("offers Reset all when the saved shortcuts are invalid, and saves the defaults", async () => {
+  const write = mock(async (preferences: ShortcutPreferences) => preferences);
+  const connection = createTestClientConnection({
+    client: {
+      workspaceGetKeyboardShortcuts: async () => {
+        throw new Error("keyboardShortcuts is invalid.");
+      },
+      workspaceSaveKeyboardShortcuts: write,
+    },
+  });
+  render(
+    <ShortcutTestProviders connection={connection}>
+      <SettingsForm />
+    </ShortcutTestProviders>,
+  );
+  const alert = await screen.findByText(/keyboardShortcuts is invalid\./);
+  expect(field("Toggle sidebar").hasAttribute("disabled")).toBe(true);
+  fireEvent.click(
+    within(alert.closest('[role="alert"]')!).getByRole("button", { name: "Reset all" }),
+  );
+  expect(field("Toggle sidebar").hasAttribute("disabled")).toBe(false);
+  await saveSettings();
+  expect(write.mock.calls[0]![0]).toEqual({ version: 1, overrides: {} });
+  await waitFor(() => expect(screen.queryByText(/keyboardShortcuts is invalid\./)).toBeNull());
 });

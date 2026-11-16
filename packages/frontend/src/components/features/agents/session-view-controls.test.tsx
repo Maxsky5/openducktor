@@ -1,5 +1,5 @@
 import { createShortcutLabelStore } from "@/features/shortcuts/shortcut-label-store";
-import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry";
+import { CommandPaletteRegistryContext } from "@/features/command-palette/command-palette-registry-context";
 import { expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";

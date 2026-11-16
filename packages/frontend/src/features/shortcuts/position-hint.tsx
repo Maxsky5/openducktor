@@ -2,11 +2,11 @@ import { SHORTCUT_POSITIONS } from "@openducktor/contracts";
 import { CommandPaletteContext } from "../command-palette/command-palette-context";
 import { commandDefinition } from "./catalogue";
 import { shortcutLabel } from "@openducktor/frontend-core/shortcuts/key-labels";
-import { createContext, use } from "react";
+import { use } from "react";
+import { SessionPositionsContext } from "./session-positions-context";
 import { useShortcutLabel } from "./use-shortcut-label";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
-export const SessionPositionsContext = createContext<ReadonlyMap<string, number>>(new Map());
 export function SessionPositionHint({
   entryKey,
   className,

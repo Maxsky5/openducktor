@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import type {
   ElectronShortcutBridge,
   ElectronShortcutRules,
+  EmbeddedShortcutRules,
   EmbeddedShortcutEvent,
   ShortcutInput,
   ShortcutPreferences,
@@ -75,15 +76,17 @@ function renderOwner({
   platform = "linux",
   commands,
   overrides = {},
+  when,
   children,
 }: {
   platform?: "darwin" | "linux";
   commands: readonly CommandPaletteCommandRegistration[];
   overrides?: ShortcutPreferences["overrides"];
+  when?: ShortcutPreferences["when"];
   children?: React.ReactNode;
 }) {
   const connection = createTestClientConnection();
-  connection.queryClient.setQueryData(["keyboard-shortcuts"], { version: 1, overrides });
+  connection.queryClient.setQueryData(["keyboard-shortcuts"], { version: 1, overrides, when });
   function Owner() {
     useCommandPalettePageCommands(commands);
     const routing = useShortcutDispatch({
@@ -253,6 +256,62 @@ test("recording installs Electron recording mode and stops app shortcuts", async
   expect(toggle).toHaveBeenCalledTimes(1);
 });
 
+test("a preview page reaches only commands that run while typing by default", async () => {
+  const applied: EmbeddedShortcutRules[] = [];
+  const source = {
+    tabId: "page",
+    apply: mock(async (rules: EmbeddedShortcutRules) => {
+      applied.push(rules);
+    }),
+  };
+  const release = embeddedShortcutSources.register(source);
+  const toggle = mock(() => {});
+  const diagnostics = mock(() => {});
+  try {
+    renderOwner({
+      commands: [
+        { id: "sidebar", run: toggle, appWide: true, localOnly: true },
+        { id: "diagnostics", run: diagnostics, appWide: true, localOnly: true },
+      ],
+      overrides: {
+        diagnostics: {
+          key: { kind: "logical", key: "j" },
+          mod: false,
+          ctrl: true,
+          alt: false,
+          shift: false,
+        },
+      },
+      // The user lets Open diagnostics run while typing; a page still must not start it.
+      when: { diagnostics: "always" },
+      children: <div data-browser-tab-id="page" />,
+    });
+    const rects = visible(document.querySelector('[data-browser-tab-id="page"]')!);
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Retry routes" }));
+      await waitFor(() =>
+        expect(applied.at(-1)?.routes.map((route) => route.commandId)).toContain("sidebar"),
+      );
+      expect(applied.at(-1)?.routes.map((route) => route.commandId)).not.toContain("diagnostics");
+      const invoke = (commandId: "sidebar" | "diagnostics", key: string) =>
+        embeddedShortcutSources.report(source, {
+          type: "invoke",
+          revision: applied.at(-1)!.revision,
+          commandId,
+          input: keyInput({ key, code: `Key${key.toUpperCase()}`, ctrl: true }),
+        });
+      act(() => invoke("diagnostics", "j"));
+      expect(diagnostics).not.toHaveBeenCalled();
+      act(() => invoke("sidebar", "b"));
+      expect(toggle).toHaveBeenCalledTimes(1);
+    } finally {
+      rects.mockRestore();
+    }
+  } finally {
+    release();
+  }
+});
+
 test("keeps preview failures per source and hides labels in a frame without routes", async () => {
   const failing = Promise.withResolvers<void>();
   const first = { tabId: "failing", apply: mock(() => failing.promise) };
@@ -276,8 +335,8 @@ test("keeps preview failures per source and hides labels in a frame without rout
       await failing.promise.catch(() => {});
     });
     await waitFor(() =>
-      expect(screen.getByTestId("routing-error").textContent).toContain(
-        "First preview rejected routes.",
+      expect(screen.getByTestId("routing-error").textContent).toBe(
+        "Some keyboard shortcuts are unavailable. First preview rejected routes.",
       ),
     );
     act(() =>

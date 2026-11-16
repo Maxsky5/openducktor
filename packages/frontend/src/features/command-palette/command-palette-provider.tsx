@@ -2,7 +2,7 @@ import type { ShortcutActionId } from "@openducktor/contracts";
 import {
   CommandPaletteRegistryContext,
   useCommandPaletteCommands,
-} from "./command-palette-registry";
+} from "./command-palette-registry-context";
 import { paletteCommandsFor, runRegisteredCommand } from "../shortcuts/command-resolution";
 
 import "../shortcuts/position-hints.css";
