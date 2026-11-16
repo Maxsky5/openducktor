@@ -35,16 +35,21 @@ export const createShortcutLabelStore = () => {
         listeners.delete(listener);
       };
     },
+    /**
+     * Publishes the labels. Unchanged entries keep their previous object, so a consumer of one id
+     * renders only when that id changes; listeners run only when something changed.
+     */
     replace(next: ReadonlyMap<ShortcutActionId, ShortcutControlLabel>) {
-      if (
-        labels.size === next.size &&
-        Array.from(next).every(([id, value]) => {
-          const previous = labels.get(id);
-          return previous?.label === value.label && previous.owner === value.owner;
-        })
-      )
-        return;
-      labels = next;
+      let changed = labels.size !== next.size;
+      const shared = new Map<ShortcutActionId, ShortcutControlLabel>();
+      for (const [id, value] of next) {
+        const previous = labels.get(id);
+        const same = previous?.label === value.label && previous.owner === value.owner;
+        shared.set(id, same ? previous : value);
+        if (!same) changed = true;
+      }
+      if (!changed) return;
+      labels = shared;
       for (const listener of listeners) listener();
     },
   };

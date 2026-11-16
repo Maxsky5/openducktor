@@ -1,3 +1,4 @@
+import { coreTaskActionShortcutId } from "@/features/shortcuts/catalogue";
 import type { ShortcutActionId } from "@openducktor/contracts";
 import { workflowShortcutActionId } from "@openducktor/contracts";
 import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
@@ -71,7 +72,7 @@ const quickActionShortcutId = (
 ): ShortcutActionId | undefined => {
   if (option?.kind !== "task_action") return undefined;
   if (option.taskAction.kind === "core")
-    return option.taskAction.action.id === "reset_task" ? "task-reset" : "task-close";
+    return coreTaskActionShortcutId(option.taskAction.action.id);
   return workflowId ? workflowShortcutActionId(workflowId, option.taskAction.action) : undefined;
 };
 

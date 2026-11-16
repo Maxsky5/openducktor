@@ -1,4 +1,4 @@
-import { type ReactNode, useRef } from "react";
+import { memo, type ReactNode, useRef } from "react";
 import { ChevronDown, CircleAlert, TriangleAlert } from "lucide-react";
 import type { AppPlatform, ShortcutCombination, ShortcutWhen } from "@openducktor/contracts";
 import {
@@ -16,6 +16,7 @@ import {
   whenLabel,
 } from "@/features/shortcuts/catalogue";
 import { typesText } from "@/features/shortcuts/recording";
+import type { ShortcutRowActions } from "./use-shortcut-editor";
 import { cn } from "@/lib/utils";
 
 /** The keys as design-system keycaps, spoken as words. */
@@ -71,8 +72,11 @@ const fieldLabel = (
   return `${label}, no keys. ${current === null ? "Add keys" : "Change shortcut"}`;
 };
 
-/** One command: its name, its keys, and the inline recorder. Editing stays on one line. */
-export function SettingsShortcutRow({
+/**
+ * One command: its name, its keys, and the inline recorder. Memoized: a list re-render, such as a
+ * search key, renders only rows whose own props changed.
+ */
+export const SettingsShortcutRow = memo(function SettingsShortcutRow({
   entry,
   label,
   showContext = true,
@@ -86,12 +90,7 @@ export function SettingsShortcutRow({
   disabled,
   editor,
   note,
-  onRecord,
-  onClear,
-  onRestoreDefault,
-  onCancel,
-  onReplace,
-  onChooseWhen,
+  actions,
 }: {
   entry: ShortcutCommandDefinition;
   label: string;
@@ -109,13 +108,10 @@ export function SettingsShortcutRow({
   editor: ShortcutRowEditor | null;
   /** Other devices where just-changed keys will not work, such as "on Windows". */
   note: readonly string[];
-  onRecord(element: HTMLElement): void;
-  onClear(element: HTMLElement): void;
-  onRestoreDefault(element: HTMLElement): void;
-  onCancel(): void;
-  onReplace(): void;
-  onChooseWhen(when: ShortcutWhen, element: HTMLElement): void;
+  /** Stable across renders; each call names this row's command. */
+  actions: ShortcutRowActions;
 }) {
+  const { id } = entry;
   const field = useRef<HTMLButtonElement>(null);
   const recording = editor?.state === "recording";
   const proposal = editor?.state === "proposed" ? editor : null;
@@ -131,7 +127,11 @@ export function SettingsShortcutRow({
           inactiveReason={inactiveReason}
           when={
             whenChoice && !editor ? (
-              <WhenPicker entry={entry} disabled={disabled} onChoose={onChooseWhen} />
+              <WhenPicker
+                entry={entry}
+                disabled={disabled}
+                onChoose={(when, element) => actions.chooseWhen(id, when, element)}
+              />
             ) : null
           }
           platform={platform}
@@ -144,8 +144,8 @@ export function SettingsShortcutRow({
             resetKeys={customized ? defaultKeys : null}
             platform={platform}
             assigned={Boolean(current)}
-            onRestoreDefault={() => field.current && onRestoreDefault(field.current)}
-            onClear={() => field.current && onClear(field.current)}
+            onRestoreDefault={() => field.current && actions.assign(id, defaultKeys, field.current)}
+            onClear={() => field.current && actions.assign(id, null, field.current)}
           />
         )}
         <Button
@@ -158,7 +158,7 @@ export function SettingsShortcutRow({
           aria-describedby={proposal ? `shortcut-problem-${entry.id}` : undefined}
           disabled={disabled || current === undefined}
           onClick={(event) => {
-            if (!recording) onRecord(event.currentTarget);
+            if (!recording) actions.record(id, event.currentTarget);
           }}
           className={keyFieldClassName(editor)}
         >
@@ -169,7 +169,7 @@ export function SettingsShortcutRow({
             platform={platform}
           />
         </Button>
-        {editor && <CancelButton onCancel={onCancel} />}
+        {editor && <CancelButton onCancel={actions.cancel} />}
       </div>
       {proposal && (
         <ProblemCallout
@@ -177,13 +177,13 @@ export function SettingsShortcutRow({
           label={entry.label}
           proposal={proposal}
           platform={platform}
-          onReplace={onReplace}
-          onRecordAgain={() => field.current && onRecord(field.current)}
+          onReplace={actions.replace}
+          onRecordAgain={() => field.current && actions.record(id, field.current)}
         />
       )}
     </li>
   );
-}
+});
 
 /** "Removed" when the user cleared default keys, "Custom" for any other change. */
 const changeBadge = (

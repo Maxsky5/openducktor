@@ -19,13 +19,17 @@ export type NativeShortcutRoutes = {
  */
 export function useNativeShortcutRouting({
   enabled,
-  routes,
+  routesVersion,
+  readRoutes,
   recording,
   retryRevision,
   onInput,
 }: {
   enabled: boolean;
-  routes: NativeShortcutRoutes;
+  /** Changes whenever the routes can change. */
+  routesVersion: unknown;
+  /** Reads the routes after a commit; they come from the browser tabs in the DOM. */
+  readRoutes(): NativeShortcutRoutes;
   recording: boolean;
   retryRevision: number;
   onInput: EmbeddedShortcutListener;
@@ -84,23 +88,24 @@ export function useNativeShortcutRouting({
       bridge.release();
     };
   }, [bridge]);
-  const latest = useRef({ routes, recording });
+  const latest = useRef(readRoutes);
   useLayoutEffect(() => {
-    latest.current = { routes, recording };
+    latest.current = readRoutes;
   });
   const lastRetry = useRef(retryRevision);
   useEffect(() => {
     if (!enabled) return;
     const force = lastRetry.current !== retryRevision;
     lastRetry.current = retryRevision;
+    const routes = latest.current();
     if (!force && control.current.installed === JSON.stringify([routes, recording])) return;
     apply(routes, recording).catch(() => {});
-  }, [enabled, routes, recording, retryRevision, apply]);
+  }, [enabled, routesVersion, recording, retryRevision, apply]);
   return {
     error: enabled ? error : null,
     /** Installs recording mode now and resolves once main uses it. */
     prepareRecording: useCallback(
-      (active: boolean) => (enabled ? apply(latest.current.routes, active) : Promise.resolve()),
+      (active: boolean) => (enabled ? apply(latest.current(), active) : Promise.resolve()),
       [enabled, apply],
     ),
   };

@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { Command } from "lucide-react";
 import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
 import { commandDefinition } from "./catalogue";
-import { paletteCommandsFor, resolvePageCommand } from "./command-resolution";
+import { isTyping, paletteCommandsFor, resolvePageCommand } from "./command-resolution";
 
 test("resolving a command checks focus once, regardless of unrelated registrations", () => {
   const focus = document.createElement("button");
@@ -22,7 +22,10 @@ test("resolving a command checks focus once, regardless of unrelated registratio
   }));
   try {
     expect(
-      resolvePageCommand([...unrelated, command], commandDefinition("task-edit")!, focus, false),
+      resolvePageCommand([...unrelated, command], commandDefinition("task-edit")!, focus, {
+        palette: false,
+        typing: isTyping(focus, false, false),
+      }),
     ).toBe(command);
     expect(focusReads).toHaveBeenCalledTimes(1);
   } finally {

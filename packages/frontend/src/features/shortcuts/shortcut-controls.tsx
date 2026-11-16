@@ -1,5 +1,5 @@
 import type { ShortcutActionId } from "@openducktor/contracts";
-import { createContext, use, type ComponentProps, type ReactNode } from "react";
+import { createContext, use, useMemo, type ComponentProps, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { useShortcutLabel } from "./use-shortcut-label";
@@ -15,7 +15,11 @@ export function ShortcutScope({
   owners: readonly string[];
   children: ReactNode;
 }) {
-  return <ShortcutOwnersContext value={owners}>{children}</ShortcutOwnersContext>;
+  // Callers pass a new array each render; the context keeps one value while the owners stay the
+  // same, so its consumers do not render again.
+  const key = owners.join("\n");
+  const value = useMemo(() => (key === "" ? [] : key.split("\n")), [key]);
+  return <ShortcutOwnersContext value={value}>{children}</ShortcutOwnersContext>;
 }
 
 function useControlShortcutLabel(

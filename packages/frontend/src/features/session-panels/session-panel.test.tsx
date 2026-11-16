@@ -248,6 +248,7 @@ describe("SessionPanel", () => {
           <CommandPaletteRegistryContext
             value={{
               pageCommands: [],
+              listedCommands: [],
               subscribe: () => () => {},
               invalidatePageCommands: () => {},
               registerPageCommand,

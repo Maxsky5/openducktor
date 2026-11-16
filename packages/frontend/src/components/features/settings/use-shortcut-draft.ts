@@ -1,4 +1,4 @@
-import { createContext, use, useCallback, useState } from "react";
+import { createContext, use, useCallback, useMemo, useState } from "react";
 import { jsonValuesEqual, type ShortcutPreferences } from "@openducktor/contracts";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useShortcutPreferences } from "@/features/shortcuts/use-shortcut-preferences";
@@ -42,18 +42,25 @@ export function useShortcutDraft(): ShortcutDraft {
       return false;
     }
   }, [draft, dirty, mutateAsync]);
-  return {
-    preferences: draft ?? saved,
-    dirty,
-    update: setDraft,
-    discard: () => {
-      setDraft(null);
-      setSaveError(null);
-    },
-    save: persist,
-    saving: save.isPending,
-    saveError,
-  };
+  const discard = useCallback(() => {
+    setDraft(null);
+    setSaveError(null);
+  }, []);
+  const saving = save.isPending;
+  // One object while nothing changed, so a render of the Settings dialog does not render the
+  // shortcut rows again.
+  return useMemo(
+    () => ({
+      preferences: draft ?? saved,
+      dirty,
+      update: setDraft,
+      discard,
+      save: persist,
+      saving,
+      saveError,
+    }),
+    [draft, saved, dirty, discard, persist, saving, saveError],
+  );
 }
 
 export const ShortcutDraftContext = createContext<ShortcutDraft | null>(null);

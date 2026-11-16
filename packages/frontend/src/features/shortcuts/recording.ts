@@ -110,15 +110,20 @@ export function useShortcutRecorder({
       const combination = event.type === "keydown" ? recordShortcut(input, platform) : null;
       if (!combination) {
         const modifierOnly = MODIFIER_KEYS.has(event.key);
-        setKeys((current) => ({
-          held,
-          ignored:
+        setKeys((current) => {
+          const ignored =
             event.type === "keydown" && !modifierOnly && held.length === 0
               ? keyName(event.key)
               : modifierOnly
                 ? current.ignored
-                : null,
-        }));
+                : null;
+          // Key repeats and key releases often change nothing; keep the state so nothing renders.
+          const same =
+            ignored === current.ignored &&
+            held.length === current.held.length &&
+            held.every((key, index) => key === current.held[index]);
+          return same ? current : { held, ignored };
+        });
         return;
       }
       setKeys({ held: [], ignored: null });

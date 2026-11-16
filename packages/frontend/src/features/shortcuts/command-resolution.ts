@@ -1,4 +1,5 @@
 import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
+import { isUnlisted } from "../command-palette/command-palette-registry";
 import type { ShortcutActionId } from "@openducktor/contracts";
 import {
   commandDefinition,
@@ -17,17 +18,48 @@ export const isProtectedFocus = (focus: Element | null): boolean =>
       focus.closest('input, textarea, [role="textbox"], .xterm, iframe, [data-visited-page]'),
     ));
 
-/** A command has one eligible owner. Ambiguous owners never depend on registration order. */
+/** Focus is in an editor, a terminal, a visited page or an embedded guest, outside the palette. */
+export const isTyping = (focus: Element | null, embedded: boolean, palette: boolean): boolean =>
+  embedded || (!palette && isProtectedFocus(focus));
+
+const NO_COMMANDS: readonly CommandPalettePageCommand[] = [];
+/** The registered commands by id, built once for each registry snapshot. */
+const commandIndexes = new WeakMap<
+  readonly CommandPalettePageCommand[],
+  Map<ShortcutActionId, CommandPalettePageCommand[]>
+>();
+const commandsWithId = (
+  commands: readonly CommandPalettePageCommand[],
+  id: ShortcutActionId,
+): readonly CommandPalettePageCommand[] => {
+  let index = commandIndexes.get(commands);
+  if (!index) {
+    index = new Map();
+    for (const command of commands) {
+      const same = index.get(command.id);
+      if (same) same.push(command);
+      else index.set(command.id, [command]);
+    }
+    commandIndexes.set(commands, index);
+  }
+  return index.get(id) ?? NO_COMMANDS;
+};
+
+/**
+ * A command has one eligible owner. Ambiguous owners never depend on registration order. While
+ * the user types, only a command that runs during typing, or the control that owns the input,
+ * can own the keys.
+ */
 export const resolvePageCommand = (
   commands: readonly CommandPalettePageCommand[],
   definition: ShortcutCommandDefinition,
   focus: Element | null,
-  palette: boolean,
+  { palette, typing }: { palette: boolean; typing: boolean },
 ): CommandPalettePageCommand | null => {
-  const protectedFocus = !palette && !definition.allowInput && isProtectedFocus(focus);
-  const candidates = commands.filter((command) => {
-    if (command.id !== definition.id || (command.paletteOnly && !palette)) return false;
-    if (protectedFocus && !command.ownsInput) return false;
+  const blockedByTyping = typing && !definition.allowInput;
+  const candidates = commandsWithId(commands, definition.id).filter((command) => {
+    if (command.paletteOnly && !palette) return false;
+    if (blockedByTyping && !command.ownsInput) return false;
     const root = command.focusRoot?.();
     if (command.focusRoot && (!root?.isConnected || !shortcutFocusWithin(root, focus)))
       return false;
@@ -59,8 +91,8 @@ const resolveAmong = (
 export type ShortcutContext = {
   commands: readonly CommandPalettePageCommand[];
   focus: Element | null;
-  /** Focus is in a browser guest or a preview frame, which counts as typing. */
-  embedded: boolean;
+  /** From `isTyping`, computed once for every binding of one key press or label pass. */
+  typing: boolean;
   paletteOpen: boolean;
   /** A dialog other than the palette is open. */
   overlayOpen: boolean;
@@ -75,12 +107,10 @@ export const resolveShortcutOwner = (
   context: ShortcutContext,
 ): CommandPalettePageCommand | null => {
   if (context.paletteOpen && !runsInPalette(definition)) return null;
-  const owner = resolvePageCommand(
-    context.commands,
-    definition,
-    context.focus,
-    context.paletteOpen,
-  );
+  const owner = resolvePageCommand(context.commands, definition, context.focus, {
+    palette: context.paletteOpen,
+    typing: context.typing,
+  });
   if (!owner) return null;
   if (
     context.overlayOpen &&
@@ -88,8 +118,6 @@ export const resolveShortcutOwner = (
     !owner.focusRoot?.()?.closest('[role="dialog"], [role="alertdialog"]')
   )
     return null;
-  const typing = context.embedded || (!context.paletteOpen && isProtectedFocus(context.focus));
-  if (typing && !definition.allowInput && !owner.ownsInput) return null;
   return owner;
 };
 
@@ -104,7 +132,12 @@ export const runRegisteredCommand = (
   focus: Element | null,
 ): void => {
   const definition = commandDefinition(id);
-  const command = definition ? resolvePageCommand(commands, definition, focus, false) : null;
+  const command = definition
+    ? resolvePageCommand(commands, definition, focus, {
+        palette: false,
+        typing: isTyping(focus, false, false),
+      })
+    : null;
   const run = command?.resolveRun ? command.resolveRun() : command?.run;
   run?.();
 };
@@ -116,11 +149,14 @@ export const paletteCommandsFor = (
 ): CommandPalettePageCommand[] => {
   // The highlighted record's commands only serve its shortcuts. Listing them would move the
   // highlight, which removes them again, so the list and the registry would never settle.
-  const listed = commands.filter((command) => !command.paletteOnly && !command.localOnly);
+  const listed = commands.filter((command) => !isUnlisted(command));
   const owners = new Map<ShortcutActionId, CommandPalettePageCommand | null>();
   for (const command of listed) {
     if (owners.has(command.id)) continue;
-    owners.set(command.id, resolvePageCommand(listed, definitionOf(command), focus, true));
+    owners.set(
+      command.id,
+      resolvePageCommand(listed, definitionOf(command), focus, { palette: true, typing: false }),
+    );
   }
   return listed.filter((command) => owners.get(command.id) === command);
 };

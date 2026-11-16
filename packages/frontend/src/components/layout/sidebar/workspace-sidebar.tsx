@@ -234,7 +234,7 @@ export function WorkspaceSidebar({
   );
 
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
-  const { scopedCollapsed, numberedEntries, cyclingEntries, positions } = useMemo(() => {
+  const { scopedCollapsed, numberedEntries, cyclingEntries } = useMemo(() => {
     const scopedCollapsed = new Set(
       model.groups
         .filter((group) => collapsedGroups.has(`${listScopeKey}:${group.id}`))
@@ -247,9 +247,21 @@ export function WorkspaceSidebar({
       scopedCollapsed,
       numberedEntries,
       cyclingEntries: model.groups.flatMap((group) => group.entries),
-      positions: new Map(numberedEntries.map((entry, index) => [entry.key, index + 1])),
     };
   }, [model.groups, collapsedGroups, listScopeKey]);
+  // A session update gives `model.groups` a new identity. The hints read positions through context,
+  // so the map keeps its identity while the order stays the same, and the hints do not render.
+  const positionOrder = numberedEntries.map((entry) => entry.key).join("\n");
+  const positions = useMemo(
+    () =>
+      new Map(
+        (positionOrder === "" ? [] : positionOrder.split("\n")).map((key, index) => [
+          key,
+          index + 1,
+        ]),
+      ),
+    [positionOrder],
+  );
   const toggleGroup = (id: string) =>
     setCollapsedGroups((current) => {
       const next = new Set(current);

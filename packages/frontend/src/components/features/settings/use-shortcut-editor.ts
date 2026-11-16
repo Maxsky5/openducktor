@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { spokenShortcut } from "@openducktor/frontend-core/shortcuts/key-labels";
 import type {
   AppPlatform,
@@ -27,6 +27,17 @@ export type ShortcutProposal = {
 };
 
 const RESET: ShortcutPreferences = { version: 1, overrides: {} };
+const NO_NOTE: readonly string[] = [];
+
+/** What a row can ask the editor to do. */
+export type ShortcutRowActions = {
+  record(id: ShortcutActionId, element: HTMLElement): void;
+  assign(id: ShortcutActionId, combination: ShortcutCombination | null, element: HTMLElement): void;
+  chooseWhen(id: ShortcutActionId, when: ShortcutWhen, element: HTMLElement): void;
+  cancel(): void;
+  /** Gives the proposed keys to their command and removes them from the command that had them. */
+  replace(): void;
+};
 
 /**
  * The editing state of Keyboard shortcuts: recording, keys that need a choice, and focus return.
@@ -127,19 +138,7 @@ export function useShortcutEditor({
     focusOpener();
   };
   useEscapeToCancel(proposal !== null, closeProposal);
-
-  return {
-    recording: recorder.recording,
-    preparing: recorder.preparing,
-    proposal,
-    error,
-    /** The command that stays listed when the filter or search changes. */
-    keptId: recorder.recording ?? proposal?.id ?? changedId,
-    /** Other devices where the last changed keys will not work, such as "on Windows". */
-    changeNote: (id: ShortcutActionId) =>
-      id === changedId && draft.preferences
-        ? otherDeviceProblems(draft.preferences, catalogue, id, device)
-        : [],
+  const handlers: ShortcutRowActions = {
     record(id: ShortcutActionId, element: HTMLElement) {
       opener.current = element;
       setProposal(null);
@@ -158,7 +157,6 @@ export function useShortcutEditor({
       opener.current = element;
       if (draft.preferences) assign(draft.preferences, id, combination);
     },
-    /** Gives the proposed keys to their command and removes them from the command that had them. */
     replace() {
       const conflict = proposal?.problem.conflict;
       const base = draft.preferences;
@@ -189,6 +187,39 @@ export function useShortcutEditor({
       const scope = when === "always" ? "also while typing" : "only while not typing";
       apply(id, change.preferences, `${entry.label} runs ${scope}.`);
     },
+  };
+  // Rows receive one object whose methods call the latest handlers, so a render of the section
+  // does not give every row new callbacks.
+  const latestHandlers = useRef(handlers);
+  useLayoutEffect(() => {
+    latestHandlers.current = handlers;
+  });
+  const [actions] = useState<ShortcutRowActions>(() => ({
+    record: (id, element) => latestHandlers.current.record(id, element),
+    assign: (id, combination, element) => latestHandlers.current.assign(id, combination, element),
+    chooseWhen: (id, when, element) => latestHandlers.current.chooseWhen(id, when, element),
+    cancel: () => latestHandlers.current.cancel(),
+    replace: () => latestHandlers.current.replace(),
+  }));
+  const changeNote = useMemo(
+    () =>
+      changedId && draft.preferences
+        ? otherDeviceProblems(draft.preferences, catalogue, changedId, { platform, shell })
+        : NO_NOTE,
+    [changedId, draft.preferences, catalogue, platform, shell],
+  );
+
+  return {
+    recording: recorder.recording,
+    preparing: recorder.preparing,
+    proposal,
+    error,
+    /** The command that stays listed when the filter or search changes. */
+    keptId: recorder.recording ?? proposal?.id ?? changedId,
+    /** Other devices where the last changed keys will not work, such as "on Windows". */
+    changeNote: (id: ShortcutActionId) => (id === changedId ? changeNote : NO_NOTE),
+    /** Row callbacks with a stable identity, so unchanged rows skip rendering. */
+    actions,
     resetAll() {
       if (recorder.recording || recorder.preparing) void recorder.cancel(false);
       setProposal(null);

@@ -255,15 +255,10 @@ function CommandRow({
       customized={view.customized}
       whenChoice={view.whenChoice}
       whenCustomized={view.whenCustomized}
-      onChooseWhen={(when, element) => editor.chooseWhen(id, when, element)}
       disabled={!loaded}
       editor={rowEditor}
       note={editor.changeNote(id)}
-      onRecord={(element) => editor.record(id, element)}
-      onClear={(element) => editor.assign(id, null, element)}
-      onRestoreDefault={(element) => editor.assign(id, view.defaultKeys, element)}
-      onCancel={editor.cancel}
-      onReplace={editor.replace}
+      actions={editor.actions}
     />
   );
 }

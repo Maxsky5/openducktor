@@ -1,4 +1,4 @@
-import { CommandPaletteRegistryContext } from "./command-palette-registry";
+import { CommandPaletteRegistryContext, isUnlisted } from "./command-palette-registry";
 import { Command } from "lucide-react";
 import { commandDefinition } from "../shortcuts/catalogue";
 import type { AppPlatform, ShortcutActionId } from "@openducktor/contracts";
@@ -34,13 +34,16 @@ function useCommandAvailability(commands: readonly CommandPaletteCommandRegistra
       commands.map((command) => [
         command.id,
         command.target?.key,
+        command.label,
         command.disabledReason?.() ?? null,
       ]),
     );
     const changed = previous.current !== null && previous.current !== snapshot;
     previous.current = snapshot;
-    if (changed) invalidate?.();
-  });
+    if (changed) invalidate?.(commands.every(isUnlisted));
+    // A caller that memoizes its commands skips this work while they stay the same; their
+    // availability closures then read the same values.
+  }, [commands, invalidate]);
 }
 
 /** Keep a page command in the palette while the calling page is mounted. */
@@ -59,19 +62,24 @@ export function useCommandPalettePageCommands(
     latest.current = commands;
   });
   useCommandAvailability(commands);
-  const signature = JSON.stringify(
-    commands.map((command) => [command.id, command.target?.key, command.label]),
-  );
+  // A label change, such as "Hide sidebar" to "Show sidebar", is read live below and published as
+  // an availability change, so it does not register every command of the caller again.
+  const signature = JSON.stringify(commands.map((command) => [command.id, command.target?.key]));
   useEffect(() => {
     if (!registerPageCommand) return;
     const releases = latest.current.map((command, index) => {
       const { id } = command;
       const targetKey = command.target?.key;
-      const label = command.label ?? commandDefinition(command.id)?.label;
+      const labelOf = (current: CommandPaletteCommandRegistration) =>
+        current.label ?? commandDefinition(current.id)?.label;
+      const label = labelOf(command);
       if (!label) throw new Error(`Shortcut action ${command.id} has no label.`);
       return registerPageCommand({
         ...command,
-        label,
+        get label() {
+          const current = latest.current[index];
+          return (current?.id === id && labelOf(current)) || label;
+        },
         icon: command.icon ?? Command,
         keywords: command.keywords ?? [label],
         resolveRun: () => {

@@ -24,7 +24,7 @@ import {
 } from "../command-palette/command-palette-registry";
 import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
 import { type CompiledShortcuts, compileShortcuts, type ShortcutBinding } from "./catalogue";
-import { resolveShortcutOwner } from "./command-resolution";
+import { isTyping, resolveShortcutOwner } from "./command-resolution";
 import { shortcutInputFromEvent } from "./dom-input";
 import { shortcutRecording } from "./recording-store";
 import { dismissShortcutPortal } from "./shortcut-focus";
@@ -42,18 +42,22 @@ type DispatchState = {
   compiled: CompiledShortcuts | null;
   /** The live registry, so a key press right after a registration still finds its owner. */
   readCommands(): readonly CommandPalettePageCommand[];
-  /** The command and dialog snapshots of the last render; routes and labels rebuild on change. */
-  inputs: { commands: readonly CommandPalettePageCommand[]; dialogs: number };
+  /**
+   * The command and dialog snapshots of this render. Nothing reads them: they give the state a
+   * new identity when they change, so labels and routes rebuild.
+   */
+  version: { commands: readonly CommandPalettePageCommand[]; overlays: number };
   paletteOpen: boolean;
   togglePalette(): void;
   runAfterClose(run: () => void): void;
 };
 
+/** `typing` comes from `isTyping`, computed once for every binding of one pass. */
 const invocationOf = (
   state: DispatchState,
   binding: ShortcutBinding,
   focus: Element | null,
-  embedded: boolean,
+  typing: boolean,
 ): Invocation | null => {
   // The palette is a dialog too, so other dialogs count only while it is closed.
   const overlayOpen = !state.paletteOpen && hasOpenDialog();
@@ -62,7 +66,7 @@ const invocationOf = (
   const owner = resolveShortcutOwner(binding.command, {
     commands: state.readCommands(),
     focus,
-    embedded,
+    typing,
     paletteOpen: state.paletteOpen,
     overlayOpen,
   });
@@ -85,8 +89,9 @@ const invocationFor = (
   focus: Element | null,
   embedded: boolean,
 ): Invocation | null => {
+  const typing = isTyping(focus, embedded, state.paletteOpen);
   for (const binding of state.compiled?.bySignature.get(signature) ?? []) {
-    const found = invocationOf(state, binding, focus, embedded);
+    const found = invocationOf(state, binding, focus, typing);
     if (found) return found;
   }
   return null;
@@ -168,18 +173,25 @@ export function useShortcutDispatch({
     () => ({
       compiled,
       readCommands: () => registry.pageCommands,
-      inputs: { commands, dialogs: overlays },
+      version: { commands, overlays },
       paletteOpen: isOpen,
       togglePalette: isOpen ? close : open,
       runAfterClose,
     }),
     [compiled, commands, registry, isOpen, overlays, open, close, runAfterClose],
   );
-  const [retryRevision, setRetryRevision] = useState(0);
-  const nativeRoutes = useMemo(
-    () => (electron ? nativeRoutesOf(state) : { claims: [], guestRoutes: {} }),
-    [electron, state],
+  // Label strings depend only on the keys, so a focus change computes only each owner.
+  const labelTexts = useMemo(
+    () =>
+      new Map(
+        Array.from(compiled?.byId ?? [], ([id, binding]) => [
+          id,
+          shortcutControlLabel(binding.combination, platform, undefined),
+        ]),
+      ),
+    [compiled, platform],
   );
+  const [retryRevision, setRetryRevision] = useState(0);
 
   const inputFocus = useRef<Element | null>(null);
   const latest = useRef({ state, publishLabels: () => {}, refreshFrames: () => {} });
@@ -224,7 +236,8 @@ export function useShortcutDispatch({
 
   const native = useNativeShortcutRouting({
     enabled: electron,
-    routes: nativeRoutes,
+    routesVersion: state,
+    readRoutes: () => nativeRoutesOf(state),
     recording,
     retryRevision,
     onInput: onEmbeddedInput,
@@ -265,16 +278,16 @@ export function useShortcutDispatch({
     const focus = inputFocus.current ?? document.activeElement;
     const tabId = electron ? null : embeddedTabId(focus);
     const embedded = Boolean(tabId || focus?.matches("[data-browser-tab-id]"));
+    const typing = isTyping(focus, embedded, state.paletteOpen);
     labelStore?.replace(
       new Map(
         compiled && frames.isReady(tabId)
           ? Array.from(compiled.byId, ([id, binding]) => [
               id,
-              shortcutControlLabel(
-                binding.combination,
-                platform,
-                invocationOf(state, binding, focus, embedded)?.owner,
-              ),
+              {
+                ...labelTexts.get(id)!,
+                owner: invocationOf(state, binding, focus, typing)?.owner,
+              },
             ])
           : [],
       ),

@@ -39,6 +39,7 @@ const recordingPalette = (shortcutLabel?: (id: string) => string | null) => {
       <CommandPaletteRegistryContext
         value={{
           pageCommands: [],
+          listedCommands: [],
           shortcutLabels,
           subscribe: () => () => {},
           invalidatePageCommands: () => {},

@@ -15,6 +15,7 @@ import {
   shortcutSignature,
 } from "@openducktor/contracts";
 import { shortcutLabel } from "@openducktor/frontend-core/shortcuts/key-labels";
+import type { CoreTaskAction } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import { resolveTerminalKeyAction } from "@openducktor/frontend-core/terminals/terminal-keyboard-policy";
 
 export type ShortcutShell = "electron" | "browser";
@@ -386,6 +387,16 @@ export const workflowCommandDefinition = (
   };
   if (unavailableReason) definition.unavailableReason = unavailableReason;
   return definition;
+};
+
+/** The shortcut of a core task action. A new core action fails to compile until it has one. */
+export const coreTaskActionShortcutId = (id: CoreTaskAction["id"]): "task-reset" | "task-close" => {
+  switch (id) {
+    case "reset_task":
+      return "task-reset";
+    case "close_task":
+      return "task-close";
+  }
 };
 
 export const effectiveShortcut = (

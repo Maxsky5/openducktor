@@ -48,7 +48,7 @@ test("command updates publish fresh snapshots without rerendering registration o
       const added = registry.pageCommands;
       expect(added).toEqual([first, second]);
       expect(registry.pageCommands).toBe(added);
-      registry.invalidatePageCommands();
+      registry.invalidatePageCommands(false);
       expect(registry.pageCommands).not.toBe(added);
       expect(registry.pageCommands).toEqual(added);
       releaseFirst();
@@ -177,6 +177,54 @@ test("hidden kept views release their shortcut registrations through Activity", 
     expect(view.getByLabelText("Registered commands").textContent).toBe("0");
     await act(async () => view.rerender(tree(true)));
     expect(view.getByLabelText("Registered commands").textContent).toBe("1");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("the listed commands keep their identity while only unlisted commands change", () => {
+  let registry!: NonNullable<React.ContextType<typeof CommandPaletteRegistryContext>>;
+  function Reader() {
+    registry = use(CommandPaletteRegistryContext)!;
+    return null;
+  }
+  const view = render(
+    <CommandPaletteRegistryProvider>
+      <Reader />
+    </CommandPaletteRegistryProvider>,
+  );
+  const listed = {
+    id: "settings" as const,
+    label: "Open Settings",
+    icon: Command,
+    keywords: [],
+    run() {},
+  };
+  try {
+    const releaseListed = registry.registerPageCommand(listed);
+    const before = registry.listedCommands;
+    expect(before).toEqual([listed]);
+    // Moving the palette highlight registers the next record's commands on each key.
+    const releaseHighlighted = registry.registerPageCommand({
+      ...listed,
+      id: "task-edit",
+      paletteOnly: true,
+    });
+    const releaseRow = registry.registerPageCommand({
+      ...listed,
+      id: "git-stage",
+      localOnly: true,
+    });
+    registry.invalidatePageCommands(true);
+    expect(registry.listedCommands).toBe(before);
+    expect(registry.pageCommands).toHaveLength(3);
+    releaseHighlighted();
+    releaseRow();
+    expect(registry.listedCommands).toBe(before);
+    registry.invalidatePageCommands(false);
+    expect(registry.listedCommands).not.toBe(before);
+    releaseListed();
+    expect(registry.listedCommands).toEqual([]);
   } finally {
     view.unmount();
   }

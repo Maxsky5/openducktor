@@ -1,6 +1,7 @@
 import { workflowShortcutActionId, type ShortcutActionId } from "@openducktor/contracts";
 import { Pencil } from "lucide-react";
 import { useCommandPalettePageCommands } from "../command-palette/command-palette-context";
+import { coreTaskActionShortcutId } from "./catalogue";
 import type { PaletteChat, PaletteTask } from "../command-palette/command-palette-types";
 import type {
   PaletteTaskCommand,
@@ -81,7 +82,7 @@ const taskCommandId = (workflowId: string, command: PaletteTaskCommand): Shortcu
     case "workflow":
       return workflowShortcutActionId(workflowId, command.action);
     case "core":
-      return command.action.id === "reset_task" ? "task-reset" : "task-close";
+      return coreTaskActionShortcutId(command.action.id);
     case "copy_id":
       return "task-copy-id";
     case "open_session":

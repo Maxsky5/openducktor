@@ -20,8 +20,9 @@ export function useShortcutLabel(
   owners: readonly string[] = [],
 ): string | null {
   const store = use(CommandPaletteRegistryContext)?.shortcutLabels;
+  // A control without a shortcut never shows a label, so it does not listen to label changes.
   const label = useSyncExternalStore(
-    store?.subscribe ?? noSubscription,
+    (id && store?.subscribe) || noSubscription,
     () => {
       const value = id ? store?.getSnapshot().get(id) : null;
       if (

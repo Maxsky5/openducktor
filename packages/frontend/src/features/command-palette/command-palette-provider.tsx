@@ -63,7 +63,9 @@ export function CommandPaletteProvider({
   const registry = use(CommandPaletteRegistryContext);
   if (!registry) throw new Error("CommandPaletteProvider requires CommandPaletteRegistryProvider.");
   const { registerPageCommand } = registry;
-  const pageCommands = useCommandPaletteCommands(isOpen);
+  // The listed commands keep their identity while the highlighted record's commands change, so
+  // moving the highlight does not render the palette a second time.
+  const pageCommands = useCommandPaletteCommands(isOpen, "listed");
   const previousFocusRef = useRef<HTMLElement | null>(null);
   /** True when this open ended with an action, which then owns focus. */
   const closedWithActionRef = useRef(false);
@@ -108,7 +110,10 @@ export function CommandPaletteProvider({
     [open, platform, registerPageCommand, runPageCommand],
   );
   const previousFocus = useCallback(() => previousFocusRef.current, []);
-  const paletteCommands = isOpen ? paletteCommandsFor(pageCommands, previousFocusRef.current) : [];
+  const paletteCommands = useMemo(
+    () => (isOpen ? paletteCommandsFor(pageCommands, previousFocusRef.current) : []),
+    [isOpen, pageCommands],
+  );
 
   return (
     <CommandPaletteContext value={value}>

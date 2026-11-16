@@ -1,3 +1,4 @@
+import { coreTaskActionShortcutId } from "@/features/shortcuts/catalogue";
 import type { ShortcutActionId } from "@openducktor/contracts";
 import { workflowShortcutActionId } from "@openducktor/contracts";
 import {
@@ -358,11 +359,8 @@ function TaskWorkflowActionMenu({
   );
 }
 
-const CORE_MENU_SHORTCUT_IDS = new Map<string, ShortcutActionId>([
-  ["close_task", "task-close"],
-  ["reset_task", "task-reset"],
-  ["remove_worktree", "task-remove-worktree"],
-  ["delete-task", "task-delete"],
-]);
-const coreMenuShortcutId = (id: string): ShortcutActionId | undefined =>
-  CORE_MENU_SHORTCUT_IDS.get(id);
+const coreMenuShortcutId = (id: string): ShortcutActionId | undefined => {
+  if (id === "remove_worktree") return "task-remove-worktree";
+  if (id === "delete-task") return "task-delete";
+  return id === "reset_task" || id === "close_task" ? coreTaskActionShortcutId(id) : undefined;
+};

@@ -300,6 +300,7 @@ describe("AgentChatMessageQueue", () => {
     const commands = new Map<string, CommandPalettePageCommand>();
     const registry = {
       pageCommands: [],
+      listedCommands: [],
       subscribe: () => () => {},
       invalidatePageCommands: () => {},
       registerPageCommand: (command: CommandPalettePageCommand) => {
@@ -339,7 +340,7 @@ describe("AgentChatMessageQueue", () => {
         [...commands.values()],
         commandDefinition("session-resume-queue")!,
         button,
-        false,
+        { palette: false, typing: false },
       );
     try {
       expect(command()).not.toBeNull();

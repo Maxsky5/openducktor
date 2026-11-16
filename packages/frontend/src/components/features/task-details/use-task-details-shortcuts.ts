@@ -1,3 +1,4 @@
+import { coreTaskActionShortcutId } from "@/features/shortcuts/catalogue";
 import { workflowShortcutActionId } from "@openducktor/contracts";
 import type { RefObject } from "react";
 import { resolveTaskCardActions, taskActionLabel } from "@openducktor/workflows";
@@ -49,7 +50,7 @@ export function useTaskDetailsShortcuts(
       },
       ...(menuAvailable && onCoreTaskAction
         ? coreTaskActions(task).map((action) => ({
-            id: action.id === "reset_task" ? ("task-reset" as const) : ("task-close" as const),
+            id: coreTaskActionShortcutId(action.id),
             run: () => onCoreTaskAction(action),
             localOnly: true,
           }))

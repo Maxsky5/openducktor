@@ -1,5 +1,5 @@
 import { ShortcutScope, ShortcutMenuItem, ShortcutButton } from "../shortcuts/shortcut-controls";
-import { hasOpenDialog, openDialogCount, subscribeOpenDialogs } from "@/components/ui/open-dialogs";
+import { hasOpenDialog, subscribeOpenDialogs } from "@/components/ui/open-dialogs";
 import {
   CommandPaletteContext,
   useCommandPalettePageCommands,
@@ -12,7 +12,6 @@ import { Loader2, type LucideIcon, Plus, X } from "lucide-react";
 import {
   memo,
   use,
-  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
   type RefObject,
@@ -101,7 +100,6 @@ export const SessionPanel = memo(function SessionPanel({
   // without a mount. A dialog that stays open closes when its view hides.
   const root = useRef<HTMLDivElement>(null);
   const shortcutActive = useSessionViewActive();
-  const dialogCount = useSyncExternalStore(subscribeOpenDialogs, openDialogCount, openDialogCount);
   const pendingShortcutClose = useRef<string | null>(null);
   const runPageCommand = use(CommandPaletteContext)?.runPageCommand;
   useOnSessionViewHide(() => {
@@ -113,19 +111,30 @@ export const SessionPanel = memo(function SessionPanel({
       model.tabs.some((tab) => tab.id === pendingShortcutClose.current)
     )
       return;
-    const frame = requestAnimationFrame(() => {
-      if (!shortcutActive || hasOpenDialog()) return;
-      pendingShortcutClose.current = null;
-      const focus = Array.from(
-        root.current?.querySelectorAll<HTMLElement>(
-          '[role="tab"][aria-selected="true"], [aria-label="Open a tab"] button:not([disabled])',
-        ) ?? [],
-      ).find((element) => element.getClientRects().length > 0);
-      if (focus) focus.focus();
-      else runPageCommand?.("focus-composer");
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [model.tabs, shortcutActive, runPageCommand, dialogCount]);
+    let frame = 0;
+    const focusRemainingTab = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (!shortcutActive || hasOpenDialog()) return;
+        pendingShortcutClose.current = null;
+        const focus = Array.from(
+          root.current?.querySelectorAll<HTMLElement>(
+            '[role="tab"][aria-selected="true"], [aria-label="Open a tab"] button:not([disabled])',
+          ) ?? [],
+        ).find((element) => element.getClientRects().length > 0);
+        if (focus) focus.focus();
+        else runPageCommand?.("focus-composer");
+      });
+    };
+    focusRemainingTab();
+    // A close confirmation can still be open. Listening only here, not through a store
+    // subscription, keeps every mounted panel from rendering on each dialog change.
+    const stopListening = subscribeOpenDialogs(focusRemainingTab);
+    return () => {
+      cancelAnimationFrame(frame);
+      stopListening();
+    };
+  }, [model.tabs, shortcutActive, runPageCommand]);
   const moves = useSessionPanelMoves();
   const focusedCommands =
     shortcutActive && isShown
