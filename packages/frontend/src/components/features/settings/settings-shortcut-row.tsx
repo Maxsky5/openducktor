@@ -1,4 +1,4 @@
-import { memo, type ReactNode, useRef } from "react";
+import { memo, type ReactNode, useRef, useState } from "react";
 import { ChevronDown, CircleAlert, TriangleAlert } from "lucide-react";
 import {
   type AppPlatform,
@@ -298,11 +298,39 @@ function WhenPicker({
   onChoose(when: ShortcutWhen, trigger: HTMLElement): void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
+  // The popover mounts at the first open. Mounting one for each of ~50 rows when the section opens
+  // cost a long task, because each Radix popper commits its anchor state.
+  const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
   const current = entry.when;
   const labelOf = (when: ShortcutWhen) => whenLabel(entry.scope, when);
+  const button = (
+    <button
+      ref={trigger}
+      type="button"
+      disabled={disabled}
+      aria-label={`When ${entry.label} runs: ${labelOf(current)}`}
+      aria-haspopup="dialog"
+      onClick={
+        mounted
+          ? undefined
+          : () => {
+              setMounted(true);
+              setOpen(true);
+            }
+      }
+      className="-mx-1 inline-flex h-5 items-center gap-1 rounded-md px-1 text-xs text-foreground/80 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+    >
+      {labelOf(current)}
+      <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground" />
+    </button>
+  );
+  if (!mounted) return button;
   return (
     <Combobox
       value={current}
+      open={open}
+      onOpenChange={setOpen}
       searchable={false}
       className="w-88"
       options={SHORTCUT_WHEN_VALUES.map((when) => ({
@@ -314,18 +342,7 @@ function WhenPicker({
         const when = SHORTCUT_WHEN_VALUES.find((option) => option === value);
         if (when && when !== current && trigger.current) onChoose(when, trigger.current);
       }}
-      trigger={
-        <button
-          ref={trigger}
-          type="button"
-          disabled={disabled}
-          aria-label={`When ${entry.label} runs: ${labelOf(current)}`}
-          className="-mx-1 inline-flex h-5 items-center gap-1 rounded-md px-1 text-xs text-foreground/80 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-        >
-          {labelOf(current)}
-          <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground" />
-        </button>
-      }
+      trigger={button}
     />
   );
 }
