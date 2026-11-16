@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetFooter, SheetTitle } from "@/components/ui/sheet";
 import { QueryProvider } from "@/test-utils/query-provider";
+import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import { AppToaster } from "./app-toaster";
 
 const FOOTER_HEIGHT = 60;
@@ -20,6 +21,9 @@ test("keeps toasts above the footer of an open sheet", async () => {
     get(this: HTMLElement) {
       return this.dataset.slot === "sheet-footer" ? FOOTER_HEIGHT : 0;
     },
+  });
+  const restore = restoreAfterTestBody(() => {
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeight);
   });
   const renderView = (open: boolean) => (
     <QueryProvider>
@@ -46,7 +50,7 @@ test("keeps toasts above the footer of an open sheet", async () => {
     expect(toaster.style.getPropertyValue("--offset-bottom")).toBe("16px");
   } finally {
     view.unmount();
-    Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeight);
+    restore();
   }
 });
 

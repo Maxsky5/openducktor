@@ -15,7 +15,10 @@ const startupToasterStyle = (bottomOffset: number): CSSProperties => ({
   pointerEvents: "none",
 });
 
-/** Shows every app notification above the page, sheets, and dialogs, and above sheet footers. */
+/**
+ * Shows every app notification above the page, sheets, and dialogs. Toasts stay above the bottom
+ * elements that reserve space, such as an open sheet footer.
+ */
 export function AppToaster(): ReactElement {
   const attempts = useStartupAttempts();
   const startupVisible = attempts.some((attempt) => attempt.presentation === "notification");

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { reserveToasterInset } from "@/components/ui/toaster-inset";
 import { errorMessage as readErrorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
@@ -274,7 +275,8 @@ export function AppUpdatePrompt(): ReactElement | null {
 
   return (
     <div
-      className="pointer-events-none fixed right-4 bottom-4 z-[80] w-[min(360px,calc(100vw-2rem))]"
+      ref={reserveToasterInset}
+      className="pointer-events-none fixed right-4 bottom-0 z-[80] w-[min(360px,calc(100vw-2rem))] pb-4"
       data-page-occluder=""
     >
       <Card className="light pointer-events-auto overflow-hidden border-border bg-popover shadow-lg backdrop-blur-none supports-[backdrop-filter]:bg-popover">

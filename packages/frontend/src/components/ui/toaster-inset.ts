@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
-/** Heights of the elements that toasts must not cover, such as an open sheet footer. */
-const heights = new Map<symbol, number>();
+/** Heights of the elements at the screen bottom that toasts must not cover. */
+const insets = new Map<symbol, number>();
 const listeners = new Set<() => void>();
 
 const emit = (): void => {
@@ -15,14 +15,18 @@ const subscribe = (listener: () => void): (() => void) => {
   };
 };
 
-const bottomInset = (): number => Math.max(0, ...heights.values());
+const bottomInset = (): number => Math.max(0, ...insets.values());
 
-/** Keeps toasts above an element at the bottom of the screen until the returned cleanup runs. */
-export const reserveToasterInset = (element: HTMLElement): (() => void) => {
+/**
+ * Keeps toasts above an element that touches the screen bottom until the returned cleanup runs. It
+ * has the shape of a React ref callback.
+ */
+export const reserveToasterInset = (element: HTMLElement | null): (() => void) | undefined => {
+  // React 19 does not call a ref callback with null when the callback returns a cleanup.
+  if (element === null) return;
   const key = Symbol("toaster-inset");
   const measure = (): void => {
-    if (heights.get(key) === element.offsetHeight) return;
-    heights.set(key, element.offsetHeight);
+    insets.set(key, element.offsetHeight);
     emit();
   };
   const observer = new ResizeObserver(measure);
@@ -30,7 +34,7 @@ export const reserveToasterInset = (element: HTMLElement): (() => void) => {
   measure();
   return () => {
     observer.disconnect();
-    heights.delete(key);
+    insets.delete(key);
     emit();
   };
 };

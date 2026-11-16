@@ -1,7 +1,6 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 import { DialogRoot, useDialogOpen } from "./dialog-root";
@@ -101,18 +100,12 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
 /** The action bar at the bottom of a sheet. Toasts stay above it while the sheet is open. */
 function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   const isOpen = useDialogOpen("SheetFooter", "Sheet");
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const footer = ref.current;
-    if (!isOpen || footer === null) return;
-    return reserveToasterInset(footer);
-  }, [isOpen]);
   return (
     <div
       data-slot="sheet-footer"
       className={cn("flex-none border-t border-border bg-card px-5 py-3", className)}
       {...props}
-      ref={ref}
+      ref={isOpen ? reserveToasterInset : undefined}
     />
   );
 }
