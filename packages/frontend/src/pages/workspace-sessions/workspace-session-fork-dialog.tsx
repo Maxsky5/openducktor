@@ -15,15 +15,7 @@ import { Folder, GitBranch, GitFork, LoaderCircle } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { forkWorkspaceSession } from "@openducktor/frontend-core/sessions/session-forks";
@@ -40,12 +32,9 @@ import {
   useStartupDialogClose,
 } from "@/features/session-startup/use-startup-dialog-attempt";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
-import {
-  startupShowsProgress,
-  startupTraceRows,
-} from "@openducktor/frontend-core/sessions/startup/startup-trace";
+import { startupShowsProgress } from "@openducktor/frontend-core/sessions/startup/startup-trace";
 import { useWorkspaceForkHandoff } from "./use-workspace-fork-handoff";
-import { cn } from "@/lib/utils";
+import { ChatDialogFrame } from "./workspace-session-dialog-frame";
 
 export function WorkspaceSessionForkDialog({
   open,
@@ -82,7 +71,6 @@ export function WorkspaceSessionForkDialog({
   const [startupAttemptId, setStartupAttemptId] = useState<string | null>(null);
   const startup = useStartupDialogAttempt(startupAttemptId);
   const { attempt } = startup;
-  const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
   const showingProgress = startupShowsProgress(attempt);
   const observeHandoff = useWorkspaceForkHandoff({
     workspace,
@@ -137,74 +125,56 @@ export function WorkspaceSessionForkDialog({
     setFailure(null);
   };
   return (
-    <Dialog
+    <ChatDialogFrame
       open={open}
-      onOpenChange={(value) => {
-        if (!value && !starting) close();
-      }}
+      attempt={attempt}
+      starting={starting}
+      onClose={close}
+      onCloseAutoFocus={onCloseAutoFocus}
+      title={FORK_CHAT_TEXT.title}
+      description={
+        showingProgress ? "See progress as the session starts." : FORK_CHAT_TEXT.description
+      }
     >
-      <DialogContent
-        className={cn("my-0 gap-0 p-0 sm:max-w-2xl", {
-          "max-w-lg overflow-hidden sm:max-w-lg": showingProgress,
-          "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))]": hasTrace,
-        })}
-        closeButton={starting ? null : undefined}
-        onCloseAutoFocus={onCloseAutoFocus}
-        onEscapeKeyDown={(event) => {
-          if (starting) event.preventDefault();
-        }}
-        onPointerDownOutside={(event) => {
-          if (starting) event.preventDefault();
-        }}
-      >
-        <DialogHeader
-          className={cn("border-b border-border px-6 py-4", showingProgress && "px-4 py-3")}
+      {startupAttemptId && showingProgress ? (
+        <StartupDialogProgress
+          open={open}
+          startupAttemptId={startupAttemptId}
+          onClose={close}
+          onEditChoices={editChoices}
+        />
+      ) : (
+        <form
+          className="flex min-h-0 flex-col"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
         >
-          <DialogTitle>{FORK_CHAT_TEXT.title}</DialogTitle>
-          <DialogDescription className={cn(showingProgress && "sr-only")}>
-            {showingProgress ? "See progress as the session starts." : FORK_CHAT_TEXT.description}
-          </DialogDescription>
-        </DialogHeader>
-        {startupAttemptId && showingProgress ? (
-          <StartupDialogProgress
-            open={open}
-            startupAttemptId={startupAttemptId}
-            onClose={close}
-            onEditChoices={editChoices}
-          />
-        ) : (
-          <form
-            className="flex min-h-0 flex-col"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submit();
-            }}
-          >
-            <fieldset disabled={starting} className="contents">
-              <DialogBody className="flex flex-col gap-4 px-6 py-4">
-                <ForkLocationFields
-                  workspace={workspace}
-                  record={record}
-                  destination={destination}
-                  onDestinationChange={setDestination}
-                  worktree={worktree}
-                  onWorktreeChange={changeWorktree}
-                  disabled={starting}
-                  error={worktreeError}
-                />
-              </DialogBody>
-              <ForkFooter
-                pending={starting}
-                error={formError}
-                disabledReason={blockedReason}
-                canSubmit={input !== null}
-                onClose={close}
+          <fieldset disabled={starting} className="contents">
+            <DialogBody className="flex flex-col gap-4 px-6 py-4">
+              <ForkLocationFields
+                workspace={workspace}
+                record={record}
+                destination={destination}
+                onDestinationChange={setDestination}
+                worktree={worktree}
+                onWorktreeChange={changeWorktree}
+                disabled={starting}
+                error={worktreeError}
               />
-            </fieldset>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
+            </DialogBody>
+            <ForkFooter
+              pending={starting}
+              error={formError}
+              disabledReason={blockedReason}
+              canSubmit={input !== null}
+              onClose={close}
+            />
+          </fieldset>
+        </form>
+      )}
+    </ChatDialogFrame>
   );
 }
 
