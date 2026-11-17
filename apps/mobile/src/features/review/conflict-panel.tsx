@@ -1,19 +1,15 @@
-import {
-  getGitConflictCopy,
-  gitConflictDescription,
-} from "@openducktor/frontend-core/git/conflicts/conflict-copy";
-import { createGitConflictActionsModel } from "@openducktor/frontend-core/git/conflicts/git-conflict-actions-model";
+import { gitConflictDescription } from "@openducktor/frontend-core/git/conflicts/conflict-copy";
 import type { GitConflict } from "@openducktor/frontend-core/git/contracts";
 import type { ReactElement } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { Button } from "@/ui/button";
-import { useConfirm } from "@/ui/confirm-dialog";
 import { Icon } from "@/ui/icon";
 import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
 import { useAnnounce } from "@/ui/use-announce";
+import { useGitConflictActionModel } from "./use-git-conflict-action-model";
 import type { GitConflictActions } from "./use-git-conflict-actions";
 
 const conflictedFilesLabel = (count: number): string =>
@@ -34,37 +30,7 @@ export function ConflictPanel({
   recipientLabel: "Builder" | "agent";
 }): ReactElement {
   const theme = useAppTheme();
-  const confirm = useConfirm();
-  const copy = getGitConflictCopy(conflict.operation);
-  const model = createGitConflictActionsModel({
-    operation: conflict.operation,
-    isHandlingConflict: actions.action !== null,
-    conflictAction: actions.action,
-    onAbort: () => {
-      void confirm({
-        title: copy.abortLabel,
-        message: `This cancels the ${copy.operationLabel} and restores the branch to its earlier state.`,
-        confirmLabel: copy.abortLabel,
-        icon: "rotate-ccw",
-        destructive: true,
-      }).then((confirmed) => {
-        if (confirmed) void actions.abort();
-      });
-    },
-    onAsk: () => {
-      void confirm({
-        title: `Ask the ${recipientLabel} to resolve the conflict?`,
-        message: actions.askDescription,
-        confirmLabel: "Send request",
-        icon: "send",
-      }).then((confirmed) => {
-        if (confirmed) void actions.askAgent();
-      });
-    },
-    recipientLabel,
-    blockedReason: actions.askBlockedReason,
-  });
-  const { help } = model;
+  const { copy, model, help } = useGitConflictActionModel(conflict, actions, recipientLabel);
   useAnnounce(help?.blockedReason);
   const count = conflict.conflictedFiles.length;
   return (
