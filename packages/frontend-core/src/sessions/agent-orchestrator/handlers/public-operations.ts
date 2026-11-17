@@ -30,6 +30,7 @@ type SessionActions = {
   manageAgentMessageQueue: AgentOperationsContextValue["manageAgentMessageQueue"];
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
+  cancelUsageLimitAutoResume: AgentOperationsContextValue["cancelUsageLimitAutoResume"];
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,
@@ -111,6 +112,8 @@ export const createOrchestratorPublicOperations = ({
       sessionActions.stopAgentSession(session),
     ),
   continueInterruptedTurn: sessionActions.continueInterruptedTurn,
+  // The notice shows a failure, because only it offers the cancel.
+  cancelUsageLimitAutoResume: sessionActions.cancelUsageLimitAutoResume,
   // The caller reports a failure, because a send waits for this update and shows its own error.
   updateAgentSessionModel: sessionActions.updateAgentSessionModel,
   replyAgentApproval: sessionActions.replyAgentApproval,

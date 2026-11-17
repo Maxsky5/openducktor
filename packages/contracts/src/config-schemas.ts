@@ -76,6 +76,7 @@ export const DEFAULT_CHAT_SETTINGS = {
   lineOverflow: "wrap",
   hunkSeparators: "line-info",
   showConversationMinimap: true,
+  autoResumeAfterUsageLimits: true,
 } as const;
 export const DEFAULT_GENERAL_SETTINGS = {
   openAgentStudioTabOnBackgroundSessionStart: true,
@@ -583,6 +584,8 @@ export const chatSettingsSchema = z.object({
   lineOverflow: z.enum(CHAT_LINE_OVERFLOW_VALUES).default(DEFAULT_CHAT_SETTINGS.lineOverflow),
   hunkSeparators: z.enum(CHAT_HUNK_SEPARATOR_VALUES).default(DEFAULT_CHAT_SETTINGS.hunkSeparators),
   showConversationMinimap: z.boolean().default(DEFAULT_CHAT_SETTINGS.showConversationMinimap),
+  /** The host resumes a session after the reported reset of a usage limit. */
+  autoResumeAfterUsageLimits: z.boolean().default(DEFAULT_CHAT_SETTINGS.autoResumeAfterUsageLimits),
 });
 export type ChatSettings = z.infer<typeof chatSettingsSchema>;
 export type ChatDiffStyle = z.infer<typeof chatSettingsSchema>["diffStyle"];

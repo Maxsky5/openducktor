@@ -1,5 +1,6 @@
 import { createLiveContinuation } from "./live-session-continuation";
 import { createLiveWorkflowObservations } from "./live-workflow-observations";
+import { createLiveObservationPublications } from "./live-observation-publications";
 import { createStartedSessionRoots } from "./started-session-roots";
 import { createWorkflowLaunchHold } from "./workflow-launch-hold";
 import {
@@ -57,10 +58,11 @@ export const createAgentSessionLiveStateService = ({
   faultLog,
   publish,
   observeNotificationInput,
-  observeApprovalInput,
+  observeWorkflowInput,
   coordinator = createLiveStateCoordinator(),
   persistence,
   messageQueues,
+  onRuntimeRegistered,
 }: CreateAgentSessionLiveStateServiceInput): AgentSessionLiveStateService => {
   const withStartAdmission = createLiveSessionStartAdmission(
     runtimeAdmission,
@@ -84,7 +86,7 @@ export const createAgentSessionLiveStateService = ({
   let liveStateSequence = 0;
   const publishEnvelopeResult = createAgentSessionLiveEnvelopePublisher(
     (envelope) => (
-      observeApprovalInput?.(envelope),
+      observeWorkflowInput?.(envelope),
       publish(
         isAgentSessionLiveStateEnvelope(envelope) || envelope.type === "transcript_event"
           ? { ...envelope, sequence: ++liveStateSequence }
@@ -282,17 +284,7 @@ export const createAgentSessionLiveStateService = ({
             yield* publishChanges([{ type: "session_upsert", snapshot: observed.session }]);
         }),
       ),
-    publishOperation: (envelope) =>
-      coordinator.run(
-        Effect.gen(function* () {
-          observations.accept(envelope);
-          yield* publishEnvelope(envelope);
-        }),
-      ),
-    retainOperation: (observation) =>
-      coordinator.run(
-        Effect.sync(() => observations.accept({ type: "session_operation_updated", observation })),
-      ),
+    ...createLiveObservationPublications({ coordinator, observations, publishEnvelope }),
     reportLaunchFailure: (ref, message) =>
       coordinator.run(
         Effect.gen(function* () {
@@ -492,7 +484,10 @@ export const createAgentSessionLiveStateService = ({
         Effect.andThen(service.holdWorkflowLaunch(input, false)),
         Effect.tap(() => Effect.sync(() => startedRoots.releaseSession(input))),
       ),
-    registerRuntimeAdapter: lifecycle.registerRuntimeAdapter,
+    registerRuntimeAdapter: (adapter) =>
+      lifecycle
+        .registerRuntimeAdapter(adapter)
+        .pipe(Effect.tap(() => Effect.sync(() => onRuntimeRegistered?.(adapter)))),
     releaseRuntime: lifecycle.releaseRuntime,
     createRuntimeRegistration: lifecycle.createRuntimeRegistration,
   };

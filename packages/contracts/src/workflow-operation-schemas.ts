@@ -54,3 +54,22 @@ export const taskCompletionObservationSchema = z.strictObject({
   failure: workflowFailureSchema.optional(),
 });
 export type TaskCompletionObservation = z.infer<typeof taskCompletionObservationSchema>;
+
+/**
+ * The host-planned resume of the latest usage-limit stop of one session. The host keeps it in
+ * memory. `stopId` names the stop and is opaque to clients.
+ */
+const usageLimitAutoResumeFields = {
+  ref: agentSessionLiveRefSchema,
+  stopId: text,
+  resumeAtEpochMs: z.number().int().nonnegative(),
+};
+export const usageLimitAutoResumeSchema = z.discriminatedUnion("state", [
+  z.strictObject({ ...usageLimitAutoResumeFields, state: z.enum(["scheduled", "resuming"]) }),
+  z.strictObject({
+    ...usageLimitAutoResumeFields,
+    state: z.literal("failed"),
+    failure: workflowFailureSchema,
+  }),
+]);
+export type UsageLimitAutoResume = z.infer<typeof usageLimitAutoResumeSchema>;

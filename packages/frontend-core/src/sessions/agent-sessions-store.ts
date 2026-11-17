@@ -8,6 +8,7 @@ import type {
   AgentSessionLiveRef,
   AgentMessageQueueSnapshot,
   SessionOperationObservation,
+  UsageLimitAutoResume,
   WorkspaceRef,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
@@ -70,6 +71,7 @@ type LiveSessionStateEnvelope = Extract<
       | "session_removed"
       | "session_operation_updated"
       | "submission_acknowledged"
+      | "usage_limit_auto_resume_updated"
       | "message_queue_updated";
   }
 >;
@@ -135,6 +137,7 @@ export const createAgentSessionsStore = (
   const approvalFailures = new Map<string, AgentChatMessage>();
   const operations = new Map<string, Map<string, SessionOperationObservation>>();
   const operationFailures = new Map<string, Map<string, AgentChatMessage>>();
+  const autoResumes = new Map<string, UsageLimitAutoResume>();
   const observedActivity = new Map<string, AgentSessionLiveSnapshot>();
   const acknowledged = new Map<string, Map<string, SubmissionReceipt>>();
   const noticeUpdates = new Set<string>();
@@ -203,6 +206,12 @@ export const createAgentSessionsStore = (
         (hostOperations.length > 0 || session.hostOperations !== undefined)
       )
         next = { ...next, hostOperations };
+      const autoResume = autoResumes.get(key);
+      const usageLimitAutoResume = autoResume
+        ? replaceEqualDeep(session.usageLimitAutoResume, autoResume)
+        : undefined;
+      if (usageLimitAutoResume !== session.usageLimitAutoResume)
+        next = { ...next, usageLimitAutoResume };
       const settledRefusal = settledRefusals.some(
         (operation) => operation.submissionId === session.pendingSubmissionId,
       );
@@ -431,6 +440,11 @@ export const createAgentSessionsStore = (
           clearLiveNotices();
           operations.clear();
           operationFailures.clear();
+          autoResumes.clear();
+          for (const autoResume of envelope.usageLimitAutoResumes ?? []) {
+            noticeUpdates.add(agentSessionIdentityKey(autoResume.ref));
+            autoResumes.set(agentSessionIdentityKey(autoResume.ref), autoResume);
+          }
           // Snapshot absence cannot undo a known admission, including a removed queue entry.
           for (const snapshot of envelope.sessions) retainLiveNotices(snapshot);
           for (const observation of envelope.sessionOperations ?? []) retainOperation(observation);
@@ -449,6 +463,14 @@ export const createAgentSessionsStore = (
           if (envelope.observation.ref.repoPath === workspaceRepoPath)
             retainOperation(envelope.observation);
           return;
+        case "usage_limit_auto_resume_updated": {
+          if (envelope.ref.repoPath !== workspaceRepoPath) return;
+          const key = agentSessionIdentityKey(envelope.ref);
+          noticeUpdates.add(key);
+          if (envelope.autoResume) autoResumes.set(key, envelope.autoResume);
+          else autoResumes.delete(key);
+          return;
+        }
         case "submission_acknowledged": {
           retainAcknowledgement(
             envelope.acknowledgement.ref,

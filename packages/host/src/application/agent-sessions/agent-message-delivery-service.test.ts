@@ -517,3 +517,83 @@ describe("agent message delivery: submit and drain", () => {
     expect(harness.queueTexts()).toEqual([]);
   });
 });
+
+describe("agent message delivery: usage-limit stops", () => {
+  const usageLimitError = (messageId: string, resetsAtEpochMs?: number) => {
+    const envelope = turnError("Session limit reached.");
+    if (envelope.type !== "transcript_event" || envelope.event.type !== "turn_error")
+      throw new Error("Expected a turn error.");
+    return {
+      ...envelope,
+      event: {
+        ...envelope.event,
+        messageId,
+        usageLimit: resetsAtEpochMs === undefined ? {} : { resetsAtEpochMs },
+      },
+    } satisfies AgentSessionLiveEnvelope;
+  };
+  const USAGE_LIMIT_PAUSE =
+    "The agent stopped on a usage limit: Session limit reached. The next message waits until the session resumes, or until you resume the queue.";
+
+  test("a completed turn after the stop releases the queue, also after a late reset", async () => {
+    const harness = createHarness();
+    harness.outcomes.push("busy");
+    await harness.submit("first");
+
+    harness.service.observeChanges([usageLimitError("limit-1"), foregroundEnd("failed")]);
+    harness.service.observeChanges([usageLimitError("limit-1", 1_800_000_000_000)]);
+    await harness.runBackground();
+    expect(harness.pause()).toBe(USAGE_LIMIT_PAUSE);
+
+    harness.service.observeChanges([foregroundEnd("completed")]);
+    await harness.runBackground();
+
+    expect(harness.sentTexts()).toEqual(["first:new_turn", "first:new_turn"]);
+    expect(harness.service.listQueues("/repo")).toEqual([]);
+  });
+
+  test("a failed resume keeps the queue paused with the new cause", async () => {
+    const harness = createHarness();
+    harness.outcomes.push("busy");
+    await harness.submit("first");
+
+    harness.service.observeChanges([usageLimitError("limit-1"), foregroundEnd("failed")]);
+    harness.service.observeChanges([foregroundEnd("failed")]);
+    harness.service.observeChanges([foregroundEnd("completed")]);
+    await harness.runBackground();
+
+    expect(harness.sentTexts()).toEqual(["first:new_turn"]);
+    expect(harness.pause()).toBe("The turn failed. Resume the queue to send the next message.");
+  });
+
+  test("a new usage-limit stop keeps the pause until a turn completes", async () => {
+    const harness = createHarness();
+    harness.outcomes.push("busy");
+    await harness.submit("first");
+
+    harness.service.observeChanges([usageLimitError("limit-1"), foregroundEnd("failed")]);
+    harness.service.observeChanges([usageLimitError("limit-2"), foregroundEnd("failed")]);
+    await harness.runBackground();
+    expect(harness.pause()).toBe(USAGE_LIMIT_PAUSE);
+
+    harness.service.observeChanges([foregroundEnd("completed")]);
+    await harness.runBackground();
+    expect(harness.sentTexts()).toEqual(["first:new_turn", "first:new_turn"]);
+  });
+
+  test("a stop by the user replaces the usage-limit pause", async () => {
+    const harness = createHarness();
+    harness.outcomes.push("busy");
+    await harness.submit("first");
+
+    harness.service.observeChanges([usageLimitError("limit-1"), foregroundEnd("failed")]);
+    harness.stop();
+    harness.service.observeChanges([foregroundEnd("completed")]);
+    await harness.runBackground();
+
+    expect(harness.sentTexts()).toEqual(["first:new_turn"]);
+    expect(harness.pause()).toBe(
+      "You stopped the agent. Resume the queue to send the next message.",
+    );
+  });
+});

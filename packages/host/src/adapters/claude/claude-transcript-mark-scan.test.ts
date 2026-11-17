@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanClaudeTranscriptForGoalRecords } from "./claude-goal-transcript-scan";
+import { scanClaudeTranscriptForGoalRecords } from "./claude-transcript-mark-scan";
 
 const directories: string[] = [];
 afterEach(async () => {

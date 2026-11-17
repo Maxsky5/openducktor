@@ -32,6 +32,7 @@ const createSessionActions = (overrides: Partial<SessionActions> = {}): SessionA
     manageAgentMessageQueue: async () => {},
     stopAgentSession: async () => {},
     continueInterruptedTurn: async () => undefined,
+    cancelUsageLimitAutoResume: async () => {},
     updateAgentSessionModel: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},

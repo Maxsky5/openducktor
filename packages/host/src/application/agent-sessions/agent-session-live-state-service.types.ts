@@ -28,6 +28,7 @@ import type {
   FileDiff,
   SessionOperationObservation,
   TaskAgentSessions,
+  UsageLimitAutoResume,
   StartupPreparedHandoff,
 } from "@openducktor/contracts";
 import type { Effect } from "effect";
@@ -77,6 +78,11 @@ export type AgentSessionLiveStateService = {
     >,
   ) => Effect.Effect<void, HostError>;
   readonly retainOperation: (observation: SessionOperationObservation) => Effect.Effect<void>;
+  /** Retains the auto-resume of a usage-limit stop and publishes a change in order. `null` removes it. */
+  readonly publishUsageLimitAutoResume: (
+    ref: AgentSessionLiveRef,
+    autoResume: UsageLimitAutoResume | null,
+  ) => Effect.Effect<void, HostError>;
   readonly publishTaskSessionRecords: (
     ref: AgentSessionLiveRef,
     records: TaskAgentSessions & { workspaceId: string },
@@ -178,7 +184,10 @@ export type CreateAgentSessionLiveStateServiceInput = {
     envelope: AgentSessionLiveEnvelope,
     provenance: "baseline" | "live",
   ) => void;
-  readonly observeApprovalInput?: (envelope: AgentSessionLiveEnvelope) => void;
+  /** Feeds each live change to the host workflow observers: approvals, operations, and auto-resume. */
+  readonly observeWorkflowInput?: (envelope: AgentSessionLiveEnvelope) => void;
   readonly coordinator?: LiveStateCoordinator;
   readonly messageQueues: AgentMessageQueueObserver;
+  /** Runs after a runtime adapter registers and restores its sessions. It must not block. */
+  readonly onRuntimeRegistered?: (adapter: AgentSessionLiveAdapterPort) => void;
 };

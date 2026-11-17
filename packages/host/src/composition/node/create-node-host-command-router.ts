@@ -10,11 +10,8 @@ import { createEffectHostCommandRouter } from "../../interface/router/host-comma
 import { createRuntimeAdmissionGate } from "@openducktor/runtime-orchestration";
 import { createNodeNotificationServices } from "./node-notification-services";
 import { createNotificationCommandHandlers } from "../../interface/commands/notification-command-handlers";
-import { createAutopilotCommandHandlers } from "../../interface/commands/autopilot-command-handlers";
-import type { AutopilotService } from "../../application/autopilot/autopilot-service";
-import { createAutopilotService } from "../../application/autopilot/autopilot-service";
-import { createKeyboardShortcutSettingsService } from "../../application/keyboard-shortcuts/keyboard-shortcut-settings-service";
-import { createKeyboardShortcutCommandHandlers } from "../../interface/commands/keyboard-shortcut-command-handlers";
+import { createNodeKeyboardShortcutHandlers } from "./node-keyboard-shortcut-handlers";
+import { createNodeSessionAutomation } from "./node-session-automation";
 import { createNodeImageCommandHandlers } from "./node-image-command-handlers";
 import { createNodeLocalToolCommandHandlers } from "./node-local-tool-command-handlers";
 import { createNodeGitProviderCommandHandlers } from "./node-git-provider-command-handlers";
@@ -110,11 +107,11 @@ export const assembleNodeEffectHostCommandRouter = (
     startupEnv,
     worktreeFiles,
   } = defaultPorts;
-  let autopilot: AutopilotService | undefined; // Autopilot needs services that this function creates later, so the hooks bind it late.
+  const automation = createNodeSessionAutomation(onBackgroundFailure, lifecycleLogger, git);
   const notificationComposition = createNodeNotificationServices(
     withTaskWorkflowSettings(baseSettingsConfig, taskWorkflows),
     eventBus,
-    (config) => (autopilot ? autopilot.configCommitted(config) : Effect.void),
+    automation.configCommitted,
   );
   const { settingsConfig } = notificationComposition;
   const setup = createNodeWorkspaceProviderSetup(
@@ -169,10 +166,12 @@ export const assembleNodeEffectHostCommandRouter = (
     createNodeAgentSessionLiveState({
       runtimeAdmission,
       observeNotificationInput: notificationComposition.acceptLive,
-      observeApprovalInput: createWorkflowLiveObserver(
+      observeWorkflowInput: createWorkflowLiveObserver(
         () => taskSessions,
         messageDelivery.runBackground,
+        automation.observeLive,
       ),
+      onRuntimeRegistered: automation.runtimeRegistered,
       messageQueues: messageDelivery,
       persistence: workspaceSessions.persistence,
       withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
@@ -282,7 +281,7 @@ export const assembleNodeEffectHostCommandRouter = (
     eventServiceInput: {
       acceptNotificationInput: notificationComposition.acceptTask,
       notifyAutoCloseBlocked: notificationComposition.acceptAutoCloseBlocked,
-      observeStatusChanges: (change) => autopilot?.observe(change),
+      observeStatusChanges: automation.observeStatusChanges,
       lifecycleLogger,
       onBackgroundFailure,
       taskEventPublicationReporter,
@@ -317,20 +316,20 @@ export const assembleNodeEffectHostCommandRouter = (
     live: agentSessionLiveStateService,
     workspaceSessions: workspaceSessionStore,
   });
-  const autopilotService = createAutopilotService({
-    tasks: taskService,
-    mutations: taskSyncService,
-    publish: (payload) => eventBus?.publish({ channel: "openducktor://run-event", payload }),
+  const automationServices = automation.create({
+    autopilot: {
+      publish: (payload) => eventBus?.publish({ channel: "openducktor://run-event", payload }),
+      taskWorkflows,
+      notifications: notificationService,
+    },
+    autoResume: {
+      live: agentSessionLiveStateService,
+      readRoots: workspaceSessions.readSessionRootRefs,
+      settings: workspaceSettingsService,
+      adapters: liveSessionAdapterRegistry,
+    },
+    taskSessions,
     settingsConfig,
-    taskWorkflows,
-    workflowLaunch: taskSessions.workflowLaunchService,
-    notifications: notificationService,
-    onBackgroundFailure,
-  });
-  autopilot = autopilotService;
-  const keyboardShortcutSettingsService = createKeyboardShortcutSettingsService({
-    settingsConfig,
-    publish: (payload) => eventBus?.publish({ channel: "openducktor://run-event", payload }),
   });
   const pullRequestReviewService = createPullRequestReviewService({
     resolver: gitProviderResolver,
@@ -392,7 +391,7 @@ export const assembleNodeEffectHostCommandRouter = (
     shutdownMessageDeliveries: messageDelivery.shutdown,
     unsubscribeImportCatalogs: workspaceChats.unsubscribeImportCatalogs,
     notifications: notificationService,
-    autopilot: autopilotService,
+    ...automationServices.lifecycle,
     assets,
     azureDevOpsConnection,
     workspaceProviderSetup,
@@ -420,7 +419,7 @@ export const assembleNodeEffectHostCommandRouter = (
     ...setup.handlers,
     ...workspaceChats.handlers,
     ...createNotificationCommandHandlers(notificationService),
-    ...createAutopilotCommandHandlers(autopilotService),
+    ...automationServices.handlers,
     ...createNodeWorkflowCommandHandlers({
       launchControls,
       messageDelivery,
@@ -472,7 +471,7 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createBrowserCommandHandlers(browserService),
     ...createRepoActionCommandHandlers(repoActionService),
     ...createWorkspaceSettingsCommandHandlers(workspaceSettingsService, hostRuntimeService),
-    ...createKeyboardShortcutCommandHandlers(keyboardShortcutSettingsService),
+    ...createNodeKeyboardShortcutHandlers(settingsConfig, eventBus),
     ...createWorkspaceLifecycleCommandHandlers(workspaceSettingsService, workspaceLifecycleService),
   };
   const router = createEffectHostCommandRouter({

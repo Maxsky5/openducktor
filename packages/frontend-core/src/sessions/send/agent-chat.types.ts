@@ -75,6 +75,10 @@ export type AgentChatInterruptedTurnResumeModel = {
   error: string | null;
   onResume: () => void;
   usageLimit?: AgentSessionUsageLimit | undefined;
+  /** The host-planned resume of the latest usage-limit stop. */
+  autoResume?: import("@openducktor/contracts").UsageLimitAutoResume | undefined;
+  /** Cancels the planned resume of one stop of the session. */
+  onCancelAutoResume: (stopId: string) => Promise<void>;
 };
 
 export type AgentChatPendingSendAttachment = Pick<

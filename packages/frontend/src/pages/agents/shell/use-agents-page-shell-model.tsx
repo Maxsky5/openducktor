@@ -98,6 +98,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const {
     sendAgentMessage,
     continueInterruptedTurn,
+    cancelUsageLimitAutoResume,
     stopAgentSession,
     loadAgentSessionHistory,
     updateAgentSessionModel,
@@ -157,6 +158,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
       agentOperations: {
         sendAgentMessage,
         continueInterruptedTurn,
+        cancelUsageLimitAutoResume,
         stopAgentSession,
         loadAgentSessionHistory,
         updateAgentSessionModel,

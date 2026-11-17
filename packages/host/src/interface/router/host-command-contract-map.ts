@@ -11,6 +11,7 @@ import type { Effect } from "effect";
 import type {
   createWorkflowLaunchCommandHandlers,
   createAgentSessionLiveCommandHandlers,
+  createUsageLimitAutoResumeCommandHandlers,
 } from "../commands/agent-session-live-command-handlers";
 import type { createAgentRuntimeQueryCommandHandlers } from "../commands/agent-runtime-query-command-handlers";
 import type { createFilesystemCommandHandlers } from "../commands/filesystem-command-handlers";
@@ -50,6 +51,7 @@ type AllHostCommandHandlers = ReturnType<typeof createWorkflowReadCommandHandler
   ReturnType<typeof createWorkspaceProviderSetupCommandHandlers> &
   ReturnType<typeof createAgentSessionLiveCommandHandlers> &
   ReturnType<typeof createWorkflowLaunchCommandHandlers> &
+  ReturnType<typeof createUsageLimitAutoResumeCommandHandlers> &
   ReturnType<typeof createAgentRuntimeQueryCommandHandlers> &
   ReturnType<typeof createWorkspaceSessionImportCommandHandlers> &
   ReturnType<typeof createWorkspaceSessionCommandHandlers> &

@@ -85,6 +85,7 @@ type UseAgentStudioSessionActionsArgs = {
   runSessionStartWorkflow: RunSessionStartWorkflow;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   continueInterruptedTurn: AgentOperationsContextValue["continueInterruptedTurn"];
+  cancelUsageLimitAutoResume: AgentOperationsContextValue["cancelUsageLimitAutoResume"];
   replyAgentApproval: AgentOperationsContextValue["replyAgentApproval"];
   answerAgentQuestion: AgentOperationsContextValue["answerAgentQuestion"];
   scheduleQueryUpdate: (updates: QueryUpdate) => void;
@@ -112,6 +113,8 @@ export type UseAgentStudioSessionActionsResult = {
   resumeSessionError: string | null;
   persistentResumeError: string | null;
   onResumeSession: () => void;
+  /** Cancels the planned auto-resume of a usage-limit stop of the selected session. */
+  onCancelAutoResume: (stopId: string) => Promise<void>;
   startLaunchKickoff: () => Promise<void>;
   onSubmitQuestionAnswers: (requestId: string, answers: string[][]) => Promise<void>;
   onReplyApproval: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
@@ -146,6 +149,7 @@ export function useAgentStudioSessionActions({
   runSessionStartWorkflow,
   sendAgentMessage,
   continueInterruptedTurn,
+  cancelUsageLimitAutoResume,
   replyAgentApproval,
   answerAgentQuestion,
   scheduleQueryUpdate,
@@ -296,6 +300,13 @@ export function useAgentStudioSessionActions({
     );
   const canResumeSession = sessionState.canResumeSession;
 
+  const onCancelAutoResume = useCallback(
+    (stopId: string): Promise<void> =>
+      selectedSessionIdentity === null
+        ? Promise.reject(new Error("Select the session, then cancel its auto-resume."))
+        : cancelUsageLimitAutoResume(selectedSessionIdentity, stopId),
+    [cancelUsageLimitAutoResume, selectedSessionIdentity],
+  );
   const { isResumingSession, resumeSessionError, persistentResumeError, onResumeSession } =
     useAgentStudioInterruptedTurnResume(
       continueInterruptedTurn,
@@ -322,6 +333,7 @@ export function useAgentStudioSessionActions({
     resumeSessionError,
     persistentResumeError,
     onResumeSession,
+    onCancelAutoResume,
     startLaunchKickoff,
     onSubmitQuestionAnswers,
     onReplyApproval,

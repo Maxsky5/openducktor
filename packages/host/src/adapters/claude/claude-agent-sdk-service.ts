@@ -13,6 +13,7 @@ import {
   updateClaudeSessionTitle,
 } from "./claude-session-title-update";
 import { getClaudeSessionMetadata, loadClaudeSessionModel } from "./claude-session-metadata";
+import { readClaudeLatestUsageLimitStop } from "./claude-usage-limit-stop";
 import { requireClaudeSession, resolveClaudeQuerySession } from "./claude-agent-sdk-query-session";
 import { randomUUID } from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -116,13 +117,9 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     this.randomId = input.randomId ?? randomUUID;
     this.transcriptReader = createClaudeRuntimeTranscriptReader(input);
     this.historyReader = createClaudeTranscriptReadOwner(this.transcriptReader);
-    const sessionStoreInput: Parameters<typeof createClaudeAgentSdkSessionStore>[0] = {
-      now: this.now,
-    };
-    if (input.emit) {
-      sessionStoreInput.emit = input.emit;
-    }
-    this.sessionStore = input.sessionStore ?? createClaudeAgentSdkSessionStore(sessionStoreInput);
+    this.sessionStore =
+      input.sessionStore ??
+      createClaudeAgentSdkSessionStore({ now: this.now, ...(input.emit && { emit: input.emit }) });
     this.fileSearch = input.fileSearch ?? createClaudeWorkspaceFileSearch();
     this.untrackFileSearchSessions = trackClaudeFileSearchSessions({
       fileSearch: this.fileSearch,
@@ -293,6 +290,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     return loadClaudeTodos(input, { reader: this.historyReader }).pipe(
       Effect.mapError((cause) => toClaudeServiceError("claudeRuntime.loadSessionTodos", cause)),
     );
+  }
+
+  readLatestUsageLimitStop(input: SessionRef) {
+    return readClaudeLatestUsageLimitStop(input, this.historyReader, this.input.processEnv);
   }
 
   loadSessionContextUsage(input: LoadAgentSessionHistoryInput) {

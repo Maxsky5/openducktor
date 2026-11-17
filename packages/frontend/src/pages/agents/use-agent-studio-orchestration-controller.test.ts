@@ -99,6 +99,7 @@ const createBaseArgs = (): BuildArgs => {
     resumeSessionError: null,
     persistentResumeError: null,
     onResumeSession: () => {},
+    onCancelAutoResume: async () => {},
     startLaunchKickoff: async () => {},
     sendAgentMessage: async () => null,
     onSubmitQuestionAnswers: async () => {},

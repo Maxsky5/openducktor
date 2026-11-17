@@ -13,28 +13,38 @@ export const scanClaudeTranscriptForGoalRecords = async (
   path: string,
   startByte: number,
 ): Promise<{ hasGoalRecord: boolean; end: number }> => {
+  const scan = await scanClaudeTranscriptForMark(path, startByte, GOAL_RECORD_MARK);
+  return { hasGoalRecord: scan.found, end: scan.end };
+};
+
+/** Scans the raw bytes of a transcript from `startByte` for `mark`, without the JSON tokenizer. */
+export const scanClaudeTranscriptForMark = async (
+  path: string,
+  startByte: number,
+  mark: Buffer,
+): Promise<{ found: boolean; end: number }> => {
   const file = await open(path, "r");
   try {
-    const buffer = Buffer.alloc(CHUNK_BYTES + GOAL_RECORD_MARK.length);
+    const buffer = Buffer.alloc(CHUNK_BYTES + mark.length);
     // The last bytes of a chunk stay at the start of the buffer, so a mark that spans two chunks
     // is found.
     let carried = 0;
     let position = startByte;
     let end = startByte;
-    let hasGoalRecord = false;
+    let found = false;
     for (;;) {
       const { bytesRead } = await file.read(buffer, carried, CHUNK_BYTES, position);
       if (bytesRead === 0) break;
       const filled = carried + bytesRead;
       const view = buffer.subarray(0, filled);
-      if (!hasGoalRecord && view.includes(GOAL_RECORD_MARK)) hasGoalRecord = true;
+      if (!found && view.includes(mark)) found = true;
       const lastNewline = view.lastIndexOf(NEWLINE);
       if (lastNewline >= carried) end = position - carried + lastNewline + 1;
       position += bytesRead;
-      carried = Math.min(GOAL_RECORD_MARK.length - 1, filled);
+      carried = Math.min(mark.length - 1, filled);
       buffer.copy(buffer, 0, filled - carried, filled);
     }
-    return { hasGoalRecord, end };
+    return { found, end };
   } finally {
     await file.close();
   }

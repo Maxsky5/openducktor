@@ -51,6 +51,7 @@ type AgentStudioOrchestrationActionsContext = {
     typeof useAgentStudioSessionActions
   >[0]["assertCanPrepareSession"];
   continueInterruptedTurn: AgentOperationsContextValue["continueInterruptedTurn"];
+  cancelUsageLimitAutoResume: AgentOperationsContextValue["cancelUsageLimitAutoResume"];
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
   loadAgentSessionHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
   updateAgentSessionModel: AgentOperationsContextValue["updateAgentSessionModel"];
@@ -200,6 +201,7 @@ export function useAgentStudioOrchestrationController({
     runSessionStartWorkflow,
     sendAgentMessage,
     continueInterruptedTurn,
+    cancelUsageLimitAutoResume,
     stopAgentSession,
     updateAgentSessionModel,
     replyAgentApproval,
@@ -299,6 +301,7 @@ export function useAgentStudioOrchestrationController({
     resumeSessionError,
     persistentResumeError,
     onResumeSession,
+    onCancelAutoResume,
     startLaunchKickoff,
     onSubmitQuestionAnswers,
     onReplyApproval,
@@ -330,6 +333,7 @@ export function useAgentStudioOrchestrationController({
     runSessionStartWorkflow,
     sendAgentMessage,
     continueInterruptedTurn,
+    cancelUsageLimitAutoResume,
     replyAgentApproval,
     answerAgentQuestion,
     scheduleQueryUpdate,
@@ -400,6 +404,7 @@ export function useAgentStudioOrchestrationController({
       resumeSessionError,
       persistentResumeError,
       onResumeSession,
+      onCancelAutoResume,
       startLaunchKickoff,
       sendAgentMessage: actions.sendAgentMessage,
       handleWorkflowStepSelect,

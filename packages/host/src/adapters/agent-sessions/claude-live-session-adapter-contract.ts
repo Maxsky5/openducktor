@@ -46,6 +46,7 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
     | "searchFiles"
     | "loadSessionHistory"
     | "loadSessionTodos"
+    | "readLatestUsageLimitStop"
     | "loadSessionDiff"
     | "loadFileStatus"
     | "continueInterruptedTurn"

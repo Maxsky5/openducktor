@@ -62,6 +62,7 @@ export type AgentStudioChatSessionActionsContext = {
   resumeSessionError: string | null;
   persistentResumeError: string | null;
   onResumeSession: () => void;
+  onCancelAutoResume: (stopId: string) => Promise<void>;
   startLaunchKickoff: () => Promise<void>;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   stopAgentSession: AgentOperationsContextValue["stopAgentSession"];
@@ -334,6 +335,8 @@ export function useAgentStudioChatModel({
     visibility: documentVisibility,
   });
   const { messageDelivery } = sessionActions;
+  const { onCancelAutoResume } = sessionActions;
+  const autoResume = selectedSessionState.loadedSession?.usageLimitAutoResume;
   const interruptedTurnResume = useMemo<AgentChatInterruptedTurnResumeModel | undefined>(
     () =>
       sessionActions.canResumeSession
@@ -342,9 +345,13 @@ export function useAgentStudioChatModel({
             error: sessionActions.resumeSessionError,
             onResume: onResumeSession,
             usageLimit: latestTurnUsageLimit(transcriptSession?.messages.items ?? []),
+            autoResume,
+            onCancelAutoResume,
           }
         : undefined,
     [
+      autoResume,
+      onCancelAutoResume,
       onResumeSession,
       sessionActions.canResumeSession,
       sessionActions.isResumingSession,

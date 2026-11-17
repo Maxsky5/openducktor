@@ -210,6 +210,7 @@ describe("createWorkspaceSettingsCommandHandlers", () => {
               lineOverflow: "wrap",
               hunkSeparators: "metadata",
               showConversationMinimap: true,
+              autoResumeAfterUsageLimits: true,
             },
             reusablePrompts: [],
             kanban: { doneVisibleDays: 1, emptyColumnDisplay: "show", taskCardView: "normal" },

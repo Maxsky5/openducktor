@@ -260,6 +260,17 @@ export type AgentSessionControlUpdateTitleInput = z.infer<
 export const agentSessionControlStopInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionControlStopInput = z.infer<typeof agentSessionControlStopInputSchema>;
 
+/** Cancels the auto-resume of one usage-limit stop. A later stop is eligible again. */
+export const agentSessionUsageLimitAutoResumeCancelInputSchema = agentSessionLiveRefSchema
+  .extend({
+    sessionScope: agentSessionScopeSchema,
+    stopId: z.string().trim().min(1),
+  })
+  .strict();
+export type AgentSessionUsageLimitAutoResumeCancelInput = z.infer<
+  typeof agentSessionUsageLimitAutoResumeCancelInputSchema
+>;
+
 const agentSessionGoalControlActionValues = ["pause", "resume", "clear"] as const;
 export const agentSessionGoalControlActionSchema = z.enum(agentSessionGoalControlActionValues);
 export type AgentSessionGoalControlAction = z.infer<typeof agentSessionGoalControlActionSchema>;

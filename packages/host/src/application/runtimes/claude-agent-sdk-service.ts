@@ -8,6 +8,7 @@ import type {
 } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
+  UsageLimitStop,
   AgentEvent,
   AgentFileSearchResult,
   AgentRuntimeCatalogRead,
@@ -95,6 +96,10 @@ export type ClaudeAgentSdkService = {
   loadSessionTodos(
     input: LoadAgentSessionTodosInput,
   ): Effect.Effect<AgentSessionTodoItem[], ClaudeAgentSdkServiceError>;
+  /** Reads the usage-limit stop of the latest turn of a root session from its transcript. */
+  readLatestUsageLimitStop(
+    input: SessionRef,
+  ): Effect.Effect<UsageLimitStop | null, ClaudeAgentSdkServiceError>;
   loadSessionContextUsage(
     input: LoadAgentSessionHistoryInput,
   ): Effect.Effect<AgentSessionContextUsage | null, ClaudeAgentSdkServiceError>;

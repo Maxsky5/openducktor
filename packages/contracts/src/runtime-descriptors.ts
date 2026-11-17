@@ -54,6 +54,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: false,
+    supportsUsageLimitAutoResume: false,
   },
   messageDelivery: {
     minimumSteeringRuntimeVersion: "2.0.24",
@@ -143,6 +144,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: true,
+    supportsUsageLimitAutoResume: false,
   },
   messageDelivery: {
     minimumSteeringRuntimeVersion: "0.106.0",
@@ -246,6 +248,7 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: true,
+    supportsUsageLimitAutoResume: true,
   },
   messageDelivery: {
     minimumSteeringRuntimeVersion: "2.1.286",

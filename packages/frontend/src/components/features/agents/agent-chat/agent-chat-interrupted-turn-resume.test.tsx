@@ -1,16 +1,20 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { describe, expect, jest, mock, setSystemTime, spyOn, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
 
 enableReactActEnvironment();
 
+const cancelNothing = async (): Promise<void> => {};
 describe("AgentChatInterruptedTurnResume", () => {
   test("counts down to the reported reset without auto-resuming and releases the clock on unmount", () => {
-    let now = Date.parse("2026-10-08T00:24:00.000Z");
-    const nowSpy = spyOn(Date, "now").mockImplementation(() => now);
-    const intervalSpy = spyOn(globalThis, "setInterval");
-    const clearSpy = spyOn(globalThis, "clearInterval");
+    jest.useFakeTimers();
+    const start = Date.parse("2026-10-08T00:24:00.000Z");
+    setSystemTime(start);
+    const advance = (ms: number) =>
+      act(() => {
+        jest.advanceTimersByTime(ms);
+      });
     const onResume = mock(() => {});
     let rendered: ReturnType<typeof render> | undefined;
     try {
@@ -20,24 +24,17 @@ describe("AgentChatInterruptedTurnResume", () => {
           error={null}
           disabled={false}
           onResume={onResume}
-          usageLimit={{ resetsAtEpochMs: now + 61 * 60_000 }}
+          onCancelAutoResume={cancelNothing}
+          usageLimit={{ resetsAtEpochMs: start + 61 * 60_000 }}
         />,
       );
-      // SAFETY: useMinuteClock passes a function to setInterval; the spy captures that callback.
-      const tick = intervalSpy.mock.calls[0]?.[0] as (() => void) | undefined;
-      expect(tick).toBeDefined();
+      advance(0);
       expect(screen.getByRole("timer").textContent).toBe("Resets in 1h 1m");
       expect(screen.getByText("The session reached its usage limit.")).toBeDefined();
       expect(rendered.container.querySelector("time")?.dateTime).toBe("2026-10-08T01:25:00.000Z");
-      act(() => {
-        now += 60_000;
-        tick?.();
-      });
+      advance(60_000);
       expect(screen.getByRole("timer").textContent).toBe("Resets in 1h 0m");
-      act(() => {
-        now += 60 * 60_000;
-        tick?.();
-      });
+      advance(60 * 60_000);
       expect(screen.queryByRole("timer")).toBeNull();
       expect(
         screen.getByText("The reported reset time has passed. Select Resume to try again."),
@@ -47,12 +44,11 @@ describe("AgentChatInterruptedTurnResume", () => {
       expect(onResume).toHaveBeenCalledTimes(1);
       rendered.unmount();
       rendered = undefined;
-      expect(clearSpy).toHaveBeenCalledTimes(1);
+      expect(jest.getTimerCount()).toBe(0);
     } finally {
       rendered?.unmount();
-      nowSpy.mockRestore();
-      intervalSpy.mockRestore();
-      clearSpy.mockRestore();
+      jest.useRealTimers();
+      setSystemTime();
     }
   });
 
@@ -63,6 +59,7 @@ describe("AgentChatInterruptedTurnResume", () => {
         error={null}
         disabled={false}
         onResume={() => {}}
+        onCancelAutoResume={cancelNothing}
         usageLimit={{}}
       />,
     );
@@ -87,6 +84,7 @@ describe("AgentChatInterruptedTurnResume", () => {
         error={null}
         disabled={false}
         onResume={onResume}
+        onCancelAutoResume={cancelNothing}
       />,
     );
 
@@ -103,6 +101,7 @@ describe("AgentChatInterruptedTurnResume", () => {
         error={null}
         disabled={false}
         onResume={() => {}}
+        onCancelAutoResume={cancelNothing}
       />,
     );
 
@@ -119,6 +118,7 @@ describe("AgentChatInterruptedTurnResume", () => {
         error={null}
         disabled
         onResume={() => {}}
+        onCancelAutoResume={cancelNothing}
       />,
     );
 
@@ -133,10 +133,75 @@ describe("AgentChatInterruptedTurnResume", () => {
         error="Continuation failed"
         disabled={false}
         onResume={() => {}}
+        onCancelAutoResume={cancelNothing}
       />,
     );
 
     expect(screen.getByRole("alert").textContent).toBe("Continuation failed");
     rendered.unmount();
+  });
+
+  test("shows the planned auto-resume and cancels it for this stop", async () => {
+    const now = Date.parse("2026-10-08T00:24:00.000Z");
+    const nowSpy = spyOn(Date, "now").mockImplementation(() => now);
+    const ref = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+    };
+    let finishCancel: () => void = () => {};
+    const onCancelAutoResume = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCancel = resolve;
+        }),
+    );
+    const rendered = render(
+      <AgentChatInterruptedTurnResume
+        isPending={false}
+        error={null}
+        disabled={false}
+        onResume={() => {}}
+        usageLimit={{ resetsAtEpochMs: now + 60 * 60_000 }}
+        autoResume={{
+          ref,
+          stopId: "limit-1",
+          resumeAtEpochMs: now + 60 * 60_000 + 30_000,
+          state: "scheduled",
+        }}
+        onCancelAutoResume={onCancelAutoResume}
+      />,
+    );
+    try {
+      expect(screen.getByRole("timer").textContent).toBe("in 1h 1m");
+      expect(rendered.container.querySelector("time")?.dateTime).toBe("2026-10-08T01:24:30.000Z");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel auto-resume" }));
+      expect(onCancelAutoResume).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("button", { name: "Canceling" }).hasAttribute("disabled")).toBe(true);
+      await act(async () => finishCancel());
+
+      rendered.rerender(
+        <AgentChatInterruptedTurnResume
+          isPending={false}
+          error={null}
+          disabled={false}
+          onResume={() => {}}
+          onCancelAutoResume={cancelNothing}
+          usageLimit={{ resetsAtEpochMs: now + 60 * 60_000 }}
+          autoResume={{
+            ref,
+            stopId: "limit-1",
+            resumeAtEpochMs: now + 60 * 60_000 + 30_000,
+            state: "resuming",
+          }}
+        />,
+      );
+      expect(screen.queryByRole("button", { name: "Cancel auto-resume" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Resuming" }).hasAttribute("disabled")).toBe(true);
+    } finally {
+      rendered.unmount();
+      nowSpy.mockRestore();
+    }
   });
 });

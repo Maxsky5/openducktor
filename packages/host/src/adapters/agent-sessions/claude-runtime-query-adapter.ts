@@ -11,7 +11,10 @@ import type {
 import { toRuntimeQueryError } from "./runtime-query-adapter";
 
 export const createClaudeRuntimeQueryAdapter = (
-  service: Pick<ClaudeAgentSdkService, keyof NativeAgentRuntimeQueries | "resolveSessionParent">,
+  service: Pick<
+    ClaudeAgentSdkService,
+    keyof NativeAgentRuntimeQueries | "resolveSessionParent" | "readLatestUsageLimitStop"
+  >,
 ): AgentRuntimeQueryAdapterPort => {
   const read = <Result>(
     operation: string,
@@ -36,5 +39,9 @@ export const createClaudeRuntimeQueryAdapter = (
     loadSessionDiff: (input) =>
       read("load session diff", input, () => service.loadSessionDiff(input)),
     loadFileStatus: (input) => read("load file status", input, () => service.loadFileStatus(input)),
+    readLatestUsageLimitStop: (input) =>
+      read("read latest usage limit stop", input, () => service.readLatestUsageLimitStop(input)),
+    // Claude reports the exact reset time of the stopped turn, and the resume waits until then.
+    readUsageLimitRecovery: () => Effect.succeed({ kind: "recovered" }),
   };
 };

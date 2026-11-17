@@ -93,7 +93,8 @@
       "forkTargets": ["session", "message"],
       "supportsListLiveSessions": true,
       "supportsPendingInputSnapshots": true,
-      "supportsInterruptedTurnResume": false
+      "supportsInterruptedTurnResume": false,
+      "supportsUsageLimitAutoResume": false
     },
     "messageDelivery": {
       "minimumSteeringRuntimeVersion": "2.0.24"

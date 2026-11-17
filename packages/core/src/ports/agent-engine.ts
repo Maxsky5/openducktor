@@ -13,6 +13,7 @@ import type {
   AgentSessionResumeIntent,
   AgentMessageQueueManageInput,
   AgentMessageQueueManageResult,
+  AgentSessionUsageLimitAutoResumeCancelInput,
   AgentMessageSubmitInput,
   AgentMessageSubmitResult,
   AgentSessionControlStartInput,
@@ -341,6 +342,8 @@ export interface AgentSessionControlPort {
   submitUserMessage(input: AgentMessageSubmitInput): Promise<AgentMessageSubmitResult>;
   manageMessageQueue(input: AgentMessageQueueManageInput): Promise<AgentMessageQueueManageResult>;
   stopSession(input: SessionRef): Promise<void>;
+  /** Cancels the auto-resume of one usage-limit stop. */
+  cancelUsageLimitAutoResume(input: AgentSessionUsageLimitAutoResumeCancelInput): Promise<void>;
 }
 
 /** Policy-bound runtime-library controls. Host adapters are the only shared-path callers. */

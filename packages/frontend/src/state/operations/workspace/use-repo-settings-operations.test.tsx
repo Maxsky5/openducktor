@@ -485,6 +485,7 @@ describe("use-repo-settings-operations", () => {
       lineOverflow: "scroll" as const,
       hunkSeparators: "metadata" as const,
       showConversationMinimap: false,
+      autoResumeAfterUsageLimits: false,
     };
     const normalizedSnapshot: SettingsSnapshot = {
       ...createSettingsSnapshot(),

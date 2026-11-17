@@ -87,6 +87,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionResumeIntentSchema",
   "gitPublicationPreviewSchema",
   "sessionOperationObservationSchema",
+  "usageLimitAutoResumeSchema",
+  "agentSessionUsageLimitAutoResumeCancelInputSchema",
   "submissionAcknowledgementSchema",
   "taskCompletionObservationSchema",
   "taskDirectMergeCompleteIntentSchema",

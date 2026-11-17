@@ -21,6 +21,7 @@ export const createAgentOperationsFixture = (
   manageAgentMessageQueue: unexpectedOperation("manageAgentMessageQueue"),
   stopAgentSession: unexpectedOperation("stopAgentSession"),
   continueInterruptedTurn: unexpectedOperation("continueInterruptedTurn"),
+  cancelUsageLimitAutoResume: unexpectedOperation("cancelUsageLimitAutoResume"),
   updateAgentSessionModel: unexpectedOperation("updateAgentSessionModel"),
   replyAgentApproval: unexpectedOperation("replyAgentApproval"),
   answerAgentQuestion: unexpectedOperation("answerAgentQuestion"),

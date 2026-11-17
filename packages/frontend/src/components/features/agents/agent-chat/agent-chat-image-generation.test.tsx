@@ -187,6 +187,7 @@ const operations = (
   manageAgentMessageQueue: async () => {},
   stopAgentSession: async () => {},
   continueInterruptedTurn: async () => undefined,
+  cancelUsageLimitAutoResume: async () => {},
   updateAgentSessionModel: async () => {},
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},

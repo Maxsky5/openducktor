@@ -53,6 +53,18 @@ export type QueuePause =
   | {
       readonly cause: "agent_error" | "delivery_failed" | "steer_failed" | "accepted_then_failed";
       readonly detail: string;
+    }
+  /**
+   * The turn stopped on a usage limit. The first turn after the stop decides the pause: a
+   * completed turn releases it, and another end replaces it with an ordinary cause.
+   */
+  | {
+      readonly cause: "usage_limit";
+      readonly detail: string;
+      /** The native message ID of the error, which repeats when the reset time arrives later. */
+      readonly stopId: string | undefined;
+      /** The failed turn of the stop ended, so the next turn end belongs to a resumed turn. */
+      readonly turnEnded: boolean;
     };
 
 /** No message can reach a session that left its runtime until the user reopens it. */
@@ -80,6 +92,8 @@ const pauseMessage = (pause: QueuePause): string => {
       return resumeText("The agent received the message whose delivery was unknown.");
     case "agent_error":
       return resumeText(`The agent stopped with an error: ${pause.detail}`);
+    case "usage_limit":
+      return `The agent stopped on a usage limit: ${pause.detail} The next message waits until the session resumes, or until you resume the queue.`;
     case "delivery_failed":
       return `Delivery failed: ${pause.detail} Resume the queue to try again.`;
     case "steer_failed":

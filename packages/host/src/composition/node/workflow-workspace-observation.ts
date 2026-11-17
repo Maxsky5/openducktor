@@ -31,8 +31,15 @@ type TaskSessions = ReturnType<
   typeof import("./node-task-session-services").createNodeTaskSessionServices
 >;
 export const createWorkflowLiveObserver =
-  (readServices: () => TaskSessions, runBackground: RunBackground) =>
+  (
+    readServices: () => TaskSessions,
+    runBackground: RunBackground,
+    observeAutomation: (
+      envelope: import("@openducktor/contracts").AgentSessionLiveEnvelope,
+    ) => void,
+  ) =>
   (envelope: import("@openducktor/contracts").AgentSessionLiveEnvelope) => {
+    observeAutomation(envelope);
     const services = readServices();
     services.approvalPolicy.observe(envelope);
     if (

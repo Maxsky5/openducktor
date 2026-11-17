@@ -1,4 +1,5 @@
 import type { AgentSessionHistoryMessage, AgentStreamPart } from "@openducktor/core";
+import { z } from "zod";
 import { readHistoryAssistantModel } from "./claude-agent-sdk-history-entry";
 import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
 import { parseClaudeHistoryAssistantEntry } from "./claude-agent-sdk-ingress-schemas";
@@ -23,6 +24,31 @@ export type MutableAssistantHistoryMessage = Extract<
   { role: "assistant" }
 >;
 
+// Claude writes reset times in Unix seconds. The SDK types do not declare these transcript fields.
+const resetSecondsSchema = z.number().nonnegative();
+const quotaLimitsResetSchema = z.object({
+  quotaLimits: z.object({ resetsAt: resetSecondsSchema }),
+});
+const apiErrorResetSchema = z.object({
+  apiErrorParams: z.object({ rate_limit_info: z.object({ resetsAt: resetSecondsSchema }) }),
+});
+
+/**
+ * The reset time that Claude Code saves on the `rate_limit` error entry of a usage limit. It
+ * writes `quotaLimits`, and also `apiErrorParams.rate_limit_info` for `usage_limit_reached`. One
+ * runtime path writes neither, and the entry then has no reset time.
+ */
+export const readClaudeUsageLimitResetEpochMs = (
+  entry: ClaudeHistoryMessage,
+): number | undefined => {
+  const quota = quotaLimitsResetSchema.safeParse(entry);
+  if (quota.success) return quota.data.quotaLimits.resetsAt * 1000;
+  const apiError = apiErrorResetSchema.safeParse(entry);
+  return apiError.success
+    ? apiError.data.apiErrorParams.rate_limit_info.resetsAt * 1000
+    : undefined;
+};
+
 type SystemMessage = Extract<AgentSessionHistoryMessage, { role: "system" }>;
 type ErrorNotice = SystemMessage & {
   notice: Extract<NonNullable<SystemMessage["notice"]>, { reason: "session_error" }>;
@@ -43,7 +69,10 @@ export const toAssistantErrorNotice = (
     notice: { tone: "error", reason: "session_error", title: "Error" },
     parts: [],
   };
-  if (error === "rate_limit") message.notice.usageLimit = {};
+  if (error === "rate_limit") {
+    const resetsAtEpochMs = readClaudeUsageLimitResetEpochMs(entry);
+    message.notice.usageLimit = resetsAtEpochMs === undefined ? {} : { resetsAtEpochMs };
+  }
   return message;
 };
 

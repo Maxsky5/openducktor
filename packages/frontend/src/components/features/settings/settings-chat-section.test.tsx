@@ -57,6 +57,13 @@ describe("settings chat section", () => {
     expect(getLatestChat()).toEqual({ ...chat, steerMessagesByDefault: true });
     expect(chat.steerMessagesByDefault).toBe(false);
   });
+  test("turns auto-resume after usage limits off in the draft", () => {
+    const chat = createChatSettings();
+    const { getLatestChat } = renderSettingsChatSectionWithUpdates(chat);
+    expectSwitchChecked("Auto-resume after usage limits", true);
+    fireEvent.click(screen.getByRole("switch", { name: "Auto-resume after usage limits" }));
+    expect(getLatestChat()).toEqual({ ...chat, autoResumeAfterUsageLimits: false });
+  });
   test("renders chat settings with thinking messages hidden by default", () => {
     const chatSettings = createChatSettings();
 
@@ -159,7 +166,7 @@ describe("settings chat section", () => {
     renderSettingsChatSection(chatSettings, true);
 
     const switches = screen.getAllByRole("switch");
-    expect(switches).toHaveLength(6);
+    expect(switches).toHaveLength(7);
     expect(switches.every((control) => control.hasAttribute("disabled"))).toBe(true);
   });
 

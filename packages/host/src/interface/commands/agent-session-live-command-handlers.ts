@@ -26,7 +26,9 @@ import {
   agentMessageQueueManageInputSchema,
   agentMessageSubmitInputSchema,
   agentWorkflowSessionStartInputSchema,
+  agentSessionUsageLimitAutoResumeCancelInputSchema,
 } from "@openducktor/contracts";
+import type { UsageLimitAutoResumeService } from "../../application/agent-sessions/usage-limit-auto-resume-service";
 import { Effect } from "effect";
 import type { AgentMessageDeliveryService } from "../../application/agent-sessions/agent-message-delivery-service";
 import type { AgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
@@ -186,5 +188,24 @@ export const createWorkflowLaunchCommandHandlers = (workflowLaunchService: Workf
     agent_session_workflow_launch: (args) =>
       parseCommandInput(workflowLaunchRequestSchema, args, "agent_session_workflow_launch").pipe(
         Effect.flatMap(workflowLaunchService.launch),
+      ),
+  }) satisfies HostCommandHandlerDefinitions;
+
+export const createUsageLimitAutoResumeCommandHandlers = (
+  service: Pick<UsageLimitAutoResumeService, "cancel">,
+  canonicalizeRepoPath: (repoPath: string) => Effect.Effect<string, HostError>,
+) =>
+  ({
+    agent_session_usage_limit_auto_resume_cancel: (args) =>
+      parseCommandInput(
+        agentSessionUsageLimitAutoResumeCancelInputSchema,
+        args,
+        "agent_session_usage_limit_auto_resume_cancel",
+      ).pipe(
+        Effect.flatMap((input) =>
+          canonicalizeRepoPath(input.repoPath).pipe(
+            Effect.flatMap((repoPath) => service.cancel({ ...input, repoPath })),
+          ),
+        ),
       ),
   }) satisfies HostCommandHandlerDefinitions;

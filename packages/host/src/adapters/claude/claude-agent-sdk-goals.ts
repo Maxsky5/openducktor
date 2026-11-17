@@ -13,7 +13,7 @@ import type {
 import { scanClaudeTranscriptBatches } from "./claude-transcript-file";
 import { findClaudeRootTranscript } from "./claude-transcript-reader";
 import { textFromContentBlocks } from "./claude-agent-sdk-utils";
-import { scanClaudeTranscriptForGoalRecords } from "./claude-goal-transcript-scan";
+import { scanClaudeTranscriptForGoalRecords } from "./claude-transcript-mark-scan";
 
 /**
  * Claude Code 2.1.306 to 2.1.319 keeps the goal of a session in `goal_status` attachment records of

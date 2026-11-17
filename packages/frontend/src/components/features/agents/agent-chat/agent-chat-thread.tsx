@@ -513,11 +513,8 @@ const AgentChatBottomStack = memo(function AgentChatBottomStack({
     >
       {interruptedTurnResume ? (
         <AgentChatInterruptedTurnResume
-          isPending={interruptedTurnResume.isPending}
-          error={interruptedTurnResume.error}
-          usageLimit={interruptedTurnResume.usageLimit}
+          {...interruptedTurnResume}
           disabled={resumeDisabled || interruptedTurnResume.isDisabled === true}
-          onResume={interruptedTurnResume.onResume}
         />
       ) : null}
 

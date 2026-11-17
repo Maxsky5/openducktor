@@ -1,4 +1,8 @@
-import type { AgentSessionUsageLimit, RuntimeDescriptor } from "@openducktor/contracts";
+import type {
+  AgentSessionUsageLimit,
+  RuntimeDescriptor,
+  UsageLimitAutoResume,
+} from "@openducktor/contracts";
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   isOutcomeUnknown,
@@ -10,15 +14,15 @@ import {
   hasSettledLatestTurn,
   latestTurnUsageLimit,
 } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
-import { useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
 import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import { INTERRUPTED_TURN_COPY } from "@openducktor/frontend-core/sessions/session-view/interrupted-turn-copy";
 import {
-  INTERRUPTED_TURN_COPY,
-  interruptedTurnTitle,
-  usageLimitCountdown,
-  usageLimitResetText,
-} from "@openducktor/frontend-core/sessions/session-view/interrupted-turn-copy";
+  buildInterruptedTurnNotice,
+  interruptedTurnDetailText,
+} from "@openducktor/frontend-core/sessions/session-view/interrupted-turn-notice";
+import { useInterruptedTurnClock } from "@openducktor/frontend-core/sessions/session-view/use-interrupted-turn-clock";
 import { useInterruptedTurnResume } from "@openducktor/frontend-core/sessions/session-view/use-interrupted-turn-resume";
+import { useUsageLimitAutoResumeCancel } from "@openducktor/frontend-core/sessions/session-view/use-usage-limit-auto-resume-cancel";
 import type {
   AgentSessionIdentity,
   AgentSessionState,
@@ -38,12 +42,14 @@ type ResumeFacts = {
   canResume: boolean;
   isLatestTurnSettled: boolean;
   usageLimit: AgentSessionUsageLimit | undefined;
+  autoResume: UsageLimitAutoResume | undefined;
 };
 
 const NO_RESUME: ResumeFacts = Object.freeze({
   canResume: false,
   isLatestTurnSettled: false,
   usageLimit: undefined,
+  autoResume: undefined,
 });
 
 const selectResumeFacts = (
@@ -60,6 +66,7 @@ const selectResumeFacts = (
     }),
     isLatestTurnSettled: hasSettledLatestTurn(messages),
     usageLimit: latestTurnUsageLimit(messages),
+    autoResume: session.usageLimitAutoResume,
   };
 };
 
@@ -85,7 +92,7 @@ function ResumeNotice(): ReactElement | null {
     [runtimeDescriptor],
   );
   const facts = useSessionSelector(identity, select);
-  const { continueInterruptedTurn } = useAgentOperationsContext();
+  const { continueInterruptedTurn, cancelUsageLimitAutoResume } = useAgentOperationsContext();
   // A lost result keeps its own title, so the user reads the host state before acting again.
   const [unknownSessionKey, setUnknownSessionKey] = useState<string | null>(null);
   const continueTurn = useCallback(
@@ -106,6 +113,12 @@ function ResumeNotice(): ReactElement | null {
   });
   const isResuming = resume.isSessionResuming(sessionKey);
   const error = resume.resumeErrorForSession(sessionKey);
+  const { autoResume } = facts;
+  const cancelStop = useCallback(
+    (stopId: string) => cancelUsageLimitAutoResume(identity, stopId),
+    [cancelUsageLimitAutoResume, identity],
+  );
+  const autoResumeCancel = useUsageLimitAutoResumeCancel(autoResume, cancelStop);
   const persistentError = resume.persistentResumeErrorForSession(sessionKey);
   const unknown = unknownSessionKey === sessionKey;
   const errorTitle = unknown ? RESULT_UNKNOWN_TITLE : "Resume failed";
@@ -124,77 +137,103 @@ function ResumeNotice(): ReactElement | null {
     <View style={styles.wrap}>
       <ResumeOffer
         usageLimit={facts.usageLimit}
-        error={error}
+        autoResume={autoResume}
+        isResuming={isResuming}
+        resumeError={error}
+        cancelError={autoResumeCancel.error}
         errorTitle={errorTitle}
-        action={
-          <SessionButton
-            label={isResuming ? INTERRUPTED_TURN_COPY.resuming : INTERRUPTED_TURN_COPY.resume}
-            icon="play"
-            variant="outline"
-            command
-            loading={isResuming}
-            disabled={!interaction.canInteract}
-            accessibilityHint={
-              interaction.blockedReason ?? "Continues the turn without a new message."
-            }
-            onPress={() => resume.resume(identity)}
-          />
-        }
+        renderActions={(notice) => (
+          <>
+            {notice.canCancelAutoResume ? (
+              <SessionButton
+                label={
+                  autoResumeCancel.isCanceling
+                    ? INTERRUPTED_TURN_COPY.canceling
+                    : INTERRUPTED_TURN_COPY.cancelAutoResume
+                }
+                icon="x"
+                variant="outline"
+                command
+                loading={autoResumeCancel.isCanceling}
+                disabled={!interaction.canInteract}
+                accessibilityHint={
+                  interaction.blockedReason ?? "Keeps this stop for a manual Resume."
+                }
+                onPress={autoResumeCancel.cancel}
+              />
+            ) : null}
+            <SessionButton
+              label={
+                notice.isResuming ? INTERRUPTED_TURN_COPY.resuming : INTERRUPTED_TURN_COPY.resume
+              }
+              icon="play"
+              variant="outline"
+              command
+              loading={notice.isResuming}
+              disabled={!interaction.canInteract}
+              accessibilityHint={
+                interaction.blockedReason ?? "Continues the turn without a new message."
+              }
+              onPress={() => resume.resume(identity)}
+            />
+          </>
+        )}
       />
     </View>
   );
 }
 
 /**
- * The desktop `AgentChatInterruptedTurnResume`: an info row with the interrupted turn, the
- * Resume button, and the resume error. A usage limit shows the time until it resets.
+ * The desktop `AgentChatInterruptedTurnResume`: an info row with the interrupted turn, its
+ * actions, and the resume error. A usage limit shows the time until it resets, or the planned
+ * auto-resume of the host.
  */
 function ResumeOffer({
   usageLimit,
-  error,
+  autoResume,
+  isResuming,
+  resumeError,
+  cancelError,
   errorTitle,
-  action,
+  renderActions,
 }: {
   usageLimit: AgentSessionUsageLimit | undefined;
-  error: string | null;
+  autoResume: UsageLimitAutoResume | undefined;
+  isResuming: boolean;
+  resumeError: string | null;
+  cancelError: string | null;
   errorTitle: string;
-  action: ReactNode;
+  renderActions: (notice: ReturnType<typeof buildInterruptedTurnNotice>) => ReactNode;
 }): ReactElement {
   const theme = useAppTheme();
-  const now = useMinuteClock();
-  let detail: string = INTERRUPTED_TURN_COPY.stoppedDetail;
-  if (usageLimit) {
-    detail = INTERRUPTED_TURN_COPY.usageLimitWithoutReset;
-    if (usageLimit.resetsAtEpochMs !== undefined) {
-      const countdown = usageLimitCountdown(usageLimit.resetsAtEpochMs, now);
-      detail =
-        countdown.kind === "passed"
-          ? INTERRUPTED_TURN_COPY.usageLimitResetPassed
-          : usageLimitResetText(countdown.remaining, countdown.resetsAt.toLocaleString());
-    }
-  }
-  const title = interruptedTurnTitle(usageLimit);
+  const now = useInterruptedTurnClock(usageLimit, autoResume);
+  const notice = buildInterruptedTurnNotice({
+    usageLimit,
+    autoResume,
+    isResuming,
+    resumeError,
+    now,
+  });
+  const detail = interruptedTurnDetailText(notice.detail, (time) => time.toLocaleString());
+  const error = notice.error ? `${errorTitle}: ${notice.error}` : cancelError;
   return (
     <View style={styles.offer}>
       <View style={styles.offerIcon}>
         <Icon name="info" size={16} colorValue={theme.desktop.infoAccent} />
       </View>
-      <View style={styles.offerText} accessible accessibilityLabel={`${title}. ${detail}`}>
+      <View style={styles.offerText} accessible accessibilityLabel={`${notice.title}. ${detail}`}>
         <Text variant="callout" weight="medium" style={styles.offerForeground}>
-          {title}
+          {notice.title}
         </Text>
         <Text variant="footnote" style={styles.offerForeground}>
           {detail}
         </Text>
       </View>
-      <View style={styles.offerAction}>{action}</View>
+      <View style={styles.offerAction}>{renderActions(notice)}</View>
       {error ? (
-        <Text
-          variant="footnote"
-          selectable
-          accessibilityRole="alert"
-          style={styles.offerError}
-        >{`${errorTitle}: ${error}`}</Text>
+        <Text variant="footnote" selectable accessibilityRole="alert" style={styles.offerError}>
+          {error}
+        </Text>
       ) : null}
     </View>
   );
@@ -219,6 +258,6 @@ const styles = StyleSheet.create((theme) => ({
   offerIcon: { alignSelf: "flex-start", paddingTop: 2 },
   offerText: { flex: 1, minWidth: 160 },
   offerForeground: { color: theme.desktop.infoSurfaceForeground },
-  offerAction: { marginLeft: "auto" },
+  offerAction: { marginLeft: "auto", flexDirection: "row", gap: theme.space.sm },
   offerError: { width: "100%", color: theme.desktop.destructiveMuted },
 }));

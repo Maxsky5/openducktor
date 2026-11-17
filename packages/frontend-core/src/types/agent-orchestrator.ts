@@ -276,6 +276,8 @@ export type AgentSessionState = {
   pendingUserMessageStartedAt?: number | undefined;
   pendingSubmissionId?: string | undefined;
   hostOperations?: import("@openducktor/contracts").SessionOperationObservation[] | undefined;
+  /** The host-planned resume of the latest usage-limit stop. */
+  usageLimitAutoResume?: import("@openducktor/contracts").UsageLimitAutoResume | undefined;
   stopRequestedAt?: string | null;
 };
 

@@ -2,6 +2,7 @@ import type { BrowserService } from "../../application/browser/browser-service-t
 import type { WorkspaceSettingsError } from "../../application/workspaces/workspace-settings-service";
 import type { NotificationService } from "../../application/notifications/notification-service";
 import type { AutopilotService } from "../../application/autopilot/autopilot-service";
+import type { UsageLimitAutoResumeService } from "../../application/agent-sessions/usage-limit-auto-resume-service";
 import type { SessionLaunchControls } from "../../application/agent-sessions/session-launch-types";
 import { Effect } from "effect";
 import type { GeneratedImageWorkers } from "../../adapters/attachments/generated-image-worker-client";
@@ -46,6 +47,7 @@ export const createNodeHostRouterLifecycle = ({
   unsubscribeImportCatalogs,
   notifications,
   autopilot,
+  autoResume,
   sessionLaunches,
   azureDevOpsConnection,
   workspaceProviderSetup,
@@ -69,6 +71,7 @@ export const createNodeHostRouterLifecycle = ({
   unsubscribeImportCatalogs: (() => void) | undefined;
   notifications: Pick<NotificationService, "initialize" | "dispose">;
   autopilot: Pick<AutopilotService, "initialize" | "dispose">;
+  autoResume: Pick<UsageLimitAutoResumeService, "initialize" | "dispose">;
   assets: { taskStoreConnectionShutdownStep: HostShutdownStep };
   sessionLaunches: Pick<SessionLaunchControls, "shutdown">;
   azureDevOpsConnection?: Pick<AzureDevOpsConnectionPort, "shutdown"> | undefined;
@@ -112,6 +115,8 @@ export const createNodeHostRouterLifecycle = ({
         }
         // Coverage starts before any runtime, so no agent can commit a change before it.
         yield* autopilot.initialize();
+        // The rebuild of pending resumes starts when each runtime registers.
+        yield* autoResume.initialize();
         if (mcpHostBridge) {
           // The bridge has independent readiness. Its failure stays visible in the bridge check
           // and blocks only operations that need the bridge.
@@ -149,6 +154,8 @@ export const createNodeHostRouterLifecycle = ({
               { label: "workspace file reads", run: shutdownWorkspaceFiles },
               // Autopilot stops before the launches and notifications that its attempts use.
               { label: "Autopilot", run: autopilot.dispose },
+              // Auto-resume stops before the session commands and runtimes that it uses.
+              { label: "usage limit auto-resume", run: autoResume.dispose },
               { label: "notifications", run: notifications.dispose },
               { label: "workspace session imports", run: shutdownWorkspaceImports },
               { label: "queued message deliveries", run: shutdownMessageDeliveries },

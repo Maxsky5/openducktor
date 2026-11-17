@@ -130,6 +130,18 @@ const transcriptSignal = (
   const ref = event.sessionRef;
   switch (event.type) {
     case "turn_error":
+      if (event.usageLimit)
+        return {
+          kind: "pause",
+          ref,
+          pause: {
+            cause: "usage_limit",
+            detail: event.message,
+            stopId: event.messageId,
+            turnEnded: false,
+          },
+        };
+      return { kind: "pause", ref, pause: { cause: "agent_error", detail: event.message } };
     case "session_error":
       return { kind: "pause", ref, pause: { cause: "agent_error", detail: event.message } };
     case "user_message":
