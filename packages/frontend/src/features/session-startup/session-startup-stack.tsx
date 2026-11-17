@@ -1,5 +1,5 @@
 import { Check, ChevronDown, ChevronUp, LoaderCircle, OctagonAlert } from "lucide-react";
-import { type CSSProperties, type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import { useStartupAttempts } from "@openducktor/frontend-core/sessions/startup/use-startup-attempts";
@@ -10,7 +10,7 @@ import {
   startupIsPending,
 } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
 import { Button } from "@/components/ui/button";
-import { NotificationOpenLabel, Toaster } from "@/components/ui/sonner";
+import { NotificationOpenLabel } from "@/components/ui/sonner";
 import { ToastResizeContent } from "@/components/ui/toast-resize";
 import { notificationClassNames } from "@/lib/sonner-feedback";
 import { cn } from "@/lib/utils";
@@ -26,34 +26,6 @@ import {
   startupProgress,
   startupTitle,
 } from "./startup-summary";
-
-// Modal forms and sheets must keep control of their footer buttons.
-const toasterStyle: CSSProperties = { zIndex: 40 };
-
-const startupToasterStyle: CSSProperties = {
-  ...toasterStyle,
-  // Bottom toasts grow upward. A reversed scroll origin keeps older cards reachable.
-  display: "flex",
-  flexDirection: "column-reverse",
-  height: "calc(100dvh - 2rem)",
-  maxHeight: "calc(100dvh - 2rem)",
-  overflowY: "auto",
-  pointerEvents: "none",
-};
-
-export function AppToaster(): ReactElement {
-  const attempts = useStartupAttempts();
-  const startupVisible = attempts.some((attempt) => attempt.presentation === "notification");
-  return (
-    <Toaster
-      offset={16}
-      mobileOffset={16}
-      visibleToasts={startupVisible ? Infinity : 5}
-      style={startupVisible ? startupToasterStyle : toasterStyle}
-      className="overscroll-contain [&>[data-sonner-toast]]:pointer-events-auto"
-    />
-  );
-}
 
 export function StartupNotifications(): ReactElement | null {
   const connection = useClientConnection();

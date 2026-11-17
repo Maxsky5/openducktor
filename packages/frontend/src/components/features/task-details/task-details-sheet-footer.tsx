@@ -16,6 +16,7 @@ import type { ReactElement } from "react";
 import { coreTaskActionMenuItem } from "@/components/features/kanban/task-action-ui";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { Button } from "@/components/ui/button";
+import { SheetFooter } from "@/components/ui/sheet";
 
 export type TaskDetailsSheetFooterProps = {
   task: TaskCard;
@@ -78,10 +79,7 @@ export function TaskDetailsSheetFooter(props: TaskDetailsSheetFooterProps): Reac
 
   return (
     <ShortcutScope owners={[shortcutOwner]}>
-      <div
-        ref={root}
-        className="mt-0 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border bg-card px-5 py-3"
-      >
+      <SheetFooter ref={root} className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Close
@@ -116,7 +114,7 @@ export function TaskDetailsSheetFooter(props: TaskDetailsSheetFooterProps): Reac
             {...(extraMenuActions.length > 0 ? { extraMenuActions } : {})}
           />
         ) : null}
-      </div>
+      </SheetFooter>
     </ShortcutScope>
   );
 }

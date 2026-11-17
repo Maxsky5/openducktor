@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /** The loading or error content inside `TaskDetailsSheetFrame`. */
@@ -77,11 +77,11 @@ export function TaskDetailsSheetPlaceholder({
           </div>
         </div>
       )}
-      <div className="flex justify-end border-t border-border bg-card px-5 py-3">
+      <SheetFooter className="flex justify-end">
         <Button variant="outline" onClick={() => onOpenChange(false)}>
           Close
         </Button>
-      </div>
+      </SheetFooter>
     </>
   );
 }

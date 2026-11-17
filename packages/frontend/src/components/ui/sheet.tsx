@@ -1,9 +1,11 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
+import { useCallback } from "react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 import { DialogRoot, useDialogOpen } from "./dialog-root";
+import { reserveToasterInset } from "./toaster-inset";
 
 const Sheet = DialogRoot;
 const SheetPortal = DialogPrimitive.Portal;
@@ -96,6 +98,34 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("space-y-1.5 pr-8", className)} {...props} />;
 }
 
+/** The action bar at the bottom of a sheet. Toasts stay above it while it is on the screen. */
+function SheetFooter({
+  className,
+  ref,
+  ...props
+}: Omit<React.ComponentProps<"div">, "ref"> & { ref?: React.RefObject<HTMLDivElement | null> }) {
+  const attach = useCallback(
+    (footer: HTMLDivElement | null) => {
+      if (footer === null) return;
+      if (ref) ref.current = footer;
+      const releaseInset = reserveToasterInset(footer);
+      return () => {
+        releaseInset?.();
+        if (ref) ref.current = null;
+      };
+    },
+    [ref],
+  );
+  return (
+    <div
+      data-slot="sheet-footer"
+      className={cn("flex-none border-t border-border bg-card px-5 py-3", className)}
+      {...props}
+      ref={attach}
+    />
+  );
+}
+
 function SheetTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
@@ -117,4 +147,4 @@ function SheetDescription({
   );
 }
 
-export { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle };
+export { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle };

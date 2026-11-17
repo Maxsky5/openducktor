@@ -489,6 +489,7 @@ describe("createTerminalTransportController", () => {
   test("forgets the grid of a terminal when its emulator is released", async () => {
     const sentByConnection: string[][] = [];
     const stateListeners: Array<(state: "connected" | "disconnected") => void> = [];
+    const { promise: reattachSent, resolve: markReattachSent } = Promise.withResolvers<void>();
     const bridge: TerminalBridge = {
       connect: async (_onFrame, onStateChange) => {
         const sent: string[] = [];
@@ -498,6 +499,7 @@ describe("createTerminalTransportController", () => {
         return {
           send: async (frame) => {
             sent.push(decodeTerminalProtocolFrame(frame).message.type);
+            if (sentByConnection.length === 2) markReattachSent();
           },
           close: () => undefined,
         };
@@ -512,6 +514,9 @@ describe("createTerminalTransportController", () => {
     controller.subscribe(terminalId, () => undefined);
 
     stateListeners[0]?.("disconnected");
+    // The reconnect runs on a timer and awaits the bridge. Wait for its attach, then give a
+    // remembered grid time to follow it.
+    await reattachSent;
     await Bun.sleep(10);
 
     expect(sentByConnection[1]).toEqual(["attach"]);

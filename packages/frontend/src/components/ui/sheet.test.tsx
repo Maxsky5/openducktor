@@ -1,7 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { createRef } from "react";
 import { finishSheetExit, withSheetAnimations } from "@/test-utils/mock-sheet-animations";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "./sheet";
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetTitle } from "./sheet";
 
 function renderSheet(open: boolean, onOpenChange: (open: boolean) => void = () => {}) {
   return (
@@ -62,4 +63,26 @@ describe("SheetContent visual overlay", () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+});
+
+// Task details shortcuts use the footer as the root of their owner.
+test("SheetFooter gives its element to the caller ref until the sheet closes", () => {
+  const footer = createRef<HTMLDivElement>();
+  const renderFooterSheet = (open: boolean) => (
+    <Sheet open={open}>
+      <SheetContent>
+        <SheetTitle>Task</SheetTitle>
+        <SheetFooter ref={footer}>Actions</SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+  const view = render(renderFooterSheet(true));
+  try {
+    expect(footer.current?.dataset.slot).toBe("sheet-footer");
+
+    view.rerender(renderFooterSheet(false));
+    expect(footer.current).toBeNull();
+  } finally {
+    view.unmount();
+  }
 });

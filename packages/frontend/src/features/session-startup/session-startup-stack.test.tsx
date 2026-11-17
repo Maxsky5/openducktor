@@ -8,7 +8,8 @@ import { WorkspacePreviewTransitionGuardProvider } from "@/components/layout/wor
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createWorkspaceStateFixture } from "@/test-utils/shared-test-fixtures";
-import { AppToaster, StartupNotifications } from "./session-startup-stack";
+import { AppToaster } from "@/components/layout/app-toaster";
+import { StartupNotifications } from "./session-startup-stack";
 
 test("keeps background starts and ordinary notices in one stack until they settle or disconnect", async () => {
   const connection = createTestClientConnection();

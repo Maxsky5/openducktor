@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmod, copyFile, mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
+import { chmod, link, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { runElectronEffect } from "../src/effect/electron-boundary";
@@ -27,30 +27,16 @@ const makeReleaseDirectory = async (): Promise<string> => {
 
 const REQUIRED_SIDECAR_IDS = ["openducktor-mcp"] as const;
 
-/**
- * Commits the file system journal with an fsync. On Linux, the commit that follows the deletion
- * of a compiled sidecar can take seconds, so this test waits for it instead of the next test file.
- */
-const commitDeletions = async (): Promise<void> => {
-  const marker = join(tmpdir(), `openducktor-sidecar-commit-${process.pid}`);
-  const handle = await open(marker, "w");
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-    await rm(marker, { force: true });
-  }
-};
-
-afterEach(async () => {
+const removeReleaseDirectories = async (): Promise<void> => {
   await Promise.all(
     Array.from(releaseDirectories, (releaseDirectory) =>
       rm(releaseDirectory, { force: true, recursive: true }),
     ),
   );
   releaseDirectories.clear();
-  await commitDeletions();
-});
+};
+
+afterEach(removeReleaseDirectories);
 
 const writePackagedSidecar = async ({
   arch = "x64",
@@ -125,7 +111,8 @@ describe("verifyPackagedElectronSidecars", () => {
       sidecarId: "openducktor-mcp",
     });
     await mkdir(dirname(path), { recursive: true });
-    await copyFile(prepared.sidecars[0]!.outputPath, path);
+    // A link puts the 100 MB executable at the package path without a second copy on disk.
+    await link(prepared.sidecars[0]!.outputPath, path);
     if (platform !== "windows") await chmod(path, 0o755);
 
     await expect(
@@ -136,6 +123,11 @@ describe("verifyPackagedElectronSidecars", () => {
         verifyPackagedMcpInitializationEffect({ path, platform, sidecarId: "openducktor-mcp" }),
       ),
     ).resolves.toBeUndefined();
+
+    // On Linux, the disk writes the executable and its deletion for seconds after this test, and
+    // the next tests stall on their own file writes. Wait for the disk inside this time limit.
+    await removeReleaseDirectories();
+    if (process.platform !== "win32") expect(Bun.spawnSync(["sync"]).exitCode).toBe(0);
   }, 30_000);
 
   test("rejects a packaged MCP sidecar that cannot initialize", async () => {
