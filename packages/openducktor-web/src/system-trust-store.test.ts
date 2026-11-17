@@ -31,10 +31,12 @@ afterEach(() => {
   tls.setDefaultCACertificates(original);
 });
 
+// The first read of the OS certificate store loads hundreds of files. On a cold CI disk, it took
+// 1.8 s.
 test("keeps the default certificates, such as NODE_EXTRA_CA_CERTS, and adds the system ones", () => {
   tls.setDefaultCACertificates([...original, privateCa]);
   trustSystemCertificates();
   const trusted = pemBodies(tls.getCACertificates("default"));
   expect(trusted).toEqual(expect.arrayContaining(pemBodies([...original, privateCa])));
   expect(trusted).toEqual(expect.arrayContaining(pemBodies(tls.getCACertificates("system"))));
-});
+}, 5_000);
