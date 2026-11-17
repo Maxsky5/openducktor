@@ -1,7 +1,6 @@
 import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import { Effect } from "effect";
-import type { z } from "zod";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import {
@@ -18,8 +17,6 @@ export type ClaudeLiveRuntimeInstance = RuntimeInstanceSummary & {
 type ClaudeRuntimeValidationDetails =
   | { readonly runtimeId: string; readonly runtimeKind: RuntimeKind }
   | { readonly runtimeId: string };
-
-type OperationValidationDetails = { readonly operation: string };
 
 export const createEventGuard =
   (store: CreateClaudeLiveSessionAdapterPreparerInput["sessionStore"]) =>
@@ -76,21 +73,6 @@ export const requireClaudeHostServiceRuntime = (
     },
   });
 };
-
-export const parseClaudeLiveSessionOutput = <Schema extends z.ZodType, Input>(
-  schema: Schema,
-  value: Input,
-  operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
-  Effect.try({
-    try: () => schema.parse(value),
-    catch: (cause) =>
-      new HostValidationError<OperationValidationDetails>({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-        details: { operation },
-      }),
-  });
 
 export const createClaudeRequiredSession =
   (

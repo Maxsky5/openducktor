@@ -27,6 +27,7 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import type { HostError, HostOperationErrorAggregate } from "../../effect/host-errors";
+import { parseAdapterOutput as parseCodexLiveSessionOutput } from "../../effect/zod-output";
 import type { AgentSessionRuntimeAdapterPort } from "../../ports/agent-session-live-adapter-port";
 import type { CodexAppServerRespondInput } from "../../ports/codex-app-server-port";
 import type {
@@ -46,7 +47,6 @@ import {
 import { toCodexForkRequest, toCodexSendRequest } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
 import {
-  parseCodexLiveSessionOutput,
   requireCodexStdioRuntime,
   toCodexLiveSessionRef,
 } from "./codex-live-session-runtime-guards";

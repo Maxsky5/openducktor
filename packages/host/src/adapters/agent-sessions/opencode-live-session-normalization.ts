@@ -29,8 +29,6 @@ type OpenCodeRuntimeValidationDetails =
       readonly runtimeRoute: RuntimeInstanceSummary["runtimeRoute"]["type"];
     };
 
-type OperationValidationDetails = { readonly operation: string };
-
 const isOpenCodeRuntimeInstance = (
   runtime: RuntimeInstanceSummary,
 ): runtime is OpenCodeRuntimeInstance =>
@@ -89,21 +87,6 @@ export const toRuntimeSignalChanges = (
       : change;
   });
 };
-
-export const parseOutput = <Schema extends z.ZodType, Input>(
-  schema: Schema,
-  value: Input,
-  operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
-  Effect.try({
-    try: () => schema.parse(value),
-    catch: (cause) =>
-      new HostValidationError<OperationValidationDetails>({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-        details: { operation },
-      }),
-  });
 
 export const toContextUsage = (
   contextUsage: OpencodeSessionContextUsage,

@@ -7,13 +7,13 @@ import {
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect, Exit } from "effect";
 import { causeMessage, type HostError, HostOperationError } from "../../effect/host-errors";
+import { parseAdapterOutput } from "../../effect/zod-output";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterPort,
   AgentSessionLiveAdapterRegistryPort,
 } from "../../ports/agent-session-live-adapter-port";
 import type { AgentSessionLiveEnvelopeDraft } from "./agent-session-live-envelope";
-import { parseAdapterOutput } from "./agent-session-live-validation";
 import type { LiveStateCoordinator } from "./live-state-coordinator";
 
 type Refs = ReadonlyArray<AgentSessionLiveRef>;

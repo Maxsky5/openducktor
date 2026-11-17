@@ -16,6 +16,7 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
+import { parseAdapterOutput as parseProjectionValue } from "../../effect/zod-output";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 
@@ -39,8 +40,6 @@ type ParsedMutation = Pick<
   readonly removedRefs: AgentSessionLiveRef[];
   readonly transcriptEvents: Array<z.output<typeof agentSessionTranscriptEventSchema>>;
 };
-
-type OperationValidationDetails = { readonly operation: string };
 
 export const createCodexLiveSessionProjection = ({
   runtime,
@@ -329,18 +328,3 @@ const refsEqual = (left: AgentSessionLiveRef, right: AgentSessionLiveRef): boole
 
 const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
-
-const parseProjectionValue = <Schema extends z.ZodType, Input>(
-  schema: Schema,
-  value: Input,
-  operation: string,
-): Effect.Effect<z.output<Schema>, HostValidationError<OperationValidationDetails>> =>
-  Effect.try({
-    try: () => schema.parse(value),
-    catch: (cause) =>
-      new HostValidationError<OperationValidationDetails>({
-        message: cause instanceof Error ? cause.message : String(cause),
-        cause,
-        details: { operation },
-      }),
-  });

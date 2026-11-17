@@ -22,6 +22,7 @@ import {
 } from "../../application/agent-sessions/agent-session-control-summary";
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import { type HostError, toHostOperationError } from "../../effect/host-errors";
+import { parseAdapterOutput as parseOutput } from "../../effect/zod-output";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
   AgentSessionMessageAcceptedError,
@@ -33,7 +34,7 @@ import type {
   AgentSessionTitleUpdateOutcome,
 } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
-import { parseOutput, refKey, toSessionRef } from "./opencode-live-session-normalization";
+import { refKey, toSessionRef } from "./opencode-live-session-normalization";
 import type { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createSerialGate } from "../../effect/serial-gate";
 import { withForkedSessionCleanup } from "./forked-session-cleanup";
