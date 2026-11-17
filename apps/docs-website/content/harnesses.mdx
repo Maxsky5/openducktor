@@ -45,13 +45,16 @@ All three harnesses run every agent role. Each one supports questions, permissio
 | Feature | OpenCode | Codex | Claude Code |
 |---|---|---|---|
 | Image generation | No | Yes | No |
-| **Resume** after a turn stops | No | Yes | Yes |
+| **Resume** after a turn stops | Yes | Yes | Yes |
+| [Auto-resume after a usage limit](/coding-sessions/#usage-limit) | No | Yes, with a ChatGPT sign-in | Yes |
 | [**Speed** choice](/models/) | No | Some models | Some models |
 | [**Agent profile** choice](/models/) | Yes | No | No |
 | Todo list in the session | No | Yes | Yes |
 | Subagents in the background | Yes | No | Yes |
 | Mention a subagent with `@` | Yes | No | No |
 | [Permission replies](/coding-sessions/#answer-a-permission-request) | <Action>Approve once</Action>, <Action>Allow for project</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Approve for session</Action>, <Action>Always allow</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> |
+
+With an API key sign-in, Codex cannot tell when the account works again, so a Codex session needs a manual **Resume** after a usage limit.
 
 ### Goal mode support [#goals]
 

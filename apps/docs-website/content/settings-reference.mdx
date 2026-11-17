@@ -82,7 +82,7 @@ A save sends only the values that you changed. If another client of the host cha
 | Hosted or remote browser client | All sections except **Remote control**, because only the host computer can share the host. **Updates** shows **Browser runner**. |
 | Mobile app | No Settings dialog. Its **Settings** tab has **Theme** and **Show Thinking Messages** for that device only. |
 
-The mobile app also uses these host settings: reusable prompts, **Steer messages by default**, **Expand file diffs by default**, **Done tasks visible for**, **Empty columns**, and **Remove task worktree on close**. Change them from a desktop or browser client.
+The mobile app also uses these host settings: reusable prompts, **Steer messages by default**, **Auto-resume after usage limits**, **Expand file diffs by default**, **Done tasks visible for**, **Empty columns**, and **Remove task worktree on close**. Change them from a desktop or browser client.
 
 ## General [#general]
 
@@ -638,6 +638,14 @@ Sets message delivery and transcript display for task sessions and workspace ses
 
 - When on, <kbd>Enter</kbd> and **Send** steer the message into the running turn. <kbd>Cmd</kbd>+<kbd>Enter</kbd> on macOS, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> on other systems, uses ordinary delivery.
 - The default is off. Ordinary delivery queues the message while the session works or already has queued messages.
+- The mobile app also uses this value.
+
+### Auto-resume after usage limits [#chat-auto-resume-after-usage-limits]
+
+- When a session stops on a usage limit and the harness reports a reset time, OpenDucktor resumes the session after the reset. See [After a usage limit](/coding-sessions/#usage-limit).
+- The default is on.
+- A save applies at once to every planned resume.
+- Claude Code and Codex sessions report a reset time. Codex needs a ChatGPT sign-in.
 - The mobile app also uses this value.
 
 ### Show thinking messages [#chat-show-thinking-messages]
