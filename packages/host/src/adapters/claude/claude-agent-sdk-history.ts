@@ -199,6 +199,13 @@ export const toClaudeHistoryMessages = (
       if (originKind !== undefined && originKind !== "human") {
         replyStartedAt = readStringProp(entry, "timestamp");
         resetCurrentUserTurnAssistantTracking();
+      } else if (
+        entry.isMeta === true &&
+        originKind === undefined &&
+        (lastError !== null || replyStartedAt === undefined)
+      ) {
+        // Resume writes a hidden user turn after a stopped turn. The wait before it is not work.
+        replyStartedAt = readStringProp(entry, "timestamp");
       }
     }
     const timestamp = readHistoryTimestamp(entry, now);
