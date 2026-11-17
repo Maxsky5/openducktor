@@ -25,6 +25,7 @@ import {
   type HostOperationErrorAggregate,
   toHostOperationError,
 } from "../../effect/host-errors";
+import { parseAdapterOutput as parseClaudeLiveSessionOutput } from "../../effect/zod-output";
 import type {
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
@@ -57,7 +58,6 @@ import {
 import { createClaudeLiveSessionState } from "./claude-live-session-state";
 import {
   createEventGuard,
-  parseClaudeLiveSessionOutput,
   requireClaudeHostServiceRuntime,
   createClaudeRequiredSession,
   toClaudeLiveSessionRef,

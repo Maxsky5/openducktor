@@ -15,8 +15,8 @@ import {
 } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 import type { LiveStateCoordinator } from "./live-state-coordinator";
-import { parseAdapterOutput } from "./agent-session-live-validation";
 import { createRetryableCleanup } from "../../effect/retryable-cleanup";
+import { parseAdapterOutput } from "../../effect/zod-output";
 import { createLiveRuntimeRelease, type OpenRelease } from "./agent-session-live-runtime-release";
 
 type LiveRuntimeLifecycle = RuntimeLiveSessionLifecyclePort & {

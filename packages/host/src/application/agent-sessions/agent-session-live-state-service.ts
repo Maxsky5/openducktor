@@ -15,6 +15,7 @@ import { agentSessionRefKey } from "@openducktor/core";
 import { Clock, Effect } from "effect";
 import { type HostError, HostInvariantError, HostValidationError } from "../../effect/host-errors";
 import { createKeyedSharedFlight } from "../../effect/shared-flight";
+import { parseAdapterOutput } from "../../effect/zod-output";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterPort,
@@ -31,7 +32,7 @@ import { createLiveChangePublisher } from "./agent-session-live-change-publisher
 import { createRuntimeSessionEngagement } from "./agent-session-runtime-engagement";
 import { createLiveStateCoordinator } from "./live-state-coordinator";
 import { createAgentSessionLiveRuntimeLifecycle } from "./agent-session-live-runtime-lifecycle";
-import { parseAdapterOutput, readAdapterSnapshots } from "./agent-session-live-validation";
+import { readAdapterSnapshots } from "./agent-session-live-validation";
 import { createAgentSessionExecutionEpisodes } from "./agent-session-execution-episodes";
 import { createStartupPreparationFinalizer } from "./startup-preparation-receipt";
 import { updateStartup } from "./session-startup-progress";

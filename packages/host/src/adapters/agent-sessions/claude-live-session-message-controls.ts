@@ -12,6 +12,7 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
+import { parseAdapterOutput as parseClaudeLiveSessionOutput } from "../../effect/zod-output";
 import type {
   AgentSessionControlAdapterPort,
   AgentSessionControlGoalInput,
@@ -28,7 +29,6 @@ import {
 } from "../claude/claude-agent-sdk-goals";
 import { canStartUserTurn } from "../claude/claude-agent-sdk-turn-policy";
 import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
-import { parseClaudeLiveSessionOutput } from "./claude-live-session-runtime-guards";
 import { toClaudeRuntimeUserMessageEvent } from "./claude-live-session-service-inputs";
 import type { createClaudeLiveSessionState } from "./claude-live-session-state";
 
