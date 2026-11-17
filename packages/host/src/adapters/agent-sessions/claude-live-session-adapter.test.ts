@@ -2387,7 +2387,7 @@ describe("Claude host live-session adapter", () => {
       });
     });
 
-    test("reports an event projection fault to the repository of the session", async () => {
+    test("reports an event projection fault to the session", async () => {
       const harness = await createHarness();
       await startBothSessions(harness);
       harness.changes.splice(0);
@@ -2413,6 +2413,7 @@ describe("Claude host live-session adapter", () => {
         {
           type: "fault",
           repoPath: "/other-repo",
+          ref: otherSessionRef,
           operation: "test.publish",
           message: "Publication failed.",
         },

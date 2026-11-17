@@ -127,7 +127,9 @@ export const createCodexLiveSessionProjection = ({
                 const ref = parsed.faultRef;
                 changes.push({ ...fault, repoPath: ref.repoPath, ref });
               } else {
-                for (const repoPath of liveRepoPaths) changes.push({ ...fault, repoPath });
+                // A runtime-wide fault concerns the sessions of this runtime only.
+                for (const { ref } of snapshotsByRef.values())
+                  changes.push({ ...fault, repoPath: ref.repoPath, ref });
               }
             }
             return {

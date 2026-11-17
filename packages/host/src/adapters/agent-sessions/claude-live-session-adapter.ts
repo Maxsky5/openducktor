@@ -123,6 +123,10 @@ export const createClaudeLiveSessionAdapterPreparer =
                 {
                   type: "fault",
                   repoPath: session.input.repoPath,
+                  ref: toClaudeLiveSessionRef({
+                    ...session.input,
+                    externalSessionId: session.externalSessionId,
+                  }),
                   operation: failure.operation,
                   message: failure.message,
                 },

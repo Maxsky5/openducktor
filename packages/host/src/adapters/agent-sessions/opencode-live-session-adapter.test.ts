@@ -1062,6 +1062,8 @@ describe("createOpenCodeLiveSessionAdapterPreparer", () => {
       {
         type: "fault",
         repoPath: "/repo",
+        ref,
+        statusUnavailable: true,
         operation: "opencode-live-session.observe-runtime",
         message: "OpenCode live event observation failed: connection lost",
       },
