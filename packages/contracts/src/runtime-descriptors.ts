@@ -160,7 +160,9 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     stableItemIds: true,
     stableItemOrder: true,
     exposesCompletionState: false,
-    limitations: [],
+    limitations: [
+      "Codex history does not record the model or effort of a turn. A reloaded reply names only the runtime.",
+    ],
   },
   approvals: {
     supportedRequestTypes: ["command_execution", "file_change", "permission_grant", "runtime_tool"],
