@@ -402,6 +402,53 @@ describe("claude-agent-sdk-history", () => {
 
     expect(history.at(-1)).toMatchObject({ messageId: "final-response", durationMs: 3_000 });
   });
+  test("times a resumed turn from its continuation, not from the stopped prompt", () => {
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "prompt",
+          timestamp: "2026-11-17T20:29:52.501Z",
+          message: { role: "user", content: "Reply with the single word: pong" },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "limit",
+          timestamp: "2026-11-17T20:29:52.585Z",
+          error: "rate_limit",
+          isApiErrorMessage: true,
+          message: {
+            id: "limit-message",
+            role: "assistant",
+            model: "<synthetic>",
+            content: [{ type: "text", text: "You've hit your 5-hour limit" }],
+            stop_reason: "stop_sequence",
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "continue",
+          isMeta: true,
+          timestamp: "2026-11-17T20:32:53.978Z",
+          message: { role: "user", content: "Continue from where you left off." },
+        }),
+        toSessionMessage({
+          type: "assistant",
+          uuid: "reply",
+          timestamp: "2026-11-17T20:32:55.609Z",
+          message: {
+            id: "reply-message",
+            role: "assistant",
+            content: [{ type: "text", text: "pong" }],
+            stop_reason: "end_turn",
+          },
+        }),
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-11-17T21:00:00.000Z",
+    );
+
+    expect(history.at(-1)).toMatchObject({ messageId: "reply-message", durationMs: 1_631 });
+  });
 
   test("does not hydrate current context usage from Claude result totals", () => {
     const history = toClaudeHistoryMessages(

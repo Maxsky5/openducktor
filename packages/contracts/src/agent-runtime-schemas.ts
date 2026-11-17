@@ -181,6 +181,11 @@ export const runtimeSessionLifecycleCapabilitiesSchema = z
     supportsListLiveSessions: z.boolean(),
     supportsPendingInputSnapshots: z.boolean(),
     supportsInterruptedTurnResume: z.boolean(),
+    /**
+     * The turn error of the runtime carries a structured reset time of a usage limit, so the host
+     * can resume the stopped turn after the reset. Requires `supportsInterruptedTurnResume`.
+     */
+    supportsUsageLimitAutoResume: z.boolean(),
   })
   .strict();
 export type RuntimeSessionLifecycleCapabilities = z.infer<
@@ -307,6 +312,16 @@ export const runtimeCapabilitiesSchema = z
     const addIssue = (path: (string | number)[], message: string): void => {
       context.addIssue({ code: "custom", path, message });
     };
+
+    if (
+      capabilities.sessionLifecycle.supportsUsageLimitAutoResume &&
+      !capabilities.sessionLifecycle.supportsInterruptedTurnResume
+    ) {
+      addIssue(
+        ["sessionLifecycle", "supportsUsageLimitAutoResume"],
+        "Runtime descriptors without interrupted turn resume must not support usage limit auto-resume.",
+      );
+    }
 
     if (
       capabilities.goals.minimumRuntimeVersion === null &&

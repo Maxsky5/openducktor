@@ -173,6 +173,8 @@ export const consumeClaudeSession = (input: {
           session.replyStartedAt = timestamp;
         }
         if (onContinuationAdmission && isClaudeContinuationAdmission(message)) {
+          // The resumed turn starts here. The wait before the resume is not work.
+          if (!continuationAdmitted) session.replyStartedAt ??= timestamp;
           continuationAdmitted = true;
           onContinuationAdmission();
         }

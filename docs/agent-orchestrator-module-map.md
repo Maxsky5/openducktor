@@ -116,6 +116,7 @@ The host owns each message queue, its order, its pause, and its automatic delive
 - An explicit steer sends one message and does not change the queue. When steering is not available, it tries a new turn. An issued steer never turns into a new turn.
 - Only a `session_idle` event with `turnOutcome: "completed"` delivers the next queued message. Pending blocking input stops steering and automatic delivery until the user answers.
 - An interrupted or failed turn, an agent error, a stop, a failed steer, or a session that left its runtime pauses a queue that has messages. Only the user can resume it.
+- A `turn_error` with `usageLimit` pauses the queue with the internal `usage_limit` cause. The first turn end after the failed turn of the stop decides the pause. A completed turn releases it, with the guards of Resume queue, and the next message goes out. A failed or interrupted turn, a stop, or another cause replaces it with an ordinary pause. This applies to the auto-resume and to a manual Resume.
 - A message with an unknown result stays locked in the `acceptance_unknown` state until a live `user_message` with its message ID or `submissionId` arrives.
 - A queued message uses the session's accepted settings when delivery starts. Queued messages do not store a model choice.
 - `agent-message-send-outcome.ts` classifies the result of each send once. Every queue path reads that outcome, and `settle` ends every send.
@@ -162,6 +163,28 @@ The live module owns runtime registration and ordered publication. Its internal 
 - Detach and publish known removals under the live coordinator. Release native resources outside that coordinator.
 - After a failed detach read, publish an authoritative snapshot of the remaining registrations. Keep the original read error and report any cleanup or publication errors.
 - A host execution episode identifies a run. Renderer terminal state applies only to that episode. Current pending input takes priority.
+
+## Usage-limit auto-resume
+
+Files: `packages/host/src/application/agent-sessions/usage-limit-stops.ts`, `usage-limit-auto-resume-service.ts`, `packages/host/src/adapters/claude/claude-usage-limit-stop.ts`, `packages/frontend-core/src/sessions/session-view/interrupted-turn-notice.ts`, `use-usage-limit-auto-resume-cancel.ts`, `agent-chat-interrupted-turn-resume.tsx`, and `apps/mobile/src/features/session/header/session-resume-notice.tsx`.
+
+The host owns every auto-resume decision. All its state stays in host memory, so a host restart loses cancels and attempts.
+
+- `usage-limit-stops.ts` holds every rule and the state of each stop. It does no I/O, so its tests need no clock or fiber. It reports each session whose entry can change.
+- `usage-limit-auto-resume-service.ts` runs the root and live reads, the schedule, the resume, the history rebuild, and the publication. It asks the rules what to do after each read.
+- The service reads the live stream through the in-process observer of the live service. It never publishes inside the coordinator lane that delivers an envelope.
+- A `turn_error` with `usageLimit` and a `messageId` names the stop. A later `turn_error` with the same ID updates its reset time. The stop is complete when its turn ends `failed` or `interrupted`.
+- A user message, a Stop, a `continue` operation that the service did not start, or new foreground work ends the stop.
+- An ended stop is never planned again in this host process, also when a runtime registers again and its history still ends with that stop.
+- A reset update of a planned stop must still be later than the error. Otherwise the planned resume ends. A later reset moves a due stop back to scheduled with the new time. Before it resumes, the attempt checks the reset rule and the current due time again.
+- A stop is eligible when the runtime descriptor sets `supportsUsageLimitAutoResume`, the reset is later than the error, the session is a root of an open workspace, and this process did not cancel or attempt the stop.
+- The due time is the reset plus 30 seconds. One scheduler fiber waits for the earliest due time, at most 60 seconds at a time, so a computer that wakes resumes within a minute.
+- At the due time, the service reads the roots again, the live snapshot, and the recovery read of the runtime. A missing root, blocking input, or an `unknown` recovery ends the stop. A `waiting` recovery moves the due time to the next reset and uses no attempt. Otherwise the service calls `AgentSessionCommandService.resumeSession` with `continue_interrupted_turn`, once.
+- The service publishes `usage_limit_auto_resume_updated` through `publishUsageLimitAutoResume`. The live service retains the entries and puts them in each repository snapshot as `usageLimitAutoResumes`.
+- When a runtime adapter registers, the service reads `readLatestUsageLimitStop` of each root of that runtime in the background and plans only resets in the future.
+- `chat.autoResumeAfterUsageLimits` is a host preference. The config commit hook applies a save at once.
+- `buildInterruptedTurnNotice` maps the usage limit, the entry, the local Resume state, and the time to the notice of both clients. `useUsageLimitAutoResumeCancel` runs Cancel auto-resume for both clients and keeps its state for one stop.
+- A failed auto-resume shows its reason in the resume notice and, as for a failed manual Resume, as the session operation error in the transcript.
 
 ## Workspace metadata and notifications
 

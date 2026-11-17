@@ -1375,6 +1375,34 @@ describe("runtime schemas", () => {
     }
   });
 
+  test("usage limit auto-resume requires interrupted turn resume", () => {
+    const result = runtimeDescriptorSchema.safeParse({
+      ...OPENCODE_RUNTIME_DESCRIPTOR,
+      capabilities: withRuntimeCapabilities({
+        sessionLifecycle: {
+          ...OPENCODE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle,
+          supportsInterruptedTurnResume: false,
+          supportsUsageLimitAutoResume: true,
+        },
+      }),
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ["capabilities", "sessionLifecycle", "supportsUsageLimitAutoResume"],
+        }),
+      ]),
+    );
+    expect(
+      CLAUDE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle.supportsUsageLimitAutoResume,
+    ).toBe(true);
+    expect(
+      CODEX_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle.supportsUsageLimitAutoResume,
+    ).toBe(true);
+  });
+
   test("runtime descriptor accepts item history and structured approval semantics", () => {
     const itemHistoryDescriptor = runtimeDescriptorSchema.parse({
       kind: "opencode",
@@ -1396,6 +1424,7 @@ describe("runtime schemas", () => {
           supportsListLiveSessions: true,
           supportsPendingInputSnapshots: true,
           supportsInterruptedTurnResume: true,
+          supportsUsageLimitAutoResume: false,
         },
         history: {
           loadable: true,

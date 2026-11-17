@@ -159,6 +159,27 @@ export const findInCauseChain = <Match>(
   return null;
 };
 
+const errorMessageSchema = z.looseObject({ message: z.string() });
+
+/**
+ * The message of an error and of each error in its `cause` chain, for host logs only. A
+ * client-facing error keeps its own message, because a native cause can name internal details.
+ */
+export const causeChainMessage = (cause: unknown): string => {
+  const messages: string[] = [];
+  const visited = new Set<unknown>();
+  let current = cause;
+  while (current !== undefined && current !== null && !visited.has(current)) {
+    visited.add(current);
+    const parsed = errorMessageSchema.safeParse(current);
+    const message = parsed.success ? parsed.data.message : String(current);
+    if (!messages.includes(message)) messages.push(message);
+    const next = errorCauseSchema.safeParse(current);
+    current = next.success ? next.data.cause : undefined;
+  }
+  return messages.join(" Cause: ");
+};
+
 export const hasNestedNodeErrorCode = (cause: unknown, code: string): boolean =>
   findInCauseChain(cause, (link): link is { code: string } => nodeErrorCode(link) === code) !==
   null;

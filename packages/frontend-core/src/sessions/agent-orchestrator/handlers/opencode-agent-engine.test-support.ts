@@ -176,6 +176,9 @@ export const createOpenCodeAgentEngineTestAdapter = (
     throw new Error("Unexpected manageMessageQueue");
   },
   stopSession: (input) => adapter.stopSession(input),
+  cancelUsageLimitAutoResume: async () => {
+    throw new Error("Unexpected auto-resume cancel");
+  },
   loadSessionHistory: (input) => adapter.loadSessionHistory(bindPolicyInput(input)),
   loadSessionToolPart: async () => {
     throw new Error("Unexpected loadSessionToolPart");

@@ -120,6 +120,8 @@ export type AgentOperationsContextValue = {
   ) => Promise<void>;
   stopAgentSession: (session: AgentSessionIdentity) => Promise<void>;
   continueInterruptedTurn: (session: AgentSessionIdentity) => Promise<void>;
+  /** Cancels the host-planned resume of one usage-limit stop of the session. */
+  cancelUsageLimitAutoResume: (session: AgentSessionIdentity, stopId: string) => Promise<void>;
   updateAgentSessionModel: (
     session: AgentSessionIdentity,
     selection: AgentModelSelection | null,

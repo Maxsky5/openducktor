@@ -781,6 +781,7 @@ describe("createAgentSessionLiveStateService", () => {
         sessionOperations: [],
         submissionAcknowledgements: [],
         taskCompletions: [],
+        usageLimitAutoResumes: [],
         sequence: 1,
       });
       expect(second).toEqual(first);
@@ -922,6 +923,7 @@ describe("createAgentSessionLiveStateService", () => {
       sessionOperations: [],
       submissionAcknowledgements: [],
       taskCompletions: [],
+      usageLimitAutoResumes: [],
       repoPath: "/repo",
       sessions: [next],
     });
@@ -987,6 +989,7 @@ describe("createAgentSessionLiveStateService", () => {
         sessionOperations: [],
         submissionAcknowledgements: [],
         taskCompletions: [],
+        usageLimitAutoResumes: [],
         repoPath: "/repo",
         sessions: [{ ...snapshot, executionEpisodeId: episodeId }],
         sequence: 2,
@@ -1023,6 +1026,7 @@ describe("createAgentSessionLiveStateService", () => {
         sessionOperations: [],
         submissionAcknowledgements: [],
         taskCompletions: [],
+        usageLimitAutoResumes: [],
         repoPath: "/repo",
         sessions: [liveSnapshot("runtime-session", "opencode")],
       },
@@ -1032,6 +1036,7 @@ describe("createAgentSessionLiveStateService", () => {
         sessionOperations: [],
         submissionAcknowledgements: [],
         taskCompletions: [],
+        usageLimitAutoResumes: [],
         repoPath: "/repo",
         sessions: [liveSnapshot("next-runtime-session", "opencode")],
       },
@@ -1111,6 +1116,7 @@ describe("createAgentSessionLiveStateService", () => {
         sessionOperations: [],
         submissionAcknowledgements: [],
         taskCompletions: [],
+        usageLimitAutoResumes: [],
         repoPath: "/repo",
         sessions: [],
       },
@@ -1306,6 +1312,7 @@ describe("createAgentSessionLiveStateService", () => {
       sessionOperations: [],
       submissionAcknowledgements: [],
       taskCompletions: [],
+      usageLimitAutoResumes: [],
       repoPath: "/repo",
       sessions: [expect.objectContaining({ activity: "idle" })],
     });
@@ -1347,6 +1354,7 @@ describe("createAgentSessionLiveStateService", () => {
       sessionOperations: [],
       submissionAcknowledgements: [],
       taskCompletions: [],
+      usageLimitAutoResumes: [],
       sessions: [expect.objectContaining({ activity: "running" })],
     });
   });
@@ -1421,6 +1429,7 @@ describe("createAgentSessionLiveStateService", () => {
       sessionOperations: [],
       submissionAcknowledgements: [],
       taskCompletions: [],
+      usageLimitAutoResumes: [],
       sessions: [
         expect.objectContaining({
           pendingApprovals: [
@@ -1500,6 +1509,7 @@ describe("createAgentSessionLiveStateService", () => {
       sessionOperations: [],
       submissionAcknowledgements: [],
       taskCompletions: [],
+      usageLimitAutoResumes: [],
       sessions: [expect.objectContaining({ contextUsage: { totalTokens: 10 } })],
     });
     expect(events[1]).toMatchObject({
@@ -1896,6 +1906,7 @@ describe("createAgentSessionLiveStateService", () => {
         sessionOperations: [],
         submissionAcknowledgements: [],
         taskCompletions: [],
+        usageLimitAutoResumes: [],
         repoPath: "/repo",
         sessions: [],
         sequence: 1,
@@ -1932,6 +1943,7 @@ describe("createAgentSessionLiveStateService", () => {
       sessionOperations: [],
       submissionAcknowledgements: [],
       taskCompletions: [],
+      usageLimitAutoResumes: [],
       sessions: [expect.objectContaining({ ref: snapshot.ref })],
     });
   });
@@ -1977,6 +1989,7 @@ describe("createAgentSessionLiveStateService", () => {
       sessionOperations: [],
       submissionAcknowledgements: [],
       taskCompletions: [],
+      usageLimitAutoResumes: [],
       sessions: [
         expect.objectContaining({
           pendingApprovals: [expect.objectContaining({ requestId: "opaque-1" })],
@@ -2098,6 +2111,7 @@ describe("createAgentSessionLiveStateService", () => {
       sessionOperations: [],
       submissionAcknowledgements: [],
       taskCompletions: [],
+      usageLimitAutoResumes: [],
       repoPath: "/repo",
       sessions: [],
     });
@@ -2174,6 +2188,7 @@ describe("createAgentSessionLiveStateService", () => {
         sessionOperations: [],
         submissionAcknowledgements: [],
         taskCompletions: [],
+        usageLimitAutoResumes: [],
         repoPath: "/repo",
         sessions: [],
         sequence: 3,

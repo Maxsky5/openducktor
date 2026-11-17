@@ -187,8 +187,13 @@ test("routes runtime-wide changes to each repository with a live session", async
   expect(changes).toEqual([
     { type: "catalog_invalidated", repoPath: "/repo-a", runtimeKind: "codex" },
     { type: "catalog_invalidated", repoPath: "/repo-b", runtimeKind: "codex" },
-    { type: "fault", repoPath: "/repo-a", operation, message: "Runtime event failed" },
-    { type: "fault", repoPath: "/repo-b", operation, message: "Runtime event failed" },
+    ...[repoA, repoB, repoAOther].map(({ ref }) => ({
+      type: "fault" as const,
+      repoPath: ref.repoPath,
+      ref,
+      operation,
+      message: "Runtime event failed",
+    })),
     {
       type: "fault",
       repoPath: "/repo-b",

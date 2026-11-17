@@ -31,6 +31,7 @@ type UseAgentsPageOrchestrationShellModelArgs = {
     ReturnType<typeof useAgentOperations>,
     | "sendAgentMessage"
     | "continueInterruptedTurn"
+    | "cancelUsageLimitAutoResume"
     | "stopAgentSession"
     | "loadAgentSessionHistory"
     | "updateAgentSessionModel"
@@ -121,6 +122,7 @@ export function useAgentsPageOrchestrationShellModel({
       sendAgentMessage: agentOperations.sendAgentMessage,
       assertCanPrepareSession,
       continueInterruptedTurn: agentOperations.continueInterruptedTurn,
+      cancelUsageLimitAutoResume: agentOperations.cancelUsageLimitAutoResume,
       stopAgentSession: agentOperations.stopAgentSession,
       loadAgentSessionHistory: agentOperations.loadAgentSessionHistory,
       updateAgentSessionModel: agentOperations.updateAgentSessionModel,

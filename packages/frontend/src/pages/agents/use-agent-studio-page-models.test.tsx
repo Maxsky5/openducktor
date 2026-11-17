@@ -220,6 +220,7 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     resumeSessionError: null,
     persistentResumeError: null,
     onResumeSession: () => {},
+    onCancelAutoResume: async () => {},
     startLaunchKickoff: async () => {},
     sendAgentMessage: async () => null,
     stopAgentSession: async () => {},

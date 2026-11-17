@@ -1020,7 +1020,8 @@ export const useRepoSessionReadModel = ({
       }
       if (
         envelope.type === "session_operation_updated" ||
-        envelope.type === "submission_acknowledged"
+        envelope.type === "submission_acknowledged" ||
+        envelope.type === "usage_limit_auto_resume_updated"
       ) {
         applyLiveEnvelopeToStore(envelope);
         commitProjected((current) => current);

@@ -28,6 +28,11 @@ export * from "./services/runtime-connections";
 export * from "./types/agent-orchestrator";
 
 export type { AgentSessionQueryParentPort } from "./ports/agent-session-query-parent";
+export type {
+  AgentUsageLimitPort,
+  UsageLimitRecovery,
+  UsageLimitStop,
+} from "./ports/agent-usage-limit";
 
 export * from "./ports/runtime-session-import";
 export type { ManagedMcpServer, ManagedMcpServerResolver } from "./ports/managed-mcp-server";

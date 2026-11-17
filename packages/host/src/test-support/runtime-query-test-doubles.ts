@@ -12,6 +12,9 @@ export const unexpectedRuntimeQueries = {
   loadSessionTodos: () => Effect.die(new Error("Unexpected query: loadSessionTodos")),
   loadSessionDiff: () => Effect.die(new Error("Unexpected query: loadSessionDiff")),
   loadFileStatus: () => Effect.die(new Error("Unexpected query: loadFileStatus")),
+  readLatestUsageLimitStop: () =>
+    Effect.die(new Error("Unexpected query: readLatestUsageLimitStop")),
+  readUsageLimitRecovery: () => Effect.die(new Error("Unexpected query: readUsageLimitRecovery")),
 } satisfies AgentRuntimeQueryAdapterPort;
 
 export const unexpectedNativeRuntimeQueries = {

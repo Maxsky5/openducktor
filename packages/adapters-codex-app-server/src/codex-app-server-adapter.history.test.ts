@@ -185,6 +185,63 @@ describe("CodexAppServerAdapter history loading", () => {
     }
   });
 
+  test("keeps the usage-limit notice of a failed turn that has no items", async () => {
+    const base = new RecordingTransport("runtime-live", false);
+    const usageLimitError = {
+      message: "You've hit your usage limit.",
+      codexErrorInfo: "usageLimitExceeded" as const,
+      additionalDetails: null,
+    };
+    const stopped = codexTurnFixture({
+      id: "stopped-turn",
+      status: "failed",
+      error: usageLimitError,
+      startedAt: 1_800_000_000,
+      completedAt: 1_800_000_001,
+      items: [
+        codexUserMessageItemFixture({
+          id: "stopped-input",
+          content: [{ type: "text", text: "Build it", text_elements: [] }],
+        }),
+      ],
+    });
+    // A resume starts a turn with no input, and the limit can stop it before any output.
+    const resumed = codexTurnFixture({
+      id: "resumed-turn",
+      status: "failed",
+      error: usageLimitError,
+      startedAt: 1_800_003_600,
+      completedAt: 1_800_003_601,
+      items: [],
+    });
+    const thread = {
+      id: "thread-idle",
+      status: { type: "idle" as const },
+      turns: [stopped, resumed],
+    };
+    const adapter = createAdapterWithTransport({
+      request: async (request) => {
+        if (request.method === "thread/read") return paginatedThreadReadResponse(thread);
+        if (request.method === "thread/turns/list") return paginatedTurnsListResponse(thread);
+        return base.request(request);
+      },
+    });
+    const ref = codexSessionRuntimeRef("thread-idle");
+    try {
+      await adapter.resumeSession(ref);
+      const history = await adapter.loadSessionHistory(ref);
+      expect(history.map((message) => message.messageId)).toEqual([
+        "codex-system-prompt:thread-idle",
+        "stopped-input",
+        "stopped-turn",
+        "resumed-turn",
+      ]);
+      expect(history.at(-1)).toMatchObject({ notice: { usageLimit: {} } });
+    } finally {
+      adapter.releaseRuntime("runtime-live");
+    }
+  });
+
   test("keeps an answered blocking question when history reloads", async () => {
     const runtimeStream = createRuntimeStreamSubscription();
     const respondServerRequest = mock(async () => undefined);

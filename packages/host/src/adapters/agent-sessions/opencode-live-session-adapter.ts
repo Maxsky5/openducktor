@@ -259,18 +259,18 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
               ),
             );
           case "fault":
-            // The route is unavailable from the fault on, before the release completes. The fault
-            // reaches each repository with live sessions. The runtime status reports it too.
+            // The route is unavailable from the fault on. Only the sessions of this runtime lose
+            // their status; a restart sends it again. The runtime status reports the fault too.
             observer.onObservationLost(signal.message);
             return serializeRuntime(
               commit("opencode-live-session.commit-fault", () => ({
                 value: undefined,
-                changes: [
-                  ...new Set(state.listSnapshots().map((snapshot) => snapshot.ref.repoPath)),
-                ].map((repoPath) => {
+                changes: state.listSnapshots().map(({ ref }) => {
                   const change = {
                     type: "fault" as const,
-                    repoPath,
+                    repoPath: ref.repoPath,
+                    ref,
+                    statusUnavailable: true as const,
                     operation: "opencode-live-session.observe-runtime",
                     message: signal.message,
                   };

@@ -316,6 +316,7 @@ const createBaseArgs = (): HookArgs => {
     runSessionStartWorkflow: createRunSessionStartWorkflow(),
     sendAgentMessage: async () => null,
     continueInterruptedTurn: async () => undefined,
+    cancelUsageLimitAutoResume: async () => {},
     replyAgentApproval: async () => {},
     answerAgentQuestion: async () => {},
     scheduleQueryUpdate: () => {},

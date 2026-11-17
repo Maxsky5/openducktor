@@ -53,7 +53,8 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     forkTargets: ["session", "message"],
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
-    supportsInterruptedTurnResume: false,
+    supportsInterruptedTurnResume: true,
+    supportsUsageLimitAutoResume: false,
   },
   messageDelivery: {
     minimumSteeringRuntimeVersion: "2.0.24",
@@ -143,6 +144,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: true,
+    supportsUsageLimitAutoResume: true,
   },
   messageDelivery: {
     minimumSteeringRuntimeVersion: "0.106.0",
@@ -158,7 +160,9 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     stableItemIds: true,
     stableItemOrder: true,
     exposesCompletionState: false,
-    limitations: [],
+    limitations: [
+      "Codex history does not record the model or effort of a turn. A reloaded reply names only the runtime.",
+    ],
   },
   approvals: {
     supportedRequestTypes: ["command_execution", "file_change", "permission_grant", "runtime_tool"],
@@ -246,6 +250,7 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: true,
+    supportsUsageLimitAutoResume: true,
   },
   messageDelivery: {
     minimumSteeringRuntimeVersion: "2.1.286",
@@ -326,12 +331,6 @@ export const OPENCODE_RUNTIME_DESCRIPTOR = {
       surface: "todos",
       reason:
         "OpenCode V2 has no public todo-state API. Historical tool content remains available.",
-    },
-    {
-      scope: "runtime",
-      surface: "interrupted_turn_resume",
-      reason:
-        "OpenCode V2 has no public continuation endpoint. Reopen the conversation and send a new message.",
     },
   ],
 } as const satisfies RuntimeDescriptor;

@@ -16,6 +16,7 @@ import {
   messageEvents,
   messageProjectionContext,
   projectInboxUser,
+  projectVisibleInboxUser,
   projectMessages,
 } from "./opencode-message-projection";
 import { isShellNotice } from "./opencode-shell-projection";
@@ -169,7 +170,7 @@ export class OpenCodeLiveMessageProjector {
         ...event.data.item,
       };
       this.inbox.set(item.id, item);
-      return item.type === "user" ? [projectInboxUser(item)] : [];
+      return projectVisibleInboxUser(item);
     }
     if (event.type === "session.inbox.cancelled") {
       this.inbox.delete(event.data.inboxID);
@@ -194,7 +195,7 @@ export class OpenCodeLiveMessageProjector {
         ...item.payload,
       };
       this.messages.set(message.id, message);
-      return [projectInboxUser({ ...item, time: { created } }, "read")];
+      return projectVisibleInboxUser({ ...item, time: { created } }, "read");
     }
     if (event.type === "session.step.started") {
       const message: SessionMessageAssistant = {

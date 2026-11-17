@@ -6,7 +6,7 @@ import { sessionForkDisabledReason } from "@openducktor/frontend-core/sessions/s
 import { useWorkspaceSessionFork } from "./use-workspace-session-fork";
 import { buildWorkspaceSessionComposer } from "./workspace-session-chat-composer";
 import { useAgentChatSend } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
-import { latestTurnUsageLimit } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
+import { buildWorkspaceInterruptedTurnResume } from "./workspace-session-interrupted-turn";
 import { usePendingSendContext } from "@/features/agent-chat-composer/use-pending-send-context";
 import { documentVisibility } from "@/features/session-navigation/document-visibility";
 import {
@@ -321,17 +321,13 @@ export function WorkspaceSessionChat({
       isSubmittingByRequestId: questionActions.isSubmittingQuestionByRequestId,
       onSubmit: questionActions.onSubmitQuestionAnswers,
     },
-    interruptedTurnResume: canResumeSession
-      ? {
-          isPending: actions.isResumingSession,
-          isDisabled: isSavingModel,
-          error: actions.resumeSessionError,
-          usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
-          onResume: () => {
-            if (identity) actions.resumeInterruptedTurn(identity);
-          },
-        }
-      : undefined,
+    interruptedTurnResume: buildWorkspaceInterruptedTurnResume({
+      canResume: canResumeSession,
+      isSavingModel,
+      identity,
+      session,
+      actions,
+    }),
     composer: buildWorkspaceSessionComposer({
       state: chatState,
       identity,

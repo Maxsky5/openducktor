@@ -8,6 +8,7 @@ import type { SessionTurnState } from "../support/session-turn-state";
 import type { PendingInputActionDependencies } from "./pending-input-actions";
 import { createPendingInputActions } from "./pending-input-actions";
 import { createContinueInterruptedTurn } from "./continue-interrupted-turn";
+import { createCancelUsageLimitAutoResume } from "./cancel-usage-limit-auto-resume";
 import { createManageAgentMessageQueue } from "./message-queue-actions";
 import { createSendAgentMessage } from "./send-agent-message";
 import { createSessionModelActions } from "./session-model-actions";
@@ -100,6 +101,12 @@ export const createAgentSessionActions = ({
     readSessionSnapshot,
   });
 
+  const cancelUsageLimitAutoResume = createCancelUsageLimitAutoResume({
+    workspaceRepoPath,
+    adapter,
+    readSessionSnapshot,
+  });
+
   const pendingInputActions = createPendingInputActions({
     workspaceRepoPath,
     liveSessionHost,
@@ -123,6 +130,7 @@ export const createAgentSessionActions = ({
     manageAgentMessageQueue,
     stopAgentSession,
     continueInterruptedTurn,
+    cancelUsageLimitAutoResume,
     updateAgentSessionModel: modelActions.updateAgentSessionModel,
     replyAgentApproval: pendingInputActions.replyAgentApproval,
     answerAgentQuestion: pendingInputActions.answerAgentQuestion,

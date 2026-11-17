@@ -49,6 +49,8 @@ const rootFields = new Set([
   "toolUseResult",
   "tool_use_result",
   "error",
+  "quotaLimits",
+  "apiErrorParams",
   "errors",
   "is_error",
   "result",
@@ -208,6 +210,15 @@ const selectClaudeTranscriptPath = (path: ClaudeTranscriptPath): boolean => {
   if (!rootFields.has(String(path[0]))) return false;
   if (path[0] === "origin") return path.length === 1 || path[1] === "kind";
   if (path[0] === "relocated") return path.length === 1 || path[1] === "relocatedCwd";
+  // A usage-limit error keeps only its reset time.
+  if (path[0] === "quotaLimits")
+    return path.length === 1 || (path.length === 2 && path[1] === "resetsAt");
+  if (path[0] === "apiErrorParams")
+    return (
+      path.length === 1 ||
+      (path[1] === "rate_limit_info" &&
+        (path.length === 2 || (path.length === 3 && path[2] === "resetsAt")))
+    );
   if (path[0] === "attachment") {
     if (path.length === 1) return true;
     if (!attachmentFields.has(String(path[1]))) return false;

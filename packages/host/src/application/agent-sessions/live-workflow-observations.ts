@@ -5,6 +5,7 @@ import type {
   SessionOperationObservation,
   SubmissionAcknowledgement,
   TaskCompletionObservation,
+  UsageLimitAutoResume,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 
@@ -23,6 +24,7 @@ export const createLiveWorkflowObservations = () => {
   const operations = new Map<string, SessionOperationObservation>();
   const acknowledgements = new Map<string, SubmissionAcknowledgement>();
   const completions = new Map<string, TaskCompletionObservation>();
+  const autoResumes = new Map<string, UsageLimitAutoResume>();
   return {
     accept: (envelope: OperationEnvelope) => {
       if (envelope.type === "session_operation_updated") {
@@ -69,7 +71,18 @@ export const createLiveWorkflowObservations = () => {
         (value) => value.ref.repoPath === repoPath,
       ),
       taskCompletions: [...completions.values()].filter((value) => value.repoPath === repoPath),
+      usageLimitAutoResumes: [...autoResumes.values()].filter(
+        (value) => value.ref.repoPath === repoPath,
+      ),
     }),
+    /** Retains the auto-resume entry of a session. Returns false when it did not change. */
+    autoResume: (ref: AgentSessionLiveRef, autoResume: UsageLimitAutoResume | null): boolean => {
+      const key = agentSessionRefKey(ref);
+      if (JSON.stringify(autoResumes.get(key) ?? null) === JSON.stringify(autoResume)) return false;
+      if (autoResume === null) autoResumes.delete(key);
+      else autoResumes.set(key, structuredClone(autoResume));
+      return true;
+    },
     project: (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot => {
       const result = { ...snapshot };
       const key = agentSessionRefKey(snapshot.ref);

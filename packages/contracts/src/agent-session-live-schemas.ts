@@ -30,6 +30,7 @@ import {
   sessionOperationObservationSchema,
   submissionAcknowledgementSchema,
   taskCompletionObservationSchema,
+  usageLimitAutoResumeSchema,
 } from "./workflow-operation-schemas";
 
 const nonEmptyStringSchema = z.string().trim().min(1);
@@ -185,6 +186,8 @@ export const agentSessionLiveSnapshotEnvelopeSchema = z
     sessionOperations: z.array(sessionOperationObservationSchema).optional(),
     submissionAcknowledgements: z.array(submissionAcknowledgementSchema).optional(),
     taskCompletions: z.array(taskCompletionObservationSchema).optional(),
+    /** Every auto-resume of a usage-limit stop that the host plans or runs in the repository. */
+    usageLimitAutoResumes: z.array(usageLimitAutoResumeSchema).optional(),
     isConnectionSnapshot: z.boolean().optional(),
     /** The transport replaced a baseline after a replay gap or host change. */
     historyReplayGap: z.boolean().optional(),
@@ -209,6 +212,13 @@ export const agentSessionLiveEnvelopeSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("task_completion_updated"),
     observation: taskCompletionObservationSchema,
+    sequence: liveStateSequenceSchema.optional(),
+  }),
+  /** Sets the auto-resume of one session. `null` removes it. */
+  z.strictObject({
+    type: z.literal("usage_limit_auto_resume_updated"),
+    ref: agentSessionLiveRefSchema,
+    autoResume: usageLimitAutoResumeSchema.nullable(),
     sequence: liveStateSequenceSchema.optional(),
   }),
   z.strictObject({
@@ -297,7 +307,8 @@ export type AgentSessionLiveStateEnvelope = Extract<
       | "task_session_records_updated"
       | "session_operation_updated"
       | "submission_acknowledged"
-      | "task_completion_updated";
+      | "task_completion_updated"
+      | "usage_limit_auto_resume_updated";
   }
 >;
 
@@ -311,7 +322,8 @@ export const isAgentSessionLiveStateEnvelope = (
   envelope.type === "task_session_records_updated" ||
   envelope.type === "session_operation_updated" ||
   envelope.type === "submission_acknowledged" ||
-  envelope.type === "task_completion_updated";
+  envelope.type === "task_completion_updated" ||
+  envelope.type === "usage_limit_auto_resume_updated";
 
 export const agentSessionLiveListInputSchema = z
   .object({

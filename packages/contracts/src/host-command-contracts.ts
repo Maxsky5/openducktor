@@ -26,6 +26,7 @@ export const HOST_COMMAND_NAMES = [
   "agent_session_read_generated_image",
   "agent_session_release_generated_image_batch",
   "agent_session_stop",
+  "agent_session_usage_limit_auto_resume_cancel",
   "agent_session_workflow_fork",
   "agent_session_workflow_launch",
   "agent_session_workflow_start",

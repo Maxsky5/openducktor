@@ -85,6 +85,17 @@ export function SettingsChatSection({
       />
 
       <SettingsSwitchRow
+        title="Auto-resume after usage limits"
+        description="When a session stops on a usage limit and the harness reports a reset time, OpenDucktor resumes the session after the reset."
+        checked={chat.autoResumeAfterUsageLimits}
+        disabled={disabled}
+        ariaLabel="Auto-resume after usage limits"
+        onCheckedChange={(checked) =>
+          onUpdateChat((current) => ({ ...current, autoResumeAfterUsageLimits: checked }))
+        }
+      />
+
+      <SettingsSwitchRow
         title="Show thinking messages"
         description="Thinking messages are hidden by default. When enabled, they will appear in session transcripts after you save settings."
         checked={chat.showThinkingMessages}

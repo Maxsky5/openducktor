@@ -66,11 +66,36 @@ To send a queued message to the agent at once, while it works, point to the mess
 
 To send a new message to the agent at once, press <kbd>Cmd</kbd>+<kbd>Enter</kbd> on macOS or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> on Windows and Linux. To swap the keys, see [Steer messages by default](/settings-reference/#chat-steer-messages-by-default).
 
-If you stop the agent or a reply fails while messages wait in the queue, **Queue paused** shows above the composer. To send the queued messages, select <Action>Resume queue</Action>.
+If you stop the agent or a reply fails while messages wait in the queue, **Queue paused** shows above the composer. To send the queued messages, select <Action>Resume queue</Action>. After a [usage limit](#usage-limit), the queue continues by itself when the resumed turn finishes.
 
 ### Fork from a reply [#fork]
 
 To try another way, select <Action>Fork from this reply</Action> on a reply of the agent. A new session of the same role starts with the conversation up to that reply, and it opens. The first session does not change.
+
+## Resume a stopped turn [#resume-turn]
+
+When a turn stops before it finishes, a notice shows above the composer. To continue the turn, select <Action>Resume</Action>. The agent continues from where it stopped, without a new message.
+
+### After a usage limit [#usage-limit]
+
+When the harness reaches its usage limit, the notice shows **The session reached its usage limit.** and the time until the limit resets.
+
+In Claude Code and Codex sessions, OpenDucktor resumes the turn by itself after the reset:
+
+- The notice shows **Resumes automatically at** and the time of the resume, about 30 seconds after the reset.
+- The resume starts also when no window shows the session, while the host runs.
+- To keep the turn stopped, select <Action>Cancel auto-resume</Action>. The cancel applies only to this stop. You can still select <Action>Resume</Action>.
+- When the resume starts, the notice shows **Resuming**. To stop the turn, stop the session.
+- If the resumed turn stops on a usage limit again, OpenDucktor plans a new resume for the new reset time.
+- If the resume fails for another reason, the notice shows the reason and <Action>Resume</Action>. OpenDucktor does not try again.
+
+In Codex sessions, OpenDucktor also asks Codex at the reset time if your account can work again. If it cannot yet, OpenDucktor waits for the next reset that Codex reports. This needs a Codex sign-in with ChatGPT. With an API key, Codex cannot tell, so select <Action>Resume</Action> after the reset.
+
+OpenCode sessions have no auto-resume. Select <Action>Resume</Action> after the reset.
+
+To turn the auto-resume off, see [Auto-resume after usage limits](/settings-reference/#chat-auto-resume-after-usage-limits).
+
+<Callout type="info" title="Host restart and sleep">After a host restart, OpenDucktor reads the session history and plans the resumes again, also for a stop that you canceled. It does not resume a stop whose reset time passed while the host was off. Select <Action>Resume</Action> for that stop. If the computer sleeps through a reset, the resume starts within one minute after the computer wakes.</Callout>
 
 ## Work toward a goal [#goal-mode]
 

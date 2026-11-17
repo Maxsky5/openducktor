@@ -51,3 +51,44 @@ describe("agent sessions store visible pending input", () => {
     expect(after.pendingApprovals).toEqual([]);
   });
 });
+
+describe("agent sessions store usage-limit auto-resume", () => {
+  test("projects the host entry of a session, and a snapshot replaces every entry", () => {
+    const store = createAgentSessionsStore("/repo");
+    const session = createAgentSessionFixture({ externalSessionId: "limited" });
+    store.replaceSession(session);
+    const ref = { repoPath: "/repo", ...identityOf(session) };
+    const entry = {
+      ref,
+      stopId: "limit-1",
+      resumeAtEpochMs: 1_800_000_000_000,
+      state: "scheduled" as const,
+    };
+
+    store.applyLiveSessionEnvelope({
+      type: "usage_limit_auto_resume_updated",
+      ref,
+      autoResume: entry,
+    });
+    store.setSessionCollection((current) => current);
+    expect(store.getSessionSnapshot(identityOf(session))?.usageLimitAutoResume).toEqual(entry);
+
+    store.applyLiveSessionEnvelope({
+      type: "snapshot",
+      repoPath: "/repo",
+      sessions: [],
+      messageQueues: [],
+      usageLimitAutoResumes: [],
+    });
+    store.setSessionCollection((current) => current);
+    expect(store.getSessionSnapshot(identityOf(session))?.usageLimitAutoResume).toBeUndefined();
+
+    store.applyLiveSessionEnvelope({
+      type: "usage_limit_auto_resume_updated",
+      ref: { ...ref, repoPath: "/other" },
+      autoResume: { ...entry, ref: { ...ref, repoPath: "/other" } },
+    });
+    store.setSessionCollection((current) => current);
+    expect(store.getSessionSnapshot(identityOf(session))?.usageLimitAutoResume).toBeUndefined();
+  });
+});

@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  interruptedTurnTitle,
-  usageLimitCountdown,
-  usageLimitResetText,
-} from "./interrupted-turn-copy";
+import { interruptedTurnTitle, usageLimitCountdown } from "./interrupted-turn-copy";
 
 describe("usageLimitCountdown", () => {
   const now = Date.UTC(2026, 9, 19, 10, 0, 0);
@@ -29,8 +25,4 @@ describe("usageLimitCountdown", () => {
 test("interruptedTurnTitle names a usage limit stop", () => {
   expect(interruptedTurnTitle({ resetsAtEpochMs: 1 })).toBe("The session reached its usage limit.");
   expect(interruptedTurnTitle(undefined)).toBe("This turn stopped before it finished.");
-});
-
-test("usageLimitResetText tells the user when to resume", () => {
-  expect(usageLimitResetText("5m", "10:05")).toBe("Resets in 5m at 10:05. Resume after the reset.");
 });

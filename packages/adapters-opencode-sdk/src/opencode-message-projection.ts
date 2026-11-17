@@ -1,10 +1,16 @@
 import type {
   ModelRef,
   OpenCodeClient,
+  SessionInboxInfo,
   SessionInboxUser,
   SessionMessageInfo,
   SessionMessageAssistant,
 } from "@opencode/client";
+import {
+  isOpenCodeContinuationInput,
+  isOpenCodeContinuationMessage,
+  isOpenCodeUserTurn,
+} from "./opencode-interrupted-turn";
 import {
   GOAL_SLASH_COMMAND,
   agentSessionHistoryMessageSchema,
@@ -209,6 +215,15 @@ export const projectInboxUser = (
   state,
 });
 
+/** The user message of an inbox item. A continuation has none. */
+export const projectVisibleInboxUser = (
+  item: SessionInboxInfo,
+  state: "queued" | "read" = "queued",
+): Array<Extract<AgentEvent, { type: "user_message" }>> =>
+  item.type === "user" && !isOpenCodeContinuationInput(item.payload)
+    ? [projectInboxUser(item, state)]
+    : [];
+
 type SubagentCompletion = { state: "completed" | "error" | "cancelled"; created: number };
 const subagentCompletions = (
   messages: Iterable<SessionMessageInfo>,
@@ -296,10 +311,25 @@ export const messageProjectionContext = (
   };
 };
 
+/**
+ * The arguments in the ended input text of a tool. OpenCode ends the input with the raw model
+ * text: the claude-agent provider sends none, and OpenCode fails a tool with malformed text and
+ * reports it. `session.tool.called` then brings the parsed arguments.
+ */
+const settledToolInput = (text: string) => {
+  if (!text) return undefined;
+  try {
+    return agentToolDataSchema.safeParse(JSON.parse(text)).data;
+  } catch {
+    return undefined;
+  }
+};
+
 const isVisibleNativeMessage = (message: SessionMessageInfo, shells?: ShellContext): boolean =>
   message.type !== "agent-switched" &&
   !(message.type === "idle" && message.outcome === "succeeded") &&
   !(message.type === "synthetic" && message.metadata?.source === "subagent") &&
+  !isOpenCodeContinuationMessage(message) &&
   !shells?.hidden.has(message.id);
 
 export const projectMessages = (
@@ -312,7 +342,7 @@ export const projectMessages = (
   // Steered input joins the current execution. A native idle record ends that evidence.
   for (const message of messages.toReversed()) {
     if (message.type === "idle") break;
-    if (message.type === "user" && !latestUserId) latestUserId = message.id;
+    if (isOpenCodeUserTurn(message) && !latestUserId) latestUserId = message.id;
     if (message.type === "assistant" && !runningModel)
       runningModel = { ...modelSelection(message.model), profileId: message.agent };
   }
@@ -378,13 +408,8 @@ const projectAssistantContent = (
     const settled = settledToolInputs ? settledToolInputs.has(content.id) : state.input.length > 0;
     tool.inputStreaming = !settled;
     if (settled) {
-      try {
-        tool.input = agentToolDataSchema.parse(JSON.parse(state.input));
-      } catch {
-        throw new Error(
-          `OpenCode returned invalid completed arguments for tool '${content.id}'. Reload the conversation after checking the tool failure in OpenCode.`,
-        );
-      }
+      const input = settledToolInput(state.input);
+      if (input) tool.input = input;
     }
   }
   if (content.time.ran !== undefined) tool.startedAtMs = content.time.ran;

@@ -51,6 +51,7 @@ import {
   sessionChanges,
 } from "./agent-message-session-conditions";
 import { createQueueRegistry } from "./agent-message-queue-registry";
+import { createQueuePauses } from "./agent-message-queue-pauses";
 import {
   endsWithoutTurn,
   type SendOutcome,
@@ -117,6 +118,7 @@ export const createAgentMessageDeliveryService = (
   });
   const { publish, forgetIfUnused, queueFor } = registry;
   const conditions = createSessionConditions();
+  const pauses = createQueuePauses({ publish, isBlockedOnInput: conditions.isBlockedOnInput });
   const reserveSubmission = createSubmissionReservations(dependencies.submissionFingerprint);
 
   /** Marks the send in flight synchronously, before another submission can start a turn. */
@@ -172,14 +174,6 @@ export const createAgentMessageDeliveryService = (
   const settle = (queue: MessageQueue, completedTurnsBefore: number, endedNoTurn = false): void => {
     forgetIfUnused(queue);
     if (endedNoTurn || queue.completedTurns !== completedTurnsBefore) scheduleDrain(queue.key);
-  };
-
-  /** Pauses queued messages and in-flight sends. The first cause stays. */
-  const pauseQueue = (queue: MessageQueue, pause: QueuePause): void => {
-    if (queue.pause !== null) return;
-    if (queue.entries.length === 0 && !queue.sendingNewTurn) return;
-    queue.pause = pause;
-    publish(queue);
   };
 
   /** Pauses failed delivery. Accepted entries leave; uncertain or refused entries keep their place. */
@@ -287,7 +281,7 @@ export const createAgentMessageDeliveryService = (
           return queueUnknownMessage(queue, content, outcome.messageId);
         case "accepted_then_failed":
           // The host state is unsure, so later messages wait for Resume.
-          pauseQueue(queue, { cause: "accepted_then_failed", detail: outcome.error.message });
+          pauses.pause(queue, { cause: "accepted_then_failed", detail: outcome.error.message });
           break;
         case "refused":
           // Messages that queued behind this send can still start when the session is idle.
@@ -398,7 +392,7 @@ export const createAgentMessageDeliveryService = (
 
   const pause = (ref: AgentSessionLiveRef, cause: QueuePause): void => {
     const queue = registry.findFor(ref);
-    if (queue) pauseQueue(queue, cause);
+    if (queue) pauses.pause(queue, cause);
   };
 
   /**
@@ -488,6 +482,7 @@ export const createAgentMessageDeliveryService = (
       // Pauses of the same batch apply first, so a failed turn never releases the next entry.
       for (const queue of completed) {
         queue.completedTurns += 1;
+        pauses.releaseAfterCompletedTurn(queue);
         ready.add(queue);
       }
       for (const queue of ready) release(queue);

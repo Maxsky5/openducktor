@@ -7,6 +7,10 @@ import {
 } from "./codex-app-server-catalog-schemas";
 import { codexUint32Schema } from "./codex-app-server-number-schemas";
 import {
+  codexAppServerAccountRateLimitsResponseSchema,
+  type CodexAppServerAccountRateLimitsResponse,
+} from "./codex-app-server-account-schemas";
+import {
   codexAppServerApprovalPolicySchema,
   codexAppServerApprovalsReviewerSchema,
   codexAppServerMultiAgentModeSchema,
@@ -164,6 +168,7 @@ export type CodexAppServerRequestResultMap = {
   "thread/settings/update": CodexAppServerThreadSetNameResult;
   "thread/unsubscribe": CodexAppServerThreadUnsubscribeResult;
   "thread/turns/list": CodexAppServerThreadTurnsListResponse;
+  "account/rateLimits/read": CodexAppServerAccountRateLimitsResponse;
   "skills/list": CodexAppServerSkillsListResponse;
   "turn/start": CodexAppServerTurnStartResult;
   "turn/steer": CodexAppServerTurnSteerResult;
@@ -194,6 +199,7 @@ const codexAppServerRequestResultSchemas: CodexAppServerRequestResultSchemaMap =
   "thread/settings/update": codexAppServerEmptyResponseSchema,
   "thread/unsubscribe": codexAppServerThreadUnsubscribeResultSchema,
   "thread/turns/list": codexAppServerThreadTurnsListResponseSchema,
+  "account/rateLimits/read": codexAppServerAccountRateLimitsResponseSchema,
   "skills/list": codexAppServerSkillsListResponseSchema,
   "turn/start": codexAppServerTurnStartResultSchema,
   "turn/steer": codexAppServerTurnSteerResultSchema,

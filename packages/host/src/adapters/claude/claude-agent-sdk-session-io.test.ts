@@ -11,6 +11,53 @@ import {
 } from "./claude-agent-sdk-session-io.test-support";
 import { claudeSdkMessageFixture } from "./claude-agent-sdk-test-messages";
 
+describe("consumeClaudeSession continuation", () => {
+  test("times a resumed turn from the start of the continuation", async () => {
+    const events: AgentEvent[] = [];
+    const session = createClaudeSession({
+      query: claudeQueryWithMessages([
+        claudeSdkMessageFixture({
+          type: "system",
+          subtype: "session_state_changed",
+          state: "running",
+          timestamp: "2026-11-17T22:10:22.500Z",
+        }),
+        claudeSdkMessageFixture({
+          type: "assistant",
+          uuid: "4f0b6f3e-6c1d-4c2e-8a51-1f2e3d4c5b6a",
+          timestamp: "2026-11-17T22:10:23.833Z",
+          message: {
+            id: "resumed-final",
+            role: "assistant",
+            model: "claude-haiku-5-5",
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: "manual" }],
+          },
+        }),
+      ]),
+    });
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    sessionStore.set(session);
+    await consumeClaudeSession({
+      emitGoal: () => {},
+      session,
+      now: () => "2026-11-17T22:11:00.000Z",
+      emit: (_session, event) => events.push(event),
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+      onContinuationAdmission: () => {},
+      sessionStore,
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "assistant_message",
+        messageId: "resumed-final",
+        durationMs: 1_333,
+      }),
+    );
+  });
+});
+
 describe("sendClaudeUserMessage", () => {
   test("keeps the native human prompt start through tools, steering, and later fork receipts", async () => {
     const humanId = "3b087ade-60ba-4824-a8ab-c8d012129136";

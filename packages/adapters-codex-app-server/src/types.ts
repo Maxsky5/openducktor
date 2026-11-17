@@ -3,6 +3,7 @@ import type { CodexImageGenerationPreparer } from "./codex-image-generation";
 import type {
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
+  CodexAppServerAccountRateLimitsResponse,
   CodexAppServerModel,
   CodexAppServerModelListResponse,
   CodexAppServerSkillCatalogEntry,
@@ -226,6 +227,8 @@ export type CodexAppServerClient = {
   threadTurnsList(
     params: CodexAppServerThreadTurnsListParams,
   ): Promise<CodexAppServerThreadTurnsListResponse>;
+  /** The usage of the signed-in account. */
+  accountRateLimitsRead(): Promise<CodexAppServerAccountRateLimitsResponse>;
 };
 
 type CodexAppServerAdapterBaseOptions = {

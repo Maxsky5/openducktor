@@ -9,8 +9,11 @@ export const INTERRUPTED_TURN_COPY = {
     "Resume when usage is available. The runtime did not report a reset time.",
   usageLimitResetPassed: "The reported reset time has passed. Select Resume to try again.",
   resumeAfterReset: "Resume after the reset.",
+  autoResuming: "Resuming after the reset.",
   resume: "Resume",
   resuming: "Resuming",
+  cancelAutoResume: "Cancel auto-resume",
+  canceling: "Canceling",
 } as const;
 
 /** The time left until a reported usage limit reset. */
@@ -32,7 +35,3 @@ export const usageLimitCountdown = (resetsAtEpochMs: number, now: number): Usage
 /** The title of the resume notice for the latest turn. */
 export const interruptedTurnTitle = (usageLimit: AgentSessionUsageLimit | undefined): string =>
   usageLimit ? INTERRUPTED_TURN_COPY.usageLimitTitle : INTERRUPTED_TURN_COPY.stoppedTitle;
-
-/** The reset line of a pending usage limit, with the reset time as the client formats it. */
-export const usageLimitResetText = (remaining: string, resetsAtLabel: string): string =>
-  `Resets in ${remaining} at ${resetsAtLabel}. ${INTERRUPTED_TURN_COPY.resumeAfterReset}`;

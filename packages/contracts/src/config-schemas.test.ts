@@ -59,6 +59,7 @@ const expectedDefaultChatSettings = {
   lineOverflow: "wrap",
   hunkSeparators: "line-info",
   showConversationMinimap: true,
+  autoResumeAfterUsageLimits: true,
 } as const;
 
 describe("config-schemas", () => {
@@ -964,6 +965,7 @@ describe("config-schemas", () => {
       lineOverflow: "scroll",
       hunkSeparators: "metadata",
       showConversationMinimap: false,
+      autoResumeAfterUsageLimits: true,
     });
     expect(parsedGlobalConfig.chat).toEqual({
       steerMessagesByDefault: true,
@@ -977,6 +979,7 @@ describe("config-schemas", () => {
       lineOverflow: "scroll",
       hunkSeparators: "simple",
       showConversationMinimap: true,
+      autoResumeAfterUsageLimits: true,
     });
   });
 

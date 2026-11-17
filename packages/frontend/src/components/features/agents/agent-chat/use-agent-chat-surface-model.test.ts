@@ -53,6 +53,7 @@ describe("useAgentChatSurfaceModel", () => {
       isPending: false,
       error: null,
       onResume: () => {},
+      onCancelAutoResume: async () => {},
     };
     const session = {
       ...transcriptTarget,

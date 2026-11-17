@@ -1723,6 +1723,7 @@ describe("createWorkspaceSettingsService", () => {
       lineOverflow: "scroll" as const,
       hunkSeparators: "simple" as const,
       showConversationMinimap: false,
+      autoResumeAfterUsageLimits: true,
     };
     const explicitAppearanceSettings = {
       horizontalScrollbarVisibility: "show" as const,

@@ -216,7 +216,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
         sessionError,
         stopTarget: { codexAppServer, directoriesMatch, runtimeId: runtime.runtimeId },
       });
-      const queries = createRuntimeQueryAdapter(controller);
+      const queries = createRuntimeQueryAdapter(controller, controller);
       const loadRuntimeCatalog: typeof queries.loadRuntimeCatalog = (input) => {
         projection.recordCatalogRepository(input.repoPath);
         return queries.loadRuntimeCatalog(input);

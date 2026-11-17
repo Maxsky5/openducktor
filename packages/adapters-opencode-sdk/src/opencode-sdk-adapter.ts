@@ -1,4 +1,8 @@
-import { assertAgentWorkStartCurrent, type AgentWorkStartOptions } from "@openducktor/core";
+import {
+  assertAgentWorkStartCurrent,
+  type AgentWorkStartOptions,
+  interruptedTurnResumeError,
+} from "@openducktor/core";
 import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -51,6 +55,7 @@ import {
   readMigration,
   verifySession,
   type OpenCodeRequestDraft,
+  type OperationIdentity,
 } from "./opencode-client";
 import {
   compilePermissionRule,
@@ -64,6 +69,7 @@ import { resolveOpencodeSessionPolicy } from "./opencode-session-policy";
 import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
 import { OPENCODE_GOAL_PLUGIN_OFF_MESSAGE, openCodeGoalCommandText } from "./opencode-goals";
 import { iso, modelSelection, projectInboxUser } from "./opencode-message-projection";
+import { readOpenCodeLatestTurn } from "./opencode-interrupted-turn";
 import {
   readReplyForkBoundary,
   requireIdleFork,
@@ -134,6 +140,24 @@ export class OpencodeSdkAdapter {
   generation(sessionID: string) {
     return this.generations.get(sessionID) ?? 0;
   }
+  /** Writes the instructions of a root conversation before new work. A subagent has its own. */
+  private async putRootInstructions(
+    input: OperationIdentity & {
+      sessionScope: AgentSessionScope;
+      systemPrompt?: string | undefined;
+    },
+    binding: OpenCodeSessionBinding,
+  ): Promise<void> {
+    if (binding.detail.parentID) return;
+    await putOpenCodeInstructions({
+      client: this.client,
+      identity: input,
+      sessionID: binding.detail.id,
+      scope: input.sessionScope,
+      systemPrompt: input.systemPrompt,
+    });
+  }
+
   private assertCurrent(ref: SessionRef & AgentWorkStartOptions, generation: number) {
     assertAgentWorkStartCurrent(ref);
     if (this.closed || this.generation(ref.externalSessionId) !== generation)
@@ -351,12 +375,18 @@ export class OpencodeSdkAdapter {
     throw cause;
   }
 
-  async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
-    const generation = this.generation(input.externalSessionId);
-    const existing = this.bindings.get(input.externalSessionId);
-    const binding = existing?.prepared
+  /** Binds an existing conversation for a resume. A prepared binding is read again. */
+  private async bindForResume(
+    input: ResumeAgentSessionInput | ContinueInterruptedAgentTurnInput,
+    generation: number,
+  ) {
+    return this.bindings.get(input.externalSessionId)?.prepared
       ? this.admit(input, input.sessionScope, await this.readBinding(input, generation), true)
-      : await this.bind(input, generation);
+      : this.bind(input, generation);
+  }
+
+  async resumeSession(input: ResumeAgentSessionInput): Promise<AgentSessionSummary> {
+    const binding = await this.bindForResume(input, this.generation(input.externalSessionId));
     input.onWorkAccepted?.();
     const active = await nativeRequest(input, "read session activity", () =>
       this.client.session.active(),
@@ -364,16 +394,48 @@ export class OpencodeSdkAdapter {
     return this.summary(binding, Boolean(active[binding.detail.id]));
   }
 
+  /**
+   * Continues the unfinished latest turn with a prompt that has no input. OpenCode leaves the empty
+   * user row out of the model context and runs its loop on the stored history.
+   */
   async continueInterruptedTurn(
     input: ContinueInterruptedAgentTurnInput,
   ): Promise<AgentSessionSummary> {
-    throw operationError(
-      input,
-      "continue an interrupted turn",
-      "unsupported_operation",
-      "OpenCode V2 has no equivalent continuation operation.",
-      "Send an explicit new message in the existing conversation.",
+    const generation = this.generation(input.externalSessionId);
+    const binding = await this.bindForResume(input, generation);
+    const [active, latestTurn] = await nativeRequest(input, "read the interrupted turn", () =>
+      Promise.all([
+        this.client.session.active().then((sessions) => Boolean(sessions[binding.detail.id])),
+        readOpenCodeLatestTurn(this.client, binding.detail.id),
+      ]),
     );
+    if (active)
+      throw interruptedTurnResumeError({
+        reason: "live_turn",
+        message: `OpenCode session '${input.externalSessionId}' has a live turn.`,
+      });
+    if (latestTurn !== "unfinished")
+      throw interruptedTurnResumeError({
+        reason: latestTurn === "completed" ? "completed_turn" : "ineligible_turn_state",
+        message:
+          latestTurn === "completed"
+            ? `OpenCode session '${input.externalSessionId}' has a completed latest turn.`
+            : `OpenCode session '${input.externalSessionId}' has no turn to continue.`,
+      });
+    await nativeRequest(input, "continue the interrupted turn", async () => {
+      await this.putRootInstructions(input, binding);
+      this.assertCurrent(input, generation);
+      assertAgentWorkStartCurrent(input);
+      const sending = this.client.session.prompt({
+        sessionID: input.externalSessionId,
+        text: "",
+        delivery: "queue",
+      });
+      input.onWorkIssued?.();
+      await sending;
+      input.onWorkAccepted?.();
+    });
+    return this.summary(binding, true);
   }
 
   async forkSession(input: ForkAgentSessionInput): Promise<AgentSessionSummary> {
@@ -551,14 +613,7 @@ export class OpencodeSdkAdapter {
           );
         return { type: "command_accepted", commandName: "compact", inputId: item.id };
       }
-      if (!binding.detail.parentID && input.delivery !== "steer")
-        await putOpenCodeInstructions({
-          client: this.client,
-          identity: input,
-          sessionID: binding.detail.id,
-          scope: input.sessionScope,
-          systemPrompt: input.systemPrompt,
-        });
+      if (input.delivery !== "steer") await this.putRootInstructions(input, binding);
       this.assertCurrent(input, generation);
       const encoded = buildOpenCodePromptText(
         input.parts.filter((part) => part.kind !== "slash_command"),
@@ -698,14 +753,8 @@ export class OpencodeSdkAdapter {
     await nativeRequest(input, goalOperation(input.command), async () => {
       const binding = this.requirePreparedBinding(input);
       // A new goal starts a turn, which needs the current instructions, as a new message does.
-      if (input.command.kind === "set" && !binding.detail.parentID && options.delivery === "queue")
-        await putOpenCodeInstructions({
-          client: this.client,
-          identity: input,
-          sessionID: binding.detail.id,
-          scope: input.sessionScope,
-          systemPrompt: input.systemPrompt,
-        });
+      if (input.command.kind === "set" && options.delivery === "queue")
+        await this.putRootInstructions(input, binding);
       this.assertCurrent(input, generation);
       const sending = this.client.session.command({
         sessionID: input.externalSessionId,

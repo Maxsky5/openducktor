@@ -208,6 +208,34 @@ describe("agent-session live contracts", () => {
         sessions: [snapshot],
         sequence: 0,
       },
+      {
+        type: "snapshot",
+        messageQueues: [],
+        repoPath: ref.repoPath,
+        sessions: [],
+        usageLimitAutoResumes: [
+          { ref, stopId: "msg-limit", resumeAtEpochMs: 1_800_000_000_000, state: "scheduled" },
+        ],
+        sequence: 4,
+      },
+      {
+        type: "usage_limit_auto_resume_updated",
+        ref,
+        autoResume: {
+          ref,
+          stopId: "msg-limit",
+          resumeAtEpochMs: 1_800_000_000_000,
+          state: "failed",
+          failure: {
+            stage: "continue",
+            code: "runtime_unavailable",
+            message: "The runtime is not available.",
+            nextAction: "Start the runtime, then select Resume.",
+          },
+        },
+        sequence: 5,
+      },
+      { type: "usage_limit_auto_resume_updated", ref, autoResume: null, sequence: 6 },
       { type: "session_upsert", session: snapshot, sequence: 1 },
       { type: "session_removed", ref, sequence: 2 },
       {

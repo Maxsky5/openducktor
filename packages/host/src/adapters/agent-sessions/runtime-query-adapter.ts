@@ -1,4 +1,8 @@
-import { AgentRuntimeQueryError, type AgentSessionQueryParentPort } from "@openducktor/core";
+import {
+  AgentRuntimeQueryError,
+  type AgentSessionQueryParentPort,
+  type AgentUsageLimitPort,
+} from "@openducktor/core";
 import { Effect } from "effect";
 import { ZodError } from "zod";
 import { HostOperationError, readRuntimeOperationFailure } from "../../effect/host-errors";
@@ -13,8 +17,17 @@ import {
   type RuntimeQueryIdentity,
 } from "../../ports/runtime-query-error";
 
+const unsupportedUsageLimitRead = (operation: string, input: RuntimeQueryIdentity) =>
+  runtimeQueryError(
+    operation,
+    input,
+    "unsupported_operation",
+    "This runtime reports no structured usage limit reset time. Select Resume after the reset.",
+  );
+
 export const createRuntimeQueryAdapter = (
   native: NativeAgentRuntimeQueries & AgentSessionQueryParentPort,
+  usageLimits?: AgentUsageLimitPort,
 ): AgentRuntimeQueryAdapterPort => {
   const read = <Result>(
     operation: string,
@@ -35,6 +48,16 @@ export const createRuntimeQueryAdapter = (
     loadSessionDiff: (input) =>
       read("load session diff", input, () => native.loadSessionDiff(input)),
     loadFileStatus: (input) => read("load file status", input, () => native.loadFileStatus(input)),
+    readLatestUsageLimitStop: (input) =>
+      usageLimits
+        ? read("read latest usage limit stop", input, () =>
+            usageLimits.readLatestUsageLimitStop(input),
+          )
+        : Effect.fail(unsupportedUsageLimitRead("read latest usage limit stop", input)),
+    readUsageLimitRecovery: (input) =>
+      usageLimits
+        ? read("read usage limit recovery", input, () => usageLimits.readUsageLimitRecovery(input))
+        : Effect.fail(unsupportedUsageLimitRead("read usage limit recovery", input)),
   };
 };
 

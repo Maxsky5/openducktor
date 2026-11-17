@@ -36,6 +36,7 @@ import {
   type AgentSessionControlReleaseInput,
   type AgentSessionResumeIntent,
   type AgentSessionControlStopInput,
+  type AgentSessionUsageLimitAutoResumeCancelInput,
   type AgentSessionGoalControlInput,
   type AgentSessionStartupResult,
   type AgentSessionControlUpdateModelInput,
@@ -60,6 +61,7 @@ import {
   agentSessionResumeIntentSchema,
   agentRepositorySessionStartInputSchema,
   agentSessionControlStopInputSchema,
+  agentSessionUsageLimitAutoResumeCancelInputSchema,
   agentSessionGoalControlInputSchema,
   agentSessionStartupResultSchema,
   agentSessionControlUpdateModelInputSchema,
@@ -199,6 +201,17 @@ export class HostAgentSessionLiveClient {
     await this.invokeFn(
       "agent_session_control_stop",
       agentSessionControlStopInputSchema.parse(input),
+      voidResultSchema,
+    );
+  }
+
+  /** Cancels the auto-resume of one usage-limit stop of a session. */
+  async agentSessionUsageLimitAutoResumeCancel(
+    input: AgentSessionUsageLimitAutoResumeCancelInput,
+  ): Promise<void> {
+    await this.invokeFn(
+      "agent_session_usage_limit_auto_resume_cancel",
+      agentSessionUsageLimitAutoResumeCancelInputSchema.parse(input),
       voidResultSchema,
     );
   }

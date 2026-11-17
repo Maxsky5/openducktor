@@ -1,4 +1,10 @@
-import { GOAL_COMMAND_ACCEPTED, InterruptedTurnResumeError } from "@openducktor/core";
+import {
+  GOAL_COMMAND_ACCEPTED,
+  InterruptedTurnResumeError,
+  type UsageLimitRecovery,
+  type UsageLimitStop,
+} from "@openducktor/core";
+import { codexUsageRecovery, readCodexLatestUsageLimitStop } from "./codex-usage-limit";
 import {
   assertAgentWorkStartCurrent,
   goalCommandStartsWork,
@@ -1215,6 +1221,18 @@ export class CodexAppServerAdapter
       query: input.query,
       workingDirectory: input.workingDirectory,
     });
+  }
+
+  /** The usage-limit stop of the latest turn of a root thread, or null. */
+  async readLatestUsageLimitStop(input: SessionRef): Promise<UsageLimitStop | null> {
+    const { client } = await this.runtimeClients.resolve(input, "read the Codex usage limit stop");
+    return readCodexLatestUsageLimitStop(client, input.externalSessionId, Date.now());
+  }
+
+  /** Whether the account can work again, with the recovery rule of the Codex terminal UI. */
+  async readUsageLimitRecovery(input: SessionRef): Promise<UsageLimitRecovery> {
+    const { client } = await this.runtimeClients.resolve(input, "read the Codex account usage");
+    return codexUsageRecovery(await client.accountRateLimitsRead(), Date.now());
   }
 
   async loadSessionHistory(

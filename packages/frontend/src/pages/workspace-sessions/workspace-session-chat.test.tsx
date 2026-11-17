@@ -776,11 +776,9 @@ test.each(["model", "effort", "profile"] as const)(
       await view.findByRole("button", { name: "Send message" });
       const editor = view.getByRole("combobox", { name: "Message composer" });
       const resume = view.queryByRole("button", { name: "Resume" });
-      if (control === "profile") expect(resume).toBeNull();
-      else {
-        expect(resume).not.toBeNull();
-        expect(resume?.hasAttribute("disabled")).toBe(false);
-      }
+      // Every runtime of this test supports Resume, OpenCode included.
+      expect(resume).not.toBeNull();
+      expect(resume?.hasAttribute("disabled")).toBe(false);
       typeIntoComposer(view.container, "Unsent draft");
       const card = editor.closest(".rounded-xl");
       expect(card).not.toBeNull();

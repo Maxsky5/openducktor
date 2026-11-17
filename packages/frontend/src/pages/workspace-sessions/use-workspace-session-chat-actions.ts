@@ -358,5 +358,6 @@ export function useWorkspaceSessionChatActions(
     resumeSessionError,
     persistentResumeError,
     resumeInterruptedTurn,
+    cancelUsageLimitAutoResume: operations.cancelUsageLimitAutoResume,
   };
 }

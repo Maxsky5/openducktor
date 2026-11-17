@@ -113,6 +113,7 @@ const createAgentEngine = (hostClient: HostClient, queryClient: QueryClient): Ag
     continueInterruptedTurn: (input) =>
       hostClient.agentSessionControlResume({ ...input, resumeMode: "continue_interrupted_turn" }),
     releaseSession: (input) => hostClient.agentSessionControlRelease(input),
+    cancelUsageLimitAutoResume: (input) => hostClient.agentSessionUsageLimitAutoResumeCancel(input),
     forkSession: (input) => hostClient.agentSessionControlFork(input),
     listRuntimeDefinitions: () => Object.values(RUNTIME_DESCRIPTORS_BY_KIND),
     loadRuntimeCatalog: async (input) =>

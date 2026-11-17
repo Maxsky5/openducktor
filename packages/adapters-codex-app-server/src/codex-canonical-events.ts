@@ -1,4 +1,8 @@
-import type { AgentSessionForkPoint, AgentTurnOutcome } from "@openducktor/contracts";
+import type {
+  AgentSessionForkPoint,
+  AgentSessionUsageLimit,
+  AgentTurnOutcome,
+} from "@openducktor/contracts";
 import type {
   AgentModelSelection,
   AgentPendingQuestionRequest,
@@ -63,6 +67,14 @@ export type CodexCanonicalSessionErrorEvent = CodexCanonicalEventBase & {
   message: string;
 };
 
+/** A turn that failed on the usage limit of the account. `messageId` is the turn ID. */
+export type CodexCanonicalTurnErrorEvent = CodexCanonicalEventBase & {
+  kind: "turn_error";
+  messageId: string;
+  message: string;
+  usageLimit: AgentSessionUsageLimit;
+};
+
 export type CodexCanonicalSessionIdleEvent = CodexCanonicalEventBase & {
   kind: "session_idle";
   turnOutcome: AgentTurnOutcome;
@@ -92,6 +104,7 @@ export type CodexCanonicalEvent =
   | CodexCanonicalAssistantMessageEvent
   | CodexCanonicalAssistantDeltaEvent
   | CodexCanonicalSessionErrorEvent
+  | CodexCanonicalTurnErrorEvent
   | CodexCanonicalSessionIdleEvent
   | CodexCanonicalSessionCompactionStartedEvent
   | CodexCanonicalSessionCompactedEvent
@@ -104,6 +117,8 @@ export type CodexMappingContext = {
   turnId?: string;
   timestamp?: string;
   subagentRole?: string;
+  /** The usage limit of a turn that failed on it, from the latest account usage snapshot. */
+  usageLimit?: AgentSessionUsageLimit;
 };
 
 export type CodexMappingResult = {

@@ -461,6 +461,8 @@ export const codexAppServerRequestParamsSchemas = {
     serviceTier: nullableString,
     effort: codexAppServerReasoningEffortSchema.nullable().optional(),
   }),
+  /** Null asks for the usage of the signed-in account with the default read options. */
+  "account/rateLimits/read": z.null(),
   "thread/turns/list": z.strictObject({
     threadId: z.string(),
     cursor: nullableString,
@@ -571,6 +573,10 @@ export const codexAppServerClientRequestSchema = z.discriminatedUnion("method", 
   z.strictObject({
     method: z.literal("thread/turns/list"),
     params: codexAppServerRequestParamsSchemas["thread/turns/list"],
+  }),
+  z.strictObject({
+    method: z.literal("account/rateLimits/read"),
+    params: codexAppServerRequestParamsSchemas["account/rateLimits/read"],
   }),
   z.strictObject({
     method: z.literal("skills/list"),

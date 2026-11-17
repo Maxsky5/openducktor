@@ -118,7 +118,7 @@ describe("OpenCode live sessions on one shared runtime", () => {
     ]);
   });
 
-  test("publishes a runtime observation fault once for each repository with live sessions", async () => {
+  test("publishes a runtime observation fault to each live session of the runtime", async () => {
     const harness = createRuntimeHarness();
     const changes: AgentSessionLiveAdapterChange[] = [];
     const prepared = await prepareAdapter(harness, { changes });
@@ -140,20 +140,20 @@ describe("OpenCode live sessions on one shared runtime", () => {
 
     await harness.emit({ type: "fault", message: "connection lost" });
 
-    expect(changes).toEqual([
-      {
+    expect(changes).toEqual(
+      [
+        sessionRef(repoA, "session-a1"),
+        sessionRef(repoA, "session-a2"),
+        sessionRef(repoB, "session-b"),
+      ].map((ref) => ({
         type: "fault",
-        repoPath: repoA,
+        repoPath: ref.repoPath,
+        ref,
+        statusUnavailable: true,
         operation: "opencode-live-session.observe-runtime",
         message: "connection lost",
-      },
-      {
-        type: "fault",
-        repoPath: repoB,
-        operation: "opencode-live-session.observe-runtime",
-        message: "connection lost",
-      },
-    ]);
+      })),
+    );
   });
 
   test("publishes no runtime observation fault when no session is live", async () => {

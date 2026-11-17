@@ -191,6 +191,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     manageAgentMessageQueue: async () => {},
     stopAgentSession: async () => undefined,
     continueInterruptedTurn: async () => undefined,
+    cancelUsageLimitAutoResume: async () => {},
     updateAgentSessionModel: async () => undefined,
     replyAgentApproval: async () => undefined,
     answerAgentQuestion: async () => undefined,

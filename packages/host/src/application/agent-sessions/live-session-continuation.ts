@@ -5,10 +5,7 @@ import type { HostError } from "../../effect/host-errors";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import type { createRuntimeSessionEngagement } from "./agent-session-runtime-engagement";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
-import {
-  continuationSessionRef,
-  toContinuationResolutionError,
-} from "./agent-session-continuation-errors";
+import { sessionLiveRef, toContinuationResolutionError } from "./agent-session-continuation-errors";
 
 export const createLiveContinuation = (
   adapterRegistry: AgentSessionLiveAdapterRegistryPort,
@@ -31,7 +28,7 @@ export const createLiveContinuation = (
         return yield* Effect.fail(
           new AgentSessionResumeError({
             reason: "continuation_in_progress",
-            sessionRef: continuationSessionRef(input),
+            sessionRef: sessionLiveRef(input),
             operation: "agent-session.continue-interrupted-turn",
             message: `Session '${input.externalSessionId}' already has a continuation in progress. Wait for it to settle, then retry Resume.`,
           }),
@@ -47,7 +44,7 @@ export const createLiveContinuation = (
             new AgentSessionResumeError({
               reason: "runtime_unavailable",
               nativeOutcome: "accepted",
-              sessionRef: continuationSessionRef(input),
+              sessionRef: sessionLiveRef(input),
               operation: "agent-session.continue-interrupted-turn",
               message: `${cause.message} The adapter already accepted the continuation, so the runtime can be working on it.`,
               nextAction:

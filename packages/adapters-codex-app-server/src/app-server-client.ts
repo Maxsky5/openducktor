@@ -90,5 +90,8 @@ export const createCodexAppServerClient = (
     async threadTurnsList(params) {
       return requestCodex(transport, { method: "thread/turns/list", params });
     },
+    async accountRateLimitsRead() {
+      return requestCodex(transport, { method: "account/rateLimits/read", params: null });
+    },
   };
 };
