@@ -10,8 +10,7 @@ import {
   MessageSquarePlus,
   RefreshCw,
 } from "lucide-react";
-import type { PropsWithChildren, ReactElement } from "react";
-import type { StartupAttempt } from "@openducktor/frontend-core/sessions/startup/startup-attempt-store";
+import type { ReactElement } from "react";
 import { WorkspaceSessionModelFields } from "./workspace-session-model-fields";
 import {
   NO_CUSTOM_AGENT_ROLE,
@@ -21,15 +20,7 @@ import {
 import { SettingsModal } from "@/components/features/settings/settings-modal";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -46,11 +37,8 @@ import {
   useStartupDialogClose,
 } from "@/features/session-startup/use-startup-dialog-attempt";
 import { startupIsPending } from "@openducktor/frontend-core/sessions/startup/startup-navigation";
-import {
-  startupShowsProgress,
-  startupTraceRows,
-} from "@openducktor/frontend-core/sessions/startup/startup-trace";
-import { cn } from "@/lib/utils";
+import { startupShowsProgress } from "@openducktor/frontend-core/sessions/startup/startup-trace";
+import { ChatDialogFrame } from "./workspace-session-dialog-frame";
 
 type WorkspaceSessionCreateDialogProps = {
   open?: boolean;
@@ -101,6 +89,12 @@ export function WorkspaceSessionCreateDialog({
   useStartupDialogClose(startup, open, close);
   return (
     <ChatDialogFrame
+      title="New session"
+      description={
+        showingProgress
+          ? "See progress as the session starts."
+          : "Choose where the agent works and how it starts."
+      }
       open={open}
       attempt={attempt}
       starting={starting}
@@ -126,60 +120,6 @@ export function WorkspaceSessionCreateDialog({
         />
       )}
     </ChatDialogFrame>
-  );
-}
-
-function ChatDialogFrame({
-  open,
-  attempt,
-  starting,
-  onClose,
-  onCloseAutoFocus,
-  children,
-}: PropsWithChildren<{
-  open: boolean;
-  attempt: StartupAttempt | null;
-  starting: boolean;
-  onClose: () => void;
-  onCloseAutoFocus: ((event: Event) => void) | undefined;
-}>): ReactElement {
-  const showingProgress = startupShowsProgress(attempt);
-  const hasTrace = attempt !== null && startupTraceRows(attempt).length > 0;
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(open) => {
-        if (!open && !starting) onClose();
-      }}
-    >
-      <DialogContent
-        className={cn(
-          "my-0 gap-0 p-0 sm:max-w-2xl",
-          showingProgress && "max-w-lg overflow-hidden sm:max-w-lg",
-          hasTrace && "min-h-[min(18rem,calc(100dvh-2rem))] max-h-[min(30rem,calc(100dvh-2rem))]",
-        )}
-        closeButton={starting ? null : undefined}
-        onCloseAutoFocus={onCloseAutoFocus}
-        onEscapeKeyDown={(event) => {
-          if (starting) event.preventDefault();
-        }}
-        onPointerDownOutside={(event) => {
-          if (starting) event.preventDefault();
-        }}
-      >
-        <DialogHeader
-          className={cn("border-b border-border px-6 py-4", showingProgress && "px-4 py-3")}
-        >
-          <DialogTitle>New session</DialogTitle>
-          <DialogDescription className={cn(showingProgress && "sr-only")}>
-            {showingProgress
-              ? "See progress as the session starts."
-              : "Choose where the agent works and how it starts."}
-          </DialogDescription>
-        </DialogHeader>
-        {children}
-      </DialogContent>
-    </Dialog>
   );
 }
 
