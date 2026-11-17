@@ -1,3 +1,4 @@
+import { codexAppServerAccountRateLimitsUpdatedSchema } from "./codex-app-server-account-schemas";
 import { z, type JSONType } from "zod";
 import { codexInt64Schema, codexUint64Schema } from "./codex-app-server-number-schemas";
 import {
@@ -113,6 +114,7 @@ const toolRequestUserInputParamsSchema = z.object({
 });
 export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUnion("method", [
   notification("skills/changed", z.object({}).strict()),
+  notification("account/rateLimits/updated", codexAppServerAccountRateLimitsUpdatedSchema),
   notification(
     "serverRequest/resolved",
     z.object({ requestId: requestIdSchema, threadId: z.string() }),
@@ -185,6 +187,7 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
 
 const consumedRuntimeNotificationMethods = new Set([
   "skills/changed",
+  "account/rateLimits/updated",
   "serverRequest/resolved",
   "thread/tokenUsage/updated",
   "turn/started",

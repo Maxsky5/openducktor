@@ -53,6 +53,8 @@ export type CodexSessionController = Pick<
   | "startSession"
   | "resumeSession"
   | "continueInterruptedTurn"
+  | "readLatestUsageLimitStop"
+  | "readUsageLimitRecovery"
   | "forkSession"
   | "sendUserMessage"
   | "controlGoal"

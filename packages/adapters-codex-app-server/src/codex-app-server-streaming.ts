@@ -1,4 +1,6 @@
 import type { CodexLiveCommandOutputs } from "./codex-live-command-output";
+import type { CodexAppServerRateLimitSnapshot } from "@openducktor/contracts";
+import { codexTurnUsageLimit, isCodexUsageLimitTurn } from "./codex-usage-limit";
 import type { CodexImageGenerationEnd } from "./codex-image-generation-state";
 import type {
   AgentImageGenerationPart,
@@ -111,6 +113,8 @@ export type CodexStreamingContext = {
    * with another turn, the session waits for that turn and keeps running. Returns true then.
    */
   continueGoalAfterTurn(session: CodexSessionState): boolean;
+  /** The latest account usage snapshot of the runtime, which Codex sends before a failed turn ends. */
+  latestRateLimits(runtimeId: string): CodexAppServerRateLimitSnapshot | undefined;
   /** The session has no running turn and waits for the goal turn that Codex starts. */
   isWaitingForGoalTurn(session: CodexSessionState): boolean;
   /** Ends the wait for a goal turn, for example when the thread fails. */
@@ -917,6 +921,10 @@ export const handleCodexPendingNotifications = async (
           if (turnId) {
             mappingContext.turnId = turnId;
           }
+          if (isCodexUsageLimitTurn(turn))
+            mappingContext.usageLimit = codexTurnUsageLimit(
+              context.latestRateLimits(session.runtimeId),
+            );
           return mappingContext;
         })(),
       );

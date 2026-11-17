@@ -1,4 +1,5 @@
 import { CodexLiveCommandOutputs } from "./codex-live-command-output";
+import type { CodexAppServerRateLimitSnapshot } from "@openducktor/contracts";
 import {
   CodexImageGenerationState,
   type CodexImageGenerationEnd,
@@ -225,6 +226,8 @@ export class CodexRuntimeSessionEvents {
   > = this.goalState;
   /** The user messages of the current turn of each session, by runtime and thread. */
   private readonly turnMessageIdsByRuntimeId = new Map<string, Map<string, string[]>>();
+  /** The latest account usage snapshot of each runtime. */
+  private readonly rateLimitsByRuntimeId = new Map<string, CodexAppServerRateLimitSnapshot>();
 
   constructor(private readonly deps: CodexRuntimeSessionEventsDeps) {
     this.liveImages = new CodexLiveImagePreparation(deps.prepareImageGenerations);
@@ -281,6 +284,7 @@ export class CodexRuntimeSessionEvents {
     this.goalState.clearRuntime(runtimeId);
     this.textAnswers.clearRuntime(runtimeId);
     this.turnMessageIdsByRuntimeId.delete(runtimeId);
+    this.rateLimitsByRuntimeId.delete(runtimeId);
     this.liveImages.cancel(runtimeId);
     this.imageGenerations.clearRuntime(runtimeId);
     this.runtimeEventGenerationByRuntimeId.delete(runtimeId);
@@ -799,6 +803,10 @@ export class CodexRuntimeSessionEvents {
     if (notification) {
       this.observeCatalogInvalidation(event.runtimeId, notification);
     }
+    if (notification?.method === "account/rateLimits/updated") {
+      this.rateLimitsByRuntimeId.set(event.runtimeId, notification.params.rateLimits);
+      return;
+    }
     if (
       notification?.method === "thread/goal/updated" ||
       notification?.method === "thread/goal/cleared"
@@ -1268,6 +1276,7 @@ export class CodexRuntimeSessionEvents {
         this.bindActiveTurnId(activeTurn, turnId, startedAtMs),
       setSessionLiveStatus: (session, liveStatus) => this.setSessionLiveStatus(session, liveStatus),
       continueGoalAfterTurn: (session) => this.continueGoalAfterTurn(session),
+      latestRateLimits: (runtimeId) => this.rateLimitsByRuntimeId.get(runtimeId),
       isWaitingForGoalTurn: (session) => this.isWaitingForGoalTurn(session),
       stopWaitingForGoalTurn: (session) => this.stopWaitingForGoalTurn(session),
       observeTurnStarted: (session, turnId, startedAtMs) =>

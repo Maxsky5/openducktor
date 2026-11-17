@@ -386,6 +386,12 @@ const createControllerHarness = ({
           }
           return controlSummary;
         },
+        readLatestUsageLimitStop: async () => {
+          throw new Error("Unexpected usage limit stop read");
+        },
+        readUsageLimitRecovery: async () => {
+          throw new Error("Unexpected usage recovery read");
+        },
         forkSession: async (input: ForkAgentSessionInput) => {
           controlInputs.forks.push(input);
           return controlSummary;

@@ -92,7 +92,10 @@ export const threadIdFromRuntimeStreamEvent = (event: CodexRuntimeStreamEvent): 
     return event.threadId;
   }
   if (event.kind === "notification") {
-    return event.message.method === "skills/changed" ? null : event.message.params.threadId;
+    return event.message.method === "skills/changed" ||
+      event.message.method === "account/rateLimits/updated"
+      ? null
+      : event.message.params.threadId;
   }
   switch (event.message.method) {
     case "execCommandApproval":

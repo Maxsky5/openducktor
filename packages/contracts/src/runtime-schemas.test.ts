@@ -1398,6 +1398,9 @@ describe("runtime schemas", () => {
     expect(
       CLAUDE_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle.supportsUsageLimitAutoResume,
     ).toBe(true);
+    expect(
+      CODEX_RUNTIME_DESCRIPTOR.capabilities.sessionLifecycle.supportsUsageLimitAutoResume,
+    ).toBe(true);
   });
 
   test("runtime descriptor accepts item history and structured approval semantics", () => {

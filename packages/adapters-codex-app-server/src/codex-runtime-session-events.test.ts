@@ -2154,6 +2154,75 @@ describe("CodexRuntimeSessionEvents", () => {
     );
   });
 
+  test("reports a usage-limit turn with the reset of the latest account usage update", async () => {
+    let listener: RuntimeListener | null = null;
+    const session = createSession("thread-limit");
+    const liveMutations: Array<{ transcriptEvents: unknown[] }> = [];
+    const runtimeEvents = createRuntimeEvents({
+      subscribeEvents: (_runtimeId, next) => {
+        listener = (event) => next(withRuntimeReceivedAt(event));
+        return () => undefined;
+      },
+      sessions: new Map([[session.threadId, session]]),
+      onLiveSessionMutation: (mutation) => {
+        liveMutations.push(mutation);
+      },
+    });
+
+    await runtimeEvents.ensureRuntimeEventSubscription("runtime-1");
+    // Codex sends the usage of the failed request just before the turn ends.
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "account/rateLimits/updated",
+        params: {
+          rateLimits: {
+            limitId: "codex",
+            primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+            secondary: { usedPercent: 40, windowDurationMins: 10_080, resetsAt: 1_800_500_000 },
+          },
+        },
+      },
+    });
+    listener?.({
+      runtimeId: "runtime-1",
+      kind: "notification",
+      message: {
+        method: "turn/completed",
+        params: {
+          threadId: session.threadId,
+          turn: codexTurnFixture({
+            id: "turn-limit",
+            status: "failed",
+            error: {
+              message: "You've hit your usage limit.",
+              codexErrorInfo: "usageLimitExceeded",
+              additionalDetails: null,
+            },
+            items: [],
+          }),
+        },
+      },
+    });
+    await flushRuntimeEvents();
+
+    const events = liveMutations.flatMap((mutation) => mutation.transcriptEvents);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "turn_error",
+          messageId: "turn-limit",
+          usageLimit: { resetsAtEpochMs: 1_800_000_000_000 },
+        }),
+        expect.objectContaining({ type: "session_idle", turnOutcome: "failed" }),
+      ]),
+    );
+    expect(events).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "session_error" })]),
+    );
+  });
+
   test("forwards routed child transcript events without a separately loaded child session", async () => {
     let listener: RuntimeListener | null = null;
     const parentSession = createSession("parent-thread");

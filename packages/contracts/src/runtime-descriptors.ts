@@ -144,7 +144,7 @@ export const CODEX_RUNTIME_CAPABILITIES = {
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
     supportsInterruptedTurnResume: true,
-    supportsUsageLimitAutoResume: false,
+    supportsUsageLimitAutoResume: true,
   },
   messageDelivery: {
     minimumSteeringRuntimeVersion: "0.106.0",

@@ -81,6 +81,17 @@ const projectCodexCanonicalEvent = (event: CodexCanonicalEvent): AgentEvent => {
     return deltaEvent;
   }
 
+  if (event.kind === "turn_error") {
+    return {
+      type: "turn_error",
+      externalSessionId: event.threadId,
+      timestamp,
+      messageId: event.messageId,
+      message: event.message,
+      usageLimit: event.usageLimit,
+    };
+  }
+
   if (event.kind === "session_error") {
     return {
       type: "session_error",

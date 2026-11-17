@@ -88,6 +88,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "gitPublicationPreviewSchema",
   "sessionOperationObservationSchema",
   "usageLimitAutoResumeSchema",
+  "codexAppServerAccountRateLimitsResponseSchema",
+  "codexAppServerAccountRateLimitsUpdatedSchema",
   "agentSessionUsageLimitAutoResumeCancelInputSchema",
   "submissionAcknowledgementSchema",
   "taskCompletionObservationSchema",

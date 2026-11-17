@@ -1,4 +1,5 @@
 import type { AgentImageGenerationPart } from "@openducktor/contracts";
+import { codexUsageLimitHistoryNotice } from "./codex-usage-limit";
 import {
   AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
   AgentRuntimeQueryError,
@@ -298,6 +299,10 @@ const toHistory = ({
       }
       if (timestampIsApproximate) {
         history = history.map((message) => ({ ...message, timestampIsApproximate: true }));
+      }
+      if (item === turn.items.at(-1)) {
+        const notice = codexUsageLimitHistoryNotice(turn);
+        if (notice) history = [...history, notice];
       }
       if (forkBoundary && !boundaryAdded && turnIndex >= forkBoundary.beforeTurnIndex) {
         boundaryAdded = true;

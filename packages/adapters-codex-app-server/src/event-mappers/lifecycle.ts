@@ -7,12 +7,14 @@ import type {
   CodexCanonicalSessionErrorEvent,
   CodexCanonicalSessionIdleEvent,
   CodexCanonicalStreamPartEvent,
+  CodexCanonicalTurnErrorEvent,
   CodexMappingContext,
   CodexMappingResult,
 } from "../codex-canonical-events";
 import { emptyCodexMappingResult } from "../codex-canonical-events";
 import type { CodexEventMapper } from "../codex-event-mapper";
 import { noCodexMapperState } from "../codex-event-mapper";
+import { CODEX_USAGE_LIMIT_MESSAGE, isCodexUsageLimitTurn } from "../codex-usage-limit";
 
 const toSessionCompactedEvent = (
   ctx: CodexMappingContext,
@@ -75,7 +77,19 @@ export const lifecycleMapper: CodexEventMapper = {
     const status = turn.status;
     const events: CodexMappingResult["events"] = [];
 
-    if (status === "failed") {
+    if (isCodexUsageLimitTurn(turn)) {
+      const event: CodexCanonicalTurnErrorEvent = {
+        kind: "turn_error",
+        source: ctx.source,
+        mapper: "lifecycle",
+        threadId: ctx.threadId,
+        messageId: turn.id,
+        message: turn.error?.message ?? CODEX_USAGE_LIMIT_MESSAGE,
+        usageLimit: ctx.usageLimit ?? {},
+      };
+      if (ctx.timestamp) event.timestamp = ctx.timestamp;
+      events.push(event);
+    } else if (status === "failed") {
       const event: CodexCanonicalSessionErrorEvent = {
         kind: "session_error",
         source: ctx.source,
