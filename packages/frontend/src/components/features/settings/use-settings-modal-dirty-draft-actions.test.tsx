@@ -60,20 +60,41 @@ const createHookHarness = (initialProps: HookArgs) =>
   createSharedHookHarness(useDirtyDraftActionsHarness, initialProps);
 
 describe("useSettingsModalDirtyDraftActions", () => {
-  test("updates the preferred tool draft", async () => {
+  test("keeps action references stable after a draft edit", async () => {
     const harness = createHookHarness({
       selectedWorkspaceId: null,
       initialSnapshot: createSnapshot(),
     });
     await harness.mount();
+    const { updateGlobalSystemSettings, updateSelectedRepoAgentDefault } = harness.getLatest();
     await harness.run((state) =>
       state.updateGlobalSystemSettings(() => ({ preferredOpenInToolId: "zed" })),
     );
     expect(harness.getLatest().snapshotDraft?.system).toEqual({ preferredOpenInToolId: "zed" });
+    expect(harness.getLatest().updateGlobalSystemSettings).toBe(updateGlobalSystemSettings);
+    expect(harness.getLatest().updateSelectedRepoAgentDefault).toBe(updateSelectedRepoAgentDefault);
     await harness.unmount();
   });
 
-  test("clears save errors before updating draft state", async () => {
+  test("clears the save error once before dispatching a draft update", async () => {
+    const calls: string[] = [];
+    const setSnapshotDraft = () => calls.push("update draft");
+    const clearSaveError = () => calls.push("clear error");
+    const harness = createSharedHookHarness(() => {
+      const draftActions = useSettingsModalDraftActions({
+        selectedWorkspaceId: "repo",
+        setSnapshotDraft,
+      });
+      return useSettingsModalDirtyDraftActions({ clearSaveError, draftActions });
+    }, undefined);
+
+    await harness.mount();
+    await harness.run((actions) => actions.clearSelectedRepoDefaultModel());
+    expect(calls).toEqual(["clear error", "update draft"]);
+    await harness.unmount();
+  });
+
+  test("clears save errors for each draft edit", async () => {
     const harness = createHookHarness({
       selectedWorkspaceId: "repo",
       initialSnapshot: createSnapshot(),

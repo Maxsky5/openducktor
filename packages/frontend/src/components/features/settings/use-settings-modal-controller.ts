@@ -7,7 +7,6 @@ import type {
   GitProviderConfig,
   GitProviderRepository,
   SettingsRepoConfig,
-  ReusablePrompt,
   RuntimeDescriptor,
   RuntimeKind,
   SettingsSnapshot,
@@ -41,8 +40,10 @@ import { useSettingsModalBranchesState } from "./use-settings-modal-branches-sta
 import { useSettingsModalCatalogState } from "./use-settings-modal-catalog-state";
 import { useSettingsModalDirtyDraftActions } from "./use-settings-modal-dirty-draft-actions";
 import { useSettingsModalDirtyState } from "./use-settings-modal-dirty-state";
-import { useSettingsModalDraftActions } from "./use-settings-modal-draft-actions";
-import type { PromptSettingsLayersUpdater } from "./settings-prompt-layers";
+import {
+  type SettingsModalDraftActions,
+  useSettingsModalDraftActions,
+} from "./use-settings-modal-draft-actions";
 import { useSettingsModalPromptValidation } from "./use-settings-modal-prompt-validation";
 import { useSettingsModalRepositoryActions } from "./use-settings-modal-repository-actions";
 import type { ReusablePromptValidationState } from "./use-settings-modal-reusable-prompt-validation";
@@ -53,13 +54,8 @@ import { useSettingsModalSaveOrchestration } from "./use-settings-modal-save-orc
 import { useSettingsModalSnapshotState } from "./use-settings-modal-snapshot-state";
 import { useSettingsRuntimeExecutableSetup } from "./use-settings-runtime-executable-setup";
 
-export type SettingsModalController = {
+export type SettingsModalController = SettingsModalDraftActions & {
   customAgentRoleValidationState: CustomAgentRoleValidationState;
-  updateCustomAgentRoles: (
-    updater: (
-      current: SettingsSnapshot["customAgentRoles"],
-    ) => SettingsSnapshot["customAgentRoles"],
-  ) => void;
   isLoadingSettings: boolean;
   isLoadingRuntimeDefinitions: boolean;
   isLoadingRuntimeExecutables: boolean;
@@ -122,49 +118,9 @@ export type SettingsModalController = {
   checkRuntimeExecutablesAgain: () => Promise<void>;
   detectSelectedRepoGithubRepository: () => Promise<GitProviderRepository | null>;
   setGitProviderValidationErrorCount: (errorCount: number) => void;
-  updateSelectedRepoConfig: (updater: (current: SettingsRepoConfig) => SettingsRepoConfig) => void;
-  updateGlobalGitConfig: (
-    updater: (current: SettingsSnapshot["git"]) => SettingsSnapshot["git"],
-  ) => void;
-  updateGlobalChatSettings: (
-    updater: (current: SettingsSnapshot["chat"]) => SettingsSnapshot["chat"],
-  ) => void;
-  updateGlobalSystemSettings: (
-    updater: (current: SettingsSnapshot["system"]) => SettingsSnapshot["system"],
-  ) => void;
-  updateNotificationSettings: (
-    updater: (current: SettingsSnapshot["notifications"]) => SettingsSnapshot["notifications"],
-  ) => void;
-  updateGlobalGeneralSettings: (
-    updater: (current: SettingsSnapshot["general"]) => SettingsSnapshot["general"],
-  ) => void;
-  updateGlobalAppearanceSettings: (
-    updater: (current: SettingsSnapshot["appearance"]) => SettingsSnapshot["appearance"],
-  ) => void;
-  updateAgentRuntimes: (updater: (current: AgentRuntimes) => AgentRuntimes) => void;
   setCodexDangerAcknowledged: (acknowledged: boolean) => void;
-  updateReusablePrompts: (updater: (current: ReusablePrompt[]) => ReusablePrompt[]) => void;
-  updateGlobalKanbanSettings: (
-    updater: (current: SettingsSnapshot["kanban"]) => SettingsSnapshot["kanban"],
-  ) => void;
-  updateGlobalAutopilotSettings: (
-    updater: (current: SettingsSnapshot["autopilot"]) => SettingsSnapshot["autopilot"],
-  ) => void;
   /** The saved Autopilot rules could not load, so the shown rules can be old. */
   savedAutopilotError: string | null;
-  updateGlobalPromptLayers: (updater: PromptSettingsLayersUpdater) => void;
-  updateRepoPromptLayers: (updater: PromptSettingsLayersUpdater) => void;
-  updateSelectedRepoAgentDefault: (
-    role: string,
-    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
-    value: string,
-  ) => void;
-  clearSelectedRepoAgentDefault: (role: string) => void;
-  updateSelectedRepoDefaultModel: (
-    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
-    value: string,
-  ) => void;
-  clearSelectedRepoDefaultModel: () => void;
   submit: () => Promise<boolean>;
   discardDraft: () => void;
   retainDraft: () => void;
@@ -327,26 +283,7 @@ export const useSettingsModalController = ({
     claudeSettingsSaveError,
     claudeValidationError,
   } = useRuntimePolicyState({ open, loadedSnapshot, snapshotDraft });
-  const {
-    updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
-    updateGlobalGitConfig: applyGlobalGitConfigUpdate,
-    updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
-    updateGlobalSystemSettings: applyGlobalSystemSettingsUpdate,
-    updateNotificationSettings: applyNotificationSettingsUpdate,
-    updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
-    updateGlobalAppearanceSettings: applyGlobalAppearanceSettingsUpdate,
-    updateAgentRuntimes: applyAgentRuntimesUpdate,
-    updateReusablePrompts: applyReusablePromptsUpdate,
-    updateCustomAgentRoles: applyCustomAgentRolesUpdate,
-    updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
-    updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
-    updateGlobalPromptLayers: applyGlobalPromptLayersUpdate,
-    updateRepoPromptLayers: applyRepoPromptLayersUpdate,
-    updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
-    clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
-    updateSelectedRepoDefaultModel: applySelectedRepoDefaultModelUpdate,
-    clearSelectedRepoDefaultModel: applyClearSelectedRepoDefaultModel,
-  } = useSettingsModalDraftActions({
+  const draftActions = useSettingsModalDraftActions({
     selectedWorkspaceId,
     setSnapshotDraft,
   });
@@ -438,71 +375,11 @@ export const useSettingsModalController = ({
     acknowledgeSave,
     retainDraft,
   });
-  const draftActions = useMemo(
-    () => ({
-      updateSelectedRepoConfig: applySelectedRepoConfigUpdate,
-      updateGlobalGitConfig: applyGlobalGitConfigUpdate,
-      updateGlobalChatSettings: applyGlobalChatSettingsUpdate,
-      updateGlobalSystemSettings: applyGlobalSystemSettingsUpdate,
-      updateNotificationSettings: applyNotificationSettingsUpdate,
-      updateGlobalGeneralSettings: applyGlobalGeneralSettingsUpdate,
-      updateGlobalAppearanceSettings: applyGlobalAppearanceSettingsUpdate,
-      updateAgentRuntimes: applyAgentRuntimesUpdate,
-      updateReusablePrompts: applyReusablePromptsUpdate,
-      updateCustomAgentRoles: applyCustomAgentRolesUpdate,
-      updateGlobalKanbanSettings: applyGlobalKanbanSettingsUpdate,
-      updateGlobalAutopilotSettings: applyGlobalAutopilotSettingsUpdate,
-      updateGlobalPromptLayers: applyGlobalPromptLayersUpdate,
-      updateRepoPromptLayers: applyRepoPromptLayersUpdate,
-      updateSelectedRepoAgentDefault: applySelectedRepoAgentDefaultUpdate,
-      clearSelectedRepoAgentDefault: applyClearSelectedRepoAgentDefault,
-      updateSelectedRepoDefaultModel: applySelectedRepoDefaultModelUpdate,
-      clearSelectedRepoDefaultModel: applyClearSelectedRepoDefaultModel,
-    }),
-    [
-      applySelectedRepoConfigUpdate,
-      applyGlobalGitConfigUpdate,
-      applyGlobalChatSettingsUpdate,
-      applyGlobalSystemSettingsUpdate,
-      applyNotificationSettingsUpdate,
-      applyGlobalGeneralSettingsUpdate,
-      applyGlobalAppearanceSettingsUpdate,
-      applyAgentRuntimesUpdate,
-      applyReusablePromptsUpdate,
-      applyCustomAgentRolesUpdate,
-      applyGlobalKanbanSettingsUpdate,
-      applyGlobalAutopilotSettingsUpdate,
-      applyGlobalPromptLayersUpdate,
-      applyRepoPromptLayersUpdate,
-      applySelectedRepoAgentDefaultUpdate,
-      applyClearSelectedRepoAgentDefault,
-      applySelectedRepoDefaultModelUpdate,
-      applyClearSelectedRepoDefaultModel,
-    ],
-  );
-  const {
-    updateSelectedRepoConfig,
-    updateGlobalGitConfig,
-    updateGlobalChatSettings,
-    updateGlobalSystemSettings,
-    updateNotificationSettings,
-    updateGlobalGeneralSettings,
-    updateGlobalAppearanceSettings,
-    updateAgentRuntimes,
-    updateReusablePrompts,
-    updateCustomAgentRoles,
-    updateGlobalKanbanSettings,
-    updateGlobalAutopilotSettings,
-    updateGlobalPromptLayers,
-    updateRepoPromptLayers,
-    updateSelectedRepoAgentDefault,
-    clearSelectedRepoAgentDefault,
-    updateSelectedRepoDefaultModel,
-    clearSelectedRepoDefaultModel,
-  } = useSettingsModalDirtyDraftActions({
+  const dirtyDraftActions = useSettingsModalDirtyDraftActions({
     clearSaveError,
     draftActions,
   });
+  const { updateAgentRuntimes, updateSelectedRepoConfig } = dirtyDraftActions;
   const { checkAgain: checkRuntimeExecutables } = runtimeExecutableSetup;
   const checkRuntimeExecutablesAgain = useCallback(
     () => checkRuntimeExecutables(updateAgentRuntimes),
@@ -520,7 +397,6 @@ export const useSettingsModalController = ({
 
   return {
     customAgentRoleValidationState,
-    updateCustomAgentRoles,
     isLoadingSettings: isLoadingSettings || !workflowMetadata.data,
     isLoadingRuntimeDefinitions,
     isLoadingRuntimeExecutables,
@@ -579,25 +455,9 @@ export const useSettingsModalController = ({
     checkRuntimeExecutablesAgain,
     detectSelectedRepoGithubRepository,
     setGitProviderValidationErrorCount,
-    updateSelectedRepoConfig,
-    updateGlobalGitConfig,
-    updateGlobalChatSettings,
-    updateGlobalSystemSettings,
-    updateNotificationSettings,
-    updateGlobalGeneralSettings,
-    updateGlobalAppearanceSettings,
-    updateAgentRuntimes,
+    ...dirtyDraftActions,
     setCodexDangerAcknowledged,
-    updateReusablePrompts,
-    updateGlobalKanbanSettings,
-    updateGlobalAutopilotSettings,
     savedAutopilotError,
-    updateGlobalPromptLayers,
-    updateRepoPromptLayers,
-    updateSelectedRepoAgentDefault,
-    clearSelectedRepoAgentDefault,
-    updateSelectedRepoDefaultModel,
-    clearSelectedRepoDefaultModel,
     runtimeReview,
     confirmRuntimeReview,
     cancelRuntimeReview,
