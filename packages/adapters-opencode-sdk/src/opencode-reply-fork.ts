@@ -1,6 +1,7 @@
 import type { OpenCodeClient, SessionInfo } from "@opencode/client";
 import type { SessionRef } from "@openducktor/core";
 import { operationError } from "./opencode-client";
+import { isOpenCodeUserTurn } from "./opencode-interrupted-turn";
 import { completedOpenCodeReplies, readMessages } from "./opencode-message-projection";
 
 export const readReplyForkBoundary = async (
@@ -19,7 +20,7 @@ export const readReplyForkBoundary = async (
       "Reload the conversation and select a completed reply.",
     );
   const nextUserIndex = messages.findIndex(
-    (message, position) => position > index && message.type === "user",
+    (message, position) => position > index && isOpenCodeUserTurn(message),
   );
   const end = nextUserIndex === -1 ? messages.length : nextUserIndex;
   if (messages.slice(index + 1, end).some((message) => message.type === "assistant"))

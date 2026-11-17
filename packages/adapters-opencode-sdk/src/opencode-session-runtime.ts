@@ -50,7 +50,7 @@ import {
   iso,
   modelSelection,
   readMessages,
-  projectInboxUser,
+  projectVisibleInboxUser,
   projectContextUsage,
 } from "./opencode-message-projection";
 import { OpenCodeLiveMessageProjector } from "./opencode-live-message-projector";
@@ -480,9 +480,7 @@ export const createPrepareOpencodeSessionRuntime =
             projectApproval(request, location.project.directory),
           ),
           pendingQuestions: forms.map(projectQuestion),
-          queuedMessages: inbox.flatMap((item) =>
-            item.type === "user" ? [projectInboxUser(item)] : [],
-          ),
+          queuedMessages: inbox.flatMap((item) => projectVisibleInboxUser(item)),
         };
         if (goal !== undefined) snapshot.goal = goal;
         if (active[binding.detail.id]) nativeRunning.add(binding.detail.id);
@@ -963,7 +961,13 @@ export const createPrepareOpencodeSessionRuntime =
           ? { ...summary, status: "running" }
           : summary;
       },
-      continueInterruptedTurn: controller.continueInterruptedTurn.bind(controller),
+      continueInterruptedTurn: async (ref) => {
+        const summary = await controller.continueInterruptedTurn(ref);
+        // A continuation after a host restart attaches the conversation, as a resume does. Native
+        // events then report its activity.
+        admittedRoots.set(summary.externalSessionId, ref);
+        return summary;
+      },
       forkSession: async (ref) => {
         const summary = await controller.forkSession(ref);
         admittedRoots.set(summary.externalSessionId, {

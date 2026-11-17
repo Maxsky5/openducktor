@@ -53,7 +53,7 @@ export const OPENCODE_RUNTIME_CAPABILITIES = {
     forkTargets: ["session", "message"],
     supportsListLiveSessions: true,
     supportsPendingInputSnapshots: true,
-    supportsInterruptedTurnResume: false,
+    supportsInterruptedTurnResume: true,
     supportsUsageLimitAutoResume: false,
   },
   messageDelivery: {
@@ -329,12 +329,6 @@ export const OPENCODE_RUNTIME_DESCRIPTOR = {
       surface: "todos",
       reason:
         "OpenCode V2 has no public todo-state API. Historical tool content remains available.",
-    },
-    {
-      scope: "runtime",
-      surface: "interrupted_turn_resume",
-      reason:
-        "OpenCode V2 has no public continuation endpoint. Reopen the conversation and send a new message.",
     },
   ],
 } as const satisfies RuntimeDescriptor;

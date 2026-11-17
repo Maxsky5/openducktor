@@ -1,10 +1,16 @@
 import type {
   ModelRef,
   OpenCodeClient,
+  SessionInboxInfo,
   SessionInboxUser,
   SessionMessageInfo,
   SessionMessageAssistant,
 } from "@opencode/client";
+import {
+  isOpenCodeContinuationInput,
+  isOpenCodeContinuationMessage,
+  isOpenCodeUserTurn,
+} from "./opencode-interrupted-turn";
 import {
   GOAL_SLASH_COMMAND,
   agentSessionHistoryMessageSchema,
@@ -209,6 +215,15 @@ export const projectInboxUser = (
   state,
 });
 
+/** The user message of an inbox item. A continuation has none. */
+export const projectVisibleInboxUser = (
+  item: SessionInboxInfo,
+  state: "queued" | "read" = "queued",
+): Array<Extract<AgentEvent, { type: "user_message" }>> =>
+  item.type === "user" && !isOpenCodeContinuationInput(item.payload)
+    ? [projectInboxUser(item, state)]
+    : [];
+
 type SubagentCompletion = { state: "completed" | "error" | "cancelled"; created: number };
 const subagentCompletions = (
   messages: Iterable<SessionMessageInfo>,
@@ -300,6 +315,7 @@ const isVisibleNativeMessage = (message: SessionMessageInfo, shells?: ShellConte
   message.type !== "agent-switched" &&
   !(message.type === "idle" && message.outcome === "succeeded") &&
   !(message.type === "synthetic" && message.metadata?.source === "subagent") &&
+  !isOpenCodeContinuationMessage(message) &&
   !shells?.hidden.has(message.id);
 
 export const projectMessages = (
@@ -312,7 +328,7 @@ export const projectMessages = (
   // Steered input joins the current execution. A native idle record ends that evidence.
   for (const message of messages.toReversed()) {
     if (message.type === "idle") break;
-    if (message.type === "user" && !latestUserId) latestUserId = message.id;
+    if (isOpenCodeUserTurn(message) && !latestUserId) latestUserId = message.id;
     if (message.type === "assistant" && !runningModel)
       runningModel = { ...modelSelection(message.model), profileId: message.agent };
   }
