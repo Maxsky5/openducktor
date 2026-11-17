@@ -240,6 +240,17 @@ const toHistory = ({
   const { forkBoundary, inheritedThreadIdsByTurnId } = historyOwnership;
   const eventMapperPipeline = createCodexEventMapperPipeline();
   let boundaryAdded = false;
+  // A usage-limit notice follows its turn. A resumed turn can fail before it has any item.
+  const turns = response.thread.turns;
+  let nextNoticeTurn = 0;
+  const usageLimitNoticesBefore = (turnIndex: number): AgentSessionHistoryMessage[] => {
+    const notices: AgentSessionHistoryMessage[] = [];
+    for (; nextNoticeTurn < turnIndex; nextNoticeTurn += 1) {
+      const notice = codexUsageLimitHistoryNotice(turns[nextNoticeTurn]!);
+      if (notice) notices.push(notice);
+    }
+    return notices;
+  };
   const projectedHistory = codexTurnItemsFromThreadRead(response).flatMap(
     (
       { item, turnIndex, turn, timestamp, timestampIsApproximate, isFinalAgentMessage, turnTiming },
@@ -300,17 +311,15 @@ const toHistory = ({
       if (timestampIsApproximate) {
         history = history.map((message) => ({ ...message, timestampIsApproximate: true }));
       }
-      if (item === turn.items.at(-1)) {
-        const notice = codexUsageLimitHistoryNotice(turn);
-        if (notice) history = [...history, notice];
-      }
+      const notices = usageLimitNoticesBefore(turnIndex);
       if (forkBoundary && !boundaryAdded && turnIndex >= forkBoundary.beforeTurnIndex) {
         boundaryAdded = true;
-        return [codexForkBoundaryHistoryMessage(forkBoundary), ...history];
+        return [...notices, codexForkBoundaryHistoryMessage(forkBoundary), ...history];
       }
-      return history;
+      return [...notices, ...history];
     },
   );
+  projectedHistory.push(...usageLimitNoticesBefore(turns.length));
   if (forkBoundary && !boundaryAdded) {
     projectedHistory.push(codexForkBoundaryHistoryMessage(forkBoundary));
   }
