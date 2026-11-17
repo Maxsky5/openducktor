@@ -1,22 +1,28 @@
-import type { AppPlatform } from "@openducktor/contracts";
+import type { ShortcutActionId } from "@openducktor/contracts";
 import {
+  CommandPaletteRegistryContext,
+  useCommandPaletteCommands,
+} from "./command-palette-registry-context";
+import { paletteCommandsFor, runRegisteredCommand } from "../shortcuts/command-resolution";
+
+import "../shortcuts/position-hints.css";
+import {
+  use,
   type PropsWithChildren,
   type ReactElement,
   useCallback,
   useEffect,
-  useEffectEvent,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
-import { hasOpenDialog } from "@/components/ui/open-dialogs";
-import { isPlatformChord } from "@/lib/keyboard-shortcuts";
+import { AppShortcutCommands, ShortcutDispatcher } from "../shortcuts/shortcut-dispatcher";
 import type { WorkspaceScopeAction, WorkspaceScopeTarget } from "@/types/workspace-scope";
 import { CommandPaletteContext, type CommandPaletteContextValue } from "./command-palette-context";
 import { CommandPaletteDialog } from "./command-palette-dialog";
-import type { CommandPalettePageCommand, CommandPaletteShell } from "./command-palette-types";
+import type { CommandPaletteShell } from "./command-palette-types";
 import { MergeCheckDialog } from "./merge-check-dialog";
 import { PullRequestSyncDialog } from "./pull-request-sync-dialog";
 import { useRecentItems } from "./recent-items";
@@ -54,7 +60,11 @@ export function CommandPaletteProvider({
     event.preventDefault();
     focusIfConnected(previousFocusRef.current);
   }, []);
-  const [pageCommands, setPageCommands] = useState<CommandPalettePageCommand[]>([]);
+  const registry = use(CommandPaletteRegistryContext);
+  if (!registry) throw new Error("CommandPaletteProvider requires CommandPaletteRegistryProvider.");
+  // The listed commands keep their identity while the highlighted record's commands change, so
+  // moving the highlight does not render the palette a second time.
+  const pageCommands = useCommandPaletteCommands(isOpen, "listed");
   const previousFocusRef = useRef<HTMLElement | null>(null);
   /** True when this open ended with an action, which then owns focus. */
   const closedWithActionRef = useRef(false);
@@ -88,43 +98,44 @@ export function CommandPaletteProvider({
     run();
   }, []);
 
-  const onShortcut = useEffectEvent((event: KeyboardEvent, keyPlatform: AppPlatform): void => {
-    if (!isPlatformChord(event, "k", keyPlatform)) return;
-    if (!isOpen && hasOpenDialog()) return;
-    // Capture phase: the terminal, the composer, and the browser never get the keys.
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.repeat) return;
-    if (isOpen) close();
-    else open();
-  });
-  useEffect(() => {
-    if (!platform) return;
-    const onKeyDown = (event: KeyboardEvent): void => onShortcut(event, platform);
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [platform]);
-
-  const registerPageCommand = useCallback((command: CommandPalettePageCommand) => {
-    setPageCommands((current) => [...current.filter((entry) => entry.id !== command.id), command]);
-    return () => setPageCommands((current) => current.filter((entry) => entry !== command));
-  }, []);
+  const runPageCommand = useCallback(
+    (id: ShortcutActionId) =>
+      runRegisteredCommand(registry.pageCommands, id, document.activeElement),
+    [registry],
+  );
 
   const value = useMemo<CommandPaletteContextValue>(
-    () => ({ open, registerPageCommand, platform }),
-    [open, platform, registerPageCommand],
+    () => ({ open, platform, runPageCommand }),
+    [open, platform, runPageCommand],
   );
   const previousFocus = useCallback(() => previousFocusRef.current, []);
+  const paletteCommands = useMemo(
+    () => (isOpen ? paletteCommandsFor(pageCommands, previousFocusRef.current) : []),
+    [isOpen, pageCommands],
+  );
 
   return (
     <CommandPaletteContext value={value}>
+      <AppShortcutCommands
+        shell={shell}
+        runIntent={runIntent}
+        openScopeChoice={openScopeChoice}
+        previousFocus={previousFocus}
+      />
+      <ShortcutDispatcher
+        platform={platform}
+        isOpen={isOpen}
+        open={open}
+        close={close}
+        runAfterClose={runAfterClose}
+      />
       {children}
       <CommandPaletteDialog
         open={isOpen}
         openScopeChoice={openScopeChoice}
         platform={platform}
         shell={shell}
-        pageCommands={pageCommands}
+        pageCommands={paletteCommands}
         close={close}
         runAfterClose={runAfterClose}
         runIntent={runIntent}

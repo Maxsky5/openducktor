@@ -4,6 +4,7 @@ import {
   knownRuntimeKindValues,
   type RuntimeExecutableCheck,
   type SettingsSnapshot,
+  type ShortcutPreferences,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
@@ -18,6 +19,7 @@ import { runtimeExecutableQueryOptions } from "@openducktor/frontend-core/querie
 import { repoBranchesQueryOptions } from "@openducktor/frontend-core/queries/git";
 import { autopilotSettingsQueryOptions } from "@openducktor/frontend-core/queries/autopilot";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { keyboardShortcutsQueryOptions } from "@openducktor/frontend-core/queries/keyboard-shortcuts";
 import {
   createChecksStateFixture,
   createGitProviderContextFixture,
@@ -32,6 +34,7 @@ import {
   useFeatureTourState,
 } from "@/features/feature-tour/feature-tour-context";
 import { FeatureTourDialogHost } from "@/features/feature-tour/feature-tour-dialog-host";
+import { ShortcutPreferencesProvider } from "@/features/shortcuts/shortcut-preferences-provider";
 import { SettingsModal, SettingsModalProvider } from "./settings-modal";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 
@@ -182,6 +185,28 @@ for (const shared of [true, false]) {
     }
   });
 }
+
+test("Settings stays open until the shortcut save finishes", async () => {
+  const write = createDeferred<ShortcutPreferences>();
+  const settings = renderSettings(false, undefined, { saveKeyboardShortcuts: () => write.promise });
+  try {
+    const content = await settings.open();
+    fireEvent.click(content.getByRole("button", { name: "Keyboard shortcuts" }));
+    fireEvent.click(content.getByRole("button", { name: "Remove shortcut for Toggle sidebar" }));
+    await act(async () => {
+      fireEvent.click(content.getByRole("button", { name: "Save settings" }));
+    });
+    await waitFor(() =>
+      expect(content.getByRole("button", { name: /Saving/ }).hasAttribute("disabled")).toBe(true),
+    );
+    fireEvent.keyDown(within(document.body).getByRole("dialog"), { key: "Escape" });
+    expect(within(document.body).queryByRole("dialog")).not.toBeNull();
+    await act(async () => write.resolve({ version: 1, overrides: { sidebar: null } }));
+    await waitFor(() => expect(within(document.body).queryByRole("dialog")).toBeNull());
+  } finally {
+    settings.unmount();
+  }
+});
 
 test("Show tour hands the focus from Settings to the tour and back to the opener", async () => {
   const settings = renderSettings(true, undefined, { featureTour: "dialog" });
@@ -401,6 +426,7 @@ function renderSettings(
      * dialog and records the tour state in `tourStateProbe`.
      */
     featureTour?: "dialog" | "state";
+    saveKeyboardShortcuts?: HostClient["workspaceSaveKeyboardShortcuts"];
   } = {},
 ) {
   const snapshot = createSettingsSnapshotFixture({
@@ -415,9 +441,12 @@ function renderSettings(
     workspaceGetSettingsSnapshot: options.readSnapshot ?? (async () => structuredClone(snapshot)),
   };
   if (runtimeExecutablesCheck) client.runtimeExecutablesCheck = runtimeExecutablesCheck;
+  if (options.saveKeyboardShortcuts)
+    client.workspaceSaveKeyboardShortcuts = options.saveKeyboardShortcuts;
   const connection = createTestClientConnection({ client });
   const { queryClient } = connection;
   queryClient.setQueryData(autopilotSettingsQueryOptions().queryKey, snapshot.autopilot);
+  queryClient.setQueryData(keyboardShortcutsQueryOptions().queryKey, { version: 1, overrides: {} });
   if (options.cacheSnapshot !== false) {
     queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, snapshot);
   }
@@ -511,15 +540,17 @@ function renderSettings(
   function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryProvider connection={connection}>
-        <WorkspaceStateContext.Provider value={workspaceState}>
-          <ChecksStateContext.Provider value={checksState}>
-            <RuntimeDefinitionsContext.Provider value={runtimeState}>
-              <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
-                {children}
-              </HostRuntimeStatusContext.Provider>
-            </RuntimeDefinitionsContext.Provider>
-          </ChecksStateContext.Provider>
-        </WorkspaceStateContext.Provider>
+        <ShortcutPreferencesProvider>
+          <WorkspaceStateContext.Provider value={workspaceState}>
+            <ChecksStateContext.Provider value={checksState}>
+              <RuntimeDefinitionsContext.Provider value={runtimeState}>
+                <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
+                  {children}
+                </HostRuntimeStatusContext.Provider>
+              </RuntimeDefinitionsContext.Provider>
+            </ChecksStateContext.Provider>
+          </WorkspaceStateContext.Provider>
+        </ShortcutPreferencesProvider>
       </QueryProvider>
     );
   }

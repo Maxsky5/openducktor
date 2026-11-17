@@ -129,11 +129,32 @@ describe("browser preview proxy", () => {
     );
     expect(response.headers.get("x-frame-options")).toBeNull();
     expect(response.headers.get("content-security-policy")).toBe(
-      `default-src 'self'; frame-ancestors ${APP_ORIGIN}`,
+      `default-src 'self'; frame-ancestors 'self' ${APP_ORIGIN}`,
     );
     expect(html).toEndWith("<body>Hi</body></html>");
     const script = await (await fetch(`${origin}/__openducktor/frame.js`)).text();
     expect(script).toContain(JSON.stringify([APP_ORIGIN]));
+  });
+
+  test("wraps non-HTML document input while keeping resource bytes and downloads unchanged", async () => {
+    const { origin } = await startPreview();
+    const response = await fetch(`${origin}/echo`, { headers: { "sec-fetch-dest": "document" } });
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const html = await response.text();
+    expect(html).toContain("/__openducktor/frame.js");
+    const source = /<iframe[^>]+src="([^"]+)"/.exec(html)?.[1];
+    if (!source) throw new Error("The preview has no resource frame.");
+    const resource = await fetch(new URL(source.replaceAll("&amp;", "&"), origin));
+    expect(resource.headers.get("content-type")).toContain("application/json");
+    expect(await resource.json()).toHaveProperty("host");
+    expect(new URL("tile.png", new URL(source, origin)).pathname).toBe("/tile.png");
+    const redirected = await fetch(`${origin}/account/settings?__openducktor_resource=1`, {
+      redirect: "manual",
+    });
+    expect(redirected.headers.get("location")).toBe("/account/login?__openducktor_resource=1");
+    const direct = await fetch(`${origin}/echo`);
+    expect(direct.headers.get("content-type")).toContain("application/json");
+    expect(await direct.json()).toHaveProperty("host");
   });
 
   test("streams a page as the dev server sends it, such as a loading state", async () => {

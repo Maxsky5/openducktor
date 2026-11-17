@@ -1,5 +1,5 @@
 import { TriangleAlert } from "lucide-react";
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import { sessionSourceIssueText } from "@openducktor/frontend-core/sessions/navigation/session-navigation-entry-labels";
 import { CommandGroup } from "@/components/ui/command";
 import type { PaletteGroup } from "./command-palette-groups";
@@ -15,7 +15,8 @@ const NOTE_CLASS_NAME = "px-4 py-3 text-sm text-muted-foreground";
 const GROUP_CLASS_NAME = "[&_[cmdk-group-heading]]:px-3";
 
 /** The grouped actions, tasks, and chats, then `New task “<query>”` for a query. */
-export function MainResults({
+/** Memoized with the row lists: a highlight move renders neither list again. */
+export const MainResults = memo(function MainResults({
   groups,
   data,
   query,
@@ -102,10 +103,10 @@ export function MainResults({
       ) : null}
     </>
   );
-}
+});
 
 /** The action list of one task or chat. A note shows why some actions are missing. */
-export function RowActionResults({
+export const RowActionResults = memo(function RowActionResults({
   list,
   query,
 }: {
@@ -127,7 +128,7 @@ export function RowActionResults({
       {actions.length === 0 ? <p className={NOTE_CLASS_NAME}>No matching actions</p> : null}
     </>
   );
-}
+});
 
 function ReadIssues({ issues }: { issues: CommandPaletteData["issues"] }): ReactElement {
   return (

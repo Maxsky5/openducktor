@@ -1,3 +1,6 @@
+import { ShortcutScope } from "@/features/shortcuts/shortcut-controls";
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
+import { useRef } from "react";
 import {
   type BrowserEngineState,
   type BrowserTabSummary,
@@ -100,16 +103,25 @@ function LoadErrorView({
   error: NonNullable<BrowserTabSummary["error"]>;
   reload: () => Promise<void>;
 }): ReactElement {
+  const root = useRef<HTMLDivElement>(null);
+  const openSite = () => {
+    void getShellBridge()
+      .openExternalUrl(error.url)
+      .catch(reportBrowserFailure("Could not open the page in the browser"));
+  };
+  const shortcutOwner = useLocalShortcuts(root, [
+    { id: "browser-external" as const, run: openSite },
+  ]);
   return (
-    <BrowserLoadErrorView
-      error={error}
-      onReload={() => void reload().catch(reportBrowserFailure("Could not reload the page"))}
-      onOpenSite={() =>
-        void getShellBridge()
-          .openExternalUrl(error.url)
-          .catch(reportBrowserFailure("Could not open the page in the browser"))
-      }
-    />
+    <ShortcutScope owners={[shortcutOwner]}>
+      <div ref={root} className="flex h-full flex-col">
+        <BrowserLoadErrorView
+          error={error}
+          onReload={() => void reload().catch(reportBrowserFailure("Could not reload the page"))}
+          onOpenSite={openSite}
+        />
+      </div>
+    </ShortcutScope>
   );
 }
 

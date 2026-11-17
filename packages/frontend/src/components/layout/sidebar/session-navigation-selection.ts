@@ -1,5 +1,5 @@
 import type { SidebarSessionGrouping } from "@openducktor/contracts";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useSyncExternalStore } from "react";
 import {
   type SessionNavigationTarget,
   sessionNavigationTargetKey,
@@ -14,16 +14,51 @@ export type SessionSelection = {
   entryKey: string | null;
 };
 
-/** The session list gives the selection to its rows, so a new selection renders only the rows. */
-export const SessionSelectionContext = createContext<SessionSelection | null>(null);
+/**
+ * The selection of the session list, as a store. Each row reads only whether it is selected or
+ * visible, so a session switch renders the rows that changed, not every row of the list.
+ */
+export type SessionSelectionStore = {
+  get(): SessionSelection;
+  set(next: SessionSelection): void;
+  subscribe(listener: () => void): () => void;
+};
+
+export const createSessionSelectionStore = (initial: SessionSelection): SessionSelectionStore => {
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => current,
+    set(next) {
+      if (next.entryKey === current.entryKey && next.visibleKey === current.visibleKey) return;
+      current = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+};
+
+export const SessionSelectionContext = createContext<SessionSelectionStore | null>(null);
 
 export const useSessionEntrySelection = (entryKey: string) => {
-  const selection = useContext(SessionSelectionContext);
-  if (!selection) throw new Error("SessionSelectionContext is missing.");
-  return {
-    isSelected: entryKey === selection.entryKey,
-    isVisible: entryKey === selection.visibleKey,
-  };
+  const store = useContext(SessionSelectionContext);
+  if (!store) throw new Error("SessionSelectionContext is missing.");
+  const isSelected = useSyncExternalStore(
+    store.subscribe,
+    () => store.get().entryKey === entryKey,
+    () => store.get().entryKey === entryKey,
+  );
+  const isVisible = useSyncExternalStore(
+    store.subscribe,
+    () => store.get().visibleKey === entryKey,
+    () => store.get().visibleKey === entryKey,
+  );
+  return { isSelected, isVisible };
 };
 
 /** Grouped task selection can name another session; only the visible session counts as read. */

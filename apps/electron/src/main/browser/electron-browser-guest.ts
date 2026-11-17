@@ -1,7 +1,4 @@
-import {
-  type BrowserForwardedShortcutId,
-  matchBrowserForwardedShortcut,
-} from "@openducktor/contracts";
+import { routeGuestShortcut, focusShortcutGuest } from "../electron-shortcut-ipc";
 import { type CdpEvent, attachCdpTargetSession } from "@openducktor/host";
 import { z } from "zod";
 import { refusedBrowserPageScheme } from "./electron-browser-policy";
@@ -73,11 +70,13 @@ export type ElectronBrowserGuest = {
   close(): void;
   focus(): void;
   setBackgroundThrottling(allowed: boolean): void;
+  setIgnoreMenuShortcuts(ignore: boolean): void;
   setWindowOpenHandler(handler: (details: GuestWindowOpenDetails) => GuestWindowOpenResponse): void;
   listenerCount(eventName: typeof RUN_DIALOG_EVENT): number;
   removeAllListeners(eventName: typeof RUN_DIALOG_EVENT): void;
   on(event: "will-frame-navigate", listener: Listener<[NavigationDetails]>): void;
   on(event: "will-redirect", listener: Listener<[NavigationDetails]>): void;
+  on(event: "focus", listener: Listener<[]>): void;
   on(event: "before-input-event", listener: Listener<[ElectronCancelableEvent, GuestInput]>): void;
   on(event: "will-prevent-unload", listener: Listener<[ElectronCancelableEvent]>): void;
   on(event: "will-attach-webview", listener: Listener<[ElectronCancelableEvent]>): void;
@@ -101,7 +100,6 @@ export type BrowserGuestEvents = {
   /** True for panel guests. Popup windows keep their keys. */
   readonly forwardShortcuts: boolean;
   onSchemeRefused(scheme: string): void;
-  onShortcut(shortcut: BrowserForwardedShortcutId): void;
   /** Returns true when the page may unload once, after a Leave answer. */
   consumeUnloadAllowance(): boolean;
   onUnloadHeld(): void;
@@ -207,8 +205,13 @@ export const prepareBrowserGuest = async (
     guest.on("will-redirect", refuseScheme);
 
     if (events.forwardShortcuts) {
+      guest.on("focus", () => {
+        if (active) focusShortcutGuest(guest.id);
+      });
       guest.on("before-input-event", (event, input) => {
-        if (!active || input.type !== "keyDown") {
+        if (!active) return;
+        if (routeGuestShortcut(guest.id, guest, event, input)) return;
+        if (input.type !== "keyDown") {
           return;
         }
         // The Reload menu items reload the OpenDucktor window, so a page with the keyboard focus
@@ -218,20 +221,6 @@ export const prepareBrowserGuest = async (
           if (input.shift) guest.reloadIgnoringCache();
           else guest.reload();
           return;
-        }
-        const shortcut = matchBrowserForwardedShortcut(
-          {
-            key: input.key,
-            ctrlKey: input.control,
-            metaKey: input.meta,
-            shiftKey: input.shift,
-            altKey: input.alt,
-          },
-          platform,
-        );
-        if (shortcut !== null) {
-          event.preventDefault();
-          events.onShortcut(shortcut.id);
         }
       });
     }

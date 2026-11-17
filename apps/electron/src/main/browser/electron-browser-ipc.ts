@@ -53,7 +53,7 @@ export type ElectronBrowserIpcControllerInput = {
 
 /**
  * The browser channel clients of each OpenDucktor renderer. Each client gets its own host browser
- * client session. Engine messages, such as shortcuts, go to every client of one renderer.
+ * client session.
  */
 export const createElectronBrowserIpcController = (input: ElectronBrowserIpcControllerInput) => {
   const senders = new Map<number, SenderState>();
@@ -152,16 +152,6 @@ export const createElectronBrowserIpcController = (input: ElectronBrowserIpcCont
     handleFrame,
     detachClient,
     detachSender,
-    /** Sends an engine message to every browser client of one renderer. */
-    sendToRenderer: (senderId: number, message: BrowserServerMessage): void => {
-      const state = senders.get(senderId);
-      if (!state) {
-        return;
-      }
-      for (const clientId of state.clients.keys()) {
-        deliver(state.sender, clientId, message);
-      }
-    },
   };
 };
 

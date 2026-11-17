@@ -1,3 +1,10 @@
+import {
+  ShortcutButton,
+  ShortcutText,
+  useShortcutTitle,
+} from "@/features/shortcuts/shortcut-controls";
+import { useCommandPalettePageCommand } from "@/features/command-palette/command-palette-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { RepoAction, RepoActions } from "@openducktor/contracts";
 import {
   MISSING_DEFAULT_ACTION_MESSAGE,
@@ -29,10 +36,31 @@ export function RepoActionsSplitButton({
   onManageActions,
 }: Props): ReactElement {
   const [menuOpen, setMenuOpen] = useState(false);
+  const chooserTitle = useShortcutTitle("session-scripts", "More actions", disabledReason === null);
   const split = splitRepoActions(actions);
-  if (split.kind === "empty") return <AddActionButton onClick={onManageActions} />;
+  const shortcutActive = useSessionViewActive();
+  useCommandPalettePageCommand(
+    shortcutActive
+      ? {
+          id: "session-scripts" as const,
+          label: "Choose repository action",
+          icon: Plus,
+          keywords: ["scripts", "repository", "terminal"],
+          target: { kind: "session", key: "repository-actions" },
+          disabledReason: () => disabledReason,
+          run: () => {
+            if (split.kind === "ready") setMenuOpen(true);
+            else onManageActions();
+          },
+        }
+      : null,
+  );
+  if (split.kind === "empty")
+    return <AddActionButton available={disabledReason === null} onClick={onManageActions} />;
   if (split.kind === "missing_default") {
-    return <MissingDefaultActionButton onClick={onManageActions} />;
+    return (
+      <MissingDefaultActionButton available={disabledReason === null} onClick={onManageActions} />
+    );
   }
   const { defaultAction, otherActions } = split;
   const isDisabled = disabledReason !== null;
@@ -70,13 +98,16 @@ export function RepoActionsSplitButton({
                 <SessionActionMenuTrigger
                   variant="outline"
                   aria-label="More actions"
+                  title={chooserTitle}
                   disabled={isDisabled}
                 />
               </PopoverTrigger>
             </span>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-64">
-            {disabledReason ?? "More actions"}
+            <ShortcutText id="session-scripts" available={!isDisabled}>
+              {disabledReason ?? "More actions"}
+            </ShortcutText>
           </TooltipContent>
         </Tooltip>
         <PopoverContent align="end" aria-label="Repository actions" className="w-56 p-1.5">
@@ -125,11 +156,18 @@ function MenuEntry({
   );
 }
 
-function AddActionButton({ onClick }: { onClick: () => void }): ReactElement {
+function AddActionButton({
+  onClick,
+  available,
+}: {
+  onClick: () => void;
+  available: boolean;
+}): ReactElement {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
+        <ShortcutButton
+          shortcutId={available ? "session-scripts" : undefined}
           type="button"
           variant="outline"
           size="sm"
@@ -139,7 +177,7 @@ function AddActionButton({ onClick }: { onClick: () => void }): ReactElement {
         >
           <Plus className="size-3.5" aria-hidden="true" />
           <span className="@max-[640px]/session-header:hidden">Add action</span>
-        </Button>
+        </ShortcutButton>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-64">
         Add a command that you can run from this bar.
@@ -148,11 +186,18 @@ function AddActionButton({ onClick }: { onClick: () => void }): ReactElement {
   );
 }
 
-function MissingDefaultActionButton({ onClick }: { onClick: () => void }): ReactElement {
+function MissingDefaultActionButton({
+  onClick,
+  available,
+}: {
+  onClick: () => void;
+  available: boolean;
+}): ReactElement {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
+        <ShortcutButton
+          shortcutId={available ? "session-scripts" : undefined}
           type="button"
           variant="outline"
           size="sm"
@@ -162,7 +207,7 @@ function MissingDefaultActionButton({ onClick }: { onClick: () => void }): React
         >
           <TriangleAlert className="size-3.5" aria-hidden="true" />
           <span className="@max-[640px]/session-header:hidden">Fix actions</span>
-        </Button>
+        </ShortcutButton>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-64">
         {MISSING_DEFAULT_ACTION_MESSAGE}

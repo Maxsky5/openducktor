@@ -4,6 +4,7 @@ import {
   hostCommandInputRecordSchema,
 } from "@openducktor/contracts";
 import { z } from "zod";
+import { configValidationError, toPayloadValue } from "../../config/config-validation-message";
 import { HostValidationError } from "../../effect/host-errors";
 
 const invalidInput = (message: string, field?: string): HostValidationError =>
@@ -97,4 +98,52 @@ export const parseCommandInput = <Schema extends z.ZodType>(
     message: `${command} input is invalid: ${parsed.error.message}`,
     cause: parsed.error,
   });
+};
+
+export const requireNoArgs = (command: string, args: HostCommandArgs): void => {
+  const record =
+    args === undefined
+      ? undefined
+      : requireRecord(commandInputRecordSchema.safeParse(args), `${command} input`);
+  if (record !== undefined && Object.keys(record).length > 0) {
+    throw new HostValidationError({
+      message: `${command} does not accept arguments.`,
+      field: "args",
+      details: { command },
+    });
+  }
+};
+
+export const requireObjectArgs = (
+  command: string,
+  args: HostCommandArgs,
+  key: string,
+): CommandInputRecord => {
+  const record =
+    args === undefined
+      ? undefined
+      : requireRecord(commandInputRecordSchema.safeParse(args), `${command} input`);
+  if (record === undefined || !(key in record)) {
+    throw new HostValidationError({
+      message: `${command} expects argument '${key}'.`,
+      field: key,
+      details: { command },
+    });
+  }
+
+  return record;
+};
+
+export const requireParsedInput = <Output>(
+  schema: z.ZodType<Output>,
+  record: CommandInputRecord,
+  key: string,
+): Output => {
+  const rawInput = record[key];
+  const result = schema.safeParse(rawInput);
+  if (!result.success) {
+    throw configValidationError(result.error, toPayloadValue(rawInput));
+  }
+
+  return result.data;
 };

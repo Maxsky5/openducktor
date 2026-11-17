@@ -5,7 +5,8 @@ import {
   DragOverlay,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { Ban } from "lucide-react";
+import { useCommandPalettePageCommands } from "@/features/command-palette/command-palette-context";
+import { Ban, Plus } from "lucide-react";
 import {
   createContext,
   type ReactElement,
@@ -103,6 +104,44 @@ export function SessionPanelsRoot({
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const { right, bottom, canMove, onMove, onDrop, platformError } = panels;
   const { candidate, onCancel } = panels.terminalClose;
+  useCommandPalettePageCommands(
+    isViewActive && isActive
+      ? [
+          {
+            id: "new-bottom-tab" as const,
+            icon: Plus,
+            keywords: ["new tab", "bottom"],
+            target: { kind: "session", key: bottom.tabIdBase },
+            run: () => {
+              bottom.onAddTab();
+              requestAnimationFrame(() =>
+                document
+                  .querySelector<HTMLElement>(
+                    `[data-panel-owner="${CSS.escape(bottom.tabIdBase)}"] [aria-label="Open a tab"] button:not([disabled])`,
+                  )
+                  ?.focus(),
+              );
+            },
+          },
+          {
+            id: "new-right-tab" as const,
+            icon: Plus,
+            keywords: ["new tab", "right"],
+            target: { kind: "session", key: right.tabIdBase },
+            run: () => {
+              right.onAddTab();
+              requestAnimationFrame(() =>
+                document
+                  .querySelector<HTMLElement>(
+                    `[data-panel-owner="${CSS.escape(right.tabIdBase)}"] [aria-label="Open a tab"] button:not([disabled])`,
+                  )
+                  ?.focus(),
+              );
+            },
+          },
+        ]
+      : [],
+  );
   useEffect(() => {
     if (!showsConfirmation) onCancel();
   }, [showsConfirmation, candidate, onCancel]);

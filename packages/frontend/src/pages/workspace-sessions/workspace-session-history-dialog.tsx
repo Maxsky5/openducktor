@@ -1,3 +1,7 @@
+import { ShortcutScope, ShortcutButton } from "@/features/shortcuts/shortcut-controls";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
+import { useRef } from "react";
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import { LoaderCircle, RotateCcw } from "lucide-react";
 import { type ComponentProps, useState } from "react";
@@ -118,43 +122,55 @@ function ArchivedSessionRow({
   listFetching: boolean;
 }) {
   const title = workspaceSessionTitle(record);
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutOwner = useLocalShortcuts(root, [
+    {
+      id: "chat-restore" as const,
+      run: () => restore.mutate(record.id),
+      disabledReason: restore.isPending || listFetching ? "Restore is pending." : null,
+      localOnly: true,
+    },
+  ]);
   return (
-    <div className="flex items-center gap-4 rounded-lg border border-border p-3">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{title}</p>
-        <p
-          className="truncate text-xs text-muted-foreground"
-          title={record.executionTarget.workingDirectory}
+    <ShortcutScope owners={[shortcutOwner]}>
+      <div ref={root} className="flex items-center gap-4 rounded-lg border border-border p-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{title}</p>
+          <p
+            className="truncate text-xs text-muted-foreground"
+            title={record.executionTarget.workingDirectory}
+          >
+            {workspaceSessionRoleName(record)} · {record.executionTarget.workingDirectory}
+          </p>
+          {isArchivedWorktreeRemoved(record) && (
+            <WorkspaceSessionRemovedWorktreeTarget
+              workspaceId={workspaceId}
+              record={record}
+              defaultTarget={defaultTarget}
+              branches={branches}
+              disabled={restore.isPending}
+              // A new target answers the last restore failure.
+              onSaved={restore.reset}
+            />
+          )}
+        </div>
+        <ShortcutButton
+          shortcutId="chat-restore"
+          size="sm"
+          variant="outline"
+          disabled={restore.isPending || listFetching}
+          aria-label={`Restore ${title}`}
+          onClick={() => restore.mutate(record.id)}
         >
-          {workspaceSessionRoleName(record)} · {record.executionTarget.workingDirectory}
-        </p>
-        {isArchivedWorktreeRemoved(record) && (
-          <WorkspaceSessionRemovedWorktreeTarget
-            workspaceId={workspaceId}
-            record={record}
-            defaultTarget={defaultTarget}
-            branches={branches}
-            disabled={restore.isPending}
-            // A new target answers the last restore failure.
-            onSaved={restore.reset}
-          />
-        )}
+          {restore.isPending && restore.variables === record.id ? (
+            <LoaderCircle className="animate-spin" />
+          ) : (
+            <RotateCcw />
+          )}
+          {ARCHIVED_CHATS_TEXT.restore}
+        </ShortcutButton>
       </div>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={restore.isPending || listFetching}
-        aria-label={`Restore ${title}`}
-        onClick={() => restore.mutate(record.id)}
-      >
-        {restore.isPending && restore.variables === record.id ? (
-          <LoaderCircle className="animate-spin" />
-        ) : (
-          <RotateCcw />
-        )}
-        {ARCHIVED_CHATS_TEXT.restore}
-      </Button>
-    </div>
+    </ShortcutScope>
   );
 }
 

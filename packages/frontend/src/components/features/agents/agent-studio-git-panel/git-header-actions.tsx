@@ -1,11 +1,20 @@
+import type { ShortcutActionId } from "@openducktor/contracts";
+import {
+  ShortcutScope,
+  ShortcutButton,
+  ShortcutText,
+} from "@/features/shortcuts/shortcut-controls";
+
 import { ArrowDown, ArrowUp, Link2, LoaderCircle, RefreshCw, Target } from "lucide-react";
-import type { ReactElement } from "react";
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
+import { useRef, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { DETECT_PR_ERROR_ID } from "./git-header-notice-items";
 
 type GitActionIconButtonProps = {
+  shortcutId: ShortcutActionId;
   testId: string;
   srLabel: string;
   icon: typeof RefreshCw;
@@ -24,6 +33,7 @@ type GitActionIconButtonProps = {
 };
 
 function GitActionIconButton({
+  shortcutId,
   testId,
   srLabel,
   icon: Icon,
@@ -73,7 +83,11 @@ function GitActionIconButton({
           {wrapTrigger ? <span className="inline-flex">{button}</span> : button}
         </TooltipTrigger>
         <TooltipContent side="top">
-          <p>{tooltip}</p>
+          <p>
+            <ShortcutText id={shortcutId} available={!disabled}>
+              {tooltip}
+            </ShortcutText>
+          </p>
         </TooltipContent>
       </Tooltip>
     </>
@@ -116,7 +130,8 @@ function DetectPullRequestAction({
   onDetect?: (() => Promise<void> | void) | null | undefined;
 }): ReactElement {
   return (
-    <Button
+    <ShortcutButton
+      shortcutId="git-detect-pr"
       type="button"
       variant="ghost"
       size="sm"
@@ -128,7 +143,7 @@ function DetectPullRequestAction({
     >
       <Link2 data-icon="inline-start" />
       {isDetecting ? "Detecting PR" : "Detect PR"}
-    </Button>
+    </ShortcutButton>
   );
 }
 
@@ -152,6 +167,7 @@ function RefreshAction({
 }): ReactElement {
   return (
     <GitActionIconButton
+      shortcutId="git-refresh"
       testId="agent-studio-git-refresh-button"
       // Screen readers hear that a Refresh runs. The tooltip keeps its original text.
       srLabel={isRefreshing ? "Refreshing" : "Refresh"}
@@ -180,59 +196,114 @@ export function GitActionRow({
   rebaseTooltip,
 }: GitActionRowProps): ReactElement {
   const { canPull, canPush, canRebase, isPushing, isRepositoryMode } = actionState;
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "git-refresh" as const,
+        run: onRefresh,
+        disabledReason: actionState.canRefresh ? null : "Git refresh is unavailable.",
+      },
+      {
+        id: "git-pull" as const,
+        run: () => {
+          void pullFromUpstream?.();
+        },
+        disabledReason: canPull && pullFromUpstream ? null : pullTooltip,
+      },
+      {
+        id: "git-push" as const,
+        run: () => {
+          void pushBranch?.();
+        },
+        disabledReason: canPush && pushBranch ? null : pushTooltip,
+      },
+      {
+        id: "git-rebase" as const,
+        run: () => {
+          void rebaseOntoTarget?.();
+        },
+        disabledReason: canRebase && !isRepositoryMode && rebaseOntoTarget ? null : rebaseTooltip,
+      },
+      {
+        id: "git-detect-pr" as const,
+        run: () => {
+          void onDetectPullRequest?.();
+        },
+        disabledReason:
+          actionState.showDetectPullRequest &&
+          !actionState.isDetectingPullRequest &&
+          onDetectPullRequest
+            ? actionState.detectPullRequestDisabledReason
+            : "PR detection is unavailable.",
+      },
+    ],
+    "[data-git-view]",
+  );
   return (
-    <div
-      className="flex items-center gap-0.5 border-y border-border px-1 py-1"
-      data-testid="agent-studio-git-action-row"
-    >
-      <RefreshAction
-        canRefresh={actionState.canRefresh}
-        isRefreshing={actionState.isRefreshing}
-        onRefresh={onRefresh}
-      />
-      {isRepositoryMode ? null : (
-        <GitActionIconButton
-          testId="agent-studio-git-rebase-button"
-          srLabel="Rebase onto target"
-          icon={Target}
-          onClick={runAction(rebaseOntoTarget)}
-          disabled={!canRebase}
-          tooltip={rebaseTooltip}
-          badge={countBadge("agent-studio-git-behind-count", rebaseBehindCount, BEHIND_TONE)}
-          wrapTrigger
+    <ShortcutScope owners={[shortcutOwner]}>
+      <div
+        className="flex items-center gap-0.5 border-y border-border px-1 py-1"
+        ref={root}
+        data-testid="agent-studio-git-action-row"
+      >
+        <RefreshAction
+          canRefresh={actionState.canRefresh}
+          isRefreshing={actionState.isRefreshing}
+          onRefresh={onRefresh}
         />
-      )}
-      <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
-        <GitActionIconButton
-          testId="agent-studio-git-pull-button"
-          srLabel="Pull from upstream"
-          icon={ArrowDown}
-          onClick={runAction(pullFromUpstream)}
-          disabled={!canPull}
-          tooltip={pullTooltip}
-          badge={countBadge("agent-studio-git-upstream-behind-count", pushBehindCount, BEHIND_TONE)}
-          wrapTrigger
-        />
-      </span>
-      <GitActionIconButton
-        testId="agent-studio-git-push-button"
-        srLabel="Push branch"
-        icon={isPushing ? LoaderCircle : ArrowUp}
-        onClick={runAction(pushBranch)}
-        disabled={!canPush}
-        tooltip={pushTooltip}
-        badge={countBadge("agent-studio-git-ahead-count", pushAheadCount, AHEAD_TONE)}
-        isSpinning={isPushing}
-      />
-      {actionState.showDetectPullRequest ? (
-        <span className="ml-auto inline-flex">
-          <DetectPullRequestAction
-            disabledReason={actionState.detectPullRequestDisabledReason}
-            isDetecting={actionState.isDetectingPullRequest}
-            onDetect={onDetectPullRequest}
+        {isRepositoryMode ? null : (
+          <GitActionIconButton
+            shortcutId="git-rebase"
+            testId="agent-studio-git-rebase-button"
+            srLabel="Rebase onto target"
+            icon={Target}
+            onClick={runAction(rebaseOntoTarget)}
+            disabled={!canRebase}
+            tooltip={rebaseTooltip}
+            badge={countBadge("agent-studio-git-behind-count", rebaseBehindCount, BEHIND_TONE)}
+            wrapTrigger
+          />
+        )}
+        <span className="inline-flex" data-testid="agent-studio-git-pull-tooltip-trigger">
+          <GitActionIconButton
+            shortcutId="git-pull"
+            testId="agent-studio-git-pull-button"
+            srLabel="Pull from upstream"
+            icon={ArrowDown}
+            onClick={runAction(pullFromUpstream)}
+            disabled={!canPull}
+            tooltip={pullTooltip}
+            badge={countBadge(
+              "agent-studio-git-upstream-behind-count",
+              pushBehindCount,
+              BEHIND_TONE,
+            )}
+            wrapTrigger
           />
         </span>
-      ) : null}
-    </div>
+        <GitActionIconButton
+          shortcutId="git-push"
+          testId="agent-studio-git-push-button"
+          srLabel="Push branch"
+          icon={isPushing ? LoaderCircle : ArrowUp}
+          onClick={runAction(pushBranch)}
+          disabled={!canPush}
+          tooltip={pushTooltip}
+          badge={countBadge("agent-studio-git-ahead-count", pushAheadCount, AHEAD_TONE)}
+          isSpinning={isPushing}
+        />
+        {actionState.showDetectPullRequest ? (
+          <span className="ml-auto inline-flex">
+            <DetectPullRequestAction
+              disabledReason={actionState.detectPullRequestDisabledReason}
+              isDetecting={actionState.isDetectingPullRequest}
+              onDetect={onDetectPullRequest}
+            />
+          </span>
+        ) : null}
+      </div>
+    </ShortcutScope>
   );
 }

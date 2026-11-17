@@ -99,7 +99,6 @@ type HarnessProps = { overrides: Partial<TerminalSessionsModel> };
 const renderPanels = (
   owner: SessionPanelOwner | null,
   initialOverrides: Partial<TerminalSessionsModel>,
-  shortcutsEnabled = true,
 ) => {
   const scopeKey = owner ? sessionPanelOwnerKey(owner) : null;
   const starts: (RepoAction | undefined)[] = [];
@@ -130,7 +129,6 @@ const renderPanels = (
         selectionKey: "build",
         unavailableKinds: WITHOUT_CI_CHECKS,
         terminals,
-        shortcutsEnabled,
       });
     },
     {
@@ -226,6 +224,17 @@ describe("useSessionPanels", () => {
         recovery: { label: "Retry terminal discovery", disabled: false, onRun: onRetryDiscovery },
       },
     ]);
+  });
+
+  test("reveals and reuses the bottom New tab chooser without starting a tool", () => {
+    const view = renderPanels(newTaskOwner(), {});
+    act(() => view.result.current.bottom.onAddTab());
+    expect(view.result.current.bottom.isVisible).toBe(true);
+    expect(view.result.current.bottom.selectedTabId).toBe("new_tab:bottom");
+    act(() => view.result.current.bottom.onAddTab());
+    expect(view.result.current.bottom.tabs.filter((tab) => tab.kind === "new_tab")).toHaveLength(1);
+    expect(view.starts).toEqual([]);
+    view.unmount();
   });
 
   test("starts a terminal in place of the right panel New tab and focuses it", () => {
@@ -424,7 +433,7 @@ describe("useSessionPanels", () => {
     const view = renderPanels(newTaskOwner(), { isLoading: true, isSynced: false });
 
     act(() => {
-      fireEvent.keyDown(window, { key: "`", ctrlKey: true });
+      view.result.current.bottomToggle.onToggle();
     });
     expect(view.result.current.bottom.isVisible).toBe(true);
     expect(view.starts).toEqual([]);
@@ -557,29 +566,18 @@ describe("useSessionPanels", () => {
     }
   });
 
-  test.each([true, false])(
-    "honors the bottom panel keyboard shortcut when enabled=%s",
-    (shortcutsEnabled) => {
-      const view = renderPanels(
-        newTaskOwner(),
-        { tabs: [terminalTab("terminal-1")] },
-        shortcutsEnabled,
-      );
-      expect(view.result.current.bottom.isVisible).toBe(true);
+  test("ignores the removed Control+backtick shortcut", () => {
+    const view = renderPanels(newTaskOwner(), { tabs: [terminalTab("terminal-1")] });
+    expect(view.result.current.bottom.isVisible).toBe(true);
 
-      act(() => {
-        fireEvent.keyDown(window, { key: "`", ctrlKey: true });
-      });
-      expect(view.result.current.bottom.presence).toBe(shortcutsEnabled ? "closed" : "open");
-      act(() => {
-        fireEvent.keyDown(window, { key: "`", ctrlKey: true });
-      });
-      expect(view.result.current.bottom.presence).toBe("open");
+    act(() => {
+      fireEvent.keyDown(window, { key: "`", ctrlKey: true });
+    });
+    expect(view.result.current.bottom.presence).toBe("open");
 
-      act(() => view.result.current.bottomToggle.onToggle());
-      expectPanelSlidesOut(view, "bottom");
-    },
-  );
+    act(() => view.result.current.bottomToggle.onToggle());
+    expectPanelSlidesOut(view, "bottom");
+  });
 
   test("asks at once before it closes a terminal that runs a command, and changes nothing", () => {
     const closeCalls: boolean[] = [];

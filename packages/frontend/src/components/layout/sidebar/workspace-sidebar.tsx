@@ -1,3 +1,6 @@
+import { ShortcutButton, useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
+import { useSessionNavigationShortcuts } from "@/features/shortcuts/use-session-navigation-shortcuts";
+import { SessionPositionsContext } from "@/features/shortcuts/session-positions-context";
 import { PanelLeftClose, PanelLeftOpen, TriangleAlert } from "lucide-react";
 import {
   type ReactElement,
@@ -27,7 +30,6 @@ import { useSessionGrouping } from "@openducktor/frontend-core/sessions/navigati
 import { useSessionNavigationModel } from "@openducktor/frontend-core/sessions/navigation/use-session-navigation-model";
 import { useVisibleSessionControls } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { useWatchSessionBlockers } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
-import { useMinuteClock } from "@openducktor/frontend-core/lib/relative-time";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state/app-state-provider";
@@ -61,6 +63,7 @@ function UnlistedWorkspacesNote({
   onOpenRepositoryModal: () => void;
 }): ReactElement | null {
   const { closedWorkspaces, incompleteRemovals } = useWorkspaceState();
+  const reopenTitle = useShortcutTitle("reopen-workspace", "Reopen a workspace");
   if (closedWorkspaces.length === 0 && incompleteRemovals.length === 0) return null;
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border border-sidebar-border px-2.5 py-2 text-xs text-sidebar-muted-foreground">
@@ -70,6 +73,7 @@ function UnlistedWorkspacesNote({
             .map((workspace) => workspace.workspaceName)
             .join(", ")}.`}{" "}
           <button
+            title={reopenTitle}
             type="button"
             className="font-medium text-sidebar-foreground underline underline-offset-2"
             onClick={onOpenRepositoryModal}
@@ -161,7 +165,6 @@ export function WorkspaceSidebar({
   const { model, retrySource } = useSessionNavigationModel(scopedWorkspaces, grouping);
   useWatchSessionBlockers(model);
   const { readVisible } = useVisibleSessionControls();
-  const now = useMinuteClock();
   const listScopeKey =
     scope === "all" ? scope : `${scope}:${activeWorkspace?.workspaceId ?? "none"}`;
 
@@ -228,136 +231,179 @@ export function WorkspaceSidebar({
     [],
   );
 
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const { scopedCollapsed, numberedEntries, cyclingEntries } = useMemo(() => {
+    const scopedCollapsed = new Set(
+      model.groups
+        .filter((group) => collapsedGroups.has(`${listScopeKey}:${group.id}`))
+        .map((group) => group.id),
+    );
+    const numberedEntries = model.groups
+      .filter((group) => !scopedCollapsed.has(group.id))
+      .flatMap((group) => group.entries);
+    return {
+      scopedCollapsed,
+      numberedEntries,
+      cyclingEntries: model.groups.flatMap((group) => group.entries),
+    };
+  }, [model.groups, collapsedGroups, listScopeKey]);
+  // A session update gives `model.groups` a new identity. The hints read positions through context,
+  // so the map keeps its identity while the order stays the same, and the hints do not render.
+  const positionOrder = numberedEntries.map((entry) => entry.key).join("\n");
+  const positions = useMemo(
+    () =>
+      new Map(
+        (positionOrder === "" ? [] : positionOrder.split("\n")).map((key, index) => [
+          key,
+          index + 1,
+        ]),
+      ),
+    [positionOrder],
+  );
+  const toggleGroup = (id: string) =>
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      const key = `${listScopeKey}:${id}`;
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  useSessionNavigationShortcuts({ numberedEntries, cyclingEntries, listScopeKey, openEntry });
+
   return (
-    <aside
-      aria-label="Sessions sidebar"
-      className={cn(
-        "workspace-sidebar flex h-full min-w-0 shrink-0 flex-col border-r border-sidebar-border bg-sidebar",
-        isOpen ? "w-80" : "w-16",
-      )}
-    >
-      {isOpen ? (
-        <>
-          <div className="electron-sidebar-content-open flex flex-col gap-3 border-b border-sidebar-border p-4">
-            <div className="electron-sidebar-heading flex items-center justify-between gap-2">
-              <div className="electron-sidebar-brand flex min-w-0 flex-1 items-center justify-between gap-2">
-                <AppBrand />
-                <CommandPaletteTrigger className="electron-sidebar-search" />
+    <SessionPositionsContext value={positions}>
+      <aside
+        aria-label="Sessions sidebar"
+        className={cn(
+          "workspace-sidebar flex h-full min-w-0 shrink-0 flex-col border-r border-sidebar-border bg-sidebar",
+          isOpen ? "w-80" : "w-16",
+        )}
+      >
+        {isOpen ? (
+          <>
+            <div className="electron-sidebar-content-open flex flex-col gap-3 border-b border-sidebar-border p-4">
+              <div className="electron-sidebar-heading flex items-center justify-between gap-2">
+                <div className="electron-sidebar-brand flex min-w-0 flex-1 items-center justify-between gap-2">
+                  <AppBrand />
+                </div>
+                <ShortcutButton
+                  shortcutId="sidebar"
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="mt-0.5 size-8 shrink-0 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                  onClick={onHide}
+                  aria-label="Hide sidebar"
+                  title="Hide sidebar"
+                >
+                  <PanelLeftClose className="size-4" />
+                </ShortcutButton>
               </div>
-              <Button
+              <CommandPaletteTrigger className="electron-sidebar-search" />
+              <div className="flex flex-col gap-1.5">
+                <SidebarNavigation onBeforeNavigate={guardTransition} />
+                <SessionCreateSplitAction />
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3">
+              <div className="min-w-0 flex-1">
+                <SessionScopeSwitch
+                  scope={scope}
+                  onScopeChange={changeScope}
+                  workspace={activeWorkspace}
+                />
+              </div>
+              <SessionGroupingToggle
+                grouping={grouping}
+                onChange={changeGrouping}
+                disabled={groupingDisabled}
+              />
+            </div>
+            <SessionSelectionScope
+              model={model}
+              grouping={grouping}
+              mode="list"
+              className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3"
+            >
+              <SessionNavigationList
+                key={listScopeKey}
+                model={model}
+                collapsedGroups={scopedCollapsed}
+                onToggleGroup={toggleGroup}
+                onOpen={openEntry}
+                onRetry={retrySource}
+                footer={
+                  scope === "all" ? (
+                    <UnlistedWorkspacesNote onOpenRepositoryModal={onOpenRepositoryModal} />
+                  ) : null
+                }
+              />
+            </SessionSelectionScope>
+            <div className="flex items-center gap-1 border-t border-sidebar-border p-2">
+              <SettingsModal
+                triggerClassName="flex-1 justify-start border-transparent bg-transparent px-3 shadow-none text-sidebar-foreground"
+                triggerSize="default"
+              />
+              <DiagnosticsTrigger className="border-transparent bg-transparent shadow-none" />
+            </div>
+          </>
+        ) : (
+          <div className="electron-sidebar-content-collapsed flex h-full min-h-0 flex-col items-center gap-2 px-1 py-2">
+            <div className="electron-sidebar-collapsed-title-row flex w-full items-center justify-center">
+              <ShortcutButton
+                shortcutId="sidebar"
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="mt-0.5 size-8 shrink-0 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-                onClick={onHide}
-                aria-label="Hide sidebar"
-                title="Hide sidebar"
+                className="electron-sidebar-collapsed-toggle size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
+                onClick={onShow}
+                aria-label="Show sidebar"
+                title="Show sidebar"
               >
-                <PanelLeftClose className="size-4" />
-              </Button>
+                <PanelLeftOpen className="size-4" />
+              </ShortcutButton>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <SidebarNavigation onBeforeNavigate={guardTransition} />
-              <SessionCreateSplitAction />
+            <div className="flex w-full flex-col items-center gap-1.5">
+              <CommandPaletteTrigger compact />
+              <SidebarNavigation compact onBeforeNavigate={guardTransition} />
+              <SessionCreateSplitAction compact />
             </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 px-3 pb-2 pt-3">
-            <div className="min-w-0 flex-1">
+            <div className="flex w-full shrink-0 flex-col items-center gap-2 border-t border-sidebar-border pt-2">
               <SessionScopeSwitch
                 scope={scope}
                 onScopeChange={changeScope}
                 workspace={activeWorkspace}
+                compact
+              />
+              {scope === "all" ? (
+                <CollapsedUnlistedWorkspaces onOpenRepositoryModal={onOpenRepositoryModal} />
+              ) : null}
+            </div>
+            <SessionSelectionScope
+              model={model}
+              grouping={grouping}
+              mode="rail"
+              className="hide-scrollbar min-h-0 w-full flex-1 overflow-y-auto px-0.5 pb-2 pt-1"
+            >
+              <SessionNavigationRail
+                key={listScopeKey}
+                model={model}
+                onOpen={openEntry}
+                onRetry={retrySource}
+              />
+            </SessionSelectionScope>
+            <div className="flex w-full shrink-0 flex-col items-center gap-1 border-t border-sidebar-border pt-2">
+              <DiagnosticsTrigger className="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground" />
+              <SettingsModal
+                triggerClassName="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground"
+                triggerSize="icon"
+                triggerIconOnly
               />
             </div>
-            <SessionGroupingToggle
-              grouping={grouping}
-              onChange={changeGrouping}
-              disabled={groupingDisabled}
-            />
           </div>
-          <SessionSelectionScope
-            model={model}
-            grouping={grouping}
-            mode="list"
-            className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-3"
-          >
-            <SessionNavigationList
-              key={listScopeKey}
-              model={model}
-              now={now}
-              onOpen={openEntry}
-              onRetry={retrySource}
-              footer={
-                scope === "all" ? (
-                  <UnlistedWorkspacesNote onOpenRepositoryModal={onOpenRepositoryModal} />
-                ) : null
-              }
-            />
-          </SessionSelectionScope>
-          <div className="flex items-center gap-1 border-t border-sidebar-border p-2">
-            <SettingsModal
-              triggerClassName="flex-1 justify-start border-transparent bg-transparent px-3 shadow-none text-sidebar-foreground"
-              triggerSize="default"
-            />
-            <DiagnosticsTrigger className="border-transparent bg-transparent shadow-none" />
-          </div>
-        </>
-      ) : (
-        <div className="electron-sidebar-content-collapsed flex h-full min-h-0 flex-col items-center gap-2 px-1 py-2">
-          <div className="electron-sidebar-collapsed-title-row flex w-full items-center justify-center">
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="electron-sidebar-collapsed-toggle size-8 text-sidebar-muted-foreground hover:text-sidebar-foreground"
-              onClick={onShow}
-              aria-label="Show sidebar"
-              title="Show sidebar"
-            >
-              <PanelLeftOpen className="size-4" />
-            </Button>
-          </div>
-          <div className="flex w-full flex-col items-center gap-1.5">
-            <CommandPaletteTrigger compact />
-            <SidebarNavigation compact onBeforeNavigate={guardTransition} />
-            <SessionCreateSplitAction compact />
-          </div>
-          <div className="flex w-full shrink-0 flex-col items-center gap-2 border-t border-sidebar-border pt-2">
-            <SessionScopeSwitch
-              scope={scope}
-              onScopeChange={changeScope}
-              workspace={activeWorkspace}
-              compact
-            />
-            {scope === "all" ? (
-              <CollapsedUnlistedWorkspaces onOpenRepositoryModal={onOpenRepositoryModal} />
-            ) : null}
-          </div>
-          <SessionSelectionScope
-            model={model}
-            grouping={grouping}
-            mode="rail"
-            className="hide-scrollbar min-h-0 w-full flex-1 overflow-y-auto px-0.5 pb-2 pt-1"
-          >
-            <SessionNavigationRail
-              key={listScopeKey}
-              model={model}
-              now={now}
-              onOpen={openEntry}
-              onRetry={retrySource}
-            />
-          </SessionSelectionScope>
-          <div className="flex w-full shrink-0 flex-col items-center gap-1 border-t border-sidebar-border pt-2">
-            <DiagnosticsTrigger className="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground" />
-            <SettingsModal
-              triggerClassName="size-9 border-transparent bg-transparent text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground"
-              triggerSize="icon"
-              triggerIconOnly
-            />
-          </div>
-        </div>
-      )}
-    </aside>
+        )}
+      </aside>
+    </SessionPositionsContext>
   );
 }
 

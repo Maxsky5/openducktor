@@ -1,3 +1,4 @@
+import type { ShortcutActionId } from "@openducktor/contracts";
 import {
   MODEL_PICKER_CAPABILITIES,
   modelPickerFavoriteDisabledReason,
@@ -19,6 +20,7 @@ import {
   type CSSProperties,
   type ReactElement,
   type RefObject,
+  type Ref,
   type KeyboardEvent as ReactKeyboardEvent,
   useId,
   useLayoutEffect,
@@ -29,6 +31,7 @@ import {
 import { List, type ListImperativeAPI, type RowComponentProps } from "react-window";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
+import { ShortcutButton } from "@/features/shortcuts/shortcut-controls";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -54,6 +57,8 @@ type ModelPickerProps = {
   onValueChange: (value: ModelPickerValue) => void;
   getModelDisabledReason?: (item: ModelPickerItem) => string | null;
   triggerClassName?: string;
+  triggerRef?: Ref<HTMLButtonElement>;
+  shortcutId?: ShortcutActionId;
   placeholder?: string;
   onOpenChange?: (open: boolean) => void;
   popoverSide?: "top" | "bottom";
@@ -651,7 +656,54 @@ const recoverPendingModelFocus = ({
   return true;
 };
 
+type ModelPickerTriggerProps = Pick<
+  ReturnType<typeof resolveModelPickerPresentation>,
+  "triggerRuntime" | "triggerModelLabel" | "triggerAriaLabel"
+> & {
+  triggerClassName: ModelPickerProps["triggerClassName"];
+  shortcutId: ModelPickerProps["shortcutId"];
+  triggerRef: ModelPickerProps["triggerRef"];
+  readOnlyReason: string | null;
+  readOnlyReasonId: string;
+};
+
+function renderModelPickerTrigger({
+  shortcutId,
+  triggerRuntime,
+  triggerModelLabel,
+  triggerAriaLabel,
+  triggerClassName,
+  triggerRef,
+  readOnlyReason,
+  readOnlyReasonId,
+}: ModelPickerTriggerProps): ReactElement {
+  return (
+    <ShortcutButton
+      shortcutId={shortcutId}
+      ref={triggerRef}
+      type="button"
+      variant="outline"
+      aria-label={triggerAriaLabel}
+      aria-disabled={readOnlyReason !== null}
+      aria-describedby={readOnlyReason ? readOnlyReasonId : undefined}
+      onClick={readOnlyReason ? (event) => event.preventDefault() : undefined}
+      className={cn(
+        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal focus-visible:ring-0 focus-visible:border-ring",
+        readOnlyReason && "cursor-not-allowed opacity-50",
+        triggerClassName,
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {triggerRuntime ? <AgentRuntimeIcon runtimeKind={triggerRuntime.kind} /> : null}
+        <span className="truncate">{triggerModelLabel}</span>
+      </span>
+      <ChevronsUpDown className="text-muted-foreground" aria-hidden="true" />
+    </ShortcutButton>
+  );
+}
+
 export function ModelPicker({
+  shortcutId,
   runtimes,
   value,
   favoriteState,
@@ -659,6 +711,7 @@ export function ModelPicker({
   onValueChange,
   getModelDisabledReason,
   triggerClassName,
+  triggerRef,
   placeholder = "Select a model",
   onOpenChange,
   popoverSide = "bottom",
@@ -843,27 +896,16 @@ export function ModelPicker({
     }
   };
 
-  const trigger = (
-    <Button
-      type="button"
-      variant="outline"
-      aria-label={triggerAriaLabel}
-      aria-disabled={readOnlyReason !== null}
-      aria-describedby={readOnlyReason ? readOnlyReasonId : undefined}
-      onClick={readOnlyReason ? (event) => event.preventDefault() : undefined}
-      className={cn(
-        "h-9 w-full min-w-0 justify-between border-input bg-card px-3 font-normal focus-visible:ring-0 focus-visible:border-ring",
-        readOnlyReason && "cursor-not-allowed opacity-50",
-        triggerClassName,
-      )}
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        {triggerRuntime ? <AgentRuntimeIcon runtimeKind={triggerRuntime.kind} /> : null}
-        <span className="truncate">{triggerModelLabel}</span>
-      </span>
-      <ChevronsUpDown className="text-muted-foreground" aria-hidden="true" />
-    </Button>
-  );
+  const trigger = renderModelPickerTrigger({
+    shortcutId,
+    triggerRuntime,
+    triggerModelLabel,
+    triggerAriaLabel,
+    triggerClassName,
+    triggerRef,
+    readOnlyReason,
+    readOnlyReasonId,
+  });
 
   const selectView = (view: ModelPickerView): void => {
     setActiveView(view);

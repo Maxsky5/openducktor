@@ -31,6 +31,19 @@ export const isSettingsInteractionDisabled = ({
   isCheckingRuntimeExecutables: boolean;
 }): boolean => isLoadingSettings || isSaving;
 
+export const settingsSectionPresentation = (
+  section: string,
+  preparing: boolean,
+  interactionDisabled: boolean,
+  settingsError: string | null,
+) => {
+  const shortcuts = section === "keyboard-shortcuts";
+  return {
+    loading: preparing && !shortcuts,
+    sidebarDisabled: interactionDisabled && !settingsError && !shortcuts,
+  };
+};
+
 export const updateRoleDefault = (
   agentDefaults: RepoAgentDefaultsInput,
   role: RepoDefaultRole,

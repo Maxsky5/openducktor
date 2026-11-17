@@ -1,5 +1,12 @@
+import {
+  ShortcutScope,
+  ShortcutText,
+  useShortcutTitle,
+} from "@/features/shortcuts/shortcut-controls";
 import { GitCommitHorizontal, LoaderCircle } from "lucide-react";
-import { type KeyboardEvent, memo, type ReactElement, useId } from "react";
+
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
+import { useRef, type KeyboardEvent, memo, type ReactElement, useId } from "react";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { GitCommitMode } from "@openducktor/frontend-core/git/contracts";
@@ -70,6 +77,33 @@ export const CommitComposer = memo(function CommitComposer({
     const submitted = message;
     if (await commit(mode, submitted)) clearSubmittedCommitMessage(contextKey, submitted);
   };
+  const root = useRef<HTMLDivElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "git-commit-staged" as const,
+        run: () => {
+          void submit("staged");
+        },
+        disabledReason: reasons.staged,
+      },
+      {
+        id: "git-commit-all" as const,
+        run: () => {
+          void submit("all");
+        },
+        disabledReason: reasons.all,
+      },
+    ],
+    "[data-git-view]",
+  );
+  const allShortcutTitle = useShortcutTitle(
+    "git-commit-all",
+    `Commit all changes (${modifier}+Enter)`,
+    reasons.all === null,
+    shortcutOwner,
+  );
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     // Enter also confirms text from an input method. That must not commit.
     if (event.nativeEvent.isComposing || event.key !== "Enter") return;
@@ -78,76 +112,84 @@ export const CommitComposer = memo(function CommitComposer({
   };
 
   return (
-    <div
-      className="shrink-0 border-t border-border px-2 py-2"
-      data-testid="agent-studio-git-commit-form"
-    >
+    <ShortcutScope owners={[shortcutOwner]}>
       <div
-        // One input group: the field and the Commit button share one border, height, and focus.
-        className="flex h-8 min-w-0 items-stretch overflow-hidden rounded-md border border-input bg-card shadow-sm transition-colors has-[input:focus-visible]:border-ring"
-        data-testid="agent-studio-git-commit-input-group"
+        className="shrink-0 border-t border-border px-2 py-2"
+        ref={root}
+        data-testid="agent-studio-git-commit-form"
       >
-        <Input
-          embedded
-          value={message}
-          disabled={isCommitting || commit === null}
-          placeholder={`Commit message (${modifier}+Enter commits all)`}
-          aria-label="Commit message"
-          aria-describedby={hintId}
-          className="h-full min-w-0 flex-1 px-2.5 text-xs"
-          data-testid="agent-studio-git-commit-message-input"
-          onKeyDown={onKeyDown}
-          onChange={(event) => {
-            const commitMessage = event.currentTarget.value;
-            updateView(() => ({ commitMessage }));
-          }}
-        />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* A disabled button gets no pointer events, so the wrapper shows its tooltip. */}
-            <span className="flex shrink-0 border-l border-input">
-              <button
-                type="button"
-                // A disabled Commit keeps the primary color, dimmed like every disabled button.
-                className={cn(
-                  "flex h-full w-9 items-center justify-center bg-primary text-primary-foreground outline-none transition-colors",
-                  "enabled:hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary-foreground/70 focus-visible:ring-inset",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
-                )}
-                aria-label="Commit staged changes"
-                disabled={reasons.staged !== null}
-                onClick={() => void submit("staged")}
-                data-testid="agent-studio-git-commit-submit-button"
-              >
-                {isCommitting ? (
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                ) : (
-                  <GitCommitHorizontal className="size-4" />
-                )}
-              </button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top" align="end">
-            <p>{reasons.staged ?? `Commit ${plural(stagedFileCount, "staged file")}`}</p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
-      <p id={hintId} className="sr-only" data-testid="agent-studio-git-commit-hint">
-        {composerHint(input)}
-      </p>
-      <span role="status" className="sr-only" data-testid="agent-studio-git-commit-status">
-        {committingMode ? PENDING_STATUS[committingMode] : ""}
-      </span>
-      {commitError ? (
-        <p
-          role="alert"
-          className="mt-1.5 px-0.5 text-xs text-destructive"
-          data-testid="agent-studio-git-commit-error"
+        <div
+          // One input group: the field and the Commit button share one border, height, and focus.
+          className="flex h-8 min-w-0 items-stretch overflow-hidden rounded-md border border-input bg-card shadow-sm transition-colors has-[input:focus-visible]:border-ring"
+          data-testid="agent-studio-git-commit-input-group"
         >
-          {commitError}
+          <Input
+            embedded
+            value={message}
+            disabled={isCommitting || commit === null}
+            placeholder={`Commit message (${modifier}+Enter commits all)`}
+            title={allShortcutTitle}
+            aria-label="Commit message"
+            aria-describedby={hintId}
+            className="h-full min-w-0 flex-1 px-2.5 text-xs"
+            data-testid="agent-studio-git-commit-message-input"
+            onKeyDown={onKeyDown}
+            onChange={(event) => {
+              const commitMessage = event.currentTarget.value;
+              updateView(() => ({ commitMessage }));
+            }}
+          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* A disabled button gets no pointer events, so the wrapper shows its tooltip. */}
+              <span className="flex shrink-0 border-l border-input">
+                <button
+                  type="button"
+                  // A disabled Commit keeps the primary color, dimmed like every disabled button.
+                  className={cn(
+                    "flex h-full w-9 items-center justify-center bg-primary text-primary-foreground outline-none transition-colors",
+                    "enabled:hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary-foreground/70 focus-visible:ring-inset",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                  )}
+                  aria-label="Commit staged changes"
+                  disabled={reasons.staged !== null}
+                  onClick={() => void submit("staged")}
+                  data-testid="agent-studio-git-commit-submit-button"
+                >
+                  {isCommitting ? (
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                  ) : (
+                    <GitCommitHorizontal className="size-4" />
+                  )}
+                </button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" align="end">
+              <p>
+                <ShortcutText id="git-commit-staged" available={reasons.staged === null}>
+                  {reasons.staged ?? `Commit ${plural(stagedFileCount, "staged file")}`}
+                </ShortcutText>
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <p id={hintId} className="sr-only" data-testid="agent-studio-git-commit-hint">
+          {composerHint(input)}
         </p>
-      ) : null}
-    </div>
+        <span role="status" className="sr-only" data-testid="agent-studio-git-commit-status">
+          {committingMode ? PENDING_STATUS[committingMode] : ""}
+        </span>
+        {commitError ? (
+          <p
+            role="alert"
+            className="mt-1.5 px-0.5 text-xs text-destructive"
+            data-testid="agent-studio-git-commit-error"
+          >
+            {commitError}
+          </p>
+        ) : null}
+      </div>
+    </ShortcutScope>
   );
 });
 

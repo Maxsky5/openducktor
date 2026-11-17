@@ -1,4 +1,5 @@
-import { BROWSER_BLANK_URL, type BrowserServerMessage } from "@openducktor/contracts";
+import { bindShortcutGuest } from "../electron-shortcut-ipc";
+import { BROWSER_BLANK_URL } from "@openducktor/contracts";
 import {
   answerOnce,
   BrowserEngineError,
@@ -44,8 +45,6 @@ export type ElectronBrowserEngineInput = {
   downloadsDirectory(): string;
   fileExists(filePath: string): boolean;
   showItemInFolder(filePath: string): void;
-  /** Sends a browser channel message to the browser clients of one OpenDucktor window. */
-  notifyRenderer(hostWebContentsId: number, message: BrowserServerMessage): void;
   /** The DevTools frontend URL of a tab, or `null` while the DevTools endpoint is not running. */
   devToolsFrontendUrl(tabId: string): string | null;
   decodePng: ElectronPngDecoder;
@@ -279,11 +278,6 @@ export const createElectronBrowserEngine = (
               forwardShortcuts: tab.surface === "panel",
               onSchemeRefused: (scheme) =>
                 emit({ type: "scheme_refused", tabId: tab.tabId, scheme }),
-              onShortcut: (shortcut) => {
-                if (tab.viewWindowId !== null) {
-                  input.notifyRenderer(tab.viewWindowId, { type: "shortcut", shortcut });
-                }
-              },
               consumeUnloadAllowance: () => {
                 const allowed = tab.allowUnloadOnce;
                 tab.allowUnloadOnce = false;
@@ -327,7 +321,17 @@ export const createElectronBrowserEngine = (
         return false;
       }
       releaseBinding(tab);
-      tab.binding = binding;
+      const releaseShortcut = bindShortcutGuest(guest.id, () => ({
+        windowId: tab.viewWindowId,
+        tabId: tab.tabId,
+      }));
+      tab.binding = {
+        ...binding,
+        release: () => {
+          releaseShortcut();
+          binding.release();
+        },
+      };
       tabByGuest.set(guest.id, tab.tabId);
       emit({ type: "tab_attached", tabId: tab.tabId });
       return true;

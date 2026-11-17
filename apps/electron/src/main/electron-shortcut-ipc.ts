@@ -1,0 +1,154 @@
+import type { BrowserWindow, IpcMain, Input, IpcMainInvokeEvent, WebContents } from "electron";
+import {
+  electronShortcutRulesSchema,
+  type ElectronShortcutRules,
+  type EmbeddedShortcutEvent,
+  holdsShortcutMod,
+  inputSignature,
+  type ShortcutInput,
+} from "@openducktor/contracts";
+import {
+  ELECTRON_SHORTCUT_APPLY_CHANNEL,
+  ELECTRON_SHORTCUT_EVENT_CHANNEL,
+  ELECTRON_SHORTCUT_RELEASE_CHANNEL,
+} from "../shared/electron-bridge-contract";
+
+type WindowRouting = { window: BrowserWindow; rules: ElectronShortcutRules; release(): void };
+const windows = new Map<number, WindowRouting>();
+const guests = new Map<number, () => { windowId: number | null; tabId: string }>();
+const platform =
+  process.platform === "darwin" ? "darwin" : process.platform === "win32" ? "win32" : "linux";
+const toInput = (
+  input: Pick<Input, "type" | "key" | "control" | "meta" | "alt" | "shift"> &
+    Partial<Pick<Input, "code" | "isComposing" | "isAutoRepeat">>,
+): ShortcutInput => ({
+  phase: input.type === "keyUp" ? "up" : "down",
+  key: input.key,
+  code: input.code ?? "",
+  ctrl: input.control,
+  meta: input.meta,
+  alt: input.alt,
+  shift: input.shift,
+  composing: input.isComposing === true,
+  repeat: input.isAutoRepeat === true,
+});
+/** Repeats keep their claim, so a held shortcut never falls through to a menu accelerator. */
+const claimedSignature = (input: ShortcutInput): string | null =>
+  inputSignature({ ...input, repeat: false }, platform);
+const publish = (
+  renderer: WebContents,
+  sourceTabId: string | null,
+  event: EmbeddedShortcutEvent,
+): void => {
+  if (!renderer.isDestroyed())
+    renderer.send(ELECTRON_SHORTCUT_EVENT_CHANNEL, { sourceTabId, event });
+};
+const guestHintStates = new Map<number, boolean>();
+export const bindShortcutGuest = (
+  id: number,
+  identity: () => { windowId: number | null; tabId: string },
+): (() => void) => {
+  guests.set(id, identity);
+  return () => {
+    guests.delete(id);
+    guestHintStates.delete(id);
+  };
+};
+export const focusShortcutGuest = (guestId: number): void => {
+  guestHintStates.delete(guestId);
+  const identity = guests.get(guestId)?.();
+  const routing =
+    identity && identity.windowId !== null ? windows.get(identity.windowId) : undefined;
+  if (routing && identity) publish(routing.window.webContents, identity.tabId, { type: "focus" });
+};
+/**
+ * Routes a key of a focused browser guest. A claimed key never reaches a menu accelerator, such
+ * as Close Window for Mod+W; only a key with a route for this guest leaves the page.
+ */
+export const routeGuestShortcut = (
+  guestId: number,
+  guest: Pick<WebContents, "setIgnoreMenuShortcuts">,
+  event: { preventDefault(): void },
+  rawInput: Parameters<typeof toInput>[0],
+): boolean => {
+  const identity = guests.get(guestId)?.();
+  const routing =
+    identity && identity.windowId !== null ? windows.get(identity.windowId) : undefined;
+  if (!routing || !identity) return false;
+  const input = toInput(rawInput);
+  const showHints = holdsShortcutMod(input, platform);
+  if (showHints !== (guestHintStates.get(guestId) ?? false)) {
+    guestHintStates.set(guestId, showHints);
+    publish(routing.window.webContents, identity.tabId, { type: "key-state", input });
+  }
+  const signature = claimedSignature(input);
+  guest.setIgnoreMenuShortcuts(
+    routing.rules.recording || (signature !== null && routing.rules.claims.includes(signature)),
+  );
+  if (routing.rules.recording || signature === null) return false;
+  const route = routing.rules.guestRoutes[identity.tabId]?.find(
+    (candidate) => candidate.signature === signature,
+  );
+  if (!route) return false;
+  event.preventDefault();
+  if (!input.repeat)
+    publish(routing.window.webContents, identity.tabId, {
+      type: "invoke",
+      revision: routing.rules.revision,
+      commandId: route.commandId,
+      input,
+    });
+  return true;
+};
+export function registerElectronShortcutIpc(
+  ipcMain: Pick<IpcMain, "handle">,
+  fromContents: (contents: WebContents) => BrowserWindow | null,
+): void {
+  const trustedWindow = (event: IpcMainInvokeEvent): BrowserWindow => {
+    const window = fromContents(event.sender);
+    if (
+      !window ||
+      window.webContents !== event.sender ||
+      event.senderFrame !== event.sender.mainFrame
+    )
+      throw new Error("Shortcut routing requires the app's main renderer frame.");
+    return window;
+  };
+  ipcMain.handle(ELECTRON_SHORTCUT_APPLY_CHANNEL, (event, raw: ElectronShortcutRules) => {
+    const window = trustedWindow(event);
+    windows.get(event.sender.id)?.release();
+    windows.delete(event.sender.id);
+    const rules = electronShortcutRulesSchema.parse(raw);
+    const onInput = (_event: Electron.Event, rawInput: Input) => {
+      const signature = claimedSignature(toInput(rawInput));
+      window.webContents.setIgnoreMenuShortcuts(
+        rules.recording || (signature !== null && rules.claims.includes(signature)),
+      );
+    };
+    const onBlur = () => {
+      guestHintStates.clear();
+      rules.recording = false;
+      window.webContents.setIgnoreMenuShortcuts(false);
+      publish(window.webContents, null, { type: "blur" });
+    };
+    const onDestroyed = () => {
+      windows.get(event.sender.id)?.release();
+      windows.delete(event.sender.id);
+    };
+    const release = () => {
+      window.webContents.removeListener("destroyed", onDestroyed);
+      window.webContents.removeListener("before-input-event", onInput);
+      window.removeListener("blur", onBlur);
+      if (!window.webContents.isDestroyed()) window.webContents.setIgnoreMenuShortcuts(false);
+    };
+    windows.set(event.sender.id, { window, rules, release });
+    window.webContents.on("before-input-event", onInput);
+    window.on("blur", onBlur);
+    window.webContents.once("destroyed", onDestroyed);
+  });
+  ipcMain.handle(ELECTRON_SHORTCUT_RELEASE_CHANNEL, (event) => {
+    trustedWindow(event);
+    windows.get(event.sender.id)?.release();
+    windows.delete(event.sender.id);
+  });
+}

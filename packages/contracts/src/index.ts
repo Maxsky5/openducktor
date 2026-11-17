@@ -32,7 +32,6 @@ export * from "./browser-url-rules";
 export * from "./workspace-id-schemas";
 export * from "./browser-channel-protocol";
 export * from "./browser-frame-protocol";
-export * from "./browser-shortcuts";
 export * from "./browser-tab-schemas";
 export * from "./local-attachment-error-schemas";
 export {
@@ -176,3 +175,5 @@ export * from "./odt-artifact-schemas";
 
 export * from "./session-startup-schemas";
 export * from "./workflow-client-schemas";
+
+export * from "./keyboard-shortcut-schemas";

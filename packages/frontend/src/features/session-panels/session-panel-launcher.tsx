@@ -1,4 +1,5 @@
 import { ArrowRight } from "lucide-react";
+import { useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
 import { type ReactElement, useId } from "react";
 import { Button } from "@/components/ui/button";
 import { PANEL_TAB_KIND_RULES, type PanelTabKind } from "./panel-tab-kinds";
@@ -50,9 +51,11 @@ function SessionPanelLauncherCard({
 }): ReactElement {
   const id = useId();
   const rule = PANEL_TAB_KIND_RULES[entry.kind];
+  const title = useShortcutTitle(`panel:${entry.kind}`, rule.label, entry.disabledReason === null);
   const Icon = rule.icon;
   return (
     <button
+      title={title}
       type="button"
       aria-labelledby={`${id}-label`}
       aria-describedby={`${id}-description`}

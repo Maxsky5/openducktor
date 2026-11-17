@@ -1,4 +1,12 @@
-import { type ComponentProps, type MouseEvent, type ReactElement, useCallback } from "react";
+import { ShortcutScope } from "@/features/shortcuts/shortcut-controls";
+import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
+import {
+  type ComponentProps,
+  type MouseEvent,
+  type ReactElement,
+  useCallback,
+  useRef,
+} from "react";
 import { CopyIconButton } from "@/components/ui/copy-icon-button";
 import { buildCopyPreview } from "@/lib/copy-preview";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
@@ -23,6 +31,19 @@ export function DocumentCopyButton({
     errorLogContext,
   });
 
+  const root = useRef<HTMLButtonElement>(null);
+  const shortcutOwner = useLocalShortcuts(
+    root,
+    [
+      {
+        id: "content-copy" as const,
+        run: () => {
+          void copyToClipboard(markdown);
+        },
+      },
+    ],
+    "[data-artifact-view], [data-markdown-preview]",
+  );
   const handleCopy = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -33,13 +54,17 @@ export function DocumentCopyButton({
   );
 
   return (
-    <CopyIconButton
-      copied={copied}
-      ariaLabel="Copy artifact content"
-      dataTestId={dataTestId}
-      onClick={handleCopy}
-      tooltipSide={tooltipSide}
-      {...(className && { className })}
-    />
+    <ShortcutScope owners={[shortcutOwner]}>
+      <CopyIconButton
+        shortcutId="content-copy"
+        ref={root}
+        copied={copied}
+        ariaLabel="Copy artifact content"
+        dataTestId={dataTestId}
+        onClick={handleCopy}
+        tooltipSide={tooltipSide}
+        {...(className && { className })}
+      />
+    </ShortcutScope>
   );
 }

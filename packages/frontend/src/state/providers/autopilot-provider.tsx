@@ -138,7 +138,7 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
         }
         // The shell parsed the payload with the run event contract.
         if (payload.type === "autopilot_outcome") presenter.present(payload.outcome);
-        else presenter.presentFailure(payload.failure);
+        else if (payload.type === "autopilot_failure") presenter.presentFailure(payload.failure);
       })
       .then(
         (stop) => {

@@ -1,6 +1,5 @@
-import { taskActionLabel } from "@openducktor/workflows";
 import type { AppPlatform } from "@openducktor/contracts";
-import { hasPlatformModifier, isPlatformChord, platformKeyLabels } from "@/lib/keyboard-shortcuts";
+import { hasPlatformModifier, platformKeyLabels } from "@/lib/keyboard-shortcuts";
 import type { CommandPaletteHint } from "./command-palette-footer";
 import type { PaletteEntry } from "./command-palette-groups";
 import type { PaletteTaskCommand, PaletteTaskView } from "./command-palette-task-model";
@@ -62,7 +61,11 @@ export const handlePaletteKeyDown = (
   event: PaletteKeyEvent & { preventDefault: () => void },
   bindings: PaletteKeyBindings,
 ): void => {
-  if (event.key === "Tab") event.preventDefault();
+  if (
+    event.key === "Tab" ||
+    (event.key === "Enter" && (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey))
+  )
+    event.preventDefault();
   const binding = [...bindings.item, ...bindings.palette].find((entry) => entry.matches(event));
   if (!binding) return;
   event.preventDefault();
@@ -138,56 +141,18 @@ export const scopeKeys = (platform: AppPlatform): string[] => [
   "↓",
 ];
 
-/**
- * The keys of the main list, split into keys of the highlighted row and keys of the palette.
- * A task row has Mod+Enter and Mod+E (edit). A chat row has Mod+E (rename). Both open their
- * action list with Tab and with Right arrow. Mod+Enter does nothing for a task without a next
- * step. Right arrow works only with the caret at the end of the text.
- */
+/** Fixed navigation of the highlighted record and workspace scope. */
 const mainListBindings = ({
   platform,
   entry,
-  taskView,
-  runTaskCommand,
-  renameChat,
   showActions,
   caretAtEnd,
   openScope,
 }: MainListKeyArgs): PaletteKeyBindings => {
   if (!platform) return { item: [], palette: [] };
-  const { modifier } = platformKeyLabels(platform);
-  const modE = (id: string, label: string, run: () => void): PaletteKeyBinding => ({
-    matches: (event) => isPlatformChord(event, "e", platform),
-    run,
-    hint: { id, keys: [modifier, "E"], label },
-  });
   const item: PaletteKeyBinding[] = [];
-  if (entry?.kind === "task" && taskView) {
-    const task = entry.item;
-    const { nextStep } = taskView;
-    const run = (command: PaletteTaskCommand): void => runTaskCommand(task, command, taskView);
-    item.push(
-      {
-        // A task without a next step keeps the key, so cmdk cannot run it as a plain Enter.
-        matches: (event) => isPlatformChord(event, "enter", platform),
-        run: () => {
-          if (nextStep) run({ kind: "workflow", action: nextStep });
-        },
-        hint: nextStep
-          ? { id: "next", keys: [modifier, "↵"], label: taskActionLabel(nextStep, task.task) }
-          : null,
-      },
-      modE("edit", "Edit", () => run({ kind: "edit" })),
-      ...actionListKeys(entry, showActions, caretAtEnd),
-    );
-  }
-  if (entry?.kind === "chat") {
-    const chat = entry.item;
-    item.push(
-      modE("rename", "Rename", () => renameChat(chat)),
-      ...actionListKeys(entry, showActions, caretAtEnd),
-    );
-  }
+  if (entry?.kind === "task" || entry?.kind === "chat")
+    item.push(...actionListKeys(entry, showActions, caretAtEnd));
   const scope: PaletteKeyBinding = {
     matches: (event) =>
       event.key === "ArrowDown" &&

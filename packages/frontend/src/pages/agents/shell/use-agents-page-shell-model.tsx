@@ -1,3 +1,4 @@
+import { TaskSessionShortcuts } from "@/features/shortcuts/task-session-shortcuts";
 import { roleDefaultPanel } from "@openducktor/workflows";
 import type { BrowserTabOwner } from "@openducktor/contracts";
 import { useBrowserPanelModel } from "@/features/browser";
@@ -5,7 +6,7 @@ import type { SessionNavigationRecovery } from "@openducktor/frontend-core/sessi
 import type { ChatFileLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-file-link-context";
 import type { ChatArtifactLinkOwner } from "@/components/features/agents/agent-chat/agent-chat-artifact-link-context";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header.types";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   type SessionPanelOwner,
   type SessionPanelsModel,
@@ -43,6 +44,7 @@ import {
 } from "@/features/session-panels/page-tool-details";
 
 type AgentsPageShellModel = {
+  taskShortcuts?: ReactNode;
   chatFileLinkOwner: ChatFileLinkOwner;
   chatArtifactLinkOwner: ChatArtifactLinkOwner | null;
   activeWorkspace: ReturnType<typeof useWorkspaceBranchState>["activeWorkspace"];
@@ -279,7 +281,18 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
     panels,
   );
 
+  const taskSessions = useMemo(
+    () => sessions.filter((session) => session.taskId === selection.view.taskId),
+    [sessions, selection.view.taskId],
+  );
   return {
+    taskShortcuts: (
+      <TaskSessionShortcuts
+        task={selection.view.selectedTask}
+        sessions={taskSessions}
+        header={agentStudioHeaderModel}
+      />
+    ),
     activeWorkspace,
     navigationPersistenceError,
     navigationPersistenceOperation: routeSession.navigationPersistenceOperation,

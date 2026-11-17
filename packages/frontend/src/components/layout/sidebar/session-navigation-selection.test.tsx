@@ -3,12 +3,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { sessionNavigationTargetKey } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import { selectSessionEntry } from "./session-navigation-selection";
-import { SessionNavigationList } from "./session-navigation-list";
+import { SessionNavigationList } from "./session-navigation-list.test-view";
 import { SessionNavigationRail } from "./session-navigation-rail";
 import { SessionNavigationTestProvider } from "./session-navigation.test-provider";
 import {
   betaWorkspace,
-  NOW,
   navigationModel,
   taskSessionEntry,
   workspaceSessionEntry,
@@ -32,7 +31,7 @@ describe("session selection", () => {
       const onOpen = mock((_entry: SessionNavigationEntry) => {});
       render(
         <SessionNavigationTestProvider selection={selection}>
-          <Component model={model} now={NOW} onOpen={onOpen} onRetry={() => {}} />
+          <Component model={model} onOpen={onOpen} onRetry={() => {}} />
         </SessionNavigationTestProvider>,
       );
       const row = screen.getByRole("button", { name: /Task builder/ });

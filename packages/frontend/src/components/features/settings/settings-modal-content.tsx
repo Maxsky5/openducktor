@@ -1,3 +1,4 @@
+import { SettingsKeyboardShortcutsSection } from "./settings-keyboard-shortcuts-section";
 import { globalPromptLayersOf } from "@openducktor/workflows";
 import type { ReactElement } from "react";
 import { RefreshCw } from "lucide-react";
@@ -90,6 +91,8 @@ export function SettingsModalContent({
     updateGlobalPromptLayers,
   } = controller;
 
+  if (section === "keyboard-shortcuts")
+    return <SettingsKeyboardShortcutsSection disabled={isInteractionDisabled} />;
   if (settingsError && !snapshotDraft) {
     return (
       <div

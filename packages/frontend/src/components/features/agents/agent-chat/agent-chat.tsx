@@ -1,3 +1,6 @@
+import { MessageSquare } from "lucide-react";
+import { useCommandPalettePageCommand } from "@/features/command-palette/command-palette-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import {
   memo,
   type ReactElement,
@@ -51,6 +54,21 @@ export function AgentChatSurface({
   );
   const supportsComposer = model.composer !== undefined;
   const composerModel = model.composer;
+  const shortcutActive = useSessionViewActive();
+  useCommandPalettePageCommand(
+    composerModel && shortcutActive
+      ? {
+          id: "focus-composer" as const,
+          label: "Focus composer",
+          icon: MessageSquare,
+          keywords: ["message", "input"],
+          target: { kind: "session", key: String(visitKey) },
+          run: () => {
+            dropTargetRef.current?.querySelector<HTMLElement>("[data-composer-editor]")?.focus();
+          },
+        }
+      : null,
+  );
   const clearDrag = useEffectEvent(() => {
     dragDepthRef.current = 0;
     isDraggingFilesRef.current = false;

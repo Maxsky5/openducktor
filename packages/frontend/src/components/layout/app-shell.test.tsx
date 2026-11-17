@@ -1,8 +1,8 @@
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { createWireTaskCardFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import {
   type ClientStorage,
@@ -385,7 +385,7 @@ function AppShellTestEnvironment({
   return (
     <MemoryRouter initialEntries={[options.initialEntry ?? "/kanban"]} useTransitions={false}>
       <CurrentRoute />
-      <ClientConnectionProvider connection={connection}>
+      <ShortcutTestProviders connection={connection}>
         <ThemeProvider>
           <ActiveWorkspaceContext.Provider
             value={{
@@ -539,7 +539,7 @@ function AppShellTestEnvironment({
             </WorkspacePresenceContext.Provider>
           </ActiveWorkspaceContext.Provider>
         </ThemeProvider>
-      </ClientConnectionProvider>
+      </ShortcutTestProviders>
     </MemoryRouter>
   );
 }
@@ -554,10 +554,15 @@ const renderAppShellForTest = (
   options: RenderAppShellForTestOptions = {},
 ): ReturnType<typeof render> => {
   const connection = createTestClientConnection({
-    client: { ...localOnlyProviderSetupClient(), ...hostFakes },
+    client: {
+      workspaceGetKeyboardShortcuts: async () => ({ version: 1, overrides: {} }),
+      ...localOnlyProviderSetupClient(),
+      ...hostFakes,
+    },
     ...(options.storage && { storage: options.storage }),
   });
   const { queryClient } = connection;
+  queryClient.setQueryData(["keyboard-shortcuts"], { version: 1, overrides: {} });
   const settingsSnapshot = createSettingsSnapshotFixture();
   queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, settingsSnapshot);
   queryClient.setQueryData(
@@ -967,7 +972,7 @@ describe("AppShell", () => {
 
     const collapsedSettingsButton = screen.getByRole("button", { name: "Settings" });
     expect(collapsedSettingsButton.getAttribute("aria-label")).toBe("Settings");
-    expect(collapsedSettingsButton.getAttribute("title")).toBe("Settings");
+    expect(collapsedSettingsButton.getAttribute("title")).toBe("Settings (Ctrl+,)");
     expect(collapsedSettingsButton.textContent?.trim()).toBe("");
   });
 
@@ -2175,7 +2180,7 @@ describe("AppShell command palette", () => {
     const restoreClipboard = replaceNavigatorClipboard(writeText);
     try {
       const { palette, input } = await searchChat();
-      expect(within(palette).getByText("Rename")).toBeTruthy();
+      expect(within(palette).queryByText("Rename")).toBeNull();
 
       fireEvent.keyDown(input, { key: "Tab" });
 
@@ -2203,10 +2208,12 @@ describe("AppShell command palette", () => {
     }
   });
 
-  test("renames a chat with Mod+E and archives it with the existing dialogs", async () => {
-    const { input } = await searchChat();
-
+  test("leaves chat rename unassigned and uses the existing rename and archive dialogs", async () => {
+    const { input, palette: initialPalette } = await searchChat();
     fireEvent.keyDown(input, { key: "e", metaKey: true });
+    expect(screen.queryByRole("dialog", { name: "Rename session" })).toBeNull();
+    fireEvent.keyDown(input, { key: "Tab" });
+    fireEvent.click(within(initialPalette).getByRole("option", { name: "Rename session" }));
     await flushQueryUpdates();
     const rename = await screen.findByRole("dialog", { name: "Rename session" });
     fireEvent.keyDown(rename, { key: "Escape" });
@@ -2268,7 +2275,7 @@ describe("AppShell command palette", () => {
     expect(selectedOption(palette)?.textContent).toContain("Polish the command palette");
   });
 
-  test("edits the highlighted task and runs its next workflow step with the task keys", async () => {
+  test("edits the highlighted task and leaves its workflow action unassigned", async () => {
     const onEdit = mock(() => {});
     const onOpenSession = mock(() => {});
     renderPalette({ taskWorkflowActions: { onEdit, onOpenSession } });
@@ -2278,13 +2285,10 @@ describe("AppShell command palette", () => {
     await waitFor(() => expect(onEdit).toHaveBeenCalledWith("odt-own"));
 
     search(await openPalette(), "polish");
-    expect(screen.getByText("Open Builder")).toBeTruthy();
+    expect(screen.queryByText("Open Builder")).toBeNull();
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter", metaKey: true });
-    await waitFor(() =>
-      expect(onOpenSession).toHaveBeenCalledWith("odt-own", "build", {
-        session: expect.objectContaining({ externalSessionId: "build-1" }),
-      }),
-    );
+    expect(onOpenSession).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Command palette" })).toBeTruthy();
   });
 
   test("creates a task from the query text", async () => {

@@ -1,3 +1,4 @@
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { lazy, type ReactElement, Suspense } from "react";
 import {
   createBrowserRouter,
@@ -66,9 +67,12 @@ function AppProviders(): ReactElement {
         <AppStateProvider>
           <WorkspacePreviewTransitionGuardProvider>
             <ApplicationOverlays>
-              <WorkspacePreviewRouteGuard />
-              <Outlet />
-              <AppToaster />
+              {/* One provider for the app; nested providers with the same settings reuse it. */}
+              <TooltipProvider>
+                <WorkspacePreviewRouteGuard />
+                <Outlet />
+                <AppToaster />
+              </TooltipProvider>
             </ApplicationOverlays>
           </WorkspacePreviewTransitionGuardProvider>
         </AppStateProvider>

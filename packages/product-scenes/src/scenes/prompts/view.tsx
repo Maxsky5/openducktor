@@ -10,6 +10,7 @@ import {
   Columns3,
   Cpu,
   FolderGit2,
+  Keyboard,
   LoaderCircle,
   type LucideIcon,
   MessageSquare,
@@ -49,6 +50,7 @@ import "./view.css";
 /** The icon of each section, as SETTINGS_SECTIONS gives it. */
 const SECTION_ICONS = {
   General: SlidersHorizontal,
+  "Keyboard shortcuts": Keyboard,
   Appearance: Palette,
   "Remote control": Radio,
   Git: FolderGit2,

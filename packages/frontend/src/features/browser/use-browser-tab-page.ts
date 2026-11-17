@@ -42,6 +42,11 @@ export const useBrowserTabPage = ({
       onFocusPage: pageFocus.onFocusPage,
       onAddressLoad: pageFocus.onAddressLoad,
     },
-    slotProps: { ref: setSlot, "data-browser-slot": surfaceKey, ...pageFocus.slotProps },
+    slotProps: {
+      ref: setSlot,
+      "data-browser-slot": surfaceKey,
+      "data-browser-tab-id": tabId,
+      ...pageFocus.slotProps,
+    },
   };
 };

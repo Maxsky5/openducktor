@@ -1,9 +1,12 @@
+import type { ShortcutActionId } from "@openducktor/contracts";
 import type { ReactElement, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ShortcutText } from "@/features/shortcuts/shortcut-controls";
 
 /** An icon button whose tooltip names its action. A disabled button explains why. */
 export function CardIconButton({
+  shortcutId,
   label,
   hint = label,
   describedBy,
@@ -11,6 +14,7 @@ export function CardIconButton({
   onClick,
   children,
 }: {
+  shortcutId?: ShortcutActionId | undefined;
   label: string;
   hint?: string;
   describedBy?: string | undefined;
@@ -37,7 +41,11 @@ export function CardIconButton({
           </Button>
         </span>
       </TooltipTrigger>
-      <TooltipContent side="top">{hint}</TooltipContent>
+      <TooltipContent side="top">
+        <ShortcutText id={shortcutId} available={!disabled}>
+          {hint}
+        </ShortcutText>
+      </TooltipContent>
     </Tooltip>
   );
 }

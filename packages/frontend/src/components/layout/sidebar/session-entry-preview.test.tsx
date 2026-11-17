@@ -26,8 +26,8 @@ import {
   createTaskCardFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
-import { SessionNavigationList } from "./session-navigation-list";
-import { SessionSelectionContext } from "./session-navigation-selection";
+import { SessionNavigationList } from "./session-navigation-list.test-view";
+import { SessionSelectionProvider } from "./session-selection-scope";
 import { SessionMenuProvider } from "./session-menu-provider";
 import {
   betaWorkspace,
@@ -165,14 +165,15 @@ const mountSidebar = (
           <WorkspaceActivityContext value={observer}>
             <VisibleSessionTargetProvider>
               <SessionReadStateProvider visibility={documentVisibility}>
-                <SessionSelectionContext value={{ entryKey: other.key, visibleKey: other.key }}>
+                <SessionSelectionProvider
+                  selection={{ entryKey: other.key, visibleKey: other.key }}
+                >
                   <SessionNavigationList
                     model={navigationModel({ needs_you: [entry], recent: [other] })}
-                    now={NOW}
                     onOpen={onOpen}
                     onRetry={() => {}}
                   />
-                </SessionSelectionContext>
+                </SessionSelectionProvider>
               </SessionReadStateProvider>
             </VisibleSessionTargetProvider>
           </WorkspaceActivityContext>

@@ -1,3 +1,4 @@
+import { useShortcutLabel } from "../shortcuts/use-shortcut-label";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { Check, ChevronRight, MessagesSquare } from "lucide-react";
 import { type ComponentProps, type ReactElement, type ReactNode, useId } from "react";
@@ -117,6 +118,7 @@ export function ActionRow({
   query: string;
   onSelect: () => void;
 }): ReactElement {
+  const shortcut = useShortcutLabel(item.shortcutId);
   return (
     <PaletteOption
       value={item.key}
@@ -141,6 +143,9 @@ export function ActionRow({
         </span>
       ) : null}
       <span className="flex-1" />
+      {shortcut && !item.disabledReason ? (
+        <span className="shrink-0 font-mono text-xs text-muted-foreground">{shortcut}</span>
+      ) : null}
       <RowTrailing disabledReason={item.disabledReason} checked={item.checked} />
     </PaletteOption>
   );

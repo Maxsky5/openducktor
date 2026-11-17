@@ -215,6 +215,7 @@ const MemoizedAgentChatPane = memo(function AgentChatPane({
 });
 
 export type AgentsPageLayoutModel = {
+  taskShortcuts?: ReactNode;
   chatFileLinkOwner: ChatFileLinkOwner;
   chatArtifactLinkOwner: ChatArtifactLinkOwner | null;
   activeWorkspace: ActiveWorkspace | null;
@@ -437,6 +438,7 @@ export function AgentsPageLayout({ model }: AgentsPageLayoutProps): ReactElement
 
   return (
     <PageToolDetailsProvider details={toolDetails}>
+      <SessionViewShownActivity>{model.taskShortcuts}</SessionViewShownActivity>
       {!panels.right.isVisible && rightPanelBridge ? (
         <AgentsPageRightPanelRuntime
           {...rightPanelBridge.rightPanel}

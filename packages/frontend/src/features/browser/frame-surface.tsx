@@ -74,6 +74,7 @@ export function FrameBrowserSurface({
       sandbox={FRAME_SANDBOX}
       className={cn("block h-full w-full border-0 bg-white", checking && "invisible")}
       data-testid="browser-frame"
+      data-browser-frame-tab-id={tabId}
     />
   );
 }

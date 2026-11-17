@@ -1,27 +1,39 @@
+import type { ShortcutActionId } from "@openducktor/contracts";
 import { Check, Copy } from "lucide-react";
-import { type ComponentProps, type MouseEventHandler, type ReactElement, useState } from "react";
+import { ShortcutText } from "@/features/shortcuts/shortcut-controls";
+import {
+  type Ref,
+  type ComponentProps,
+  type MouseEventHandler,
+  type ReactElement,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOnSessionViewHide } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { cn } from "@/lib/utils";
 
 type CopyIconButtonProps = {
+  ref?: Ref<HTMLButtonElement>;
   copied: boolean;
   ariaLabel: string;
   onClick: MouseEventHandler<HTMLButtonElement>;
   className?: string;
   dataTestId?: string;
   tooltipLabel?: string;
+  shortcutId?: ShortcutActionId;
   tooltipSide?: ComponentProps<typeof TooltipContent>["side"];
 };
 
 export function CopyIconButton({
+  ref,
   copied,
   ariaLabel,
   onClick,
   className,
   dataTestId,
   tooltipLabel = "Copy",
+  shortcutId,
   tooltipSide = "left",
 }: CopyIconButtonProps): ReactElement {
   // The button stays mounted with the hidden view, so an open tooltip would show again on return.
@@ -32,6 +44,7 @@ export function CopyIconButton({
       <Tooltip open={isTooltipOpen} onOpenChange={setTooltipOpen}>
         <TooltipTrigger asChild>
           <Button
+            ref={ref}
             type="button"
             variant="outline"
             size="icon"
@@ -51,7 +64,9 @@ export function CopyIconButton({
           </Button>
         </TooltipTrigger>
         <TooltipContent side={tooltipSide}>
-          <p>{tooltipLabel}</p>
+          <p>
+            <ShortcutText id={shortcutId}>{tooltipLabel}</ShortcutText>
+          </p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

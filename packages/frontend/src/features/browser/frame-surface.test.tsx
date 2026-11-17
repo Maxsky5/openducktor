@@ -1,5 +1,9 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
-import type { BrowserFrameSource, BrowserTabFrameStateRequest } from "@openducktor/contracts";
+import type {
+  BrowserFrameMessage,
+  BrowserFrameSource,
+  BrowserTabFrameStateRequest,
+} from "@openducktor/contracts";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -8,11 +12,12 @@ import { createBrowserFocusRegistry } from "./browser-focus-registry";
 import type { BrowserFrameControls } from "./browser-frame-display";
 import { createBrowserSurfaceRegistry } from "./browser-surface-registry";
 import { FrameBrowserSurface } from "./frame-surface";
+import { embeddedShortcutSources } from "../shortcuts/embedded-sources";
 
 const TAB_ID = browserTabIdFixture(1);
 
 /** A message as the frame script posts it, or as another script of the page could post it. */
-type FrameMessageData = Record<string, string | number | boolean | null>;
+type FrameMessageData = BrowserFrameMessage | Record<string, string | number | boolean | null>;
 const PREVIEW = "http://localhost:61000";
 const PREVIEW_SOURCE: BrowserFrameSource = { kind: "preview", origin: PREVIEW };
 
@@ -79,6 +84,30 @@ const state = {
 };
 
 describe("FrameBrowserSurface", () => {
+  test("installs routes into a replacement document without a loading message", async () => {
+    const { frame, fromFrame } = await renderFrame();
+    await waitFor(() => expect(frame.src).toContain(PREVIEW));
+    fromFrame(state);
+    const first = embeddedShortcutSources.all().find((source) => source.tabId === TAB_ID)!;
+    const posted = spyOn(frame.contentWindow!, "postMessage").mockImplementation(() => {});
+    const rules = { revision: 1, routes: [] };
+    const installed = first.apply(rules);
+    fromFrame({ openducktorFrame: 1, type: "shortcut", event: { type: "ready", revision: 1 } });
+    await installed;
+
+    fromFrame({ ...state, url: "http://localhost:3000/replacement" });
+    act(() => frame.dispatchEvent(new Event("load")));
+    const replacement = embeddedShortcutSources.all().find((source) => source.tabId === TAB_ID)!;
+    expect(replacement).not.toBe(first);
+    expect(embeddedShortcutSources.has(first)).toBe(false);
+    const reinstalled = replacement.apply({ ...rules, revision: 2 });
+    fromFrame({ openducktorFrame: 1, type: "shortcut", event: { type: "ready", revision: 2 } });
+    await reinstalled;
+    expect(posted).toHaveBeenLastCalledWith(
+      { openducktorShortcutRules: { ...rules, revision: 2 } },
+      PREVIEW,
+    );
+  });
   test("loads a page of the host from the preview origin of its dev server", async () => {
     const { frame, source } = await renderFrame();
 

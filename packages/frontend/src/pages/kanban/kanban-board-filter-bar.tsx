@@ -1,14 +1,6 @@
-import { issueTypeSchema, type AppPlatform, type TaskPriority } from "@openducktor/contracts";
+import { issueTypeSchema, type TaskPriority } from "@openducktor/contracts";
 import { Blocks, Flag, Tag, X } from "lucide-react";
-import {
-  type ReactElement,
-  useEffect,
-  useEffectEvent,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactElement, useId, useMemo, useRef } from "react";
 import {
   KanbanFilterMenu,
   type KanbanFilterOption,
@@ -19,11 +11,10 @@ import {
   PRIORITY_STYLES,
 } from "@/components/features/kanban/kanban-task-badge-model";
 import { Button } from "@/components/ui/button";
-import { hasOpenDialog } from "@/components/ui/open-dialogs";
+import { useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
+import { useCommandPalettePageCommand } from "@/features/command-palette/command-palette-context";
 import { ToolbarSearchField } from "@/components/ui/search-field";
-import { isPlatformChord } from "@/lib/keyboard-shortcuts";
 import { cn } from "@/lib/utils";
-import { readDevicePlatform } from "@/lib/device-platform";
 import type { KanbanBoardFilterModel } from "@openducktor/frontend-core/tasks/board/use-kanban-board-filter-model";
 
 type KanbanBoardFilterBarProps = {
@@ -36,20 +27,21 @@ type KanbanBoardFilterBarProps = {
  */
 export function KanbanBoardFilterBar({ filter }: KanbanBoardFilterBarProps): ReactElement {
   const searchId = useId();
+  const searchTitle = useShortcutTitle("focus-task-search", "Search tasks", !filter.isDisabled);
   const searchRef = useRef<HTMLInputElement>(null);
-  // The shortcut follows the keys of this device, not the platform of the selected host.
-  const [platform] = useState(readDevicePlatform);
-  const onShortcut = useEffectEvent((event: KeyboardEvent, keyPlatform: AppPlatform): void => {
-    if (!isPlatformChord(event, "f", keyPlatform) || filter.isDisabled || hasOpenDialog()) return;
-    event.preventDefault();
-    searchRef.current?.focus();
-    searchRef.current?.select();
+  useCommandPalettePageCommand({
+    id: "focus-task-search" as const,
+    label: "Focus task search",
+    icon: Blocks,
+    keywords: ["search", "find tasks"],
+    target: { kind: "app", key: "kanban-search" },
+    disabledReason: () =>
+      filter.isDisabled || !searchRef.current ? "Task search is unavailable." : null,
+    run: () => {
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    },
   });
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => onShortcut(event, platform);
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [platform]);
   const labelOptions = useMemo(
     () => filter.labelOptions.map((label) => ({ value: label, label })),
     [filter.labelOptions],
@@ -69,6 +61,7 @@ export function KanbanBoardFilterBar({ filter }: KanbanBoardFilterBarProps): Rea
     <div className="flex min-w-64 flex-1 basis-0 flex-wrap items-center gap-2">
       <div className="min-w-40 max-w-56 flex-1 basis-40">
         <ToolbarSearchField
+          title={searchTitle}
           ref={searchRef}
           id={searchId}
           size="md"

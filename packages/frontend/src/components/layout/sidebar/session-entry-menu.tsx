@@ -1,9 +1,11 @@
 import { Archive, Copy, Folder, Mail, MailOpen, Pencil } from "lucide-react";
 import { useRef, type ReactElement } from "react";
+import { useCommandPaletteCommands } from "@/features/command-palette/command-palette-registry-context";
+import { paletteChatKey } from "@/features/command-palette/command-palette-row-keys";
+import { ShortcutMenuItem } from "@/features/shortcuts/shortcut-controls";
 import {
   ContextMenuContent,
   ContextMenuGroup,
-  ContextMenuItem,
   ContextMenuSeparator,
 } from "@/components/ui/context-menu";
 import {
@@ -56,6 +58,16 @@ function SessionMenuItems({
   const setUnread = useSetSessionUnread();
   const { requestDialog, copyToClipboard } = useSessionMenu();
   const workspaceSession = entry.context.kind === "workspace" ? entry.context.session : null;
+  const pageCommands = useCommandPaletteCommands();
+  const shortcutAvailable = Boolean(
+    workspaceSession &&
+    pageCommands.some(
+      (command) =>
+        !command.paletteOnly &&
+        command.target?.kind === "chat" &&
+        command.target.key === paletteChatKey(entry.workspace.workspaceId, workspaceSession.id),
+    ),
+  );
   const { externalSessionId, workingDirectory } = sessionEntryLocation(entry);
   const ReadIcon = unread ? MailOpen : Mail;
   const openDialog = (action: "rename" | "archive") => {
@@ -71,20 +83,29 @@ function SessionMenuItems({
   return (
     <>
       <ContextMenuGroup>
-        <ContextMenuItem className="cursor-pointer" onSelect={() => setUnread(entry, !unread)}>
+        <ShortcutMenuItem
+          shortcutId={shortcutAvailable ? (unread ? "chat-read" : "chat-unread") : undefined}
+          className="cursor-pointer"
+          onSelect={() => setUnread(entry, !unread)}
+        >
           <ReadIcon aria-hidden="true" />
           {unread ? SESSION_MENU_LABELS.markRead : SESSION_MENU_LABELS.markUnread}
-        </ContextMenuItem>
+        </ShortcutMenuItem>
         {workspaceSession && (
-          <ContextMenuItem className="cursor-pointer" onSelect={() => openDialog("rename")}>
+          <ShortcutMenuItem
+            shortcutId={shortcutAvailable ? "chat-rename" : undefined}
+            className="cursor-pointer"
+            onSelect={() => openDialog("rename")}
+          >
             <Pencil aria-hidden="true" />
             {SESSION_MENU_LABELS.rename}
-          </ContextMenuItem>
+          </ShortcutMenuItem>
         )}
       </ContextMenuGroup>
       <ContextMenuSeparator />
       <ContextMenuGroup>
-        <ContextMenuItem
+        <ShortcutMenuItem
+          shortcutId={shortcutAvailable ? "chat-copy-path" : undefined}
           className="cursor-pointer"
           disabled={!workingDirectory}
           onSelect={() => {
@@ -93,8 +114,9 @@ function SessionMenuItems({
         >
           <Folder aria-hidden="true" />
           {SESSION_MENU_LABELS.copyWorkingDirectory}
-        </ContextMenuItem>
-        <ContextMenuItem
+        </ShortcutMenuItem>
+        <ShortcutMenuItem
+          shortcutId={shortcutAvailable ? "chat-copy-id" : undefined}
           className="cursor-pointer"
           disabled={!externalSessionId}
           onSelect={() => {
@@ -103,16 +125,20 @@ function SessionMenuItems({
         >
           <Copy aria-hidden="true" />
           {SESSION_MENU_LABELS.copyExternalSessionId}
-        </ContextMenuItem>
+        </ShortcutMenuItem>
       </ContextMenuGroup>
       {workspaceSession && (
         <>
           <ContextMenuSeparator />
           <ContextMenuGroup>
-            <ContextMenuItem className="cursor-pointer" onSelect={() => openDialog("archive")}>
+            <ShortcutMenuItem
+              shortcutId={shortcutAvailable ? "chat-archive" : undefined}
+              className="cursor-pointer"
+              onSelect={() => openDialog("archive")}
+            >
               <Archive aria-hidden="true" />
               {SESSION_MENU_LABELS.archive}
-            </ContextMenuItem>
+            </ShortcutMenuItem>
           </ContextMenuGroup>
         </>
       )}

@@ -4,6 +4,7 @@ import { settingsSnapshotSaveInputSchema } from "@openducktor/contracts";
 import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { createWorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
+import { createKeyboardShortcutSettingsService } from "../../application/keyboard-shortcuts/keyboard-shortcut-settings-service";
 import { createOpenCodeCreationSettings } from "../../application/workspaces/opencode-creation-settings";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -31,6 +32,69 @@ const withTempConfig = async (run: (configPath: string) => Promise<void>): Promi
 };
 
 describe("settings config files", () => {
+  test("shortcut preferences survive host restart and unrelated settings saves without entering shared settings", async () => {
+    await withTempConfig(async (configPath) => {
+      const fixture = await createSharedSettingsFixture({ configPath });
+      try {
+        const service = createWorkspaceSettingsService(
+          fixture.settingsConfig,
+          builtinTaskWorkflows,
+        );
+        const shortcuts = createKeyboardShortcutSettingsService({
+          settingsConfig: fixture.settingsConfig,
+          publish: () => {},
+        });
+        const preferences = { version: 1 as const, overrides: { palette: null } };
+        await Effect.runPromise(shortcuts.save(preferences));
+        await Effect.runPromise(service.setTheme("dark"));
+        const restarted = createKeyboardShortcutSettingsService({
+          settingsConfig: createSettingsConfigAdapter({
+            configPath,
+            sharedSettings: fixture.database,
+          }),
+          publish: () => {},
+        });
+        expect(await Effect.runPromise(restarted.read())).toEqual(preferences);
+        expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({
+          keyboardShortcuts: preferences,
+          theme: "dark",
+        });
+        expect(
+          (await Effect.runPromise(fixture.database.readGlobalConfig())).keyboardShortcuts,
+        ).toBeUndefined();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  });
+
+  test("invalid shortcut preferences remain unchanged until an explicit reset", async () => {
+    await withTempConfig(async (configPath) => {
+      const fixture = await createSharedSettingsFixture({ configPath });
+      try {
+        const raw = JSON.parse(await readFile(configPath, "utf8"));
+        await writeFile(
+          configPath,
+          JSON.stringify({ ...raw, keyboardShortcuts: { version: 99, overrides: {} } }),
+        );
+        const service = createKeyboardShortcutSettingsService({
+          settingsConfig: fixture.settingsConfig,
+          publish: () => {},
+        });
+        const result = await Effect.runPromise(Effect.result(service.read()));
+        expect(result._tag).toBe("Failure");
+        expect(JSON.parse(await readFile(configPath, "utf8")).keyboardShortcuts.version).toBe(99);
+        await Effect.runPromise(service.save({ version: 1, overrides: {} }));
+        expect(await Effect.runPromise(service.read())).toEqual({
+          version: 1,
+          overrides: {},
+        });
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  });
+
   test("a shared write keeps a preference edit that another host saves during the write", async () => {
     await withTempConfig(async (configPath) => {
       const shared = createDefaultGlobalConfig();

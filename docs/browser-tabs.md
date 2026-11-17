@@ -34,7 +34,7 @@ flowchart TD
 | Path | Holds |
 |---|---|
 | `packages/contracts/src/browser-tab-schemas.ts` | Tab summary, prompts, engine state, host commands, and the `openducktor://browser-event` payload |
-| `packages/contracts/src/browser-channel-protocol.ts` | Messages of the Electron browser channel: picker hover and target, annotation anchors, and forwarded shortcuts |
+| `packages/contracts/src/browser-channel-protocol.ts` | Messages of the Electron browser channel: picker hover and target, annotation anchors, and protocol errors |
 | `packages/host/src/application/browser/` | Tab registry and service, engine events, prompts, site permissions, CDP proxy, agent tools, picker, and annotation capture |
 | `packages/frontend-core/src/browser/` | Tab store. It subscribes to browser events first, then reads the tab list, and keeps the higher revision of each tab. |
 | `packages/frontend/src/features/browser/` | Browser layer, page surfaces, tab view, browser channel client, and tab coordinator |

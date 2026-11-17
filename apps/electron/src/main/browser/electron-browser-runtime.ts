@@ -10,7 +10,6 @@ import { createElectronBrowserEngine } from "./electron-browser-engine";
 import { fileDialogFilters } from "./electron-browser-file-dialog";
 import {
   createElectronBrowserIpcController,
-  type ElectronBrowserIpcController,
   registerElectronBrowserIpc,
 } from "./electron-browser-ipc";
 import { attachBrowserMainWindow } from "./electron-browser-main-window";
@@ -26,7 +25,6 @@ export type ElectronBrowserRuntimeInput = {
  */
 export const createElectronBrowserRuntime = ({ reportFailure }: ElectronBrowserRuntimeInput) => {
   const { app, BrowserWindow, dialog, nativeImage, session, shell, webContents } = electron;
-  let ipcController: ElectronBrowserIpcController | null = null;
 
   const viewPort = createElectronBrowserViewPort();
   const devTools = createElectronDevToolsEndpoint({
@@ -40,8 +38,6 @@ export const createElectronBrowserRuntime = ({ reportFailure }: ElectronBrowserR
     downloadsDirectory: () => app.getPath("downloads"),
     fileExists: existsSync,
     showItemInFolder: (filePath) => shell.showItemInFolder(filePath),
-    notifyRenderer: (hostWebContentsId, message) =>
-      ipcController?.sendToRenderer(hostWebContentsId, message),
     devToolsFrontendUrl: devTools.frontendUrl,
     decodePng: (png) => nativeImage.createFromBuffer(png),
     newId: randomUUID,
@@ -97,7 +93,6 @@ export const createElectronBrowserRuntime = ({ reportFailure }: ElectronBrowserR
               reportDeliveryFailure: (senderId, cause) =>
                 reportFailure(`electron.browser.deliver.${senderId}`, cause),
             });
-            ipcController = controller;
             registerElectronBrowserIpc({
               ipcMain,
               controller,

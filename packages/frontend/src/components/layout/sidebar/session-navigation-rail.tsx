@@ -1,3 +1,4 @@
+import { SessionPositionHint } from "@/features/shortcuts/position-hint";
 import { CircleAlert, LoaderCircle } from "lucide-react";
 import { memo, useId, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,6 @@ import {
 
 type SessionNavigationRailProps = {
   model: SessionNavigationModel;
-  now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
   onRetry: (issue: SessionNavigationSourceIssue) => void;
 };
@@ -46,7 +46,6 @@ type SessionNavigationRailProps = {
  */
 export function SessionNavigationRail({
   model,
-  now,
   onOpen,
   onRetry,
 }: SessionNavigationRailProps): ReactElement {
@@ -62,7 +61,6 @@ export function SessionNavigationRail({
                 key={group.id}
                 group={group}
                 isLoading={model.isLoading}
-                now={now}
                 onOpen={onOpen}
               />
             ))}
@@ -102,22 +100,14 @@ export function SessionNavigationRail({
 
 function SessionRailEntry({
   entry,
-  now,
   onOpen,
 }: {
   entry: SessionNavigationEntry;
-  now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
   const { isSelected, isVisible } = useSessionEntrySelection(entry.key);
   return (
-    <SessionRailIcon
-      entry={entry}
-      isSelected={isSelected}
-      isVisible={isVisible}
-      now={now}
-      onOpen={onOpen}
-    />
+    <SessionRailIcon entry={entry} isSelected={isSelected} isVisible={isVisible} onOpen={onOpen} />
   );
 }
 
@@ -125,20 +115,18 @@ const SessionRailIcon = memo(function SessionRailIcon({
   entry,
   isSelected,
   isVisible,
-  now,
   onOpen,
 }: {
   entry: SessionNavigationEntry;
   isSelected: boolean;
   isVisible: boolean;
-  now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
   const unread = useSessionUnread(entry);
   const Icon = sessionEntryIcon(entry);
   const readStatusId = useId();
   return (
-    <SessionEntryPreview entry={entry} isVisible={isVisible} now={now} onOpen={onOpen}>
+    <SessionEntryPreview entry={entry} isVisible={isVisible} onOpen={onOpen}>
       <button
         type="button"
         aria-current={isSelected ? "true" : undefined}
@@ -151,7 +139,16 @@ const SessionRailIcon = memo(function SessionRailIcon({
           sessionEntrySurfaceClassName(entry, isSelected),
         )}
       >
-        <Icon className={cn("size-4", sessionEntryIconClassName(entry))} aria-hidden="true" />
+        <span className="shortcut-position-target grid size-4 place-items-center">
+          <Icon
+            className={cn(
+              "shortcut-position-replaced col-start-1 row-start-1 size-4",
+              sessionEntryIconClassName(entry),
+            )}
+            aria-hidden="true"
+          />
+          <SessionPositionHint entryKey={entry.key} className="max-w-8" />
+        </span>
         <SessionEntryStatusDot
           entry={entry}
           unread={unread}
@@ -167,12 +164,10 @@ const SessionRailIcon = memo(function SessionRailIcon({
 function SessionRailGroup({
   group,
   isLoading,
-  now,
   onOpen,
 }: {
   group: SessionNavigationGroup;
   isLoading: boolean;
-  now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
   const label = SESSION_GROUP_LABELS[group.id];
@@ -195,7 +190,7 @@ function SessionRailGroup({
             {group.entries.map((entry) => (
               <SessionPresence as="li" key={entry.key}>
                 <div className="flex justify-center px-1 pb-1.5 pt-1">
-                  <SessionRailEntry entry={entry} now={now} onOpen={onOpen} />
+                  <SessionRailEntry entry={entry} onOpen={onOpen} />
                 </div>
               </SessionPresence>
             ))}

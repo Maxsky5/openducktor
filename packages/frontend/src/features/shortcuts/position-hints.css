@@ -1,0 +1,20 @@
+.shortcut-position-hint {
+  visibility: hidden;
+  transition: visibility 0s;
+}
+.shortcut-position-replaced {
+  visibility: visible;
+  transition: visibility 0s;
+}
+
+html[data-shortcut-hints="true"]:not([data-shortcut-recording]) {
+  .shortcut-position-hint {
+    visibility: visible;
+    transition-delay: 750ms;
+  }
+
+  .shortcut-position-target:has(> .shortcut-position-hint) > .shortcut-position-replaced {
+    visibility: hidden;
+    transition-delay: 750ms;
+  }
+}

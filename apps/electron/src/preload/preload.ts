@@ -1,3 +1,10 @@
+import { z } from "zod";
+import { embeddedShortcutEventSchema } from "@openducktor/contracts";
+import {
+  ELECTRON_SHORTCUT_APPLY_CHANNEL,
+  ELECTRON_SHORTCUT_EVENT_CHANNEL,
+  ELECTRON_SHORTCUT_RELEASE_CHANNEL,
+} from "../shared/electron-bridge-contract";
 import { chromiumArtifactPreviewSupport } from "@openducktor/frontend/lib/artifact-preview-environment";
 import {
   remoteAccessStateSchema,
@@ -281,6 +288,31 @@ const electronApi: OpenDucktorElectronApi = {
     return result.src;
   },
   terminals,
+  shortcuts: {
+    apply: (rules) => ipcRenderer.invoke(ELECTRON_SHORTCUT_APPLY_CHANNEL, rules),
+    subscribe: (listener) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        message: { sourceTabId: unknown; event: unknown },
+      ) => {
+        listener(
+          z
+            .strictObject({
+              sourceTabId: z.string().nullable(),
+              event: embeddedShortcutEventSchema,
+            })
+            .parse(message),
+        );
+      };
+      ipcRenderer.on(ELECTRON_SHORTCUT_EVENT_CHANNEL, handler);
+      return () => ipcRenderer.removeListener(ELECTRON_SHORTCUT_EVENT_CHANNEL, handler);
+    },
+    release: () => {
+      void ipcRenderer
+        .invoke(ELECTRON_SHORTCUT_RELEASE_CHANNEL)
+        .catch((cause) => console.error("Could not release native shortcuts.", cause));
+    },
+  },
   browser,
   editorClipboard: {
     readText(type) {

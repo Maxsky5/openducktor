@@ -118,7 +118,7 @@ export function useCommandPaletteRunners({
 
 /** The task view of a row, with the pending workflow state when its workspace is active. */
 export function usePaletteTaskViews(
-  data: CommandPaletteData,
+  data: Pick<CommandPaletteData, "sessionsByTaskKey" | "live">,
 ): (task: PaletteTask) => PaletteTaskView {
   const { kanbanPendingState } = useRequiredTaskWorkflowActions();
   const activeWorkspaceId = useWorkspaceState().activeWorkspace?.workspaceId ?? null;

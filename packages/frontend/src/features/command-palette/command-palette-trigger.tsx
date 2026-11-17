@@ -1,9 +1,8 @@
-import type { AppPlatform } from "@openducktor/contracts";
+import { useShortcutKeys } from "../shortcuts/use-shortcut-label";
 import { Search } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { platformKeyLabels } from "@/lib/keyboard-shortcuts";
 import { cn } from "@/lib/utils";
 import { useCommandPalette } from "./command-palette-context";
 import { KeyCaps } from "./command-palette-key-caps";
@@ -18,9 +17,10 @@ export function CommandPaletteTrigger({
   compact?: boolean;
   className?: string;
 }): ReactElement {
-  const { open, platform } = useCommandPalette();
-  const modifier = platform ? platformKeyLabels(platform).modifier : null;
-  const keyShortcuts = ariaKeyShortcuts(platform);
+  const { open } = useCommandPalette();
+  const shortcut = useShortcutKeys("palette");
+  const keys = shortcut?.keys;
+  const keyShortcuts = shortcut?.aria;
   if (compact) {
     return (
       <TooltipProvider>
@@ -43,7 +43,7 @@ export function CommandPaletteTrigger({
           </TooltipTrigger>
           <TooltipContent side="right" className="flex items-center gap-2">
             {LABEL}
-            {modifier ? <KeyCaps keys={[modifier, "K"]} /> : null}
+            {keys ? <KeyCaps keys={keys} /> : null}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -55,7 +55,7 @@ export function CommandPaletteTrigger({
       size="sm"
       variant="outline"
       className={cn(
-        "h-8 shrink-0 gap-1.5 border-sidebar-border bg-transparent px-2 text-sidebar-muted-foreground shadow-none hover:text-sidebar-foreground",
+        "h-9 w-full justify-start gap-2 rounded-md border-sidebar-border bg-muted/40 px-3 text-sm font-normal text-sidebar-muted-foreground shadow-none hover:bg-muted hover:text-sidebar-foreground",
         className,
       )}
       aria-label={LABEL}
@@ -63,14 +63,9 @@ export function CommandPaletteTrigger({
       title={LABEL}
       onClick={open}
     >
-      <Search className="size-3.5" aria-hidden="true" />
-      {modifier ? <KeyCaps keys={[modifier, "K"]} /> : null}
+      <Search className="size-4 shrink-0" aria-hidden="true" />
+      <span className="flex-1 text-left">Search anything…</span>
+      {keys ? <KeyCaps keys={keys} /> : null}
     </Button>
   );
 }
-
-/** The shortcut for `aria-keyshortcuts`, or undefined until the platform is known. */
-const ariaKeyShortcuts = (platform: AppPlatform | null): string | undefined => {
-  if (!platform) return undefined;
-  return platform === "darwin" ? "Meta+K" : "Control+K";
-};

@@ -37,6 +37,7 @@ export function MarkdownPreviewModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        data-markdown-preview
         className="flex max-w-5xl flex-col overflow-hidden p-0"
         onCloseAutoFocus={onCloseAutoFocus}
       >

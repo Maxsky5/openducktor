@@ -109,43 +109,14 @@ const hintLabels = (bindings: ReturnType<typeof mainList>["bindings"]) => {
 };
 
 describe("command palette key bindings", () => {
-  test("runs the next workflow step with Mod+Enter and names it in the footer", () => {
+  test("leaves task assignments to the shared dispatcher and prevents modified Enter from selecting a row", () => {
     const { bindings, runTaskCommand } = mainList();
-    const event = keyEvent("Enter", { metaKey: true });
-
-    handlePaletteKeyDown(event, bindings);
-
-    expect(runTaskCommand).toHaveBeenCalledWith(
-      task,
-      { kind: "workflow", action: "build_start" },
-      expect.objectContaining({ nextStep: "build_start" }),
-    );
-    expect(event.preventDefault).toHaveBeenCalled();
-    expect(hintLabels(bindings)).toEqual({
-      item: ["Start Builder", "Edit", "Actions"],
-      palette: ["Workspace", "Close"],
-    });
-  });
-
-  test("keeps Mod+Enter from cmdk for a task without a next step and hides its hint", () => {
-    const { bindings, runTaskCommand } = mainList({ view: taskView({ nextStep: null }) });
-    const event = keyEvent("Enter", { metaKey: true });
-
-    handlePaletteKeyDown(event, bindings);
-
-    expect(event.preventDefault).toHaveBeenCalled();
-    expect(runTaskCommand).not.toHaveBeenCalled();
-    expect(hintLabels(bindings).item).toEqual(["Edit", "Actions"]);
-  });
-
-  test("uses Ctrl as the modifier on Linux", () => {
-    const { bindings, runTaskCommand } = mainList({ platform: "linux" });
-
+    const enter = keyEvent("Enter", { metaKey: true });
+    handlePaletteKeyDown(enter, bindings);
     handlePaletteKeyDown(keyEvent("e", { metaKey: true }), bindings);
     expect(runTaskCommand).not.toHaveBeenCalled();
-
-    handlePaletteKeyDown(keyEvent("e", { ctrlKey: true }), bindings);
-    expect(runTaskCommand).toHaveBeenCalledWith(task, { kind: "edit" }, expect.anything());
+    expect(enter.preventDefault).toHaveBeenCalled();
+    expect(hintLabels(bindings)).toEqual({ item: ["Actions"], palette: ["Workspace", "Close"] });
   });
 
   test("opens the task actions with Tab, and with Right arrow only at the end of the text", () => {
@@ -182,16 +153,16 @@ describe("command palette key bindings", () => {
     expect(hintLabels(bindings)).toEqual({ item: [], palette: ["Close"] });
   });
 
-  test("renames a highlighted chat with Mod+E and opens its actions with Tab", () => {
+  test("keeps chat rename unassigned and opens its actions with Tab", () => {
     const chatEntry: PaletteEntry = { kind: "chat", item: chat };
     const { bindings, renameChat, showActions } = mainList({ entry: chatEntry });
 
     handlePaletteKeyDown(keyEvent("e", { metaKey: true }), bindings);
     handlePaletteKeyDown(keyEvent("Tab"), bindings);
 
-    expect(renameChat).toHaveBeenCalledWith(chat);
+    expect(renameChat).not.toHaveBeenCalled();
     expect(showActions).toHaveBeenCalledWith(chatEntry);
-    expect(hintLabels(bindings).item).toEqual(["Rename", "Actions"]);
+    expect(hintLabels(bindings).item).toEqual(["Actions"]);
   });
 
   test("returns from a row action list with Backspace only in an empty input", () => {

@@ -101,7 +101,7 @@ function AgentStudioGitPanelContent({
   // The panel shows refresh failures. Keep a read failure out of the app error boundary.
   const onRefresh = useCallback(() => void refresh().catch(() => {}), [refresh]);
   return (
-    <>
+    <div data-git-view className="flex h-full min-h-0 flex-col">
       <GitInfoHeader
         key={model.subjectKey}
         {...getGitInfoHeaderProps(model, view, onRefresh)}
@@ -129,7 +129,7 @@ function AgentStudioGitPanelContent({
           commit={model.commit ?? null}
         />
       ) : null}
-    </>
+    </div>
   );
 }
 

@@ -291,7 +291,11 @@ const createAutopilotHarness = async ({
   const eventBus = createHostEventBus({ report: () => {} });
   const runEvents: AutopilotRunEvent[] = [];
   eventBus.subscribe("openducktor://run-event", (envelope) => {
-    if (envelope.channel === "openducktor://run-event") runEvents.push(envelope.payload);
+    if (
+      envelope.channel === "openducktor://run-event" &&
+      envelope.payload.type !== "keyboard_shortcuts_saved"
+    )
+      runEvents.push(envelope.payload);
   });
 
   const start = () => {

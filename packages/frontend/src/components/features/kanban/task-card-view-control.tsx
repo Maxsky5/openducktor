@@ -1,4 +1,5 @@
 import type { KanbanTaskCardView } from "@openducktor/contracts";
+import { ShortcutText } from "@/features/shortcuts/shortcut-controls";
 import type { ReactElement } from "react";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -60,7 +61,11 @@ export function TaskCardViewControl({
                   </RadioGroupSegmentItem>
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="bottom">{option.label}</TooltipContent>
+              <TooltipContent side="bottom">
+                <ShortcutText id={`task-cards:${option.value}`} available={!isUnavailable}>
+                  {option.label}
+                </ShortcutText>
+              </TooltipContent>
             </Tooltip>
           );
         })}

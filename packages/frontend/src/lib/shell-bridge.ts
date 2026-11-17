@@ -78,6 +78,7 @@ export type FrameBrowserBridge = {
 export type BrowserBridge = ElectronBrowserBridge | FrameBrowserBridge;
 
 export type ShellBridge = HostConnection & {
+  shortcuts?: import("@openducktor/contracts").ElectronShortcutBridge;
   dispose?: () => Promise<void>;
   setActive?: (active: boolean) => void;
   remoteAccess?: import("@openducktor/contracts").RemoteAccessBridge;

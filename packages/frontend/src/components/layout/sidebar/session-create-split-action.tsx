@@ -1,4 +1,6 @@
+import type { ShortcutActionId } from "@openducktor/contracts";
 import { Archive, ChevronDown, Download, Import, MessageCirclePlus, Plus } from "lucide-react";
+import { ShortcutButton, ShortcutHint } from "@/features/shortcuts/shortcut-controls";
 import { type ReactElement, type ReactNode, useRef, useState } from "react";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
 import {
@@ -39,12 +41,14 @@ const SPLIT_LAYOUT = {
 
 function MenuItem({
   icon,
+  shortcutId,
   label,
   title,
   disabled = false,
   onSelect,
 }: {
   icon: ReactNode;
+  shortcutId: ShortcutActionId | undefined;
   label: string;
   title?: string | undefined;
   disabled?: boolean;
@@ -65,6 +69,7 @@ function MenuItem({
         {icon}
       </span>
       <span className="min-w-0 text-sm">{label}</span>
+      <ShortcutHint id={shortcutId} available={!disabled} />
     </Button>
   );
 }
@@ -85,11 +90,13 @@ function SessionCreateMenuItems({
   return (
     <>
       <MenuItem
+        shortcutId="new-chat"
         icon={<MessageCirclePlus />}
         label="New session"
         onSelect={() => onOpenDialog({ kind: "chat", workspace })}
       />
       <MenuItem
+        shortcutId={importState.kind === "ready" ? "import-tasks" : undefined}
         icon={<Download />}
         label={issueImportActionLabel(importState)}
         title={issueImportActionHint(importState)}
@@ -102,11 +109,13 @@ function SessionCreateMenuItems({
         }
       />
       <MenuItem
+        shortcutId="archived-chats"
         icon={<Archive />}
         label="Archived sessions"
         onSelect={() => onOpenDialog({ kind: "archived_chats", workspace })}
       />
       <MenuItem
+        shortcutId="import-chat"
         icon={<Import />}
         label="Import session from an external runtime"
         onSelect={() => onOpenDialog({ kind: "import_chat", workspace })}
@@ -147,7 +156,8 @@ export function SessionCreateSplitAction({ compact = false }: { compact?: boolea
   return (
     <div className={layout.root}>
       {compact ? null : (
-        <Button
+        <ShortcutButton
+          shortcutId="new-task"
           type="button"
           className="h-9 flex-1 justify-start gap-2 rounded-r-none px-3 shadow-none"
           aria-label={mainLabel}
@@ -157,7 +167,7 @@ export function SessionCreateSplitAction({ compact = false }: { compact?: boolea
         >
           <Plus data-icon="inline-start" aria-hidden="true" />
           New task
-        </Button>
+        </ShortcutButton>
       )}
       <Popover open={menuOpen} onOpenChange={setMenuOpen}>
         <PopoverTrigger asChild>
@@ -181,6 +191,7 @@ export function SessionCreateSplitAction({ compact = false }: { compact?: boolea
             <>
               {compact ? (
                 <MenuItem
+                  shortcutId="new-task"
                   icon={<Plus />}
                   label="New task"
                   disabled={isTaskCreationDisabled}

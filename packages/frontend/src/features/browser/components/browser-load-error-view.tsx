@@ -1,7 +1,7 @@
+import { ShortcutButton } from "@/features/shortcuts/shortcut-controls";
 import type { BrowserTabError } from "@openducktor/contracts";
 import { CircleAlert, ExternalLink, RotateCw } from "lucide-react";
 import type { ReactElement } from "react";
-import { Button } from "@/components/ui/button";
 import { BrowserStateView } from "./browser-state-view";
 
 export type BrowserLoadErrorViewProps = {
@@ -33,15 +33,27 @@ export function BrowserLoadErrorView({
       title={TITLES[error.kind]}
       actions={
         error.kind === "frame_refused" ? (
-          <Button type="button" size="sm" variant="outline" onClick={onOpenSite}>
+          <ShortcutButton
+            shortcutId="browser-external"
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onOpenSite}
+          >
             <ExternalLink aria-hidden="true" />
             Open in browser
-          </Button>
+          </ShortcutButton>
         ) : (
-          <Button type="button" size="sm" variant="outline" onClick={onReload}>
+          <ShortcutButton
+            shortcutId="browser-reload"
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onReload}
+          >
             <RotateCw aria-hidden="true" />
             Reload
-          </Button>
+          </ShortcutButton>
         )
       }
     >

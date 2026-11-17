@@ -42,6 +42,7 @@ export const buildAgentStudioHeaderModel = (args: {
 }): AgentStudioWorkflowHeaderModel => ({
   taskTitle: args.selectedTask?.title ?? null,
   taskId: args.selectedTask?.id ?? null,
+  taskWorkflowId: args.selectedTask?.taskWorkflow.definition.id,
   pullRequest: args.selectedTask?.pullRequest ?? null,
   onOpenTaskDetails: args.selectedTask ? args.onOpenTaskDetails : null,
   selectedRole: args.selectedRole,

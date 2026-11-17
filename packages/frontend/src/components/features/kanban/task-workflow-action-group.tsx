@@ -1,3 +1,6 @@
+import { coreTaskActionShortcutId } from "@/features/shortcuts/catalogue";
+import type { ShortcutActionId } from "@openducktor/contracts";
+import { workflowShortcutActionId } from "@openducktor/contracts";
 import {
   resolveTaskCardActions,
   type TaskWorkflowAction,
@@ -8,6 +11,8 @@ import {
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { type ReactElement, type ReactNode, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ShortcutHint, ShortcutButton } from "@/features/shortcuts/shortcut-controls";
+import { useShortcutPortalOwner } from "@/features/shortcuts/shortcut-focus";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { CoreTaskAction } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
@@ -32,6 +37,7 @@ type ExtraTaskMenuAction = {
 };
 
 type TaskWorkflowActionGroupProps = {
+  shortcutsAvailable?: boolean;
   task: TaskCard;
   onAction: (action: TaskWorkflowAction) => void;
   includeActions?: readonly TaskWorkflowAction[];
@@ -71,6 +77,7 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
     actions,
     disabledActions = EMPTY_DISABLED_ACTIONS,
     leadingCoreAction,
+    shortcutsAvailable = false,
   } = props;
   const { primaryAction, secondaryActions, allActions } = getActions(props);
   const hasWorkflowAction = allActions.length > 0 || leadingCoreAction !== undefined;
@@ -101,6 +108,7 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
     size,
     className: cn(expandPrimary ? "min-w-0 flex-1" : "", primaryClassName),
     isKanbanCard: actions !== undefined,
+    shortcutsAvailable,
   };
 
   return (
@@ -108,6 +116,8 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
       {leadingCoreAction ? (
         <PrimaryActionButton
           {...buttonProps}
+          shortcutId={coreMenuShortcutId(leadingCoreAction.action.id)}
+          title={leadingCoreAction.action.label}
           variant={coreTaskActionPrimaryVariant(leadingCoreAction.action)}
           onSelect={leadingCoreAction.onSelect}
         >
@@ -118,6 +128,8 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
       {primary ? (
         <PrimaryActionButton
           {...buttonProps}
+          shortcutId={workflowShortcutActionId(task.taskWorkflow.definition.id, primary)}
+          title={taskActionLabel(primary, task)}
           variant={taskPrimaryActionVariant(primary, task)}
           disabled={disabledActions.includes(primary)}
           onSelect={() => onAction(primary)}
@@ -133,6 +145,7 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
 
       {showMenu ? (
         <TaskWorkflowActionMenu
+          shortcutsAvailable={shortcutsAvailable}
           task={task}
           onAction={onAction}
           actionItems={secondaryActions}
@@ -150,6 +163,9 @@ export function TaskWorkflowActionGroup(props: TaskWorkflowActionGroupProps): Re
 }
 
 function PrimaryActionButton({
+  shortcutsAvailable,
+  shortcutId,
+  title,
   size,
   variant,
   className,
@@ -158,6 +174,9 @@ function PrimaryActionButton({
   onSelect,
   children,
 }: {
+  shortcutsAvailable: boolean;
+  shortcutId: ShortcutActionId | undefined;
+  title: string | undefined;
   size: "default" | "sm";
   variant: "default" | "outline" | "destructive" | "warning";
   className: string;
@@ -167,7 +186,9 @@ function PrimaryActionButton({
   children: ReactNode;
 }): ReactElement {
   return (
-    <Button
+    <ShortcutButton
+      shortcutId={shortcutsAvailable ? shortcutId : undefined}
+      title={shortcutsAvailable ? title : undefined}
       type="button"
       size={size}
       variant={variant}
@@ -180,7 +201,7 @@ function PrimaryActionButton({
       }}
     >
       {children}
-    </Button>
+    </ShortcutButton>
   );
 }
 
@@ -212,6 +233,7 @@ type TaskWorkflowActionMenuProps = Required<
     | "size"
     | "expandPrimary"
     | "compactMenuTrigger"
+    | "shortcutsAvailable"
   >
 > & {
   actionItems: readonly TaskWorkflowAction[];
@@ -230,9 +252,11 @@ function TaskWorkflowActionMenu({
   size,
   expandPrimary,
   compactMenuTrigger,
+  shortcutsAvailable,
 }: TaskWorkflowActionMenuProps): ReactElement {
   const [isMenuOpen, setMenuOpen] = useState(false);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useShortcutPortalOwner(menuTriggerRef, () => setMenuOpen(false));
   const menuContentRef = useRef<HTMLDivElement>(null);
 
   return (
@@ -258,7 +282,10 @@ function TaskWorkflowActionMenu({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        ref={menuContentRef}
+        ref={(element) => {
+          menuContentRef.current = element;
+          return menuRef(element);
+        }}
         align={menuAlign}
         className="w-56 p-1.5"
         data-kanban-task-id={isKanbanCard ? task.id : undefined}
@@ -296,6 +323,10 @@ function TaskWorkflowActionMenu({
             >
               {taskActionIcon(action, task)}
               {taskActionLabel(action, task)}
+              <ShortcutHint
+                id={workflowShortcutActionId(task.taskWorkflow.definition.id, action)}
+                available={shortcutsAvailable && !disabledActions.has(action)}
+              />
             </Button>
           ))}
           {actionItems.length > 0 && extraMenuActions.length > 0 ? (
@@ -316,6 +347,10 @@ function TaskWorkflowActionMenu({
             >
               {action.icon}
               {action.label}
+              <ShortcutHint
+                id={coreMenuShortcutId(action.id)}
+                available={shortcutsAvailable && !action.disabled}
+              />
             </Button>
           ))}
         </div>
@@ -323,3 +358,9 @@ function TaskWorkflowActionMenu({
     </Popover>
   );
 }
+
+const coreMenuShortcutId = (id: string): ShortcutActionId | undefined => {
+  if (id === "remove_worktree") return "task-remove-worktree";
+  if (id === "delete-task") return "task-delete";
+  return id === "reset_task" || id === "close_task" ? coreTaskActionShortcutId(id) : undefined;
+};

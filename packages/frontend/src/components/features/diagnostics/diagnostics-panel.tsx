@@ -1,3 +1,4 @@
+import { ShortcutButton } from "@/features/shortcuts/shortcut-controls";
 import { RefreshCcw, ShieldCheck } from "lucide-react";
 import {
   createContext,
@@ -140,7 +141,8 @@ export function DiagnosticsTrigger({ className }: { className?: string }): React
   const label = `Open diagnostics: ${model.summaryState.label}`;
   const iconClass = DIAGNOSTICS_SUMMARY_ICON_CLASSES[model.summaryState.tone];
   return (
-    <Button
+    <ShortcutButton
+      shortcutId="diagnostics"
       type="button"
       size="icon"
       variant="outline"
@@ -154,6 +156,6 @@ export function DiagnosticsTrigger({ className }: { className?: string }): React
       ) : (
         <ShieldCheck className={cn("size-4", iconClass)} />
       )}
-    </Button>
+    </ShortcutButton>
   );
 }

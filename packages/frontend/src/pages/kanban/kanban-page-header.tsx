@@ -1,7 +1,7 @@
+import { ShortcutButton } from "@/features/shortcuts/shortcut-controls";
 import { Loader2, RefreshCcw } from "lucide-react";
 import type { ReactElement } from "react";
 import { TaskCardViewControl } from "@/components/features/kanban/task-card-view-control";
-import { Button } from "@/components/ui/button";
 import { KanbanBoardFilterBar } from "./kanban-board-filter-bar";
 import type { KanbanPageHeaderModel } from "./kanban-page-model-types";
 
@@ -23,7 +23,8 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
             onValueChange={model.onTaskCardViewChange}
           />
         </div>
-        <Button
+        <ShortcutButton
+          shortcutId="refresh-tasks"
           type="button"
           size="sm"
           variant="outline"
@@ -37,7 +38,7 @@ export function KanbanPageHeader({ model }: KanbanPageHeaderProps): ReactElement
             <RefreshCcw className="size-3.5" />
           )}
           {model.isLoadingTasks ? "Refreshing..." : "Refresh Tasks"}
-        </Button>
+        </ShortcutButton>
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useCommandPalettePageCommand } from "@/features/command-palette/command-palette-context";
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { SessionPanelsModel } from "@/features/session-panels";
+import { useShortcutLabel } from "@/features/shortcuts/use-shortcut-label";
 
 type SessionViewControlsProps = {
   bottom: SessionPanelsModel["bottomToggle"];
@@ -26,7 +27,7 @@ export function SessionViewControls({ bottom, right }: SessionViewControlsProps)
     () =>
       bottom.isAvailable
         ? {
-            id: "bottom-panel",
+            id: "bottom-panel" as const,
             ...panelToggleView("bottom", bottom.isOpen),
             keywords: ["terminal", "shell", "console", "toggle panel"],
             run: bottom.onToggle,
@@ -41,7 +42,7 @@ export function SessionViewControls({ bottom, right }: SessionViewControlsProps)
     () =>
       rightOnToggle
         ? {
-            id: "right-panel",
+            id: "right-panel" as const,
             ...panelToggleView("right", rightIsOpen),
             keywords: ["artifacts", "files", "git", "toggle panel"],
             run: rightOnToggle,
@@ -51,6 +52,8 @@ export function SessionViewControls({ bottom, right }: SessionViewControlsProps)
   );
   // Kept views also show these controls, but only the active view owns the palette commands.
   const isActive = useSessionViewActive();
+  const bottomShortcut = useShortcutLabel("bottom-panel");
+  const rightShortcut = useShortcutLabel("right-panel");
   useCommandPalettePageCommand(isActive ? bottomCommand : null);
   useCommandPalettePageCommand(isActive ? rightCommand : null);
   return (
@@ -61,6 +64,7 @@ export function SessionViewControls({ bottom, right }: SessionViewControlsProps)
           icon={bottomView.icon}
           isOpen={bottom.isOpen}
           disabled={!bottom.isAvailable}
+          shortcut={isActive && bottom.isAvailable ? bottomShortcut : null}
           onToggle={bottom.onToggle}
         />
         {right && rightView ? (
@@ -69,6 +73,7 @@ export function SessionViewControls({ bottom, right }: SessionViewControlsProps)
             icon={rightView.icon}
             isOpen={right.isOpen}
             disabled={false}
+            shortcut={isActive ? rightShortcut : null}
             onToggle={right.onToggle}
           />
         ) : null}
@@ -95,12 +100,14 @@ function PanelToggleButton({
   icon: Icon,
   isOpen,
   disabled,
+  shortcut,
   onToggle,
 }: {
   label: string;
   icon: LucideIcon;
   isOpen: boolean;
   disabled: boolean;
+  shortcut: string | null;
   onToggle: () => void;
 }): ReactElement {
   return (
@@ -121,7 +128,15 @@ function PanelToggleButton({
           </Button>
         </span>
       </TooltipTrigger>
-      <TooltipContent side="bottom">{label}</TooltipContent>
+      <TooltipContent side="bottom">
+        {label}
+        {shortcut ? (
+          <>
+            {" "}
+            <span className="ml-1 font-mono text-xs opacity-75">{shortcut}</span>
+          </>
+        ) : null}
+      </TooltipContent>
     </Tooltip>
   );
 }

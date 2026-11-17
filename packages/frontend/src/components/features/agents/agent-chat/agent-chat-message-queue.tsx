@@ -1,8 +1,10 @@
+import { ShortcutButton } from "@/features/shortcuts/shortcut-controls";
 import type { AgentMessageQueueAction, AgentMessageTarget } from "@openducktor/contracts";
 import { LoaderCircle, Pause, Play } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useRef, useState } from "react";
+import { useCommandPalettePageCommand } from "@/features/command-palette/command-palette-context";
+import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { CssPresenceList, useCssPresence } from "@/components/ui/css-presence";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
@@ -194,8 +196,9 @@ export function AgentChatMessageQueuePauseNotice({
   model: AgentChatMessageQueueModel;
 }): ReactElement | null {
   const [isResuming, setResuming] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const active = useSessionViewActive();
   const pause = model.queue?.pause;
-  if (!pause) return null;
   const resume = (): void => {
     setResuming(true);
     void model
@@ -205,6 +208,20 @@ export function AgentChatMessageQueuePauseNotice({
       })
       .finally(() => setResuming(false));
   };
+  useCommandPalettePageCommand(
+    active && pause && model.queue
+      ? {
+          id: "session-resume-queue" as const,
+          icon: Play,
+          keywords: ["resume", "queue", "paused"],
+          target: { kind: "session", key: model.queue.target.externalSessionId },
+          isVisible: () => Boolean(button.current?.getClientRects().length),
+          disabledReason: () => (isResuming ? "The queue is resuming." : null),
+          run: resume,
+        }
+      : null,
+  );
+  if (!pause) return null;
   return (
     <div
       className="mx-2 mt-2 flex items-center gap-2 rounded-lg bg-muted py-1 pr-1 pl-2.5 text-xs text-muted-foreground"
@@ -215,14 +232,22 @@ export function AgentChatMessageQueuePauseNotice({
         <span className="font-medium text-foreground">Queue paused.</span>{" "}
         <span>{pause.message}</span>
       </p>
-      <Button type="button" size="xs" variant="outline" disabled={isResuming} onClick={resume}>
+      <ShortcutButton
+        shortcutId="session-resume-queue"
+        ref={button}
+        type="button"
+        size="xs"
+        variant="outline"
+        disabled={isResuming}
+        onClick={resume}
+      >
         {isResuming ? (
           <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
         ) : (
           <Play className="size-3" aria-hidden="true" />
         )}
         Resume queue
-      </Button>
+      </ShortcutButton>
     </div>
   );
 }

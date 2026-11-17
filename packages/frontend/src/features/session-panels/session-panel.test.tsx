@@ -1,10 +1,22 @@
-import { describe, expect, mock, test } from "bun:test";
+import { createShortcutLabelStore } from "@/features/shortcuts/shortcut-label-store";
+import { ShortcutLabels } from "@/test-utils/shortcut-labels";
+import { Command } from "lucide-react";
+import { useCommandPalettePageCommand } from "../command-palette/command-palette-context";
+import { ShortcutButton } from "../shortcuts/shortcut-controls";
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { useShortcutDispatch } from "../shortcuts/use-shortcut-dispatch";
+import { trackOpenDialog } from "@/components/ui/open-dialogs";
+import { CommandPaletteRegistryContext } from "../command-palette/command-palette-registry-context";
+import { CommandPaletteContext } from "../command-palette/command-palette-context";
+import type { CommandPalettePageCommand } from "../command-palette/command-palette-types";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import {
   type BrowserTabSummary,
   TERMINAL_PROTOCOL_VERSION,
   type TerminalSummary,
 } from "@openducktor/contracts";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { type ReactElement, useCallback, useState } from "react";
 import type { TerminalTab } from "@openducktor/frontend-core/terminals/terminal-presentation-state";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -23,7 +35,7 @@ import {
   SessionViewShownContext,
 } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import type { BrowserTabViewProps } from "./use-session-panel-browser-tabs";
-import type { ResolvedBrowserTab } from "./session-panel-layout";
+import type { ResolvedBrowserTab, ResolvedPanelTab } from "./session-panel-layout";
 import { SessionPanelsRoot } from "./session-panels-root";
 
 const terminal: TerminalTab = {
@@ -125,6 +137,184 @@ test("a hidden panel root closes its terminal confirmation before its content tu
 });
 
 describe("SessionPanel", () => {
+  test("keeps menu shortcuts in their panel and hides them while typing", async () => {
+    const connection = createTestClientConnection();
+    connection.queryClient.setQueryData(["keyboard-shortcuts"], {
+      version: 1,
+      overrides: {
+        "task-edit": {
+          key: { kind: "logical", key: "F9" },
+          ctrl: true,
+          mod: false,
+          alt: false,
+          shift: true,
+        },
+      },
+    });
+    const close = mock(() => {});
+    const edit = mock(() => {});
+    function Routing() {
+      useCommandPalettePageCommand({
+        id: "task-edit",
+        label: "Edit task",
+        icon: Command,
+        keywords: [],
+        target: { kind: "task", key: "task-1" },
+        run: edit,
+      });
+      useShortcutDispatch({
+        platform: "linux",
+        isOpen: false,
+        open: () => {},
+        close: () => {},
+        runAfterClose: (run) => run(),
+      });
+      return (
+        <ShortcutButton shortcutId="task-edit" title="Edit task">
+          Edit task
+        </ShortcutButton>
+      );
+    }
+    const view = render(
+      <ShortcutTestProviders connection={connection}>
+        <Routing />
+        <SessionPanel
+          model={createSessionPanelFixture({
+            tabs: [
+              { id: "files", kind: "files" },
+              { id: "diffs", kind: "diffs" },
+            ],
+            selectedTabId: "files",
+            onClose: close,
+          })}
+          toolTabs={{ files: { content: <input aria-label="Find a file" /> } }}
+        />
+      </ShortcutTestProviders>,
+    );
+    try {
+      const tab = screen.getByRole("tab", { name: "Files" });
+      const closeButton = screen.getByRole("button", { name: "Close Files" });
+      act(() => tab.focus());
+      await waitFor(() => expect(closeButton.title).toContain("Ctrl+Shift+X"));
+      const editButton = screen.getByRole("button", { name: "Edit task" });
+      await waitFor(() => expect(editButton.title).toBe("Edit task (Ctrl+Shift+F9)"));
+      const input = screen.getByRole("textbox", { name: "Find a file" });
+      act(() => input.focus());
+      expect(document.activeElement).toBe(input);
+      await waitFor(() => expect(editButton.title).toBe("Edit task"));
+      expect(closeButton.title).toContain("Ctrl+Shift+X");
+      expect(fireEvent.keyDown(input, { key: "F9", ctrlKey: true, shiftKey: true })).toBe(true);
+      expect(edit).not.toHaveBeenCalled();
+      fireEvent.contextMenu(screen.getByRole("tab", { name: "Diffs" }));
+      const otherItem = await screen.findByRole("menuitem", { name: "Close tab" });
+      act(() => otherItem.focus());
+      expect(otherItem.textContent).not.toContain("Ctrl+Shift+X");
+      expect(fireEvent.keyDown(otherItem, { key: "X", ctrlKey: true, shiftKey: true })).toBe(true);
+      expect(close).not.toHaveBeenCalled();
+      fireEvent.keyDown(otherItem, { key: "Escape" });
+      await waitFor(() => expect(screen.queryByRole("menuitem", { name: "Close tab" })).toBeNull());
+      fireEvent.contextMenu(tab);
+      const item = await screen.findByRole("menuitem", { name: "Close tab" });
+      act(() => item.focus());
+      await waitFor(() => expect(item.textContent).toContain("Ctrl+Shift+X"));
+      expect(fireEvent.keyDown(item, { key: "X", ctrlKey: true, shiftKey: true })).toBe(false);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledWith("files");
+      await waitFor(() => expect(screen.queryByRole("menuitem", { name: "Close tab" })).toBeNull());
+      act(() => editButton.focus());
+      await waitFor(() => expect(editButton.title).toBe("Edit task (Ctrl+Shift+F9)"));
+      expect(fireEvent.keyDown(window, { key: "X", ctrlKey: true, shiftKey: true })).toBe(true);
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test.each(["remaining tab", "composer"] as const)(
+    "returns focus to the %s after its shortcut closes a panel tab",
+    async (destination) => {
+      const hasRemainingTab = destination === "remaining tab";
+      const commands = new Map<string, CommandPalettePageCommand>();
+      const focusComposer = mock((_id: string) => {});
+      const registerPageCommand = (command: CommandPalettePageCommand) => {
+        commands.set(command.id, command);
+        return () => {
+          commands.delete(command.id);
+        };
+      };
+      function Harness() {
+        const [open, setOpen] = useState(true);
+        const tabs: ResolvedPanelTab[] = hasRemainingTab ? [{ id: "files", kind: "files" }] : [];
+        if (open) tabs.push({ id: "new_tab:bottom", kind: "new_tab" });
+        return (
+          <CommandPaletteRegistryContext
+            value={{
+              pageCommands: [],
+              listedCommands: [],
+              shortcutLabels: createShortcutLabelStore(),
+              subscribe: () => () => {},
+              invalidatePageCommands: () => {},
+              registerPageCommand,
+            }}
+          >
+            <CommandPaletteContext
+              value={{
+                platform: "linux",
+                open: () => {},
+                runPageCommand: focusComposer,
+              }}
+            >
+              <SessionPanel
+                model={createSessionPanelFixture({
+                  panel: "bottom",
+                  tabs,
+                  selectedTabId: open ? "new_tab:bottom" : hasRemainingTab ? "files" : null,
+                  onClose: () => setOpen(false),
+                })}
+              />
+            </CommandPaletteContext>
+          </CommandPaletteRegistryContext>
+        );
+      }
+      const view = renderWithConnection(<Harness />);
+      const remainingTab = hasRemainingTab ? screen.getByRole("tab", { name: "Files" }) : null;
+      const rect = new DOMRect(0, 0, 80, 28);
+      const layout = remainingTab
+        ? spyOn(remainingTab, "getClientRects").mockReturnValue({
+            0: rect,
+            length: 1,
+            item: () => rect,
+            [Symbol.iterator]: () => [rect][Symbol.iterator](),
+          })
+        : null;
+      try {
+        act(() => screen.getByRole("tab", { name: "New tab" }).focus());
+        act(() => commands.get("close-panel-tab")?.run());
+        if (remainingTab) {
+          await waitFor(() => expect(document.activeElement === remainingTab).toBe(true), {
+            timeout: 300,
+          });
+          expect(focusComposer).not.toHaveBeenCalled();
+        } else {
+          await waitFor(() => expect(focusComposer).toHaveBeenCalledWith("focus-composer"));
+        }
+        // A later dialog must not move the focus again.
+        const elsewhere = document.createElement("button");
+        document.body.append(elsewhere);
+        act(() => elsewhere.focus());
+        trackOpenDialog(Symbol("later dialog"))();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        expect(document.activeElement === elsewhere).toBe(true);
+        expect(focusComposer).toHaveBeenCalledTimes(hasRemainingTab ? 0 : 1);
+        elsewhere.remove();
+      } finally {
+        view.unmount();
+        layout?.mockRestore();
+      }
+    },
+  );
+
   test("a view that shows again paints its panel before its content turns active", () => {
     const model = createSessionPanelFixture();
     const panel = (isShown: boolean, isActive: boolean) => (
@@ -344,6 +534,53 @@ describe("SessionPanel", () => {
     expect(screen.getByRole("menuitem", { name: "Close tab" })).toBeDefined();
   });
 
+  test("shows the effective close assignment only for the selected panel tab", async () => {
+    let label: string | null = "Ctrl+Shift+X";
+    const panel = () => (
+      <ShortcutLabels labels={{ "close-panel-tab": label }}>
+        <CommandPaletteContext
+          value={{
+            open: () => {},
+            platform: "linux",
+          }}
+        >
+          <SessionPanel
+            model={createSessionPanelFixture({
+              tabs: [
+                { id: "diffs", kind: "diffs" },
+                { id: "files", kind: "files" },
+              ],
+              selectedTabId: "diffs",
+            })}
+            toolTabs={toolTabs}
+          />
+        </CommandPaletteContext>
+      </ShortcutLabels>
+    );
+    const view = renderWithConnection(panel());
+    await act(async () => {
+      fireEvent.contextMenu(screen.getByRole("tab", { name: "Diffs" }));
+    });
+    expect(screen.getByRole("menuitem", { name: "Close tab" }).textContent).toContain(
+      "Ctrl+Shift+X",
+    );
+    label = "Ctrl+Shift+F10";
+    view.rerender(panel());
+    expect(screen.getByRole("menuitem", { name: "Close tab" }).textContent).toContain(
+      "Ctrl+Shift+F10",
+    );
+    label = null;
+    view.rerender(panel());
+    expect(screen.getByRole("menuitem", { name: "Close tab" }).textContent).toBe("Close tab");
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Close tab" }), { key: "Escape" });
+    label = "Ctrl+Shift+X";
+    view.rerender(panel());
+    await act(async () => {
+      fireEvent.contextMenu(screen.getByRole("tab", { name: "Files" }));
+    });
+    expect(screen.getByRole("menuitem", { name: "Close tab" }).textContent).toBe("Close tab");
+  });
+
   test("shows the full tab label only when the tab cuts it off, above a bottom panel tab", async () => {
     const bottom = createSessionPanelFixture({
       panel: "bottom",
@@ -427,14 +664,24 @@ describe("SessionPanel", () => {
     view.unmount();
   });
 
-  test("closes the new-tab tooltip when the view hides and keeps it closed on return", async () => {
+  test("updates the new-tab assignment and closes its tooltip when the view hides", async () => {
     const model = createSessionPanelFixture();
+    let shortcut: string | null = "Ctrl+Alt+Enter";
     const panel = (isShown: boolean) => (
-      <SessionViewContext value={{ id: "view", isActive: isShown }}>
-        <SessionViewShownContext value={isShown}>
-          <SessionPanel model={model} toolTabs={toolTabs} />
-        </SessionViewShownContext>
-      </SessionViewContext>
+      <ShortcutLabels labels={{ "new-right-tab": shortcut }}>
+        <CommandPaletteContext
+          value={{
+            open: () => {},
+            platform: "linux",
+          }}
+        >
+          <SessionViewContext value={{ id: "view", isActive: isShown }}>
+            <SessionViewShownContext value={isShown}>
+              <SessionPanel model={model} toolTabs={toolTabs} />
+            </SessionViewShownContext>
+          </SessionViewContext>
+        </CommandPaletteContext>
+      </ShortcutLabels>
     );
     const view = renderWithConnection(panel(true));
     const addTab = screen.getByRole("button", { name: "New tab in the right panel" });
@@ -442,6 +689,12 @@ describe("SessionPanel", () => {
     await act(async () => {
       fireEvent.focus(addTab);
     });
+    expect(screen.getByRole("tooltip").textContent).toBe("New tab Ctrl+Alt+Enter");
+    shortcut = "Ctrl+Shift+Enter";
+    view.rerender(panel(true));
+    expect(screen.getByRole("tooltip").textContent).toBe("New tab Ctrl+Shift+Enter");
+    shortcut = null;
+    view.rerender(panel(true));
     expect(screen.getByRole("tooltip").textContent).toBe("New tab");
 
     view.rerender(panel(false));

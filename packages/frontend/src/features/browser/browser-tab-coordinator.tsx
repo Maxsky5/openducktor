@@ -1,4 +1,3 @@
-import { BROWSER_FORWARDED_SHORTCUTS } from "@openducktor/contracts";
 import { workflowCatalogQueryOptions } from "@openducktor/frontend-core/queries/workflows";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
@@ -11,7 +10,6 @@ import {
   useSessionPanelLayoutStore,
 } from "@/features/session-panels";
 import { useWorkspacePresence, useWorkspaceState } from "@/state/app-state-provider";
-import { platformQueryOptions } from "@openducktor/frontend-core/queries/system";
 import { useBrowserDevToolsStore } from "./browser-devtools-store";
 import { useBrowserRecentPages } from "./browser-recent-pages";
 import { useBrowserRuntime } from "./browser-runtime";
@@ -20,8 +18,7 @@ import { browserNoticeText } from "./components/browser-notice-text";
 
 /** Runs the browser tab coordinator for the app shell. Renders nothing. */
 export function BrowserTabCoordinator() {
-  const platform = useQuery(platformQueryOptions()).data ?? "unknown";
-  useBrowserTabCoordinator(platform);
+  useBrowserTabCoordinator();
   useRecentPagesPruning();
   return null;
 }
@@ -47,10 +44,9 @@ const useRecentPagesPruning = (): void => {
  * Keeps the panels of every owner in step with the host tabs, also for owners whose page does not
  * show: a closed tab leaves its panel, a new popup goes after its opener, a new agent tab goes to
  * the end of the right panel, and pruned owners lose their pending annotations. It
- * also records the recent pages, shows tab notices and save failures, and runs forwarded
- * shortcuts.
+ * also records the recent pages and shows tab notices and save failures.
  */
-const useBrowserTabCoordinator = (platform: string): void => {
+const useBrowserTabCoordinator = (): void => {
   const catalog = useQuery(workflowCatalogQueryOptions());
   const roleIds = useMemo(
     () => [
@@ -112,28 +108,11 @@ const useBrowserTabCoordinator = (platform: string): void => {
   useEffect(() => {
     if (runtime.surface !== "electron") return;
     return runtime.channel.subscribe((message) => {
-      if (message.type === "shortcut") dispatchShortcut(message.shortcut, platform);
       if (message.type === "protocol_error") {
         toast.error("A browser tab action failed", { description: message.failure.message });
       }
     });
-  }, [runtime, platform]);
-};
-
-/** Sends a forwarded OpenDucktor shortcut to the app, as if the window had the keyboard focus. */
-const dispatchShortcut = (id: string, platform: string): void => {
-  const shortcut = BROWSER_FORWARDED_SHORTCUTS.find((candidate) => candidate.id === id);
-  if (!shortcut) return;
-  const useMeta = shortcut.modifier === "mod" && platform === "darwin";
-  window.dispatchEvent(
-    new KeyboardEvent("keydown", {
-      key: shortcut.key,
-      metaKey: useMeta,
-      ctrlKey: !useMeta,
-      bubbles: true,
-      cancelable: true,
-    }),
-  );
+  }, [runtime]);
 };
 
 /** The annotation owner of the session panel layout that OpenDucktor pruned. */

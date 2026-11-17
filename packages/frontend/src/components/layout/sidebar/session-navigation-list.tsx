@@ -1,5 +1,7 @@
+import { useMinuteClockLabel } from "@openducktor/frontend-core/lib/relative-time";
+import { SessionPositionHint } from "@/features/shortcuts/position-hint";
 import { ChevronDown, LoaderCircle } from "lucide-react";
-import { memo, type ReactElement, useId, useState } from "react";
+import { memo, type ReactElement, useId } from "react";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeClassName } from "@/lib/task-status-presentation";
 import type { SessionNavigationTarget } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
@@ -43,7 +45,8 @@ import { SessionCommandIcon } from "./session-command-activity";
 
 type SessionNavigationListProps = {
   model: SessionNavigationModel;
-  now: number;
+  collapsedGroups: ReadonlySet<string>;
+  onToggleGroup: (id: string) => void;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
   onRetry: (issue: SessionNavigationSourceIssue) => void;
   footer?: ReactElement | null;
@@ -55,7 +58,8 @@ type SessionNavigationListProps = {
  */
 export function SessionNavigationList({
   model,
-  now,
+  collapsedGroups,
+  onToggleGroup,
   onOpen,
   onRetry,
   footer = null,
@@ -73,8 +77,9 @@ export function SessionNavigationList({
               <SessionGroupSection
                 key={group.id}
                 group={group}
+                collapsed={collapsedGroups.has(group.id)}
+                onToggle={() => onToggleGroup(group.id)}
                 isLoading={model.isLoading}
-                now={now}
                 onOpen={onOpen}
               />
             ))}
@@ -103,15 +108,17 @@ export function SessionNavigationList({
 
 function SessionRowMetadata({
   entry,
-  now,
+  sampleNow,
 }: {
   entry: SessionNavigationEntry;
-  now: number;
+  sampleNow: number | undefined;
 }): ReactElement | null {
+  // Each row follows the minute clock itself, so a tick renders only the rows whose time changed.
+  const liveTime = useMinuteClockLabel((now) => sessionEntryShortTime(entry, now));
+  const shortTime = sampleNow === undefined ? liveTime : sessionEntryShortTime(entry, sampleNow);
   if (entry.attention.length > 0) return <AttentionBadges entry={entry} />;
   const issueIcon = <SessionEntryIssueIcon entry={entry} />;
   if (entry.status.kind === "running") return issueIcon;
-  const shortTime = sessionEntryShortTime(entry, now);
   return (
     <span className="flex shrink-0 items-center gap-1">
       {issueIcon}
@@ -136,17 +143,20 @@ function SessionRowMetadata({
 export function SessionRowContent({
   entry,
   unread,
-  now,
   readStatusId,
   commandCount,
   isSelected,
+  positionHint,
+  sampleNow,
 }: {
   entry: SessionNavigationEntry;
   unread: boolean;
-  now: number;
   readStatusId: string;
   commandCount: number;
   isSelected: boolean;
+  positionHint?: ReactElement;
+  /** The fixed time of sample rows, such as in the feature tour. Live rows follow the clock. */
+  sampleNow?: number;
 }): ReactElement {
   const titleClassName = SESSION_TITLE_CLASSES[sessionEntryTitleTone(entry, unread)];
   const task = entry.context.kind === "task" ? entry.context.task : null;
@@ -169,11 +179,18 @@ export function SessionRowContent({
             {task.sharedState.shortLabel}
           </Badge>
         )}
-        <SessionRowMetadata entry={entry} now={now} />
+        <SessionRowMetadata entry={entry} sampleNow={sampleNow} />
       </span>
       <span className="flex w-full min-w-0 items-center gap-2">
-        <span className="relative flex size-4 shrink-0 items-center justify-center">
-          <Icon className={cn("size-4", sessionEntryIconClassName(entry))} aria-hidden="true" />
+        <span className="shortcut-position-target grid h-4 min-w-4 shrink-0 place-items-center">
+          <Icon
+            className={cn(
+              "shortcut-position-replaced col-start-1 row-start-1 size-4",
+              sessionEntryIconClassName(entry),
+            )}
+            aria-hidden="true"
+          />
+          {positionHint}
         </span>
         <span
           className={cn(
@@ -234,36 +251,24 @@ export function SessionGroupHeaderContent({
 
 function SessionListRow({
   entry,
-  now,
   onOpen,
 }: {
   entry: SessionNavigationEntry;
-  now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
   const { isSelected, isVisible } = useSessionEntrySelection(entry.key);
-  return (
-    <SessionRow
-      entry={entry}
-      isSelected={isSelected}
-      isVisible={isVisible}
-      now={now}
-      onOpen={onOpen}
-    />
-  );
+  return <SessionRow entry={entry} isSelected={isSelected} isVisible={isVisible} onOpen={onOpen} />;
 }
 
 const SessionRow = memo(function SessionRow({
   entry,
   isSelected,
   isVisible,
-  now,
   onOpen,
 }: {
   entry: SessionNavigationEntry;
   isSelected: boolean;
   isVisible: boolean;
-  now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
   const unread = useSessionUnread(entry);
@@ -271,7 +276,7 @@ const SessionRow = memo(function SessionRow({
   const commands = useSessionCommands(entry);
   const commandCount = commands.status === "ready" ? commands.commands.length : 0;
   return (
-    <SessionEntryPreview entry={entry} isVisible={isVisible} now={now} onOpen={onOpen}>
+    <SessionEntryPreview entry={entry} isVisible={isVisible} onOpen={onOpen}>
       <button
         type="button"
         aria-current={isSelected ? "true" : undefined}
@@ -292,10 +297,10 @@ const SessionRow = memo(function SessionRow({
         <SessionRowContent
           entry={entry}
           unread={unread}
-          now={now}
           readStatusId={readStatusId}
           commandCount={commandCount}
           isSelected={isSelected}
+          positionHint={<SessionPositionHint entryKey={entry.key} />}
         />
       </button>
     </SessionEntryPreview>
@@ -304,16 +309,17 @@ const SessionRow = memo(function SessionRow({
 
 function SessionGroupSection({
   group,
+  collapsed,
+  onToggle,
   isLoading,
-  now,
   onOpen,
 }: {
   group: SessionNavigationGroup;
+  collapsed: boolean;
+  onToggle: () => void;
   isLoading: boolean;
-  now: number;
   onOpen: (entry: SessionNavigationEntry, target?: SessionNavigationTarget) => void;
 }): ReactElement {
-  const [collapsed, setCollapsed] = useState(false);
   const listId = `${useId()}-session-group`;
   const label = SESSION_GROUP_LABELS[group.id];
   return (
@@ -323,7 +329,7 @@ function SessionGroupSection({
           type="button"
           aria-expanded={!collapsed}
           aria-controls={listId}
-          onClick={() => setCollapsed((current) => !current)}
+          onClick={onToggle}
           className={SESSION_GROUP_HEADER_CLASS_NAME}
         >
           <SessionGroupHeaderContent
@@ -338,7 +344,7 @@ function SessionGroupSection({
               {group.entries.map((entry) => (
                 <SessionPresence as="li" key={entry.key}>
                   <div className="py-0.5">
-                    <SessionListRow entry={entry} now={now} onOpen={onOpen} />
+                    <SessionListRow entry={entry} onOpen={onOpen} />
                   </div>
                 </SessionPresence>
               ))}

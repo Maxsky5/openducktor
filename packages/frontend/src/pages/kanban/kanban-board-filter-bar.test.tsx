@@ -1,3 +1,7 @@
+import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
+import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { useShortcutDispatch } from "@/features/shortcuts/use-shortcut-dispatch";
+import { type PropsWithChildren } from "react";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { afterEach, describe, expect, test } from "bun:test";
@@ -36,6 +40,18 @@ const renderBar = ({
     configurable: true,
     get: () => navigatorPlatforms[platform],
   });
+  const connection = createTestClientConnection();
+  connection.queryClient.setQueryData(["keyboard-shortcuts"], { version: 1, overrides: {} });
+  function ShortcutOwner({ children }: PropsWithChildren) {
+    useShortcutDispatch({
+      platform,
+      isOpen: false,
+      open: () => {},
+      close: () => {},
+      runAfterClose: (run) => run(),
+    });
+    return children;
+  }
   const latest = { filter: EMPTY_KANBAN_BOARD_FILTER };
   function Harness({ initial, labelOptions = [], isDisabled = false }: HarnessProps): ReactElement {
     const [value, setValue] = useState<KanbanBoardFilter>({
@@ -59,9 +75,16 @@ const renderBar = ({
       />
     );
   }
-  render(<Harness {...props} />);
+  render(
+    <ShortcutTestProviders connection={connection}>
+      <ShortcutOwner>
+        <Harness {...props} />
+      </ShortcutOwner>
+    </ShortcutTestProviders>,
+  );
   return {
     latest,
+    queryClient: connection.queryClient,
     search: screen.getByRole<HTMLInputElement>("textbox", { name: "Search tasks" }),
   };
 };
@@ -99,6 +122,39 @@ describe("KanbanBoardFilterBar search", () => {
       expect([search.selectionStart, search.selectionEnd]).toEqual([0, "crash".length]);
     });
   }
+
+  test("uses an edited search assignment and returns its cleared keys to the browser", async () => {
+    const { search, queryClient } = renderBar({
+      platform: "linux",
+      initial: { searchText: "crash" },
+    });
+    await act(async () => {
+      queryClient.setQueryData(["keyboard-shortcuts"], {
+        version: 1,
+        overrides: {
+          "focus-task-search": {
+            key: { kind: "logical", key: "F2" },
+            ctrl: true,
+            mod: false,
+            alt: false,
+            shift: true,
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(fireEvent.keyDown(window, { key: "f", ctrlKey: true })).toBe(true);
+    expect(fireEvent.keyDown(window, { key: "F2", ctrlKey: true, shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(search);
+    await act(async () => {
+      queryClient.setQueryData(["keyboard-shortcuts"], {
+        version: 1,
+        overrides: { "focus-task-search": null },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(fireEvent.keyDown(window, { key: "F2", ctrlKey: true, shiftKey: true })).toBe(true);
+  });
 
   test("leaves Mod+F alone with the modifier of the other platform", () => {
     const { search } = renderBar({ platform: "linux" });

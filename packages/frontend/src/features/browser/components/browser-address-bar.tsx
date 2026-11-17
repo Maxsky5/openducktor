@@ -6,6 +6,7 @@ import {
 import { type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { browserShortAddress } from "./browser-format";
+import { useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
 
 type AddressDraft = {
   text: string;
@@ -63,6 +64,10 @@ export function BrowserAddressBar({
   // A new page URL replaces a submitted draft, and also a draft that the user left.
   const showsDraft = draft !== null && (draft.sourceUrl === url || (isFocused && !draft.submitted));
   const text = showsDraft ? draft.text : pageAddressText(url);
+  const shortcutTitle = useShortcutTitle(
+    "browser-address",
+    isFocused ? undefined : pageAddressText(url) || undefined,
+  );
   // Without the focus, a page address shows without its scheme, as in a browser.
   const value = isFocused || (showsDraft && !draft.submitted) ? text : browserShortAddress(text);
 
@@ -114,6 +119,7 @@ export function BrowserAddressBar({
 
   return (
     <Input
+      title={shortcutTitle}
       ref={inputRef}
       type="text"
       inputMode="url"
@@ -126,7 +132,6 @@ export function BrowserAddressBar({
       spellCheck={false}
       placeholder={BROWSER_ADDRESS_PLACEHOLDER}
       value={value}
-      title={isFocused ? undefined : pageAddressText(url) || undefined}
       className={BROWSER_ADDRESS_INPUT_CLASS_NAME}
       onChange={(event) => {
         setDraft({ text: event.currentTarget.value, sourceUrl: url, submitted: false });

@@ -45,6 +45,7 @@ export function SearchField({
 }
 
 type ToolbarSearchFieldProps = SearchFieldProps & {
+  title?: string | undefined;
   /** `sm` fits a panel toolbar. `md` fits a page header toolbar. `lg` fits a settings page. */
   size?: "sm" | "md" | "lg";
   ref?: Ref<HTMLInputElement | null>;
@@ -57,6 +58,7 @@ type ToolbarSearchFieldProps = SearchFieldProps & {
  * A Radix dialog still closes, because it gets Escape first in the capture phase.
  */
 export function ToolbarSearchField({
+  title,
   id,
   label,
   value,
@@ -73,6 +75,7 @@ export function ToolbarSearchField({
       </Label>
       <SearchInput
         ref={ref}
+        title={title}
         id={id}
         value={value}
         placeholder={placeholder}
@@ -128,7 +131,10 @@ const TOOLBAR_CLASSES = {
   lg: DEFAULT_CLASSES,
 } satisfies Record<NonNullable<ToolbarSearchFieldProps["size"]>, SearchInputClasses>;
 
-type SearchInputProps = Pick<ComponentProps<"input">, "autoComplete" | "spellCheck" | "onKeyDown"> &
+type SearchInputProps = Pick<
+  ComponentProps<"input">,
+  "autoComplete" | "spellCheck" | "onKeyDown" | "title"
+> &
   Omit<SearchFieldProps, "label"> & {
     classes: SearchInputClasses;
     ref?: Ref<HTMLInputElement | null> | undefined;

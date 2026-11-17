@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { browserForwardedShortcutIdSchema } from "./browser-shortcuts";
 import {
   browserBoxSchema,
   browserFailureSchema,
@@ -72,7 +71,6 @@ const browserServerMessageSchema = z.discriminatedUnion("type", [
       }),
     ),
   }),
-  z.strictObject({ type: z.literal("shortcut"), shortcut: browserForwardedShortcutIdSchema }),
   z.strictObject({
     type: z.literal("protocol_error"),
     tabId: browserTabIdSchema.optional(),

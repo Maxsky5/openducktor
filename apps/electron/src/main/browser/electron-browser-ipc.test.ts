@@ -116,18 +116,15 @@ describe("Electron browser IPC controller", () => {
     expect(JSON.stringify(bad)).toContain("electron.browser.decode");
   });
 
-  test("sends engine messages to every client of a renderer and closes clients on detach", async () => {
+  test("closes the clients of a renderer on detach", async () => {
     const service = createService();
     const controller = createElectronBrowserIpcController({
       browserService: service.browserService,
       reportDeliveryFailure: () => {},
     });
-    const { sender, sent } = createSender();
+    const { sender } = createSender();
     controller.connect(sender, "client-a");
     controller.connect(sender, "client-b");
-    controller.sendToRenderer(7, { type: "shortcut", shortcut: "command_palette" });
-    controller.sendToRenderer(8, { type: "shortcut", shortcut: "command_palette" });
-    expect(sent.map((envelope) => envelope.clientId)).toEqual(["client-a", "client-b"]);
 
     await Effect.runPromise(controller.detachClient(7, "client-a"));
     await Effect.runPromise(controller.detachSender(7));

@@ -6,7 +6,6 @@ import {
 
 const TEST_COMMAND_PALETTE: CommandPaletteContextValue = {
   open: () => {},
-  registerPageCommand: () => () => {},
   platform: null,
 };
 

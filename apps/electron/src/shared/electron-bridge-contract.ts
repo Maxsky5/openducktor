@@ -1,3 +1,6 @@
+export const ELECTRON_SHORTCUT_APPLY_CHANNEL = "openducktor:shortcuts:apply";
+export const ELECTRON_SHORTCUT_EVENT_CHANNEL = "openducktor:shortcuts:event";
+export const ELECTRON_SHORTCUT_RELEASE_CHANNEL = "openducktor:shortcuts:release";
 import type {
   AppPlatform,
   ArtifactPreviewEnvironment,
@@ -166,6 +169,7 @@ export type OpenDucktorElectronNotificationApi = {
 };
 
 export type OpenDucktorElectronApi = {
+  shortcuts: import("@openducktor/contracts").ElectronShortcutBridge;
   getArtifactPreviewEnvironment(): Promise<ArtifactPreviewEnvironment>;
   platform: AppPlatform;
   selectHost(): Promise<void>;
