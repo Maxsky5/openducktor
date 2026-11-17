@@ -311,6 +311,20 @@ export const messageProjectionContext = (
   };
 };
 
+/**
+ * The arguments in the ended input text of a tool. OpenCode ends the input with the raw model
+ * text: the claude-agent provider sends none, and OpenCode fails a tool with malformed text and
+ * reports it. `session.tool.called` then brings the parsed arguments.
+ */
+const settledToolInput = (text: string) => {
+  if (!text) return undefined;
+  try {
+    return agentToolDataSchema.safeParse(JSON.parse(text)).data;
+  } catch {
+    return undefined;
+  }
+};
+
 const isVisibleNativeMessage = (message: SessionMessageInfo, shells?: ShellContext): boolean =>
   message.type !== "agent-switched" &&
   !(message.type === "idle" && message.outcome === "succeeded") &&
@@ -394,13 +408,8 @@ const projectAssistantContent = (
     const settled = settledToolInputs ? settledToolInputs.has(content.id) : state.input.length > 0;
     tool.inputStreaming = !settled;
     if (settled) {
-      try {
-        tool.input = agentToolDataSchema.parse(JSON.parse(state.input));
-      } catch {
-        throw new Error(
-          `OpenCode returned invalid completed arguments for tool '${content.id}'. Reload the conversation after checking the tool failure in OpenCode.`,
-        );
-      }
+      const input = settledToolInput(state.input);
+      if (input) tool.input = input;
     }
   }
   if (content.time.ran !== undefined) tool.startedAtMs = content.time.ran;

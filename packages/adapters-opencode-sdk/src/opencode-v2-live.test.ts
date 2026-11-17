@@ -3065,6 +3065,8 @@ describe("OpenCode V2 live observation", () => {
     { label: "partial arguments", delta: '{"code":"console.', settled: false },
     { label: "valid JSON before input.ended", delta: '{"code":"console.log(42)"}', settled: false },
     { label: "completed arguments", delta: '{"code":"console.log(42)"}', settled: true },
+    // The claude-agent provider ends the input with no text. `session.tool.called` brings it.
+    { label: "empty arguments of a bare tool call", delta: "", settled: true },
   ])(
     "preserves tool preparation and queuing on reconnect for $label",
     async ({ delta, settled }) => {
@@ -3156,7 +3158,7 @@ describe("OpenCode V2 live observation", () => {
         if (signal.type !== "session_event" || signal.event.type !== "assistant_part")
           throw new Error("Expected the restored tool event");
         expect(signal.event.part).not.toHaveProperty("startedAtMs");
-        if (settled)
+        if (settled && delta)
           expect(signal.event.part).toMatchObject({ input: { code: "console.log(42)" } });
         else expect(signal.event.part).not.toHaveProperty("input");
         expect(fixture.requests.some(({ url }) => /\/(prompt|command)$/.test(url.pathname))).toBe(
