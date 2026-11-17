@@ -19,9 +19,10 @@ const findCatalogProfile = (
 };
 
 export const findCatalogModel = (
-  catalog: AgentModelCatalog,
-  selection: Pick<AgentModelSelection, "providerId" | "modelId">,
+  catalog: AgentModelCatalog | null | undefined,
+  selection: Pick<AgentModelSelection, "providerId" | "modelId"> | null | undefined,
 ): CatalogModel | null => {
+  if (!catalog || !selection) return null;
   return (
     catalog.models.find(
       (model) => model.providerId === selection.providerId && model.modelId === selection.modelId,

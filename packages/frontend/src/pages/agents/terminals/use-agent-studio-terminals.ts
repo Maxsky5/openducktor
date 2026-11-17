@@ -6,7 +6,7 @@ import {
   useTerminals,
 } from "@openducktor/frontend-core/terminals/use-terminals";
 import { sessionPanelOwnerKey } from "@/features/session-panels";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 
 type AgentStudioTerminalDependencies = {
   hostClient: TerminalHostClient;
@@ -31,6 +31,7 @@ export const useAgentStudioTerminals = (
   },
   suppliedDependencies?: AgentStudioTerminalDependencies,
 ): TerminalSessionsModel => {
+  const { terminals } = useShellPlatform();
   const taskScope = useTaskTerminalScope({
     key: workspaceId !== null && taskId !== null ? terminalScopeKey(workspaceId, taskId) : null,
     workspaceId,
@@ -38,8 +39,5 @@ export const useAgentStudioTerminals = (
     taskId,
     taskVersion,
   });
-  return useTerminals(
-    taskScope,
-    suppliedDependencies ?? { terminalBridge: getShellBridge().terminals },
-  );
+  return useTerminals(taskScope, suppliedDependencies ?? { terminalBridge: terminals });
 };

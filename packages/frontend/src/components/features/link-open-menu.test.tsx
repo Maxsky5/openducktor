@@ -39,7 +39,11 @@ const showMenu = async (blockedReason: string | null = null) => {
   };
   cleanups.push(registerInAppLinkTarget(target));
   render(<LinkOpenMenu />);
-  await act(() => openClickedLink(URL_TO_OPEN, PLAIN, { x: 10, y: 10, width: 40, height: 14 }));
+  await act(() =>
+    openClickedLink(URL_TO_OPEN, PLAIN, { x: 10, y: 10, width: 40, height: 14 }, async () => {
+      throw new Error("Expected the link menu to open.");
+    }),
+  );
   return { opened };
 };
 

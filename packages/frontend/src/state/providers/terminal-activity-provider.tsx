@@ -5,12 +5,12 @@ import {
   terminalActivityOwnerKey,
 } from "@openducktor/frontend-core/terminals/terminal-activity-store";
 import { useTerminalTransport } from "@openducktor/frontend-core/terminals/use-terminal-transport";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import { TerminalActivityContext } from "../terminal-activity-context";
 
 /** Share the terminal connection with the panels without attaching to their output. */
 export function TerminalActivityProvider({ children }: PropsWithChildren): ReactElement {
-  const { controller } = useTerminalTransport(getShellBridge().terminals);
+  const { controller } = useTerminalTransport(useShellPlatform().terminals);
   return <TerminalActivityContext value={controller}>{children}</TerminalActivityContext>;
 }
 

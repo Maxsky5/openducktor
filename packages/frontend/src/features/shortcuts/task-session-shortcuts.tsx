@@ -2,12 +2,12 @@ import { memo, useMemo } from "react";
 import { workflowShortcutActionId } from "@openducktor/contracts";
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 import { getQuickActionBlockedReason } from "@/components/features/agents/agent-studio-header-quick-actions-availability";
-import { taskWorkflowInput, type ResolvedTaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard } from "@openducktor/workflows";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import type { AgentStudioHeaderModel } from "@/components/features/agents/agent-studio-header.types";
 import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { coreTaskActions } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
-import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { resolveLatestTaskSession } from "@openducktor/frontend-core/lib/agent-session-options";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { useCommandPalettePageCommands } from "../command-palette/command-palette-context";
@@ -75,9 +75,7 @@ export const TaskSessionShortcuts = memo(function TaskSessionShortcuts({
       ...task.taskWorkflow.definition.actions.flatMap((action) => {
         const role = task.taskWorkflow.viewActionRole(action.id);
         const launchId =
-          action.kind === "session"
-            ? task.taskWorkflow.evaluator.actionLaunchAction(taskWorkflowInput(task), action.id)
-            : null;
+          action.kind === "session" ? task.taskWorkflow.actionLaunchAction(task, action.id) : null;
         const option = quickActions.find((option) =>
           option.kind === "task_action"
             ? option.taskAction.kind === "workflow" && option.taskAction.action === action.id
@@ -117,13 +115,8 @@ export const TaskSessionShortcuts = memo(function TaskSessionShortcuts({
             {
               id: "task-latest-session" as const,
               run: () => {
-                const active = sessions.filter((session) =>
-                  isAgentSessionActivityActive(session.activityState),
-                );
-                const latest = (active.length ? active : sessions).reduce((latest, session) =>
-                  Date.parse(session.startedAt) > Date.parse(latest.startedAt) ? session : latest,
-                );
-                onWorkflowStepSelect(latest.role, agentSessionIdentityKey(latest));
+                const latest = resolveLatestTaskSession(sessions, sessions);
+                if (latest) onWorkflowStepSelect(latest.role, agentSessionIdentityKey(latest));
               },
             },
           ]

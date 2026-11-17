@@ -7,7 +7,8 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { openSqliteDrizzleConnection } from "../../infrastructure/sqlite/sqlite-drizzle-client";
-import { ensureLegacySchema, legacyMigrationsFolder } from "./sqlite-legacy-task-store-migrations";
+import { ensureLegacySchema } from "./sqlite-legacy-task-store-migrations";
+import { legacyMigrationsFolder } from "./sqlite-migration-assets";
 import { legacyTaskStoreSchema, tasks as legacyTasks } from "./sqlite-legacy-task-store-schema";
 import {
   createLegacyTaskStore,

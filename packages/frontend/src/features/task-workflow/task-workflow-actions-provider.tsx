@@ -4,8 +4,8 @@ import { TaskCreateModal } from "@/components/features/task-create/task-create-m
 import { TaskDetailsSheetController } from "@/components/features/task-details/task-details-sheet-controller";
 import { GitConflictDialog } from "@/features/git-conflict-resolution";
 import { HumanReviewFeedbackModal } from "@/features/human-review-feedback/human-review-feedback-modal";
-import { TaskApprovalModal } from "@/pages/kanban/task-approval-modal";
-import { TaskResetImplementationModal } from "@/pages/kanban/task-reset-implementation-modal";
+import { TaskApprovalModal } from "./task-approval-modal";
+import { TaskResetImplementationModal } from "./task-reset-implementation-modal";
 import { TaskConfirmDialogHost } from "./task-confirm-dialog-host";
 import {
   TaskWorkflowActionsContext,

@@ -61,7 +61,6 @@ describe("createSqliteTaskRepository SQLite integration", () => {
         ),
       );
       expect(settings).toEqual([[3, 1, "delete"]]);
-      expect(settings).not.toEqual([[0, 1, "wal"]]);
     } finally {
       await Effect.runPromise(production.release);
     }
@@ -251,7 +250,6 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(stored()).toBe(0);
     expect((await update(true)).removeWorktreeOnClose).toBe(true);
     expect(stored()).toBe(1);
-    // Null follows the global setting again.
     expect((await update(null)).removeWorktreeOnClose).toBeNull();
     expect(stored()).toBeNull();
   });

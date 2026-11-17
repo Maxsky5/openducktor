@@ -2,7 +2,6 @@ import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import type { WorkflowIcon } from "@openducktor/contracts";
 import {
   roleWorkflowForTask,
-  taskWorkflowInput,
   workflowRoleIcon,
   type ResolvedTaskCard,
 } from "@openducktor/workflows";
@@ -96,7 +95,7 @@ export const buildWorkflowRail = <Session>(
       stateLabel: stateLabel(task, state),
       session,
       launchActionId: projected.available
-        ? task.taskWorkflow.evaluator.stepLaunchAction(taskWorkflowInput(task), step.id)
+        ? task.taskWorkflow.stepLaunchAction(task, step.id)
         : null,
       ...workflowStepRailState({ state, hasSession: session !== null }),
     };

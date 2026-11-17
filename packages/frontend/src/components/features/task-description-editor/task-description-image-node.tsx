@@ -6,7 +6,7 @@ import { GithubIssueImage } from "@/components/features/issue-source/github-issu
 import { isHostLoadedIssueImageUrl } from "@openducktor/frontend-core/tasks/issue-import/issue-image-url";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import { useResourceSource } from "@/lib/use-resource-source";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 
@@ -106,6 +106,7 @@ function useTaskImageSource(
   enabled: boolean,
   failedSrc: string | null,
 ) {
+  const { resolveTaskAssetSource } = useShellPlatform();
   const assetId = parseTaskAssetUri(source);
   const workspaceId = context?.workspaceId ?? "";
   const taskId = context?.taskId ?? "";
@@ -113,10 +114,7 @@ function useTaskImageSource(
     ["task-asset", workspaceId, taskId, "description", assetId ?? source],
     enabled && assetId && workspaceId && taskId && !preview
       ? (signal) =>
-          getShellBridge().resolveTaskAssetSource(
-            { workspaceId, taskId, scope: "description", assetId },
-            signal,
-          )
+          resolveTaskAssetSource({ workspaceId, taskId, scope: "description", assetId }, signal)
       : undefined,
   );
   return imageSource(source, preview, context, resource, failedSrc);

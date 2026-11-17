@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import {
   type RepoConfig,
   type TaskWorktreeSummary,

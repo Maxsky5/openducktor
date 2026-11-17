@@ -9,7 +9,8 @@ import type {
   ShortcutPreferences,
 } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createUnavailableShellBridge, type ShellBridge } from "@/lib/shell-bridge";
+import { ShellPlatformContext } from "@/lib/shell-platform";
 import { ShortcutTestProviders } from "@/test-utils/shortcut-providers";
 import { useCommandPalettePageCommands } from "../command-palette/command-palette-context";
 import type { CommandPaletteCommandRegistration } from "../command-palette/command-palette-types";
@@ -20,15 +21,14 @@ import { useShortcutLabel } from "./use-shortcut-label";
 
 afterEach(() => {
   cleanup();
-  configureShellBridge(createUnavailableShellBridge());
   document.documentElement.removeAttribute("data-shortcut-hints");
 });
 
 type NativeListener = Parameters<ElectronShortcutBridge["subscribe"]>[0];
-function installNativeBridge(apply: ElectronShortcutBridge["apply"]) {
+function createNativeBridge(apply: ElectronShortcutBridge["apply"]) {
   const ignore: NativeListener = () => {};
   const native = { input: ignore };
-  configureShellBridge({
+  const shellPlatform: ShellBridge = {
     ...createUnavailableShellBridge(),
     browser: {
       surface: "electron",
@@ -48,8 +48,8 @@ function installNativeBridge(apply: ElectronShortcutBridge["apply"]) {
       },
       release: () => {},
     },
-  });
-  return native;
+  };
+  return { native, shellPlatform };
 }
 
 const visible = (element: Element) =>
@@ -74,12 +74,14 @@ const keyInput = (overrides: Partial<ShortcutInput>): ShortcutInput => ({
 
 function renderOwner({
   platform = "linux",
+  shellPlatform = createUnavailableShellBridge(),
   commands,
   overrides = {},
   when,
   children,
 }: {
   platform?: "darwin" | "linux";
+  shellPlatform?: ShellBridge;
   commands: readonly CommandPaletteCommandRegistration[];
   overrides?: ShortcutPreferences["overrides"];
   when?: ShortcutPreferences["when"];
@@ -109,9 +111,11 @@ function renderOwner({
     );
   }
   return render(
-    <ShortcutTestProviders connection={connection}>
-      <Owner />
-    </ShortcutTestProviders>,
+    <ShellPlatformContext value={shellPlatform}>
+      <ShortcutTestProviders connection={connection}>
+        <Owner />
+      </ShortcutTestProviders>
+    </ShellPlatformContext>,
   );
 }
 
@@ -170,12 +174,13 @@ test("saved workflow bindings stay inactive when the workflow is absent from the
 
 test("Electron claims every assignment once and renderer keys do not wait for main", async () => {
   const applied: ElectronShortcutRules[] = [];
-  installNativeBridge((rules) => {
+  const { shellPlatform } = createNativeBridge((rules) => {
     applied.push(rules);
     return new Promise(() => {});
   });
   const toggle = mock(() => {});
   renderOwner({
+    shellPlatform,
     platform: "darwin",
     commands: [{ id: "sidebar", run: toggle, appWide: true, localOnly: true }],
     children: (
@@ -197,7 +202,7 @@ test("Electron claims every assignment once and renderer keys do not wait for ma
 
 test("guest routes belong to each tab and only current rules can invoke", async () => {
   const applied: ElectronShortcutRules[] = [];
-  const native = installNativeBridge(async (rules) => {
+  const { native, shellPlatform } = createNativeBridge(async (rules) => {
     applied.push(rules);
   });
   const root = document.createElement("div");
@@ -207,6 +212,7 @@ test("guest routes belong to each tab and only current rules can invoke", async 
   const close = mock(() => {});
   try {
     renderOwner({
+      shellPlatform,
       platform: "darwin",
       commands: [
         {
@@ -241,11 +247,14 @@ test("guest routes belong to each tab and only current rules can invoke", async 
 
 test("recording installs Electron recording mode and stops app shortcuts", async () => {
   const applied: ElectronShortcutRules[] = [];
-  installNativeBridge(async (rules) => {
+  const { shellPlatform } = createNativeBridge(async (rules) => {
     applied.push(rules);
   });
   const toggle = mock(() => {});
-  renderOwner({ commands: [{ id: "sidebar", run: toggle, appWide: true, localOnly: true }] });
+  renderOwner({
+    shellPlatform,
+    commands: [{ id: "sidebar", run: toggle, appWide: true, localOnly: true }],
+  });
   await act(() => shortcutRecording.begin());
   expect(applied.at(-1)?.recording).toBe(true);
   fireEvent.keyDown(window, { key: "b", code: "KeyB", ctrlKey: true });

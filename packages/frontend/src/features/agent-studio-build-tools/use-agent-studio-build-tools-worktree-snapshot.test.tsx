@@ -2,7 +2,7 @@ import type { WorkspaceRef } from "@openducktor/contracts";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { type GitReadContext, type GitWorktreeStatus } from "@openducktor/contracts";
-import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
+import { useWorkspaceRepositorySettings } from "@/state/queries/use-workspace-repository-settings";
 import { type QueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { toLocalChanges } from "@openducktor/frontend-core/test-support/local-changes-fixture";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
@@ -358,7 +358,7 @@ describe("useAgentStudioBuildToolsWorktreeSnapshot", () => {
     });
     const harness = createSharedHookHarness(
       () => {
-        const settings = useAgentStudioRepoSettings({
+        const settings = useWorkspaceRepositorySettings({
           activeWorkspaceId: "workspace-repo",
           activeRepoPath: "/repo",
         });

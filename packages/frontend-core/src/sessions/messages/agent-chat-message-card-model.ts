@@ -4,7 +4,6 @@ export {
   formatTime,
   getAssistantFooterData,
   roleLabel,
-  SYSTEM_PROMPT_PREFIX,
   stripToolPrefix,
   toSingleLineMarkdown,
 } from "./message-formatting";

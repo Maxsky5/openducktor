@@ -29,13 +29,13 @@ const resolveHomeDirectory = (): string => {
   });
 };
 
-export const resolveUserPath = (rawPath: string): string => {
+const resolveRequiredUserPath = (
+  rawPath: string,
+  emptyPath: { field: string; message: string },
+): string => {
   const normalized = normalizeUserPathInput(rawPath);
   if (!normalized) {
-    throw new HostValidationError({
-      message: "Path is empty; provide a valid path",
-      field: "path",
-    });
+    throw new HostValidationError(emptyPath);
   }
 
   return resolveNormalizedUserPath(normalized, {
@@ -43,6 +43,12 @@ export const resolveUserPath = (rawPath: string): string => {
     joinHomePath: (homeDir, relativePath) => path.join(homeDir, relativePath),
   });
 };
+
+export const resolveUserPath = (rawPath: string): string =>
+  resolveRequiredUserPath(rawPath, {
+    message: "Path is empty; provide a valid path",
+    field: "path",
+  });
 
 export const displayUserPath = (absolutePath: string, homeDir: string = homedir()): string => {
   if (homeDir.trim().length === 0) {
@@ -62,28 +68,16 @@ export const displayUserPath = (absolutePath: string, homeDir: string = homedir(
   return `~/${normalizePathSeparators(relative)}`;
 };
 
-const resolveConfiguredBaseDir = (rawPath: string): string => {
-  const normalized = normalizeUserPathInput(rawPath);
-  if (!normalized) {
-    throw new HostValidationError({
-      message: "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path",
-      field: OPENDUCKTOR_CONFIG_DIR_ENV,
-    });
-  }
-
-  return resolveNormalizedUserPath(normalized, {
-    resolveHomeDir: resolveHomeDirectory,
-    joinHomePath: (homeDir, relativePath) => path.join(homeDir, relativePath),
-  });
-};
-
 export const resolveOpenDucktorBaseDir = (
   scope: OpenDucktorConfigDirScope,
   env: NodeJS.ProcessEnv = process.env,
 ): string => {
   const envDir = env[OPENDUCKTOR_CONFIG_DIR_ENV];
   if (envDir !== undefined) {
-    return resolveConfiguredBaseDir(envDir);
+    return resolveRequiredUserPath(envDir, {
+      message: "OPENDUCKTOR_CONFIG_DIR is set but empty; provide a valid directory path",
+      field: OPENDUCKTOR_CONFIG_DIR_ENV,
+    });
   }
 
   if (scope === "test") {

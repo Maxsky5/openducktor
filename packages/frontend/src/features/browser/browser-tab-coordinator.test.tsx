@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { BrowserHostEvent, BrowserTabSummary } from "@openducktor/contracts";
 import type { BrowserTabEventListener } from "@openducktor/frontend-core/connection/host-connection";
 import {
@@ -15,9 +15,8 @@ import {
   type SessionPanelOwner,
   useSessionPanelLayoutStore,
 } from "@/features/session-panels";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { WorkspacePresenceContext, WorkspaceStateContext } from "@/state/app-state-contexts";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   browserTabIdFixture,
@@ -33,10 +32,6 @@ import { BrowserTabCoordinator } from "./browser-tab-coordinator";
 
 const TASK: SessionPanelOwner = { kind: "task", workspaceId: "workspace-1", taskId: "task-1" };
 const TAB_ID = browserTabIdFixture(1);
-
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
 
 /** Renders the coordinator on an Electron shell, with host browser events that the test sends. */
 const renderCoordinator = async () => {
@@ -54,36 +49,37 @@ const renderCoordinator = async () => {
       },
     }),
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      bridge: {
-        browser: {
-          surface: "electron",
-          connect: async () => ({ send: async () => {}, close: () => {} }),
-          setSurface: async () => {},
-          focusPage: async () => {},
-          capturePage: async () => "data:image/png;base64,",
-          pickFiles: async () => [],
-        },
+  const shellPlatform = createShellBridgeFixture({
+    bridge: {
+      browser: {
+        surface: "electron",
+        connect: async () => ({ send: async () => {}, close: () => {} }),
+        setSurface: async () => {},
+        focusPage: async () => {},
+        capturePage: async () => "data:image/png;base64,",
+        pickFiles: async () => [],
       },
-    }),
-  );
+    },
+  });
   let layouts: SessionPanelLayoutStore | null = null;
   function LayoutProbe(): ReactElement | null {
     layouts = useSessionPanelLayoutStore();
     return null;
   }
   render(
-    <QueryProvider connection={connection}>
-      <WorkspaceStateContext.Provider value={createWorkspaceStateFixture()}>
-        <WorkspacePresenceContext.Provider value={createWorkspacePresenceFixture()}>
-          <BrowserRuntimeProvider>
-            <BrowserTabCoordinator />
-            <LayoutProbe />
-          </BrowserRuntimeProvider>
-        </WorkspacePresenceContext.Provider>
-      </WorkspaceStateContext.Provider>
-    </QueryProvider>,
+    withShellPlatform(
+      <QueryProvider connection={connection}>
+        <WorkspaceStateContext.Provider value={createWorkspaceStateFixture()}>
+          <WorkspacePresenceContext.Provider value={createWorkspacePresenceFixture()}>
+            <BrowserRuntimeProvider>
+              <BrowserTabCoordinator />
+              <LayoutProbe />
+            </BrowserRuntimeProvider>
+          </WorkspacePresenceContext.Provider>
+        </WorkspaceStateContext.Provider>
+      </QueryProvider>,
+      shellPlatform,
+    ),
   );
   await waitFor(() => expect(layouts).not.toBeNull());
   const layoutStore = (): SessionPanelLayoutStore => {

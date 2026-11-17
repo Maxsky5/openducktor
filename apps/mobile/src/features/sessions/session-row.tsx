@@ -8,6 +8,7 @@ import {
   visibleAttentionReasons,
 } from "@openducktor/frontend-core/sessions/navigation/session-navigation-entry-labels";
 import type { SessionNavigationEntry } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
+import { statusTone } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 import { memo, type ReactElement, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
@@ -19,7 +20,6 @@ import {
 import Animated, { type CSSStyle, cubicBezier } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import type { CommandFailure } from "@/host-session/command-outcome";
-import { taskStatusTone } from "@/features/tasks/presentation/task-status-paint";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { withAlpha } from "@/theme/color-alpha";
 import { themeStyleCache } from "@/theme/theme-style-cache";
@@ -298,10 +298,7 @@ export const SessionRow = memo(function SessionRow({
               </Text>
               {task ? (
                 // The desktop row uses the short state label; its attention says the rest.
-                <Badge
-                  label={task.sharedState.shortLabel}
-                  tone={taskStatusTone(task.sharedState)}
-                />
+                <Badge label={task.sharedState.shortLabel} tone={statusTone(task.sharedState)} />
               ) : null}
               <RowMetadata entry={entry} starting={starting} />
             </View>

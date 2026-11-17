@@ -1,3 +1,4 @@
+import { liveSessionRefKey, toLiveSessionRef } from "./live-session-ref";
 import type { AgentTextGenerationPort } from "../../ports/agent-text-generation-port";
 import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
 import {
@@ -34,7 +35,6 @@ import type {
   AgentSessionTitleUpdateOutcome,
 } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
-import { refKey, toSessionRef } from "./opencode-live-session-normalization";
 import type { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createSerialGate } from "../../effect/serial-gate";
 import { withForkedSessionCleanup } from "./forked-session-cleanup";
@@ -160,7 +160,7 @@ export const createOpenCodeSessionControlAdapter = ({
     assertCurrent: (() => void) | undefined,
   ): Parameters<typeof connection.controlGoal>[0] => {
     const request: Parameters<typeof connection.controlGoal>[0] = {
-      ...toSessionRef(input),
+      ...toLiveSessionRef(input),
       runtimeKind: "opencode",
       runtimePolicy: { kind: "opencode" },
       sessionScope: input.sessionScope,
@@ -205,7 +205,7 @@ export const createOpenCodeSessionControlAdapter = ({
     },
     resumeSession: (input) => {
       const request: Parameters<typeof connection.resumeSession>[0] = {
-        ...toSessionRef(input),
+        ...toLiveSessionRef(input),
         runtimeKind: "opencode",
         runtimePolicy: { kind: "opencode" },
         sessionScope: input.sessionScope,
@@ -224,7 +224,7 @@ export const createOpenCodeSessionControlAdapter = ({
       );
     },
     continueInterruptedTurn: (input) => {
-      const sessionRef = toSessionRef(input);
+      const sessionRef = toLiveSessionRef(input);
       const request: Parameters<typeof connection.continueInterruptedTurn>[0] = {
         ...sessionRef,
         runtimeKind: "opencode",
@@ -242,7 +242,7 @@ export const createOpenCodeSessionControlAdapter = ({
       }
       return sendGate
         .run(
-          refKey(sessionRef),
+          liveSessionRefKey(sessionRef),
           runSummary("opencode-live-session.continue-interrupted-turn", input.repoPath, () =>
             connection.continueInterruptedTurn(request),
           ),
@@ -292,7 +292,7 @@ export const createOpenCodeSessionControlAdapter = ({
       );
     },
     sendUserMessage: (input, options) => {
-      const sessionRef = toSessionRef(input);
+      const sessionRef = toLiveSessionRef(input);
       const request: Parameters<typeof connection.sendUserMessage>[0] = {
         ...sessionRef,
         runtimeKind: "opencode",
@@ -309,7 +309,7 @@ export const createOpenCodeSessionControlAdapter = ({
       }
       if (options?.assertCurrent) request.workStartGuard = { assertCurrent: options.assertCurrent };
       return sendGate.run(
-        refKey(sessionRef),
+        liveSessionRefKey(sessionRef),
         Effect.tryPromise({
           try: () => connection.sendUserMessage(request, options),
           catch: (cause) =>
@@ -354,9 +354,9 @@ export const createOpenCodeSessionControlAdapter = ({
       );
     },
     controlGoal: (input, options) => {
-      const sessionRef = toSessionRef(input);
+      const sessionRef = toLiveSessionRef(input);
       return sendGate.run(
-        refKey(sessionRef),
+        liveSessionRefKey(sessionRef),
         Effect.tryPromise({
           try: () =>
             connection.controlGoal(goalRequest(input, options?.assertCurrent), {
@@ -390,8 +390,8 @@ export const createOpenCodeSessionControlAdapter = ({
         ),
       ),
     updateSessionTitle: (input) =>
-      runTitleUpdate("opencode-live-session.update-session-title", toSessionRef(input), () =>
-        connection.updateSessionTitle({ ...toSessionRef(input), title: input.title }),
+      runTitleUpdate("opencode-live-session.update-session-title", toLiveSessionRef(input), () =>
+        connection.updateSessionTitle({ ...toLiveSessionRef(input), title: input.title }),
       ),
     stopSession: (input) =>
       Effect.tryPromise({

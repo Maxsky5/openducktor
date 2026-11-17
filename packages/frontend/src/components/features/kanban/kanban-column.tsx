@@ -1,5 +1,6 @@
 import type { KanbanColumn as KanbanColumnData } from "@openducktor/workflows";
 import type { KanbanTaskCardView } from "@openducktor/contracts";
+import { getRequiredTaskActivityState } from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
 import { Inbox } from "lucide-react";
 import { type ComponentProps, memo, type ReactElement, useEffect, useMemo, useRef } from "react";
 import {
@@ -160,18 +161,6 @@ export function KanbanColumn({
 }
 
 const laneCountLabel = (count: number): string => (count === 1 ? "1 task" : `${count} tasks`);
-
-const getRequiredTaskActivityState = (
-  taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>,
-  taskId: string,
-): KanbanTaskActivityState => {
-  const taskActivityState = taskActivityStateByTaskId.get(taskId);
-  if (!taskActivityState) {
-    throw new Error(`Missing Kanban task activity state for task ${taskId}`);
-  }
-
-  return taskActivityState;
-};
 
 type MeasuredCardProps = CardProps & {
   contentRevision: string;

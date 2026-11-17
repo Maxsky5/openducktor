@@ -1,9 +1,9 @@
-import { expect, spyOn, test } from "bun:test";
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
+import { mock, expect, test } from "bun:test";
 import type { PullRequestReviewActivity, PullRequestReviewOutcome } from "@openducktor/contracts";
 import { fireEvent, render } from "@testing-library/react";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import * as externalUrl from "@/lib/open-external-url";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   TaskExecutionCiCommentCard,
@@ -106,22 +106,21 @@ test.each(["light", "dark"] as const)("renders review outcome text in the %s the
 });
 
 test("opens review comments through the external URL shell bridge", () => {
-  const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+  const openExternalUrlSpy = mock(async (_url: string) => {});
   const comment = createComment();
 
-  try {
-    const view = render(
+  const view = render(
+    withShellPlatform(
       <TooltipProvider>
         <TaskExecutionCiCommentCard comment={comment} isBot={false} />
       </TooltipProvider>,
-    );
+      createShellBridgeFixture({ bridge: { openExternalUrl: openExternalUrlSpy } }),
+    ),
+  );
 
-    fireEvent.click(view.getByRole("button", { name: "Open comment from reviewer" }));
+  fireEvent.click(view.getByRole("button", { name: "Open comment from reviewer" }));
 
-    expect(openExternalUrlSpy).toHaveBeenCalledWith(comment.url);
-  } finally {
-    openExternalUrlSpy.mockRestore();
-  }
+  expect(openExternalUrlSpy).toHaveBeenCalledWith(comment.url);
 });
 
 test("skips unchanged card inputs and renders updated comments", () => {
@@ -151,22 +150,21 @@ test("skips unchanged card inputs and renders updated comments", () => {
 });
 
 test("opens links in review markdown through the external URL shell bridge", () => {
-  const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+  const openExternalUrlSpy = mock(async (_url: string) => {});
   const markdownUrl = "https://example.com/review-guidance";
 
-  try {
-    const view = render(
+  const view = render(
+    withShellPlatform(
       <TaskExecutionCiMarkdownLink href={markdownUrl}>Review guidance</TaskExecutionCiMarkdownLink>,
-    );
-    const link = view.getByRole("link", { name: "Review guidance" });
+      createShellBridgeFixture({ bridge: { openExternalUrl: openExternalUrlSpy } }),
+    ),
+  );
+  const link = view.getByRole("link", { name: "Review guidance" });
 
-    expect(link.getAttribute("target")).toBeNull();
-    fireEvent.click(link);
+  expect(link.getAttribute("target")).toBeNull();
+  fireEvent.click(link);
 
-    expect(openExternalUrlSpy).toHaveBeenCalledWith(markdownUrl);
-  } finally {
-    openExternalUrlSpy.mockRestore();
-  }
+  expect(openExternalUrlSpy).toHaveBeenCalledWith(markdownUrl);
 });
 
 test("labels suggested changes as a distinct review section", () => {

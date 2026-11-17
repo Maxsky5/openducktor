@@ -1,5 +1,5 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
-import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
+import { getScopedRepoConfig } from "../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";

@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./claude-transcript-worker": "./src/adapters/claude/claude-transcript-worker.ts",
     "./host-database-import-worker": "./src/adapters/sqlite/host-database-import-worker.ts",
+    "./sqlite-migration-assets": "./src/adapters/sqlite/sqlite-migration-assets.ts",
     "./generated-image-worker": "./src/adapters/attachments/generated-image-worker.ts",
     "./node-pty": "./src/adapters/node/pty-process-adapter.ts",
     "./chrome-for-testing": "./src/adapters/browser/chrome-for-testing/chrome-for-testing-engine.ts"

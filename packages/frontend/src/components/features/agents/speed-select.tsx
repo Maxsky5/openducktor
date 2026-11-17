@@ -3,7 +3,7 @@ import { type ReactElement, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { STANDARD_SPEED } from "@openducktor/frontend-core/lib/model-catalog-selection";
+import { STANDARD_SPEED } from "@openducktor/core";
 import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
 import { cn } from "@/lib/utils";
 import "./speed-select.css";

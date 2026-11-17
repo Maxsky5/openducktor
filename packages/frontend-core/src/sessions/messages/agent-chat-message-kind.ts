@@ -1,8 +1,11 @@
 import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
-import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX } from "@openducktor/core";
+import {
+  AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX,
+  AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
+} from "@openducktor/core";
 import type { AgentChatMessage } from "../../types/agent-orchestrator";
 import type { AgentChatToolCallPresentation } from "../send/agent-chat.types";
-import { assistantRoleFromMessage, formatTime, SYSTEM_PROMPT_PREFIX } from "./message-formatting";
+import { assistantRoleFromMessage, formatTime } from "./message-formatting";
 
 /** What a transcript message is. Each client draws each kind in its own way. */
 export type AgentChatMessageKind = {
@@ -50,7 +53,7 @@ export const classifyAgentChatMessage = ({
   const isSubagentMessage = meta?.kind === "subagent";
   const isSessionNoticeMessage = meta?.kind === "session_notice";
   const isSystemPromptMessage =
-    message.role === "system" && message.content.startsWith(SYSTEM_PROMPT_PREFIX);
+    message.role === "system" && message.content.startsWith(AGENT_SESSION_SYSTEM_PROMPT_PREFIX);
   const isRichCardMessage =
     isToolMessage ||
     isSubagentMessage ||
@@ -58,7 +61,7 @@ export const classifyAgentChatMessage = ({
     isSystemPromptMessage ||
     isImageGenerationMessage;
   const systemPromptBody = isSystemPromptMessage
-    ? message.content.slice(SYSTEM_PROMPT_PREFIX.length).trimStart()
+    ? message.content.slice(AGENT_SESSION_SYSTEM_PROMPT_PREFIX.length).trimStart()
     : "";
   const showSharedHeader =
     !isImageGenerationMessage &&
@@ -114,6 +117,6 @@ export const resolveInstructionsMessage = (
       markdown: message.content.slice(AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX.length),
     };
   }
-  if (!message.content.startsWith(SYSTEM_PROMPT_PREFIX)) return null;
+  if (!message.content.startsWith(AGENT_SESSION_SYSTEM_PROMPT_PREFIX)) return null;
   return { kind: "system_prompt", toggleLabel: "Show system prompt", markdown: systemPromptBody };
 };

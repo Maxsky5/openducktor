@@ -1,7 +1,11 @@
 import { readFile, stat } from "node:fs/promises";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
-import type { AgentUserMessagePart, AgentUserMessageSourceText } from "@openducktor/core";
+import {
+  type AgentUserMessagePart,
+  type AgentUserMessageSourceText,
+  shouldInsertSyntheticSpaceBeforePart,
+} from "@openducktor/core";
 import { errorMessage, HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { readText } from "./claude-agent-sdk-utils";
 
@@ -47,8 +51,6 @@ const MIME_BY_EXTENSION = new Map<
   [".png", "image/png"],
   [".webp", "image/webp"],
 ]);
-
-const WORDLIKE_TEXT_START_PATTERN = /[\p{L}\p{N}_]/u;
 
 const readExtension = (pathOrName: string): string => {
   const lastDot = pathOrName.lastIndexOf(".");
@@ -201,22 +203,6 @@ const claudePartLabel = (part: AgentUserMessagePart): string => {
   }
 };
 
-const shouldInsertSyntheticSpaceBeforeClaudePart = (
-  previousPart: AgentUserMessagePart | null,
-  part: AgentUserMessagePart,
-): boolean => {
-  if (!previousPart || previousPart.kind === "text") {
-    return false;
-  }
-
-  if (part.kind !== "text") {
-    return true;
-  }
-
-  const firstCharacter = part.text.at(0);
-  return firstCharacter !== undefined && WORDLIKE_TEXT_START_PATTERN.test(firstCharacter);
-};
-
 const SIMPLE_CLAUDE_FILE_REFERENCE_PATTERN = /^[^\s@"\\]+$/u;
 
 const encodeClaudeFileReference = (path: string): string => {
@@ -273,7 +259,7 @@ export const encodeClaudePromptTextWithSourceRanges = (parts: AgentUserMessagePa
       });
     }
 
-    if (shouldInsertSyntheticSpaceBeforeClaudePart(previousPart, part)) {
+    if (shouldInsertSyntheticSpaceBeforePart(previousPart, part)) {
       text += " ";
     }
 
@@ -322,7 +308,7 @@ export const toClaudeMessageFromParts = async (
   };
 
   for (const part of parts) {
-    if (shouldInsertSyntheticSpaceBeforeClaudePart(previousPart, part)) {
+    if (shouldInsertSyntheticSpaceBeforePart(previousPart, part)) {
       text += " ";
     }
 

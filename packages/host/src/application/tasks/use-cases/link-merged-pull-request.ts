@@ -1,7 +1,7 @@
 import { TASK_CLOSED_STATE } from "@openducktor/contracts";
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
-import { errorMessage, HostValidationError } from "../../../effect/host-errors";
+import { HostValidationError } from "../../../effect/host-errors";
 import { requireWorktreeFiles } from "../../git/git-service-inputs";
 import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
 import {
@@ -16,10 +16,7 @@ import { ensureNoDirectMergeEffect } from "../support/direct-merge-block";
 import { coreTaskTransition, requirePullRequestManagement } from "../support/task-workflow-events";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { cleanupConfirmedMergeClose } from "../support/task-close-cleanup";
-import {
-  canSkipRelinkedPullRequestCleanup,
-  loadTaskBranchCleanup,
-} from "../support/task-worktree-cleanup";
+import { inspectTaskBranches } from "../support/task-branches";
 import { createTaskMutationProgressFailure } from "../task-mutation-progress-failure";
 import type { TaskServiceUseCaseInput, TaskServiceWithMutationProgress } from "../task-service";
 
@@ -71,7 +68,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         });
       }
       const workflow = taskWorkflows.forTask(current);
-      // A merged pull request closes the task. A closed task with this pull request is done.
       if (current.status === TASK_CLOSED_STATE && sameExistingPullRequest) {
         return enrichTask(workflow, current);
       }
@@ -113,32 +109,17 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         );
       }
 
-      const loadCleanup = loadTaskBranchCleanup(
-        dependencies,
-        workflow,
-        current,
+      const branchState = yield* inspectTaskBranches(dependencies, {
+        workspaceId: input.workspaceId,
         repoPath,
-        taskId,
-        "Pull request linking",
-        input.workspaceId,
-      );
+        task: current,
+        workflow,
+        operationLabel: "Pull request linking",
+      });
       // The cleanup needs the task branch. A relink can find it already removed.
-      let hasTaskBranch = false;
-      if (metadata.pullRequest === undefined) {
-        yield* loadCleanup;
-        hasTaskBranch = true;
-      } else {
-        const cleanupResult = yield* Effect.result(loadCleanup);
-        if (cleanupResult._tag === "Success") {
-          hasTaskBranch = true;
-        } else {
-          const message = errorMessage(cleanupResult.failure);
-          if (!canSkipRelinkedPullRequestCleanup(message)) {
-            return yield* Effect.fail(cleanupResult.failure);
-          }
-        }
-      }
-      if (hasTaskBranch) {
+      if (branchState.kind === "unavailable" && metadata.pullRequest === undefined)
+        return yield* branchState.error;
+      if (branchState.kind === "available") {
         yield* requireWorktreeFiles(dependencies.worktreeFiles);
       }
       yield* taskStore.setPullRequest({
@@ -149,25 +130,26 @@ export const createTaskLinkMergedPullRequestUseCase = ({
       });
       const postLink = yield* Effect.result(
         Effect.gen(function* () {
-          const cleanupEffect = hasTaskBranch
-            ? cleanupConfirmedMergeClose({
-                workspaceId: input.workspaceId,
-                dependencies: { ...dependencies, taskActivityGuard, worktreeOwners },
-                taskStore,
-                lifecycle: taskSessionLifecycleCoordinator,
-                repoPath,
-                workflow,
-                task: current,
-                // The confirmation showed the uncommitted files that removal deletes.
-                worktreeCleanup: { remove: removeWorktree, force: true },
-              })
-            : runTaskRuntimeCleanup({
-                workspaceId: input.workspaceId,
-                progress: createTaskCleanupProgressState(),
-                repoPath,
-                taskIds: [taskId],
-                terminalService: dependencies.terminalService,
-              });
+          const cleanupEffect =
+            branchState.kind === "available"
+              ? cleanupConfirmedMergeClose({
+                  workspaceId: input.workspaceId,
+                  dependencies: { ...dependencies, taskActivityGuard, worktreeOwners },
+                  taskStore,
+                  lifecycle: taskSessionLifecycleCoordinator,
+                  repoPath,
+                  workflow,
+                  task: current,
+                  // The confirmation showed the uncommitted files that removal deletes.
+                  worktreeCleanup: { remove: removeWorktree, force: true },
+                })
+              : runTaskRuntimeCleanup({
+                  workspaceId: input.workspaceId,
+                  progress: createTaskCleanupProgressState(),
+                  repoPath,
+                  taskIds: [taskId],
+                  terminalService: dependencies.terminalService,
+                });
           return yield* completeTaskClosure({
             workspaceId: input.workspaceId,
             cleanup: cleanupEffect,

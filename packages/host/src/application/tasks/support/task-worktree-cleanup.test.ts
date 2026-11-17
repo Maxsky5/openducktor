@@ -22,15 +22,10 @@ import {
 } from "../test-support/task-workflow-harness";
 import { createTaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import { createTaskWorktreeService } from "../worktrees/task-worktree-service";
-import {
-  createGitPortTestDouble,
-  noWorktreeOwners,
-} from "../../../test-support/service-test-doubles";
+import { noWorktreeOwners } from "../../../test-support/service-test-doubles";
 import {
   cleanupMergedTaskState,
   findLatestCleanupTarget,
-  loadTaskBranchCleanup,
-  resolveBuildStartPoint,
   resolveRuntimeDescriptorForTaskSession,
 } from "./task-worktree-cleanup";
 
@@ -925,155 +920,6 @@ describe("task worktree cleanup", () => {
 
     expect(calls).not.toContainEqual(
       expect.objectContaining({ type: "deleteLocalBranch", branch: "odt/task-1" }),
-    );
-  });
-
-  test("loads source and target branches from the task worktree", async () => {
-    const calls: unknown[] = [];
-    const branchCleanup = await Effect.runPromise(
-      loadTaskBranchCleanup(
-        {
-          gitPort: createDirectMergeGitPort({
-            calls,
-            currentBranches: {
-              "/worktrees/repo/task-1": { name: "odt/task-1", detached: false },
-            },
-          }),
-          taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-          workspaceSettingsService: createBuildWorkspaceSettingsService({
-            workspaceId: "repo",
-            repoPath: "/repo",
-            hooks: emptyHooks,
-            defaultTargetBranch: { remote: "origin", branch: "main" },
-          }),
-        },
-        specPlanBuildWorkflow,
-        task(),
-        "/repo",
-        "task-1",
-        "direct_merge",
-        "repo",
-      ),
-    );
-
-    expect(branchCleanup).toEqual({ sourceBranch: "odt/task-1", targetBranch: "main" });
-  });
-
-  test("rejects missing, detached, and unnamed task worktrees with actionable messages", async () => {
-    await expect(
-      Effect.runPromise(
-        loadTaskBranchCleanup(
-          {
-            gitPort: createDirectMergeGitPort({ calls: [] }),
-            taskWorktreeService: createDirectMergeTaskWorktreeService(null),
-            workspaceSettingsService: createBuildWorkspaceSettingsService({
-              workspaceId: "repo",
-              repoPath: "/repo",
-              hooks: emptyHooks,
-            }),
-          },
-          specPlanBuildWorkflow,
-          task(),
-          "/repo",
-          "task-1",
-          "direct_merge",
-          "repo",
-        ),
-      ),
-    ).rejects.toThrow(
-      "direct_merge requires a task worktree for task task-1. Start a Builder or QA session first.",
-    );
-
-    await expect(
-      Effect.runPromise(
-        loadTaskBranchCleanup(
-          {
-            gitPort: createDirectMergeGitPort({
-              calls: [],
-              currentBranches: {
-                "/worktrees/repo/task-1": { detached: true },
-              },
-            }),
-            taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-            workspaceSettingsService: createBuildWorkspaceSettingsService({
-              workspaceId: "repo",
-              repoPath: "/repo",
-              hooks: emptyHooks,
-            }),
-          },
-          specPlanBuildWorkflow,
-          task(),
-          "/repo",
-          "task-1",
-          "direct_merge",
-          "repo",
-        ),
-      ),
-    ).rejects.toThrow("direct_merge requires a task branch, but the task worktree is detached.");
-
-    await expect(
-      Effect.runPromise(
-        loadTaskBranchCleanup(
-          {
-            gitPort: createDirectMergeGitPort({
-              calls: [],
-              currentBranches: {
-                "/worktrees/repo/task-1": { name: " ", detached: false },
-              },
-            }),
-            taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
-            workspaceSettingsService: createBuildWorkspaceSettingsService({
-              workspaceId: "repo",
-              repoPath: "/repo",
-              hooks: emptyHooks,
-            }),
-          },
-          specPlanBuildWorkflow,
-          task(),
-          "/repo",
-          "task-1",
-          "direct_merge",
-          "repo",
-        ),
-      ),
-    ).rejects.toThrow("direct_merge requires a task branch name.");
-  });
-});
-
-describe("resolveBuildStartPoint", () => {
-  const gitPortWith = (references: string[]) =>
-    createGitPortTestDouble({
-      referenceExists: (_repoPath: string, reference: string) =>
-        Effect.succeed(references.includes(reference)),
-    });
-
-  test("uses a target branch that exists", async () => {
-    const start = await Effect.runPromise(
-      resolveBuildStartPoint(
-        { gitPort: gitPortWith(["origin/main"]) },
-        "/repo",
-        { remote: "origin", branch: "main" },
-        false,
-      ),
-    );
-
-    expect(start).toEqual({ reference: "origin/main", upstreamRemote: "origin" });
-  });
-
-  test("tells the user to choose an existing branch when the target is missing", async () => {
-    const failure = await Effect.runPromise(
-      Effect.flip(
-        resolveBuildStartPoint(
-          { gitPort: gitPortWith(["main"]) },
-          "/repo",
-          { remote: "origin", branch: "main" },
-          false,
-        ),
-      ),
-    );
-
-    expect(failure.message).toBe(
-      "Target branch origin/main does not exist in this repository. Choose an existing target branch, or fetch this branch first.",
     );
   });
 });

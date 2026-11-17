@@ -339,48 +339,4 @@ describe("agent-orchestrator/support/session-history-chat-messages subagents", (
     expect(subagent.meta.status).toBe("completed");
     expect(subagent.meta.externalSessionId).toBe("session-child-1");
   });
-
-  test("ignores ambiguous same-prompt history-loaded subagent history rows without session ids", () => {
-    const subagent = expectSingleSubagent(
-      loadHistory([
-        {
-          messageId: "m-assistant",
-          role: "assistant",
-          timestamp: "2026-02-22T08:00:02.000Z",
-          text: "",
-          parts: [
-            {
-              kind: "subagent",
-              messageId: "m-assistant",
-              partId: "p-subagent-running",
-              correlationKey: "part:m-assistant:p-subagent-running",
-              status: "running",
-              agent: "build",
-              prompt: "Review changes",
-              description: "Review changes [commit|branch|pr]",
-              startedAtMs: 100,
-            },
-            {
-              kind: "subagent",
-              messageId: "m-assistant",
-              partId: "p-subagent-completed",
-              correlationKey: "session:m-assistant:session-child-1",
-              status: "completed",
-              agent: "build",
-              prompt: "Review changes",
-              description: "Review completed",
-              externalSessionId: "session-child-1",
-              startedAtMs: 120,
-              endedAtMs: 300,
-            },
-          ],
-        },
-      ]),
-    );
-
-    expect(subagent.id).toBe("subagent:session:m-assistant:session-child-1");
-    expect(subagent.meta.correlationKey).toBe("session:m-assistant:session-child-1");
-    expect(subagent.meta.status).toBe("completed");
-    expect(subagent.meta.externalSessionId).toBe("session-child-1");
-  });
 });

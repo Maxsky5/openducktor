@@ -4,6 +4,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { resolveLocalAttachmentPreview } from "@/lib/local-attachment-files";
 import { useResourceSource } from "@/lib/use-resource-source";
 import { isPreviewableAttachmentKind } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
+import { useShellPlatform } from "@/lib/shell-platform";
 import type { DeviceFileReference } from "@openducktor/frontend-core/platform/device-file";
 import { toBrowserFile } from "@/lib/local-attachment-files";
 
@@ -40,6 +41,7 @@ export const useAgentChatAttachmentPreview = ({
   attachment: AgentChatAttachmentPreviewTarget;
   externalError?: string | null;
 }): AgentChatAttachmentPreviewState => {
+  const { resolveLocalAttachmentPreview: readPreview } = useShellPlatform();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [fileSource, setFileSource] = useState<FileSource | null>(null);
   const [failure, setFailure] = useState<PreviewFailure | null>(null);
@@ -48,7 +50,7 @@ export const useAgentChatAttachmentPreview = ({
   const resource = useResourceSource(
     ["attachment-preview", attachment.path ?? ""],
     previewable && !attachment.file && attachment.path
-      ? (signal) => resolveLocalAttachmentPreview(attachment.path!, signal)
+      ? (signal) => resolveLocalAttachmentPreview(attachment.path!, signal, readPreview)
       : undefined,
   );
   useEffect(() => {

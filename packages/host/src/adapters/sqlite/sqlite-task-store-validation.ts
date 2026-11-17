@@ -1,3 +1,4 @@
+import { gitTargetBranchSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   SqliteTaskStoreDataError,
@@ -11,6 +12,19 @@ type SafeParseResult<A> =
 type SafeParser<Input, Output> = {
   readonly safeParse: (value: Input) => SafeParseResult<Output>;
 };
+
+export const taskTargetBranchFromRow = (
+  row: { id: string; targetBranch: string | null; targetRemote: string | null },
+  workspaceId: string,
+) =>
+  row.targetBranch === null
+    ? Effect.succeed(undefined)
+    : validateWithSchema(
+        gitTargetBranchSchema,
+        { branch: row.targetBranch, remote: row.targetRemote ?? undefined },
+        "target branch",
+        { workspaceId, taskId: row.id },
+      );
 
 export const validateWithSchema = <Input, Output>(
   parser: SafeParser<Input, Output>,

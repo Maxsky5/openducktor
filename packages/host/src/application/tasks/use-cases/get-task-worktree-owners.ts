@@ -9,7 +9,7 @@ import {
   requireTaskStopImpactDependencies,
 } from "../support/required-task-dependencies";
 import { collectRemovedWorktreePaths } from "../support/task-removed-worktrees";
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { readTaskWorktreeOwners } from "../support/task-worktree-owner-guard";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 

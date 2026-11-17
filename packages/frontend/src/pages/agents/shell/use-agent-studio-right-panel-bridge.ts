@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { AgentStudioOrchestrationSelectionContext } from "../use-agent-studio-orchestration-controller";
-import type { UseAgentsPageRightPanelModelArgs } from "../use-agents-page-right-panel-model";
+import type { UseAgentsPageRightPanelModelArgs } from "../right-panel/use-agents-page-right-panel-model";
 
 type AgentStudioRightPanelBridgeSelection = Pick<AgentStudioOrchestrationSelectionContext, "view">;
 

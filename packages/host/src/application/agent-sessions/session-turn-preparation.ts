@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
+import { getScopedRepoConfig } from "../workspaces/scoped-repo-config";
 import type {
   AgentMessageTarget,
   AgentSessionModelSelection,

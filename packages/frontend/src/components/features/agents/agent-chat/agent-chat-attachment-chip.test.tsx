@@ -1,13 +1,9 @@
+import { withShellPlatform } from "@/test-utils/focused-fixture";
 import { QueryProvider } from "@/test-utils/query-provider";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
-import {
-  configureShellBridge,
-  createDisabledAppUpdateBridge,
-  createUnavailableShellBridge,
-  type ShellBridge,
-} from "@/lib/shell-bridge";
+import { createUnavailableShellBridge, type ShellBridge } from "@/lib/shell-bridge";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 
 const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvider });
@@ -15,26 +11,12 @@ const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvi
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;
 
-const configureAttachmentPreviewShellBridge = (
+const attachmentPreviewShell = (
   resolveLocalAttachmentPreview: ShellBridge["resolveLocalAttachmentPreview"],
-): void => {
-  configureShellBridge({
-    ...createUnavailableShellBridge(),
-    appUpdates: createDisabledAppUpdateBridge({
-      status: "disabled",
-      currentVersion: "unknown",
-      disabledCode: "updater_unavailable",
-      disabledReason: "Updates are unavailable in this test shell.",
-    }),
-    capabilities: {
-      canOpenExternalUrls: true,
-      canPreviewLocalAttachments: true,
-    },
-    openExternalUrl: async () => {},
-    resolveLocalAttachmentPreview,
-    resolveTaskAssetSource: async () => ({ kind: "url", src: "asset://task-preview" }),
-  });
-};
+): ShellBridge => ({
+  ...createUnavailableShellBridge(),
+  resolveLocalAttachmentPreview,
+});
 
 const getPreviewButton = (): HTMLElement => {
   const previewButton = screen
@@ -69,7 +51,6 @@ const getDialogImage = (name: string): HTMLImageElement => {
 afterEach(() => {
   URL.createObjectURL = originalCreateObjectUrl;
   URL.revokeObjectURL = originalRevokeObjectUrl;
-  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("AgentChatAttachmentChip", () => {
@@ -110,7 +91,7 @@ describe("AgentChatAttachmentChip", () => {
   });
 
   test("surfaces inline thumbnail failures as explicit preview errors", async () => {
-    configureAttachmentPreviewShellBridge(
+    const shellPlatform = attachmentPreviewShell(
       mock(async (path) => ({
         kind: "url" as const,
         src: `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
@@ -118,16 +99,19 @@ describe("AgentChatAttachmentChip", () => {
     );
 
     render(
-      <AgentChatAttachmentChip
-        variant="transcript"
-        attachment={{
-          id: "attachment-3",
-          path: "uuid-preview-inline.png",
-          name: "preview-inline.png",
-          kind: "image",
-          mime: "image/png",
-        }}
-      />,
+      withShellPlatform(
+        <AgentChatAttachmentChip
+          variant="transcript"
+          attachment={{
+            id: "attachment-3",
+            path: "uuid-preview-inline.png",
+            name: "preview-inline.png",
+            kind: "image",
+            mime: "image/png",
+          }}
+        />,
+        shellPlatform,
+      ),
     );
 
     await waitFor(() => {
@@ -152,7 +136,7 @@ describe("AgentChatAttachmentChip", () => {
   });
 
   test("renders transcript image previews from the resolved desktop asset url", async () => {
-    configureAttachmentPreviewShellBridge(
+    const shellPlatform = attachmentPreviewShell(
       mock(async (path) => ({
         kind: "url" as const,
         src: `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
@@ -160,16 +144,19 @@ describe("AgentChatAttachmentChip", () => {
     );
 
     render(
-      <AgentChatAttachmentChip
-        variant="transcript"
-        attachment={{
-          id: "attachment-4",
-          path: "uuid-preview-dialog.png",
-          name: "preview-dialog.png",
-          kind: "image",
-          mime: "image/png",
-        }}
-      />,
+      withShellPlatform(
+        <AgentChatAttachmentChip
+          variant="transcript"
+          attachment={{
+            id: "attachment-4",
+            path: "uuid-preview-dialog.png",
+            name: "preview-dialog.png",
+            kind: "image",
+            mime: "image/png",
+          }}
+        />,
+        shellPlatform,
+      ),
     );
 
     await waitFor(() => {

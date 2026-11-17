@@ -1,13 +1,8 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import { replaceNavigatorClipboard } from "@/test-utils/mock-clipboard";
 import { AzureDevOpsConnectionSettings } from "./azure-devops-connection-settings";
-
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
 
 type ConnectionController = Parameters<typeof AzureDevOpsConnectionSettings>[0]["controller"];
 
@@ -231,15 +226,18 @@ describe("AzureDevOpsConnectionSettings", () => {
     const openExternalUrl = mock(async () => {});
     const writeText = mock(async () => {});
     const restoreClipboard = replaceNavigatorClipboard(writeText);
-    configureShellBridge(createShellBridgeFixture({ bridge: { openExternalUrl } }));
+    const shellPlatform = createShellBridgeFixture({ bridge: { openExternalUrl } });
 
     try {
       render(
-        <AzureDevOpsConnectionSettings
-          controller={createPendingController()}
-          disabled={false}
-          onSaveSettings={async () => true}
-        />,
+        withShellPlatform(
+          <AzureDevOpsConnectionSettings
+            controller={createPendingController()}
+            disabled={false}
+            onSaveSettings={async () => true}
+          />,
+          shellPlatform,
+        ),
       );
 
       expect(screen.queryByText("Pull request actions")).toBeNull();

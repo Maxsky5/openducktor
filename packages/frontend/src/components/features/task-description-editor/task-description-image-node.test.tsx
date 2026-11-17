@@ -1,18 +1,15 @@
+import { withShellPlatform } from "@/test-utils/focused-fixture";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { act, fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { TaskDescriptionImageContext } from "./task-description-image-context";
 import { TaskDescriptionImageNode } from "./task-description-image-node";
 
 const render = (element: ReactNode) => renderView(element, { wrapper: QueryProvider });
-
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
 
 describe("TaskDescriptionImageNode", () => {
   test("loads a linked GitHub issue image through the authenticated host request", async () => {
@@ -63,10 +60,10 @@ describe("TaskDescriptionImageNode", () => {
       kind: "url" as const,
       src: "openducktor-task-asset://resolved",
     }));
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource,
-    });
+    };
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const props = {
       node: {
@@ -81,9 +78,14 @@ describe("TaskDescriptionImageNode", () => {
       scope: "description" as const,
     };
     const view = render(
-      <TaskDescriptionImageContext.Provider value={{ previews: new Map(), renderContext: context }}>
-        <TaskDescriptionImageNode {...props} />
-      </TaskDescriptionImageContext.Provider>,
+      withShellPlatform(
+        <TaskDescriptionImageContext.Provider
+          value={{ previews: new Map(), renderContext: context }}
+        >
+          <TaskDescriptionImageNode {...props} />
+        </TaskDescriptionImageContext.Provider>,
+        shellPlatform,
+      ),
     );
 
     await waitFor(() => expect(resolveTaskAssetSource).toHaveBeenCalledTimes(1));
@@ -102,13 +104,13 @@ describe("TaskDescriptionImageNode", () => {
   });
 
   test("shows the image error state when a resolved asset response fails to load", async () => {
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource: async () => ({
-        kind: "url",
+        kind: "url" as const,
         src: "openducktor-task-asset://missing",
       }),
-    });
+    };
     const props = {
       node: {
         attrs: {
@@ -121,18 +123,21 @@ describe("TaskDescriptionImageNode", () => {
       updateAttributes: () => {},
     } satisfies ComponentProps<typeof TaskDescriptionImageNode>;
     const view = render(
-      <TaskDescriptionImageContext.Provider
-        value={{
-          previews: new Map(),
-          renderContext: {
-            workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-            taskId: "task-1",
-            scope: "description",
-          },
-        }}
-      >
-        <TaskDescriptionImageNode {...props} />
-      </TaskDescriptionImageContext.Provider>,
+      withShellPlatform(
+        <TaskDescriptionImageContext.Provider
+          value={{
+            previews: new Map(),
+            renderContext: {
+              workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+              taskId: "task-1",
+              scope: "description",
+            },
+          }}
+        >
+          <TaskDescriptionImageNode {...props} />
+        </TaskDescriptionImageContext.Provider>,
+        shellPlatform,
+      ),
     );
 
     const image = await waitFor(() => view.getByRole("img", { name: "Architecture" }));

@@ -6,7 +6,12 @@ import {
 } from "./session-start-goal-generation";
 import { launchGoalObjective, supportsTaskTargetBranchSelection } from "@openducktor/workflows";
 import type { GitBranch, RuntimeKind } from "@openducktor/contracts";
-import type { AgentDeliveryAvailability, AgentModelSelection } from "@openducktor/core";
+import {
+  type AgentDeliveryAvailability,
+  type AgentModelSelection,
+  STANDARD_SPEED,
+  withSpeed,
+} from "@openducktor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
 import type { SessionStartGoalMode, SessionStartModalModel } from "./session-start-modal-model";
@@ -26,7 +31,7 @@ import type {
   ReuseSessionStartDecision,
   SessionStartExistingSessionOption,
 } from "./session-start-types";
-import { STANDARD_SPEED, withSpeed } from "../../lib/model-catalog-selection";
+
 import { assertRuntimeSupportsSelectedStartMode } from "./session-start-validation";
 import type { SessionStartModalOpenRequest } from "./use-session-start-modal-coordinator";
 import { useSessionStartModalCoordinator } from "./use-session-start-modal-coordinator";

@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "./scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import type { RepoConfig, TaskMetadataPayload } from "@openducktor/contracts";
 import { Effect, Equal } from "effect";
 import {
@@ -13,7 +13,7 @@ import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { loadDefaultMergeMethod } from "./task-workflow-helpers";
-import { effectiveTargetBranchForTask } from "./task-worktree-cleanup";
+import { loadTaskTargetBranch } from "./task-branches";
 import type { TaskServiceUseCaseInput } from "../task-service";
 import type { DirectMergeInput } from "../task-inputs";
 import { requireDependencies, requireDirectMergeDependencies } from "./required-task-dependencies";
@@ -25,7 +25,7 @@ import type { TaskRecord } from "../../../ports/task-repository-ports";
 export const loadLiveApprovalPreparation = (
   dependencies: {
     gitPort: GitPort;
-    workspaceSettingsService: WorkspaceSettingsService;
+    workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
   },
   current: TaskRecord,
   workingDirectory: string,
@@ -52,18 +52,15 @@ export const loadLiveApprovalPreparation = (
         }),
       );
     }
-    const targetBranch = normalizeApprovalTargetBranch(
-      yield* effectiveTargetBranchForTask(
-        dependencies.workspaceSettingsService,
-        current,
-        repoConfig.repoPath,
-        repoConfig.workspaceId,
-      ),
+    const liveTarget = yield* loadTaskTargetBranch(dependencies.workspaceSettingsService, {
+      workspaceId: repoConfig.workspaceId,
+      repoPath: repoConfig.repoPath,
+      task: current,
+    });
+    const targetBranch = normalizeApprovalTargetBranch(liveTarget.branch);
+    const publishTarget = publishTargetFromTargetBranch(
+      liveTarget.source === "task" ? liveTarget.branch : repoConfig.defaultTargetBranch,
     );
-    const publishTarget =
-      current.targetBranch === undefined
-        ? publishTargetFromTargetBranch(repoConfig.defaultTargetBranch)
-        : publishTargetFromTargetBranch(current.targetBranch);
     const targetRef = canonicalTargetBranch(targetBranch);
     const worktreeStatus = yield* dependencies.gitPort.getWorktreeStatusSummaryData(
       workingDirectory,
@@ -89,7 +86,7 @@ export const loadOpenApprovalContext = (
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
-    workspaceSettingsService: WorkspaceSettingsService;
+    workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
   },
   workflow: TaskWorkflow,
   taskId: string,

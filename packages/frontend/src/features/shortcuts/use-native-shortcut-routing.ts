@@ -4,7 +4,7 @@ import type {
   ShortcutRoute,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import type { EmbeddedShortcutListener } from "./embedded-sources";
 
 export type NativeShortcutRoutes = {
@@ -34,7 +34,8 @@ export function useNativeShortcutRouting({
   retryRevision: number;
   onInput: EmbeddedShortcutListener;
 }) {
-  const bridge = enabled ? getShellBridge().shortcuts : undefined;
+  const { shortcuts } = useShellPlatform();
+  const bridge = enabled ? shortcuts : undefined;
   const control = useRef({ alive: false, revision: 0, acknowledged: -1, installed: "" });
   const [error, setError] = useState<string | null>(null);
   const apply = useCallback(

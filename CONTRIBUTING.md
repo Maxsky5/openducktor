@@ -18,7 +18,7 @@ Thanks for contributing. This project is public, but it is still early and the c
 
 ## Quick Start
 
-1. Install the core tooling: Bun `1.4.3`, Node.js `24.14` or later, Xcode Command Line Tools, `git`, and at least one supported runtime (`opencode`, `codex`, or `claude`).
+1. Install the core tools. [Local tooling reference](#local-tooling-reference)
 2. Install workspace dependencies from the repository root:
 
 ```sh
@@ -42,7 +42,7 @@ Useful alternative:
 
 Core tooling:
 
-- Bun `1.4.3`
+- Bun at the version in the `packageManager` field. [Root package manifest](package.json)
 - Node.js `24.14` or later
 - Xcode Command Line Tools
 - `git`

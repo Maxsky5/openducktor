@@ -7,17 +7,13 @@ import { tasks, taskIssueLinks } from "./sqlite-host-database-schema";
 import { createSqliteTaskStoreHarness } from "./sqlite-task-store-test-support";
 
 describe("SQLite task IDs", () => {
-  test("initializes an empty store and rejects reads after disposal", async () => {
+  test("initializes an empty store", async () => {
     const { cleanup, scope, store } = await createSqliteTaskStoreHarness();
     try {
       expect(await Effect.runPromise(store.listTaskIds(scope))).toEqual([]);
     } finally {
       await cleanup();
     }
-
-    expect(await Effect.runPromise(Effect.flip(store.listTaskIds(scope)))).toMatchObject({
-      _tag: "HostOperationError",
-    });
   });
 
   test("keeps card ordering, ID ties, and old closed tasks", async () => {

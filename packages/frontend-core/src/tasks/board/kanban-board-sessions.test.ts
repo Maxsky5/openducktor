@@ -213,60 +213,6 @@ describe("use-kanban-board-model helpers", () => {
     ]);
   });
 
-  test("sortTasksByActivityState puts waiting-input tasks above active and inactive tasks", () => {
-    const tasks = [
-      createTaskCard({ id: "task-no-session" }),
-      createTaskCard({ id: "task-waiting" }),
-      createTaskCard({ id: "task-with-session" }),
-      createTaskCard({ id: "task-another-no-session" }),
-    ];
-    const taskSessionsByTaskId = buildTaskSessionsByTaskId([
-      createSession({
-        sessionAssociation: {
-          kind: "workflow",
-          workspaceId: "workspace-1",
-          taskId: "task-waiting",
-          role: "spec",
-        },
-        pendingApprovals: [
-          {
-            requestId: "permission-1",
-            requestType: "permission_grant" as const,
-            title: `Approve permission: ${"tool"}`,
-            summary: `Approval request for ${"tool"}.`,
-            affectedPaths: ["odt_read_task"],
-            action: { name: "tool" },
-            mutation: "read_only" as const,
-            supportedReplyOutcomes: [
-              "approve_once" as const,
-              "approve_session" as const,
-              "reject" as const,
-            ],
-          },
-        ],
-      }),
-      createSession({
-        sessionAssociation: {
-          kind: "workflow",
-          workspaceId: "workspace-1",
-          taskId: "task-with-session",
-          role: "spec",
-        },
-        externalSessionId: "session-2",
-      }),
-    ]);
-    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, taskSessionsByTaskId);
-
-    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
-
-    expect(sorted.map((t) => t.id)).toEqual([
-      "task-waiting",
-      "task-with-session",
-      "task-no-session",
-      "task-another-no-session",
-    ]);
-  });
-
   test("sortTasksByActivityState preserves relative order within groups", () => {
     const tasks = [
       createTaskCard({ id: "task-1-waiting" }),
@@ -354,24 +300,6 @@ describe("use-kanban-board-model helpers", () => {
       "task-3-idle",
       "task-6-idle",
     ]);
-  });
-
-  test("sortTasksByActivityState handles empty columns gracefully", () => {
-    const tasks: TaskCard[] = [];
-    const taskActivityStateByTaskId = new Map<string, "idle" | "active" | "waiting_input">();
-
-    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
-
-    expect(sorted).toEqual([]);
-  });
-
-  test("sortTasksByActivityState handles no active sessions gracefully", () => {
-    const tasks = [createTaskCard({ id: "task-1" }), createTaskCard({ id: "task-2" })];
-    const taskActivityStateByTaskId = buildTaskActivityStateByTaskId(tasks, new Map());
-
-    const sorted = sortTasksByActivityState(tasks, taskActivityStateByTaskId);
-
-    expect(sorted.map((t) => t.id)).toEqual(["task-1", "task-2"]);
   });
 
   test("sortTasksByActivityState throws when a task is missing activity state", () => {

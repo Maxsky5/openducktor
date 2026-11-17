@@ -30,7 +30,7 @@ import {
   SessionViewContext,
   SessionViewShownContext,
 } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
-import { AgentsPage } from "@/pages/agents/agents-page";
+import { AgentsPage } from "@/pages/agents/shell/agents-page";
 import WorkspaceSessionsPage from "@/pages/workspace-sessions/workspace-sessions-page";
 import { useWorkspaceState } from "@/state/app-state-provider";
 import type { ActiveWorkspace } from "@/types/state-slices";

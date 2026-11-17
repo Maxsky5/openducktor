@@ -48,12 +48,12 @@ import {
   createTaskCardFixture,
   createTaskStoreCheckFixture,
   enableReactActEnvironment,
-} from "../agents/agent-studio-test-utils";
-import { useKanbanSessionStartFlow } from "./use-kanban-session-start-flow";
+} from "@/pages/agents/agent-studio-test-utils";
+import { useDesktopTaskSessionStartFlow } from "./use-desktop-task-session-start-flow";
 
 enableReactActEnvironment();
 
-type HookArgs = Parameters<typeof useKanbanSessionStartFlow>[0];
+type HookArgs = Parameters<typeof useDesktopTaskSessionStartFlow>[0];
 
 const sessionIdentity = (externalSessionId: string) => ({
   externalSessionId,
@@ -184,7 +184,7 @@ const createHookHarness = (initialProps: HookArgs) => {
       ),
     );
 
-  return createCoreHookHarness(useKanbanSessionStartFlow, initialProps, { wrapper });
+  return createCoreHookHarness(useDesktopTaskSessionStartFlow, initialProps, { wrapper });
 };
 
 const createDefaultRepoSettings = (): RepoSettingsInput => ({
@@ -307,7 +307,7 @@ const createBaseArgs = (): HookArgs => ({
   runSessionStartWorkflow: createRunSessionStartWorkflow(),
 });
 
-describe("useKanbanSessionStartFlow", () => {
+describe("useDesktopTaskSessionStartFlow", () => {
   let repoConfig = createRepoConfigFixture();
   const applyAgentStudioStateAction = mock(
     async (_workspaceId: string, action: WorkspaceAgentStudioStateAction): Promise<RepoConfig> => {
@@ -1535,7 +1535,7 @@ describe("useKanbanSessionStartFlow", () => {
 
 /** Runs a workflow action through the flow handlers that the shared dispatcher calls. */
 function runFlowAction(
-  flow: Pick<ReturnType<typeof useKanbanSessionStartFlow>, "onLaunch" | "onHumanFeedback">,
+  flow: Pick<ReturnType<typeof useDesktopTaskSessionStartFlow>, "onLaunch" | "onHumanFeedback">,
   task: Parameters<typeof resolveTaskActionDestination>[0],
   action: string,
 ): void {

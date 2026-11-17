@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { ensureCleanTaskWorktree } from "../../../domain/task";
 import { errorMessage, HostValidationError } from "../../../effect/host-errors";

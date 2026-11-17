@@ -1,7 +1,7 @@
 import type { AgentChatToolCallPresentation } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { resolveInstructionsMessage } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-kind";
-import { SYSTEM_PROMPT_PREFIX } from "@openducktor/frontend-core/sessions/messages/message-formatting";
+import { AGENT_SESSION_SYSTEM_PROMPT_PREFIX } from "@openducktor/core";
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 
@@ -122,7 +122,7 @@ export const foldsSystemText = (message: AgentChatMessage, runtimeKind: RuntimeK
 const isSystemPromptRow = (row: AgentChatTranscriptRow): boolean =>
   row.kind === "message" &&
   row.message.role === "system" &&
-  row.message.content.startsWith(SYSTEM_PROMPT_PREFIX);
+  row.message.content.startsWith(AGENT_SESSION_SYSTEM_PROMPT_PREFIX);
 
 /**
  * The rows that a phone shows. The system prompt is long setup text, so the mobile transcript

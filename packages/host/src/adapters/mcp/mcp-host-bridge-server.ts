@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "../../application/tasks/support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../application/workspaces/scoped-repo-config";
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {

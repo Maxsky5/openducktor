@@ -3,10 +3,9 @@ import {
   isAgentSessionActivityActive,
   isAgentSessionActivityWorking,
 } from "./agent-session-activity-state";
-import {
-  taskWorkflowInput,
-  type WorkflowRoleId as AgentRole,
-  type ResolvedTaskCard as TaskCard,
+import type {
+  WorkflowRoleId as AgentRole,
+  ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 import type {
   WorkflowStepAttentionVariant,
@@ -29,26 +28,13 @@ export const buildRoleWorkflowState = ({
 }): WorkflowStepPresentation => {
   const availability = workflowAvailability(workflow);
   const active = isActive(liveSession);
-  const step = task?.taskWorkflow.agentStep(role);
-  const input = task ? taskWorkflowInput(task) : null;
-  const rules =
-    (step &&
-      task &&
-      input &&
-      step.displayRules?.filter(
-        (rule) =>
-          task.taskWorkflow.evaluator.condition(rule.when)(input) &&
-          (!rule.session || rule.session.includes(liveSession)),
-      )) ||
-    [];
-  let completion: WorkflowStepPresentation["completion"] =
-    rules.find((rule) => rule.completion !== undefined)?.completion ?? "not_started";
-  if (!rules.some((rule) => rule.completion !== undefined)) {
+  const display = task?.taskWorkflow.stepDisplay(task, role, liveSession);
+  let completion: WorkflowStepPresentation["completion"] = display?.completion ?? "not_started";
+  if (display?.completion === undefined) {
     if (workflow.completed) completion = "done";
     else if (active || (liveSession === "idle" && workflow.available)) completion = "in_progress";
   }
-  const needsInput =
-    rules.find((rule) => rule.attention !== undefined)?.attention === "needs_input";
+  const needsInput = display?.attention === "needs_input";
   return {
     tone: needsInput ? "waiting_input" : workflowTone({ availability, completion, liveSession }),
     availability,
@@ -77,7 +63,6 @@ type WorkflowRailEntry = {
   hasSession: boolean;
 };
 
-/** The hint and attention marker of one workflow rail step. */
 export const workflowStepRailState = (entry: WorkflowRailEntry): WorkflowStepRailState => {
   const attentionVariant = workflowStepAttentionVariant(entry);
   return { hint: workflowStepHint(entry, attentionVariant), attentionVariant };

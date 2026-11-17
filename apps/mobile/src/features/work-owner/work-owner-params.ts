@@ -1,19 +1,12 @@
-import { type RuntimeKind, runtimeKindSchema } from "@openducktor/contracts";
-import type { WorkOwnerParams } from "@/navigation/routes";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import { sessionParams, type WorkOwnerParams } from "@/navigation/routes";
 import { type RawRouteParams, routeParam } from "@/navigation/route-params";
-
-/** The search params of a route, as Expo Router gives them. */
+import { readRouteSessionIdentity } from "@/navigation/session-route-params";
 
 /** The owner of a work view, read from its route. */
 export type WorkOwnerRef =
   | { readonly kind: "task"; readonly workspaceId: string; readonly taskId: string }
-  | {
-      readonly kind: "chat";
-      readonly workspaceId: string;
-      readonly externalSessionId: string;
-      readonly runtimeKind: RuntimeKind;
-      readonly workingDirectory: string;
-    };
+  | Readonly<AgentSessionIdentity & { kind: "chat"; workspaceId: string }>;
 
 /**
  * Reads the work owner from route params. A task route has `taskId`. A chat route has the
@@ -25,29 +18,15 @@ export const readWorkOwnerRef = (raw: RawRouteParams): WorkOwnerRef | null => {
   if (workspaceId === null) return null;
   const taskId = routeParam(raw["taskId"]);
   if (taskId !== null) return { kind: "task", workspaceId, taskId };
-  const externalSessionId = routeParam(raw["externalSessionId"]);
-  const runtimeKind = runtimeKindSchema.safeParse(routeParam(raw["runtimeKind"]));
-  const workingDirectory = routeParam(raw["workingDirectory"]);
-  if (externalSessionId === null || !runtimeKind.success || workingDirectory === null) return null;
-  return {
-    kind: "chat",
-    workspaceId,
-    externalSessionId,
-    runtimeKind: runtimeKind.data,
-    workingDirectory,
-  };
+  const session = readRouteSessionIdentity(raw);
+  return session.ok ? { kind: "chat", workspaceId, ...session.identity } : null;
 };
 
 /** The route params of the owner, for the `routes` builders. */
 export const toWorkOwnerParams = (owner: WorkOwnerRef): WorkOwnerParams =>
   owner.kind === "task"
     ? { workspaceId: owner.workspaceId, taskId: owner.taskId }
-    : {
-        workspaceId: owner.workspaceId,
-        externalSessionId: owner.externalSessionId,
-        runtimeKind: owner.runtimeKind,
-        workingDirectory: owner.workingDirectory,
-      };
+    : sessionParams(owner.workspaceId, owner);
 
 /** A stable key of the owner, for caches and view state. */
 export const workOwnerRefKey = (owner: WorkOwnerRef): string =>

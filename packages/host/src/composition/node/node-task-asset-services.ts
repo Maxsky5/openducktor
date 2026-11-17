@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "../../application/tasks/support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../application/workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { createNodeTaskAssetFilePort } from "../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task-asset-registry";

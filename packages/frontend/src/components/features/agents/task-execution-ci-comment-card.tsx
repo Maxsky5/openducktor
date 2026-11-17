@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import { PierrePreloadedDiffViewer } from "./pierre-diff-viewer";
 import {
@@ -17,13 +17,14 @@ import {
 } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
 
-const openReviewUrl = (url: string, failureMessage: string): void => {
-  void openExternalUrl(url).catch((error) => {
-    toast.error(failureMessage, {
-      description: errorMessage(error),
+function useOpenReviewUrl() {
+  const openExternalUrl = useOpenExternalUrl();
+  return (url: string, failureMessage: string): void => {
+    void openExternalUrl(url).catch((error) => {
+      toast.error(failureMessage, { description: errorMessage(error) });
     });
-  });
-};
+  };
+}
 
 type TaskExecutionCiMarkdownLinkProps = ComponentProps<"a"> & ExtraProps;
 
@@ -34,6 +35,7 @@ export function TaskExecutionCiMarkdownLink({
   href,
   ...props
 }: TaskExecutionCiMarkdownLinkProps): ReactElement {
+  const openReviewUrl = useOpenReviewUrl();
   const openLink = (event: MouseEvent<HTMLAnchorElement>): void => {
     event.preventDefault();
     if (href) {
@@ -301,6 +303,7 @@ function CiCommentOpenButton({
   activityName: string;
   author: string;
 }): ReactElement {
+  const openReviewUrl = useOpenReviewUrl();
   return (
     <div className="flex items-center pr-3">
       <Tooltip>

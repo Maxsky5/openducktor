@@ -78,7 +78,6 @@ import {
   type ElectronHostChannelServer,
 } from "./electron-host-channel-server";
 import { createElectronHostInvoke, runElectronHostChannelInvoke } from "./electron-host-invoke";
-import { createHostChannelSocketData } from "@openducktor/remote-host/host-channel";
 import { createTaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
 import {
   ELECTRON_LOCAL_ATTACHMENT_PREVIEW_PROTOCOL,
@@ -795,8 +794,6 @@ const startHostChannelServer = (
         cause,
       ),
   });
-  // Every desktop window belongs to the local operator, so the windows share their task leases.
-  const ownedLeases = new Set<string>();
   const shutdownFailure = {
     code: "unavailable" as const,
     message: "The desktop host is shutting down.",
@@ -805,19 +802,17 @@ const startHostChannelServer = (
   return startElectronHostChannelServer({
     rendererOrigins: resolveElectronRendererSocketOrigins(rendererDevUrl),
     onError: (cause) => reportElectronNonFatalFailure("Desktop host channel failed.", cause),
-    createChannel: () =>
-      createHostChannelSocketData({
-        hostEvents: hostEventBus.stream(),
-        notifications: hostCommandRouter.notificationStream,
-        leases,
-        ownedLeases,
-        invoke: (command, args, signal) =>
-          runElectronHostChannelInvoke(hostCommandRouter.invoke(command, args), signal),
-        remoteAccessStates: operator.states,
-        refusal: () => (shutdownController.isHostShutdownStarted() ? shutdownFailure : null),
-        reportFailure: (cause) =>
-          reportElectronNonFatalFailure("Desktop host channel delivery failed.", cause),
-      }),
+    channel: {
+      hostEvents: hostEventBus.stream(),
+      notifications: hostCommandRouter.notificationStream,
+      leases,
+      invoke: (command, args, signal) =>
+        runElectronHostChannelInvoke(hostCommandRouter.invoke(command, args), signal),
+      remoteAccessStates: operator.states,
+      refusal: () => (shutdownController.isHostShutdownStarted() ? shutdownFailure : null),
+      reportFailure: (cause) =>
+        reportElectronNonFatalFailure("Desktop host channel delivery failed.", cause),
+    },
   });
 };
 

@@ -1,5 +1,5 @@
 import { posix, win32 } from "node:path";
-import { normalizeUserPathInput, resolveNormalizedUserPath } from "@openducktor/path-support";
+import { resolveUserPath } from "@openducktor/path-support";
 import type { ToolDiscoveryId } from "../../ports/tool-discovery-port";
 
 export type ToolDiscoveryPathOptions = {
@@ -47,7 +47,7 @@ const joinToolPath = (
 ): string => (context.platform === "win32" ? win32.join(...segments) : posix.join(...segments));
 
 export const resolveUserPathForContext = (rawPath: string, context: ToolDiscoveryContext): string =>
-  resolveNormalizedUserPath(normalizeUserPathInput(rawPath), {
+  resolveUserPath(rawPath, {
     homeDir: context.homeDir,
     joinHomePath: (homeDir, relativePath) => joinToolPath(context, homeDir, relativePath),
   });

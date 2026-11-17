@@ -16,12 +16,10 @@ export {
   BROWSER_EVENT_STREAM_NAME,
   STARTUP_EVENT_STREAM_NAME,
   hostEventStreamEventName,
-} from "./host-event-stream-name";
-export {
-  createAgentSessionLiveAttachment,
-  envelopeRepoPath as agentSessionLiveEnvelopeRepoPath,
+  agentSessionLiveEnvelopeRepoPath,
   liveSessionStreamEventName,
-} from "./agent-session-live-attachment";
+} from "@openducktor/contracts";
+export { createAgentSessionLiveAttachment } from "./agent-session-live-attachment";
 
 import { HostAgentSessionLiveClient } from "./agent-session-live-client";
 import { HostAgentClient } from "./build-runtime-client";

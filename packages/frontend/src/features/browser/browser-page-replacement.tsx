@@ -11,7 +11,8 @@ import type { ReactElement, ReactNode } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import type { HostClient } from "@openducktor/host-client";
-import { type BrowserFrameBridge, getShellBridge } from "@/lib/shell-bridge";
+import type { BrowserFrameBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import { BROWSER_TABS_NEED_LOCAL_APP } from "./browser-frame-display";
 import { BrowserCertificateView } from "./components/browser-certificate-view";
 import type { BrowserPromptOf } from "./components/browser-component-types";
@@ -104,10 +105,11 @@ function LoadErrorView({
   reload: () => Promise<void>;
 }): ReactElement {
   const root = useRef<HTMLDivElement>(null);
+  const { openExternalUrl } = useShellPlatform();
   const openSite = () => {
-    void getShellBridge()
-      .openExternalUrl(error.url)
-      .catch(reportBrowserFailure("Could not open the page in the browser"));
+    void openExternalUrl(error.url).catch(
+      reportBrowserFailure("Could not open the page in the browser"),
+    );
   };
   const shortcutOwner = useLocalShortcuts(root, [
     { id: "browser-external" as const, run: openSite },

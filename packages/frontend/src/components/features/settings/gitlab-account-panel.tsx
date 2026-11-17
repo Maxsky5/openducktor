@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 import type { GitlabAccountController } from "./use-gitlab-account-controller";
@@ -32,12 +32,15 @@ type GitlabAccountPanelProps = {
 
 type ControllerProps = { controller: GitlabAccountController; disabled: boolean };
 
-const openUrl = (url: string, failure: string) => (event: MouseEvent<HTMLAnchorElement>) => {
-  event.preventDefault();
-  void openExternalUrl(url).catch((cause) => {
-    toast.error(failure, { description: errorMessage(cause) });
-  });
-};
+function useOpenGitlabUrl() {
+  const openExternalUrl = useOpenExternalUrl();
+  return (url: string, failure: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    void openExternalUrl(url).catch((cause) => {
+      toast.error(failure, { description: errorMessage(cause) });
+    });
+  };
+}
 
 export function GitlabAccountPanel({
   controller,
@@ -477,6 +480,7 @@ function TokenForm({
 }
 
 function CreateTokenLink({ url }: { url: string }): ReactElement {
+  const openUrl = useOpenGitlabUrl();
   return (
     <Button type="button" size="xs" variant="ghost" className="-mx-2 self-start" asChild>
       <a href={url} onClick={openUrl(url, "Failed to open the GitLab token page")}>
@@ -488,6 +492,7 @@ function CreateTokenLink({ url }: { url: string }): ReactElement {
 }
 
 function PendingSignIn({ controller }: { controller: GitlabAccountController }): ReactElement {
+  const openUrl = useOpenGitlabUrl();
   const { copied, copyToClipboard } = useCopyToClipboard({
     successMessage: "Sign-in code copied",
     errorLogContext: "GitlabAccountPanel.copyDeviceCode",

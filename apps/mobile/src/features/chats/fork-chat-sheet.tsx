@@ -31,8 +31,8 @@ import {
   workspaceSessionForkInput,
 } from "@openducktor/frontend-core/workspace-sessions/fork/workspace-session-fork-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigation, usePreventRemove, useRouter } from "expo-router";
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { useNavigation, useRouter } from "expo-router";
+import { type ReactElement, useEffect, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useCommandGate } from "@/host-session/active-session-context";
@@ -53,7 +53,7 @@ import { StartupTrace } from "@/features/session-startup/startup-trace";
 import { useVisibleHandoff } from "@/features/session-startup/use-visible-handoff";
 import { useStartupSheetClose } from "@/features/session-startup/startup-presentation-context";
 import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
-import { closeScreen } from "@/navigation/close-screen";
+import { useGuardedStartupSheetClose } from "@/features/session-startup/use-guarded-startup-sheet-close";
 
 const TITLE = "Fork session";
 
@@ -237,18 +237,7 @@ const useForkChatCommand = (
     pendingRequests.has(sessionForkRequestKey(workspace.repoPath, source, { messageId }));
   const showProgress = startupShowsProgress(attempt);
   const running = pending || startupIsPending(attempt) || (attemptId !== null && !showProgress);
-  const [closing, setClosing] = useState(false);
-  const allowRemoval = usePreventRemove(!closing && running, () => {});
-  const closed = useRef(false);
-  const close = useCallback(() => {
-    if (closed.current) return;
-    closed.current = true;
-    // Keep the guard off while the native close transition runs.
-    // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change
-    setClosing(true);
-    allowRemoval();
-    closeScreen(navigation);
-  }, [allowRemoval, navigation]);
+  const close = useGuardedStartupSheetClose(navigation, running);
   useStartupSheetClose(attemptId, close);
   useRepairedStartupHandoff(attempt);
   useEffect(() => {

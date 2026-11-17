@@ -3,10 +3,14 @@ import {
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
+import {
+  type AgentModelCatalog,
+  type AgentModelSelection,
+  findCatalogModel,
+  STANDARD_SPEED,
+} from "@openducktor/core";
 import { useState } from "react";
 import { errorMessage } from "../../lib/errors";
-import { findCatalogModel, STANDARD_SPEED } from "../../lib/model-catalog-selection";
 
 export type SpeedControlModel = {
   key: string;

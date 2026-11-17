@@ -1,6 +1,6 @@
 import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import type { TaskWorkflow, TaskWorkflowLaunchAction } from "./task-workflow/task-workflow";
-import { taskWorkflowInput, type ResolvedTaskCard } from "./task-workflow-view";
+import type { ResolvedTaskCard } from "./task-workflow-view";
 import { isPullRequestLaunch } from "./task-workflow/pull-request-launch";
 
 const agentStepOfRole = (workflow: TaskWorkflow, role: string) => {
@@ -12,23 +12,8 @@ const agentStepOfRole = (workflow: TaskWorkflow, role: string) => {
   return step;
 };
 
-/** The launch actions that show as extra controls on a surface for the task. */
-export const taskSurfaceLaunches = (
-  task: ResolvedTaskCard,
-  surface: "studio" | "git_conflict",
-): TaskWorkflowLaunchAction[] => {
-  const candidates = task.taskWorkflow.surfaceLaunches(surface);
-  if (candidates.length === 0) return [];
-  const input = taskWorkflowInput(task);
-  const available = new Set(
-    task.workflowSteps.filter((step) => step.available).map(({ id }) => id),
-  );
-  return candidates.flatMap(({ launch, stepId, show }) =>
-    available.has(stepId) && show(input) ? [launch] : [],
-  );
-};
 export const taskGitConflictLaunch = (task: ResolvedTaskCard): TaskWorkflowLaunchAction | null =>
-  taskSurfaceLaunches(task, "git_conflict")[0] ?? null;
+  task.taskWorkflow.surfaceLaunches(task, "git_conflict")[0] ?? null;
 /** The task sessions that can run the core pull request launch of the task, latest first. */
 export const taskPullRequestSessions = <
   Session extends { taskId: string; role: string; startedAt: string },
@@ -39,18 +24,6 @@ export const taskPullRequestSessions = <
   sessions
     .filter(({ taskId, role }) => taskId === task.id && task.taskWorkflow.createsPullRequest(role))
     .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
-/** The order of launch candidates: the first matching launch order rule, then declaration order. */
-export const taskLaunchOrder = (task: ResolvedTaskCard): readonly string[] => {
-  const input = taskWorkflowInput(task);
-  const hasPullRequest = !!task.pullRequest;
-  return (
-    task.taskWorkflow.definition.launchOrder.find(
-      (rule) =>
-        (rule.pullRequest === undefined || rule.pullRequest === hasPullRequest) &&
-        task.taskWorkflow.evaluator.condition(rule.when)(input),
-    )?.order ?? []
-  );
-};
 /** The command kind of a launch: a kickoff starts a session; a message continues one. */
 export const launchSessionCommand = (
   launch: Pick<TaskWorkflowLaunchAction, "template">,
@@ -64,10 +37,7 @@ export const resolveSessionContinuationLaunchAction = (
 ): string => {
   if (!task)
     throw new Error("Task workflow is unavailable. Reload the task before starting a session.");
-  return task.taskWorkflow.evaluator.stepLaunchAction(
-    taskWorkflowInput(task),
-    agentStepOfRole(task.taskWorkflow, role).id,
-  );
+  return task.taskWorkflow.stepLaunchAction(task, agentStepOfRole(task.taskWorkflow, role).id);
 };
 export const supportsTaskTargetBranchSelection = (
   role: string | null | undefined,

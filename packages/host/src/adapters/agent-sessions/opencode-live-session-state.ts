@@ -1,3 +1,4 @@
+import { liveSessionRefKey, toLiveSessionRef } from "./live-session-ref";
 import { resolveOpenCodePendingApproval } from "./opencode-pending-approval-owner";
 import { assertApprovalAllowed } from "./opencode-approval-authorization";
 import { OpenCodeSessionRefIndex } from "./opencode-live-session-ref-index";
@@ -21,12 +22,7 @@ import type {
   AgentSessionLiveAdapterMutation,
 } from "../../ports/agent-session-live-adapter-port";
 import type { OpenCodeRuntimeInstance } from "./opencode-live-session-normalization";
-import {
-  refKey,
-  refsEqual,
-  toContextUsage,
-  toSessionRef,
-} from "./opencode-live-session-normalization";
+import { refsEqual, toContextUsage } from "./opencode-live-session-normalization";
 import {
   createOpenCodePendingRequestRouter,
   type OpenCodePendingRoute,
@@ -80,7 +76,7 @@ export const createOpenCodeLiveSessionState = ({
 
   const commitSnapshot = (reported: OpenCodeLiveSession): AgentSessionLiveAdapterChange[] => {
     const session = { ...reported, snapshot: goals.apply(reported.snapshot) };
-    const key = refKey(session.snapshot.ref);
+    const key = liveSessionRefKey(session.snapshot.ref);
     const previous = sessionsByRef.get(key)?.snapshot;
     sessionsByRef.set(key, session);
     refsByExternalSessionId.set(session.snapshot.ref);
@@ -139,7 +135,7 @@ export const createOpenCodeLiveSessionState = ({
     usage: OpencodeSessionContextUsage | null,
     readStart: OpenCodeSessionReadStart,
   ) => {
-    const session = sessionsByRef.get(refKey(ref));
+    const session = sessionsByRef.get(liveSessionRefKey(ref));
     if (session?.snapshot.contextUsage || versions.readScope(ref, readStart) !== "session") {
       return { value: session?.snapshot.contextUsage ?? null, changes: [] };
     }
@@ -164,7 +160,7 @@ export const createOpenCodeLiveSessionState = ({
       workingDirectory: summary.workingDirectory,
       externalSessionId: summary.externalSessionId,
     };
-    const previous = sessionsByRef.get(refKey(ref));
+    const previous = sessionsByRef.get(liveSessionRefKey(ref));
     const keepActivity = options.keepActivity === true && previous !== undefined;
     const session = toOpenCodeLiveSession({
       runtime,
@@ -377,7 +373,7 @@ export const createOpenCodeLiveSessionState = ({
   };
 
   const dropSession = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
-    const key = refKey(ref);
+    const key = liveSessionRefKey(ref);
     const session = sessionsByRef.get(key);
     if (!session || !refsEqual(session.snapshot.ref, ref)) {
       return [];
@@ -388,7 +384,7 @@ export const createOpenCodeLiveSessionState = ({
     contextUsageBySessionId.delete(ref.externalSessionId);
     goals.set(ref.externalSessionId, null);
     pendingRequests.removeSession(ref);
-    return [{ type: "session_removed", ref: toSessionRef(ref) }];
+    return [{ type: "session_removed", ref: toLiveSessionRef(ref) }];
   };
 
   const removeSession = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] =>
@@ -406,16 +402,16 @@ export const createOpenCodeLiveSessionState = ({
         parseOpenCodeLiveSnapshot(snapshot, "opencode-live-session.clone-snapshot"),
       ),
     readSnapshot: (ref: AgentSessionLiveRef): AgentSessionLiveReadResult => {
-      const snapshot = sessionsByRef.get(refKey(ref))?.snapshot;
+      const snapshot = sessionsByRef.get(liveSessionRefKey(ref))?.snapshot;
       return snapshot
         ? {
             type: "live",
             session: parseOpenCodeLiveSnapshot(snapshot, "opencode-live-session.read-snapshot"),
           }
-        : { type: "missing", ref: toSessionRef(ref) };
+        : { type: "missing", ref: toLiveSessionRef(ref) };
     },
     contextUsage: (ref: AgentSessionLiveRef): AgentSessionContextUsage | null =>
-      sessionsByRef.get(refKey(ref))?.snapshot.contextUsage ?? null,
+      sessionsByRef.get(liveSessionRefKey(ref))?.snapshot.contextUsage ?? null,
     readStart: (): OpenCodeSessionReadStart => versions.readStart(),
     invalidatePendingRequests: (): void => pendingRequests.clear(),
     admitSource: (source: OpencodeRuntimeSnapshotSource): AgentSessionLiveAdapterChange[] =>
@@ -483,7 +479,9 @@ export const createOpenCodeLiveSessionState = ({
     refForExternalSession: (externalSessionId: string): AgentSessionLiveRef | null =>
       refsByExternalSessionId.find(externalSessionId),
     release: (): AgentSessionLiveRef[] => {
-      const refs = [...sessionsByRef.values()].map(({ snapshot }) => toSessionRef(snapshot.ref));
+      const refs = [...sessionsByRef.values()].map(({ snapshot }) =>
+        toLiveSessionRef(snapshot.ref),
+      );
       for (const ref of refs) {
         versions.removed(ref);
       }

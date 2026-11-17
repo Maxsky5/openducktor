@@ -57,7 +57,7 @@ test("opens test notification settings without workspace or task reads", async (
 });
 
 test.each(['"]', "unknown", "error][id]"])("rejects malformed attention kind %s", (kind) => {
-  expect(findNotificationAttentionTarget(kind, "request")).toBeNull();
+  expect(findNotificationAttentionTarget(document.body, kind, "request")).toBeNull();
 });
 
 describe("notification navigation", () => {
@@ -232,9 +232,10 @@ describe("notification navigation", () => {
     document.body.append(fixture);
     try {
       expect(
-        findNotificationAttentionTarget("error", "error-2")?.dataset.notificationAttentionId,
+        findNotificationAttentionTarget(fixture, "error", "error-2")?.dataset
+          .notificationAttentionId,
       ).toBe("error-2");
-      expect(findNotificationAttentionTarget("error", "missing")).toBeNull();
+      expect(findNotificationAttentionTarget(fixture, "error", "missing")).toBeNull();
     } finally {
       fixture.remove();
     }

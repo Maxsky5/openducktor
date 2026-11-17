@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { hasNestedNodeErrorCode, HostValidationError } from "../../effect/host-errors";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
+import { managedWorktreeRoots } from "../git/managed-worktree-roots";
 import {
   requireRuntimeWorkingDirectory,
   resolveRuntimeRepoConfig,
@@ -22,12 +23,7 @@ export const requireManagedHistoryDirectory = (
       ...input,
       repoPath,
     });
-    const worktreeBasePath =
-      repoConfig.worktreeBasePath === undefined
-        ? dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId)
-        : dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath);
-    const legacyBasePath = dependencies.settingsConfig.defaultRepoWorktreeBasePath(repoPath);
-    for (const root of [worktreeBasePath, legacyBasePath]) {
+    for (const root of managedWorktreeRoots(dependencies.settingsConfig, repoConfig, repoPath)) {
       const resolved = yield* dependencies.worktreeFiles.resolvePathWithinRoot(
         root,
         input.workingDirectory,

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { BrowserTabOwner, BrowserTabSummary } from "@openducktor/contracts";
 import type { BrowserTabEventListener } from "@openducktor/frontend-core/connection/host-connection";
 import {
@@ -7,8 +7,7 @@ import {
 } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   browserTabIdFixture,
@@ -19,10 +18,6 @@ import { useBrowserPanelModel } from "./use-browser-panel-model";
 
 const OWNER: BrowserTabOwner = { kind: "task", workspaceId: "workspace-1", taskId: "task-1" };
 const TAB_ID = browserTabIdFixture(1);
-
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
 
 /** Renders the model with host commands that the test answers. */
 const renderModel = () => {
@@ -43,26 +38,26 @@ const renderModel = () => {
       },
     }),
   });
-  configureShellBridge(
-    createShellBridgeFixture({
-      bridge: {
-        browser: {
-          surface: "electron",
-          connect: async () => ({ send: async () => {}, close: () => {} }),
-          setSurface: async () => {},
-          focusPage: async () => {},
-          capturePage: async () => "data:image/png;base64,",
-          pickFiles: async () => [],
-        },
+  const shellPlatform = createShellBridgeFixture({
+    bridge: {
+      browser: {
+        surface: "electron",
+        connect: async () => ({ send: async () => {}, close: () => {} }),
+        setSurface: async () => {},
+        focusPage: async () => {},
+        capturePage: async () => "data:image/png;base64,",
+        pickFiles: async () => [],
       },
-    }),
-  );
+    },
+  });
   const view = renderHook(() => useBrowserPanelModel(OWNER), {
-    wrapper: ({ children }: { children: ReactNode }) => (
-      <QueryProvider connection={connection}>
-        <BrowserRuntimeProvider>{children}</BrowserRuntimeProvider>
-      </QueryProvider>
-    ),
+    wrapper: ({ children }: { children: ReactNode }) =>
+      withShellPlatform(
+        <QueryProvider connection={connection}>
+          <BrowserRuntimeProvider>{children}</BrowserRuntimeProvider>
+        </QueryProvider>,
+        shellPlatform,
+      ),
   });
   const model = () => {
     const current = view.result.current;

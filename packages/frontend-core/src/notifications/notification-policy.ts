@@ -1,4 +1,4 @@
-import { normalizeSessionErrorMessage } from "../lib/session-error-message";
+import { normalizeSessionErrorMessage } from "@openducktor/core";
 import {
   notificationOccurrenceSchema,
   notificationSettingsSchema,

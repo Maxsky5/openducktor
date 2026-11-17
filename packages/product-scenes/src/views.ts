@@ -1,18 +1,8 @@
 // The React view of each scene, loaded on demand, so a host that renders one scene loads only its
 // view and its styles.
-import { type ComponentType, createElement, type ReactElement } from "react";
-import type { SceneViews, ViewPropsOf } from "./frame/SceneFrame";
+import type { ComponentType } from "react";
+import type { ViewPropsOf } from "./frame/SceneFrame";
 import type { SceneName } from "./registry";
-
-/** Renders the view of the scene `name` from a map of static views. */
-export function viewElement<Names extends SceneName, Name extends Names>(
-  views: SceneViews<Names>,
-  name: Name,
-  props: ViewPropsOf<Name>,
-): ReactElement {
-  const view: ComponentType<ViewPropsOf<Name>> = views[name];
-  return createElement(view, props);
-}
 
 /** The loader of the view of each scene. */
 export type SceneViewLoaders = {

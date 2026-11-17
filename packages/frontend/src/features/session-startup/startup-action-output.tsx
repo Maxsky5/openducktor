@@ -4,7 +4,8 @@ import { useStartupTerminalOutput } from "@openducktor/frontend-core/terminals/u
 import { createTerminalOutputSequencer } from "@openducktor/frontend-core/terminals/terminal-output-sequencer";
 import { restoreTerminalPrecedingJoinState } from "@openducktor/frontend-core/terminals/terminal-rep-state";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import {
   createTerminalBinding,
   type TerminalBinding,
@@ -22,7 +23,8 @@ export function StartupActionOutput({
   terminalId: string;
   presentation: StartupPresentation;
 }): ReactElement {
-  const { controller, transportError } = useStartupTerminalOutput(getShellBridge().terminals);
+  const { controller, transportError } = useStartupTerminalOutput(useShellPlatform().terminals);
+  const openExternalUrl = useOpenExternalUrl();
   const container = useRef<HTMLDivElement>(null);
   const bindingRef = useRef<TerminalBinding | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -53,6 +55,7 @@ export function StartupActionOutput({
           scrollOnUserInput: false,
         }),
         report,
+        openExternalUrl,
       );
     } catch (cause) {
       report(cause);
@@ -124,7 +127,7 @@ export function StartupActionOutput({
       binding.dispose();
       bindingRef.current = null;
     };
-  }, [controller, presentation, terminalId]);
+  }, [controller, openExternalUrl, presentation, terminalId]);
 
   return (
     <div className="flex min-w-0 flex-col gap-2">

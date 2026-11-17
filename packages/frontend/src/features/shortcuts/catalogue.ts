@@ -10,12 +10,8 @@ import {
   type ShortcutWhen,
 } from "@openducktor/contracts";
 import type { CoreTaskAction } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
-import { getShellBridge } from "@/lib/shell-bridge";
 
 export type ShortcutShell = "electron" | "browser";
-/** The shell of this client: the desktop app or a browser. */
-export const currentShortcutShell = (): ShortcutShell =>
-  getShellBridge().browser.surface === "electron" ? "electron" : "browser";
 export type FocusArea = "panel" | "git" | "browser" | "content";
 
 /**

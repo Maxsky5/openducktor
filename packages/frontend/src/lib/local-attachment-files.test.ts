@@ -1,58 +1,9 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { LOCAL_ATTACHMENT_BYTE_LIMIT } from "@openducktor/contracts";
-import { createHostClientFixture } from "@/test-utils/focused-fixture";
 import {
   createBrowserAttachmentStager,
   resolveLocalAttachmentPreview,
 } from "./local-attachment-files";
-import {
-  configureShellBridge,
-  createDisabledAppUpdateBridge,
-  createUnavailableShellBridge,
-  type ShellBridge,
-} from "./shell-bridge";
-
-const createTestShellBridge = (overrides: Partial<ShellBridge> = {}): ShellBridge => ({
-  getArtifactPreviewEnvironment: createUnavailableShellBridge().getArtifactPreviewEnvironment,
-  client: createHostClientFixture({}),
-  subscribeWorkspaceSessionUpdates: async () => () => {},
-  subscribeRuntimeChanges: async () => () => {},
-  subscribeTaskMergeStatusUpdates: async () => () => {},
-  subscribeStartupProgress: async () => () => {},
-  subscribeBrowserTabEvents: async () => () => {},
-  subscribeRunEvents: async () => () => {},
-  subscribeWorkspaceProviderSetupUpdates: async () => () => {},
-  subscribeAzureDevOpsConnectionUpdates: async () => () => {},
-  observeAgentSessionLive: async () => () => {},
-  subscribeNotificationStream: async () => () => {},
-  subscribeTaskStream: async () => ({
-    subscriptionId: "test-subscription",
-    acknowledge: async () => {},
-    unsubscribe: () => {},
-  }),
-  appUpdates: createDisabledAppUpdateBridge({
-    status: "disabled",
-    currentVersion: "unknown",
-    disabledCode: "updater_unavailable",
-    disabledReason: "Updates are unavailable in this test shell.",
-  }),
-  capabilities: {
-    canOpenExternalUrls: true,
-    canPreviewLocalAttachments: true,
-  },
-  notifications: createUnavailableShellBridge().notifications,
-  openExternalUrl: async () => {},
-  resolveLocalAttachmentPreview: async () => ({ kind: "url", src: "asset://preview" }),
-  resolveTaskAssetSource: async () => ({ kind: "url", src: "asset://task-preview" }),
-  terminals: createUnavailableShellBridge().terminals,
-  browser: createUnavailableShellBridge().browser,
-  ...overrides,
-});
-
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
-
 describe("local-attachment-files", () => {
   test("browser attachment stager rejects oversized files before reading them", async () => {
     const workspaceStageLocalAttachment = mock(async () => ({ path: "/tmp/staged/oversized.pdf" }));
@@ -108,7 +59,9 @@ describe("local-attachment-files", () => {
 
   test("resolveLocalAttachmentPreview rejects blank paths before shell delegation", async () => {
     await expect(
-      resolveLocalAttachmentPreview("   ", new AbortController().signal),
+      resolveLocalAttachmentPreview("   ", new AbortController().signal, async () => {
+        throw new Error("A blank path must not reach the shell.");
+      }),
     ).rejects.toThrow("Attachment preview is unavailable because the local file path is missing.");
   });
 
@@ -117,9 +70,10 @@ describe("local-attachment-files", () => {
     const resolveForShell = mock(async () => {
       throw new Error("Inline runtime attachments have no local file.");
     });
-    configureShellBridge(createTestShellBridge({ resolveLocalAttachmentPreview: resolveForShell }));
 
-    expect(await resolveLocalAttachmentPreview(uri, new AbortController().signal)).toEqual({
+    expect(
+      await resolveLocalAttachmentPreview(uri, new AbortController().signal, resolveForShell),
+    ).toEqual({
       kind: "url",
       src: uri,
     });
@@ -131,14 +85,15 @@ describe("local-attachment-files", () => {
       kind: "url" as const,
       src: "asset://localhost/preview.png",
     }));
-    configureShellBridge(
-      createTestShellBridge({
-        resolveLocalAttachmentPreview: resolveLocalAttachmentPreviewSrcForShell,
-      }),
-    );
 
     const signal = new AbortController().signal;
-    await expect(resolveLocalAttachmentPreview("  Screenshot.png  ", signal)).resolves.toEqual({
+    await expect(
+      resolveLocalAttachmentPreview(
+        "  Screenshot.png  ",
+        signal,
+        resolveLocalAttachmentPreviewSrcForShell,
+      ),
+    ).resolves.toEqual({
       kind: "url",
       src: "asset://localhost/preview.png",
     });
@@ -146,16 +101,12 @@ describe("local-attachment-files", () => {
   });
 
   test("resolveLocalAttachmentPreview surfaces shell validation errors", async () => {
-    configureShellBridge(
-      createTestShellBridge({
-        resolveLocalAttachmentPreview: async () => {
-          throw new Error("Attachment path is not a staged local attachment.");
-        },
-      }),
-    );
+    const readPreview = async () => {
+      throw new Error("Attachment path is not a staged local attachment.");
+    };
 
     await expect(
-      resolveLocalAttachmentPreview("/tmp/preview.png", new AbortController().signal),
+      resolveLocalAttachmentPreview("/tmp/preview.png", new AbortController().signal, readPreview),
     ).rejects.toThrow("Attachment path is not a staged local attachment.");
   });
 });

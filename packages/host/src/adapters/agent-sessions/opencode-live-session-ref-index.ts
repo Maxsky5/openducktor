@@ -1,6 +1,6 @@
+import { liveSessionRefKey, toLiveSessionRef } from "./live-session-ref";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
-import { refKey, toSessionRef } from "./opencode-live-session-normalization";
 
 export class OpenCodeSessionRefIndex {
   private readonly byExternalId = new Map<string, Map<string, AgentSessionLiveRef>>();
@@ -13,12 +13,12 @@ export class OpenCodeSessionRefIndex {
       refs = new Map();
       this.byExternalId.set(ref.externalSessionId, refs);
     }
-    refs.set(refKey(ref), ref);
+    refs.set(liveSessionRefKey(ref), ref);
   }
 
   delete(ref: AgentSessionLiveRef): void {
     const refs = this.byExternalId.get(ref.externalSessionId);
-    refs?.delete(refKey(ref));
+    refs?.delete(liveSessionRefKey(ref));
     if (refs?.size === 0) this.byExternalId.delete(ref.externalSessionId);
   }
 
@@ -32,7 +32,7 @@ export class OpenCodeSessionRefIndex {
       });
     }
     const ref = matches?.values().next().value;
-    return ref ? toSessionRef(ref) : null;
+    return ref ? toLiveSessionRef(ref) : null;
   }
 
   clear(): void {

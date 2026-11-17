@@ -40,16 +40,6 @@ export const refsEqual = (left: AgentSessionLiveRef, right: AgentSessionLiveRef)
   left.workingDirectory === right.workingDirectory &&
   left.externalSessionId === right.externalSessionId;
 
-export const refKey = (ref: AgentSessionLiveRef): string =>
-  [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
-
-export const toSessionRef = (ref: AgentSessionLiveRef): AgentSessionLiveRef => ({
-  repoPath: ref.repoPath,
-  runtimeKind: ref.runtimeKind,
-  workingDirectory: ref.workingDirectory,
-  externalSessionId: ref.externalSessionId,
-});
-
 export const toRuntimeSignalChanges = (
   signal: Extract<OpencodeSessionRuntimeSignal, { type: "catalog_invalidated" | "runtime_notice" }>,
   snapshots: readonly AgentSessionLiveSnapshot[],

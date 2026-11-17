@@ -2480,6 +2480,13 @@ describe("Claude host live-session adapter", () => {
         otherSessionRef,
         importedRef,
       ]);
+      expect(harness.changes).toContainEqual(
+        expect.objectContaining({
+          type: "session_upsert",
+          provenance: "baseline",
+          snapshot: expect.objectContaining({ ref: importedRef }),
+        }),
+      );
     });
 
     test("removes only the session tree of a stopped session", async () => {

@@ -1,9 +1,12 @@
 import type { SharedBoardState } from "@openducktor/contracts";
+import {
+  statusLabel,
+  statusTone,
+} from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 import { memo, type ReactElement } from "react";
 import { StatusLabel } from "@/ui/badge";
 import { TaskChip } from "./task-chip";
 import { statusChipPaint } from "./task-chip-paint";
-import { taskStatusLabel, taskStatusTone } from "./task-status-paint";
 
 /**
  * A task status badge in the desktop status colors. Its label carries the status, so color is
@@ -19,9 +22,9 @@ export const TaskStatusBadge = memo(function TaskStatusBadge({
   quiet?: boolean;
   size?: "sm" | "md";
 }): ReactElement {
-  const label = taskStatusLabel(status);
+  const label = statusLabel(status);
   return quiet ? (
-    <StatusLabel label={label} tone={taskStatusTone(status)} />
+    <StatusLabel label={label} tone={statusTone(status)} />
   ) : (
     <TaskChip
       label={label}

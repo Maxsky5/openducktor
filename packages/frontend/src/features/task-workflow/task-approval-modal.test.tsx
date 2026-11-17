@@ -1,7 +1,8 @@
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { taskWorktreeOwnersQueryOptions } from "@openducktor/frontend-core/queries/task-worktree-owners";
 import { noTaskWorktreeOwners } from "@openducktor/frontend-core/test-support/worktree-owners-read";
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { TaskMergeStatus } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -12,7 +13,6 @@ import { taskStopImpactQueryOptions } from "@openducktor/frontend-core/queries/t
 import { taskWorktreeCleanupImpactQueryOptions } from "@openducktor/frontend-core/queries/task-worktree-cleanup-impact";
 import { terminalListByFilterQueryOptions } from "@openducktor/frontend-core/queries/terminals";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
-import * as externalUrl from "@/lib/open-external-url";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { WorkspaceProviders } from "@/test-utils/workspace-providers";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
@@ -773,27 +773,26 @@ describe("TaskApprovalModal", () => {
   });
 
   test("opens an existing pull request through the external URL shell bridge", () => {
-    const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+    const openExternalUrlSpy = mock(async (_url: string) => {});
     const pullRequestUrl = "https://github.com/openai/openducktor/pull/42";
 
-    try {
-      const view = render(
+    const view = render(
+      withShellPlatform(
         createElement(PanelWithProviders, {
           model: createApprovalModel({
             mode: "pull_request",
             pullRequestUrl,
           }),
         }),
-      );
-      const link = view.getByRole("link", { name: "Open existing pull request" });
+        createShellBridgeFixture({ bridge: { openExternalUrl: openExternalUrlSpy } }),
+      ),
+    );
+    const link = view.getByRole("link", { name: "Open existing pull request" });
 
-      expect(link.getAttribute("target")).toBeNull();
-      expect(fireEvent.click(link)).toBe(false);
-      expect(openExternalUrlSpy).toHaveBeenCalledWith(pullRequestUrl);
-      view.unmount();
-    } finally {
-      openExternalUrlSpy.mockRestore();
-    }
+    expect(link.getAttribute("target")).toBeNull();
+    expect(fireEvent.click(link)).toBe(false);
+    expect(openExternalUrlSpy).toHaveBeenCalledWith(pullRequestUrl);
+    view.unmount();
   });
 
   test("disables pull request confirmation when the provider is unavailable", () => {

@@ -1,11 +1,11 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
+import { describe, expect, mock, test } from "bun:test";
 import type { PullRequestReviewCheck, PullRequestReviewContext } from "@openducktor/contracts";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import * as externalUrl from "@/lib/open-external-url";
 import type { ClientConnection } from "@openducktor/frontend-core/connection/client-connection";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -390,33 +390,32 @@ describe("TaskExecutionCiChecksPanel", () => {
   });
 
   test("opens check links through the external URL shell bridge", () => {
-    const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+    const openExternalUrlSpy = mock(async (_url: string) => {});
 
-    try {
-      const view = render(
+    const view = render(
+      withShellPlatform(
         <TaskExecutionCiCheckCard
           check={{
             ...loadedCheck,
             name: "Unit tests",
           }}
         />,
-      );
-      const link = view.getByRole("link", { name: "Open Unit tests check" });
+        createShellBridgeFixture({ bridge: { openExternalUrl: openExternalUrlSpy } }),
+      ),
+    );
+    const link = view.getByRole("link", { name: "Open Unit tests check" });
 
-      expect(link.getAttribute("target")).toBeNull();
-      expect(fireEvent.click(link)).toBe(false);
-      expect(openExternalUrlSpy).toHaveBeenCalledWith(loadedCheck.url);
-      view.unmount();
-    } finally {
-      openExternalUrlSpy.mockRestore();
-    }
+    expect(link.getAttribute("target")).toBeNull();
+    expect(fireEvent.click(link)).toBe(false);
+    expect(openExternalUrlSpy).toHaveBeenCalledWith(loadedCheck.url);
+    view.unmount();
   });
 
   test("opens the pull request heading through the external URL shell bridge", () => {
-    const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+    const openExternalUrlSpy = mock(async (_url: string) => {});
 
-    try {
-      const view = render(
+    const view = render(
+      withShellPlatform(
         <QueryProvider>
           <ThemeProvider defaultTheme="light">
             <TooltipProvider>
@@ -428,18 +427,17 @@ describe("TaskExecutionCiChecksPanel", () => {
             </TooltipProvider>
           </ThemeProvider>
         </QueryProvider>,
-      );
-      const link = view.getByRole("link", {
-        name: loadedContext.pullRequest.title,
-      });
+        createShellBridgeFixture({ bridge: { openExternalUrl: openExternalUrlSpy } }),
+      ),
+    );
+    const link = view.getByRole("link", {
+      name: loadedContext.pullRequest.title,
+    });
 
-      expect(link.getAttribute("target")).toBeNull();
-      expect(fireEvent.click(link)).toBe(false);
-      expect(openExternalUrlSpy).toHaveBeenCalledWith(loadedContext.pullRequest.url);
-      view.unmount();
-    } finally {
-      openExternalUrlSpy.mockRestore();
-    }
+    expect(link.getAttribute("target")).toBeNull();
+    expect(fireEvent.click(link)).toBe(false);
+    expect(openExternalUrlSpy).toHaveBeenCalledWith(loadedContext.pullRequest.url);
+    view.unmount();
   });
 
   test("classifies common automation authors as bots", () => {

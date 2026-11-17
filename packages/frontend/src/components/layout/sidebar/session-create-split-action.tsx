@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useRequiredTaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { cn } from "@/lib/utils";
-import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
+import { useWorkspaceRepositorySettings } from "@/state/queries/use-workspace-repository-settings";
 import {
   issueImportActionHint,
   issueImportActionLabel,
@@ -135,7 +135,7 @@ export function SessionCreateSplitAction({ compact = false }: { compact?: boolea
   const { onCreateTask } = useRequiredTaskWorkflowActions();
   const { openSettings } = useSettingsModal();
   const { openWorkspaceDialog } = useWorkspaceDialogs();
-  const { gitProvider } = useAgentStudioRepoSettings({
+  const { gitProvider } = useWorkspaceRepositorySettings({
     activeWorkspaceId: workspace?.workspaceId ?? null,
     activeRepoPath: workspace?.repoPath ?? null,
   });

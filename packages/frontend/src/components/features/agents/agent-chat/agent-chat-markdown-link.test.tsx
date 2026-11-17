@@ -1,3 +1,4 @@
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import { beforeAll, describe, expect, test, mock } from "bun:test";
 import { fireEvent, render as renderView, waitFor } from "@testing-library/react";
 import { act, type ReactElement } from "react";
@@ -166,14 +167,15 @@ describe("chat Markdown links", () => {
 });
 
 test("external links keep shell behavior and unsafe schemes do not become file links", async () => {
-  const external = await import("@/lib/open-external-url");
-  const { spyOn } = await import("bun:test");
-  const openExternal = spyOn(external, "openExternalUrl").mockResolvedValue();
+  const openExternal = mock(async (_url: string) => {});
   const openFile = mock<(href: string, trigger: HTMLAnchorElement) => void>(() => {});
   const view = render(
-    <ChatFileLinkContext value={openFile}>
-      <AgentChatMarkdownRenderer markdown="[web](https://example.com) [unsafe](javascript:42) [file](a.ts:42) [empty]()" />
-    </ChatFileLinkContext>,
+    withShellPlatform(
+      <ChatFileLinkContext value={openFile}>
+        <AgentChatMarkdownRenderer markdown="[web](https://example.com) [unsafe](javascript:42) [file](a.ts:42) [empty]()" />
+      </ChatFileLinkContext>,
+      createShellBridgeFixture({ bridge: { openExternalUrl: openExternal } }),
+    ),
   );
   try {
     fireEvent.click(view.getByText("web"));
@@ -188,7 +190,6 @@ test("external links keep shell behavior and unsafe schemes do not become file l
     expect(openExternal).toHaveBeenCalledTimes(1);
   } finally {
     view.unmount();
-    openExternal.mockRestore();
   }
 });
 

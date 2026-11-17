@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import {
   TASK_APPROVAL_COPY as COPY,
   taskApprovalGeneratePullRequestNotice,
@@ -18,6 +18,12 @@ export function TaskApprovalPullRequestSection({
 }: {
   model: TaskApprovalApprovalModalModel;
 }): ReactElement {
+  const openExternalUrl = useOpenExternalUrl();
+  const openExistingPullRequestUrl = (url: string): void => {
+    void openExternalUrl(url).catch((error) => {
+      toast.error("Failed to open pull request", { description: errorMessage(error) });
+    });
+  };
   const openExistingPullRequest = (event: MouseEvent<HTMLAnchorElement>): void => {
     event.preventDefault();
     if (model.pullRequestUrl) {
@@ -95,11 +101,3 @@ export function TaskApprovalPullRequestSection({
     </div>
   );
 }
-
-const openExistingPullRequestUrl = (url: string): void => {
-  void openExternalUrl(url).catch((error) => {
-    toast.error("Failed to open pull request", {
-      description: errorMessage(error),
-    });
-  });
-};

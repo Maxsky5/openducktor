@@ -12,8 +12,6 @@ import type { TaskApprovalModalModel } from "@openducktor/frontend-core/tasks/ap
 import { getTaskApprovalModalHeader } from "@openducktor/frontend-core/tasks/approval/task-approval-modal-header";
 import { TaskApprovalModalPanel } from "./task-approval-modal-panel";
 
-export { TaskApprovalModalPanel } from "./task-approval-modal-panel";
-
 export function TaskApprovalModal({
   model,
 }: {

@@ -3,8 +3,9 @@
 // with react-dom/server, so the page loads no React. The script mounts the timeline of each scene
 // on the page.
 import { MAC_KEYS, type KeyLabels } from "../replicas/keys";
-import type { SceneOptionsProp, SiteSceneName } from "../registry";
+import type { SceneOptionsProp } from "../registry";
 import { renderView } from "./render";
+import type { SiteSceneName } from "./views";
 
 type Props = {
   [Name in SiteSceneName]: {

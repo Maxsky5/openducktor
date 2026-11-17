@@ -1,5 +1,9 @@
-import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { findCatalogModel } from "@openducktor/frontend-core/lib/model-catalog-selection";
+import {
+  type AgentModelCatalog,
+  type AgentModelSelection,
+  findCatalogModel,
+} from "@openducktor/core";
+
 import {
   buildContextUsagePresentation,
   type ContextUsagePresentation,

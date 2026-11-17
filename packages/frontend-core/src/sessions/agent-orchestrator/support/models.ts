@@ -1,11 +1,12 @@
 import type { AgentSessionRecord } from "@openducktor/contracts";
-import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import {
+  type AgentModelCatalog,
+  type AgentModelSelection,
   findCatalogModel,
   normalizeCatalogVariant,
   normalizeKnownCatalogProfileId,
   pickCatalogDefaultModel,
-} from "../../../lib/model-catalog-selection";
+} from "@openducktor/core";
 
 export const pickDefaultSessionSelectionForCatalog = (
   catalog: AgentModelCatalog,

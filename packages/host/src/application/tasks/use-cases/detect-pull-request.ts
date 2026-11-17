@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { HostValidationError } from "../../../effect/host-errors";
 import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
@@ -8,7 +8,7 @@ import {
 } from "../support/required-task-dependencies";
 import { ensureNoDirectMergeEffect } from "../support/direct-merge-block";
 import { requirePullRequestManagement } from "../support/task-workflow-events";
-import { loadTaskBranchCleanup } from "../support/task-worktree-cleanup";
+import { requireTaskBranches } from "../support/task-branches";
 import type { CreateTaskServiceInput, TaskService } from "../task-service";
 
 export const createTaskPullRequestDetectionUseCase = ({
@@ -52,15 +52,13 @@ export const createTaskPullRequestDetectionUseCase = ({
 
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = repoConfig.repoPath;
-      const taskContext = yield* loadTaskBranchCleanup(
-        dependencies,
+      const taskContext = yield* requireTaskBranches(dependencies, {
+        workspaceId: input.workspaceId,
+        repoPath: effectiveRepoPath,
+        task: current,
         workflow,
-        current,
-        effectiveRepoPath,
-        taskId,
-        "Pull request detection",
-        input.workspaceId,
-      );
+        operationLabel: "Pull request detection",
+      });
       const provider = yield* dependencies.gitProviderResolver.resolve(repoConfig);
       const pullRequests = yield* provider.pullRequests();
       const openPullRequest = yield* pullRequests.findOpenForSourceBranch({

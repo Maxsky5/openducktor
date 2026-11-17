@@ -4,7 +4,7 @@
 // code and no GSAP until a scene can show, and it shows the static frame until the timeline loads.
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
 import { MOTION_QUERY } from "../motion/preference";
-import { CHAPTER_SCENE_NAMES, type ChapterSceneName, SCENES, type SceneName } from "../registry";
+import { isChapterScene, SCENES, type SceneName } from "../registry";
 
 /** Starts the page player on the root of a view. Returns the function that stops it. */
 type MountPlayer = (root: HTMLElement) => () => void;
@@ -14,9 +14,6 @@ type MountPlayer = (root: HTMLElement) => () => void;
  * player is ready before the view shows.
  */
 const LOAD_MARGIN = "100% 0px";
-
-const isChapterScene = (name: SceneName): name is ChapterSceneName =>
-  CHAPTER_SCENE_NAMES.some((chapter) => chapter === name);
 
 const players = new Map<SceneName, Promise<MountPlayer>>();
 

@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizeApprovalTargetBranch, publishTargetFromTargetBranch } from "../../../domain/task";

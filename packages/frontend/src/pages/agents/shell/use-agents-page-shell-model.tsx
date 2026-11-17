@@ -25,7 +25,7 @@ import {
 import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
 import { useAgentStudioTerminals } from "../terminals/use-agent-studio-terminals";
 import type { useAgentStudioOrchestrationController } from "../use-agent-studio-orchestration-controller";
-import { useAgentStudioRepoSettings } from "../use-agent-studio-repo-settings";
+import { useWorkspaceRepositorySettings } from "@/state/queries/use-workspace-repository-settings";
 import { useAgentsPageBuildTools } from "./use-agents-page-build-tools";
 import type { AgentsPageModalContentModel } from "./agents-page-modal-content";
 import { useAgentStudioGitConflictHeaderModel } from "./use-agent-studio-git-conflict-header-model";
@@ -78,7 +78,7 @@ export function useAgentsPageShellModel(): AgentsPageShellModel {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
   const { allRuntimeDefinitions: runtimeDefinitions } = useRuntimeAvailabilityContext();
   const { repoSettings, repoSettingsError, loadRepoSettings, gitProvider, isLoadingRepoSettings } =
-    useAgentStudioRepoSettings({
+    useWorkspaceRepositorySettings({
       activeRepoPath: workspaceRepoPath,
       activeWorkspaceId,
     });

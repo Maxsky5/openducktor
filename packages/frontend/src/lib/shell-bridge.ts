@@ -214,13 +214,5 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   browser: { surface: "frame", frames: null },
 });
 
-let configuredShellBridge: ShellBridge = createUnavailableShellBridge();
-
-export const configureShellBridge = (bridge: ShellBridge): void => {
-  configuredShellBridge = bridge;
-};
-
 /** The shell parts that are not the host. Code reaches the host only through its client connection. */
 export type ShellPlatform = Omit<ShellBridge, keyof HostConnection>;
-
-export const getShellBridge = (): ShellPlatform => configuredShellBridge;

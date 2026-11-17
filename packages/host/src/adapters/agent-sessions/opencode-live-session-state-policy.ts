@@ -1,3 +1,4 @@
+import { liveSessionRefKey, toLiveSessionRef } from "./live-session-ref";
 import {
   type AgentSessionActivity,
   type AgentSessionContextUsage,
@@ -9,7 +10,7 @@ import {
 import type { AgentEvent } from "@openducktor/core";
 import type { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
-import { refKey, refsEqual, toSessionRef } from "./opencode-live-session-normalization";
+import { refsEqual } from "./opencode-live-session-normalization";
 
 export type OpenCodeLiveSession = {
   snapshot: AgentSessionLiveSnapshot;
@@ -24,7 +25,7 @@ export const requireOpenCodeLiveSession = (
   runtimeId: string,
   ref: AgentSessionLiveRef,
 ): OpenCodeLiveSession => {
-  const session = sessionsByRef.get(refKey(ref));
+  const session = sessionsByRef.get(liveSessionRefKey(ref));
   if (!session || !refsEqual(session.snapshot.ref, ref)) {
     throw new HostValidationError({
       field: "sessionRef",
@@ -60,8 +61,8 @@ export const requireOpenCodeEventSession = ({
       details: { runtimeId, externalSessionId: childExternalSessionId },
     });
   }
-  const parentRef = { ...toSessionRef(ownerRef), externalSessionId: parentExternalSessionId };
-  if (!sessionsByRef.has(refKey(parentRef))) {
+  const parentRef = { ...toLiveSessionRef(ownerRef), externalSessionId: parentExternalSessionId };
+  if (!sessionsByRef.has(liveSessionRefKey(parentRef))) {
     throw new HostValidationError({
       field: "parentExternalSessionId",
       message: `OpenCode event for child session '${childExternalSessionId}' names unregistered parent '${parentExternalSessionId}'.`,
@@ -72,8 +73,8 @@ export const requireOpenCodeEventSession = ({
       },
     });
   }
-  const childRef = { ...toSessionRef(ownerRef), externalSessionId: childExternalSessionId };
-  const existing = sessionsByRef.get(refKey(childRef));
+  const childRef = { ...toLiveSessionRef(ownerRef), externalSessionId: childExternalSessionId };
+  const existing = sessionsByRef.get(liveSessionRefKey(childRef));
   if (existing) {
     if (existing.snapshot.parentExternalSessionId !== parentExternalSessionId) {
       throw new HostValidationError({
@@ -114,7 +115,7 @@ export const openCodeSessionTreeRefs = (
   ref: AgentSessionLiveRef,
 ): AgentSessionLiveRef[] => {
   const all = [...sessions];
-  const refs = [toSessionRef(ref)];
+  const refs = [toLiveSessionRef(ref)];
   for (let index = 0; index < refs.length; index += 1) {
     const parent = refs[index];
     if (!parent) continue;
@@ -123,7 +124,7 @@ export const openCodeSessionTreeRefs = (
         session.snapshot.parentExternalSessionId === parent.externalSessionId &&
         !refs.some((candidate) => refsEqual(candidate, session.snapshot.ref))
       )
-        refs.push(toSessionRef(session.snapshot.ref));
+        refs.push(toLiveSessionRef(session.snapshot.ref));
   }
   return refs;
 };

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
 import { REPOSITORY_SECTIONS, SETTINGS_SECTIONS } from "./settings-modal-constants";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import { Combobox } from "@/components/ui/combobox";
 
 type SettingsSidebarProps = {
@@ -23,8 +23,9 @@ export function SettingsSidebar({
   onChange,
 }: SettingsSidebarProps): ReactElement {
   const labelId = useId();
+  const { remoteAccess } = useShellPlatform();
   const sections = SETTINGS_SECTIONS.filter(
-    (entry) => entry.id !== "remote-access" || getShellBridge().remoteAccess,
+    (entry) => entry.id !== "remote-access" || remoteAccess,
   );
   return (
     <aside

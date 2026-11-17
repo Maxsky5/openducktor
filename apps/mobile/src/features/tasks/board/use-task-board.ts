@@ -18,6 +18,7 @@ import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/se
 import {
   deriveActiveTaskSessionContextByTaskId,
   buildTaskSessionsByTaskId,
+  getRequiredTaskActivityState,
 } from "@openducktor/frontend-core/tasks/board/kanban-board-sessions";
 import type {
   ActiveTaskSessionContext,
@@ -132,7 +133,7 @@ export function useTaskBoard(workspace: WorkspaceRecord): TaskBoard {
       sessionsOf: (taskId) => taskSessionsByTaskId.get(taskId) ?? EMPTY_SESSIONS,
       historyOf: (taskId) => historicalSessionsByTaskId.get(taskId) ?? EMPTY_HISTORY,
       activeContextOf: (taskId) => activeContextByTaskId.get(taskId),
-      activityOf: (taskId) => taskActivityStateByTaskId.get(taskId) ?? "idle",
+      activityOf: (taskId) => getRequiredTaskActivityState(taskActivityStateByTaskId, taskId),
       mergedTargetOf: (taskId) => mergedTargetByTaskId.get(taskId),
       autoCloseFailureOf: (taskId) => autoCloseFailureByTaskId.get(taskId),
     }),

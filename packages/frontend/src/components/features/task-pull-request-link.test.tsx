@@ -1,45 +1,32 @@
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import type { Mock } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
-import * as sonnerActual from "sonner";
-import * as externalUrlActual from "@/lib/open-external-url";
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 
 enableReactActEnvironment();
 
-let openExternalUrlMock: Mock<typeof externalUrlActual.openExternalUrl>;
-let toastErrorMock: Mock<typeof sonnerActual.toast.error>;
-
 describe("TaskPullRequestLink", () => {
-  beforeEach(() => {
-    openExternalUrlMock = spyOn(externalUrlActual, "openExternalUrl").mockImplementation(
-      async () => {},
-    );
-    toastErrorMock = spyOn(sonnerActual.toast, "error").mockImplementation(() => "toast-error");
-  });
-
-  afterEach(() => {
-    openExternalUrlMock.mockRestore();
-    toastErrorMock.mockRestore();
-  });
-
   test("opens the pull request URL when clicked", async () => {
+    const openExternalUrlMock = mock(async (_url: string) => {});
     const { TaskPullRequestLink } = await import("./task-pull-request-link");
     const rendered = render(
-      createElement(TaskPullRequestLink, {
-        pullRequest: {
-          providerId: "github",
-          number: 110,
-          url: "https://github.com/openai/openducktor/pull/110",
-          state: "open",
-          createdAt: "2026-03-12T12:24:09Z",
-          updatedAt: "2026-03-12T12:24:09Z",
-          lastSyncedAt: undefined,
-          mergedAt: undefined,
-          closedAt: undefined,
-        },
-      }),
+      withShellPlatform(
+        createElement(TaskPullRequestLink, {
+          pullRequest: {
+            providerId: "github",
+            number: 110,
+            url: "https://github.com/openai/openducktor/pull/110",
+            state: "open",
+            createdAt: "2026-03-12T12:24:09Z",
+            updatedAt: "2026-03-12T12:24:09Z",
+            lastSyncedAt: undefined,
+            mergedAt: undefined,
+            closedAt: undefined,
+          },
+        }),
+        createShellBridgeFixture({ bridge: { openExternalUrl: openExternalUrlMock } }),
+      ),
     );
 
     fireEvent.click(rendered.getByRole("button"));

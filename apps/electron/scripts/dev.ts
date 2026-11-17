@@ -23,7 +23,7 @@ import {
   errorMessage,
   toElectronOperationError,
 } from "../src/effect/electron-errors";
-import { copySqliteMigrationsEffect, resolveSqliteMigrationCopyPlans } from "./build";
+import { copyElectronSqliteMigrationsEffect } from "./build";
 import {
   DEVTOOLS_PORT_RECOVERY_STEP,
   forwardElectronStderr,
@@ -457,11 +457,7 @@ export const buildElectronBundlesEffect = (): Effect.Effect<
     // The import worker has its own bundle, as in the production build.
     yield* runStepEffect("Electron import worker build", ["bun", "run", "build:import-worker"]);
     yield* runStepEffect("Electron preload build", ["bun", "run", "build:preload"]);
-    yield* Effect.forEach(
-      resolveSqliteMigrationCopyPlans({ electronPackageRoot: packageRoot, workspaceRoot }),
-      copySqliteMigrationsEffect,
-      { discard: true },
-    );
+    yield* copyElectronSqliteMigrationsEffect();
   });
 
 const resolveElectronDevExecutablePathEffect = (

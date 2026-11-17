@@ -190,11 +190,9 @@ const setResult = (tool: ToolPart, result: Result): void => {
   if (result.error !== undefined) tool.error = result.error;
 };
 
-/** A shell command that exits with an error code failed. */
 export const isFailedShellExit = (exit: number | string | undefined): boolean =>
   exit !== undefined && exit !== 0;
 
-/** The error of a shell command that exited with an error code. */
 export const shellExitError = (exit: number | string | undefined): string =>
   `Shell command exited with code ${exit}.`;
 

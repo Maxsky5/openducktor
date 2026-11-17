@@ -3,7 +3,8 @@
 // loader for each scene. The maps hold only the scenes of the website. A host that renders one
 // scene uses the lazy loaders of the registry instead.
 import type { SceneBuilder } from "../motion/scene";
-import type { ChapterBuilders, ChapterSceneName, LoopSceneName, SiteSceneName } from "../registry";
+import type { ChapterBuilders, ChapterSceneName, LoopSceneName } from "../registry";
+import type { SiteSceneName } from "./views";
 import { build as actions } from "../scenes/actions/timeline";
 import { build as autopilot } from "../scenes/autopilot/timeline";
 import { build as chat } from "../scenes/chat/timeline";

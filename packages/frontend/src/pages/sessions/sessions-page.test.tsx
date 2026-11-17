@@ -2,7 +2,7 @@ import { expect, mock, test } from "bun:test";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { memo, type ReactElement, type ReactNode, useEffect, useMemo, useState } from "react";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
-import { AgentsPage } from "@/pages/agents/agents-page";
+import { AgentsPage } from "@/pages/agents/shell/agents-page";
 import WorkspaceSessionsPage from "@/pages/workspace-sessions/workspace-sessions-page";
 import { SessionPanel, SessionPanelsRoot, sessionPanelOwnerKey } from "@/features/session-panels";
 import { useActiveWorkspace } from "@/state/app-state-provider";
@@ -189,7 +189,7 @@ test.each(["partial", "fresh"] as const)(
       usePublishVisibleSessionTarget(target);
       return <input aria-label={`${runtimeKind} draft`} />;
     }
-    mock.module("@/pages/agents/agents-page", () => ({ AgentsPage: Conversation }));
+    mock.module("@/pages/agents/shell/agents-page", () => ({ AgentsPage: Conversation }));
     const href = (runtime: string) =>
       `/sessions?workspace=alpha&kind=task&task=current&session=native-${runtime}&agent=planner`;
     const view = render(
@@ -214,7 +214,7 @@ test.each(["partial", "fresh"] as const)(
       expect(view.getByDisplayValue("Kept draft")).toBe(first);
     } finally {
       view.unmount();
-      mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+      mock.module("@/pages/agents/shell/agents-page", () => realAgentsPage);
     }
   },
 );
@@ -251,7 +251,7 @@ test.each([
       return <input aria-label={`${workspaceId} draft`} />;
     }
     const page = { AgentsPage: Conversation };
-    mock.module("@/pages/agents/agents-page", () => page);
+    mock.module("@/pages/agents/shell/agents-page", () => page);
     mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => ({
       default: Conversation,
     }));
@@ -275,7 +275,7 @@ test.each([
       expect(mounts).toBe(2);
     } finally {
       view.unmount();
-      mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+      mock.module("@/pages/agents/shell/agents-page", () => realAgentsPage);
       mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => realWorkspacePage);
     }
   },
@@ -343,7 +343,7 @@ test("view content that reads only its activity does not render again when its s
     renders += 1;
     return <output aria-label="Activity">{String(useSessionViewActive())}</output>;
   });
-  mock.module("@/pages/agents/agents-page", () => ({ AgentsPage: Conversation }));
+  mock.module("@/pages/agents/shell/agents-page", () => ({ AgentsPage: Conversation }));
   const view = render(
     <MemoryRouter
       initialEntries={[
@@ -362,7 +362,7 @@ test("view content that reads only its activity does not render again when its s
     expect(renders).toBe(rendersBefore);
   } finally {
     view.unmount();
-    mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+    mock.module("@/pages/agents/shell/agents-page", () => realAgentsPage);
   }
 });
 
@@ -371,7 +371,7 @@ test("task and chat views share six slots and removed tasks release their kept v
     const location = useLocation();
     return <input aria-label={new URLSearchParams(location.search).get("session") ?? "empty"} />;
   }
-  mock.module("@/pages/agents/agents-page", () => ({ AgentsPage: Conversation }));
+  mock.module("@/pages/agents/shell/agents-page", () => ({ AgentsPage: Conversation }));
   mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => ({
     default: Conversation,
   }));
@@ -409,7 +409,7 @@ test("task and chat views share six slots and removed tasks release their kept v
     expect(view.container.querySelectorAll("input")).toHaveLength(4);
   } finally {
     view.unmount();
-    mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+    mock.module("@/pages/agents/shell/agents-page", () => realAgentsPage);
     mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => realWorkspacePage);
   }
 });
@@ -473,7 +473,7 @@ test("task and chat switches keep their inputs and terminal viewports and stop h
       </SessionPanelsRoot>
     );
   }
-  mock.module("@/pages/agents/agents-page", () => ({ AgentsPage: Conversation }));
+  mock.module("@/pages/agents/shell/agents-page", () => ({ AgentsPage: Conversation }));
   mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => ({
     default: Conversation,
   }));
@@ -508,7 +508,7 @@ test("task and chat switches keep their inputs and terminal viewports and stop h
     expect(terminal?.isConnected).toBe(true);
   } finally {
     view.unmount();
-    mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+    mock.module("@/pages/agents/shell/agents-page", () => realAgentsPage);
     mock.module("@/pages/workspace-sessions/workspace-sessions-page", () => realWorkspacePage);
   }
 });
@@ -517,7 +517,7 @@ test("drops the task view when its workspace leaves the list before the active w
   function Conversation() {
     return <input aria-label="Task draft" />;
   }
-  mock.module("@/pages/agents/agents-page", () => ({ AgentsPage: Conversation }));
+  mock.module("@/pages/agents/shell/agents-page", () => ({ AgentsPage: Conversation }));
   const view = render(
     <MemoryRouter
       initialEntries={["/sessions?workspace=alpha&kind=task&task=current&agent=planner"]}
@@ -532,12 +532,12 @@ test("drops the task view when its workspace leaves the list before the active w
     expect(view.getByRole("button", { name: "Unlist active workspace" })).toBeTruthy();
   } finally {
     view.unmount();
-    mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+    mock.module("@/pages/agents/shell/agents-page", () => realAgentsPage);
   }
 });
 
 test("leaves an open task visible, then replaces its closed session route with Kanban", async () => {
-  mock.module("@/pages/agents/agents-page", () => ({
+  mock.module("@/pages/agents/shell/agents-page", () => ({
     AgentsPage: () => <p>Task conversation</p>,
   }));
   const view = render(
@@ -559,13 +559,13 @@ test("leaves an open task visible, then replaces its closed session route with K
     await waitFor(() => expect(screen.getByText("Previous page")).toBeTruthy());
   } finally {
     view.unmount();
-    mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+    mock.module("@/pages/agents/shell/agents-page", () => realAgentsPage);
   }
 });
 
 test("redirects a saved closed-task address before mounting its conversation", async () => {
   const mountConversation = mock(() => <p>Task conversation</p>);
-  mock.module("@/pages/agents/agents-page", () => ({ AgentsPage: mountConversation }));
+  mock.module("@/pages/agents/shell/agents-page", () => ({ AgentsPage: mountConversation }));
   const view = render(
     <MemoryRouter initialEntries={["/sessions?workspace=alpha&kind=task&task=current"]}>
       <Harness initiallyClosed />
@@ -577,7 +577,7 @@ test("redirects a saved closed-task address before mounting its conversation", a
     expect(mountConversation).not.toHaveBeenCalled();
   } finally {
     view.unmount();
-    mock.module("@/pages/agents/agents-page", () => realAgentsPage);
+    mock.module("@/pages/agents/shell/agents-page", () => realAgentsPage);
   }
 });
 

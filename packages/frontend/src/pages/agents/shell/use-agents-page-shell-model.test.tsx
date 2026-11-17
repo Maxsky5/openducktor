@@ -70,7 +70,9 @@ import {
 } from "./use-agents-page-shell-model.test-support";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 
-type RepoSettingsStateContract = ReturnType<typeof repoSettingsModule.useAgentStudioRepoSettings>;
+type RepoSettingsStateContract = ReturnType<
+  typeof repoSettingsModule.useWorkspaceRepositorySettings
+>;
 
 enableReactActEnvironment();
 
@@ -560,7 +562,7 @@ const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
   </WorkspaceStateContext.Provider>
 );
 
-const repoSettingsModule = await import("../use-agent-studio-repo-settings");
+const repoSettingsModule = await import("@/state/queries/use-workspace-repository-settings");
 const routeSessionModule = await import("./use-agents-page-route-session-model");
 const orchestrationShellModule = await import("./use-agents-page-orchestration-shell-model");
 const buildToolsModule = await import("./use-agents-page-build-tools");
@@ -595,7 +597,7 @@ const registerModuleMocks = (): void => {
         requestContextTransition: (applyTransition) => applyTransition(),
       },
     })),
-    spyOn(repoSettingsModule, "useAgentStudioRepoSettings").mockImplementation(
+    spyOn(repoSettingsModule, "useWorkspaceRepositorySettings").mockImplementation(
       () => repoSettingsState,
     ),
     spyOn(orchestrationShellModule, "useAgentsPageOrchestrationShellModel").mockImplementation(

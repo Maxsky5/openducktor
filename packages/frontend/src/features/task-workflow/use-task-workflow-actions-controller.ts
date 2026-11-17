@@ -13,8 +13,8 @@ import { buildSessionNavigationHref } from "@/features/session-navigation/sessio
 import { useSessionStartWorkflowRunner } from "@openducktor/frontend-core/sessions/start/use-session-start-workflow-runner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { gitProviderReadError as toGitProviderReadError } from "@openducktor/frontend-core/review/git-provider-health";
-import { openExternalUrl } from "@/lib/open-external-url";
-import { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
+import { type ExternalUrlOpener, useOpenExternalUrl } from "@/lib/open-external-url";
+import { useWorkspaceRepositorySettings } from "@/state/queries/use-workspace-repository-settings";
 import type {
   TaskApprovalModalModel,
   TaskGitConflictDialogModel,
@@ -22,7 +22,7 @@ import type {
 import { useTaskApprovalFlow } from "@openducktor/frontend-core/tasks/approval/use-task-approval-flow";
 import { useTaskGitConflictResolver } from "@openducktor/frontend-core/tasks/workflow/use-task-git-conflict-resolver";
 import { buildWorkflowPendingState } from "@openducktor/frontend-core/tasks/workflow/task-workflow-pending-state";
-import { useKanbanSessionStartFlow } from "@/pages/kanban/use-kanban-session-start-flow";
+import { useDesktopTaskSessionStartFlow } from "./use-desktop-task-session-start-flow";
 import {
   type TaskResetImplementationModalModel,
   useTaskResetFlow,
@@ -66,12 +66,17 @@ export type TaskWorkflowActionsController = {
 };
 
 export function useTaskWorkflowActionsController(): TaskWorkflowActionsController {
+  const openExternalUrl = useOpenExternalUrl();
+  const showPullRequestCreated = useCallback(
+    (pullRequest: PullRequest) => showPullRequestCreatedToast(pullRequest, openExternalUrl),
+    [openExternalUrl],
+  );
   const navigate = useNavigate();
   const { activeWorkspace, branches, saveAgentModelFavorites } = useWorkspaceState();
   const favoriteState = useAgentModelFavorites({ saveAgentModelFavorites });
   const activeWorkspaceId = activeWorkspace?.workspaceId ?? null;
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;
-  const { gitProvider, repoSettings } = useAgentStudioRepoSettings({
+  const { gitProvider, repoSettings } = useWorkspaceRepositorySettings({
     activeRepoPath: workspaceRepoPath,
     activeWorkspaceId,
   });
@@ -139,7 +144,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     onPullRequestGenerate,
     onOpenSession,
     onHumanFeedback,
-  } = useKanbanSessionStartFlow({
+  } = useDesktopTaskSessionStartFlow({
     activeWorkspaceId,
     branches: branches ?? [],
     favoriteState,
@@ -202,7 +207,7 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
     closeTask,
     openResetImplementation,
     onResolveGitConflict: handleResolveTaskGitConflict,
-    showPullRequestCreated: showPullRequestCreatedToast,
+    showPullRequestCreated,
     showGitProviderContextLoadFailure: showGitProviderContextLoadFailureToast,
   });
 
@@ -373,7 +378,10 @@ export function useTaskWorkflowActionsController(): TaskWorkflowActionsControlle
   };
 }
 
-const showPullRequestCreatedToast = (pullRequest: PullRequest): void => {
+const showPullRequestCreatedToast = (
+  pullRequest: PullRequest,
+  openExternalUrl: ExternalUrlOpener,
+): void => {
   toast.success("Pull request created", {
     description: `PR #${pullRequest.number}`,
     action: {

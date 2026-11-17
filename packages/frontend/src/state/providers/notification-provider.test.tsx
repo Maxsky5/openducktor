@@ -15,7 +15,8 @@ import {
 } from "@openducktor/frontend-core/notifications/notification-runtime.test-support";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { ShellPlatformContext } from "@/lib/shell-platform";
 import { type NotificationBridge } from "@openducktor/frontend-core/platform/notification-bridge";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
@@ -42,7 +43,7 @@ test("startup feedback suppresses only its in-app Started toast through publicat
   let onFrame: Parameters<HostConnection["subscribeNotificationStream"]>[1] = () => {};
   let onOccurrence: Parameters<NotificationBridge["subscribeOccurrences"]>[0] = () => {};
   let sequence = 0;
-  configureShellBridge({
+  const shellPlatform = {
     ...createUnavailableShellBridge(),
     notifications: createBridge({
       showOsNotification,
@@ -55,7 +56,7 @@ test("startup feedback suppresses only its in-app Started toast through publicat
         return { occurrence, settings: selectedSettings };
       },
     }),
-  });
+  };
   const connection = createTestClientConnection({
     host: createTestHostConnection({
       subscribeNotificationStream: async (_input, listener) => {
@@ -79,11 +80,13 @@ test("startup feedback suppresses only its in-app Started toast through publicat
   const record = createWorkspaceRecordFixture();
   workspace.workspaces = [record];
   const wrapper = ({ children }: PropsWithChildren) => (
-    <ClientConnectionProvider connection={connection}>
-      <WorkspaceStateContext value={workspace}>
-        <NotificationProvider>{children}</NotificationProvider>
-      </WorkspaceStateContext>
-    </ClientConnectionProvider>
+    <ShellPlatformContext value={shellPlatform}>
+      <ClientConnectionProvider connection={connection}>
+        <WorkspaceStateContext value={workspace}>
+          <NotificationProvider>{children}</NotificationProvider>
+        </WorkspaceStateContext>
+      </ClientConnectionProvider>
+    </ShellPlatformContext>
   );
   const hook = createHookHarness(useNotificationContext, undefined, { wrapper });
   try {
@@ -118,7 +121,6 @@ test("startup feedback suppresses only its in-app Started toast through publicat
     for (const [request] of showOsNotification.mock.calls) toast.dismiss(request.occurrenceId);
     await hook.unmount();
     await connection.dispose();
-    configureShellBridge(createUnavailableShellBridge());
     playSound.mockRestore();
   }
 });
@@ -231,7 +233,7 @@ const createHarness = (
   let onOccurrence: Parameters<NotificationBridge["subscribeOccurrences"]>[0] | undefined;
   let onFrame: Parameters<HostConnection["subscribeNotificationStream"]>[1] | undefined;
   let onStreamFailure: Parameters<HostConnection["subscribeNotificationStream"]>[2] | undefined;
-  configureShellBridge({
+  const shellPlatform = {
     ...createUnavailableShellBridge(),
     notifications: createBridge({
       showOsNotification,
@@ -250,7 +252,7 @@ const createHarness = (
         return () => {};
       },
     }),
-  });
+  };
   const connection = createTestClientConnection({
     host: createTestHostConnection({
       subscribeNotificationStream: async (_input, listener, onFailure) => {
@@ -262,11 +264,13 @@ const createHarness = (
   });
   const workspace = createWorkspaceState();
   const wrapper = ({ children }: PropsWithChildren) => (
-    <ClientConnectionProvider connection={connection}>
-      <WorkspaceStateContext.Provider value={workspace}>
-        <NotificationProvider>{children}</NotificationProvider>
-      </WorkspaceStateContext.Provider>
-    </ClientConnectionProvider>
+    <ShellPlatformContext value={shellPlatform}>
+      <ClientConnectionProvider connection={connection}>
+        <WorkspaceStateContext.Provider value={workspace}>
+          <NotificationProvider>{children}</NotificationProvider>
+        </WorkspaceStateContext.Provider>
+      </ClientConnectionProvider>
+    </ShellPlatformContext>
   );
   const hook = createHookHarness(useNotificationContext, undefined, {
     wrapper,
@@ -299,12 +303,8 @@ const createHarness = (
       });
     },
     async close(): Promise<void> {
-      try {
-        await hook.unmount();
-        await connection.dispose();
-      } finally {
-        configureShellBridge(createUnavailableShellBridge());
-      }
+      await hook.unmount();
+      await connection.dispose();
     },
   };
 };

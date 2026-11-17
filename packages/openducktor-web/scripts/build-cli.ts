@@ -5,6 +5,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { markExecutable, runCommand } from "@openducktor/build-tools";
+import {
+  type SqliteMigrationCopyPlan,
+  sqliteMigrationCopyPlans,
+} from "@openducktor/host/sqlite-migration-assets";
 import { Effect } from "effect";
 import {
   errorMessage,
@@ -14,31 +18,13 @@ import {
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
-const workspaceRoot = resolve(packageRoot, "../..");
 const outputPath = join(packageRoot, "dist", "cli.js");
 const execFileAsync = promisify(execFile);
 
-export type WebSqliteMigrationCopyPlan = {
-  sourceDirectory: string;
-  targetDirectory: string;
-};
-
-export const resolveWebSqliteMigrationCopyPlans = ({
-  packageRoot,
-  workspaceRoot,
-}: {
-  packageRoot: string;
-  workspaceRoot: string;
-}): WebSqliteMigrationCopyPlan[] =>
-  ["drizzle", "drizzle-host"].map((folder) => ({
-    sourceDirectory: join(workspaceRoot, "packages", "host", "src", "adapters", "sqlite", folder),
-    targetDirectory: join(packageRoot, "dist", folder),
-  }));
-
-export const copyWebSqliteMigrationsEffect = ({
+const copyWebSqliteMigrationsEffect = ({
   sourceDirectory,
   targetDirectory,
-}: WebSqliteMigrationCopyPlan): Effect.Effect<void, WebDependencyError> =>
+}: SqliteMigrationCopyPlan): Effect.Effect<void, WebDependencyError> =>
   Effect.tryPromise({
     try: () => cp(sourceDirectory, targetDirectory, { force: true, recursive: true }),
     catch: (cause) =>
@@ -50,9 +36,6 @@ export const copyWebSqliteMigrationsEffect = ({
         details: { sourceDirectory, targetDirectory },
       }),
   });
-
-export const copyWebSqliteMigrations = (input: WebSqliteMigrationCopyPlan): Promise<void> =>
-  runWebBoundary(copyWebSqliteMigrationsEffect(input));
 
 const CLI_BUILD_COMMAND = [
   "bun",
@@ -132,7 +115,7 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
         }),
     });
     yield* Effect.forEach(
-      resolveWebSqliteMigrationCopyPlans({ packageRoot, workspaceRoot }),
+      sqliteMigrationCopyPlans(dirname(outputPath)),
       copyWebSqliteMigrationsEffect,
       { discard: true },
     );

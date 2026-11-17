@@ -46,10 +46,8 @@ import {
 } from "./codex-live-session-acceptance";
 import { toCodexForkRequest, toCodexSendRequest } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
-import {
-  requireCodexStdioRuntime,
-  toCodexLiveSessionRef,
-} from "./codex-live-session-runtime-guards";
+import { requireCodexStdioRuntime } from "./codex-live-session-runtime-guards";
+import { toLiveSessionRef } from "./live-session-ref";
 export type {
   CodexLiveSessionAdapterPreparer,
   CreateCodexLiveSessionAdapterPreparerInput,
@@ -208,7 +206,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
           });
       // A failure after Codex admitted the message keeps the message accepted.
       const messageError = (operation: string, input: AgentSessionLiveRef) => (cause: unknown) =>
-        toCodexMessageSendError(cause, toCodexLiveSessionRef(input)) ??
+        toCodexMessageSendError(cause, toLiveSessionRef(input)) ??
         sessionError(operation, input.externalSessionId)(cause);
       const goals = createCodexGoalControls({
         controller,
@@ -357,7 +355,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
                 Effect.flatMap((event) =>
                   refreshAfterAcceptedCodexMessage(
                     event,
-                    toCodexLiveSessionRef(input),
+                    toLiveSessionRef(input),
                     refreshProjection,
                   ).pipe(Effect.asVoid),
                 ),
@@ -373,7 +371,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
                 catch: sessionError("codex-live-session.reply-question", input.externalSessionId),
               }).pipe(
                 Effect.flatMap((event) =>
-                  refreshProjection([{ ...event, sessionRef: toCodexLiveSessionRef(input) }]),
+                  refreshProjection([{ ...event, sessionRef: toLiveSessionRef(input) }]),
                 ),
               ),
         settleRuntimeTranscript: images.settleRuntimeTranscript,
@@ -426,7 +424,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
             Effect.mapError((cause) =>
               toAgentSessionResumeError(
                 cause,
-                toCodexLiveSessionRef(input),
+                toLiveSessionRef(input),
                 "codex-live-session.continue-interrupted-turn",
               ),
             ),
@@ -461,7 +459,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
               ),
             ),
             Effect.flatMap((value) =>
-              publishAcceptedCodexMessage(value, toCodexLiveSessionRef(input), refreshProjection),
+              publishAcceptedCodexMessage(value, toLiveSessionRef(input), refreshProjection),
             ),
           ),
         controlGoal: goals.controlGoal,
@@ -480,10 +478,8 @@ export const createCodexLiveSessionAdapterPreparer = ({
             catch: sessionError("codex-live-session.update-session-model", input.externalSessionId),
           }).pipe(Effect.tap(() => refreshProjection())),
         updateSessionTitle: (input) =>
-          runTitleUpdate(
-            "codex-live-session.update-session-title",
-            toCodexLiveSessionRef(input),
-            () => controller.updateSessionTitle(input),
+          runTitleUpdate("codex-live-session.update-session-title", toLiveSessionRef(input), () =>
+            controller.updateSessionTitle(input),
           ),
         stopSession: (input) =>
           goals.stopTurn(input).pipe(Effect.flatMap(() => finishSession(input, "stop"))),

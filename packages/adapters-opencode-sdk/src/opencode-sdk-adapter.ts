@@ -1,9 +1,3 @@
-import {
-  assertAgentWorkStartCurrent,
-  type AgentWorkStartOptions,
-  interruptedTurnResumeError,
-} from "@openducktor/core";
-import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
@@ -28,6 +22,10 @@ import {
   agentSessionRefsEqual,
   agentSessionScopesEqual,
   assertAgentRuntimePolicyBinding,
+  assertAgentWorkStartCurrent,
+  detectAgentFileReferenceKind,
+  interruptedTurnResumeError,
+  type AgentWorkStartOptions,
   type StartAgentSessionInput,
   type ResumeAgentSessionInput,
   type ForkAgentSessionInput,

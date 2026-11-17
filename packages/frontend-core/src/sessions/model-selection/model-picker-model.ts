@@ -5,8 +5,8 @@ import {
   type RuntimeDescriptor,
   type RuntimeKind,
 } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
-import { resolveSavedModelAlias } from "../../lib/model-catalog-selection";
+import { type AgentModelCatalog, resolveSavedModelAlias } from "@openducktor/core";
+
 import type { RuntimeModelCatalogResource } from "../../queries/use-runtime-model-catalogs";
 
 export type ModelPickerValue = AgentModelFavorite;

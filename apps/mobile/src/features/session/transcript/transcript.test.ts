@@ -10,7 +10,6 @@ import {
   buildMessage,
   buildSession,
 } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
-import { SYSTEM_PROMPT_PREFIX } from "@openducktor/frontend-core/sessions/messages/message-formatting";
 import type { AgentChatMessage } from "@openducktor/frontend-core/types/agent-orchestrator";
 import {
   initialTranscriptFollowState,
@@ -175,7 +174,7 @@ describe("transcript rows", () => {
   });
 
   test("leave out the system prompt and keep instruction updates", () => {
-    const prompt = buildMessage("system", `${SYSTEM_PROMPT_PREFIX}\nYou are the Builder.`, {
+    const prompt = buildMessage("system", "System prompt:\n\n\nYou are the Builder.", {
       id: "p1",
     });
     const update = buildMessage("system", "The workspace has new instructions.", { id: "i1" });

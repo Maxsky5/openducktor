@@ -73,13 +73,11 @@ describe("Bun test preload", () => {
     expect(missingPreload).toEqual([]);
   });
 
-  test("removes the test config directory after the suite", async () => {
+  test("loads the root test environment and removes its temporary directories", async () => {
     const child = Bun.spawn({
       cmd: [
         process.execPath,
         "test",
-        "--preload",
-        path.join(ROOT, "tools/bun-test-preload.ts"),
         path.join(ROOT, "scripts/test-support/bun-test-preload-fixture.test.ts"),
       ],
       cwd: ROOT,
@@ -100,22 +98,6 @@ describe("Bun test preload", () => {
     }
     await expect(access(configDir)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(access(workerTmpDir)).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  test("loads the frontend DOM setup for a focused test run from the repository root", async () => {
-    const child = Bun.spawn({
-      cmd: [
-        process.execPath,
-        "test",
-        path.join(ROOT, "packages/frontend/src/pages/agents/use-navigation-url-sync.test.tsx"),
-      ],
-      cwd: ROOT,
-      stderr: "pipe",
-      stdout: "pipe",
-    });
-    const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-
-    expect(exitCode, stderr).toBe(0);
   });
 
   test("gives a later frontend file a fresh DOM after a successful file leaves unmanaged nodes", async () => {

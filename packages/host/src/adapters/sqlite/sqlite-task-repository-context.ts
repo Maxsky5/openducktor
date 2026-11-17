@@ -1,7 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { Context, Deferred, Effect } from "effect";
-import { normalizePathForComparison } from "../../domain/path-comparison";
 import { type WorkspaceAccess, workspaceAccessBlock } from "../../domain/workspace-access";
+import { workspaceMatchesScope, workspaceScopeMismatch } from "../../domain/workspace-scope";
 import {
   HostOperationError,
   HostValidationError,
@@ -122,15 +122,7 @@ const validateScopes = (session: HostDatabaseSession, scopes: readonly Workspace
     const byId = new Map(rows.map((row) => [row.workspaceId, row]));
     for (const scope of scopes) {
       const row = byId.get(scope.workspaceId);
-      if (
-        !row ||
-        normalizePathForComparison(row.repoPath) !== normalizePathForComparison(scope.repoPath)
-      )
-        return yield* new HostValidationError({
-          field: "workspaceId",
-          message:
-            "The workspace no longer matches this repository. Reload the workspace before retrying.",
-        });
+      if (!workspaceMatchesScope(scope, row)) return yield* workspaceScopeMismatch();
       const blocked = workspaceAccessBlock(
         scope.workspaceId,
         { closed: row.closed, removal: row.removal !== null },

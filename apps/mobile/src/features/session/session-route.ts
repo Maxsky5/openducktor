@@ -1,7 +1,7 @@
-import { runtimeKindSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { type RawRouteParams, routeParam } from "@/navigation/route-params";
+import { readRouteSessionIdentity } from "@/navigation/session-route-params";
 
 /** The session that a session route opens. */
 export type SessionRoute = {
@@ -18,27 +18,21 @@ export type SessionRouteResult = { ok: true; route: SessionRoute } | { ok: false
 /** Reads the session route params. A link without the full session identity cannot open. */
 export const readSessionRoute = (raw: RawRouteParams): SessionRouteResult => {
   const workspaceId = routeParam(raw["workspaceId"]);
-  const externalSessionId = routeParam(raw["externalSessionId"]);
-  const workingDirectory = routeParam(raw["workingDirectory"]);
-  const runtimeKindText = routeParam(raw["runtimeKind"]);
-  if (!workspaceId || !externalSessionId || !workingDirectory || !runtimeKindText) {
+  const session = readRouteSessionIdentity(raw);
+  if (workspaceId === null || !session.ok) {
     return {
       ok: false,
-      message: "This link does not name a full session. Open the session again from its list.",
-    };
-  }
-  const runtimeKind = runtimeKindSchema.safeParse(runtimeKindText);
-  if (!runtimeKind.success) {
-    return {
-      ok: false,
-      message: `This app does not know the runtime "${runtimeKindText}". Update the app, then open the session again.`,
+      message:
+        workspaceId !== null && !session.ok && session.unknownRuntime
+          ? `This app does not know the runtime "${session.unknownRuntime}". Update the app, then open the session again.`
+          : "This link does not name a full session. Open the session again from its list.",
     };
   }
   return {
     ok: true,
     route: {
       workspaceId,
-      identity: { externalSessionId, runtimeKind: runtimeKind.data, workingDirectory },
+      identity: session.identity,
       readOnly: routeParam(raw["readOnly"]) === "1",
       focusPendingInput: routeParam(raw["focus"]) === "pending-input",
     },

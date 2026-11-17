@@ -6,13 +6,14 @@ import {
   hostEventsOpenedSchema,
   REMOTE_SOCKET_AUTHORIZATION_PREFIX,
   splitHostChannelFrame,
+  taskEventLeaseSchema,
 } from "@openducktor/contracts";
-import { createHostChannelSocketData } from "@openducktor/remote-host/host-channel";
 import { BufferedHostEventStream } from "@openducktor/remote-host/host-event-bus";
 import { createTaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
 import { Effect } from "effect";
 import { request as httpRequest } from "node:http";
 import WebSocket from "ws";
+import type { z } from "zod";
 import { createNotificationStream } from "../../../../packages/host/src/application/notifications/notification-stream";
 import { createTaskEventStream } from "../../../../packages/host/src/events/task-event-stream";
 import { resolveElectronRendererSocketOrigins } from "./electron-loopback-cors-policy";
@@ -31,31 +32,29 @@ afterEach(async () => {
 /** A started desktop channel server with real host event, notification, and task streams. */
 const startServer = async (
   rendererOrigins: ReadonlySet<string> = new Set([RENDERER_ORIGIN]),
+  taskEvents = createTaskEventStream({ reporter: { report: () => {} } }),
 ): Promise<ElectronHostChannelServer> => {
   const notifications = createNotificationStream();
   const leases = createTaskEventLeaseManager({
-    taskEventStream: createTaskEventStream({ reporter: { report: () => {} } }),
+    taskEventStream: taskEvents,
     reportDeliveryFailure: () => {},
   });
   const server = await startElectronHostChannelServer({
     rendererOrigins,
     onError: () => {},
-    createChannel: () =>
-      createHostChannelSocketData({
-        hostEvents: new BufferedHostEventStream(),
-        notifications,
-        leases,
-        ownedLeases: new Set(),
-        invoke: async () => ({ result: null }),
-        refusal: () => null,
-        reportFailure: () => {},
-      }),
+    channel: {
+      hostEvents: new BufferedHostEventStream(),
+      notifications,
+      leases,
+      invoke: async () => ({ result: null }),
+      refusal: () => null,
+      reportFailure: () => {},
+    },
   });
   let stopped = false;
   const stop = server.stop;
   cleanups.push(async () => {
     if (!stopped) await stop();
-    leases.dispose();
     await Effect.runPromise(notifications.dispose());
   });
   return {
@@ -155,27 +154,37 @@ test("refuses a socket without the renderer origin, loopback host, token, or rou
   expect(await refusalStatus(url, validHeaders(server), "/terminal")).toBe(404);
 });
 
-test("answers events.open on an authorized socket and closes it on stop", async () => {
-  const server = await startServer();
+test("answers an authorized socket and disposes its task subscription on stop", async () => {
+  const hostSubscriptionId = crypto.randomUUID();
+  const taskEvents = createTaskEventStream({
+    reporter: { report: () => {} },
+    subscriptionIdFactory: () => hostSubscriptionId,
+  });
+  const server = await startServer(undefined, taskEvents);
   const socket = new WebSocket(
     server.endpoint.url,
     [HOST_CHANNEL_SUBPROTOCOL, authorization(server.endpoint.token)],
     { headers: { origin: RENDERER_ORIGIN } },
   );
   const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
-  const result = new Promise<unknown>((resolve) =>
-    socket.on("message", (data) => {
-      const { header, body } = splitHostChannelFrame(frameBytes(data));
-      const message = hostChannelMessageSchema.parse(JSON.parse(header));
-      if (message.type === "result" && body) resolve(JSON.parse(new TextDecoder().decode(body)));
-    }),
-  );
+  const receiveResult = <Result>(id: number, schema: z.ZodType<Result>): Promise<Result> =>
+    new Promise((resolve) => {
+      const onMessage = (data: WebSocket.RawData) => {
+        const { header, body } = splitHostChannelFrame(frameBytes(data));
+        const message = hostChannelMessageSchema.parse(JSON.parse(header));
+        if (message.type !== "result" || message.id !== id || !body) return;
+        socket.off("message", onMessage);
+        resolve(schema.parse(JSON.parse(new TextDecoder().decode(body))));
+      };
+      socket.on("message", onMessage);
+    });
   await new Promise<void>((resolve, reject) => {
     socket.once("open", () => resolve());
     socket.once("error", reject);
   });
   expect(socket.protocol).toBe(HOST_CHANNEL_SUBPROTOCOL);
 
+  const opened = receiveResult(0, hostEventsOpenedSchema);
   socket.send(
     encodeHostChannelFrame({
       type: "request",
@@ -185,13 +194,28 @@ test("answers events.open on an authorized socket and closes it on stop", async 
       notificationCursor: null,
     }),
   );
-  expect(hostEventsOpenedSchema.parse(await result)).toMatchObject({
+  expect(await opened).toMatchObject({
     hostChanged: false,
     gaps: [],
   });
 
+  const cursor = taskEvents.cursor();
+  const subscribed = receiveResult(1, taskEventLeaseSchema);
+  socket.send(
+    encodeHostChannelFrame({
+      type: "request",
+      id: 1,
+      method: "task_events.subscribe",
+      input: { cursor },
+    }),
+  );
+  expect((await subscribed).replayBoundary).toEqual(cursor);
+  const acknowledgement = { subscriptionId: hostSubscriptionId, cursor };
+  taskEvents.acknowledge(acknowledgement);
+
   await server.stop();
   await closed;
+  expect(() => taskEvents.acknowledge(acknowledgement)).toThrow("unknown subscription");
 });
 
 test("accepts the file origin of a packaged window and refuses the null fetch origin", async () => {

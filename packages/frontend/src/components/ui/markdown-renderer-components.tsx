@@ -1,10 +1,10 @@
-import type { MouseEvent } from "react";
-import type { Components } from "react-markdown";
+import type { ComponentProps, MouseEvent } from "react";
+import type { Components, ExtraProps } from "react-markdown";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { CheckIcon } from "lucide-react";
 import { openClickedLink } from "@/lib/link-open";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import { CHECKBOX_CLASS_NAME } from "./checkbox";
 
@@ -18,9 +18,48 @@ const showOpenFailure = (description: string): void => {
   toast.error("Failed to open link", { description });
 };
 
-const openMarkdownUrl = (url: string): void => {
-  void openExternalUrl(url).catch((error) => showOpenFailure(errorMessage(error)));
-};
+function MarkdownLink({
+  node: _node,
+  children,
+  className,
+  href,
+  ...props
+}: ComponentProps<"a"> & ExtraProps) {
+  const openExternalUrl = useOpenExternalUrl();
+  // A click asks where the link opens, or opens it where its modifier keys choose.
+  const openLink = (event: MouseEvent<HTMLAnchorElement>): void => {
+    event.preventDefault();
+    if (!href) return;
+    const { x, y, width, height } = event.currentTarget.getBoundingClientRect();
+    void openClickedLink(href, event, { x, y, width, height }, openExternalUrl).catch((error) =>
+      showOpenFailure(errorMessage(error)),
+    );
+  };
+
+  return (
+    <a
+      {...props}
+      href={href}
+      target={undefined}
+      onClick={openLink}
+      onAuxClick={(event) => {
+        event.preventDefault();
+        if (event.button === 1) {
+          if (href) {
+            void openExternalUrl(href).catch((error) => showOpenFailure(errorMessage(error)));
+          }
+        }
+      }}
+      onContextMenu={(event) => event.preventDefault()}
+      className={cn(
+        "text-foreground underline decoration-muted-foreground underline-offset-2 transition hover:decoration-foreground",
+        className,
+      )}
+    >
+      {children}
+    </a>
+  );
+}
 
 const SHARED_COMPONENTS: Components = {
   // A GFM task item shows the look of the app checkbox. The Markdown source owns its state, so it
@@ -51,41 +90,7 @@ const SHARED_COMPONENTS: Components = {
       </span>
     );
   },
-  a: ({ node: _node, children, className, href, ...props }) => {
-    // A click asks where the link opens, or opens it where its modifier keys choose.
-    const openLink = (event: MouseEvent<HTMLAnchorElement>): void => {
-      event.preventDefault();
-      if (!href) return;
-      const { x, y, width, height } = event.currentTarget.getBoundingClientRect();
-      void openClickedLink(href, event, { x, y, width, height }).catch((error) =>
-        showOpenFailure(errorMessage(error)),
-      );
-    };
-
-    return (
-      <a
-        {...props}
-        href={href}
-        target={undefined}
-        onClick={openLink}
-        onAuxClick={(event) => {
-          event.preventDefault();
-          if (event.button === 1) {
-            if (href) {
-              openMarkdownUrl(href);
-            }
-          }
-        }}
-        onContextMenu={(event) => event.preventDefault()}
-        className={cn(
-          "text-foreground underline decoration-muted-foreground underline-offset-2 transition hover:decoration-foreground",
-          className,
-        )}
-      >
-        {children}
-      </a>
-    );
-  },
+  a: MarkdownLink,
 };
 
 const COMPACT_COMPONENTS: Components = {

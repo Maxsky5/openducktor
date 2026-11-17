@@ -25,13 +25,16 @@ import {
   type AgentToolResultContent,
 } from "@openducktor/contracts";
 import { readOpenCodeGoalKickoffObjective } from "./opencode-goals";
-import { AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX, type AgentEvent } from "@openducktor/core";
+import {
+  AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX,
+  type AgentEvent,
+  detectAgentFileReferenceKind,
+} from "@openducktor/core";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 import { deriveToolPreview } from "./tool-preview";
-import { detectAgentFileReferenceKind } from "./file-reference-utils";
 import type { OpencodeSessionContextUsage } from "./opencode-session-runtime-signals";
 import {
   isFailedShellExit,

@@ -1,10 +1,10 @@
-import { runtimeKindSchema } from "@openducktor/contracts";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { Stack } from "expo-router";
 import { type ReactElement, useMemo, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 import { type RawRouteParams, routeParam } from "@/navigation/route-params";
+import { readRouteSessionIdentity } from "@/navigation/session-route-params";
 import { Screen } from "@/ui/screen";
 import { EmptyState } from "@/ui/states";
 import { createDisclosureStore, DisclosureStoreProvider } from "./rows/disclosure";
@@ -20,29 +20,14 @@ import {
 const TITLE = "Tool Call";
 
 /**
- * The key of the session of the call. The route names the session by its identity, because the
- * key encodes its parts and a route param comes back decoded.
- */
-const readSessionKey = (params: RawRouteParams): string | null => {
-  const externalSessionId = routeParam(params.externalSessionId);
-  const workingDirectory = routeParam(params.workingDirectory);
-  const runtimeKind = runtimeKindSchema.safeParse(routeParam(params.runtimeKind));
-  if (!externalSessionId || !workingDirectory || !runtimeKind.success) return null;
-  return agentSessionIdentityKey({
-    externalSessionId,
-    runtimeKind: runtimeKind.data,
-    workingDirectory,
-  });
-};
-
-/**
  * The tool call route: the details of one call of the session screen under it, as the desktop
  * tool details panel shows them. It is a pushed screen, so a swipe or Back returns to the
  * session. It follows the live message of the call, so a running command shows its output as the
  * runtime sends it.
  */
 export function ToolCallScreen({ params }: { params: RawRouteParams }): ReactElement {
-  const sessionKey = readSessionKey(params) ?? "";
+  const session = readRouteSessionIdentity(params);
+  const sessionKey = session.ok ? agentSessionIdentityKey(session.identity) : "";
   const messageId = routeParam(params.messageId) ?? "";
   const title = routeParam(params.title) ?? TITLE;
   const { context, message } = useToolCallSource(sessionKey, messageId);

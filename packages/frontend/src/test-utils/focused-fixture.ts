@@ -1,6 +1,11 @@
 import { createUnavailableShellBridge, type ShellBridge } from "@/lib/shell-bridge";
+import { ShellPlatformContext } from "@/lib/shell-platform";
+import { createElement, type ReactNode } from "react";
 import type { HostClient } from "@openducktor/host-client";
 import { createHostClientFixture } from "@openducktor/frontend-core/test-support/focused-fixture";
+
+export const withShellPlatform = (children: ReactNode, value: ShellBridge) =>
+  createElement(ShellPlatformContext, { value }, children);
 
 export { createHostClientFixture } from "@openducktor/frontend-core/test-support/focused-fixture";
 

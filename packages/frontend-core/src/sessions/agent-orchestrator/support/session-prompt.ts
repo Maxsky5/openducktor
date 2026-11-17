@@ -34,13 +34,12 @@ export type LoadSessionPromptContextInput = Pick<SessionPromptInput, "role" | "t
   loadPromptSettings: (workspaceId: string) => Promise<PromptSettings>;
 };
 
-export const SYSTEM_PROMPT_PREFIX = AGENT_SESSION_SYSTEM_PROMPT_PREFIX;
 const SYSTEM_PROMPT_MESSAGE_ID_PREFIX = "history:system-prompt:";
 
 export const isSessionSystemPromptMessage = (message: AgentChatMessage): boolean =>
   message.role === "system" &&
   (message.id.startsWith(SYSTEM_PROMPT_MESSAGE_ID_PREFIX) ||
-    message.content.startsWith(SYSTEM_PROMPT_PREFIX));
+    message.content.startsWith(AGENT_SESSION_SYSTEM_PROMPT_PREFIX));
 
 const buildSessionSystemPrompt = ({ role, task, promptSettings }: SessionPromptInput): string =>
   task.taskWorkflow.prompts.systemPrompt({
@@ -86,7 +85,7 @@ export const buildSessionHeaderMessages = ({
     {
       id: `history:system-prompt:${externalSessionId}`,
       role: "system",
-      content: `${SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
+      content: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
       timestamp: startedAt,
     },
   ];

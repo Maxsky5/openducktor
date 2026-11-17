@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import type { ShellBridge } from "./shell-bridge";
 import type { ResourceData, ResourceRead } from "../types/resource-source";
 import type { RemoteConnectionState } from "@openducktor/host-client/remote";
 
@@ -14,7 +15,8 @@ const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query
 const { useResourceSource } = await import("./use-resource-source");
 const { synchronizeConnectionState } =
   await import("@openducktor/frontend-core/recovery/state-recovery");
-const { configureShellBridge, createUnavailableShellBridge } = await import("./shell-bridge");
+const { createUnavailableShellBridge } = await import("./shell-bridge");
+const { ShellPlatformContext } = await import("./shell-platform");
 const allocations: string[] = [];
 const releases: string[] = [];
 URL.createObjectURL = () => {
@@ -96,7 +98,7 @@ for (const pending of [false, true]) {
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 let state: RemoteConnectionState = { status: "connected", generation: 1 };
 const listeners = new Set<(state: RemoteConnectionState) => void>();
-configureShellBridge({
+const shellPlatform: ShellBridge = {
   ...createUnavailableShellBridge(),
   remoteConnection: {
     readState: () => state,
@@ -110,7 +112,7 @@ configureShellBridge({
     disconnect: async () => {},
     retry: async () => {},
   },
-});
+};
 let reads = 0;
 const read: ResourceRead = async () => {
   reads += 1;
@@ -118,9 +120,11 @@ const read: ResourceRead = async () => {
   return { kind: "blob", blob: new Blob(["image"], { type: "image/png" }) };
 };
 const view = render(
-  <QueryClientProvider client={client}>
-    <Source id="retry" read={read} />
-  </QueryClientProvider>,
+  <ShellPlatformContext value={shellPlatform}>
+    <QueryClientProvider client={client}>
+      <Source id="retry" read={read} />
+    </QueryClientProvider>
+  </ShellPlatformContext>,
 );
 try {
   await waitFor(() =>
@@ -142,5 +146,4 @@ try {
 } finally {
   view.unmount();
   client.clear();
-  configureShellBridge(createUnavailableShellBridge());
 }

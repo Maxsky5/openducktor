@@ -1,4 +1,7 @@
-import { formatAgentSessionActivityStateLabel } from "./agent-session-activity-state";
+import {
+  formatAgentSessionActivityStateLabel,
+  isAgentSessionActivityActive,
+} from "./agent-session-activity-state";
 import { agentSessionIdentityKey } from "./agent-session-identity";
 import type { AgentSessionIdentity, AgentSessionState } from "../types/agent-orchestrator";
 import type { AgentSessionActivityState } from "../types/agent-session-activity";
@@ -7,9 +10,36 @@ import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
 export type AgentSessionRecencySummary = AgentSessionIdentity &
   Pick<AgentSessionState, "startedAt">;
 
-export type AgentSessionOptionSummary = AgentSessionRecencySummary & { role: AgentRole } & {
+type TaskSessionOption = AgentSessionRecencySummary & { role: AgentRole };
+
+export type AgentSessionOptionSummary = TaskSessionOption & {
   activityState: AgentSessionActivityState;
   statusUnavailableReason?: AgentSessionState["statusUnavailableReason"];
+};
+
+/** Prefer the latest active session, then the latest saved session. Ties keep the input order. */
+export const resolveLatestTaskSession = (
+  live: readonly AgentSessionOptionSummary[],
+  saved: readonly TaskSessionOption[],
+): TaskSessionOption | null => {
+  let latestActive: TaskSessionOption | null = null;
+  for (const session of live) {
+    if (
+      isAgentSessionActivityActive(session.activityState, session.statusUnavailableReason) &&
+      (!latestActive || Date.parse(session.startedAt) > Date.parse(latestActive.startedAt))
+    ) {
+      latestActive = session;
+    }
+  }
+  if (latestActive) return latestActive;
+
+  let latestSaved: TaskSessionOption | null = null;
+  for (const session of saved) {
+    if (!latestSaved || Date.parse(session.startedAt) > Date.parse(latestSaved.startedAt)) {
+      latestSaved = session;
+    }
+  }
+  return latestSaved;
 };
 
 export const compareAgentSessionRecency = (

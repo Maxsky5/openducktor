@@ -1,6 +1,5 @@
 import { sqliteValues } from "./sqlite-parameters";
 import {
-  gitTargetBranchSchema,
   type TaskArtifactSummary,
   TASK_CLOSED_STATE,
   taskRecordDataSchema,
@@ -11,7 +10,7 @@ import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
 import { normalizeLabels } from "../../domain/task/task-labels";
 import type { TaskRecord, TaskStoreListTasksInput } from "../../ports/task-repository-ports";
-import { validateWithSchema } from "./sqlite-task-store-validation";
+import { taskTargetBranchFromRow, validateWithSchema } from "./sqlite-task-store-validation";
 import { artifactSummariesByTaskId } from "./sqlite-task-workflow-artifact-queries";
 import { taskCardRows, type TaskCardRow } from "./sqlite-task-queries";
 import type { SqliteTaskStoreReadError } from "./sqlite-task-store-errors";
@@ -111,15 +110,7 @@ const rowToTaskRecord = (
   artifactSummary: TaskArtifactSummary | undefined,
 ): Effect.Effect<TaskRecord, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
-    const targetBranch =
-      row.targetBranch === null
-        ? undefined
-        : yield* validateWithSchema(
-            gitTargetBranchSchema,
-            { branch: row.targetBranch, remote: row.targetRemote ?? undefined },
-            "target branch",
-            { workspaceId: row.workspaceId, taskId: row.id },
-          );
+    const targetBranch = yield* taskTargetBranchFromRow(row, row.workspaceId);
     const taskCard = {
       createdAt: row.createdAt.toISOString(),
       description: row.description ?? "",

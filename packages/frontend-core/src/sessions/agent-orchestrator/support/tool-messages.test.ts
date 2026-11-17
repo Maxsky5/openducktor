@@ -1,4 +1,4 @@
-import { normalizeSessionErrorMessage } from "../../../lib/session-error-message";
+import { normalizeSessionErrorMessage } from "@openducktor/core";
 import { describe, expect, test } from "bun:test";
 import { createSessionMessagesFixture } from "../../../test-support/session-message-test-helpers";
 import type { AgentChatMessage } from "../../../types/agent-orchestrator";

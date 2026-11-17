@@ -2,6 +2,7 @@ import type {
   TaskChangeSet,
   TaskArtifactChange,
   TaskEventCursor,
+  TaskEventStatusChange,
   WorkspaceRef,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
@@ -16,16 +17,15 @@ export const createMutationPublisher = ({
 }: {
   taskSyncService: Pick<TaskSyncService, "runStatusMutation" | "publishTasksUpdated">;
 }) => {
-  const publish = <A>(
+  const runMutation = <A, B>(
     operation: TaskMutationOperation,
     workspace: WorkspaceRef,
-    changes: TaskChangeSet,
     mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
-    options: {
-      changes?: (result: A) => TaskChangeSet;
-      artifactChanges?: (result: A) => TaskArtifactChange[];
-    } = {},
-  ): Effect.Effect<{ value: A; cursor: TaskEventCursor }, TaskServiceError> =>
+    publishSuccess: (
+      value: A,
+      statusChanges: TaskEventStatusChange[],
+    ) => Effect.Effect<B, TaskServiceError>,
+  ): Effect.Effect<B, TaskServiceError> =>
     Effect.suspend(() =>
       taskSyncService.runStatusMutation(
         workspace,
@@ -47,18 +47,49 @@ export const createMutationPublisher = ({
               }
               return yield* Effect.fail(result.failure);
             }
-            const cursor = yield* taskSyncService.publishTasksUpdated(
-              workspace,
-              options.changes?.(result.success) ?? changes,
-              operation,
-              statusChanges,
-              undefined,
-              options.artifactChanges?.(result.success),
-            );
-            return { value: result.success, cursor };
+            return yield* publishSuccess(result.success, statusChanges);
           }),
       ),
     );
 
-  return publish;
+  return {
+    publish<A>(
+      operation: TaskMutationOperation,
+      workspace: WorkspaceRef,
+      changes: TaskChangeSet,
+      mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
+      options: {
+        changes?: (result: A) => TaskChangeSet;
+        artifactChanges?: (result: A) => TaskArtifactChange[];
+      } = {},
+    ): Effect.Effect<{ value: A; cursor: TaskEventCursor }, TaskServiceError> {
+      return runMutation(operation, workspace, mutation, (value, statusChanges) =>
+        taskSyncService
+          .publishTasksUpdated(
+            workspace,
+            options.changes?.(value) ?? changes,
+            operation,
+            statusChanges,
+            undefined,
+            options.artifactChanges?.(value),
+          )
+          .pipe(Effect.map((cursor) => ({ value, cursor }))),
+      );
+    },
+    publishWhen<A>(
+      operation: TaskMutationOperation,
+      workspace: WorkspaceRef,
+      changes: TaskChangeSet,
+      mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
+      mutated: (value: A) => boolean,
+    ): Effect.Effect<A, TaskServiceError> {
+      return runMutation(operation, workspace, mutation, (value, statusChanges) =>
+        mutated(value)
+          ? taskSyncService
+              .publishTasksUpdated(workspace, changes, operation, statusChanges)
+              .pipe(Effect.as(value))
+          : Effect.succeed(value),
+      );
+    },
+  };
 };

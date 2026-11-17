@@ -1,30 +1,20 @@
-import { getScopedRepoConfig } from "./scoped-repo-config";
-import type { GitTargetBranch } from "@openducktor/contracts";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import type { TaskWorkflow, TaskWorkflowRole } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../../domain/path-comparison";
-import { canonicalTargetBranch, checkoutBranch } from "../../../domain/task";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
-import type { GitPort, GitPortError } from "../../../ports/git-port";
+import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../../ports/system-command-port";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
-import type { TaskStorePort, TaskRecord } from "../../../ports/task-repository-ports";
+import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import type { WorktreeFilePort } from "../../../ports/worktree-file-port";
 import { requireWorktreeFiles } from "../../git/git-service-inputs";
 import type { RuntimeDefinitionsService } from "../../runtimes/runtime-definitions-service";
-import type {
-  WorkspaceSettingsError,
-  WorkspaceSettingsService,
-} from "../../workspaces/workspace-settings-service";
+import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskTerminalCleanupPort } from "../task-service";
 import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
-import type {
-  TaskWorktreeService,
-  TaskWorktreeServiceError,
-} from "../worktrees/task-worktree-service";
-import type { requireBuildStartDependencies } from "./required-task-dependencies";
-import { startWorktreeSessionHint } from "./task-workflow-events";
+import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { loadRemoveWorktreeOnClose } from "./task-workflow-helpers";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
 import {
@@ -35,11 +25,6 @@ import {
 import type { TaskWorktreeOwnerReader } from "../../../ports/task-worktree-owner-port";
 import { acquireRemovableWorktrees } from "./task-worktree-owner-guard";
 
-type TaskWorktreeCleanupError =
-  | GitPortError
-  | HostValidationError
-  | TaskWorktreeServiceError
-  | WorkspaceSettingsError;
 const canonicalPathPlatform = process.platform === "win32" ? "windows" : "posix";
 export const findLatestCleanupTarget = (
   dependencies: {
@@ -56,36 +41,21 @@ export const findLatestCleanupTarget = (
   workspaceId: string,
 ) =>
   Effect.gen(function* () {
-    const candidates: Array<{
-      workingDirectory: string;
-      startedAt: string;
-    }> = [];
     const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
       workspaceId,
       repoPath,
       taskId,
     });
-    if (taskWorktree) {
-      candidates.push({
-        workingDirectory: taskWorktree.workingDirectory,
-        startedAt: "\uffff",
-      });
-    }
     const metadata = yield* taskStore.getTaskMetadata({ workspaceId, repoPath, taskId });
-    candidates.push(
-      ...metadata.agentSessions
-        .filter((session) => dependencies.worktreeRoles.includes(session.role))
-        .map((session) => ({
-          workingDirectory: session.workingDirectory,
-          startedAt: session.startedAt,
-        })),
-    );
-    candidates.sort((left, right) => {
-      const startedAtComparison = Date.parse(right.startedAt) - Date.parse(left.startedAt);
-      return startedAtComparison === 0
-        ? right.workingDirectory.localeCompare(left.workingDirectory)
-        : startedAtComparison;
-    });
+    const sessions = metadata.agentSessions
+      .filter((session) => dependencies.worktreeRoles.includes(session.role))
+      .sort((left, right) => {
+        const startedAtComparison = Date.parse(right.startedAt) - Date.parse(left.startedAt);
+        return startedAtComparison === 0
+          ? right.workingDirectory.localeCompare(left.workingDirectory)
+          : startedAtComparison;
+      });
+    const candidates = taskWorktree ? [taskWorktree, ...sessions] : sessions;
     for (const candidate of candidates) {
       const workingDirectory = candidate.workingDirectory.trim();
       if (
@@ -206,7 +176,6 @@ export const cleanupMergedTaskState = (
   workspaceId: string,
 ) =>
   Effect.gen(function* () {
-    // The task value wins, so the global setting is read only for a task without one.
     const removeWorktree =
       removeWorktreeOnClose ?? (yield* loadRemoveWorktreeOnClose(dependencies.settingsConfig));
     if (!removeWorktree) {
@@ -285,72 +254,6 @@ export const cleanupMergedTaskState = (
     ));
     yield* dependencies.gitPort.deleteLocalBranch(repoPath, sourceBranch, forceDelete);
   });
-export const effectiveTargetBranchForTask = (
-  workspaceSettingsService: WorkspaceSettingsService,
-  task: TaskRecord,
-  repoPath: string,
-  workspaceId: string,
-) =>
-  Effect.gen(function* () {
-    if (task.targetBranchError) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "targetBranch",
-          message: task.targetBranchError,
-          details: { repoPath, taskId: task.id },
-        }),
-      );
-    }
-    if (task.targetBranch) {
-      return task.targetBranch;
-    }
-    const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, {
-      workspaceId,
-      repoPath,
-    });
-    return repoConfig.defaultTargetBranch;
-  });
-export const resolveBuildStartPoint = (
-  dependencies: Pick<ReturnType<typeof requireBuildStartDependencies>, "gitPort">,
-  repoPath: string,
-  targetBranch: GitTargetBranch,
-  allowLocalBranchFallback: boolean,
-): Effect.Effect<
-  {
-    reference: string;
-    upstreamRemote: string | null;
-  },
-  GitPortError | HostValidationError
-> =>
-  Effect.gen(function* () {
-    const configuredTargetBranch = yield* Effect.try({
-      try: () => canonicalTargetBranch(targetBranch),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
-    if (yield* dependencies.gitPort.referenceExists(repoPath, configuredTargetBranch)) {
-      return {
-        reference: configuredTargetBranch,
-        upstreamRemote: targetBranch.remote?.trim() || null,
-      };
-    }
-    if (allowLocalBranchFallback && targetBranch.remote?.trim() === "origin") {
-      const localBranch = checkoutBranch(targetBranch);
-      if (yield* dependencies.gitPort.referenceExists(repoPath, localBranch)) {
-        return { reference: localBranch, upstreamRemote: null };
-      }
-    }
-    return yield* Effect.fail(
-      new HostValidationError({
-        field: "targetBranch",
-        message: `Target branch ${configuredTargetBranch} does not exist in this repository. Choose an existing target branch, or fetch this branch first.`,
-        details: { repoPath, targetBranch: configuredTargetBranch },
-      }),
-    );
-  });
 export const resolveRuntimeDescriptorForTaskSession = (
   runtimeDefinitionsService: RuntimeDefinitionsService,
   runtimeKind: string,
@@ -393,79 +296,3 @@ export const resolveRuntimeDescriptorForTaskSession = (
     }
     return descriptor;
   });
-export const loadTaskBranchCleanup = (
-  dependencies: {
-    gitPort: GitPort;
-    taskWorktreeService: TaskWorktreeService;
-    workspaceSettingsService: WorkspaceSettingsService;
-  },
-  workflow: TaskWorkflow,
-  task: TaskRecord,
-  repoPath: string,
-  taskId: string,
-  operationLabel: string,
-  workspaceId: string,
-): Effect.Effect<
-  {
-    sourceBranch: string;
-    targetBranch: string;
-  },
-  TaskWorktreeCleanupError
-> =>
-  Effect.gen(function* () {
-    const taskWorktree = yield* dependencies.taskWorktreeService.getTaskWorktree({
-      workspaceId,
-      repoPath,
-      taskId,
-    });
-    if (!taskWorktree) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "taskId",
-          message: `${operationLabel} requires a task worktree for task ${taskId}. ${startWorktreeSessionHint(workflow)}`,
-          details: { repoPath, taskId },
-        }),
-      );
-    }
-    const currentBranch = yield* dependencies.gitPort.getCurrentBranch(
-      taskWorktree.workingDirectory,
-    );
-    if (currentBranch.detached) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "workingDirectory",
-          message: `${operationLabel} requires a task branch, but the task worktree is detached.`,
-          details: { workingDirectory: taskWorktree.workingDirectory },
-        }),
-      );
-    }
-    const sourceBranch = currentBranch.name?.trim();
-    if (!sourceBranch) {
-      return yield* Effect.fail(
-        new HostValidationError({
-          field: "workingDirectory",
-          message: `${operationLabel} requires a task branch name.`,
-          details: { workingDirectory: taskWorktree.workingDirectory },
-        }),
-      );
-    }
-    const targetBranch = yield* effectiveTargetBranchForTask(
-      dependencies.workspaceSettingsService,
-      task,
-      repoPath,
-      workspaceId,
-    );
-    const checkoutTarget = yield* Effect.try({
-      try: () => checkoutBranch(targetBranch),
-      catch: (cause) =>
-        new HostValidationError({
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
-    return { sourceBranch, targetBranch: checkoutTarget };
-  });
-export const canSkipRelinkedPullRequestCleanup = (message: string): boolean =>
-  message.includes("requires a task worktree for task") ||
-  message.includes("the task worktree is detached") ||
-  message.includes("requires a task branch name");

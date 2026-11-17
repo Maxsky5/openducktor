@@ -47,7 +47,9 @@ describe("OdtTaskStore", () => {
       { client },
     );
 
-    await expect(store.readTask({ taskId: "task-1" })).resolves.toEqual(summaryPayload);
+    await expect(store.callWorkspaceTask("odt_read_task", { taskId: "task-1" })).resolves.toEqual(
+      summaryPayload,
+    );
     expect(calls).toEqual([
       { toolName: "odt_read_task", workspaceId: "repo", input: { taskId: "task-1" } },
     ]);
@@ -77,7 +79,9 @@ describe("OdtTaskStore", () => {
       { client },
     );
 
-    await expect(store.readTaskAssets({ taskId: "task-1", assetIds })).resolves.toEqual(payload);
+    await expect(
+      store.callWorkspaceTask("odt_read_task_assets", { taskId: "task-1", assetIds }),
+    ).resolves.toEqual(payload);
     expect(calls).toEqual([
       {
         toolName: "odt_read_task_assets",
@@ -107,9 +111,9 @@ describe("OdtTaskStore", () => {
       { client },
     );
 
-    await expect(store.readTask({ workspaceId: "tool-repo", taskId: "task-1" })).resolves.toEqual(
-      summaryPayload,
-    );
+    await expect(
+      store.callWorkspaceTask("odt_read_task", { workspaceId: "tool-repo", taskId: "task-1" }),
+    ).resolves.toEqual(summaryPayload);
 
     expect(calls).toEqual([
       {
@@ -138,7 +142,7 @@ describe("OdtTaskStore", () => {
     const store = new OdtTaskStore({ hostUrl: "http://127.0.0.1:14327" }, { client });
 
     await expect(
-      store.createTask({
+      store.callWorkspaceTask("odt_create_task", {
         workspaceId: "repo",
         title: "Bridge task",
         issueType: "task",
@@ -173,7 +177,7 @@ describe("OdtTaskStore", () => {
 
     const store = new OdtTaskStore({ hostUrl: "http://127.0.0.1:14327" }, { client });
 
-    await expect(store.searchTasks({ status: "open" })).rejects.toThrow(
+    await expect(store.callWorkspaceTask("odt_search_tasks", { status: "open" })).rejects.toThrow(
       "Missing workspaceId for workspace-scoped tool 'odt_search_tasks'",
     );
   });
@@ -210,7 +214,7 @@ describe("OdtTaskStore", () => {
 
     const store = new OdtTaskStore({ hostUrl: "http://127.0.0.1:14327" }, { client });
 
-    await expect(store.getWorkspaces({})).resolves.toEqual({
+    await expect(store.getWorkspaces()).resolves.toEqual({
       workspaces: [
         {
           workspaceId: "repo",

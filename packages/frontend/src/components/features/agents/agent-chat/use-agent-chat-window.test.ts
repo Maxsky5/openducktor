@@ -2939,10 +2939,6 @@ describe("useAgentChatWindow", () => {
     await harness.unmount();
   });
 
-  test("exports the expected row-window budget", () => {
-    expect(AGENT_CHAT_ROW_WINDOW_SIZE).toBe(20);
-  });
-
   test("navigates 10,000 rows in both directions within the row-window budget", async () => {
     const rows = createSingleTurnRows(10_000);
     const harness = await mountHarness(

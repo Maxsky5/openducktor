@@ -19,7 +19,7 @@ import {
   isRelatedTaskBranch,
   managedWorktreeBaseForRepoConfig,
 } from "./task-cleanup-support";
-import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
+import { resolveTaskWorktreeStartPoint } from "./task-branches";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 
 type CanonicalImplementationResetTarget = {
@@ -106,7 +106,7 @@ export const cleanupImplementationResetActivity = (
 
 const resolveCanonicalImplementationResetTarget = (
   gitPort: GitPort,
-  workspaceSettingsService: WorkspaceSettingsService,
+  workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">,
   task: TaskRecord,
   repoPath: string,
   canonicalWorktreePath: string,
@@ -136,18 +136,10 @@ const resolveCanonicalImplementationResetTarget = (
         }),
       );
     }
-    const effectiveTarget = yield* effectiveTargetBranchForTask(
-      workspaceSettingsService,
-      task,
-      repoPath,
-      workspaceId,
+    const { reference: restoreReference } = yield* resolveTaskWorktreeStartPoint(
+      { gitPort, workspaceSettingsService },
+      { task, repoPath, workspaceId },
     );
-    const restoreReference = (yield* resolveBuildStartPoint(
-      { gitPort },
-      repoPath,
-      effectiveTarget,
-      task.targetBranch === undefined,
-    )).reference;
     return { branch, restoreReference, worktreePath };
   });
 
@@ -201,7 +193,7 @@ export const collectImplementationResetTargets = (
   dependencies: {
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
-    workspaceSettingsService: WorkspaceSettingsService;
+    workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
   },
   input: {
     workspaceId: string;

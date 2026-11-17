@@ -1,6 +1,7 @@
 import { Activity, memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { MAX_CACHED_TRANSCRIPTS } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model-cache";
+import { useRegisterNotificationTranscript } from "@/features/notifications/notification-attention-context";
 import { AgentChatThread } from "./agent-chat-thread";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 
@@ -61,6 +62,8 @@ const ThreadPane = memo(function ThreadPane({
 });
 
 function ThreadContent({ model, visitKey }: { model: AgentChatThreadModel; visitKey: string }) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  useRegisterNotificationTranscript(rootRef, model.transcript);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const visibleContainer = model.messagesContainerRef;
   const threadModel = useMemo(() => ({ ...model, messagesContainerRef: containerRef }), [model]);
@@ -72,7 +75,7 @@ function ThreadContent({ model, visitKey }: { model: AgentChatThreadModel; visit
     };
   }, [visibleContainer]);
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
       <AgentChatThread model={threadModel} visitKey={visitKey} />
     </div>
   );

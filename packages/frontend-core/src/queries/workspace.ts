@@ -12,6 +12,7 @@ import { normalizeTargetBranch } from "../lib/target-branch";
 import type { RepoAgentDefaultInput, RepoSettingsInput } from "../types/session-slices";
 import { connectionHost } from "../connection/client-connection";
 import { runtimeCatalogQueryKeys } from "./runtime-catalog";
+import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
 type WorkspaceRecordUpdate =
   | WorkspaceRecord[]
@@ -26,9 +27,15 @@ export const workspaceQueryKeys = {
   settingsSnapshot: () => [...workspaceQueryKeys.all, "settings-snapshot"] as const,
   repoConfig: (workspaceId: string) =>
     [...workspaceQueryKeys.all, "repo-config", workspaceId] as const,
+  skippedRepoConfig: () =>
+    [...workspaceQueryKeys.all, "repo-config", SKIPPED_QUERY_KEY_SEGMENT, null] as const,
   list: () => [...workspaceQueryKeys.all, "list"] as const,
   catalog: () => [...workspaceQueryKeys.all, "catalog"] as const,
 };
+
+type RepoConfigQueryKey =
+  | ReturnType<typeof workspaceQueryKeys.repoConfig>
+  | ReturnType<typeof workspaceQueryKeys.skippedRepoConfig>;
 
 const toRepoAgentDefaultInput = (
   value: AgentModelDefault | undefined,
@@ -70,12 +77,20 @@ export const readChatSettingsFromSnapshot = (snapshot: SettingsSnapshot): ChatSe
   chatSettingsSchema.parse(snapshot.chat);
 
 export const repoConfigQueryOptions = (workspaceId: string) =>
-  queryOptions({
+  queryOptions<RepoConfig, Error, RepoConfig, RepoConfigQueryKey>({
     queryKey: workspaceQueryKeys.repoConfig(workspaceId),
     queryFn: ({ client }) => connectionHost(client).workspaceGetRepoConfig(workspaceId),
     staleTime: REPO_CONFIG_STALE_TIME_MS,
     gcTime: Number.POSITIVE_INFINITY,
   });
+
+export const repoConfigQueryOptionsOrSkip = (workspaceId: string | null) =>
+  workspaceId === null
+    ? skippedQueryOptions<RepoConfig, RepoConfigQueryKey>({
+        queryKey: workspaceQueryKeys.skippedRepoConfig(),
+        staleTime: REPO_CONFIG_STALE_TIME_MS,
+      })
+    : repoConfigQueryOptions(workspaceId);
 
 export const workspaceListQueryOptions = () =>
   queryOptions({

@@ -6,9 +6,11 @@ import {
 import type { RemoteAccessOperator } from "@openducktor/remote-host";
 import { z } from "zod";
 import { Effect } from "effect";
+import { REMOTE_ACCESS_PATH } from "./remote-access-path";
 
 const clientIdSchema = z.uuid();
 const NO_STORE = { headers: { "cache-control": "no-store" } };
+const REVOKE_CLIENT_PATH = new RegExp(`^${REMOTE_ACCESS_PATH}/clients/([^/]+)/revoke$`);
 
 type RemoteAccessFailure = { failure: { message: string; nextAction: string } };
 
@@ -30,27 +32,27 @@ export const handleRemoteAccessHttp = async (
   controller: RemoteAccessOperator,
 ): Promise<Response> => {
   const route = new URL(request.url).pathname;
-  if (route === "/remote-access/networks" && request.method === "GET")
+  if (route === `${REMOTE_ACCESS_PATH}/networks` && request.method === "GET")
     return respond(controller.readNetworks(), 503);
   if (request.method === "POST") {
     if (request.headers.get("content-type")?.split(";")[0] !== "application/json")
       return new Response("Use application/json.", { status: 400 });
-    const revoke = /^\/remote-access\/clients\/([^/]+)\/revoke$/.exec(route);
+    const revoke = REVOKE_CLIENT_PATH.exec(route);
     if (revoke) {
       const client = clientIdSchema.safeParse(revoke[1]);
       if (!client.success) return new Response("Invalid client reference.", { status: 400 });
       return respond(controller.revokeClient(client.data), 503);
     }
-    if (route === "/remote-access/pairing/start") {
+    if (route === `${REMOTE_ACCESS_PATH}/pairing/start`) {
       return respond(
         controller.startPairing(remotePairingStartInputSchema.parse(await request.json())),
         409,
       );
     }
-    if (route === "/remote-access/pairing/stop")
+    if (route === `${REMOTE_ACCESS_PATH}/pairing/stop`)
       return Response.json(await Effect.runPromise(controller.stopPairing()), NO_STORE);
     // A failed enable shows its failure in the state.
-    if (route === "/remote-access/enable")
+    if (route === `${REMOTE_ACCESS_PATH}/enable`)
       return Response.json(
         await Effect.runPromise(
           controller
@@ -59,10 +61,10 @@ export const handleRemoteAccessHttp = async (
         ),
         NO_STORE,
       );
-    if (route === "/remote-access/disable")
+    if (route === `${REMOTE_ACCESS_PATH}/disable`)
       return Response.json(await Effect.runPromise(controller.disable()), NO_STORE);
     return new Response("Not found", { status: 404 });
-  } else if (route !== "/remote-access" || request.method !== "GET")
+  } else if (route !== REMOTE_ACCESS_PATH || request.method !== "GET")
     return new Response("Not found", { status: 404 });
   return Response.json(await Effect.runPromise(controller.readState()), NO_STORE);
 };

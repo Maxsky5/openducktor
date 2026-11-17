@@ -9,7 +9,7 @@ import {
   useMemo,
 } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import {
   CodeView,
   EditProvider,
@@ -38,6 +38,7 @@ export function TaskExecutionFileCodeView({
   onItemEditChange,
 }: TaskExecutionFileCodeViewProps): ReactElement {
   const { theme } = useTheme();
+  const { editorClipboard } = useShellPlatform();
   const options = useMemo<CodeViewOptions<undefined, undefined>>(
     () => ({
       theme: THEME,
@@ -69,18 +70,17 @@ export function TaskExecutionFileCodeView({
     [theme, file.numberColumnWidth],
   );
   const editorOptions = useMemo<TaskExecutionEditorOptions>(() => {
-    const clipboard = getShellBridge().editorClipboard;
     const editorOptions: TaskExecutionEditorOptions = {
       onAttach(attachedEditor) {
         editorRef.current = attachedEditor;
         attachedEditor.focus({ lineNumber: "first-visible", preventScroll: true });
       },
     };
-    if (clipboard) {
-      editorOptions.clipboard = clipboard;
+    if (editorClipboard) {
+      editorOptions.clipboard = editorClipboard;
     }
     return editorOptions;
-  }, [editorRef]);
+  }, [editorClipboard, editorRef]);
 
   const items = useMemo<CodeViewFileItem[]>(
     () => [{ id: file.id, type: "file", file: file.file, edit: editable, version }],

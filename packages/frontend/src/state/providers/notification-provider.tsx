@@ -30,7 +30,7 @@ import type {
   SessionStartNotificationInput,
   SessionStartNotificationPublisher,
 } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import {
   NotificationContext,
@@ -41,7 +41,7 @@ import { useHostConnection } from "@openducktor/frontend-core/connection/client-
 
 export function NotificationProvider({ children }: PropsWithChildren): ReactElement {
   const { workspaces } = useWorkspaceStateContext();
-  const shellNotifications = getShellBridge().notifications;
+  const shellNotifications = useShellPlatform().notifications;
   const host = useHostConnection();
   const [failureState, updateFailureState] = useReducer(
     reduceNotificationFailureState,

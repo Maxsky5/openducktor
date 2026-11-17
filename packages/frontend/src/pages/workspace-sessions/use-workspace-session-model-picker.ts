@@ -1,4 +1,4 @@
-import type { AgentModelSelection, RuntimeKind } from "@openducktor/core";
+import { type AgentModelSelection, type RuntimeKind, withSpeed } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import {
   selectableModelPickerCatalog,
@@ -8,7 +8,7 @@ import {
 import { resolveModelSelectionOptions } from "@openducktor/frontend-core/sessions/model-selection/model-selection-options";
 import { useModelSelectionActions } from "@openducktor/frontend-core/sessions/model-selection/use-model-selection-actions";
 import { useSpeedControl } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
-import { withSpeed } from "@openducktor/frontend-core/lib/model-catalog-selection";
+
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import { useRefreshStaleRuntimeCatalog } from "@openducktor/frontend-core/queries/use-runtime-catalog-query";

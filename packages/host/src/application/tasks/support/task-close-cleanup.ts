@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "./scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";

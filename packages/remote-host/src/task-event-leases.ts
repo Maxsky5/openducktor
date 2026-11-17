@@ -33,6 +33,7 @@ export type TaskEventLeaseConnection = {
 };
 
 export type TaskEventLeaseManager = {
+  readonly size: number;
   acknowledge(lease: TaskEventLease, cursor: TaskEventCursor): void;
   attach(lease: TaskEventLease, sink: TaskEventFrameSink): number;
   create(input: TaskEventStreamSubscribe, subscriptionId: string): TaskEventLease;
@@ -137,6 +138,9 @@ export const createTaskEventLeaseManager = ({
   };
 
   return {
+    get size() {
+      return leases.size;
+    },
     acknowledge(lease, cursor) {
       taskEventStream.acknowledge({
         cursor,
