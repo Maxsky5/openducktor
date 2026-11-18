@@ -26,7 +26,7 @@ export const FRAME = { width: 1920, height: 1080 } as const;
  * stand in one row, in the order of the film, so each travel goes to the right and the next set
  * never comes in through the caption column. The phones are 700 px apart, so the next phone comes
  * into the frame as the last one leaves it, and the windows are about 120 px apart. Each set is
- * centered on the middle of the row.
+ * centered on the middle of the row, at y = 430, and the keyboard-shortcuts set is 20 px lower.
  */
 export const PLACES = {
   "mobile-start-builder": { x: 0, y: 0 },
@@ -46,11 +46,11 @@ export type SetName = keyof typeof PLACES;
 export const VIEWS_OF = {
   "mobile-start-builder": "[data-phone]",
   "mobile-question": "[data-phone]",
-  "goal-mode": ".app-window",
-  fork: ".app-window",
-  artifacts: ".af-window",
-  gitlab: ".gl-content",
-  "keyboard-shortcuts": ".ks-window",
+  "goal-mode": "[data-root]",
+  fork: "[data-root]",
+  artifacts: "[data-root]",
+  gitlab: "[data-tab]",
+  "keyboard-shortcuts": "[data-root]",
 } as const satisfies Record<SetName, string>;
 
 /** The width of the repository menu of the GitLab settings, which the film crops. */

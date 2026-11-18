@@ -51,18 +51,31 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   // Goal mode on: the default goal shows, and Customize first message closes.
   const on = dialog.turnOn(clicked + 0.9);
   scene.mark("goal-on", on);
+  // The marks of each wait keep a short margin to the changes of the screen, so a film can play the
+  // wait faster: the rest after the switch, the travel of the pointer, and the wait for the model.
+  scene.mark("goal-on-rest", on + 0.35);
 
   // Generate goal: a model writes a goal from the task, its spec and plan, and the default goal.
   // The start waits for the goal.
   const generated = on + 4;
   dialog.generateGoal(on + 2, generated, GENERATED_GOAL);
   scene.mark("generate", on + 2);
+  scene.mark("to-generate", on + 2 - 0.05);
+  scene.mark("to-generate-end", on + 2 + 0.78);
+  scene.mark("model", on + 2 + 0.95);
   scene.mark("generated", generated);
+  scene.mark("model-end", generated - 0.1);
+  scene.mark("generated-rest", generated + 0.4);
+  scene.mark("to-start", generated + 1.55);
 
   // Start session: the form is disabled while the start runs, then the dialog shows the startup
   // steps of the new task worktree.
   const started = dialog.start(generated + 1.6, STARTING);
   scene.mark("start", started);
+  scene.mark("to-start-end", started - 0.02);
+  // The dialog resizes from Starting… to the startup steps, and the steps play.
+  scene.mark("resizing", started + 0.6);
+  scene.mark("startup", started + 0.9);
   studio.cursor.hide(started + 0.3);
   const traced = started + STARTING;
   dialog.step("checkout", "running", traced + 0.2);
@@ -94,6 +107,9 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   });
   goal.show(opened + 0.35);
   scene.mark("session", opened);
+  scene.mark("startup-end", opened - 0.05);
+  // The Builder works turn after turn by itself, up to the goal row that shows Complete.
+  scene.mark("turns", opened + 0.3);
 
   /** An edit call joins its run, and its file lands in the Diffs tab. */
   const land = (edit: HTMLElement, path: string, files: number, at: number): number => {
@@ -135,6 +151,7 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   // The goal is met: the row shows Complete, and the session stops.
   goal.status(ended + 0.2, "complete");
   scene.mark("complete", ended + 0.2);
+  scene.mark("turns-end", ended + 0.2 - 1.6);
   studio.patch(ended + 0.2, { activity: "idle", tones: FRAMES.build.tones });
   studio.sessions.update(builder, ended + 0.2, { tone: "done", running: false, time: "now" });
   scene.endAt(ended + 3);

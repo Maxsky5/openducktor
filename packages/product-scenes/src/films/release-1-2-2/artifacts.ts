@@ -1,10 +1,10 @@
 // Chapter 4 of the release film: task artifacts. The Builder saves an HTML mockup on the task, the
 // mockup joins the files of the Artifacts tab, and the visitor opens it in a large preview. Each
-// step plays at the speed of the app.
+// step plays at the speed of the app. Only the rests and a travel of the pointer play faster.
 import type { Framing, Shot } from "../engine/camera";
 import type { Film } from "../engine/film";
 import { CAPTIONS } from "./captions";
-import { BESIDE, CHAPTER_TRAVEL, POINTER, partOf, playBeat, pushTo, REST } from "./shots";
+import { BESIDE, CHAPTER_TRAVEL, POINTER, partOf, playBeat, REST } from "./shots";
 
 /** The framing of the whole window. */
 const WINDOW: Framing = { ...BESIDE, maxZoom: 1 };
@@ -18,8 +18,8 @@ export function artifactsChapter(film: Film, at: number): number {
     {
       set: "artifacts",
       caption: CAPTIONS.artifacts.id,
-      play: { mark: "saved" },
-      part: ".af-window",
+      mark: "saved",
+      part: "[data-root]",
       framing: WINDOW,
       lead: 0.4,
       result: { mark: "preview", hold: 1.9 },
@@ -30,23 +30,21 @@ export function artifactsChapter(film: Film, at: number): number {
   // The pointer goes to the saved file a little faster. The rests after the file opens and on the
   // Expand button play faster.
   const run = beat.run;
-  run.speed(run.at("said", 0.05), REST);
-  run.speed(run.at("said", 0.4), POINTER);
-  run.speed(run.at("file", -0.36), 1);
-  run.speed(run.at("file", 0.5), REST);
-  run.speed(run.at("file", 1.15), 1);
-  run.speed(run.at("expand", 0.25), REST);
-  run.speed(run.at("expand", 0.6), 1);
+  run.speed("said-rest", REST);
+  run.speed("to-file", POINTER);
+  run.speed("to-file-end", 1);
+  run.speed("file-rest", REST);
+  run.speed("file-rest-end", 1);
+  run.speed("expand-rest", REST);
+  run.speed("expand-rest-end", 1);
   // The large preview opens, and the camera pushes in on the page that the Builder made, with the
   // title of the file above it. The title starts at the left edge of the dialog, and the empty
   // right part of the title bar may leave the frame.
-  const preview = (selector: string): HTMLElement =>
-    partOf(film, "artifacts", `.ar-dialog ${selector}`)();
-  pushTo(
-    film,
+  const part = (selector: string): HTMLElement => partOf(film, "artifacts", selector)();
+  film.camera.move(
     (): Shot => {
-      const head = film.camera.boxOf(preview(".ar-dialog-head"));
-      const page = film.camera.boxOf(preview(".wf-sheet"));
+      const head = film.camera.boxOf(part("[data-dialog-head]"));
+      const page = film.camera.boxOf(part("[data-mockup-page]"));
       return film.camera.frame(
         {
           x: head.x,
@@ -57,7 +55,7 @@ export function artifactsChapter(film: Film, at: number): number {
         MOCKUP,
       );
     },
-    run.at("preview", 0.2),
+    run.mark("preview-open"),
     0.7,
   );
   return beat.close();

@@ -1,19 +1,10 @@
 // Chapter 3 of the release film: sessions. A session forks from a reply, and the fork opens with
-// the conversation up to that reply. Each step plays at the speed of the app.
+// the conversation up to that reply. Each step plays at the speed of the app. Only the travels and
+// the rest of the pointer and the startup steps play faster.
 import type { Framing, Shot } from "../engine/camera";
 import type { Film } from "../engine/film";
 import { CAPTIONS } from "./captions";
-import {
-  BESIDE,
-  CHAPTER_TRAVEL,
-  POINTER,
-  partOf,
-  playBeat,
-  pushTo,
-  REST,
-  STEPS,
-  shotOf,
-} from "./shots";
+import { BESIDE, CHAPTER_TRAVEL, POINTER, partOf, playBeat, REST, STEPS, shotOf } from "./shots";
 
 /**
  * The framing of the whole window. The Fork session dialog opens in the center of the window, over
@@ -43,10 +34,10 @@ export function sessionsChapter(film: Film, at: number): number {
     {
       set: "fork",
       caption: CAPTIONS.fork.id,
-      play: { mark: "point" },
+      mark: "point",
       shot: (): Shot => {
         const shot = shotOf(film, partOf(film, "fork", FIRST_REPLY), REPLY)();
-        return { ...shot, x: (shot.x ?? 0) + SIDEBAR_SHIFT / (shot.zoom ?? 1) };
+        return { ...shot, x: shot.x + SIDEBAR_SHIFT / shot.zoom };
       },
       lead: 0.8,
       result: { mark: "forked", hold: 1.3 },
@@ -55,22 +46,21 @@ export function sessionsChapter(film: Film, at: number): number {
     at,
   );
   const run = fork.run;
-  // The pointer goes fast to the worktree name and rests there for 0.6 s, which plays faster. It
-  // then goes faster to Fork session. Once the dialog has narrowed to the startup progress, its
-  // steps play twice as fast; each step still shows.
-  run.speed(run.at("worktree", 0.5), NAME);
-  run.speed(run.at("worktree", 1.1), REST);
-  run.speed(run.at("confirm", -0.72), POINTER);
-  run.speed(run.at("confirm", -0.02), 1);
-  run.speed(run.at("confirm", 0.95), STEPS);
-  run.speed(run.at("forked", -0.35), 1);
-  pushTo(
-    film,
-    shotOf(film, partOf(film, "fork", ".fk-window"), WINDOW),
-    run.at("dialog", 0.25),
+  // The pointer goes fast to the worktree name, and its rest there plays faster. It then goes
+  // faster to Fork session. Once the dialog has narrowed to the startup progress, its steps play
+  // twice as fast; each step still shows.
+  run.speed("to-name", NAME);
+  run.speed("name-rest", REST);
+  run.speed("to-confirm", POINTER);
+  run.speed("to-confirm-end", 1);
+  run.speed("startup", STEPS);
+  run.speed("startup-end", 1);
+  film.camera.move(
+    shotOf(film, partOf(film, "fork", "[data-root]"), WINDOW),
+    run.mark("dialog-open"),
     0.7,
   );
   // The fork holds still once its dialog has closed, before the pointer goes on to the composer.
-  run.freeze(run.at("forked", 0.25));
-  return fork.close();
+  run.freeze(run.mark("dialog-closed"));
+  return fork.hideCaption();
 }

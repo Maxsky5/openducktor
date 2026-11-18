@@ -85,7 +85,7 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
           </span>
         </div>
       </div>
-      <div className="sb-controls">
+      <div className="sb-controls" data-nav-controls="">
         <span className="sb-scope">
           <span data-checked={flag(nav.scope === "current")}>{WORKSPACE}</span>
           <span data-checked={flag(nav.scope === "all")}>All workspaces</span>
@@ -94,7 +94,7 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
           <ListTree />
         </span>
       </div>
-      <div className="sb-sessions">
+      <div className="sb-sessions" data-nav-sessions="">
         {groups.map(({ group, label, entries, count, hidden }) => {
           const Icon = ICONS[group];
           return (
@@ -123,7 +123,7 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
           );
         })}
       </div>
-      <div className="sb-footer">
+      <div className="sb-footer" data-nav-footer="">
         <span className="sb-settings">
           <Settings />
           Settings

@@ -97,7 +97,7 @@ export function StudioWindow({
       <StudioHeader frame={frame} pr={pr} openIn={openIn} bottom={bottom !== undefined} />
       <div className="st-area">
         <div className="st-body">
-          <div className="st-main">
+          <div className="st-main" data-studio-main="">
             <WorkflowRail tones={frame.tones} selected={frame.selected} />
             <ChatColumn>
               <Thread>{children}</Thread>

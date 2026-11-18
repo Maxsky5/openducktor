@@ -18,7 +18,9 @@ export function KeyCast({ chords }: { chords: readonly KeyChord[] }): ReactEleme
         <p className="film-keys" data-keys={chord.id} key={chord.id}>
           {chord.keys.map((key) => (
             <span className="film-key" key={key.cap}>
-              <kbd className="film-key-cap">{key.cap}</kbd>
+              <kbd className="film-key-cap" data-key-cap="">
+                {key.cap}
+              </kbd>
               {key.name && <span className="film-key-name">{key.name}</span>}
             </span>
           ))}

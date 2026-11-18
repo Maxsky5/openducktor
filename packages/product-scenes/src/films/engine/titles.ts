@@ -4,7 +4,7 @@
 // closing card shows the name, the version, a line, and the addresses of the project.
 import { all, must } from "../../motion/dom";
 import { gsap } from "../../motion/gsap";
-import type { Box, Camera, Shot } from "./camera";
+import type { Box, Camera, Framed, Shot } from "./camera";
 import type { Film } from "./film";
 import {
   breakMosaic,
@@ -26,12 +26,24 @@ const ROCK = [
 const WALL_TILT = { rx: 6, ry: -14, rz: 0 } as const;
 
 /**
+ * Frame pixels from the center of the frame to the center of the room of the wall, on the right of
+ * the caption column. The zoom fits the wall in this room.
+ */
+const WALL_ROOM = 380;
+
+/**
+ * Frame pixels from the center of the frame to the center of the wall: the wall sits 20 px to the
+ * right of the center of its room, away from the caption column.
+ */
+const WALL_OFFSET = 400;
+
+/**
  * The shot that shows `wall` on the right of the caption column, at `room` times the zoom that
  * fits it, with the tilt of the wall.
  */
-function wallShot(camera: Camera, wall: Box, room: number): Shot {
-  const fit = camera.frame(wall, { margin: 60, offsetX: 380 }).zoom ?? 1;
-  return { ...camera.frame(wall, { offsetX: 400, zoom: fit * room }), ...WALL_TILT };
+function wallShot(camera: Camera, wall: Box, room: number): Required<Shot> {
+  const fit = camera.frame(wall, { margin: 60, offsetX: WALL_ROOM }).zoom;
+  return { ...camera.frame(wall, { offsetX: WALL_OFFSET, zoom: fit * room }), ...WALL_TILT };
 }
 
 /** Seconds that the title shows next to the wall before the camera dives. */
@@ -47,29 +59,25 @@ export type IntroTimes = { dive: number; arrived: number };
 type IntroOptions = {
   /** The wall of the sets, as the film lays it out before its first frame. */
   layout: MosaicLayout;
-  /** The set that the camera dives into, and its product view. */
-  first: { set: HTMLElement; view: HTMLElement };
+  /** The set that the camera dives into. The wall measured its product view. */
+  first: HTMLElement;
   /** The shot at the end of the dive. */
-  shot: Shot;
+  shot: Framed;
 };
 
 /**
- * Plays the opening from `at`. The first frame shows the title next to the wall, so a feed that
- * shows the first frame as the poster shows the name, the version, and the screens of the film.
- * The camera holds still on the wall, then dives into the view of `first` while each set flies back
- * to its place in the world. The camera follows the view of `first`, so it grows on a straight
- * line to its place in `shot` and never leaves the frame.
+ * Plays the opening from the start of the film. The first frame shows the title next to the wall,
+ * so a feed that shows the first frame as the poster shows the name, the version, and the screens
+ * of the film. The camera holds still on the wall, then dives into the view of `first` while each
+ * set flies back to its place in the world. The camera follows the view of `first`, so it grows on
+ * a straight line to its place in `shot` and never leaves the frame.
  */
-export function playIntro(
-  film: Film,
-  at: number,
-  { layout, first, shot }: IntroOptions,
-): IntroTimes {
+export function playIntro(film: Film, { layout, first, shot }: IntroOptions): IntroTimes {
   const { timeline, root, camera } = film;
   const intro = must(root, "[data-intro]");
   const content = must(intro, "[data-intro-content]");
   const duck = must(intro, "[data-mark-duck]", SVGGElement);
-  const place = layout.places.find(({ set }) => set === first.set);
+  const place = layout.places.find(({ set }) => set === first);
   if (!place) throw new Error("The set of the first shot is not in the wall of the opening.");
 
   // The first frame. The film builds before its first frame, so these states apply at once.
@@ -78,16 +86,15 @@ export function playIntro(
   // The camera holds still on the wall while the title shows.
   const wall = wallShot(camera, layout.wall, 0.96);
   camera.place(wall);
-  const dive = at + TITLE_HOLD;
-  timeline.to(duck, { keyframes: ROCK }, at + 0.3);
+  const dive = TITLE_HOLD;
+  timeline.to(duck, { keyframes: ROCK }, 0.3);
 
   // The dive: the title leaves to the left, and the camera follows the view of the first set back
   // to its place. The set moves with the same ease, so the camera knows its box at each step.
   timeline.to(content, { autoAlpha: 0, x: -60, duration: 0.55, ease: "power2.in" }, dive);
   timeline.set(intro, { autoAlpha: 0 }, dive + 0.6);
-  breakMosaic(film, layout, first.set, dive, DIVE, DIVE_EASE);
-  const origin = camera.boxOf(first.set);
-  const view = camera.boxOf(first.view);
+  breakMosaic(timeline, layout, first, dive, DIVE, DIVE_EASE);
+  const { origin, view } = place;
   const viewAt = (progress: number): Box => {
     const scale = place.scale + (1 - place.scale) * progress;
     return {
@@ -127,24 +134,17 @@ export function playOutro(film: Film, at: number, options: MosaicOptions): numbe
   camera.cut(() => wallShot(camera, wall(), 0.84), formed);
   timeline.to(viewport, { autoAlpha: 1, duration: FADE_IN, ease: "power1.out" }, formed);
 
+  // The parts take their first state with the card, so no part shows before it moves in.
   const card = formed + 0.15;
   timeline.set(outro, { autoAlpha: 1 }, card);
-  timeline.fromTo(
-    lockup,
-    { autoAlpha: 0, y: 40, scale: 0.94 },
-    { autoAlpha: 1, y: 0, scale: 1, duration: 1.0, ease: "power3.out" },
-    card,
-  );
+  timeline.set(lockup, { autoAlpha: 0, y: 40, scale: 0.94 }, card);
+  timeline.set(line, { autoAlpha: 0, y: 20 }, card);
+  timeline.set(links, { autoAlpha: 0, y: 26, scale: 0.96 }, card);
+  timeline.to(lockup, { autoAlpha: 1, y: 0, scale: 1, duration: 1.0, ease: "power3.out" }, card);
   timeline.to(duck, { keyframes: ROCK }, card + 0.5);
-  timeline.fromTo(
-    line,
-    { autoAlpha: 0, y: 20 },
-    { autoAlpha: 1, y: 0, duration: 0.8, ease: "power3.out" },
-    card + 0.6,
-  );
-  timeline.fromTo(
+  timeline.to(line, { autoAlpha: 1, y: 0, duration: 0.8, ease: "power3.out" }, card + 0.6);
+  timeline.to(
     links,
-    { autoAlpha: 0, y: 26, scale: 0.96 },
     { autoAlpha: 1, y: 0, scale: 1, duration: 0.7, ease: "back.out(1.5)", stagger: 0.14 },
     card + 1.0,
   );

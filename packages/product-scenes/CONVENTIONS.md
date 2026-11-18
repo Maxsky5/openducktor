@@ -92,12 +92,12 @@ A film puts scenes of the package together in one long video, for social media a
 | `src/films/registry.ts`, `src/films/views.ts` | The film names, frame sizes, and lazy loaders |
 
 1. A set holds one loop scene of the registry at its design width, with `captioned` on. The film plays the scene with `film.play`. The scene keeps its story, and the film can only change its speed.
-2. A film reads the marks of a scene to move its camera and to show its captions at the time of a step. To frame a new step, add a `scene.mark` to the scene. Do not copy a time of a scene into a film.
+2. A film reads only the marks of a scene to move its camera, to show its captions, and to change the speed of the scene. To frame a new step or to change the speed of a part, add a `scene.mark` to the scene. Do not copy a time of a scene into a film.
 3. A camera move finds its target when it starts, because the scenes change their layout while they play. Frame a part that shows at that time.
-4. Play each step of a scene at the speed of the app. Only a pause with no change on the screen and the typing of a text can play faster. Hold the camera still between its moves: a slow drift makes small text shimmer.
-5. A film imports the views of its scenes. The video page loads the builders of its sets from the registry.
+4. Play each change of the UI at the speed of the app. A film can play a wait faster, with no speed badge: a rest with no change on the screen, a wait for the host or a model, such as the startup steps, a detection, or the model that writes a goal, a travel of the pointer to its target, and the work of an agent as a time lapse. A wait shows no new behavior of the product, and at the speed of the app it makes the film too long for social media. A film can also play a rest slower, so that a camera move ends before the next change. Put a mark at the start and at the end of each part that changes its speed in the scene, with a short margin to the changes of the screen. Hold the camera still between its moves: a slow drift makes small text shimmer.
+5. A film imports the views of its scenes. `mountFilm` loads the builders of its sets from the registry.
 6. Write the words of a film in `captions.ts`, in the language of its audience. Each sentence states only what the product does.
-7. `src/films.test.ts` builds each film from its view: a missing mark, a missing part, or two captions that show together fail the test. Play the film in the video tool to check the motion.
+7. `src/films.test.ts` builds each film from its view and plays it to its end: a missing mark, a missing part, or two captions that show together fail the test. The document of the test has no layout, so play the film in the video tool to check the motion and the framing.
 
 ## Public modules
 

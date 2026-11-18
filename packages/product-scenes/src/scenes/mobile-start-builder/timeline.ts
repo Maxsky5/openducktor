@@ -52,8 +52,13 @@ export const build: SceneBuilder = (scene) => {
   steps.show(1, 1.2);
   scene.mark("swipe", 2.4);
   const first = pager.swipe(FIRST_LANE, FIRST_LANE + 1, 2.4);
+  // The marks of each rest keep a short margin to the changes of the screen, so a film can play
+  // the rest faster.
+  scene.mark("lane-rest", first + 0.1);
+  scene.mark("lane-rest-end", first + 1 - 0.05);
   const ready = pager.swipe(FIRST_LANE + 1, READY_LANE, first + 1);
   scene.mark("ready", ready);
+  scene.mark("card-rest", ready + 0.3);
 
   // The card of the search shortcut task offers Start Builder, and a tap opens the start sheet.
   steps.show(2, ready + 0.5);
@@ -62,8 +67,10 @@ export const build: SceneBuilder = (scene) => {
     ready + 1.8,
   );
   scene.mark("tap", tapped);
+  scene.mark("card-rest-end", tapped - 0.6);
   const opened = phone.present("start", tapped);
   scene.mark("sheet", opened);
+  scene.mark("sheet-rest", opened + 0.15);
 
   // The visitor checks the choices and starts the session. The button shows the progress, the
   // start disables the other controls of the sheet, and Run in background becomes Continue in
@@ -73,6 +80,8 @@ export const build: SceneBuilder = (scene) => {
   const button = must(sheet, "[data-start-session]");
   const started = tap(() => button, opened + 3.2);
   scene.mark("start", started);
+  scene.mark("sheet-rest-end", started - 0.6);
+  scene.mark("startup", started + 0.45);
   phone.busy("start", button, started);
   const traced = started + START.snapshot;
   progress.show(traced, { checkout: "running", upstream: "pending", session: "pending" });
@@ -88,6 +97,9 @@ export const build: SceneBuilder = (scene) => {
   progress.set("session", "completed", shown);
   progress.ready(shown);
   scene.mark("session", shown);
+  scene.mark("startup-end", shown - 0.05);
+  // The session has slid in, and the Builder has not added its first rows yet.
+  scene.mark("session-in", shown + 0.25);
   const closed = phone.dismiss("start", shown);
   phone.push("tasks", "session", shown);
 

@@ -1,60 +1,45 @@
-// One run of the scene of a set in a film. The run can change its speed at film times, as a speed
-// ramp of a film editor: a slow step shows a change of the UI at the speed of the app, and a fast
-// step skips a wait. The scene timeline stays paused, and a driver on the master timeline sets its
-// time at each step of the film, so the changes of the scene always run forward and in order. The
-// marks of the scene follow each speed change.
+// One run of the scene of a set in a film. The run can change its speed at the marks of the scene,
+// as a speed ramp of a film editor: a slow step shows a change of the UI at the speed of the app,
+// and a fast step skips a wait. The scene timeline stays paused, and a driver on the master
+// timeline sets its time at each step of the film, so the changes of the scene always run forward
+// and in order. The marks of the scene follow each speed change.
+import { must } from "../../motion/dom";
 import { gsap } from "../../motion/gsap";
 import { createScene, type SceneBuilder } from "../../motion/scene";
 
-/** How a film plays the scene of a set. */
-export type PlayOptions = {
-  /** How many times faster than on a page the scene plays first. */
-  speed?: number;
-  /** The mark of the scene that happens at the film time `at`. Without it, the scene starts at `at`. */
-  mark?: string;
-};
-
 /** One run of the scene of a set, on the master timeline. */
 export type SetRun = {
-  /** The film time of the mark `name` of the scene. */
+  /** The film time of the mark `name` of the scene, with the speeds set so far. */
   mark: (name: string) => number;
   /**
-   * The film time when the scene is `offset` seconds of the scene after its mark `name`, with the
-   * speeds set so far. A speed change uses it to start at a step of the scene.
+   * Plays the scene `speed` times faster than on a page from its mark `name`. Call it in the order
+   * of the marks.
    */
-  at: (name: string, offset: number) => number;
-  /**
-   * Plays the scene `speed` times faster than on a page from the film time `at`. Call it in the
-   * order of the times.
-   */
-  speed: (at: number, speed: number) => void;
+  speed: (name: string, speed: number) => void;
   /**
    * Stops the scene at the film time `at`, so the set keeps that frame while the camera leaves it.
-   * The scene plays no more, so the film can read no mark after it.
+   * The scene plays no more, so the film can change its speed and read its marks only before `at`.
    */
   freeze: (at: number) => void;
-  /** The root of the scene, to find a part of it. */
-  root: HTMLElement;
 };
 
 /** A run and the step that adds the driver of its last speed, when the film is built. */
-export type DrivenRun = { run: SetRun; finish: () => void };
+type DrivenRun = { run: SetRun; finish: () => void };
 
 /** A part of a run at one speed: its film time and scene time at its start. */
 type Segment = { film: number; scene: number; speed: number };
 
+/** Builds the scene of the set `name` in `frame`, so that its mark `mark` happens at the film time `at`. */
 export function createRun(
   timeline: gsap.core.Timeline,
   name: string,
   frame: HTMLElement,
   build: SceneBuilder<string>,
+  mark: string,
   at: number,
-  { speed = 1, mark }: PlayOptions,
 ): DrivenRun {
-  const stage = frame.querySelector("[data-stage]");
-  if (!(stage instanceof HTMLElement)) throw new Error(`The ${name} scene has no stage.`);
   const scene = gsap.timeline({ paused: true });
-  build(createScene(frame, stage, scene));
+  build(createScene(frame, must(frame, "[data-stage]"), scene));
   const length = scene.duration();
   const labelOf = (label: string): number => {
     const time = scene.labels[label];
@@ -64,17 +49,18 @@ export function createRun(
     }
     return time;
   };
-  const start = mark === undefined ? at : at - labelOf(mark) / speed;
+  const start = at - labelOf(mark);
   if (start < 0) throw new Error(`The ${name} scene starts at ${start.toFixed(2)} s.`);
 
-  const segments: Segment[] = [{ film: start, scene: 0, speed }];
+  const segments: Segment[] = [{ film: start, scene: 0, speed: 1 }];
   const lastSegment = (): Segment => {
     const segment = segments.at(-1);
     if (!segment) throw new Error(`The ${name} run has no speed.`);
     return segment;
   };
   const filmOf = (time: number): number => {
-    const segment = segments.findLast((part) => part.scene <= time) ?? lastSegment();
+    const segment = segments.findLast((part) => part.scene <= time);
+    if (!segment) throw new Error(`The ${name} scene has no time ${time.toFixed(2)} s.`);
     if (segment.speed === 0 && time > segment.scene) {
       throw new Error(`The ${name} run stops before the scene time ${time.toFixed(2)} s.`);
     }
@@ -102,6 +88,9 @@ export function createRun(
 
   const setSpeed = (when: number, value: number): void => {
     const segment = lastSegment();
+    if (segment.speed === 0) {
+      throw new Error(`The ${name} run stops at ${segment.film.toFixed(2)} s and plays no more.`);
+    }
     if (when < segment.film) {
       throw new Error(`Change the speed of the ${name} run in the order of the times.`);
     }
@@ -112,13 +101,11 @@ export function createRun(
 
   const run: SetRun = {
     mark: (label) => filmOf(labelOf(label)),
-    at: (label, offset) => filmOf(labelOf(label) + offset),
-    speed: (when, value) => {
+    speed: (label, value) => {
       if (!(value > 0)) throw new Error(`Give the ${name} run a speed above 0, or freeze it.`);
-      setSpeed(when, value);
+      setSpeed(filmOf(labelOf(label)), value);
     },
     freeze: (when) => setSpeed(when, 0),
-    root: frame,
   };
   return { run, finish: () => drive(lastSegment(), length) };
 }

@@ -11,13 +11,13 @@ import rootPackage from "../../../package.json";
 import type { SceneTheme, ViewPropsOf } from "../src/frame/SceneFrame";
 import { must } from "../src/motion/dom";
 import { gsap } from "../src/motion/gsap";
-import { mountScene, type SceneHandle } from "../src/motion/mount";
+import { mountScene, type SceneHandle, stepForward } from "../src/motion/mount";
 import { type KeyLabels, MAC_KEYS, PC_KEYS } from "../src/replicas/keys";
 import { type LoopSceneName, SCENES, type SceneOptions } from "../src/registry";
 import { type SceneViewLoaders, VIEWS } from "../src/views";
-import { filmName, startFilm } from "./film";
+import { startFilm } from "./film";
 import { startPreview } from "./preview";
-import { videoScene } from "./scenes";
+import { filmName, type SceneVideo, videoScene } from "./scenes";
 
 // A tween of GSAP moves its element with a 3D transform by default, which gives the element its
 // own layer while it moves. A video renders each frame by itself, so 2D transforms keep the text
@@ -136,9 +136,6 @@ const births = new WeakMap<Animation, number>();
  * to the scene time `time`. They do not follow GSAP, so each one stays paused and gets its time from
  * the frame clock. A frame then has the same pixels in each run.
  */
-/** Seconds of one frame step of a seek, as the scenes and the films play. */
-const FRAME_STEP = 1 / 60;
-
 function holdCssMotion(time: number): void {
   for (const animation of document.getAnimations()) {
     const birth = births.get(animation) ?? time;
@@ -149,7 +146,11 @@ function holdCssMotion(time: number): void {
 }
 
 /** A mounted scene or film, as the renderer drives it. */
-type Mounted = { duration: number; seek: (time: number) => void };
+type Mounted = {
+  duration: number;
+  seek: (time: number) => void;
+  moving: (from: number, to: number) => boolean;
+};
 
 async function startScene(): Promise<Mounted> {
   const name = videoScene(param("scene"));
@@ -183,7 +184,7 @@ async function startScene(): Promise<Mounted> {
     loadFonts(),
   ]);
   const handle: SceneHandle = mountScene(root, build);
-  return { duration: handle.duration(), seek: handle.seek };
+  return { duration: handle.duration(), seek: handle.seek, moving: () => false };
 }
 
 async function startFilmPage(value: string): Promise<Mounted> {
@@ -202,33 +203,25 @@ const ready = (film === null ? startScene() : startFilmPage(film)).then((handle)
 });
 /** The time of the frame that shows. */
 let shown = 0;
-/** The transform of the camera of a film after the last seek, and whether the seek changed it. */
-let camera = "";
-let moved = false;
-const cameraOf = (): string =>
-  [...document.querySelectorAll<HTMLElement>("[data-rig], [data-cam]")]
-    .map((element) => element.style.transform)
-    .join(" ");
-window.__sceneVideo = {
+const video: SceneVideo = {
   ready,
-  moved: () => moved,
+  moving: (from, to) => {
+    if (!mounted) throw new Error("Wait for ready before the page tells a camera move.");
+    return mounted.moving(from, to);
+  },
   seek: (time) => {
     if (!mounted) throw new Error("Wait for ready before the first seek.");
+    const { seek } = mounted;
     // The page holds the CSS motion after each frame step of a long seek, such as for a still
     // image, so a transition that starts during the seek starts at its own time.
-    if (time <= shown) {
-      mounted.seek(time);
-      holdCssMotion(time);
-    }
-    for (let at = shown; at < time;) {
-      at = Math.min(time, at + FRAME_STEP);
-      mounted.seek(at);
+    const show = (at: number): void => {
+      seek(at);
       holdCssMotion(at);
-    }
+    };
+    if (time <= shown) show(time);
+    stepForward(shown, time, show);
     shown = time;
-    const now = cameraOf();
-    moved = now !== camera;
-    camera = now;
   },
 };
-if (query.has("preview")) void ready.then((duration) => startPreview(duration, query));
+window.__sceneVideo = video;
+if (query.has("preview")) void ready.then((duration) => startPreview(video, duration, query));

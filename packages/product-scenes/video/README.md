@@ -18,7 +18,7 @@ bun run render:video -- --scene hero --format 16:9 --theme dark --fps 60
 | Option | Values | Default |
 |---|---|---|
 | `--scene` | A loop scene of `src/registry.ts`, such as `hero` or `goal-mode` | `--scene` or `--film` |
-| `--film` | A film of `src/films/registry.ts`, such as `release-1-2-2`. A film has its own frame size, so `--format` does not apply | `--scene` or `--film` |
+| `--film` | A film of `src/films/registry.ts`, such as `release-1-2-2`. A film has its own frame size, so the command does not accept `--format` | `--scene` or `--film` |
 | `--format` | `16:9` (1920 × 1080), `1:1` (1080 × 1080), `9:16` (1080 × 1920) | `16:9` |
 | `--theme` | `light`, `dark` | `light` |
 | `--keys` | `mac` (⌘ and ⌥), `pc` (Ctrl and Alt) | `mac` |
@@ -27,7 +27,7 @@ bun run render:video -- --scene hero --format 16:9 --theme dark --fps 60
 | `--blur` | For a film: the screenshots that each frame mixes while the camera moves, from 1 to 16. The command takes them in the first half of the frame time, as a camera shutter of 180 degrees, so a fast move shows motion blur. A frame where the camera does not move keeps one screenshot and stays sharp | `1` (no motion blur) |
 | `--from` | The time of the first frame, in seconds. The page plays the frames before it with no image | `0` |
 | `--seconds` | The length of the video, up to the end of the run | Up to the end |
-| `--snap` | Times in seconds, such as `5,12.5`. The command saves one PNG image for each time in the `--out` folder, and no video | No image |
+| `--snap` | Times in seconds, such as `5,12.5`. The command saves one PNG image for each time in the `--out` folder, and no video. It does not accept the options of a video: `--fps`, `--blur`, `--from`, `--seconds`, and `--frames` | No image |
 | `--out` | The path of the MP4 file | `video/out/<scene>-<format>-<theme>.mp4` |
 | `--frames` | A folder for a copy of each frame as a PNG file | No copy |
 
@@ -49,12 +49,12 @@ To watch a scene or a film in a browser, run `bun run preview:video`, then open 
 
 1. `render.ts` starts a Vite server for `index.html` on a free port and opens the page in headless Chromium at the size of the video.
 2. `main.ts` renders the static view of the scene, as the website does, and mounts its timeline with `mountScene`. The scene keeps its design width from `src/registry.ts`, and a transform scales it to fit the video on the page color of the website.
-3. The page waits for its fonts and then gives the renderer `window.__sceneVideo` with `ready` and `seek`.
-4. For each frame, the renderer calls `seek(index / fps)`, takes a screenshot, and sends the PNG data to `ffmpeg`. With `--blur N`, it takes N screenshots in the first half of the time of each frame where the camera of the film moves, and `ffmpeg` mixes each group into one frame.
+3. The page waits for its fonts and then gives the renderer `window.__sceneVideo` with `ready`, `seek`, and `moving`.
+4. For each frame, the renderer calls `seek(index / fps)`, takes a screenshot, and sends the PNG data to `ffmpeg`. With `--blur N`, it takes N screenshots in the first half of the time of each frame where the camera of the film moves, and `ffmpeg` mixes each group into one frame. `moving` tells the renderer whether a move of the camera runs in that half of the frame.
 
 The server neither watches the sources nor sends updates, so a change of a source does not reload the page of a job that runs. Run one job at a time: two jobs share the Vite cache of the dependencies.
 
-A film page renders the view of the film at its frame size, loads the builder of the scene of each set, and builds the master timeline with `mountFilm`. Its `seek` plays forward in steps of 1/60 s, so each change of a scene runs at its time.
+A film page renders the view of the film at its frame size and mounts it with `mountFilm`, which loads the builder of the scene of each set and builds the master timeline. Its `seek` plays forward in steps of 1/60 s, so each change of a scene runs at its time.
 
 ## Same frames in each run
 

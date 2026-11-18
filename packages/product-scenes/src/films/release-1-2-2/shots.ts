@@ -2,8 +2,8 @@
 // next to the captions, and how a beat lights its set, moves the camera, plays its scene, shows
 // its caption, and holds its result.
 import { must } from "../../motion/dom";
-import type { Framing, Shot } from "../engine/camera";
-import type { Film, PlayOptions, SetRun } from "../engine/film";
+import type { Framed, Framing, Shot } from "../engine/camera";
+import type { Film, SetRun } from "../engine/film";
 
 /** The framing of a part next to the captions, in the right part of the frame. */
 export const BESIDE: Framing = { margin: 70, offsetX: 440, maxZoom: 2.1 };
@@ -14,8 +14,6 @@ export const CHAPTER_TRAVEL = 0.95;
 export const BEAT_TRAVEL = 0.8;
 /** The ease of a travel from one set to the next: its top speed stays low enough to follow. */
 export const TRAVEL_EASE = "power2.inOut";
-/** How much faster a pause plays while the pointer moves and nothing else changes. */
-export const PAUSE = 2;
 /**
  * How much faster a rest plays: the pointer or the finger stays still, and the screen does not
  * change. Nothing moves, so the rest only gets shorter.
@@ -25,10 +23,6 @@ export const REST = 5;
 export const POINTER = 1.5;
 /** How much faster the startup steps of a session play: each step still shows. */
 export const STEPS = 2;
-/** How much faster the typing of a text plays. */
-export const TYPING = 2.5;
-/** Seconds of a push in on a part of a set. */
-export const PUSH = 1.1;
 
 /** Finds the part `selector` of the set `name`, or the set itself. */
 export function partOf(film: Film, name: string, selector?: string): () => HTMLElement {
@@ -41,7 +35,7 @@ export function unionShot(
   film: Film,
   finds: readonly (() => HTMLElement)[],
   framing: Framing = BESIDE,
-): () => Shot {
+): () => Framed {
   return () => {
     const boxes = finds.map((find) => film.camera.boxOf(find()));
     const left = Math.min(...boxes.map((box) => box.x));
@@ -55,35 +49,13 @@ export function unionShot(
   };
 }
 
-/** The shot that frames the part that `find` returns, with a zoom `scale` times larger. */
+/** The shot that frames the part that `find` returns. */
 export function shotOf(
   film: Film,
   find: () => HTMLElement,
   framing: Framing = BESIDE,
-  scale = 1,
-): () => Shot {
-  return () => {
-    const box = film.camera.boxOf(find());
-    const zoom = (film.camera.frame(box, framing).zoom ?? 1) * scale;
-    return film.camera.frame(box, { ...framing, zoom });
-  };
-}
-
-/**
- * Moves the camera to `shot` from `at`, and keeps it there. The move keeps the shot that it finds
- * when it starts, because the part can change or go after the move starts. A still camera keeps
- * the text of the product sharp. Returns the time when the camera arrives.
- */
-export function pushTo(film: Film, shot: () => Shot, at: number, duration = PUSH): number {
-  let found: Shot | undefined;
-  return film.camera.move(
-    () => {
-      found ??= shot();
-      return found;
-    },
-    at,
-    duration,
-  );
+): () => Framed {
+  return () => film.camera.frame(film.camera.boxOf(find()), framing);
 }
 
 /** One beat of a chapter: a scene that plays under one caption, up to its result. */
@@ -92,14 +64,12 @@ export type Beat = {
   set: string;
   /** The caption of the beat. */
   caption: string;
-  /** How the film plays the scene. With `mark`, the mark happens `lead` seconds after the camera arrives. */
-  play: PlayOptions;
+  /** The mark of the scene that happens `lead` seconds after the camera arrives. */
+  mark: string;
   lead?: number;
   /** The part of the set that the camera frames first, and how. */
   part?: string;
-  /** The parts of the set that the camera frames together first, in place of `part`. */
-  parts?: readonly string[];
-  /** The shot of the camera on the set, in place of `part` and `parts`. */
+  /** The shot of the camera on the set, in place of `part`. */
   shot?: () => Shot;
   framing?: Framing;
   /** The result of the beat: the beat ends `hold` seconds after this mark of the scene. */
@@ -108,19 +78,19 @@ export type Beat = {
   travel: number;
 };
 
-/** The run of a beat, its times, and the end of its caption. */
+/** The run of a beat and the end of its caption. */
 export type BeatRun = {
   run: SetRun;
-  arrived: number;
-  /** The film time when the beat ends. Read it after the speed changes of the beat. */
-  end: () => number;
   /**
    * Hides the caption at the end of the beat and stops the scene there, so the set keeps its
    * result while the camera leaves. Returns the end.
    */
   close: () => number;
-  /** Hides the caption at the end of the beat, for a scene that plays on in the next beat. */
-  hand: () => number;
+  /**
+   * Hides the caption at the end of the beat, for a scene that plays on in the next beat or that
+   * the chapter stops itself. Returns the end.
+   */
+  hideCaption: () => number;
 };
 
 /**
@@ -131,35 +101,24 @@ export type BeatRun = {
  */
 export function playBeat(film: Film, beat: Beat, at: number): BeatRun {
   const arrived = at + beat.travel;
-  const run = film.play(beat.set, arrived + (beat.lead ?? 0), beat.play);
+  const run = film.play(beat.set, beat.mark, arrived + (beat.lead ?? 0));
   film.light(beat.set, at, arrived);
-  const shot =
-    beat.shot ??
-    (beat.parts
-      ? unionShot(
-          film,
-          beat.parts.map((part) => partOf(film, beat.set, part)),
-          beat.framing,
-        )
-      : shotOf(film, partOf(film, beat.set, beat.part), beat.framing));
+  const shot = beat.shot ?? shotOf(film, partOf(film, beat.set, beat.part), beat.framing);
   film.camera.move(shot, at, beat.travel, TRAVEL_EASE);
   // The caption shows while the camera travels, and at once on a beat with no travel.
   film.captions.show(beat.caption, at + Math.min(0.45, beat.travel / 2));
-  const end = (): number => run.mark(beat.result.mark) + beat.result.hold;
-  const hand = (): number => {
-    const time = end();
-    film.captions.hide(beat.caption, time - 0.2);
-    return time;
+  const hideCaption = (): number => {
+    const end = run.mark(beat.result.mark) + beat.result.hold;
+    film.captions.hide(beat.caption, end - 0.2);
+    return end;
   };
   return {
     run,
-    arrived,
-    end,
-    hand,
+    hideCaption,
     close: () => {
-      const time = hand();
-      run.freeze(time);
-      return time;
+      const end = hideCaption();
+      run.freeze(end);
+      return end;
     },
   };
 }

@@ -26,10 +26,13 @@ type CameraState = {
 export type Box = { x: number; y: number; width: number; height: number };
 
 /** The parts of the camera state that a shot sets. The other parts keep their values. */
-export type Shot = Partial<Pick<CameraState, "x" | "y" | "zoom" | "rx" | "ry" | "rz">>;
+export type Shot = Partial<CameraState>;
 
-/** A function that finds the shot when the move starts. */
-export type ShotTarget = () => Shot;
+/** The point and the zoom of a shot that frames a box. */
+export type Framed = Pick<CameraState, "x" | "y" | "zoom">;
+
+/** A shot with a point and a zoom, and a tilt. A missing tilt is flat. */
+type FollowShot = Framed & Shot;
 
 /**
  * How a shot frames a box. The zoom fits the box in the frame minus `margin` on each side, up to
@@ -48,17 +51,13 @@ export type Camera = {
   /** The box of `element` in world pixels, as the layout places it now. */
   boxOf: (element: HTMLElement) => Box;
   /** The shot that frames `box`. */
-  frame: (box: Box, framing?: Framing) => Shot;
-  /** The shot that frames the element that `find` returns when the move starts. */
-  look: (find: () => HTMLElement, framing?: Framing, tilt?: Shot) => () => Shot;
+  frame: (box: Box, framing?: Framing) => Framed;
   /** Puts the camera on `shot` while the film builds, for its first frame. */
   place: (shot: Shot) => void;
-  /** Puts the camera on `shot` at `at`, with no move. */
-  cut: (shot: ShotTarget, at: number) => void;
-  /** Moves the camera to `shot` from `at`. Returns the end time. */
-  move: (shot: ShotTarget, at: number, duration?: number, ease?: string) => number;
-  /** A slow move that keeps a still shot alive. Returns the end time. */
-  drift: (shot: ShotTarget, at: number, duration: number) => number;
+  /** Puts the camera at `at` on the shot that `shot` finds then, with no move. */
+  cut: (shot: () => Shot, at: number) => void;
+  /** Moves the camera from `at` to the shot that `shot` finds then. Returns the end time. */
+  move: (shot: () => Shot, at: number, duration: number, ease?: string) => number;
   /**
    * Moves the camera from the shot `from` to the shot `to` from `at`, and keeps a box that moves in
    * the world in view: `box` gives the box at each progress of `ease`, from 0 to 1. The box moves
@@ -68,11 +67,13 @@ export type Camera = {
    */
   follow: (
     box: (progress: number) => Box,
-    shots: { from: Shot; to: Shot },
+    shots: { from: FollowShot; to: FollowShot },
     at: number,
     duration: number,
     ease: string,
   ) => number;
+  /** True when a move of the camera runs between the film times `from` and `to`. */
+  moving: (from: number, to: number) => boolean;
 };
 
 /** The part of a follow move, as its eased progress, that the tilt takes to reach its end. */
@@ -84,6 +85,8 @@ export function camera(timeline: gsap.core.Timeline, root: HTMLElement, size: Fr
   const cam = must(root, "[data-cam]");
   const world = must(root, "[data-world]");
   const state: CameraState = { x: 0, y: 0, zoom: 1, rx: 0, ry: 0, rz: 0 };
+  /** The time span of each move, which the film knows when it builds. */
+  const moves: { from: number; to: number }[] = [];
   const apply = (): void => {
     const { x, y, zoom, rx, ry, rz } = state;
     const screenX = size.width / 2 - x * zoom;
@@ -105,7 +108,7 @@ export function camera(timeline: gsap.core.Timeline, root: HTMLElement, size: Fr
     return { x, y, width: element.offsetWidth, height: element.offsetHeight };
   };
 
-  const frame = (box: Box, framing: Framing = {}): Shot => {
+  const frame = (box: Box, framing: Framing = {}): Framed => {
     const { margin = 80, maxZoom = 2.4, offsetX = 0, offsetY = 0 } = framing;
     const zoom =
       framing.zoom ??
@@ -121,16 +124,12 @@ export function camera(timeline: gsap.core.Timeline, root: HTMLElement, size: Fr
     };
   };
 
-  const look =
-    (find: () => HTMLElement, framing?: Framing, tilt: Shot = {}) =>
-    (): Shot => ({ ...tilt, ...frame(boxOf(find()), framing) });
-
   const place = (shot: Shot): void => {
     Object.assign(state, shot);
     apply();
   };
 
-  const cut = (shot: ShotTarget, at: number): void => {
+  const cut = (shot: () => Shot, at: number): void => {
     timeline.call(
       () => {
         Object.assign(state, shot());
@@ -141,7 +140,8 @@ export function camera(timeline: gsap.core.Timeline, root: HTMLElement, size: Fr
     );
   };
 
-  const move = (shot: ShotTarget, at: number, duration = 1.2, ease = "power3.inOut"): number => {
+  const move = (shot: () => Shot, at: number, duration: number, ease = "power3.inOut"): number => {
+    moves.push({ from: at, to: at + duration });
     timeline.call(
       () => {
         timeline.add(
@@ -155,23 +155,18 @@ export function camera(timeline: gsap.core.Timeline, root: HTMLElement, size: Fr
     return at + duration;
   };
 
-  const drift = (shot: ShotTarget, at: number, duration: number): number =>
-    move(shot, at, duration, "sine.inOut");
-
   const follow: Camera["follow"] = (box, { from, to }, at, duration, ease) => {
-    const screenOf = (target: Box, shot: Shot): Box => {
-      const zoom = shot.zoom ?? 1;
-      return {
-        x: size.width / 2 + (target.x - (shot.x ?? 0)) * zoom,
-        y: size.height / 2 + (target.y - (shot.y ?? 0)) * zoom,
-        width: target.width * zoom,
-        height: target.height * zoom,
-      };
-    };
+    const screenOf = (target: Box, { x, y, zoom }: Framed): Box => ({
+      x: size.width / 2 + (target.x - x) * zoom,
+      y: size.height / 2 + (target.y - y) * zoom,
+      width: target.width * zoom,
+      height: target.height * zoom,
+    });
     const start = screenOf(box(0), from);
     const end = screenOf(box(1), to);
     const mix = (a: number, b: number, progress: number): number => a + (b - a) * progress;
     const progress = { value: 0 };
+    moves.push({ from: at, to: at + duration });
     timeline.fromTo(
       progress,
       { value: 0 },
@@ -203,6 +198,9 @@ export function camera(timeline: gsap.core.Timeline, root: HTMLElement, size: Fr
     return at + duration;
   };
 
+  const moving = (from: number, to: number): boolean =>
+    moves.some((span) => span.from < to && from < span.to);
+
   apply();
-  return { boxOf, frame, look, place, cut, move, drift, follow };
+  return { boxOf, frame, place, cut, move, follow, moving };
 }

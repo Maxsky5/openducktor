@@ -2,13 +2,15 @@
 // plays and pauses, the right arrow jumps 1 s forward (5 s with Shift), the left arrow loads the
 // page again at an earlier time, and the query `t` starts at a time, with `play` to play at once.
 // A bar shows the time. The renderer never opens this mode.
+import type { SceneVideo } from "./scenes";
 
 /** The last time that `seek` accepts, a little before the end. */
 const END_MARGIN = 0.001;
 
-export function startPreview(duration: number, query: URLSearchParams): void {
-  const video = window.__sceneVideo;
-  if (!video) throw new Error("The preview needs the handle of the video page.");
+export function startPreview(video: SceneVideo, duration: number, query: URLSearchParams): void {
+  const start = Number(query.get("t") ?? 0);
+  if (!(start >= 0))
+    throw new Error(`Set t to a time in seconds, 0 or more, not ${query.get("t")}.`);
   const bar = document.createElement("div");
   bar.className = "video-preview-bar";
   document.body.append(bar);
@@ -25,7 +27,7 @@ export function startPreview(duration: number, query: URLSearchParams): void {
     else query.delete("play");
     location.search = query.toString();
   };
-  go(Number(query.get("t") ?? 0));
+  go(start);
   document.addEventListener("keydown", (event: KeyboardEvent) => {
     const step = event.shiftKey ? 5 : 1;
     if (event.key === " ") {

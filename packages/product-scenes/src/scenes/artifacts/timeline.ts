@@ -50,6 +50,10 @@ export const build: SceneBuilder<ArtifactsTemplate> = (scene) => {
   // The Builder ends its turn. Its step on the rail stops the spinner.
   const ended = rows.say(row("saved"), saved + 0.5);
   scene.mark("said", ended);
+  // The marks of each wait keep a short margin to the changes of the screen, so a film can play the
+  // wait faster: the rests and the travel of the pointer to the file.
+  scene.mark("said-rest", ended + 0.05);
+  scene.mark("to-file", ended + 0.4);
   studio.patch(ended, { activity: "idle" });
   studio.sessions.update(STORY_SESSIONS.build.id, ended, {
     tone: "done",
@@ -62,11 +66,16 @@ export const build: SceneBuilder<ArtifactsTemplate> = (scene) => {
   scene.at(pointed, () => file.toggleAttribute("data-hover", true));
   const opened = cursor.click(() => file, pointed + 0.3, 0.05);
   scene.mark("file", opened);
+  scene.mark("to-file-end", opened - 0.36);
+  scene.mark("file-rest", opened + 0.5);
+  scene.mark("file-rest-end", opened + 1.15);
   tab.open(opened + 0.1);
 
   // Expand opens the page in a large dialog.
   const onExpand = cursor.point(() => tab.expand, opened + 1.2, 0.7);
   scene.mark("expand", onExpand);
+  scene.mark("expand-rest", onExpand + 0.25);
+  scene.mark("expand-rest-end", onExpand + 0.6);
   scene.at(onExpand, () => {
     tab.expand.toggleAttribute("data-hover", true);
     tip.show(tab.expand, EXPAND);
@@ -78,6 +87,7 @@ export const build: SceneBuilder<ArtifactsTemplate> = (scene) => {
   });
   preview.open(expanded + 0.1);
   scene.mark("preview", expanded + 0.35);
+  scene.mark("preview-open", expanded + 0.35 + 0.2);
   cursor.hide(expanded + 0.6);
 
   // The visitor reads the page, then closes the dialog.

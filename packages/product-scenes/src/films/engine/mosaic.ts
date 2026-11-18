@@ -7,7 +7,7 @@ import type { Box, Camera } from "./camera";
 import type { Film } from "./film";
 
 /** One tile of the mosaic: a set and the product view in it that the tile shows. */
-export type MosaicTile = { set: () => HTMLElement; view: () => HTMLElement };
+type MosaicTile = { set: () => HTMLElement; view: () => HTMLElement };
 
 export type MosaicOptions = {
   /** The rows of tiles, from the top. */
@@ -19,8 +19,11 @@ export type MosaicOptions = {
   gap: number;
 };
 
-/** The place of a set in the wall: its move and its scale from its place in the grid. */
-type Place = { set: HTMLElement; x: number; y: number; scale: number };
+/**
+ * The place of a set in the wall: its move and its scale from its place in the grid, and the boxes
+ * of the set and of its view in the grid, as the layout measured them.
+ */
+type Place = { set: HTMLElement; x: number; y: number; scale: number; origin: Box; view: Box };
 
 /** The box of the wall and the place of each set in it, in the order of the rows. */
 export type MosaicLayout = { wall: Box; places: Place[] };
@@ -39,7 +42,8 @@ function rowBoxes(views: readonly Box[], width: number, gap: number): Box[] {
 
 /**
  * Measures the view of each tile in the layout of the page and lays out the wall. The camera
- * measures the layout boxes, so the moves of the sets do not change the result.
+ * measures the boxes with the GSAP moves of the sets, so lay out the wall while each set is in its
+ * place in the grid.
  */
 export function layoutMosaic(
   camera: Camera,
@@ -72,6 +76,8 @@ export function layoutMosaic(
         x: center.x - width / 2 + box.x - origin.x - (view.x - origin.x) * scale,
         y: y - origin.y - (view.y - origin.y) * scale,
         scale,
+        origin,
+        view,
       });
     });
     y += (boxes[0]?.height ?? 0) + gap;
@@ -92,17 +98,15 @@ export function formMosaic({ places }: MosaicLayout): void {
  * it one after the other.
  */
 export function breakMosaic(
-  film: Film,
+  timeline: gsap.core.Timeline,
   { places }: MosaicLayout,
   first: HTMLElement,
   at: number,
   duration: number,
   ease: string,
 ): void {
-  const order = [...places].sort((a, b) => Number(b.set === first) - Number(a.set === first));
-  order.forEach(({ set }, index) => {
-    film.timeline.to(set, { x: 0, y: 0, scale: 1, duration, ease }, at + index * 0.025);
-  });
+  const others = places.map(({ set }) => set).filter((set) => set !== first);
+  timeline.to([first, ...others], { x: 0, y: 0, scale: 1, duration, ease, stagger: 0.025 }, at);
 }
 
 /**

@@ -58,12 +58,17 @@ export const build: SceneBuilder = (scene) => {
   scene.at(forked + 0.2, () => fork.removeAttribute("data-hover"));
   dialog.open(forked + 0.15);
   scene.mark("dialog", forked + 0.15);
+  scene.mark("dialog-open", forked + 0.15 + 0.25);
 
   // New worktree shows its fields with the suggested name. The window shows the whole dialog, and
   // on a phone stage the body scrolls to the fields.
   const selected = cursor.click(() => dialog.location("new_worktree"), forked + 0.8, 0.8);
   dialog.select("new_worktree", selected);
   scene.mark("worktree", selected);
+  // The marks of each wait keep a short margin to the changes of the screen, so a film can play the
+  // wait faster: the travels of the pointer, its rest on the worktree name, and the startup steps.
+  scene.mark("to-name", selected + 0.5);
+  scene.mark("name-rest", selected + 1.1);
   const scrolled = dialog.scrollToEnd(selected + 0.2, 0.3);
 
   // The visitor checks the worktree name, then selects Fork session. The button shows that the
@@ -73,6 +78,9 @@ export const build: SceneBuilder = (scene) => {
   const progress = confirmed + 0.6;
   dialog.start(confirmed, progress);
   scene.mark("confirm", confirmed);
+  scene.mark("to-confirm", confirmed - 0.72);
+  scene.mark("to-confirm-end", confirmed - 0.02);
+  scene.mark("startup", confirmed + 0.95);
   const started = dialog.runSteps(progress, 0.8);
   cursor.hide(progress + 0.3);
 
@@ -89,6 +97,9 @@ export const build: SceneBuilder = (scene) => {
   sessions.update(FORK_ENTRY.id, ready, { selected: true, time: "now" });
   dialog.close(ready);
   scene.mark("forked", ready);
+  scene.mark("startup-end", ready - 0.35);
+  // The dialog has closed over the fork, and the pointer has not left for the composer yet.
+  scene.mark("dialog-closed", ready + 0.25);
 
   // The visitor sends another follow-up. The agent starts, and the fork runs.
   const clicked = cursor.click(() => composer.editor, ready + 0.7, 0.8);

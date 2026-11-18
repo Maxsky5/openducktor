@@ -1,12 +1,11 @@
 @layer views {
   :where(.stage) {
-    /* A caption sits in the column on the left, centered on the height of the frame. */
+    /* A caption sits in the column on the left. Its script centers it on the height of the frame. */
     .film-caption {
       position: absolute;
       top: 50%;
       left: 104px;
       width: 760px;
-      transform: translateY(-50%);
       visibility: hidden;
     }
     .film-kicker {

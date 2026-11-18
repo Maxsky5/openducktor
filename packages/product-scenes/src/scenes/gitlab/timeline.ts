@@ -43,12 +43,18 @@ export const build: SceneBuilder = (scene) => {
   const picked = cursor.click(() => git.tile("gitlab"), 0.5, 1);
   git.select("gitlab", picked);
   scene.mark("provider", picked);
+  scene.mark("gitlab-card", picked + 0.4);
+  // The marks of each wait keep a short margin to the changes of the screen, so a film can play the
+  // wait faster: the detection, the rest, the travel of the pointer, and the approval.
+  scene.mark("detect", picked + 1.85);
 
   // Detect from origin reads the origin remote and fills the project path. The error goes, and the
   // card asks for an account.
   const clicked = cursor.click(git.detectButton, picked + 0.9, 0.9);
   const detected = git.detect(PROJECT_PATH, clicked, DETECT);
   scene.mark("detected", detected);
+  scene.mark("detect-end", detected - 0.05);
+  scene.mark("detected-rest", detected + 0.1);
 
   // Sign in with GitLab opens the sign-in in the browser, and the card waits for the approval. A
   // phone stage scrolls the tab to show the button first. A wide stage shows it already.
@@ -62,10 +68,14 @@ export const build: SceneBuilder = (scene) => {
   const signedIn = cursor.click(git.signInButton, revealed + 0.1, 0.8);
   const waiting = git.startSignIn(signedIn, SIGN_IN);
   scene.mark("waiting", waiting);
+  scene.mark("to-sign-in", waiting - 1.45);
+  scene.mark("to-sign-in-end", waiting - 0.6);
+  scene.mark("approval", waiting + 0.3);
   cursor.hide(waiting + 0.4);
 
   // The visitor approves the sign-in in the browser. The account links, and the card is Ready.
   const ready = git.link(waiting + APPROVAL, CHECK);
   scene.mark("ready", ready);
+  scene.mark("approval-end", ready - 0.35);
   scene.endAt(ready + 2.5);
 };

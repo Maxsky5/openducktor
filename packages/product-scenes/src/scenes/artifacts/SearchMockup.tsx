@@ -30,7 +30,7 @@ function Mark({ part }: { part: number }): ReactElement {
 export function SearchMockup(): ReactElement {
   return (
     <div className="wf">
-      <div className="wf-sheet">
+      <div className="wf-sheet" data-mockup-page="">
         <p className="wf-head">
           <span className="wf-tag">Wireframe</span>
           Search dialog · v1

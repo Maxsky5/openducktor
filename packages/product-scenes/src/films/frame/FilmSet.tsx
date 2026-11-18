@@ -9,8 +9,6 @@ type FilmSetProps = {
   /** The place of the set in the world, in world pixels. */
   x: number;
   y: number;
-  /** The width of the set, when the film shows the scene narrower than its design width. */
-  width?: number;
   /**
    * The pixels that the film hides on the left of the set, as a crop of a film editor, such as a
    * side menu that would show at the edge of the captions.
@@ -20,7 +18,7 @@ type FilmSetProps = {
   children: ReactElement;
 };
 
-export function FilmSet({ name, x, y, width, cropLeft, children }: FilmSetProps): ReactElement {
+export function FilmSet({ name, x, y, cropLeft, children }: FilmSetProps): ReactElement {
   return (
     <div
       className="film-set"
@@ -28,7 +26,7 @@ export function FilmSet({ name, x, y, width, cropLeft, children }: FilmSetProps)
       style={{
         left: x,
         top: y,
-        width: width ?? SCENES[name].size.width,
+        width: SCENES[name].size.width,
         clipPath: cropLeft === undefined ? undefined : `inset(0 0 0 ${cropLeft}px)`,
       }}
     >

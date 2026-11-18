@@ -17,7 +17,7 @@ export function ArtifactPreviewDialog({
   return (
     <div className="st-overlay">
       <div className="st-dialog ar-dialog" data-dialog-box="">
-        <div className="ar-dialog-head">
+        <div className="ar-dialog-head" data-dialog-head="">
           <b>{name}</b>
         </div>
         <HtmlPreview>{children}</HtmlPreview>

@@ -2,6 +2,7 @@
 // changed since 1.0.0, so a person who never used OpenDucktor also understands each feature. Each
 // sentence states only what the product does.
 import type { CaptionText } from "../frame/Caption";
+import { chapterNumber } from "../frame/ChapterBar";
 import type { KeyCap, KeyChord } from "../frame/KeyCast";
 import type { OutroLink } from "../frame/Titles";
 
@@ -18,58 +19,63 @@ export const CHAPTERS = [
   "Raccourcis",
 ] as const;
 
+/** The kicker of a caption: the number and the name of its chapter, as the chapter bar shows them. */
+function kicker(chapter: (typeof CHAPTERS)[number]): string {
+  return `${chapterNumber(CHAPTERS.indexOf(chapter))} · ${chapter}`;
+}
+
 export const CAPTIONS = {
   tasks: {
     id: "tasks",
-    kicker: "01 · Mobile",
+    kicker: kicker("Mobile"),
     title: ["App mobile", "*iOS et Android*"],
     sub: "En bêta, connectée à votre machine. Ici, elle lance un agent.",
   },
   question: {
     id: "question",
-    kicker: "01 · Mobile",
+    kicker: kicker("Mobile"),
     title: ["Les questions", "*des agents*"],
     sub: "L’agent de spec attend une réponse. Vous la choisissez sur le téléphone.",
   },
   goalStart: {
     id: "goal-start",
-    kicker: "02 · Goal mode",
+    kicker: kicker("Goal mode"),
     title: ["L’agent reçoit", "*un objectif*"],
     sub: "Generate goal l’écrit depuis la tâche et son plan.",
   },
   goalTurns: {
     id: "goal-turns",
-    kicker: "02 · Goal mode",
+    kicker: kicker("Goal mode"),
     title: ["Il enchaîne", "*les tours seul*"],
     sub: "Jusqu’à ce que l’objectif soit atteint. Avec Claude Code, Codex et OpenCode.",
   },
   fork: {
     id: "fork",
-    kicker: "03 · Sessions",
+    kicker: kicker("Sessions"),
     title: ["Forker", "*depuis une réponse*"],
     sub: "La nouvelle session reprend la conversation jusqu’à ce point.",
   },
   artifacts: {
     id: "artifacts",
-    kicker: "04 · Artifacts",
+    kicker: kicker("Artifacts"),
     title: ["Des fichiers", "*sur la tâche*"],
     sub: "Ici, l’agent y enregistre une maquette HTML, ouverte dans l’app.",
   },
   gitlab: {
     id: "gitlab",
-    kicker: "05 · GitLab",
+    kicker: kicker("GitLab"),
     title: ["GitLab", "*est supporté*"],
     sub: "GitLab.com ou auto-hébergé, à côté de GitHub et Azure DevOps.",
   },
   shortcutSessions: {
     id: "shortcut-sessions",
-    kicker: "06 · Raccourcis",
+    kicker: kicker("Raccourcis"),
     title: ["⌘1 à ⌘0 ouvrent", "*vos sessions*"],
     sub: "En tenant ⌘, chaque session affiche son numéro.",
   },
   shortcutKeys: {
     id: "shortcut-keys",
-    kicker: "06 · Raccourcis",
+    kicker: kicker("Raccourcis"),
     title: ["Raccourcis", "*modifiables*"],
     sub: "Chaque commande peut avoir des touches, dans les réglages.",
   },

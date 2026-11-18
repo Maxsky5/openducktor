@@ -32,37 +32,20 @@ export function captionTrack(timeline: gsap.core.Timeline, root: HTMLElement): C
     const kicker = must(caption, "[data-kicker]");
     const words = all(caption, "[data-word]");
     const sub = must(caption, "[data-sub]");
-    // The parts take their first state with the caption, so no part shows before it moves in.
+    // The parts take their first state with the caption, so no part shows before it moves in. The
+    // caption keeps its center on the middle of the frame.
     timeline.set(kicker, { autoAlpha: 0, x: -24 }, at);
     timeline.set(words, { yPercent: 118, rotate: 4 }, at);
     timeline.set(sub, { autoAlpha: 0, y: 16 }, at);
-    timeline.set(caption, { autoAlpha: 1, y: 0 }, at);
-    timeline.fromTo(
-      kicker,
-      { autoAlpha: 0, x: -24 },
-      { autoAlpha: 1, x: 0, duration: 0.5, ease: "power3.out", immediateRender: false },
-      at,
-    );
-    timeline.fromTo(
+    timeline.set(caption, { autoAlpha: 1, yPercent: -50 }, at);
+    timeline.to(kicker, { autoAlpha: 1, x: 0, duration: 0.5, ease: "power3.out" }, at);
+    timeline.to(
       words,
-      { yPercent: 118, rotate: 4 },
-      {
-        yPercent: 0,
-        rotate: 0,
-        duration: 0.8,
-        ease: "power4.out",
-        stagger: 0.05,
-        immediateRender: false,
-      },
+      { yPercent: 0, rotate: 0, duration: 0.8, ease: "power4.out", stagger: 0.05 },
       at + 0.08,
     );
     const subAt = at + 0.3 + words.length * 0.05;
-    timeline.fromTo(
-      sub,
-      { autoAlpha: 0, y: 16 },
-      { autoAlpha: 1, y: 0, duration: 0.6, ease: "power3.out", immediateRender: false },
-      subAt,
-    );
+    timeline.to(sub, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power3.out" }, subAt);
     return subAt + 0.6;
   };
 
@@ -79,7 +62,7 @@ export function captionTrack(timeline: gsap.core.Timeline, root: HTMLElement): C
 }
 
 /** How a chord of keys comes or goes: a fade, or a cut that swaps it with the next chord at once. */
-export type KeyChange = "fade" | "cut";
+type KeyChange = "fade" | "cut";
 
 /** The held keys of a film, which the caption column shows. */
 export type KeyCastTrack = {
@@ -100,25 +83,17 @@ export function keyTrack(timeline: gsap.core.Timeline, root: HTMLElement): KeyCa
     show: (id, at, end, { enter = "fade", exit = "fade", pressed = [] } = {}) => {
       const row = must(root, `[data-keys="${id}"]`);
       if (enter === "fade") {
-        timeline.fromTo(
-          row,
-          { autoAlpha: 0, y: 10 },
-          { autoAlpha: 1, y: 0, duration: 0.2, ease: "power2.out", immediateRender: false },
-          at,
-        );
+        timeline.set(row, { autoAlpha: 0, y: 10 }, at);
+        timeline.to(row, { autoAlpha: 1, y: 0, duration: 0.2, ease: "power2.out" }, at);
       } else {
         timeline.set(row, { autoAlpha: 1, y: 0 }, at);
       }
-      const caps = all(row, ".film-key-cap");
+      const caps = all(row, "[data-key-cap]");
       for (const index of pressed) {
         const cap = caps[index];
         if (!cap) throw new Error(`The chord ${id} has no key ${index}.`);
-        timeline.fromTo(
-          cap,
-          { y: 4, scale: 0.94 },
-          { y: 0, scale: 1, duration: 0.18, ease: "power2.out", immediateRender: false },
-          at,
-        );
+        timeline.set(cap, { y: 4, scale: 0.94 }, at);
+        timeline.to(cap, { y: 0, scale: 1, duration: 0.18, ease: "power2.out" }, at);
       }
       if (exit === "fade") {
         timeline.to(row, { autoAlpha: 0, duration: 0.2, ease: "power1.in" }, end - 0.2);

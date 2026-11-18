@@ -64,15 +64,21 @@ export const build: SceneBuilder = (scene) => {
   scene.mark("open", opened);
   scene.mark("question", shown);
 
-  // The visitor reads the question and chooses an answer. Confirm Answers turns on.
+  // The visitor reads the question and chooses an answer. Confirm Answers turns on. The marks of
+  // each rest keep a short margin to the changes of the screen, so a film can play the rest faster.
   steps.show(2, shown + 0.2);
+  scene.mark("read", shown + 0.2);
+  scene.mark("read-rest", shown + 1.4);
   const chosen = question.choose(QUESTION.answer, shown + READ);
   scene.mark("choose", chosen);
+  scene.mark("read-rest-end", chosen - 0.6);
+  scene.mark("choice-rest", chosen + 0.25);
 
   // Confirm Answers sends the answer, and the card shows its progress until the host takes it.
   steps.show(3, chosen + 0.3);
   const sent = question.confirm(chosen + CONFIRM);
   scene.mark("submit", sent);
+  scene.mark("choice-rest-end", sent - 0.6);
 
   // The host takes the answer: the card goes, the question shows the answer, and the Spec agent
   // works again.
@@ -83,6 +89,8 @@ export const build: SceneBuilder = (scene) => {
     setRail("spec", RAIL.working.spec);
   });
   scene.mark("answered", answered);
+  // The answer shows, and the reply of the agent has not come yet.
+  scene.mark("before-reply", answered + 0.75);
 
   // The Spec agent replies and reads the note store.
   steps.show(4, answered + 0.2);

@@ -1,7 +1,8 @@
 // Chapter 2 of the release film: Goal mode. The start dialog of the Builder turns Goal mode on, a
 // model writes the goal, and the session starts. The Builder then works turn after turn by itself,
-// and the goal row shows Complete. Each step of the UI plays at the speed of the app. The wait for
-// the model and the work of the Builder play faster, as a time lapse.
+// and the goal row shows Complete. Each step of the UI plays at the speed of the app. The rests,
+// the travels of the pointer, the wait for the model, and the startup steps play faster, and the
+// work of the Builder plays as a time lapse.
 import type { Framing, Shot } from "../engine/camera";
 import type { Film } from "../engine/film";
 import { CAPTIONS } from "./captions";
@@ -20,7 +21,7 @@ const LAPSE = 2.5;
  * How much faster the startup steps play. The camera still lands on the chat before the session
  * opens.
  */
-const STEPS = 1.6;
+const STARTUP = 1.6;
 /** Seconds of the camera move to the chat column. */
 const TO_CHAT = 0.9;
 /** How much faster the wait for the model that writes the goal plays. The spinner keeps its speed. */
@@ -36,7 +37,7 @@ export function goalChapter(film: Film, at: number): number {
   // Goal mode turns on, and one framing holds it at both sizes. Generate goal waits for the model,
   // which writes a sharper goal, and Start session shows the startup steps.
   const place = (): Shot => {
-    const window = camera.boxOf(part(".app-window")());
+    const window = camera.boxOf(part("[data-root]")());
     return camera.frame(
       {
         x: window.x + (window.width - DIALOG_SIZE.width) / 2,
@@ -51,7 +52,7 @@ export function goalChapter(film: Film, at: number): number {
     {
       set: "goal-mode",
       caption: CAPTIONS.goalStart.id,
-      play: { mark: "dialog" },
+      mark: "dialog",
       shot: place,
       lead: 0.05,
       result: { mark: "start", hold: 0.6 },
@@ -60,41 +61,39 @@ export function goalChapter(film: Film, at: number): number {
     at,
   );
   const run = start.run;
-  // The rest after the switch, before the pointer goes to Generate goal, plays faster. The pointer
-  // clicks Generate goal 0.8 s after the generate mark, and the wait for the model plays faster.
-  // The visitor sees the new goal, and the rest before the pointer goes to Start session, 1.6 s
-  // after the goal shows, plays faster.
-  run.speed(run.at("goal-on", 0.35), REST);
-  run.speed(run.at("generate", -0.05), POINTER);
-  run.speed(run.at("generate", 0.78), 1);
-  run.speed(run.at("generate", 0.95), MODEL_WAIT);
-  run.speed(run.at("generated", -0.1), 1);
-  run.speed(run.at("generated", 0.4), REST);
-  run.speed(run.at("generated", 1.55), POINTER);
-  run.speed(run.at("start", -0.02), 1);
-  const started = start.hand();
+  // The rest after the switch and the travel of the pointer to Generate goal play faster, and so
+  // does the wait for the model. The visitor sees the new goal, and the rest and the travel of the
+  // pointer to Start session play faster.
+  run.speed("goal-on-rest", REST);
+  run.speed("to-generate", POINTER);
+  run.speed("to-generate-end", 1);
+  run.speed("model", MODEL_WAIT);
+  run.speed("model-end", 1);
+  run.speed("generated-rest", REST);
+  run.speed("to-start", POINTER);
+  run.speed("to-start-end", 1);
+  const started = start.hideCaption();
 
   // While the dialog shows the startup steps, the camera moves to the chat column, where the
   // Builder session opens. The column ends at the right edge of the frame, so the side panel of
   // the window stays out of the frame and no text is cut. The turns play as a time lapse, and the
   // goal row at the bottom of the column shows Complete at the speed of the app.
   const chat = (): Shot => {
-    const box = camera.boxOf(part(".st-main")());
+    const box = camera.boxOf(part("[data-studio-main]")());
     return {
       x: box.x + box.width - FRAME.width / 2 / CHAT_ZOOM,
       y: box.y + box.height / 2,
       zoom: CHAT_ZOOM,
     };
   };
-  // The dialog shows Starting... for 0.5 s, then resizes to the startup steps in 0.3 s. The camera
-  // leaves as the steps show, and the steps play faster once the resize ends. The camera lands
-  // about 0.3 s before the dialog goes and the session shows.
-  run.speed(run.at("start", 0.9), STEPS);
-  run.speed(run.at("session", -0.05), 1);
-  camera.move(chat, run.at("start", 0.6), TO_CHAT);
+  // The camera leaves while the dialog resizes to the startup steps, and the steps play faster. The
+  // camera lands before the dialog goes and the session shows.
+  run.speed("startup", STARTUP);
+  run.speed("startup-end", 1);
+  camera.move(chat, run.mark("resizing"), TO_CHAT);
   captions.show(CAPTIONS.goalTurns.id, started + 0.45);
-  run.speed(run.at("session", 0.3), LAPSE);
-  run.speed(run.at("complete", -1.6), 1);
+  run.speed("turns", LAPSE);
+  run.speed("turns-end", 1);
   const complete = run.mark("complete");
   const end = complete + 1.0;
   captions.hide(CAPTIONS.goalTurns.id, end - 0.2);

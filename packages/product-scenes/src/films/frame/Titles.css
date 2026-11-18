@@ -24,13 +24,6 @@
       transform-box: view-box;
       transform-origin: 32px 50px;
     }
-    .film-mark-water {
-      fill: none;
-      stroke: #fff;
-      stroke-width: 2.5;
-      stroke-linecap: round;
-      opacity: 0;
-    }
     .film-mark-visor {
       fill: none;
       stroke: #5100ff;

@@ -1,6 +1,6 @@
-// The OpenDucktor mark of the film titles: the violet tile, the duck, its visor, and the light that
-// scans the visor. The paths copy the mark of the app, and the titles move the duck, the water,
-// and the light. `copied-film-mark.test.ts` compares the paths with the mark of the replicas.
+// The OpenDucktor mark of the film titles: the violet tile, the duck, its visor, and the light on
+// the visor. The paths copy the mark of the app, and the titles rock the duck.
+// `copied-film-mark.test.ts` compares the paths with the mark of the replicas.
 import type { ReactElement } from "react";
 
 /** The paths of the duck in its 64 unit box, from the mark of the app. */
@@ -12,21 +12,17 @@ export const DUCK = {
   light: "M40.2 17.8H43.4",
 } as const;
 
-/** The water line under the duck, which shows while the duck lands. */
-const WATER = "M10 54.5q5.5-3 11 0t11 0t11 0t11 0";
-
-export function Mark({ className }: { className?: string }): ReactElement {
+export function Mark(): ReactElement {
   return (
-    <svg className={`film-mark ${className ?? ""}`} viewBox="0 0 64 64" data-mark="">
+    <svg className="film-mark" viewBox="0 0 64 64">
       <rect className="film-mark-tile" width="64" height="64" rx="15" />
-      <path className="film-mark-water" d={WATER} data-mark-water="" />
       <g className="film-mark-duck" data-mark-duck="">
         <g transform="translate(8.5 8) scale(0.74)">
           <path d={DUCK.body} />
           <circle cx={DUCK.head.cx} cy={DUCK.head.cy} r={DUCK.head.r} />
           <path d={DUCK.bill} />
           <path className="film-mark-visor" d={DUCK.visor} />
-          <path className="film-mark-light" d={DUCK.light} data-mark-light="" />
+          <path className="film-mark-light" d={DUCK.light} />
         </g>
       </g>
     </svg>
