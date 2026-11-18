@@ -15,6 +15,7 @@ import {
 } from "@openducktor/contracts";
 import type { DemoHandlers, DemoHostResults } from "./demo-host-client";
 import type { DemoDocumentSaveOptions } from "./demo-runs";
+import type { DemoTerminals } from "./demo-terminals";
 import {
   availableTaskActions,
   SPEC_PLAN_BUILD_BOARD,
@@ -91,7 +92,10 @@ const snapshotOf = (task: DemoTask) => ({
 export type DemoTaskStore = ReturnType<typeof createDemoTaskStore>;
 
 /** The tasks of the demo workspaces and the task commands of the host client. */
-export const createDemoTaskStore = (world: DemoWorld) => {
+export const createDemoTaskStore = (
+  world: DemoWorld,
+  terminals: Pick<DemoTerminals, "closeTaskTerminals">,
+) => {
   const { clock, events } = world;
   let eventNumber = 1;
   /** Staged images that a saved description uses stay until the demo ends. */
@@ -199,12 +203,10 @@ export const createDemoTaskStore = (world: DemoWorld) => {
         ),
       },
     });
-    if (task.worktree) {
-      const checkout = workspace.repository.checkout(task.worktree.workingDirectory);
-      checkout.committed.clear();
-      checkout.uncommitted.clear();
-      checkout.commits = 0;
-    }
+    if (task.worktree)
+      workspace.repository.resetBranch(
+        workspace.repository.checkout(task.worktree.workingDirectory),
+      );
     world.sessions.forgetTaskSessions(workspace, task.record.id, workflow.worktreeRoles);
     unlinkPullRequest(task);
   };
@@ -212,7 +214,7 @@ export const createDemoTaskStore = (world: DemoWorld) => {
   const unlinkPullRequest = (task: DemoTask) => {
     const { pullRequest: _unlinked, ...record } = task.record;
     task.record = record;
-    delete task.pullRequestTitle;
+    delete task.pullRequestDraft;
   };
 
   /** Saves a workflow document, and applies its submit event when `submit` is true. */
@@ -270,7 +272,12 @@ export const createDemoTaskStore = (world: DemoWorld) => {
     return { created: true, checkout: workspace.repository.addWorktree(worktree) };
   };
 
-  const linkPullRequest = (workspace: DemoWorkspace, taskId: string, title: string) => {
+  const linkPullRequest = (
+    workspace: DemoWorkspace,
+    taskId: string,
+    title: string,
+    body: string,
+  ) => {
     const task = findTask(workspace, taskId);
     const now = clock.nowIso();
     const number = task.record.pullRequest?.number ?? world.nextPullRequestNumber++;
@@ -284,7 +291,7 @@ export const createDemoTaskStore = (world: DemoWorld) => {
         updatedAt: now,
       },
     });
-    task.pullRequestTitle = title;
+    task.pullRequestDraft = { title, body };
     publish(workspace, { taskIds: [taskId] });
     if (!task.record.pullRequest) throw new Error("The demo pull request did not save.");
     return task.record.pullRequest;
@@ -441,8 +448,13 @@ export const createDemoTaskStore = (world: DemoWorld) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
       world.sessions.forgetTaskSessions(workspace, taskId);
+      terminals.closeTaskTerminals(scope.workspaceId, taskId);
       if (task.worktree) workspace.repository.removeWorktree(task.worktree.workingDirectory);
       workspace.tasks.delete(taskId);
+      // The issue of a deleted task can be imported again.
+      for (const issue of workspace.issues) {
+        if (issue.linkedTaskId === taskId) delete issue.linkedTaskId;
+      }
       publish(workspace, { taskIds: [taskId], removedTaskIds: [taskId] });
       return { ok: true };
     },
@@ -450,6 +462,7 @@ export const createDemoTaskStore = (world: DemoWorld) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
       world.sessions.stopTaskSessions(workspace, taskId);
+      terminals.closeTaskTerminals(scope.workspaceId, taskId);
       const previousStatus = task.record.status;
       touch(task, { status: "closed" });
       if (removeWorktree && task.worktree) {
@@ -466,6 +479,7 @@ export const createDemoTaskStore = (world: DemoWorld) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
       world.sessions.forgetTaskSessions(workspace, taskId);
+      terminals.closeTaskTerminals(scope.workspaceId, taskId);
       const previousStatus = task.record.status;
       task.documents = {};
       task.freeArtifacts = [];
@@ -647,8 +661,9 @@ export const createDemoTaskStore = (world: DemoWorld) => {
       if (!task.worktree)
         throw new Error("This task has no worktree to merge. Refresh the task, then try again.");
       world.sessions.stopTaskSessions(workspace, taskId);
-      workspace.repository.mergeIntoTarget(
+      workspace.repository.mergeInto(
         workspace.repository.checkout(task.worktree.workingDirectory),
+        input.expected.targetBranch.branch,
       );
       if (input.removeWorktree) {
         workspace.repository.removeWorktree(task.worktree.workingDirectory);
@@ -663,8 +678,8 @@ export const createDemoTaskStore = (world: DemoWorld) => {
       });
       return { outcome: "completed", task: taskCard(task) };
     },
-    taskPullRequestUpsert: async (scope, taskId, title) =>
-      linkPullRequest(workspaceOf(scope), taskId, title),
+    taskPullRequestUpsert: async (scope, taskId, title, body) =>
+      linkPullRequest(workspaceOf(scope), taskId, title, body),
     taskPullRequestUnlink: async (scope, taskId) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
@@ -710,7 +725,7 @@ export const createDemoTaskStore = (world: DemoWorld) => {
         pullRequest: {
           providerId: "github",
           number: pullRequest.number,
-          title: task.pullRequestTitle ?? task.record.title,
+          title: task.pullRequestDraft?.title ?? task.record.title,
           url: pullRequest.url,
           state: "open",
         },

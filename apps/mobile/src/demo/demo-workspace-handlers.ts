@@ -179,6 +179,14 @@ export const createDemoWorkspaceHandlers = (world: DemoWorld) => {
     systemGetPlatform: async () => "darwin",
     systemListOpenInTools: async () => [],
     agentRuntimeLoadCatalog: async (input) => modelCatalog(input.runtimeKind),
+    // Generate goal is the only text generation. The scripted goal names the task of the prompt.
+    agentRuntimeGenerateText: async ({ prompt }) => {
+      const title = /^# Task [^:]+: (.+)$/m.exec(prompt)?.[1];
+      if (!title) throw new Error("The demo cannot write a goal without a task. Write the goal.");
+      return {
+        text: `Finish "${title}" so that it meets its specification. Add tests for the new behavior, keep all tests passing, and complete this workflow step.`,
+      };
+    },
     agentRuntimeSearchFiles: async (input) => {
       const { workspace, checkout } = checkoutOf(input.repoPath, input.workingDirectory);
       const query = input.query.trim().toLowerCase();

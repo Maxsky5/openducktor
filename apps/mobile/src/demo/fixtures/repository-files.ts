@@ -116,6 +116,12 @@ export function syncLabel(state: SyncState): string {
 `),
     ],
     [
+      "src/features/placeholder.ts",
+      text(`// This folder holds one file for each feature. Remove this file with the first feature.
+export {};
+`),
+    ],
+    [
       "src/tags/tags.ts",
       text(`export type Tag = { id: string; name: string };
 

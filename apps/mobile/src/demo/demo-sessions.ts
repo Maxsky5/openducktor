@@ -3,6 +3,7 @@ import type {
   AgentQueuedMessage,
   AgentSessionActivity,
   AgentSessionControlSummary,
+  AgentSessionGoal,
   AgentSessionHistoryMessage,
   AgentSessionLivePendingApprovalRequest,
   AgentSessionLivePendingQuestionRequest,
@@ -40,7 +41,9 @@ type UserMessagePart = Parameters<HostClient["agentSessionMessageSubmit"]>[0]["p
 
 export type DemoSessionOwner =
   | { kind: "chat"; record: WorkspaceSession }
-  | { kind: "task"; taskId: string; role: string };
+  | { kind: "task"; taskId: string; role: string }
+  /** A finished subagent: its history opens read-only from the card in its parent session. */
+  | { kind: "subagent"; parent: DemoSession };
 
 type Run = {
   messageId: string;
@@ -72,6 +75,8 @@ export type DemoSession = {
   lastActivityAt: number;
   /** True while the sample data builds the session, so it sends no live events. */
   quiet: boolean;
+  /** The goal of Goal mode, which the runtime reports in the live state. */
+  goal?: AgentSessionGoal;
 };
 
 export const runtimeIdOf = (runtimeKind: RuntimeKind): string => `demo-${runtimeKind}-1`;
@@ -143,8 +148,9 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     return session;
   };
 
-  const isLive = (session: DemoSession) =>
-    session.owner.kind === "task" || session.owner.record.archivedAt === null;
+  const isLive = (session: DemoSession): boolean =>
+    session.owner.kind === "task" ||
+    (session.owner.kind === "chat" && session.owner.record.archivedAt === null);
 
   const snapshotOf = (session: DemoSession): AgentSessionLiveSnapshot => {
     const snapshot: AgentSessionLiveSnapshot = {
@@ -163,6 +169,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
       },
       model: { ...session.model },
     };
+    if (session.goal) snapshot.goal = { ...session.goal };
     // Only a chat names its workspace. A task session belongs to its task records.
     if (session.owner.kind === "chat")
       snapshot.repositoryScope = {
@@ -182,19 +189,25 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
       : null,
   });
 
-  const scopeOf = (session: DemoSession): AgentSessionScope =>
-    session.owner.kind === "chat"
-      ? {
+  const scopeOf = (session: DemoSession): AgentSessionScope => {
+    switch (session.owner.kind) {
+      case "chat":
+        return {
           kind: "repository",
           workspaceId: session.workspace.record.workspaceId,
           title: session.title,
-        }
-      : {
+        };
+      case "task":
+        return {
           kind: "workflow",
           workspaceId: session.workspace.record.workspaceId,
           taskId: session.owner.taskId,
           role: session.owner.role,
         };
+      case "subagent":
+        return scopeOf(session.owner.parent);
+    }
+  };
 
   /** Publishes the live state of a session. Returns its live sequence. */
   const upsert = (session: DemoSession): number => {
@@ -404,6 +417,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     transcript(session, { type: "session_idle", turnOutcome: "completed" });
     session.run = null;
     session.activity = "idle";
+    if (session.goal?.status === "active") session.goal.status = "complete";
     session.contextTokens += 2_400 + entry.text.length * 3;
     session.lastActivityAt = clock.now();
     upsert(session);
@@ -436,6 +450,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     });
     session.run = run;
     session.activity = "running";
+    if (session.goal?.status === "waiting_for_message") session.goal.status = "active";
     upsert(session);
     transcript(session, { type: "session_status", status: { type: "busy", message: null } });
     advance(session, run, session.quiet ? 0 : DEMO_STEP_MS / 2);
@@ -521,6 +536,8 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     session.pendingApprovals = [];
     session.pendingQuestions = [];
     session.activity = "idle";
+    if (session.goal?.status === "active")
+      session.goal = { ...session.goal, status: "paused", reason: "Stopped by the user" };
     const entry = assistantEntry(session, run);
     if (!entry.text) entry.text = "Stopped.";
     transcript(session, { type: "session_idle", turnOutcome: "interrupted" });
@@ -792,6 +809,21 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
         : { queue: queueOf(session) };
     },
     agentSessionControlStop: async (ref) => stopRun(find(ref)),
+    agentSessionGoalControl: async (input) => {
+      const session = find(input);
+      const goal = session.goal;
+      if (!goal) throw new Error("This session has no goal. Refresh the session.");
+      if (input.action === "clear") delete session.goal;
+      else if (input.action === "pause")
+        session.goal = { objective: goal.objective, status: "paused" };
+      // The demo runtime continues a goal only with the next message.
+      else
+        session.goal = {
+          objective: goal.objective,
+          status: session.run ? "active" : "waiting_for_message",
+        };
+      upsert(session);
+    },
     agentSessionControlRelease: async () => {},
     agentSessionUsageLimitAutoResumeCancel: async () => {},
     agentSessionControlUpdateModel: async (input) => {

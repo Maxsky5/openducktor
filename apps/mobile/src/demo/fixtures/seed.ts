@@ -633,6 +633,40 @@ export function copyTags(tags: readonly Tag[], noteId: string): Tag[] {
     },
     180,
   );
+  // The subagent that the chat started. Its session opens read-only from its card.
+  const subagentPrompt = "Read src/sync and tell me which fields of a tag the sync sends.";
+  const tagsSubagent = engine.create({
+    externalSessionId: `claude-seed-${sessionNumber++}`,
+    workspace: fieldnotes,
+    owner: { kind: "subagent", parent: tagsChat },
+    runtimeKind: tagsChat.ref.runtimeKind,
+    workingDirectory: tagsChat.ref.workingDirectory,
+    title: "Check how sync sends tags",
+    model: MODELS.lyra,
+    startedAtMs: now - 186 * MINUTE,
+    quiet: true,
+  });
+  play(
+    tagsSubagent,
+    subagentPrompt,
+    {
+      steps: [
+        {
+          kind: "tool",
+          tool: "read",
+          toolType: "read",
+          title: "Read src/tags/tags.ts",
+          input: { file_path: `${tagsCheckout.workingDirectory}/src/tags/tags.ts` },
+          output: "export type Tag = { id: string; name: string };",
+        },
+        {
+          kind: "text",
+          text: "The sync sends each tag as it is: `id` and `name`. A tag has no `noteId`, so the server cannot link a moved tag to its note.",
+        },
+      ],
+    },
+    185,
+  );
   const tagsAnswer = tagsChat.history.at(-1);
   if (tagsAnswer?.role === "assistant") {
     tagsAnswer.parts.splice(2, 0, {
@@ -643,7 +677,8 @@ export function copyTags(tags: readonly Tag[], noteId: string): Tag[] {
       status: "completed",
       agent: "reviewer",
       description: "Check how sync sends tags",
-      prompt: "Read src/sync and tell me which fields of a tag the sync sends.",
+      prompt: subagentPrompt,
+      externalSessionId: tagsSubagent.ref.externalSessionId,
       startedAtMs: now - 186 * MINUTE,
       endedAtMs: now - 185 * MINUTE,
     });

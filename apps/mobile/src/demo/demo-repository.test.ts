@@ -31,9 +31,65 @@ describe("demo repository", () => {
       ahead: 1,
       behind: 0,
     });
-    repository.mergeIntoTarget(checkout);
+    repository.mergeInto(checkout, "refs/heads/main");
     const root = repository.checkout("/repo");
     expect(repository.readFile(root, "src/new.ts")).toEqual(text("export {};\n"));
     expect(repository.branchDiffs(checkout)).toEqual([]);
+  });
+
+  test("compares a branch with the merge base of the selected target branch", () => {
+    const repository = createDemoRepository({
+      repoPath: "/repo",
+      targetBranch: "main",
+      files: new Map([
+        ["README.md", text("# Notes\n")],
+        ["src/old.ts", text("export const old = 1;\n")],
+      ]),
+    });
+    const source = repository.addWorktree({ workingDirectory: "/worktrees/a", branch: "odt/a" });
+    repository.commit(source, new Map([["README.md", text("# Notes\n\nTags\n")]]), "Tags");
+    const fork = repository.addWorktree({
+      workingDirectory: "/worktrees/b",
+      branch: "odt/b",
+      from: source,
+    });
+    const changed = (ref: string) =>
+      repository.worktreeStatus(fork, ref, 0).fileDiffs.map((diff) => [diff.file, diff.type]);
+
+    expect(changed("refs/heads/odt/a")).toEqual([]);
+    expect(repository.worktreeStatus(fork, "odt/a", 0).targetAheadBehind).toEqual({
+      ahead: 0,
+      behind: 0,
+    });
+    expect(changed("origin/main")).toEqual([["README.md", "modified"]]);
+
+    repository.commit(fork, new Map([["src/old.ts", null]]), "Remove old");
+    expect(changed("refs/heads/odt/a")).toEqual([["src/old.ts", "deleted"]]);
+    const tree = repository.fileTree(fork, "odt/a");
+    expect(
+      tree.kind === "snapshot" ? tree.entries.map((entry) => [entry.path, entry.gitStatus]) : [],
+    ).toEqual([["README.md", null]]);
+    expect(() => changed("refs/heads/missing")).toThrow("has no branch missing");
+  });
+
+  test("merges a branch into the branch of another checkout", () => {
+    const repository = createDemoRepository({
+      repoPath: "/repo",
+      targetBranch: "main",
+      files: new Map([["README.md", text("# Notes\n")]]),
+    });
+    const into = repository.addWorktree({ workingDirectory: "/worktrees/a", branch: "odt/a" });
+    const task = repository.addWorktree({
+      workingDirectory: "/worktrees/b",
+      branch: "odt/b",
+      from: into,
+    });
+    repository.commit(task, new Map([["src/b.ts", text("export {};\n")]]), "Add b");
+
+    repository.mergeInto(task, "odt/a");
+
+    expect(repository.readFile(into, "src/b.ts")).toEqual(text("export {};\n"));
+    expect(repository.readFile(repository.checkout("/repo"), "src/b.ts")).toBeNull();
+    expect(repository.worktreeStatus(task, "odt/a", 0).fileDiffs).toEqual([]);
   });
 });

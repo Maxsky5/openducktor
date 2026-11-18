@@ -185,6 +185,9 @@ export const createDemoLaunches = ({
             taskId: task.record.id,
           },
         });
+      // A reset, close, or delete during the setup removes the worktree, so the start ends here.
+      if (workspace.tasks.get(task.record.id)?.worktree?.workingDirectory !== workingDirectory)
+        throw new Error("The task changed during the worktree setup. Start the session again.");
     }
 
     const decision = request.policy.decision;
@@ -210,6 +213,8 @@ export const createDemoLaunches = ({
         session.history = engine.copyHistory(source, source.history.at(-1)?.messageId ?? "");
       }
     }
+    // Goal mode: the runtime sets the goal with the first instruction.
+    if (request.goal) session.goal = { objective: request.goal.objective, status: "active" };
     engine.publishTaskRecords(workspace, task.record.id, session);
     const liveStateSequence = engine.upsert(session);
 

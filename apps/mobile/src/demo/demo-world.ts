@@ -41,8 +41,8 @@ export type DemoTask = {
   freeArtifacts: DemoFreeArtifact[];
   /** The worktree of the task, once a role run created it. */
   worktree: { workingDirectory: string; branch: string } | null;
-  /** The title of the linked pull request. */
-  pullRequestTitle?: string;
+  /** The title and description of the linked pull request. */
+  pullRequestDraft?: { title: string; body: string };
 };
 
 /** What the task commands ask of the sessions of a task. */

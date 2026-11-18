@@ -15,7 +15,7 @@ export type DemoRoleOutcomes = {
     options: DemoDocumentSaveOptions,
   ): void;
   applyEvent(workspace: DemoWorkspace, taskId: string, eventId: string): void;
-  linkPullRequest(workspace: DemoWorkspace, taskId: string, title: string): void;
+  linkPullRequest(workspace: DemoWorkspace, taskId: string, title: string, body: string): void;
 };
 
 const text = (value: string): DemoFile => ({ kind: "text", text: value });
@@ -118,6 +118,9 @@ test("${task.record.title.replace(/"/g, "'")}", () => {
     ],
   ]);
 };
+
+/** The placeholder file of the empty features folder of the Fieldnotes repository. */
+const FEATURES_PLACEHOLDER = "src/features/placeholder.ts";
 
 const changelogWith = (
   repository: DemoRepository,
@@ -240,6 +243,18 @@ export const roleRun = (
   const taskId = task.record.id;
   if (options.pullRequest) {
     const title = task.record.title;
+    const summary = task.record.description?.split("\n\n")[0]?.trim() || title;
+    const body = [
+      "## Summary",
+      summary,
+      "## Changes",
+      repository
+        .branchDiffs(checkout)
+        .map((diff) => `- ${diff.type} \`${diff.file}\``)
+        .join("\n"),
+      "## Tests",
+      "- `bun test`: 12 pass, 0 fail",
+    ].join("\n\n");
     return {
       steps: [
         {
@@ -254,10 +269,13 @@ export const roleRun = (
           input: { command: "git log --oneline origin/main..HEAD" },
           output: `${checkout.revision.slice(0, 7)} ${title}`,
         },
-        workflowTool("odt_set_pull_request", "Open pull request", { title }),
-        { kind: "text", text: `I opened the pull request "${title}". Its checks pass.` },
+        workflowTool("odt_set_pull_request", "Open pull request", { title, body }),
+        {
+          kind: "text",
+          text: `I opened the pull request "${title}" with this description. Its checks pass.\n\n${body}`,
+        },
       ],
-      onComplete: () => outcomes.linkPullRequest(workspace, taskId, title),
+      onComplete: () => outcomes.linkPullRequest(workspace, taskId, title, body),
     };
   }
   switch (role) {
@@ -366,15 +384,16 @@ export const roleRun = (
             title: `Write ${paths[0] ?? "files"}`,
             input: { file_path: `${checkout.workingDirectory}/${paths[0] ?? ""}` },
             output: "The files were written.",
-            edit: () =>
-              repository.commit(
-                checkout,
-                new Map([
-                  ...changes,
-                  ["CHANGELOG.md", changelogWith(repository, checkout, task.record.title)],
-                ]),
-                task.record.title,
-              ),
+            edit: () => {
+              const commit = new Map<string, DemoFile | null>([
+                ...changes,
+                ["CHANGELOG.md", changelogWith(repository, checkout, task.record.title)],
+              ]);
+              // The first feature replaces the placeholder of the features folder.
+              if (repository.readFile(checkout, FEATURES_PLACEHOLDER))
+                commit.set(FEATURES_PLACEHOLDER, null);
+              return repository.commit(checkout, commit, task.record.title);
+            },
           },
           {
             kind: "tool",

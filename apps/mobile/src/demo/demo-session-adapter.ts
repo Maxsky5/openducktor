@@ -94,7 +94,7 @@ export const createDemoSessionAdapter = (
     clock,
   );
 
-  const tasks = createDemoTaskStore(world);
+  const tasks = createDemoTaskStore(world, terminals);
   const engine = createDemoSessionEngine(world);
   world.sessions = {
     stopTaskSessions: (workspace, taskId) => {

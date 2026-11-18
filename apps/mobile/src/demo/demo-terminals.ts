@@ -77,6 +77,8 @@ type Terminal = {
   line: string;
   /** The command that runs now, which the Restart control repeats. */
   running: DemoTerminalAction | null;
+  /** Fails the host action of this terminal when the terminal closes before the action ends. */
+  cancelHostAction: (() => void) | null;
 };
 
 type Connection = {
@@ -148,6 +150,8 @@ export type DemoTerminals = {
     workingDir: string;
     delayMs: number;
   }): { terminalId: string; finished: Promise<readonly string[]> };
+  /** Closes the terminals of a task, as Reset Task, Close Task, and Delete do on a host. */
+  closeTaskTerminals(workspaceId: string, taskId: string): void;
   /** Adds a terminal with earlier output, for the sample data. */
   seed(input: {
     label: string;
@@ -268,6 +272,7 @@ export const createDemoTerminals = (world: DemoTerminalWorld, clock: DemoClock):
       output: new Uint8Array(),
       line: "",
       running: null,
+      cancelHostAction: null,
     };
     terminals.set(terminalId, terminal);
     terminal.output = encoder.encode(`${DIM}${SIMULATED_TERMINAL_NOTICE}${RESET}\r\n`);
@@ -518,6 +523,35 @@ export const createDemoTerminals = (world: DemoTerminalWorld, clock: DemoClock):
     },
   };
 
+  /** Stops a terminal and removes it from every list, as the host does on close. */
+  const close = (terminal: Terminal) => {
+    const { terminalId } = terminal.summary;
+    const wasRunning = terminal.running !== null;
+    terminal.running = null;
+    terminal.cancelHostAction?.();
+    terminals.delete(terminalId);
+    revision += 1;
+    for (const connection of connections) {
+      connection.attached.delete(terminalId);
+      if (connection.activity && wasRunning)
+        send(connection, {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "activity_removed",
+          terminalId,
+        });
+      for (const [subscriptionId, filter] of connection.lists) {
+        if (!contextMatches(terminal.summary.context, filter)) continue;
+        send(connection, {
+          version: TERMINAL_PROTOCOL_VERSION,
+          type: "list_removed",
+          subscriptionId,
+          revision,
+          terminalId,
+        });
+      }
+    }
+  };
+
   const find = (terminalId: string): Terminal => {
     const terminal = terminals.get(terminalId);
     if (!terminal)
@@ -575,27 +609,7 @@ export const createDemoTerminals = (world: DemoTerminalWorld, clock: DemoClock):
         const terminal = find(terminalId);
         if (terminal.running && !confirmTerminate)
           return { closed: false, confirmationRequired: true };
-        terminals.delete(terminalId);
-        revision += 1;
-        for (const connection of connections) {
-          connection.attached.delete(terminalId);
-          if (connection.activity && terminal.running)
-            send(connection, {
-              version: TERMINAL_PROTOCOL_VERSION,
-              type: "activity_removed",
-              terminalId,
-            });
-          for (const [subscriptionId, filter] of connection.lists) {
-            if (!contextMatches(terminal.summary.context, filter)) continue;
-            send(connection, {
-              version: TERMINAL_PROTOCOL_VERSION,
-              type: "list_removed",
-              subscriptionId,
-              revision,
-              terminalId,
-            });
-          }
-        }
+        close(terminal);
         return { closed: true, list: listResponse({ kind: "all" }) };
       },
       terminalPreparePathInput: async ({ paths }) => ({
@@ -607,9 +621,18 @@ export const createDemoTerminals = (world: DemoTerminalWorld, clock: DemoClock):
       // A setup step that the end of the demo cuts off fails, so its launch does not wait forever.
       const finished = new Promise<readonly string[]>((resolve, reject) => {
         void startAction(terminal, action, delayMs).then(resolve);
+        terminal.cancelHostAction = () =>
+          reject(new Error(`${action.name} stopped because its terminal closed. Start again.`));
         clock.onEnd(() => reject(new Error("The demo ended. Open the demo again.")));
       });
       return { terminalId: terminal.summary.terminalId, finished };
+    },
+    closeTaskTerminals: (workspaceId, taskId) => {
+      for (const terminal of terminals.values()) {
+        const { context } = terminal.summary;
+        if ("taskId" in context && context.taskId === taskId && context.workspaceId === workspaceId)
+          close(terminal);
+      }
     },
     seed: ({ label, context, workingDir, history, createdAt }) => {
       const terminal = create({ label, context, workingDir, startedBy: "user", createdAt });

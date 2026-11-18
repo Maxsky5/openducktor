@@ -19,18 +19,22 @@ export type DemoFile =
 /** File changes by path. `null` deletes the file. */
 export type DemoFileChanges = ReadonlyMap<string, DemoFile | null>;
 
+/** One commit of a demo branch: its ID and the files that it changes. */
+type DemoCommit = { readonly id: string; readonly changes: DemoFileChanges };
+
 /** One checkout of the demo repository: the repository root or a worktree of a task or a chat. */
 export type DemoCheckout = {
   readonly workingDirectory: string;
   readonly branch: string;
   /** The commit of the checkout, which changes with each scripted commit. */
   revision: string;
-  /** The commits of the branch since the target branch, as file changes. */
-  committed: Map<string, DemoFile | null>;
+  /**
+   * The commits of the branch since the target branch, oldest first. Branches that share commits
+   * share their IDs, so the merge base of two branches is their common first commits.
+   */
+  log: DemoCommit[];
   /** The changes of the working files that no commit holds yet. */
   uncommitted: Map<string, DemoFile | null>;
-  /** The number of commits on the branch since the target branch. */
-  commits: number;
 };
 
 const CONTEXT_LINES = 3;
@@ -191,8 +195,14 @@ export type DemoRepository = {
   readFile(checkout: DemoCheckout, path: string): DemoFile | null;
   /** Writes changes to the working files and commits them, as a scripted agent does. */
   commit(checkout: DemoCheckout, changes: DemoFileChanges, message: string): GitFileDiff[];
-  /** Merges the commits of a branch into the target branch, as Direct Merge does. */
-  mergeIntoTarget(checkout: DemoCheckout): void;
+  /** Puts a branch back on the target branch and drops its working changes. */
+  resetBranch(checkout: DemoCheckout): void;
+  /**
+   * Merges the commits of a branch into `targetRef`, as Direct Merge does. The target is the
+   * default branch or the branch of another checkout.
+   */
+  mergeInto(checkout: DemoCheckout, targetRef: string): void;
+  /** The changes of a branch since the default target branch. */
   branchDiffs(checkout: DemoCheckout): GitFileDiff[];
   localChanges(checkout: DemoCheckout, observedAtMs: number): GitLocalChanges;
   worktreeStatus(
@@ -220,33 +230,62 @@ export const createDemoRepository = (input: {
     workingDirectory: input.repoPath,
     branch: input.targetBranch,
     revision: targetRevision,
-    committed: new Map(),
+    log: [],
     uncommitted: new Map(),
-    commits: 0,
   });
   let treeRevision = 0;
 
-  const headFile = (checkout: DemoCheckout, path: string): DemoFile | null => {
-    if (checkout.committed.has(path)) return checkout.committed.get(path) ?? null;
+  /** The file at `path` after the commits of `log`, on top of the target branch. */
+  const fileAfter = (log: readonly DemoCommit[], path: string): DemoFile | null => {
+    for (let index = log.length - 1; index >= 0; index -= 1) {
+      const changes = log[index]?.changes;
+      if (changes?.has(path)) return changes.get(path) ?? null;
+    }
     return target.get(path) ?? null;
   };
+  const headFile = (checkout: DemoCheckout, path: string): DemoFile | null =>
+    fileAfter(checkout.log, path);
   const readFile = (checkout: DemoCheckout, path: string): DemoFile | null => {
     if (checkout.uncommitted.has(path)) return checkout.uncommitted.get(path) ?? null;
     return headFile(checkout, path);
   };
+  const changedPaths = (log: readonly DemoCommit[]): string[] => [
+    ...new Set(log.flatMap((commit) => [...commit.changes.keys()])),
+  ];
   const paths = (checkout: DemoCheckout): string[] => {
     const all = new Set([
       ...target.keys(),
-      ...checkout.committed.keys(),
+      ...changedPaths(checkout.log),
       ...checkout.uncommitted.keys(),
     ]);
     return [...all].filter((path) => readFile(checkout, path) !== null).sort();
   };
-  const branchDiffs = (checkout: DemoCheckout): GitFileDiff[] =>
-    [...checkout.committed.keys()]
+
+  /** The commits of a branch ref: none for the target branch, or the log of a checkout branch. */
+  const logOf = (ref: string): readonly DemoCommit[] => {
+    const name = ref.replace(/^refs\/(heads|remotes)\//, "").replace(/^origin\//, "");
+    if (name === input.targetBranch || name === "@{upstream}") return [];
+    for (const checkout of checkouts.values()) {
+      if (checkout.branch === name) return checkout.log;
+    }
+    throw new Error(`The demo repository has no branch ${name}. Choose another target branch.`);
+  };
+  /** The number of first commits that two branches share: their merge base. */
+  const sharedCommits = (left: readonly DemoCommit[], right: readonly DemoCommit[]): number => {
+    let count = 0;
+    while (count < left.length && count < right.length && left[count]?.id === right[count]?.id)
+      count += 1;
+    return count;
+  };
+  /** The changes of a branch since its merge base with `baseLog`, as `git diff base...HEAD`. */
+  const diffsSince = (checkout: DemoCheckout, baseLog: readonly DemoCommit[]): GitFileDiff[] => {
+    const mergeBase = checkout.log.slice(0, sharedCommits(checkout.log, baseLog));
+    return changedPaths(checkout.log.slice(mergeBase.length))
       .sort()
-      .filter((path) => !sameFile(target.get(path), checkout.committed.get(path)))
-      .map((path) => fileDiff(path, target.get(path), checkout.committed.get(path)));
+      .filter((path) => !sameFile(fileAfter(mergeBase, path), headFile(checkout, path)))
+      .map((path) => fileDiff(path, fileAfter(mergeBase, path), headFile(checkout, path)));
+  };
+  const branchDiffs = (checkout: DemoCheckout): GitFileDiff[] => diffsSince(checkout, []);
   const uncommittedDiffs = (checkout: DemoCheckout): GitFileDiff[] =>
     [...checkout.uncommitted.keys()]
       .sort()
@@ -258,6 +297,11 @@ export const createDemoRepository = (input: {
     detached: false,
     revision: checkout.revision,
   });
+
+  const upstream = (checkout: DemoCheckout): GitLocalChanges["upstreamAheadBehind"] =>
+    checkout.workingDirectory === input.repoPath
+      ? { outcome: "tracking", ahead: 0, behind: 0 }
+      : { outcome: "untracked", ahead: checkout.log.length };
 
   const snapshotHashes = (diffs: GitFileDiff[]) => ({
     hashVersion: 1,
@@ -281,9 +325,8 @@ export const createDemoRepository = (input: {
         workingDirectory,
         branch,
         revision: from?.revision ?? targetRevision,
-        committed: new Map(from?.committed),
+        log: [...(from?.log ?? [])],
         uncommitted: new Map(),
-        commits: from?.commits ?? 0,
       };
       checkouts.set(workingDirectory, created);
       return created;
@@ -298,35 +341,50 @@ export const createDemoRepository = (input: {
       const diffs = [...changes.entries()].map(([path, file]) =>
         fileDiff(path, readFile(checkout, path), file),
       );
-      for (const [path, file] of changes) {
-        checkout.uncommitted.delete(path);
-        checkout.committed.set(path, file);
-      }
-      checkout.commits += 1;
+      for (const path of changes.keys()) checkout.uncommitted.delete(path);
       checkout.revision = commitId(`${checkout.revision}:${message}`);
+      checkout.log.push({ id: checkout.revision, changes: new Map(changes) });
       treeRevision += 1;
       return diffs;
     },
-    mergeIntoTarget(checkout) {
-      for (const [path, file] of checkout.committed) {
-        if (file) target.set(path, file);
-        else target.delete(path);
+    resetBranch(checkout) {
+      checkout.log = [];
+      checkout.uncommitted.clear();
+      checkout.revision = targetRevision;
+      treeRevision += 1;
+    },
+    mergeInto(checkout, targetRef) {
+      const baseLog = logOf(targetRef);
+      const merged = checkout.log.slice(sharedCommits(checkout.log, baseLog));
+      const into = [...checkouts.values()].find(
+        (other) => other.log === baseLog && other.workingDirectory !== input.repoPath,
+      );
+      if (into) {
+        // The other branch gets the commits, and the task branch now has nothing to merge.
+        into.log.push(...merged);
+        into.revision = into.log.at(-1)?.id ?? into.revision;
+        checkout.log = [...into.log];
+      } else {
+        for (const commit of merged) {
+          for (const [path, file] of commit.changes) {
+            if (file) target.set(path, file);
+            else target.delete(path);
+          }
+        }
+        // Each branch keeps only its commits that the target does not hold yet.
+        const mergedIds = new Set(merged.map((commit) => commit.id));
+        for (const other of checkouts.values()) {
+          other.log = other.log.filter((commit) => !mergedIds.has(commit.id));
+        }
+        targetRevision = commitId(`${targetRevision}:${checkout.branch}`);
+        const root = checkouts.get(input.repoPath);
+        if (root) root.revision = targetRevision;
       }
-      checkout.committed.clear();
-      checkout.commits = 0;
-      targetRevision = commitId(`${targetRevision}:${checkout.branch}`);
-      const root = checkouts.get(input.repoPath);
-      if (root) root.revision = targetRevision;
       treeRevision += 1;
     },
     branchDiffs,
     localChanges(checkout, observedAtMs) {
-      const all = [...checkout.uncommitted.keys()]
-        .sort()
-        .filter((path) => !sameFile(headFile(checkout, path), checkout.uncommitted.get(path)));
-      const diffs = all.map((path) =>
-        fileDiff(path, headFile(checkout, path), checkout.uncommitted.get(path)),
-      );
+      const diffs = uncommittedDiffs(checkout);
       const statuses: FileStatus[] = diffs.map((diff) => ({
         path: diff.file,
         status: statusLetter(diff),
@@ -339,10 +397,7 @@ export const createDemoRepository = (input: {
         unstaged: { fileStatuses: statuses, fileDiffs: diffs, snapshot: hashes },
         staged: { fileStatuses: [], fileDiffs: [], snapshot: snapshotHashes([]) },
         conflicted: { fileStatuses: [], fileDiffs: [] },
-        upstreamAheadBehind:
-          checkout.workingDirectory === input.repoPath
-            ? { outcome: "tracking", ahead: 0, behind: 0 }
-            : { outcome: "untracked", ahead: checkout.commits },
+        upstreamAheadBehind: upstream(checkout),
         snapshot: {
           effectiveWorkingDir: checkout.workingDirectory,
           targetBranch: "",
@@ -353,7 +408,9 @@ export const createDemoRepository = (input: {
       };
     },
     worktreeStatus(checkout, targetRef, observedAtMs) {
-      const diffs = branchDiffs(checkout);
+      const baseLog = logOf(targetRef);
+      const shared = sharedCommits(checkout.log, baseLog);
+      const diffs = diffsSince(checkout, baseLog);
       return {
         currentBranch: currentBranch(checkout),
         fileStatuses: uncommittedDiffs(checkout).map((diff) => ({
@@ -362,11 +419,8 @@ export const createDemoRepository = (input: {
           staged: false,
         })),
         fileDiffs: diffs,
-        targetAheadBehind: { ahead: checkout.commits, behind: 0 },
-        upstreamAheadBehind:
-          checkout.workingDirectory === input.repoPath
-            ? { outcome: "tracking", ahead: 0, behind: 0 }
-            : { outcome: "untracked", ahead: checkout.commits },
+        targetAheadBehind: { ahead: checkout.log.length - shared, behind: baseLog.length - shared },
+        upstreamAheadBehind: upstream(checkout),
         snapshot: {
           effectiveWorkingDir: checkout.workingDirectory,
           targetBranch: targetRef,
@@ -378,7 +432,12 @@ export const createDemoRepository = (input: {
     },
     fileTree(checkout, targetBranch) {
       const uncommitted = new Map(uncommittedDiffs(checkout).map((diff) => [diff.file, diff]));
-      const branch = new Map(branchDiffs(checkout).map((diff) => [diff.file, diff]));
+      const branch = new Map(
+        diffsSince(checkout, targetBranch ? logOf(targetBranch) : []).map((diff) => [
+          diff.file,
+          diff,
+        ]),
+      );
       const statusOf = (path: string) => {
         const diff = uncommitted.get(path) ?? branch.get(path);
         if (!diff) return null;
