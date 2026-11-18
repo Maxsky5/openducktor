@@ -522,6 +522,13 @@ describe("demo backend", () => {
     await demo.advance(30_000);
     const { sessionScope: _scope, ...ref } = target;
     const live = await demo.client.agentSessionLiveRead(ref);
+    // The queued message left the queue: the session ran it after the first turn.
+    const queue = await demo.client.agentSessionMessageQueueManage({
+      ...target,
+      action: { kind: "resume" },
+    });
+    expect(queue.queue.entries).toEqual([]);
+    expect(queue.queue.revision).toBeGreaterThan(1);
     expect(live.type === "live" && live.session.activity).toBe("idle");
   });
 });

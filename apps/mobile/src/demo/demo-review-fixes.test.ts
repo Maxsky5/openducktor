@@ -250,3 +250,28 @@ describe("demo backend review fixes", () => {
     await expect(launch).rejects.toThrow("The demo ended");
   });
 });
+
+describe("demo task worktree owners", () => {
+  test("lists the chats that work in a task worktree", async () => {
+    const demo = openDemo();
+    const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
+    const worktree = await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id);
+    if (!worktree) throw new Error("The task has no worktree.");
+    await demo.client.workspaceSessionCreate({
+      workspaceId: "fieldnotes",
+      location: "existing_worktree",
+      existingWorktree: { workingDirectory: worktree.workingDirectory },
+      runtimeKind: "claude",
+      selectedModel: null,
+      customAgentRoleId: null,
+      manualTitle: "Shared chat",
+      targetBranch: { remote: "origin", branch: "main" },
+    });
+    const owners = await demo.client.taskWorktreeOwnersGet({
+      ...FIELDNOTES,
+      taskIds: [reviewed.id],
+      operation: "reset_task",
+    });
+    expect(owners.owners.chats.map((chat) => chat.title)).toEqual(["Shared chat"]);
+  });
+});

@@ -565,10 +565,21 @@ export const createDemoTaskStore = (world: DemoWorld) => {
       if (task.worktree) workspace.repository.removeWorktree(task.worktree.workingDirectory);
       task.worktree = null;
     },
-    taskWorktreeOwnersGet: async () => ({
-      owners: { checkoutWorkspaces: [], tasks: [], chats: [], historyChats: [] },
-      historyReadErrors: [],
-    }),
+    // Chats that work in a task worktree block its removal, as on a host.
+    taskWorktreeOwnersGet: async ({ workspaceId, taskIds }) => {
+      const workspace = findWorkspace(world, workspaceId);
+      const chats = taskIds.flatMap((taskId) => {
+        const folder = findTask(workspace, taskId).worktree?.workingDirectory;
+        if (!folder) return [];
+        return world.sessions
+          .chatsInFolder(workspace, folder)
+          .map((chat) => ({ workspaceId, sessionId: chat.sessionId, title: chat.title }));
+      });
+      return {
+        owners: { checkoutWorkspaces: [], tasks: [], chats, historyChats: [] },
+        historyReadErrors: [],
+      };
+    },
     taskWorktreeCleanupImpactGet: async (scope, taskId) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);

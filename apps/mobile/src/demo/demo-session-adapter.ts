@@ -52,6 +52,7 @@ export const createDemoSessionAdapter = (
       forgetTaskSessions: () => {},
       taskSessionRecords: () => [],
       runningTaskSessionCount: () => 0,
+      chatsInFolder: () => [],
     },
     nextPullRequestNumber: 128,
     nextNumber: () => nextNumber++,
@@ -110,6 +111,15 @@ export const createDemoSessionAdapter = (
     },
     taskSessionRecords: (workspace, taskId) =>
       engine.taskSessions(workspace, taskId).map(engine.taskRecordOf),
+    chatsInFolder: (workspace, folder) =>
+      [...engine.sessions.values()].flatMap((session) =>
+        session.workspace === workspace &&
+        session.owner.kind === "chat" &&
+        session.owner.record.archivedAt === null &&
+        session.ref.workingDirectory === folder
+          ? [{ sessionId: session.owner.record.id, title: session.title }]
+          : [],
+      ),
     runningTaskSessionCount: (workspace, taskId) =>
       engine.taskSessions(workspace, taskId).filter((session) => session.run !== null).length,
   };

@@ -56,6 +56,8 @@ export type DemoTaskSessionHooks = {
   forgetTaskSessions(workspace: DemoWorkspace, taskId: string, roles?: readonly string[]): void;
   taskSessionRecords(workspace: DemoWorkspace, taskId: string): AgentSessionRecord[];
   runningTaskSessionCount(workspace: DemoWorkspace, taskId: string): number;
+  /** The active chats that work in a folder. */
+  chatsInFolder(workspace: DemoWorkspace, folder: string): { sessionId: string; title: string }[];
 };
 
 export type DemoWorkspace = {
