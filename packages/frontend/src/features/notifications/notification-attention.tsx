@@ -90,7 +90,7 @@ function NotificationAttentionFocus({
     let missingTimeout: number | undefined;
     let revealedTarget: HTMLElement | null = null;
     let waitingForDialog = hasOpenModalDialog();
-    const revealAndFocus = (): void => {
+    const revealAndFocus = (behavior?: ScrollBehavior): void => {
       if (completed.current === location) return;
       const target = root && findNotificationAttentionTarget(root, kind, id);
       if (!target) {
@@ -106,7 +106,7 @@ function NotificationAttentionFocus({
       missingTimeout = undefined;
       if (target !== revealedTarget) {
         revealedTarget = target;
-        revealElement(target);
+        revealElement(target, behavior);
       }
       if (waitingForDialog || hasOpenModalDialog()) {
         waitingForDialog = true;
@@ -116,12 +116,14 @@ function NotificationAttentionFocus({
       if (target.ownerDocument.activeElement === target) finish();
     };
 
-    const observer = root && new MutationObserver(revealAndFocus);
+    const observer = root && new MutationObserver(() => revealAndFocus());
     if (root && observer) observer.observe(root, { childList: true, subtree: true });
     const unsubscribe = subscribeDialogFocusReleased(() => {
-      if (!waitingForDialog) return;
+      if (!waitingForDialog || hasOpenModalDialog()) return;
       waitingForDialog = false;
-      revealAndFocus();
+      // Reveal in the final layout before clearing the attention route.
+      revealedTarget = null;
+      revealAndFocus("instant");
     });
     revealAndFocus();
     return () => {

@@ -20,6 +20,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { REVEAL_ELEMENT_EVENT } from "@/lib/reveal-element";
 import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import { NotificationAttentionProvider } from "./notification-attention";
 import { useRegisterNotificationTranscript } from "./notification-attention-context";
@@ -195,7 +196,7 @@ function ConversationWithSettings() {
   );
 }
 
-test("focuses a notification request after Settings closes, even past the missing request timeout", async () => {
+test("reveals and focuses a notification request when Settings closes after the timeout", async () => {
   const router = createMemoryRouter(
     [
       {
@@ -222,6 +223,11 @@ test("focuses a notification request after Settings closes, even past the missin
     router.dispose();
   });
   try {
+    const request = view.getByTestId("request in active transcript");
+    const revealedWhileSettingsOpen: boolean[] = [];
+    request.addEventListener(REVEAL_ELEMENT_EVENT, () => {
+      revealedWhileSettingsOpen.push(view.queryByRole("dialog", { name: "Settings" }) !== null);
+    });
     fireEvent.click(view.getByRole("button", { name: "Open settings" }));
     const settings = view.getByRole("dialog", { name: "Settings" });
     const close = view.getByRole("button", { name: "Close" });
@@ -235,11 +241,13 @@ test("focuses a notification request after Settings closes, even past the missin
     expect(reportError).not.toHaveBeenCalled();
     expect(settings.contains(document.activeElement)).toBe(true);
     expect(router.state.location.search).toContain("attentionId=request-1");
+    expect(revealedWhileSettingsOpen).toEqual([true]);
 
     fireEvent.click(close);
     await act(async () => jest.runOnlyPendingTimers());
 
-    expect(document.activeElement).toBe(view.getByTestId("request in active transcript"));
+    expect(revealedWhileSettingsOpen).toEqual([true, false]);
+    expect(document.activeElement).toBe(request);
     expect(router.state.location.search).toBe(search);
     expect(reportError).not.toHaveBeenCalled();
   } finally {
