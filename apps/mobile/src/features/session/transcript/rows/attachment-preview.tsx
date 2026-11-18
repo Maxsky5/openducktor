@@ -117,14 +117,14 @@ function StagedImage({
 function StagedImageRead({ path, name, label, mediaType }: StagedImageProps): ReactElement {
   const theme = useAppTheme();
   const { action, share } = useImageActions();
-  const { remote } = useActiveSession().remote;
+  const { resources } = useActiveSession();
   const files = useResourceFiles();
   const options = useMemo(
     () =>
       resourceFileQueryOptions(files, ["staged-preview", path], (signal) =>
-        remote.readStagedPreview(path, signal),
+        resources.readStagedPreview(path, signal),
       ),
-    [files, path, remote],
+    [files, path, resources],
   );
   const query = useQuery(options);
   const source = useMemo(() => (query.data ? { uri: query.data.uri } : null), [query.data]);

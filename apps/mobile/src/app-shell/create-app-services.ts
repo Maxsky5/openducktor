@@ -7,6 +7,7 @@ import { appActivitySource, createDeviceNetworkSource } from "@/host-session/dev
 import { createHostSessionOwner } from "@/host-session/host-session-owner";
 import { BACKGROUND_GRACE_MS, startLifecycleController } from "@/host-session/lifecycle-controller";
 import { createAttachmentStager } from "@/platform/attachment-stager";
+import { createDemoSessionAdapter } from "@/demo/demo-session-adapter";
 import { createDeviceRemoteTransport } from "@/platform/remote-transport";
 import { clearResourceCache } from "@/platform/resource-files";
 import { createDevicePreferences } from "@/preferences/device-preferences";
@@ -32,6 +33,7 @@ export const createAppServices = (): AppServices => {
     appVersion: `mobile-${appVersionLabel()}`,
     feedback: feedback.feedback,
     createAttachmentStager,
+    createDemoSession: createDemoSessionAdapter,
     startLifecycle: (session) =>
       startLifecycleController(
         appActivitySource,

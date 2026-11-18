@@ -160,6 +160,31 @@ Hermes has no `Intl.ListFormat`, `Intl.PluralRules`, `Intl.RelativeTimeFormat`, 
 - A free artifact goes chunk by chunk into a device file, so its bytes never enter JavaScript memory. Only a text format reads the bytes back to show the text.
 - The device file goes away when its last view closes, or when a new read of a changed artifact replaces it.
 
+### Demo mode
+
+Host selection offers Try demo. The demo opens the real screens on the fictional Fieldnotes sample data, with no host, account, or network. [The store review guide](../../docs/mobile-store-review.md) lists what the demo simulates and what needs a real host.
+
+This diagram shows how the demo replaces the remote host under the same client contracts.
+
+```mermaid
+flowchart TD
+  Owner["Host session owner"] --> Remote["Remote host connection"]
+  Owner --> Demo["Demo session adapter"]
+  Remote --> Conn["ClientConnection"]
+  Demo --> Conn
+  Conn --> Views["Existing screens"]
+  Demo --> State["Memory state and scripts"]
+```
+
+- `src/demo/` owns the demo backend. `createDemoSessionAdapter` supplies a `HostConnection`, a terminal bridge, and a resource reader for one demo session.
+- The demo host client runs each call through the production `createHostClient`, so the contract schemas check every demo input and result.
+- The demo state holds the workspaces, tasks, sessions, a virtual Git repository for each workspace, terminals, and staged files. Every change goes out on the same task and live session streams as a host change, so all screens show one state.
+- Prompts and workflow role runs follow short scripts. A prompt that asks for a change in a worktree asks for one permission first. A role run applies its workflow outcome only when it ends normally.
+- Demo terminals print scripted output for a fixed set of commands. No command starts a shell.
+- The owner keeps the demo state in memory only. Reset demo and Exit demo abort the demo lifetime, so no scripted event shows after them. The owner disposes the demo connection only after the connection tree has unmounted and released its preview files.
+- The demo reads and writes no saved host, credential, or host store. Device preferences, such as the theme, stay device settings.
+- In the demo, web links, terminal links, and web images show a notice instead of a network request.
+
 ## Setup
 
 1. Install the repository dependencies from the repository root: `bun install`.
@@ -322,7 +347,7 @@ The ordinary Bun suites exclude `native-tests`, since they do not load React Nat
 
 ## Release
 
-[The release process](../../docs/release-process.md#build-the-mobile-app) builds the store binaries and lists the secrets.
+[The release process](../../docs/release-process.md#build-the-mobile-app) builds the store binaries and lists the secrets. [The store review guide](../../docs/mobile-store-review.md) gives the reviewer steps of the demo, its feature coverage, and the store metadata updates.
 
 - Before the first release, the project owner creates the App Store Connect and Google Play app records for `com.openducktor.mobile`. Google Play requires a first Android build that the owner uploads by hand.
 - `plugins/with-ios-release-signing.js` sets manual signing on the app target only. Signing settings on the `xcodebuild` command line also reach the Pods targets.

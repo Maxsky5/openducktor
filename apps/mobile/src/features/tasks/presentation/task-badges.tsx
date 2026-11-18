@@ -66,7 +66,10 @@ export const PullRequestBadge = memo(function PullRequestBadge({
   size?: ChipSize;
 }): ReactElement {
   const theme = useAppTheme();
-  const openLink = useLinkOpener(undefined);
+  const openLink = useLinkOpener(
+    undefined,
+    "This pull request is part of the demo and has no web page.",
+  );
   const paint = pullRequestPaint(pullRequest);
   return (
     <TaskChip

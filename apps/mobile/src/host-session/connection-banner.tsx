@@ -12,6 +12,7 @@ import { Text } from "@/ui/text";
 import { usePendingAction } from "@/ui/use-pending-action";
 import { useShownAfter } from "@/ui/use-shown-after";
 import { useActiveSession, useCommandGate } from "./active-session-context";
+import { retryConnection } from "./retry-connection";
 import { connectionCopy } from "./connection-phase";
 
 const ENTER = FadeIn.duration(200);
@@ -28,8 +29,9 @@ const BUSY_DELAY_MS = 800;
 export function ConnectionBanner(): ReactElement | null {
   const theme = useAppTheme();
   const { phase } = useCommandGate();
-  const { host, remote } = useActiveSession();
-  const retry = useCallback(() => remote.remote.retry(), [remote]);
+  const session = useActiveSession();
+  const { host } = session;
+  const retry = useCallback(() => retryConnection(session), [session]);
   const attempt = usePendingAction(retry, haptics.error);
   const copy = phase.kind === "connected" ? null : connectionCopy(phase, host.label);
   const shown = useShownAfter(copy !== null, copy?.busy ? BUSY_DELAY_MS : 0);

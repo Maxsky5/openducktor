@@ -141,6 +141,9 @@ try {
       subscribeResuming: () => () => {},
       stop: () => {},
     }),
+    createDemoSession: () => {
+      throw new Error("No demo in this fixture.");
+    },
   });
   owner.start();
 
@@ -152,7 +155,8 @@ try {
   assert.equal(added.host.shell, "web");
   const state = owner.getState();
   assert.equal(state.status, "active");
-  if (state.status !== "active") throw new Error("The host did not become active.");
+  if (state.status !== "active" || state.session.kind !== "remote")
+    throw new Error("The host did not become active.");
   const { connection, remote } = state.session;
   assert.equal(remote.remote.readState().status, "connected");
   const connectedClients = async () =>

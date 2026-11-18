@@ -15,7 +15,7 @@ import { Text } from "@/ui/text";
 import { useScreenEndSpace } from "@/ui/screen";
 import { usePendingAction } from "@/ui/use-pending-action";
 import { useShake } from "@/ui/use-shake";
-import { useActiveSession, useCommandGate } from "./active-session-context";
+import { useCommandGate, useRemoteSession } from "./active-session-context";
 import { connectionCopy, retryStatusLabel } from "./connection-phase";
 import { useClaimConnectionStatus } from "./connection-status-slot";
 
@@ -62,7 +62,8 @@ export function HostConnectionState(): ReactElement {
   const tabBarSpace = useTabBarSpace({ automaticInsets: true });
   const screenEndSpace = useScreenEndSpace(theme.space.huge);
   const bottomSpace = segments.includes("(tabs)") ? tabBarSpace + theme.space.huge : screenEndSpace;
-  const { host, remote } = useActiveSession();
+  // The demo gate stays open, so only a saved host shows this state.
+  const { host, remote } = useRemoteSession();
   const { phase } = useCommandGate();
   useClaimConnectionStatus();
   const copy = connectionCopy(phase, host.label);

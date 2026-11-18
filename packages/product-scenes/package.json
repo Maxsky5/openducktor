@@ -16,7 +16,9 @@
     "./motion/state": "./src/motion/state.ts",
     "./motion/text": "./src/motion/text.ts",
     "./motion/tokens": "./src/motion/tokens.ts",
+    "./sample/actions": "./src/sample/actions.ts",
     "./sample/chats": "./src/sample/chats.ts",
+    "./sample/models": "./src/sample/models.ts",
     "./sample/tasks": "./src/sample/tasks.ts",
     "./sample/workspace": "./src/sample/workspace.ts",
     "./vocabulary": "./src/replicas/vocabulary.ts"

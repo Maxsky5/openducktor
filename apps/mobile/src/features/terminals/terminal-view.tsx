@@ -19,7 +19,8 @@ import {
 import { ActivityIndicator, Linking, useWindowDimensions, View } from "react-native";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { StyleSheet } from "react-native-unistyles";
-import { useCommandGate } from "@/host-session/active-session-context";
+import { useCommandGate, useIsDemo } from "@/host-session/active-session-context";
+import { useDemoNotice } from "@/features/demo/use-demo-notice";
 import { useClipboardCopy } from "@/platform/use-clipboard-copy";
 import {
   type IsolatedPageHandle,
@@ -96,8 +97,14 @@ export const TerminalView = memo(function TerminalView({
   const terminalId = tab.terminalId;
 
   const post = useCallback((message: TerminalPageInbound) => page.current?.post(message), []);
+  const demo = useIsDemo();
+  const demoNotice = useDemoNotice();
   const openLink = useCallback(
     (url: string) => {
+      if (demo) {
+        demoNotice("Demo terminals run no servers, so their links open no web page.");
+        return;
+      }
       const href = checkHttpUrl(url);
       if (href === null) {
         feedback.show("warning", "The link did not open.", {
@@ -117,7 +124,7 @@ export const TerminalView = memo(function TerminalView({
         );
       });
     },
-    [confirm, feedback],
+    [confirm, demo, demoNotice, feedback],
   );
   const { copyText } = useClipboardCopy();
   const copy = useCallback(

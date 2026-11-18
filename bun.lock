@@ -134,6 +134,7 @@
         "@openducktor/core": "workspace:*",
         "@openducktor/frontend-core": "workspace:*",
         "@openducktor/host-client": "workspace:*",
+        "@openducktor/product-scenes": "workspace:*",
         "@openducktor/theme": "workspace:*",
         "@openducktor/workflows": "workspace:*",
         "@react-native/normalize-colors": "0.88.1",

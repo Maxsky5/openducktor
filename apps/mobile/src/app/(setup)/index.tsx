@@ -5,7 +5,7 @@ import { View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
-import { useHostSessionState } from "@/app-shell/app-services";
+import { useHostSessionOwner, useHostSessionState } from "@/app-shell/app-services";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { AppVersionFooter } from "@/ui/settings-layout";
 import { ThemeMenuButton } from "@/features/settings/theme-menu-button";
@@ -47,6 +47,7 @@ function BrandHeader(): ReactElement {
  */
 export default function SetupScreen(): ReactElement {
   const router = useRouter();
+  const owner = useHostSessionOwner();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const state = useHostSessionState();
@@ -82,7 +83,10 @@ export default function SetupScreen(): ReactElement {
             </Text>
           </View>
           <View style={styles.cardContent}>
-            <AddHostForm onScan={() => router.push(routes.setupScan())} />
+            <AddHostForm
+              onScan={() => router.push(routes.setupScan())}
+              onTryDemo={() => owner.enterDemo()}
+            />
           </View>
         </View>
         {hosts.length > 0 || damagedHosts.length > 0 ? (
