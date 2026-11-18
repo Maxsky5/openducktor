@@ -244,14 +244,14 @@ export const roleRun = (
   if (options.pullRequest) {
     const title = task.record.title;
     const summary = task.record.description?.split("\n\n")[0]?.trim() || title;
+    const changes = repository
+      .branchDiffs(checkout)
+      .map((diff) => `- ${diff.type} \`${diff.file}\``);
     const body = [
       "## Summary",
       summary,
       "## Changes",
-      repository
-        .branchDiffs(checkout)
-        .map((diff) => `- ${diff.type} \`${diff.file}\``)
-        .join("\n"),
+      changes.length > 0 ? changes.join("\n") : "- No file changes.",
       "## Tests",
       "- `bun test`: 12 pass, 0 fail",
     ].join("\n\n");
