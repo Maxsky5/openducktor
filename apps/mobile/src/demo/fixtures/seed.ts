@@ -634,7 +634,7 @@ export function copyTags(tags: readonly Tag[], noteId: string): Tag[] {
     180,
   );
   // The subagent that the chat started. Its session opens read-only from its card.
-  const subagentPrompt = "Read src/sync and tell me which fields of a tag the sync sends.";
+  const subagentPrompt = "Read the tag type and tell me which fields of a tag the sync sends.";
   const tagsSubagent = engine.create({
     externalSessionId: `claude-seed-${sessionNumber++}`,
     workspace: fieldnotes,

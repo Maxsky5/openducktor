@@ -132,7 +132,8 @@ export const createDemoWorkspaceHandlers = (world: DemoWorld) => {
     enabled: true,
     configuredExecutablePath: `/usr/local/bin/${kind}`,
     effectiveExecutablePath: `/usr/local/bin/${kind}`,
-    version: kind === "opencode" ? "1.4.0" : kind === "codex" ? "0.48.0" : "2.3.0",
+    // The demo runtimes have the version that the current features need, such as goals.
+    version: RUNTIME_DESCRIPTORS_BY_KIND[kind].capabilities.goals.minimumRuntimeVersion ?? "1.0.0",
     state: "ready",
     trigger: "host_startup",
     runtimeId: runtimeIdOf(kind),

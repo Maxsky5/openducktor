@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import { resolveRuntimeGoalAvailability } from "@openducktor/core";
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { createManualTimers } from "../test-support/manual-timers";
 import { createDemoSessionAdapter } from "./demo-session-adapter";
 
@@ -343,6 +345,16 @@ describe("demo QA fixes", () => {
     const listed = await demo.client.issueItemGet({ ...FIELDNOTES, sourceId: issue.sourceId });
     expect(listed.linkedTaskId).toBeUndefined();
     expect((await importIssue()).results[0]?.outcome).toBe("created");
+  });
+
+  test("offers goals on every demo runtime", async () => {
+    const demo = openDemo();
+    const { runtimes } = await demo.client.runtimeStatus();
+    for (const runtime of runtimes) {
+      expect(
+        resolveRuntimeGoalAvailability(RUNTIME_DESCRIPTORS_BY_KIND[runtime.kind], runtime.version),
+      ).toEqual({ available: true });
+    }
   });
 
   test("sets the goal of a Goal mode launch and writes a generated goal", async () => {
