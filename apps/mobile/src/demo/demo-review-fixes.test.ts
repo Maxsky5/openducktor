@@ -495,6 +495,38 @@ describe("demo QA fixes", () => {
     expect(status.targetAheadBehind).toEqual({ ahead: 0, behind: 0 });
   });
 
+  test("refuses to restore a chat whose shared worktree another chat removed", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { chat } = await chatOf(demo, "Why do tags drop on sync?");
+    await demo.client.workspaceSessionCreate({
+      workspaceId: "fieldnotes",
+      location: "existing_worktree",
+      existingWorktree: { workingDirectory: chat.executionTarget.workingDirectory },
+      runtimeKind: "claude",
+      selectedModel: null,
+      customAgentRoleId: null,
+      manualTitle: "Second chat",
+      targetBranch: { remote: "origin", branch: "main" },
+    });
+    const second = (await demo.client.workspaceSessionListActive("fieldnotes")).find(
+      (item) => item.manualTitle === "Second chat",
+    );
+    if (!second) throw new Error("The second chat is missing.");
+    const archive = (sessionId: string, removeWorktree: boolean) =>
+      demo.client.workspaceSessionArchive({
+        workspaceId: "fieldnotes",
+        sessionId,
+        confirmStop: true,
+        removeWorktree,
+      });
+    await archive(chat.id, false);
+    await archive(second.id, true);
+    await expect(
+      demo.client.workspaceSessionRestore({ workspaceId: "fieldnotes", sessionId: chat.id }),
+    ).rejects.toThrow("The worktree of this chat was removed");
+  });
+
   test("compares a forked chat with the branch of its source", async () => {
     const demo = openDemo();
     await observeLive(demo);

@@ -632,9 +632,12 @@ export const createDemoLaunches = ({
     },
     workspaceSessionRestore: async ({ workspaceId, sessionId }) => {
       const chat = findChat(workspaceId, sessionId);
+      const target = chat.owner.record.executionTarget;
+      // Another chat can remove a shared worktree, so the checkout itself decides.
       if (
-        chat.owner.record.executionTarget.kind === "local_worktree" &&
-        chat.owner.record.executionTarget.worktreeState === "removed"
+        target.kind === "local_worktree" &&
+        (target.worktreeState === "removed" ||
+          !chat.workspace.repository.findCheckout(target.workingDirectory))
       )
         throw new Error(
           "The worktree of this chat was removed, so it cannot continue. Start a new chat.",
