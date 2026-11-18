@@ -71,6 +71,7 @@ describe("settings snapshot edits", () => {
       repoPath: "/moved",
       tileColor: "#f08c00",
       defaultModel: model,
+      namingModel: { ...model, variant: "low" },
       branchPrefix: "feature",
       defaultTargetBranch: { remote: "upstream", branch: "develop" },
       git: { provider: { id: "github", enabled: true, autoDetected: false } },

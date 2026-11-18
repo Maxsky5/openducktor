@@ -297,6 +297,45 @@ describe("settings save transforms", () => {
     },
   );
 
+  test("saves a naming model without an empty effort and clears a removed one", () => {
+    const namingModel = {
+      runtimeKind: "codex" as const,
+      providerId: " openai ",
+      modelId: "gpt-5-mini",
+      variant: "",
+    };
+    const baseline = createSettingsSnapshotFixture({
+      workspaces: { "repo-a": prepareRepoConfigForSave(createRepoConfig()) },
+    });
+    const snapshot = createSettingsSnapshotFixture({
+      workspaces: { "repo-a": createRepoConfig({ namingModel }) },
+    });
+    expect(prepareRepoConfigForSave(createRepoConfig({ namingModel })).namingModel).toEqual({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5-mini",
+    });
+    const saved = settingsSnapshotSaveInputSchema.parse(
+      prepareSettingsSnapshotForSave(snapshot, baseline),
+    );
+    expect(saved.workspaces?.["repo-a"]?.namingModel).toEqual({
+      type: "set",
+      value: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5-mini" },
+    });
+
+    const cleared = settingsSnapshotSaveInputSchema.parse(
+      prepareSettingsSnapshotForSave(baseline, {
+        ...baseline,
+        workspaces: {
+          "repo-a": prepareRepoConfigForSave(
+            createRepoConfig({ namingModel: { ...namingModel, variant: "low" } }),
+          ),
+        },
+      }),
+    );
+    expect(cleared.workspaces?.["repo-a"]?.namingModel).toEqual({ type: "clear" });
+  });
+
   test("keeps every workspace field that needs no normalization", () => {
     const repo = createRepoConfig({
       abbreviation: "RA",

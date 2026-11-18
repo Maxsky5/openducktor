@@ -264,6 +264,20 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
     .where(where);
 
 type WorkspaceRow = Awaited<ReturnType<typeof workspaceQuery>>[number];
+
+/**
+ * The `workspace_role_defaults` key of the naming model. Workflow roles cannot use it, because the
+ * store reads that row as `namingModel`.
+ */
+export const NAMING_MODEL_SETTINGS_KEY = "odt.naming-model";
+
+/** The naming model shares the role default rows under a reserved key. It has no profile. */
+const splitNamingModel = (rows: Record<string, { profileId?: unknown }>) => {
+  const { [NAMING_MODEL_SETTINGS_KEY]: naming, ...agentDefaults } = rows;
+  if (!naming) return { agentDefaults };
+  const { profileId: _profileId, ...namingModel } = naming;
+  return { agentDefaults, namingModel };
+};
 const mapWorkspace = ({
   workspace: row,
   model,
@@ -344,7 +358,7 @@ const mapWorkspace = ({
             remote: row.defaultTargetRemote ?? undefined,
           },
           defaultModel: model ?? undefined,
-          agentDefaults: collections.agentDefaults,
+          ...splitNamingModel(collections.agentDefaults),
           hooks: { beforeWorktreeRemoval: collections.commands },
           actions: { items: collections.actions, defaultActionId: row.defaultActionId },
           worktreeCopyPaths: collections.paths,

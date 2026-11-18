@@ -21,6 +21,7 @@ import type {
 import type {
   RepoAgentDefaultRole,
   ModelDefaultDraft,
+  NamingModelDraft,
 } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { ObservedCheck } from "@openducktor/frontend-core/types/diagnostics";
 import type { RepoSettingsInput } from "@openducktor/frontend-core/types/session-slices";
@@ -38,6 +39,8 @@ export type {
 
 export type WorkspaceModelDefaultsDraft = {
   defaultModel?: ModelDefaultDraft | undefined;
+  /** The model that writes session titles and branch names. Only the settings edit it. */
+  namingModel?: NamingModelDraft | undefined;
   agentDefaults: Partial<Record<RepoAgentDefaultRole, ModelDefaultDraft | undefined>>;
 };
 

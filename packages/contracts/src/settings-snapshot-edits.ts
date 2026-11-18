@@ -222,6 +222,7 @@ const workspaceRule = object({
   abbreviation: optional(),
   tileColor: optional(),
   defaultModel: optional(modelRule),
+  namingModel: optional(modelRule),
   worktreeBasePath: optional(),
   defaultTargetBranch: object({ remote: optional() }),
   git: object({

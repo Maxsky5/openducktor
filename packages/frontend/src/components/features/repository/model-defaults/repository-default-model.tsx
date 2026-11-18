@@ -3,21 +3,10 @@ import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { type ReactElement, useMemo } from "react";
 import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
-import { Button } from "@/components/ui/button";
-import { Combobox } from "@/components/ui/combobox";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
-import {
-  filterRuntimeDefinitionsForDefaultSelection,
-  findRuntimeDefinition,
-  resolveRuntimeKindSelection,
-} from "@openducktor/frontend-core/lib/agent-runtime";
+import { filterRuntimeDefinitionsForDefaultSelection } from "@openducktor/frontend-core/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
-import { ensureDraftAgentDefault } from "./model-defaults-model";
-import { buildRepositoryAgentControls } from "./repository-agent-controls";
-import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-selection";
-import { RepositoryModelPickerField } from "./repository-model-picker-field";
+import { RepositoryModelBlock, selectPickedModel } from "./repository-model-block";
 
 type RepositoryDefaultModelBlockProps = {
   presentation?: "settings" | "creation";
@@ -54,9 +43,7 @@ export function RepositoryDefaultModelBlock({
   onUpdateSelectedRepoDefaultModel,
   onClearSelectedRepoDefaultModel,
 }: RepositoryDefaultModelBlockProps): ReactElement {
-  const { isLoadingSettings, isSaving } = loadingState;
   const workflows = useWorkflowSettings();
-  const defaultModel = selectedRepoConfig.defaultModel ?? null;
   const runtimeDefinitions = useMemo(
     () =>
       filterRuntimeDefinitionsForDefaultSelection(
@@ -65,106 +52,27 @@ export function RepositoryDefaultModelBlock({
       ),
     [availableRuntimeDefinitions, workflows.data],
   );
-  const runtimeKind = resolveRuntimeKindSelection({
-    runtimeDefinitions,
-    requestedRuntimeKind: defaultModel?.runtimeKind ?? null,
-  });
-  const runtimeDescriptor = runtimeKind
-    ? findRuntimeDefinition(runtimeDefinitions, runtimeKind)
-    : null;
-  const catalog = runtimeKind ? getCatalogForRuntime(runtimeKind) : null;
-  const isModelPickerCatalogLoading = runtimeKind ? isCatalogLoadingForRuntime(runtimeKind) : false;
-  const value = ensureDraftAgentDefault(defaultModel);
-  const controls = buildRepositoryAgentControls({
-    value,
-    runtimeKind,
-    runtimeDescriptor,
-    catalog,
-    isCatalogLoading: isModelPickerCatalogLoading,
-    isSaving,
-  });
-  const isClearDisabled = isLoadingSettings || isSaving || defaultModel === null;
-  const isCreation = presentation === "creation";
-
   return (
-    <div
-      className={cn(
-        "@container grid border border-border bg-card",
-        isCreation ? "gap-3 rounded-xl p-4 sm:p-5" : "gap-2 rounded-md p-3",
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="grid gap-1">
-          <h3 className="text-sm font-semibold text-foreground">Default model</h3>
-          <p className="text-xs text-muted-foreground">
-            Used for new sessions and for task sessions that have no role default.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={isClearDisabled}
-          onClick={onClearSelectedRepoDefaultModel}
-        >
-          Clear
-        </Button>
-      </div>
-
-      <div className="grid gap-3 @2xl:grid-cols-3">
-        <RepositoryModelPickerField
-          runtimeDefinitions={runtimeDefinitions}
-          catalogResources={catalogResources}
-          value={controls.selectedPickerValue}
-          favoriteState={favoriteState}
-          isReadOnly={isSaving || isLoadingSettings}
-          isLoadingCatalog={isModelPickerCatalogLoading}
-          onSelect={(selectedValue, targetCatalog) => {
-            onUpdateSelectedRepoConfig((repoConfig) => {
-              const nextDefault = resolveRepoAgentDefaultModelPickerSelection({
-                currentValue:
-                  repoConfig.defaultModel === undefined
-                    ? null
-                    : ensureDraftAgentDefault(repoConfig.defaultModel),
-                currentRuntimeKind: repoConfig.defaultModel?.runtimeKind ?? null,
-                targetCatalog,
-                value: selectedValue,
-              });
-              if (!nextDefault) {
-                return repoConfig;
-              }
-              return {
-                ...repoConfig,
-                defaultModel: nextDefault,
-              };
-            });
-          }}
-        />
-
-        <div className="grid min-w-0 gap-1">
-          <Label className="text-xs">Agent profile</Label>
-          <Combobox
-            value={value.profileId}
-            options={controls.profile.options}
-            placeholder={controls.profile.placeholder}
-            disabled={controls.profile.disabled}
-            className="w-full min-w-0"
-            onValueChange={(profileId) => onUpdateSelectedRepoDefaultModel("profileId", profileId)}
-          />
-        </div>
-
-        <div className="grid min-w-0 gap-1">
-          <Label className="text-xs">Effort</Label>
-          <Combobox
-            value={value.variant}
-            options={controls.variant.options}
-            placeholder={controls.variant.placeholder}
-            disabled={controls.variant.disabled}
-            className="w-full min-w-0"
-            onValueChange={(variant) => onUpdateSelectedRepoDefaultModel("variant", variant)}
-          />
-        </div>
-      </div>
-    </div>
+    <RepositoryModelBlock
+      title="Default model"
+      description="Used for new sessions and for task sessions that have no role default."
+      presentation={presentation}
+      showProfile
+      value={selectedRepoConfig.defaultModel ?? null}
+      runtimeDefinitions={runtimeDefinitions}
+      catalogResources={catalogResources}
+      favoriteState={favoriteState}
+      loadingState={loadingState}
+      getCatalogForRuntime={getCatalogForRuntime}
+      isCatalogLoadingForRuntime={isCatalogLoadingForRuntime}
+      onSelectModel={(value, targetCatalog) =>
+        onUpdateSelectedRepoConfig((repoConfig) => {
+          const nextDefault = selectPickedModel(repoConfig.defaultModel, value, targetCatalog);
+          return nextDefault ? { ...repoConfig, defaultModel: nextDefault } : repoConfig;
+        })
+      }
+      onUpdateField={onUpdateSelectedRepoDefaultModel}
+      onClear={onClearSelectedRepoDefaultModel}
+    />
   );
 }

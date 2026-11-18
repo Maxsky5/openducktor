@@ -72,6 +72,28 @@ describe("settings runtime availability validation", () => {
     expect(validation.totalErrorCount).toBe(0);
   });
 
+  test("warns when the runtime of the naming model is disabled", () => {
+    const snapshotDraft = createSnapshot();
+    const repo = snapshotDraft.workspaces.repo;
+    if (!repo) throw new Error("Expected the repo fixture");
+    snapshotDraft.workspaces.repo = {
+      ...repo,
+      defaultModel: undefined,
+      agentDefaults: {},
+      namingModel: { runtimeKind: "codex", providerId: "codex", modelId: "gpt-5.4-mini" },
+    };
+
+    const validation = buildRuntimeAvailabilityValidationState({
+      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      snapshotDraft,
+    });
+
+    expect(validation.warningsByWorkspaceId).toEqual({
+      repo: ['Naming model runtime "Codex" is disabled.'],
+    });
+    expect(validation.totalErrorCount).toBe(0);
+  });
+
   test("does not require a runtime while runtime definitions are unavailable", () => {
     const validation = buildRuntimeAvailabilityValidationState({
       runtimeDefinitions: [],

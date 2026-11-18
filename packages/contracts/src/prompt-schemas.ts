@@ -20,6 +20,7 @@ export const agentPromptPlaceholderValues = [
   "git.targetBranch",
   "git.conflictedFiles",
   "git.conflictOutput",
+  "workText",
 ] as const;
 export const agentPromptPlaceholderSchema = z.enum(agentPromptPlaceholderValues);
 export type AgentPromptPlaceholder = z.infer<typeof agentPromptPlaceholderSchema>;
@@ -119,6 +120,16 @@ export const WORKFLOW_PROMPT_IDS = {
   /** Optional. It tells a model how to write a goal. Without it, the workflow offers no Goal mode. */
   goal: "workflow.goal",
   pullRequest: "messages.pull_request",
+} as const;
+
+/**
+ * The prompts that tell a naming model how to name a branch or a workspace session. They use the
+ * `workflow` owner kind with a reserved owner ID, so they keep the prompt settings key format.
+ */
+export const NAMING_PROMPT_OWNER_ID = "odt.naming";
+export const NAMING_PROMPT_IDS = {
+  branchName: "branch-name",
+  workspaceSessionTitle: "workspace-session-title",
 } as const;
 
 /** A workflow prompt that a launch action sends as a session message has an ID in this group. */

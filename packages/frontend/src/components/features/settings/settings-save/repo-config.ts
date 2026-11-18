@@ -1,6 +1,9 @@
 import type { SettingsRepoConfig } from "@openducktor/contracts";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
-import { prepareModelDefaultsForSave } from "@openducktor/frontend-core/lib/repo-agent-defaults";
+import {
+  normalizeNamingModelForSave,
+  prepareModelDefaultsForSave,
+} from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import { normalizeTargetBranch } from "@openducktor/frontend-core/lib/target-branch";
 import { dropBlankLines } from "@/state/read-models/settings-read-model";
 import { preparePromptAppendsForSave, preparePromptOverridesForSave } from "./prompt-layers";
@@ -20,6 +23,7 @@ export const prepareRepoConfigForSave = (repo: SettingsRepoConfig): SettingsRepo
     tileColor: trimmedNonEmpty(repo.tileColor ?? "") ?? undefined,
     repoPath: repo.repoPath.trim(),
     ...prepareModelDefaultsForSave(repo),
+    ...(repo.namingModel && { namingModel: normalizeNamingModelForSave(repo.namingModel) }),
     worktreeBasePath: trimmedNonEmpty(repo.worktreeBasePath ?? "") ?? undefined,
     branchPrefix: trimmedNonEmpty(repo.branchPrefix) ?? DEFAULT_BRANCH_PREFIX,
     defaultTargetBranch: normalizeTargetBranch(repo.defaultTargetBranch),

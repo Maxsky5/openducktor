@@ -1,4 +1,5 @@
 import {
+  NAMING_PROMPT_OWNER_ID,
   promptOverrideKey,
   ROLE_INSTRUCTIONS_PROMPT_ID,
   type AgentPromptPlaceholder,
@@ -7,6 +8,8 @@ import {
 } from "@openducktor/contracts";
 import {
   BASE_PROMPT_PLACEHOLDERS,
+  NAMING_PROMPT_PLACEHOLDERS,
+  NAMING_PROMPT_TEMPLATES,
   latestWorkflowRevisions,
   workflowPromptTemplates,
   type CompiledWorkflowCatalog,
@@ -14,10 +17,12 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { workflowCatalogQueryOptions } from "./workflows";
 
-type PromptPurpose = WorkflowDescriptor["templates"][number]["purpose"];
+/** When the agent gets a prompt. A naming prompt goes to the naming model of the workspace. */
+type PromptPurpose = WorkflowDescriptor["templates"][number]["purpose"] | "naming";
 
 /** A prompt in Settings, with the override key of its owner. */
-export type SettingsPromptTemplate = WorkflowDescriptor["templates"][number] & {
+export type SettingsPromptTemplate = Omit<WorkflowDescriptor["templates"][number], "purpose"> & {
+  purpose: PromptPurpose;
   key: string;
   /** The role or the workflow that owns the prompt, for example "Builder" or "Spec, Plan, Build". */
   ownerTitle: string;
@@ -67,8 +72,39 @@ const workflowPromptUsage = (purpose: PromptPurpose, roles: readonly string[]): 
       return "Reply when a read-only agent tries to change files";
     case "goal":
       return "Instructions to write the goal of a step in Goal mode";
+    case "naming":
+      return "Instructions to the naming model of the workspace";
   }
 };
+
+/**
+ * The naming prompts, shown as one more owner after the workflows. They use the reserved
+ * `odt.naming` workflow owner, so their overrides keep the prompt settings key format.
+ */
+const namingPrompts = (): SettingsWorkflowPrompts => ({
+  id: NAMING_PROMPT_OWNER_ID,
+  title: "Naming",
+  groups: [
+    {
+      id: "naming",
+      title: "Names of work",
+      description:
+        "Tell the naming model how to name branches and workspace sessions. Each prompt gets the work as {{workText}}.",
+      templates: NAMING_PROMPT_TEMPLATES.map(
+        ({ output: _output, requiredPlaceholders, purpose, ...template }) => ({
+          ...template,
+          purpose,
+          requiredPlaceholders: [...requiredPlaceholders],
+          roleIds: [],
+          ownerTitle: "Naming",
+          ownerKind: "workflow",
+          usage: workflowPromptUsage(purpose, []),
+          placeholders: NAMING_PROMPT_PLACEHOLDERS,
+        }),
+      ),
+    },
+  ],
+});
 
 /** The groups of a workflow section, in the order of a session. */
 const WORKFLOW_GROUPS: readonly {
@@ -132,7 +168,7 @@ export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
       placeholders: BASE_PROMPT_PLACEHOLDERS,
     }),
   );
-  const workflows = latestWorkflowRevisions([...catalog.workflows.values()]).map(
+  const workflowSections = latestWorkflowRevisions([...catalog.workflows.values()]).map(
     (workflow): SettingsWorkflowPrompts => {
       const templates = workflowPromptTemplates(workflow).map(
         (template): SettingsPromptTemplate => {
@@ -164,6 +200,7 @@ export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
       };
     },
   );
+  const workflows = [...workflowSections, namingPrompts()];
   const templates: SettingsPromptTemplate[] = [
     ...roleTemplates,
     ...workflows.flatMap(({ groups }) => groups.flatMap((group) => group.templates)),

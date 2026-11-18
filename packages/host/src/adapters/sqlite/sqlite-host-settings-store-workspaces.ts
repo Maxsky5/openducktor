@@ -1,4 +1,5 @@
 import { jsonValuesEqual, type RepoConfig } from "@openducktor/contracts";
+import { NAMING_MODEL_SETTINGS_KEY } from "./sqlite-host-settings-store-reads";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { canonicalGitlabInstanceUrl } from "@openducktor/core";
 import { Effect } from "effect";
@@ -13,6 +14,13 @@ import {
 } from "./sqlite-prompt-layer-rows";
 
 const operation = "hostSettings.workspace";
+
+/** The role defaults and the naming model, which shares their rows under a reserved key. */
+const modelDefaultRows = ({
+  agentDefaults,
+  namingModel,
+}: RepoConfig): RepoConfig["agentDefaults"] =>
+  namingModel ? { ...agentDefaults, [NAMING_MODEL_SETTINGS_KEY]: namingModel } : agentDefaults;
 export const saveWorkspace = (
   session: HostDatabaseSession,
   config: RepoConfig,
@@ -50,7 +58,10 @@ export const saveWorkspace = (
           operation,
         );
     }
-    const models = settingsKeyChanges(previous?.agentDefaults, config.agentDefaults);
+    const models = settingsKeyChanges(
+      previous && modelDefaultRows(previous),
+      modelDefaultRows(config),
+    );
     for (const keys of settingsRowBatches(models.removed))
       yield* session.execute(
         (db) =>
