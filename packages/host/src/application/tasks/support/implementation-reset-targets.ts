@@ -12,12 +12,12 @@ import {
   recordStoppedAgentSessionCount,
   type TaskCleanupProgressState,
 } from "./task-cleanup-progress";
+import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
   collectRelatedTaskBranches,
   collectResetWorktreePaths,
   collectSessionsUsingCanonicalWorktree,
   isRelatedTaskBranch,
-  managedWorktreeBaseForRepoConfig,
 } from "./task-cleanup-support";
 import { resolveTaskWorktreeStartPoint } from "./task-branches";
 import type { TaskRecord } from "../../../ports/task-repository-ports";

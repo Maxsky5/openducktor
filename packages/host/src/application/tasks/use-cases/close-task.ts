@@ -12,8 +12,8 @@ import {
   createTaskCleanupProgressState,
   recordStoppedAgentSessionCount,
 } from "../support/task-cleanup-progress";
+import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
-  managedWorktreeBaseForRepoConfig,
   runTaskLocalCleanup,
   selectWorkflowCleanupSessionRecords,
   taskHasSessionsForRoles,

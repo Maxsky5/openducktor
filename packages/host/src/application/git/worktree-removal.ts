@@ -5,6 +5,7 @@ import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import { findRepoConfigByPath, validateWorktreePathSegments } from "./git-service-inputs";
+import { managedWorktreeBaseForRepoConfig } from "./managed-worktree-roots";
 export type RemoveWorktreeAndFilesystemPathInput = {
   force: boolean;
   managedWorktreeBasePath?: string;
@@ -32,9 +33,7 @@ const managedWorktreeBasePath = (
   canonicalRepoPath: string,
 ) =>
   Effect.map(findRepoConfigByPath(settingsConfig, canonicalRepoPath), (repoConfig) =>
-    repoConfig.worktreeBasePath !== undefined
-      ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
-      : settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId),
+    managedWorktreeBaseForRepoConfig(settingsConfig, repoConfig),
   );
 const inspectFilesystemCleanup = (
   { settingsConfig, worktreeFiles }: RemoveWorktreeAndFilesystemPathDependencies,

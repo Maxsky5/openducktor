@@ -4,7 +4,8 @@ import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { cleanTaskBranchPrefix, pickTaskBranch, type TaskBranchMatch } from "../../../domain/task";
 import type { GitPort, GitRefTip } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
-import { isRelatedTaskBranch, managedWorktreeBaseForRepoConfig } from "./task-cleanup-support";
+import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
+import { isRelatedTaskBranch } from "./task-cleanup-support";
 
 const LOCAL_BRANCH_REF_PREFIX = "refs/heads/";
 

@@ -16,6 +16,7 @@ import type { GitPort } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { WorktreeActionRunner } from "../actions/worktree-action-runner";
+import { managedWorktreeBaseForRepoConfig } from "../git/managed-worktree-roots";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import {
   type ExistingWorktreeDependencies,
@@ -232,10 +233,7 @@ export const withWorkspaceSessionTarget = <A, E>(
       const newBranch = createBranch
         ? yield* planNewBranch(git, repoPath, input.targetBranch)
         : null;
-      const base =
-        repoConfig.worktreeBasePath === undefined
-          ? settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId)
-          : settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath);
+      const base = managedWorktreeBaseForRepoConfig(settingsConfig, repoConfig);
       const namespace = settingsConfig.join(base, "workspace-sessions");
       const workingDirectory = settingsConfig.join(namespace, worktree.name);
       // A restore of this directory holds its guard. Check the directory after it finishes.

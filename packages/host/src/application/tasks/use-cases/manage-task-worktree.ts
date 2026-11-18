@@ -16,10 +16,8 @@ import {
   appendTaskCleanupProgress,
   createTaskCleanupProgressState,
 } from "../support/task-cleanup-progress";
-import {
-  managedWorktreeBaseForRepoConfig,
-  runTaskLocalCleanup,
-} from "../support/task-cleanup-support";
+import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
+import { runTaskLocalCleanup } from "../support/task-cleanup-support";
 import {
   collectCloseWorktreePaths,
   collectTaskCleanupTargets,

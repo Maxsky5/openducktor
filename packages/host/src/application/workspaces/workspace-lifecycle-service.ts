@@ -22,8 +22,8 @@ import type {
   TaskOwnershipReader,
 } from "../../ports/task-repository-ports";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
+import { managedWorktreeBaseForRepoConfig } from "../git/managed-worktree-roots";
 import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
-import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import type {
   WorkspaceActivityBlocker,

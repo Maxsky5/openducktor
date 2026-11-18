@@ -18,7 +18,7 @@ import type {
   WorktreeOwnershipChat,
 } from "../../ports/workspace-session-store-port";
 import type { HistoryOwnerRead } from "../../ports/task-worktree-owner-port";
-import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
+import { managedWorktreeBaseForRepoConfig } from "../git/managed-worktree-roots";
 import type { WorkspaceSessionTargetDependencies } from "./workspace-session-target";
 
 export type WorktreeOwnerDependencies = Pick<

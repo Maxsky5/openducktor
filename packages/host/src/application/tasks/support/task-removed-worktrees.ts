@@ -13,10 +13,10 @@ import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { collectCloseWorktreePaths } from "./task-close-cleanup";
+import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
   collectDeleteWorktreePaths,
   collectResetWorktreePaths,
-  managedWorktreeBaseForRepoConfig,
   workflowRoleIds,
 } from "./task-cleanup-support";
 

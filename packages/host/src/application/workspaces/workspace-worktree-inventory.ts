@@ -10,10 +10,8 @@ import type {
   TaskStorePort,
   TaskOwnershipReader,
 } from "../../ports/task-repository-ports";
-import {
-  isRelatedTaskBranch,
-  managedWorktreeBaseForRepoConfig,
-} from "../tasks/support/task-cleanup-support";
+import { managedWorktreeBaseForRepoConfig } from "../git/managed-worktree-roots";
+import { isRelatedTaskBranch } from "../tasks/support/task-cleanup-support";
 import type { WorkspaceSettingsError, WorkspaceSettingsService } from "./workspace-settings-model";
 
 export type WorkspaceWorktreeInventoryError =

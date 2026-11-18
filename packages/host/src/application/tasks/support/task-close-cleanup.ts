@@ -11,9 +11,9 @@ import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import type { requireMergedTaskCleanupDependencies } from "./required-task-dependencies";
 import type { requireTaskCloseDependencies } from "./task-cleanup-dependencies";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
+import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
   collectRelatedTaskBranches,
-  managedWorktreeBaseForRepoConfig,
   runTaskLocalCleanup,
   validateExistingTaskWorktreeCandidate,
 } from "./task-cleanup-support";
