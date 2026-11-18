@@ -30,7 +30,7 @@ const codexTurnEndedAt = (
  * The latest reset among the exhausted windows of a usage snapshot. Codex reports `resetsAt` in
  * Unix seconds. The account can work again only after every exhausted window resets.
  */
-export const codexExhaustedResetEpochMs = (
+const codexExhaustedResetEpochMs = (
   snapshot: CodexAppServerRateLimitSnapshot,
 ): number | undefined => {
   const resets = [snapshot.primary, snapshot.secondary].flatMap((window) =>
