@@ -500,7 +500,12 @@ export const createDemoLaunches = ({
       } else {
         const branch = input.worktree.branchName ?? `odt/${input.worktree.name}`;
         const workingDirectory = `${workspace.worktreeRoot}/${input.worktree.name}`;
-        const checkout = workspace.repository.addWorktree({ workingDirectory, branch });
+        // The new branch starts from the selected target branch, as on a host.
+        const checkout = workspace.repository.addWorktree({
+          workingDirectory,
+          branch,
+          base: input.targetBranch.branch,
+        });
         executionTarget = {
           kind: "local_worktree",
           workingDirectory,

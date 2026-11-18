@@ -268,8 +268,12 @@ export const createDemoTaskStore = (
       workingDirectory: `${workspace.worktreeRoot}/${taskId}`,
       branch: `odt/${taskId}-${slug}`,
     };
+    const checkout = workspace.repository.addWorktree({
+      ...worktree,
+      base: (task.record.targetBranch ?? workspace.defaultTargetBranch).branch,
+    });
     task.worktree = worktree;
-    return { created: true, checkout: workspace.repository.addWorktree(worktree) };
+    return { created: true, checkout };
   };
 
   const linkPullRequest = (

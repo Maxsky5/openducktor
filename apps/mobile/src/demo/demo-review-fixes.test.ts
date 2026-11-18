@@ -419,6 +419,36 @@ describe("demo QA fixes", () => {
     expect(status.fileDiffs.map((diff) => diff.type)).toContain("deleted");
   });
 
+  test("starts a new chat worktree from the selected target branch", async () => {
+    const demo = openDemo();
+    const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
+    const worktree = await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id);
+    const branch = await demo.client.gitGetCurrentBranch(
+      FIELDNOTES.repoPath,
+      worktree?.workingDirectory ?? "",
+    );
+    const created = demo.client.workspaceSessionCreate({
+      workspaceId: "fieldnotes",
+      location: "local_worktree",
+      worktree: { mode: "from_name", name: "on-shortcut", branchName: null },
+      runtimeKind: "claude",
+      selectedModel: null,
+      customAgentRoleId: null,
+      manualTitle: "On the shortcut branch",
+      targetBranch: { branch: branch.name ?? "" },
+    });
+    await demo.advance(5_000);
+    const { session } = await created;
+    const status = await demo.client.gitGetWorktreeStatus(
+      FIELDNOTES.repoPath,
+      `refs/heads/${branch.name}`,
+      "target",
+      session.executionTarget.workingDirectory,
+    );
+    expect(status.fileDiffs).toEqual([]);
+    expect(status.targetAheadBehind).toEqual({ ahead: 0, behind: 0 });
+  });
+
   test("compares a forked chat with the branch of its source", async () => {
     const demo = openDemo();
     await observeLive(demo);

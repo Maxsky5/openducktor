@@ -181,13 +181,14 @@ export type DemoRepository = {
   checkout(workingDirectory: string): DemoCheckout;
   findCheckout(workingDirectory: string): DemoCheckout | null;
   /**
-   * Adds a worktree on a new branch from the target branch, or from the commits of `from`. An
-   * existing checkout at that folder stops it.
+   * Adds a worktree on a new branch from the target branch, from the branch `base`, or from the
+   * commits of `from`. An existing checkout at that folder stops it.
    */
   addWorktree(input: {
     workingDirectory: string;
     branch: string;
     from?: DemoCheckout;
+    base?: string;
   }): DemoCheckout;
   removeWorktree(workingDirectory: string): void;
   worktrees(): DemoCheckout[];
@@ -318,14 +319,15 @@ export const createDemoRepository = (input: {
       return found;
     },
     findCheckout: (workingDirectory) => checkouts.get(workingDirectory) ?? null,
-    addWorktree({ workingDirectory, branch, from }) {
+    addWorktree({ workingDirectory, branch, from, base }) {
       if (checkouts.has(workingDirectory))
         throw new Error("A worktree already uses this folder. Enter another name.");
+      const log = from ? from.log : base ? logOf(base) : [];
       const created: DemoCheckout = {
         workingDirectory,
         branch,
-        revision: from?.revision ?? targetRevision,
-        log: [...(from?.log ?? [])],
+        revision: log.at(-1)?.id ?? targetRevision,
+        log: [...log],
         uncommitted: new Map(),
       };
       checkouts.set(workingDirectory, created);
