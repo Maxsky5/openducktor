@@ -3,7 +3,12 @@ import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { cleanTaskBranchPrefix } from "../../../domain/task";
-import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
+import {
+  errorMessage,
+  HostDependencyError,
+  HostOperationError,
+  HostValidationError,
+} from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
@@ -93,49 +98,6 @@ export const validateExistingTaskWorktreeCandidate = (
       );
     }
     return canonicalWorktreePath;
-  });
-/**
- * Lists the local task branches that cleanup deletes. Fails when a worktree that the cleanup
- * keeps has one of them checked out: Git refuses to delete that branch, and the cleanup
- * deletes branches only after it removes the task worktrees.
- */
-export const collectRelatedTaskBranches = (
-  gitPort: GitPort,
-  repoPath: string,
-  branchPrefix: string,
-  taskIds: string[],
-  removedWorktreePaths: string[],
-  operationLabel: string,
-) =>
-  Effect.gen(function* () {
-    const branches = yield* gitPort.listBranches(repoPath);
-    const removedWorktrees = new Set(removedWorktreePaths.map(normalizePathForComparison));
-    const names = new Set<string>();
-    for (const branch of branches) {
-      if (branch.isRemote) {
-        continue;
-      }
-      const taskId = taskIds.find((candidate) =>
-        isRelatedTaskBranch(branch.name, branchPrefix, candidate),
-      );
-      if (!taskId) {
-        continue;
-      }
-      if (
-        branch.worktreePath &&
-        !removedWorktrees.has(normalizePathForComparison(branch.worktreePath))
-      ) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            field: "taskId",
-            message: `Cannot ${operationLabel} task ${taskId} because branch ${branch.name} is checked out in worktree ${branch.worktreePath}. Switch that worktree to another branch, then try again.`,
-            details: { repoPath, taskId, branch: branch.name, worktreePath: branch.worktreePath },
-          }),
-        );
-      }
-      names.add(branch.name);
-    }
-    return [...names].sort();
   });
 const collectManagedTaskWorktreePaths = (
   dependencies: {
@@ -440,8 +402,19 @@ export const runTaskLocalCleanup = ({
       }
     }
 
-    for (const branchName of branchNames) {
-      yield* gitPort.deleteLocalBranch(repoPath, branchName, true, onBranchDeleting);
+    for (const [index, branchName] of branchNames.entries()) {
+      // The task worktrees are gone, so a retry cannot find a branch that only the worktree
+      // checkout tied to the task. The error names each branch that stays.
+      yield* gitPort.deleteLocalBranch(repoPath, branchName, true, onBranchDeleting).pipe(
+        Effect.mapError((cause) => {
+          const remaining = branchNames.slice(index).join(" ");
+          return new HostOperationError({
+            operation: "task.cleanup.delete_branch",
+            message: `${errorMessage(cause)} OpenDucktor removed the task worktrees, so a retry may not find the branches ${remaining}. Delete them with git branch -D ${remaining}.`,
+            cause,
+          });
+        }),
+      );
       progress.deletedBranches.push(branchName);
     }
   });

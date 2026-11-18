@@ -17,6 +17,7 @@ import type { AgentSessionOperationPolicy } from "../../application/agent-sessio
 import { Effect } from "effect";
 import { toHostOperationError } from "../../effect/host-errors";
 import type { CreateTaskServiceInput } from "../../application/tasks/task-service";
+import type { NamingService } from "../../application/naming/naming-service";
 import { createTaskServiceWithMutationProgress } from "../../application/tasks/task-service";
 import { createTaskSessionStartPreparationService } from "../../application/tasks/worktrees/task-session-start-preparation-service";
 import { createNodeTaskEventServices } from "./node-task-event-services";
@@ -59,10 +60,10 @@ export const createNodeTaskSessionServices = ({
   agentSessionLiveStateService,
   canonicalizeRepoPath,
   runtimeAdmission,
-  repositoryPolicy,
+  workspaceSessions: { persistence: repositoryPolicy, readSessionRootRefs: readSavedRoots },
+  naming,
   workflowLaunch,
   pauseForStop,
-  readSessionRootRefs: readSavedRoots,
   savedSessions,
   claudeSessionMetadata,
 }: {
@@ -77,7 +78,14 @@ export const createNodeTaskSessionServices = ({
   agentSessionLiveStateService: AgentSessionLiveStateService;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtimeAdmission: import("../../ports/runtime-admission-port").RuntimeAdmissionPort;
-  repositoryPolicy: AgentSessionOperationPolicy;
+  /** The workspace session composition. */
+  workspaceSessions: {
+    persistence: AgentSessionOperationPolicy;
+    readSessionRootRefs: Parameters<
+      typeof createAgentSessionCommandService
+    >[0]["readSessionRootRefs"];
+  };
+  naming: NamingService;
   workflowLaunch: Pick<
     Parameters<typeof createWorkflowLaunchService>[0],
     "resolveParts" | "messageDelivery"
@@ -85,9 +93,6 @@ export const createNodeTaskSessionServices = ({
     adapterRegistry: AgentRuntimeQueryDependencies["adapterRegistry"];
   };
   pauseForStop: Parameters<typeof createAgentSessionCommandService>[0]["pauseForStop"];
-  readSessionRootRefs: Parameters<
-    typeof createAgentSessionCommandService
-  >[0]["readSessionRootRefs"];
   /** The saved chats and tasks that own sessions and worktrees. */
   savedSessions: Pick<NodeTaskAssetServices, "workspaceSessionStore" | "taskOwnership">;
   claudeSessionMetadata: ClaudeSessionMetadataPort;
@@ -159,7 +164,10 @@ export const createNodeTaskSessionServices = ({
       input: Parameters<typeof eventServices.taskService.linkMergedPullRequest>[0],
     ) => completionWorkers.run(eventServices.taskService.linkMergedPullRequest(input)),
   };
-  const taskSessionStart = createTaskSessionStartPreparationService(taskServiceInput);
+  const taskSessionStart = createTaskSessionStartPreparationService({
+    ...taskServiceInput,
+    naming,
+  });
   const agentRuntimeQueries = createAgentRuntimeQueryService({
     adapterRegistry: workflowLaunch.adapterRegistry,
     settingsConfig: taskServiceInput.settingsConfig,

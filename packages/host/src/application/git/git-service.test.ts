@@ -91,11 +91,13 @@ const createFakeGitPort = ({
 }: FakeGitPortInput = {}): GitPort =>
   ({
     isMergeIncluded: () => Effect.die(new Error("unexpected merge inclusion")),
+    renameCheckedOutBranch: () => Effect.die(new Error("unexpected branch rename")),
     restoreDeletedBranch: () => Effect.die(new Error("unexpected branch restore")),
     readPublicationTarget: () => Effect.die(new Error("unexpected publication target")),
     inspectPublication: () => Effect.die(new Error("unexpected publication inspect")),
     pushBoundPublication: () => Effect.die(new Error("unexpected bound publication")),
     listRefTips: () => Effect.die(new Error("unexpected ref tip list")),
+    listRefNames: () => Effect.die(new Error("unexpected ref name list")),
     countCommitsAhead: () => Effect.die(new Error("unexpected ahead count")),
     mergeTreeOids: () => Effect.die(new Error("unexpected merge tree")),
     readReflogs: () => Effect.die(new Error("unexpected reflog read")),
@@ -159,6 +161,9 @@ const createFakeGitPort = ({
       return Effect.succeed(
         existingRefs === undefined || existingRefs.includes(`${workingDir}:${reference}`),
       );
+    },
+    listRemoteNames() {
+      return Effect.succeed([]);
     },
     listRemotes(workingDir) {
       return Effect.tryPromise({
@@ -307,9 +312,9 @@ const createFakeGitPort = ({
       });
     },
     configureBranchUpstream() {
-      return Effect.succeed({ createdTrackingRef: null });
+      return Effect.succeed(null);
     },
-    deleteReference() {
+    deleteOwnedReference() {
       return Effect.void;
     },
     removeWorktree(repoPath, worktreePath, force) {

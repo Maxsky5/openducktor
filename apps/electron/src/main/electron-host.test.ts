@@ -329,10 +329,9 @@ const createGit = (): GitPort =>
     isRegisteredWorktree: () => Effect.succeed(true),
     referenceExists: (_workingDir, reference) => Effect.succeed(reference === "origin/main"),
     configureBranchUpstream: () =>
-      Effect.succeed({
-        createdTrackingRef: "refs/remotes/origin/odt/task-1-task-1",
-      }),
-    deleteReference: () => Effect.succeed(undefined),
+      Effect.succeed({ ref: "refs/remotes/origin/odt/task-1-task-1", oid: "c0ffee" }),
+    deleteOwnedReference: () => Effect.succeed(undefined),
+    listRemoteNames: () => Effect.succeed(["origin"]),
     listRemotes: () =>
       Effect.succeed([{ name: "origin", url: "git@github.com:openai/openducktor.git" }]),
     listBranches: () => Effect.succeed([{ name: "main", isCurrent: true, isRemote: false }]),

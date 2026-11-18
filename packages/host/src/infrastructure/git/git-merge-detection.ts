@@ -17,8 +17,12 @@ const OLD_GIT_AHEAD_BEHIND_OUTPUT = "unknown field name: ahead-behind";
 /** The merge detection methods of the Git port. */
 export const createGitMergeDetectionMethods = (
   runner: GitCommandRunner,
-): Pick<GitPort, "listRefTips" | "countCommitsAhead" | "mergeTreeOids" | "readReflogs"> => ({
+): Pick<
+  GitPort,
+  "listRefTips" | "listRefNames" | "countCommitsAhead" | "mergeTreeOids" | "readReflogs"
+> => ({
   listRefTips: (repoPath, patterns) => listRefTips(runner, repoPath, patterns),
+  listRefNames: (repoPath, patterns) => listRefNames(runner, repoPath, patterns),
   countCommitsAhead: (repoPath, base, patterns) =>
     countCommitsAhead(runner, repoPath, base, patterns),
   mergeTreeOids: (repoPath, pairs) => mergeTreeOids(runner, repoPath, pairs),
@@ -52,6 +56,21 @@ const listRefTips = (
     }
     return tips;
   });
+
+/**
+ * The full names of the references that match the patterns. Git reads no commit object for them,
+ * so the listing stays fast with many remote branches.
+ */
+const listRefNames = (
+  runner: GitCommandRunner,
+  repoPath: string,
+  patterns: string[],
+): Effect.Effect<string[], GitCommandError> =>
+  patterns.length === 0
+    ? Effect.succeed([])
+    : runGit(runner, repoPath, ["for-each-ref", "--format=%(refname)", ...patterns]).pipe(
+        Effect.map((output) => output.split("\n").filter((line) => line.length > 0)),
+      );
 
 /**
  * The number of commits that `base` does not have, for each ref that the patterns match, in one

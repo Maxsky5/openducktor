@@ -11,6 +11,7 @@ import {
   rollbackFailedTaskWorktree,
   type TaskStartRollbackError,
 } from "./task-worktree-rollback";
+import type { OwnedTrackingRef } from "../../../ports/git-port";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 
 type BuildStartDependencies = ReturnType<typeof requireBuildStartDependencies>;
@@ -58,11 +59,13 @@ export const prepareNewTaskWorktree = (
   worktreeBase: string,
   worktreePath: string,
   branch: string,
+  /** The naming model chose the branch as free, so an existing remote branch of it is a collision. */
+  branchIsGenerated: boolean,
 ) =>
   Effect.gen(function* () {
     yield* dependencies.worktreeFiles.ensureDirectory(worktreeBase);
 
-    let createdTrackingRef: string | null = null;
+    let ownedTrackingRef: OwnedTrackingRef | null = null;
     let createdTaskWorktree = false;
     const actionRun = dependencies.worktreeActions.createRun({ worktreePath, branch });
     const rollback = (): Effect.Effect<void, TaskStartRollbackError> =>
@@ -84,7 +87,7 @@ export const prepareNewTaskWorktree = (
             canonicalRepoPath,
             worktreePath,
             branch,
-            createdTrackingRef,
+            ownedTrackingRef,
             worktreeBase,
           );
           yield* updateStartup((progress) =>
@@ -138,16 +141,25 @@ export const prepareNewTaskWorktree = (
         );
 
         if (startPoint.upstreamRemote) {
-          const upstreamSetup = yield* startupStep(
+          // Uninterruptible until the rollback owns the tracking ref: the setup undoes its own
+          // writes when it fails, and an interruption waits for the setup to finish.
+          yield* startupStep(
             { id: "upstream", label: "Set branch upstream", details: [startPoint.upstreamRemote] },
             dependencies.gitPort.configureBranchUpstream(
               canonicalRepoPath,
               worktreePath,
               branch,
               startPoint.upstreamRemote,
+              branchIsGenerated,
             ),
+          ).pipe(
+            Effect.tap((owned) =>
+              Effect.sync(() => {
+                ownedTrackingRef = owned;
+              }),
+            ),
+            Effect.uninterruptible,
           );
-          createdTrackingRef = upstreamSetup.createdTrackingRef;
         }
 
         yield* startupStep(

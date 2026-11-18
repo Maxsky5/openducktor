@@ -60,13 +60,14 @@ import {
   resolveFetchRemotes,
 } from "../../infrastructure/git/git-sync";
 import {
-  configureBranchUpstream,
   createWorktree,
   deleteLocalBranch,
-  deleteReference,
   removeWorktree,
   restoreDeletedBranch,
 } from "../../infrastructure/git/git-worktree";
+import { renameCheckedOutBranch } from "../../infrastructure/git/git-branch-rename";
+import { configureBranchUpstream } from "../../infrastructure/git/git-branch-upstream";
+import { deleteOwnedReference } from "../../infrastructure/git/git-refs";
 import {
   buildWorktreeStatusData,
   buildWorktreeStatusSummaryData,
@@ -222,6 +223,9 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     referenceExists(workingDir, reference) {
       return referenceExists(runner, workingDir, reference);
     },
+    listRemoteNames(workingDirectory) {
+      return runGit(runner, workingDirectory, ["remote"]).pipe(Effect.map(parseRemoteNames));
+    },
     listRemotes(workingDirectory) {
       return Effect.gen(function* () {
         const remoteNames = parseRemoteNames(yield* runGit(runner, workingDirectory, ["remote"]));
@@ -329,14 +333,24 @@ export const createGitCliAdapter = (input: CreateGitCliAdapterInput): GitPort =>
     createWorktree(repoPath, worktreePath, branch, createBranch, startPoint) {
       return createWorktree(runner, repoPath, worktreePath, branch, createBranch, startPoint);
     },
-    configureBranchUpstream(repoPath, worktreePath, branch, upstreamRemote) {
-      return configureBranchUpstream(runner, repoPath, worktreePath, branch, upstreamRemote);
+    configureBranchUpstream(repoPath, worktreePath, branch, upstreamRemote, requireNewTrackingRef) {
+      return configureBranchUpstream(
+        runner,
+        repoPath,
+        worktreePath,
+        branch,
+        upstreamRemote,
+        requireNewTrackingRef,
+      );
     },
-    deleteReference(repoPath, reference) {
-      return deleteReference(runner, repoPath, reference);
+    deleteOwnedReference(repoPath, owned) {
+      return deleteOwnedReference(runner, repoPath, owned);
     },
     removeWorktree(repoPath, worktreePath, force) {
       return removeWorktree(runner, repoPath, worktreePath, force);
+    },
+    renameCheckedOutBranch(workingDirectory, expectedBranch, branch) {
+      return renameCheckedOutBranch(runner, workingDirectory, expectedBranch, branch);
     },
     deleteLocalBranch(repoPath, branch, force, onDeleting) {
       return deleteLocalBranch(runner, repoPath, branch, force, onDeleting);

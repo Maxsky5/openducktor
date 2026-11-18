@@ -34,11 +34,11 @@ describe("rollbackFailedTaskWorktree", () => {
         rollbackFailedTaskWorktree(
           requireBuildStartDependencies(
             extendGitPort(createBuildStartGitPort({ calls }), {
-              deleteReference(repoPath, reference) {
-                calls.push({ type: "deleteReference", repoPath, reference });
+              deleteOwnedReference(repoPath, owned) {
+                calls.push({ type: "deleteOwnedReference", repoPath, ...owned });
                 return Effect.fail(
                   new HostOperationError({
-                    operation: "test.deleteReference",
+                    operation: "test.deleteOwnedReference",
                     message: "cannot delete tracking ref",
                   }),
                 );
@@ -67,7 +67,7 @@ describe("rollbackFailedTaskWorktree", () => {
           "/repo",
           "/worktrees/repo/task-1",
           "odt/task-1",
-          "refs/remotes/origin/odt/task-1",
+          { ref: "refs/remotes/origin/odt/task-1", oid: "c0ffee" },
           "/worktrees/repo",
         ),
       ),

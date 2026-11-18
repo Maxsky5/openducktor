@@ -1,5 +1,4 @@
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
-import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
@@ -59,7 +58,6 @@ export const createTaskCloseUseCase = ({
         dependencies.settingsConfig,
         repoConfig,
       );
-      const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
       const cleanupProgress = createTaskCleanupProgressState();
       const cleanup = Effect.gen(function* () {
         const currentMetadata = yield* taskStore.getTaskMetadata(input);
@@ -100,7 +98,7 @@ export const createTaskCloseUseCase = ({
             lifecycle: taskSessionLifecycleCoordinator,
             worktreeOwners,
             repoPath: effectiveRepoPath,
-            branchPrefix,
+            repoConfig,
             workflow,
             task: current,
             sessions: currentSessions,

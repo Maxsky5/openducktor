@@ -1,4 +1,5 @@
 import { allowAllGoalCommands } from "../../../test-support/service-test-doubles";
+import { disabledNamingService } from "../../../test-support/naming-test-doubles";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
 import { promptSettingsOf } from "@openducktor/workflows";
 import { mock } from "bun:test";
@@ -428,7 +429,7 @@ export const createLaunchHarness = async (
       Effect.sync(() => {
         worktreeExists = true;
       }),
-    configureBranchUpstream: () => Effect.succeed({ createdTrackingRef: null }),
+    configureBranchUpstream: () => Effect.succeed(null),
     removeWorktree: (_repoPath, path) =>
       Effect.sync(() => {
         removedWorktrees.push(path);
@@ -474,6 +475,7 @@ export const createLaunchHarness = async (
       }),
   });
   const preparation = createTaskSessionStartPreparationService({
+    naming: disabledNamingService,
     taskWorkflows,
     taskStore: taskReader,
     gitPort: git,
@@ -565,6 +567,7 @@ export const createLaunchHarness = async (
       prepareResume: unexpected("repository resume"),
       prepareForkSource: () => Effect.die(new Error("unexpected fork source read")),
       prepareSend: unexpected("repository send"),
+      prepareDelivery: unexpected("repository send"),
       recordAcceptedMessage: unexpected("repository message record"),
       prepareModelUpdate: unexpected("repository model update"),
       validateRef: unexpected("repository validation"),

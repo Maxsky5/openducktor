@@ -4,7 +4,8 @@ import { startupStep } from "../../agent-sessions/session-startup-progress";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
-import { buildBranchName } from "../../../domain/task";
+import type { NamingService } from "../../naming/naming-service";
+import { chooseTaskBranch } from "./task-branch-naming";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
@@ -67,6 +68,8 @@ export type TaskSessionStartPreparationDependencies = {
   runtimeRegistry?: RuntimeRegistryPort;
   worktreeFiles?: WorktreeFilePort;
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
+  /** Names the branch of a new task worktree when the workspace has a naming model. */
+  naming: NamingService;
 };
 
 export const createTaskSessionStartPreparationService = ({
@@ -80,6 +83,7 @@ export const createTaskSessionStartPreparationService = ({
   runtimeRegistry,
   worktreeFiles,
   taskSessionLifecycleCoordinator,
+  naming,
 }: TaskSessionStartPreparationDependencies) => {
   return {
     validateTarget(input: TaskSessionStartPreparationInput): Effect.Effect<void, TaskServiceError> {
@@ -211,7 +215,10 @@ export const createTaskSessionStartPreparationService = ({
                     ),
                   );
                 } else {
-                  const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
+                  const { branch, generated } = yield* chooseTaskBranch(
+                    { naming, gitPort: dependencies.gitPort },
+                    { repoConfig, repoPath: canonicalRepoPath, task },
+                  );
                   const newWorktree = yield* prepareNewTaskWorktree(
                     dependencies,
                     repoConfig,
@@ -220,6 +227,7 @@ export const createTaskSessionStartPreparationService = ({
                     worktreeBase,
                     worktreePath,
                     branch,
+                    generated,
                   );
                   rollback = () =>
                     Effect.scoped(

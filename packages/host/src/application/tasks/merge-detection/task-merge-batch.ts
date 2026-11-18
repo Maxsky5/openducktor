@@ -27,7 +27,6 @@ const needsTreeCheck = (task: CountedTask): boolean =>
 export const checkMovedTasks = ({
   gitPort,
   gitRepoPath,
-  branchRefPattern,
   moved,
   checkedAt,
   withPermit,
@@ -35,8 +34,6 @@ export const checkMovedTasks = ({
 }: {
   gitPort: GitPort;
   gitRepoPath: string;
-  /** The `for-each-ref` pattern that matches every task branch. */
-  branchRefPattern: string;
   moved: readonly MovedTask[];
   checkedAt: string;
   /** Limits the Git commands that run at a time. */
@@ -108,7 +105,9 @@ export const checkMovedTasks = ({
       ([targetOid, tasks]) =>
         Effect.gen(function* () {
           const counts = yield* Effect.result(
-            withPermit(gitPort.countCommitsAhead(gitRepoPath, targetOid, [branchRefPattern])),
+            withPermit(
+              gitPort.countCommitsAhead(gitRepoPath, targetOid, [...new Set(tasks.map(branchRef))]),
+            ),
           );
           if (counts._tag === "Failure") return yield* fail(tasks, errorMessage(counts.failure));
           for (const task of tasks) {

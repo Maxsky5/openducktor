@@ -1,7 +1,9 @@
 import type { TaskWorkflow } from "@openducktor/workflows";
 import type { AgentSessionRecord, RepoConfig } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { collectRelatedTaskBranches } from "./task-branch-tips";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
+import { checkoutBranch } from "../../../domain/task";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { SettingsConfigPort } from "../../../ports/settings-config-port";
@@ -14,12 +16,10 @@ import {
 } from "./task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
-  collectRelatedTaskBranches,
   collectResetWorktreePaths,
   collectSessionsUsingCanonicalWorktree,
-  isRelatedTaskBranch,
 } from "./task-cleanup-support";
-import { resolveTaskWorktreeStartPoint } from "./task-branches";
+import { loadTaskTargetBranch, resolveTaskWorktreeStartPoint } from "./task-branches";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 
 type CanonicalImplementationResetTarget = {
@@ -110,7 +110,6 @@ const resolveCanonicalImplementationResetTarget = (
   task: TaskRecord,
   repoPath: string,
   canonicalWorktreePath: string,
-  branchPrefix: string,
   workspaceId: string,
 ) =>
   Effect.gen(function* () {
@@ -126,12 +125,18 @@ const resolveCanonicalImplementationResetTarget = (
         }),
       );
     }
-    // The reset keeps this worktree and hard-resets its branch, so the branch must belong to the task.
-    if (!isRelatedTaskBranch(branch, branchPrefix, task.id)) {
+    const { branch: targetBranch } = yield* loadTaskTargetBranch(workspaceSettingsService, {
+      task,
+      repoPath,
+      workspaceId,
+    });
+    // The reset keeps this worktree and hard-resets its branch, so the branch must not be the
+    // target branch. The branch of the task worktree is the task branch, whatever its name.
+    if (branch === checkoutBranch(targetBranch)) {
       return yield* Effect.fail(
         new HostValidationError({
           field: "taskId",
-          message: `Cannot reset implementation because canonical worktree ${canonicalWorktreePath} is on branch ${branch}, which is not a task branch. Check out the task branch or reset the task.`,
+          message: `Cannot reset implementation because canonical worktree ${canonicalWorktreePath} is on the target branch ${branch}. Check out the task branch or reset the task.`,
           details: { repoPath, taskId: task.id, canonicalWorktreePath, actualBranch: branch },
         }),
       );
@@ -198,7 +203,7 @@ export const collectImplementationResetTargets = (
   input: {
     workspaceId: string;
     repoPath: string;
-    branchPrefix: string;
+    repoConfig: RepoConfig;
     managedWorktreeBasePath: string;
     /** The existing canonical worktree, or null when it does not exist. */
     canonicalWorktree: string | null;
@@ -208,16 +213,16 @@ export const collectImplementationResetTargets = (
   },
 ) =>
   Effect.gen(function* () {
-    const { repoPath, branchPrefix, task } = input;
+    const { repoPath, repoConfig, task } = input;
     const worktreePaths = yield* collectImplementationResetWorktreePaths(dependencies, {
       ...input,
       taskId: task.id,
     });
     const relatedBranches = yield* collectRelatedTaskBranches(
-      dependencies.gitPort,
+      dependencies,
+      repoConfig,
       repoPath,
-      branchPrefix,
-      [task.id],
+      task,
       worktreePaths,
       "reset implementation",
     );
@@ -228,7 +233,6 @@ export const collectImplementationResetTargets = (
           task,
           repoPath,
           input.canonicalWorktree,
-          branchPrefix,
           input.workspaceId,
         )
       : null;

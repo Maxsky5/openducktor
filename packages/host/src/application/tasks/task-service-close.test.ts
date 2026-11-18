@@ -747,16 +747,19 @@ describe("TaskService.closeTask", () => {
       worktreeFiles: createWorktreeFiles(calls),
     });
 
-    await expect(
-      run(
-        service.closeTask({
-          workspaceId: "workspace-1",
-          repoPath: "/repo",
-          taskId: "task-1",
-          removeWorktree: true,
-        }),
-      ),
-    ).rejects.toThrow("Close cleanup already removed worktrees: /worktrees/repo/task-1.");
+    const failure = await run(
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
+    ).catch((error: Error) => error);
+    expect(String(failure)).toContain(
+      "Close cleanup already removed worktrees: /worktrees/repo/task-1.",
+    );
+    // The worktree is gone, so the error names the branch that a retry may not find.
+    expect(String(failure)).toContain("Delete them with git branch -D odt/task-1.");
     expect(calls).not.toContain("transition:task-1:closed");
   });
 

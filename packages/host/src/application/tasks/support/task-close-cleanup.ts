@@ -1,7 +1,8 @@
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
-import type { AgentSessionRecord } from "@openducktor/contracts";
+import type { AgentSessionRecord, RepoConfig } from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
 import { Effect } from "effect";
+import { collectRelatedTaskBranches } from "./task-branch-tips";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { HostValidationError } from "../../../effect/host-errors";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
@@ -12,11 +13,7 @@ import type { requireMergedTaskCleanupDependencies } from "./required-task-depen
 import type { requireTaskCloseDependencies } from "./task-cleanup-dependencies";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
-import {
-  collectRelatedTaskBranches,
-  runTaskLocalCleanup,
-  validateExistingTaskWorktreeCandidate,
-} from "./task-cleanup-support";
+import { runTaskLocalCleanup, validateExistingTaskWorktreeCandidate } from "./task-cleanup-support";
 import type { TaskWorktreeOwnerReader } from "../../../ports/task-worktree-owner-port";
 import { acquireRemovableWorktrees } from "./task-worktree-owner-guard";
 import { cleanupKeptTaskWorktree, releaseMergedTaskSessions } from "./task-worktree-cleanup";
@@ -132,7 +129,7 @@ export const collectTaskCleanupTargets = ({
   worktreeOwners,
   repoPath,
   workspaceId,
-  branchPrefix,
+  repoConfig,
   workflow,
   task,
   sessions,
@@ -143,7 +140,7 @@ export const collectTaskCleanupTargets = ({
   worktreeOwners: TaskWorktreeOwnerReader | undefined;
   repoPath: string;
   workspaceId: string;
-  branchPrefix: string;
+  repoConfig: RepoConfig;
   workflow: TaskWorkflow;
   task: TaskRecord;
   sessions: AgentSessionRecord[];
@@ -171,10 +168,10 @@ export const collectTaskCleanupTargets = ({
       },
     );
     const branchNames = yield* collectRelatedTaskBranches(
-      dependencies.gitPort,
+      dependencies,
+      repoConfig,
       repoPath,
-      branchPrefix,
-      [task.id],
+      task,
       worktreePaths,
       operationLabel,
     );
@@ -233,7 +230,7 @@ export const cleanupConfirmedMergeClose = ({
       workspaceId,
       worktreeOwners: dependencies.worktreeOwners,
       repoPath,
-      branchPrefix: repoConfig.branchPrefix,
+      repoConfig,
       workflow,
       task,
       sessions: metadata.agentSessions,

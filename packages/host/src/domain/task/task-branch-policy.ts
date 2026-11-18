@@ -50,6 +50,18 @@ export const buildBranchName = (prefix: string, taskId: string, title: string): 
 
 export const checkoutBranch = (targetBranch: GitTargetBranch): string => targetBranch.branch.trim();
 
+/** The name of the branch that a task or a chat merges into. */
+export const targetBranchName = (
+  owner: { targetBranch?: GitTargetBranch | null | undefined },
+  defaultTargetBranch: GitTargetBranch,
+): string => checkoutBranch(owner.targetBranch ?? defaultTargetBranch);
+
+/** The ref prefix of local branches. */
+export const LOCAL_BRANCH_REF_PREFIX = "refs/heads/";
+
+/** The branch name of a local branch ref. */
+export const localBranchName = (ref: string): string => ref.slice(LOCAL_BRANCH_REF_PREFIX.length);
+
 /**
  * The full ref of a target branch. A short name such as `main` can also match a tag or a local
  * branch named `origin/main`, so Git operations that must use the selected branch use this ref.
