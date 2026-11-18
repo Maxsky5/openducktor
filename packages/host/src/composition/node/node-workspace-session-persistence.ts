@@ -18,6 +18,8 @@ import {
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import { createWorkspaceSessionOperationGate } from "../../application/workspaces/workspace-session-operation-gate";
 import { createLiveSessionPublisher } from "./runtime-lifecycle-publisher";
+import { createWorkspaceSessionCreationFacts } from "../../application/workspaces/workspace-session-naming";
+import type { NamingService } from "../../application/naming/naming-service";
 
 // Resolve live state in the title callback at call time. Composition creates persistence first.
 export const createNodeWorkspaceSessionPersistence = ({
@@ -25,21 +27,24 @@ export const createNodeWorkspaceSessionPersistence = ({
   faultLog,
   taskStore,
   store,
+  naming,
   ...dependencies
 }: Omit<
   Parameters<typeof createWorkspaceSessionRuntimePersistence>[0],
-  "publishUpdated" | "operationGate" | "sessionTitleGate" | "reportRenameFailure"
+  "publishUpdated" | "operationGate" | "sessionTitleGate" | "reportRenameFailure" | "naming"
 > & {
+  naming: NamingService;
   eventBus: HostEventBusPort | undefined;
   faultLog: AgentSessionLiveFaultLogger;
   taskStore: Pick<TaskStorePort, "recordAgentSessionActivity">;
-  settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
+  settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog" | "getRepoConfig">;
 }) => {
   const readSessionRootRefs = createLiveSessionRootRefsReader({
     store,
     settings: dependencies.settings,
   });
   const operationGate = createWorkspaceSessionOperationGate();
+  const facts = createWorkspaceSessionCreationFacts();
   // Title transitions serialize on their own gate, because an observed message
   // renames the runtime session without an operation. Always acquire the
   // operation gate before the title gate, never the reverse.
@@ -91,6 +96,12 @@ export const createNodeWorkspaceSessionPersistence = ({
     operationGate,
     sessionTitleGate,
     reportRenameFailure,
+    naming: {
+      facts,
+      service: naming,
+      settings: dependencies.settings,
+      git: dependencies.git,
+    },
   });
   const persistence = {
     ...workspacePersistence,
@@ -126,6 +137,7 @@ export const createNodeWorkspaceSessionPersistence = ({
     publishUpdated,
     operationGate,
     sessionTitleGate,
+    facts,
     isTitleSyncPending: persistence.isTitleSyncPending,
     markTitleSyncPending: persistence.markTitleSyncPending,
   };

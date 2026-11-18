@@ -36,6 +36,7 @@ const form = (overrides: Partial<NewChatForm> = {}): NewChatForm => {
     rolesReady: true,
     branches: null,
     branchPrefix: "odt",
+    hasNamingModel: false,
     hostError: null,
     ...overrides,
   };
@@ -53,6 +54,7 @@ const form = (overrides: Partial<NewChatForm> = {}): NewChatForm => {
       selectedModelAvailable: fields.model.kind === "ready",
       rolesReady: fields.rolesReady,
       availableBranches: fields.branches,
+      hasNamingModel: fields.hasNamingModel,
     }),
   };
 };
@@ -70,7 +72,11 @@ describe("buildNewChatRequest", () => {
       targetBranch: TARGET,
     });
     expect(request.blockedReason).toBeNull();
-    expect(request.worktreeSummary).toEqual({ directory: null, branch: null });
+    expect(request.worktreeSummary).toEqual({
+      directory: null,
+      branch: null,
+      namedByFirstMessage: false,
+    });
   });
 
   test("waits for the target branch, then asks for one when the location has none", () => {
@@ -158,7 +164,11 @@ describe("buildNewChatRequest", () => {
       name: "login-flow",
       branchName: null,
     });
-    expect(valid.worktreeSummary).toEqual({ directory: "login-flow", branch: "odt/login-flow" });
+    expect(valid.worktreeSummary).toEqual({
+      directory: "login-flow",
+      branch: "odt/login-flow",
+      namedByFirstMessage: false,
+    });
 
     const badBranch = buildNewChatRequest(
       form({
@@ -168,6 +178,46 @@ describe("buildNewChatRequest", () => {
     );
     expect(badBranch.fieldErrors.branch).toBe("Enter a valid Git branch name.");
     expect(badBranch.input).toBeNull();
+  });
+
+  test("lets the first message name a new branch when the workspace has a naming model", () => {
+    const blank = buildNewChatRequest(form({ location: "local_worktree", hasNamingModel: true }));
+    expect(blank.blockedReason).toBeNull();
+    expect(worktreeOf(blank.input)).toEqual({ mode: "from_name", name: "", branchName: null });
+    expect(blank.worktreeSummary).toEqual({
+      directory: null,
+      branch: null,
+      namedByFirstMessage: true,
+    });
+
+    const typedBranch = buildNewChatRequest(
+      form({
+        location: "local_worktree",
+        hasNamingModel: true,
+        worktree: { mode: "from_name", name: "", branchName: "feature/login" },
+      }),
+    );
+    expect(worktreeOf(typedBranch.input)).toEqual({
+      mode: "from_name",
+      name: "",
+      branchName: "feature/login",
+    });
+    expect(typedBranch.worktreeSummary).toEqual({
+      directory: null,
+      branch: "feature/login",
+      namedByFirstMessage: false,
+    });
+
+    const existingBranch = buildNewChatRequest(
+      form({
+        location: "local_worktree",
+        hasNamingModel: true,
+        worktree: { mode: "from_branch", name: "", branchName: "main" },
+        branches: [{ name: "main", isCurrent: true, isRemote: false }],
+      }),
+    );
+    expect(existingBranch.input).toBeNull();
+    expect(existingBranch.blockedReason).toBe("Enter a worktree name.");
   });
 
   test("uses an existing branch only when no other worktree has it", () => {
@@ -217,7 +267,11 @@ describe("buildNewChatRequest", () => {
       name: "main",
       branchName: "main",
     });
-    expect(main.worktreeSummary).toEqual({ directory: "main", branch: "main" });
+    expect(main.worktreeSummary).toEqual({
+      directory: "main",
+      branch: "main",
+      namedByFirstMessage: false,
+    });
   });
 
   test("shows the worktree error that the host reported", () => {

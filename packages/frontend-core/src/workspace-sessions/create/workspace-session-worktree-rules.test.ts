@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { GitBranch } from "@openducktor/contracts";
 import {
+  branchNamedByFirstMessage,
   changeWorktreeMode,
   existingBranchError,
   existingBranchUnavailableReason,
@@ -10,6 +11,8 @@ import {
   WORKTREE_NAME_RULE,
   worktreeDirectoryName,
   worktreeNameError,
+  worktreeNameOptional,
+  worktreeNameReady,
 } from "./workspace-session-worktree-rules";
 
 const branch = (overrides: Partial<GitBranch> & Pick<GitBranch, "name">): GitBranch => ({
@@ -81,5 +84,26 @@ describe("worktree rules", () => {
     expect(newWorktreeBranchState({ ...value, branchName: "bad..name" }, "odt").branchError).toBe(
       true,
     );
+  });
+
+  test("lets a new branch worktree keep a blank name only with a naming model", () => {
+    const blank = { mode: "from_name" as const, name: " ", branchName: null };
+    const existing = { mode: "from_branch" as const, name: "", branchName: "main" };
+    expect(worktreeNameOptional(blank, false)).toBe(false);
+    expect(worktreeNameReady(blank, false)).toBe(false);
+    expect(worktreeNameOptional(blank, true)).toBe(true);
+    expect(worktreeNameReady(blank, true)).toBe(true);
+    expect(worktreeNameOptional(existing, true)).toBe(false);
+    expect(worktreeNameReady(existing, true)).toBe(false);
+    expect(worktreeNameReady({ ...blank, name: "named" }, false)).toBe(true);
+  });
+
+  test("names the branch from the first message only for a blank name without a branch name", () => {
+    const blank = { mode: "from_name" as const, name: "", branchName: null };
+    expect(branchNamedByFirstMessage(blank, true)).toBe(true);
+    expect(branchNamedByFirstMessage(blank, false)).toBe(false);
+    expect(branchNamedByFirstMessage({ ...blank, name: "login" }, true)).toBe(false);
+    expect(branchNamedByFirstMessage({ ...blank, branchName: "feature/x" }, true)).toBe(false);
+    expect(newWorktreeBranchState(blank, "odt").defaultBranch).toBe("");
   });
 });

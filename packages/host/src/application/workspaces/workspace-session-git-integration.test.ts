@@ -1,4 +1,5 @@
 import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
+import { createNamingTestDependencies } from "../../test-support/naming-test-doubles";
 import { HostOperationError } from "../../effect/host-errors";
 import { WorktreeActionExitError } from "../actions/worktree-action-runner";
 import { createWorkspaceSessionImportService } from "./workspace-session-import-service";
@@ -184,6 +185,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     };
     const store = createSqliteWorkspaceSessionStore(database);
     const dependencies: WorkspaceSessionServiceDependencies = {
+      facts: createNamingTestDependencies().facts,
       taskOwnership: database.taskOwnership,
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },

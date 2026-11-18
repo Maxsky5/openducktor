@@ -19,5 +19,8 @@ export type WorkspaceSessionRuntimeTitleUpdater = (
 export type WorkspaceSessionRenameFailureReporter = (
   runtimeRef: AgentSessionLiveRef,
   message: string,
-  operation?: "workspaceSession.accepted-message.rename" | "workspaceSession.title.sync",
+  operation?:
+    | "workspaceSession.accepted-message.rename"
+    | "workspaceSession.title.sync"
+    | "workspaceSession.naming",
 ) => Effect.Effect<void>;

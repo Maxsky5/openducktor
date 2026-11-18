@@ -14,6 +14,7 @@ const base = (overrides: Partial<Parameters<typeof buildWorkspaceSessionCreateIn
     selectedModelAvailable: true,
     rolesReady: true,
     availableBranches: [],
+    hasNamingModel: false,
     ...overrides,
   });
 
@@ -33,6 +34,26 @@ describe("buildWorkspaceSessionCreateInput", () => {
 
   test("blocks an existing worktree with no checked selection", () => {
     expect(base({ existingWorktree: null })).toBeNull();
+  });
+
+  test("sends a blank new branch worktree name only when the workspace has a naming model", () => {
+    const blank = {
+      location: "local_worktree" as const,
+      worktree: { mode: "from_name" as const, name: "  ", branchName: null },
+    };
+    expect(base(blank)).toBeNull();
+    expect(base({ ...blank, hasNamingModel: true })).toMatchObject({
+      location: "local_worktree",
+      worktree: { mode: "from_name", name: "", branchName: null },
+    });
+    expect(
+      base({
+        ...blank,
+        hasNamingModel: true,
+        worktree: { mode: "from_branch", name: "", branchName: "main" },
+        availableBranches: [{ name: "main", isCurrent: true, isRemote: false }],
+      }),
+    ).toBeNull();
   });
 
   test("ignores the existing worktree choice for the current checkout", () => {

@@ -12,6 +12,7 @@ import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import {
+  branchNamedByFirstMessage,
   existingBranchError,
   existingBranchUnavailableReason,
   INVALID_BRANCH_NAME,
@@ -21,6 +22,8 @@ import {
   WORKTREE_NAME_MAX_LENGTH,
   worktreeDirectoryName,
   worktreeNameError,
+  worktreeNameOptional,
+  WORKTREE_NAME_OPTIONAL_HINT,
   type WorkspaceSessionWorktreeFieldError,
 } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-worktree-rules";
 
@@ -84,13 +87,31 @@ export function ExistingWorktreeBranchFields({
   );
 }
 
-export function WorktreeNameField({ value, onChange, disabled, error }: WorktreeInputProps) {
+export function WorktreeNameField({
+  value,
+  onChange,
+  disabled,
+  error,
+  hasNamingModel = false,
+}: WorktreeInputProps & {
+  /** True when the workspace has a naming model, so a new branch worktree can have a blank name. */
+  hasNamingModel?: boolean;
+}) {
   const directoryName = worktreeDirectoryName(value.name);
   const nameError = worktreeNameError(value.name, error);
+  const optional = worktreeNameOptional(value, hasNamingModel);
 
   return (
     <div className="grid gap-1.5" data-invalid={Boolean(nameError) || undefined}>
-      <Label htmlFor="workspace-session-worktree-name">Worktree name</Label>
+      <Label htmlFor="workspace-session-worktree-name">
+        {optional ? (
+          <>
+            Worktree name <span className="font-normal text-muted-foreground">optional</span>
+          </>
+        ) : (
+          "Worktree name"
+        )}
+      </Label>
       <Input
         id="workspace-session-worktree-name"
         value={value.name}
@@ -108,6 +129,7 @@ export function WorktreeNameField({ value, onChange, disabled, error }: Worktree
       />
       <p id="workspace-session-worktree-name-hint" className="text-xs text-muted-foreground">
         Spaces and slashes become hyphens in the directory name.
+        {optional ? ` ${WORKTREE_NAME_OPTIONAL_HINT}` : null}
       </p>
       {directoryName !== null && (
         <p className="break-all text-xs text-muted-foreground">
@@ -127,6 +149,28 @@ export function WorktreeNameField({ value, onChange, disabled, error }: Worktree
   );
 }
 
+/** The branch that the new worktree gets: typed, from the worktree name, or from the first message. */
+function NewBranchPreview({
+  branch,
+  namedByFirstMessage,
+}: {
+  branch: string;
+  namedByFirstMessage: boolean;
+}) {
+  if (namedByFirstMessage)
+    return (
+      <p className="mt-1 text-xs text-muted-foreground">
+        New branch: named from your first message
+      </p>
+    );
+  if (!branch) return null;
+  return (
+    <p className="mt-1 break-all text-xs text-muted-foreground">
+      New branch: <span className="font-mono">{branch}</span>
+    </p>
+  );
+}
+
 export function NewWorktreeBranchFields({
   workspace,
   value,
@@ -134,7 +178,13 @@ export function NewWorktreeBranchFields({
   disabled,
   error,
   alwaysExpanded = false,
-}: WorktreeInputProps & { workspace: ActiveWorkspace; alwaysExpanded?: boolean }) {
+  hasNamingModel = false,
+}: WorktreeInputProps & {
+  workspace: ActiveWorkspace;
+  alwaysExpanded?: boolean;
+  /** True when the workspace has a naming model, so a blank name lets the first message name the branch. */
+  hasNamingModel?: boolean;
+}) {
   const [advanced, setAdvanced] = useState(false);
   const config = useQuery(repoConfigQueryOptions(workspace.workspaceId));
   const { branchError, defaultBranch } = newWorktreeBranchState(value, config.data?.branchPrefix);
@@ -180,11 +230,10 @@ export function NewWorktreeBranchFields({
           {branchError && <p className="text-xs text-destructive">{INVALID_BRANCH_NAME}</p>}
         </div>
       </CollapsibleContent>
-      {(value.branchName || defaultBranch) && (
-        <p className="mt-1 break-all text-xs text-muted-foreground">
-          New branch: <span className="font-mono">{value.branchName || defaultBranch}</span>
-        </p>
-      )}
+      <NewBranchPreview
+        branch={value.branchName || defaultBranch}
+        namedByFirstMessage={branchNamedByFirstMessage(value, hasNamingModel)}
+      />
       <WorktreeBranchValidation message={branchFailure} />
       {config.isError && (
         <div role="alert">

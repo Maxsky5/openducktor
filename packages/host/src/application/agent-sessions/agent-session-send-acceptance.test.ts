@@ -110,6 +110,7 @@ describe("message acceptance through the command and live adapter modules", () =
           runSend: (_ref, effect) => effect,
           validateRef: () => Effect.void,
           prepareForkSource: () => Effect.die(new Error("unexpected fork source read")),
+          prepareDelivery: () => Effect.void,
           prepareSend: Effect.succeed,
           prepareResume: () => Effect.die(new Error("unexpected resume")),
           prepareModelUpdate: () => Effect.die(new Error("unexpected model update")),

@@ -147,6 +147,7 @@ function WorkspaceSessionCreateForm({
     selectLocation,
     worktree,
     changeWorktree,
+    hasNamingModel,
     existing,
     selectExistingWorktree,
     targetBranch,
@@ -273,6 +274,7 @@ function WorkspaceSessionCreateForm({
               disabled={starting}
               branches={branches}
               error={worktreeError}
+              hasNamingModel={hasNamingModel}
               onChange={changeWorktree}
             />
           )}

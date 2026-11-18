@@ -70,7 +70,14 @@ export const workspaceSessionWorktreeInputSchema = z.discriminatedUnion("mode", 
   }),
   z.strictObject({
     mode: z.literal("from_name"),
-    name: workspaceSessionWorktreeNameSchema,
+    /**
+     * Blank when the workspace has a naming model: the host picks the folder and, without a
+     * branch name, names the branch from the first message.
+     */
+    name: z
+      .string()
+      .trim()
+      .pipe(z.union([z.literal(""), workspaceSessionWorktreeNameSchema])),
     branchName: workspaceSessionBranchNameSchema.nullable(),
   }),
 ]);

@@ -1,4 +1,5 @@
 import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
+import { createNamingTestDependencies } from "../../test-support/naming-test-doubles";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -835,6 +836,7 @@ describe("Workspace Session persistence through the shared command module", () =
       repoPath: database.repoPath,
     });
     const workspace = createWorkspaceSessionService({
+      facts: createNamingTestDependencies().facts,
       taskOwnership: database.taskOwnership,
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },

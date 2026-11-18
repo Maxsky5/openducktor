@@ -143,7 +143,11 @@ type RecordRetryResult = RecordRetryKey &
   ({ kind: "loaded" } | { kind: "failed"; message: string });
 
 const faultMessage = (envelope: Extract<AgentSessionLiveEnvelope, { type: "fault" }>): string => {
-  if (envelope.operation === "workspaceSession.title.sync") return envelope.message;
+  if (
+    envelope.operation === "workspaceSession.title.sync" ||
+    envelope.operation === "workspaceSession.naming"
+  )
+    return envelope.message;
   return `Live-session observation failed${envelope.operation ? ` during ${envelope.operation}` : ""}: ${envelope.message}`;
 };
 

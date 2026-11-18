@@ -12,7 +12,7 @@ import { startupStep, updateStartup } from "../agent-sessions/session-startup-pr
 import { planWorktreeSetup } from "../agent-sessions/worktree-setup-plan";
 import { canonicalTargetBranch, targetBranchRef } from "../../domain/task/task-branch-policy";
 import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
-import type { GitPort } from "../../ports/git-port";
+import type { GitPort, OwnedTrackingRef } from "../../ports/git-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
 import type { WorktreeActionRunner } from "../actions/worktree-action-runner";
@@ -54,7 +54,7 @@ export type WorkspaceSessionTargetCreationDependencies = {
     | "isRegisteredWorktree"
     | "removeWorktree"
     | "deleteLocalBranch"
-    | "deleteReference"
+    | "deleteOwnedReference"
   > &
     ExistingWorktreeDependencies["git"];
   settingsConfig: Pick<
@@ -148,6 +148,8 @@ export const withWorkspaceSessionTarget = <A, E>(
     targetBranch: GitTargetBranch;
     startPoint?: string;
     rollbackMode?: "all_owned";
+    /** The new branch gets no upstream yet, because the first message renames it. */
+    deferUpstream?: boolean;
   },
   use: (target: WorkspaceSessionExecutionTarget, retainTarget: () => void) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | HostError> =>
@@ -258,7 +260,7 @@ export const withWorkspaceSessionTarget = <A, E>(
       });
       let acquired = false;
       let retained = false;
-      let createdTrackingRef: string | null = null;
+      let ownedTrackingRef: OwnedTrackingRef | null = null;
       const actionRun = dependencies.worktreeActions.createRun({
         worktreePath: workingDirectory,
         branch,
@@ -308,7 +310,7 @@ export const withWorkspaceSessionTarget = <A, E>(
                     ],
                   }),
                 );
-                if (newBranch?.upstreamRemote) {
+                if (newBranch?.upstreamRemote && !input.deferUpstream) {
                   const upstream = yield* startupStep(
                     { id: "upstream", label: "Set branch upstream" },
                     git.configureBranchUpstream(
@@ -316,9 +318,10 @@ export const withWorkspaceSessionTarget = <A, E>(
                       workingDirectory,
                       branch,
                       newBranch.upstreamRemote,
+                      false,
                     ),
                   );
-                  createdTrackingRef = upstream.createdTrackingRef;
+                  ownedTrackingRef = upstream;
                 }
               }),
             );
@@ -406,7 +409,7 @@ export const withWorkspaceSessionTarget = <A, E>(
           yield* git.deleteLocalBranch(repoPath, branch, true);
       });
       const removeTrackingRef = Effect.gen(function* () {
-        if (createdTrackingRef !== null) yield* git.deleteReference(repoPath, createdTrackingRef);
+        if (ownedTrackingRef !== null) yield* git.deleteOwnedReference(repoPath, ownedTrackingRef);
       });
       const cleanups: Exit.Exit<void, HostError>[] = [stopped];
       for (const cleanup of [removeWorktree, removeDirectory, removeBranch, removeTrackingRef]) {

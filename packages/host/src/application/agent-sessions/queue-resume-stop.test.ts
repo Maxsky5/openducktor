@@ -22,6 +22,7 @@ test("Stop during queue Resume preparation retains the pause and prevents post-S
       runSend: (_ref, work) => work,
       validateRef: unexpected,
       prepareForkSource: () => Effect.die(new Error("unexpected fork source read")),
+      prepareDelivery: unexpected,
       prepareSend: unexpected,
       prepareResume: unexpected,
       prepareModelUpdate: unexpected,

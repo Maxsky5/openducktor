@@ -13,6 +13,8 @@ import {
   planRuntimeTitleRename,
   runtimeTitle,
 } from "../../domain/workspace-sessions/workspace-session-title";
+import type { WorkspaceSessionNamingDependencies } from "./workspace-session-naming";
+import { createWorkspaceSessionNamingPolicy } from "./workspace-session-naming-policy";
 import {
   type HostError,
   HostOperationError,
@@ -62,6 +64,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   sessionTitleGate,
   updateRuntimeSessionTitle,
   reportRenameFailure,
+  naming,
 }: {
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
@@ -71,6 +74,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   updateRuntimeSessionTitle: WorkspaceSessionRuntimeTitleUpdater;
   reportRenameFailure: WorkspaceSessionRenameFailureReporter;
+  naming: WorkspaceSessionNamingDependencies;
 }): AgentSessionPersistencePort &
   AgentSessionOperationPolicy & {
     recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<void, HostError>;
@@ -237,6 +241,17 @@ export const createWorkspaceSessionRuntimePersistence = ({
         yield* publishUpdated(known.ref.workspaceId, saved.success);
       }),
     );
+  const { prepareDelivery, nameFromFirstMessage } = createWorkspaceSessionNamingPolicy({
+    naming,
+    store,
+    find,
+    publishUpdated,
+    reportRenameFailure,
+    sessionTitleGate,
+    titleSync,
+    renameRuntimeTitle,
+    storeEffect,
+  });
   const recordAcceptedMessage = (
     runtimeRef: ScopedAgentSessionRef,
     message: AcceptedAgentUserMessage,
@@ -244,6 +259,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     Effect.gen(function* () {
       const located = yield* find(runtimeRef);
       if (!located) return;
+      const fact = naming.facts.take(located.ref);
       yield* sessionTitleGate.run(
         located.ref,
         Effect.gen(function* () {
@@ -256,6 +272,10 @@ export const createWorkspaceSessionRuntimePersistence = ({
           );
         }),
       );
+      // After the shortened title, so a runtime that syncs after the turn waits for it. A manual
+      // title wins, so a chat that has one needs no model title.
+      if (fact && located.session.manualTitle === null)
+        yield* startJob(nameFromFirstMessage(runtimeRef, located.ref, fact, message));
     });
   const recordObservedMessage = (
     runtimeRef: AgentSessionLiveRef,
@@ -394,6 +414,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
         };
       }),
     prepareSend: (input) => prepare(input).pipe(Effect.map((prepared) => prepared.input)),
+    prepareDelivery,
     validateRef,
     prepareModelUpdate: (input) =>
       Effect.gen(function* () {
