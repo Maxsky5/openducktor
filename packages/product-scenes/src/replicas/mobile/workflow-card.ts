@@ -5,6 +5,7 @@
 // phase without a transition.
 import { must } from "../../motion/dom";
 import type { Scene } from "../../motion/scene";
+import type { WorkflowPhase } from "./WorkflowToolCard";
 
 /** The workflow cards in the transcript of the session screen `screen`. */
 export function workflowCards(scene: Scene, screen: HTMLElement) {
@@ -20,11 +21,11 @@ export function workflowCards(scene: Scene, screen: HTMLElement) {
   const call = (row: string, at: number, runs: number): number => {
     const card = cardOf(row);
     scene.at(at, () => {
-      card.dataset.phase = "executing";
+      card.dataset.phase = "executing" satisfies WorkflowPhase;
       card.hidden = false;
     });
     scene.at(at + runs, () => {
-      card.dataset.phase = "completed";
+      card.dataset.phase = "completed" satisfies WorkflowPhase;
     });
     return at + runs;
   };

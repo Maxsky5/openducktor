@@ -1,19 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import * as lucide from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import {
-  NO_ANSWER_YET,
-  QUESTION_ROW_ICONS,
-  QUESTION_TOOL_NAME,
-} from "./replicas/mobile/QuestionToolRow";
+import { QUESTION_ROW_ICONS } from "./replicas/mobile/QuestionToolRow";
 import { type MobileCall, moreLinesText, TOOL_ICONS } from "./replicas/mobile/ToolRun";
-import { RUN_CALL_KINDS, runCountText, runTitle } from "./replicas/mobile/tool-run-text";
 import { ICON_SWAP_IN } from "./replicas/mobile/icon-swap";
 import { FOLD_MOTION } from "./replicas/mobile/tool-runs";
 import { PHONE_TEXT_UPDATE } from "./replicas/transcript/rows";
 import { BUILDER_TOOLS } from "./sample/mobile";
 import * as review from "./sample/mobile-review";
-import * as approve from "./scenes/mobile-approve/sample";
 import * as diffComment from "./scenes/mobile-diff-comment/sample";
 import * as needsYou from "./scenes/mobile-needs-you/sample";
 import * as pullRequest from "./scenes/mobile-pull-request/sample";
@@ -39,7 +33,6 @@ type QuestionMeta = Omit<ToolMeta, "input" | "status"> & {
   output?: string;
 };
 type QuestionDetail = { detail: { prompt: string; answers: string[] } };
-type Summary = { callCount: number; kindCounts: Record<string, number>; fileEditCount: number };
 type ToolCallPresentation = { kind: string; displayName: string };
 type PresentToolCall = (tool: string, label?: string) => ToolCallPresentation;
 type CallLine = { kind: string; name: string; text?: string; extraLineCount?: number };
@@ -48,16 +41,9 @@ type SampleCall = { id: string; call: MobileCall };
 
 // SAFETY: tool-runs.ts exports these values and functions.
 const runs = await importProduct<{
-  TOOL_RUN_CALL_KINDS: readonly string[];
   readToolRunClassifier: (
     present: PresentToolCall,
   ) => (meta: ToolMeta | QuestionMeta) => string | null;
-  summarizeToolRun: (
-    rows: readonly ToolRow[],
-    classify: (meta: ToolMeta) => string | null,
-  ) => Summary;
-  readToolRunTitle: (summary: Summary) => string;
-  readToolRunCountLabels: (summary: Summary) => string[];
   readToolRunCallLine: (
     row: ToolRow,
     present: PresentToolCall,
@@ -66,8 +52,6 @@ const runs = await importProduct<{
 }>("packages/frontend-core/src/sessions/transcript/tool-runs.ts");
 // SAFETY: agent-chat-tool-presentation.ts exports these values and functions.
 const presentation = await importProduct<{
-  NO_ANSWER_YET_LABEL: string;
-  readToolCallName: (meta: QuestionMeta, displayName: string) => string;
   resolveRegularToolSummary: (
     meta: QuestionMeta,
     content: string,
@@ -153,7 +137,6 @@ const SAMPLE_RUNS: readonly SampleCall[][] = [
   ...Object.values(steer.RUNS).map((ids) => callsOf(steer.TOOLS, ids)),
   ...Object.values(diffComment.RUNS).map((ids) => callsOf(diffComment.TOOLS, ids)),
   ...Object.values(startBuilder.RUNS).map((ids) => callsOf(startBuilder.TOOLS, ids)),
-  callsOf(approve.TOOLS, approve.RUN),
   callsOf(review.FIX_TOOLS, review.FIX_RUN),
   ...Object.values(pullRequest.RUNS).map((ids) => callsOf(pullRequest.TOOLS, ids)),
 ];
@@ -201,17 +184,6 @@ const lucideName = (displayName: string | undefined): string =>
   (displayName ?? "").replace(/[a-z0-9](?=[A-Z])/g, "$&-").toLowerCase();
 
 describe("the transcript of the mobile app copied in the replicas", () => {
-  test("a run header names and counts the calls of the run as the app does", () => {
-    expect(runs.TOOL_RUN_CALL_KINDS).toEqual([...RUN_CALL_KINDS]);
-    for (const run of SAMPLE_RUNS) {
-      const rows = run.map(({ id, call }) => rowOf(id, call));
-      const summary = runs.summarizeToolRun(rows, classify);
-      const kinds = run.map(({ call }) => call.kind);
-      expect(runs.readToolRunTitle(summary)).toBe(runTitle(kinds));
-      expect(runs.readToolRunCountLabels(summary).join(" · ")).toBe(runCountText(kinds));
-    }
-  });
-
   test("a Codex command shows as bash with its command and the icon of its action", () => {
     for (const { id, call } of SAMPLE_RUNS.flat()) {
       const row = rowOf(id, call);
@@ -237,21 +209,15 @@ describe("the transcript of the mobile app copied in the replicas", () => {
     for (const { duration } of [...calls, pullRequest.SET_PULL_REQUEST, question.QUESTION_CALL]) {
       expect(durations.formatAgentDuration(milliseconds(duration))).toBe(duration);
     }
-    for (const worked of [
-      diffComment.WORKED,
-      approve.WORKED,
-      review.FIX_WORKED,
-      pullRequest.WORKED,
-    ]) {
+    for (const worked of [diffComment.WORKED, review.FIX_WORKED, pullRequest.WORKED]) {
       expect(durations.formatTurnDurationLabel(milliseconds(worked))).toBe(`Worked for ${worked}`);
     }
   });
 
-  test("a question shows alone with its name, its question, and its answer as the app does", () => {
+  test("a question shows alone with its question and its answer as the app does", () => {
     const waiting = questionMeta(false);
     const answered = questionMeta(true);
     expect(classify(answered)).toBeNull();
-    expect(presentation.readToolCallName(answered, "request_user_input")).toBe(QUESTION_TOOL_NAME);
     expect(presentation.resolveRegularToolSummary(answered, "", null).text).toBe(
       question.QUESTION.question,
     );
@@ -261,7 +227,6 @@ describe("the transcript of the mobile app copied in the replicas", () => {
         .map(({ detail }) => presentation.readQuestionAnswerText(detail));
     expect(answerOf(waiting)).toEqual([""]);
     expect(answerOf(answered)).toEqual([question.QUESTION.answer]);
-    expect(presentation.NO_ANSWER_YET_LABEL).toBe(NO_ANSWER_YET);
     expect(toolIcon(answered)).toBe("circle-help");
     for (const [name, Icon] of Object.entries(QUESTION_ROW_ICONS)) {
       expect(exportNames(Icon)).toContain(componentName(ICONS[name]));

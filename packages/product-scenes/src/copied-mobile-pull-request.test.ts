@@ -10,7 +10,6 @@ import {
 import { HUMAN_REVIEW_ACTIONS } from "./replicas/mobile/review-actions";
 import { START_MODE_LABELS, START_SHEET_TEXT } from "./replicas/mobile/StartSessionSheet";
 import { pullRequestName, WORKFLOW_RUNNING_LABEL } from "./replicas/mobile/WorkflowToolCard";
-import { SQUASH_HINT } from "./sample/mobile-review";
 import { PULL_REQUEST, SET_PULL_REQUEST, START_MODES } from "./scenes/mobile-pull-request/sample";
 import { importProduct, readProduct } from "./test-support/product-source";
 
@@ -97,7 +96,6 @@ const { createGitProviderContextFixture } = await importProduct<{
 const approval = await importProduct<{
   taskApprovalPullRequestDraftOptions: (role: string | null) => readonly DraftOption[];
   taskApprovalGeneratePullRequestNotice: (role: string | null) => string;
-  taskApprovalSquashCommitHint: (target: { branch: string }) => typeof SQUASH_HINT;
   getTaskApprovalSubmitState: (
     model: PullRequestApproval,
     impact: { worktree: null; close: null },
@@ -216,6 +214,7 @@ describe("the pull request approval of the mobile app copied in the replicas", (
     expect(HUMAN_REVIEW_ACTIONS.map(({ id, title }) => ({ id, title }))).toEqual(
       options.map(({ id, label }) => ({ id, title: label })),
     );
+    expect(options.every((option) => !option.disabled)).toBe(true);
   });
 
   test("the approval asks the Builder to write the pull request first", async () => {
@@ -252,7 +251,6 @@ describe("the pull request approval of the mobile app copied in the replicas", (
     );
     expect(submit.confirmLabel).toBe(chooseSessionLabel(builder));
     expect(submit.confirmDisabled).toBe(false);
-    expect(SQUASH_HINT).toEqual(approval.taskApprovalSquashCommitHint({ branch: "main" }));
   });
 
   test("the start of the pull request launch reuses the latest Builder session", async () => {

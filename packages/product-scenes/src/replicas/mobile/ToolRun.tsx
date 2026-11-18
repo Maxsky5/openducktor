@@ -4,7 +4,8 @@
 // along a guide line, each with the icon of its tool (tool-icon.ts and tool-status.tsx), the common
 // tool name, its command or its summary, and its timing. While a call runs, three moving bars take
 // the place of its icon. A run whose calls all ended and that another row follows is folded, as the
-// collapseFinishedToolCalls preference folds it by default. tool-runs.ts moves the runs.
+// collapseFinishedToolCalls preference folds it by default. tool-runs.ts moves the runs. The icon
+// and the timing are the parts of each tool line of the app, so the question row uses them too.
 import {
   ChevronRight,
   FileSearch,
@@ -19,7 +20,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ReactElement } from "react";
-import { type RunCallKind, type RunTitle, runCountText, runTitle } from "./tool-run-text";
+import { type CallKind, type RunTitle, runCounts, runTitle } from "../transcript/tool-runs";
 import "./ToolRun.css";
 
 /** The tool types that the runtime reports, which pick the icon of a call in tool-icon.ts. */
@@ -48,7 +49,7 @@ export type MobileCall = {
   /** The tool type that the runtime reports. Codex reports the read of a file as `read`. */
   type: MobileToolType;
   /** The kind that the header counts. Codex runs its file lookups as commands. */
-  kind: RunCallKind;
+  kind: CallKind;
   /** The common name of the tool, such as bash. */
   name: string;
   /**
@@ -75,6 +76,30 @@ export function RunningBars(): ReactElement {
   );
 }
 
+/**
+ * ToolCallIcon of tool-status.tsx: the icon of the tool in a box as high as the first text line.
+ * While the line or its row has `data-running`, the bars take the place of the icon, in the running
+ * color.
+ */
+export function CallIcon({ icon: Icon }: { icon: LucideIcon }): ReactElement {
+  return (
+    <span className="mob-call-icon">
+      <Icon className="mob-call-glyph" data-call-glyph />
+      <RunningBars />
+    </span>
+  );
+}
+
+/** ToolTiming of row-parts.tsx: the run time and the clock time. A running line has no run time. */
+export function CallTiming({ duration, time }: { duration: string; time: string }): ReactElement {
+  return (
+    <span className="mob-call-timing">
+      <span className="mob-call-duration">{duration}</span>
+      <span>{time}</span>
+    </span>
+  );
+}
+
 /** The count of the other lines of a command after its first line, as `+3 lines`. */
 export function moreLinesText(count: number): string {
   return `+${count} ${count === 1 ? "line" : "lines"}`;
@@ -89,7 +114,6 @@ function CallLine({
   call: MobileCall;
   running: boolean;
 }): ReactElement {
-  const Icon = TOOL_ICONS[call.type];
   const [first = "", ...rest] = call.text.split("\n");
   const more = rest.length;
   return (
@@ -99,19 +123,13 @@ function CallLine({
       data-call-kind={call.kind}
       data-running={running ? "" : undefined}
     >
-      <span className="mob-call-icon">
-        <Icon className="mob-call-glyph" data-call-glyph />
-        <RunningBars />
-      </span>
+      <CallIcon icon={TOOL_ICONS[call.type]} />
       <span className="mob-call-text">
         <span className="mob-call-name">{call.name}</span>
         <span className={call.code ? "mob-call-code" : "mob-call-summary"}>{first}</span>
         {more > 0 && <span className="mob-call-more">{moreLinesText(more)}</span>}
       </span>
-      <span className="mob-call-timing">
-        <span className="mob-call-duration">{call.duration}</span>
-        <span>{call.time}</span>
-      </span>
+      <CallTiming duration={call.duration} time={call.time} />
     </div>
   );
 }
@@ -153,9 +171,9 @@ export function ToolRun<Id extends string>({
         <TitleIcon className="mob-run-icon" />
         <span className="mob-run-title">{title}</span>
         <span className="mob-run-counts" data-run-counts="">
-          {runCountText(kinds)}
+          {runCounts(kinds)}
         </span>
-        <ChevronRight className="mob-run-chevron" data-run-chevron="" />
+        <ChevronRight className="mob-run-chevron" />
       </div>
       {/* The anchor of the calls. While the run folds, the calls lie over the rows under it. */}
       <div className="mob-run-fold">

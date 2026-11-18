@@ -76,19 +76,15 @@
       line-height: calc(16 * var(--u));
     }
     /* The comment field of comment-composer.tsx: the title with Cancel, then a field with 20
-       point corners. The separator color draws the line over it: slate 100, or slate 800 in the
-       dark theme. */
+       point corners. The separator color draws the line over it. */
     .mob-comment-composer {
       display: grid;
       flex: 0 0 auto;
       gap: calc(4 * var(--u));
       padding: calc(8 * var(--u)) calc(12 * var(--u));
-      border-top: calc(1 * var(--u)) solid oklch(96.8% 0.007 247.896);
+      border-top: calc(1 * var(--u)) solid var(--m-separator);
       background: var(--chat-background);
       color: var(--foreground);
-    }
-    :where([data-theme="dark"]) & .mob-comment-composer {
-      border-top-color: oklch(27.9% 0.041 260.031);
     }
     .mob-comment-context {
       display: flex;
@@ -136,17 +132,8 @@
     .mob-comment-field[data-can-save] .mob-comment-hint {
       display: none;
     }
-    /* The Android caret after the comment, as the caret of the composer: 2 dp in the tint color,
-       as high as the text. It takes no room on the line. */
-    .mob-comment-caret {
-      display: none;
-      width: calc(2 * var(--u));
-      height: calc(21 * var(--u));
-      margin-right: calc(-2 * var(--u));
-      background: var(--m-tint);
-      vertical-align: text-top;
-    }
-    .mob-comment-field[data-can-save] .mob-comment-caret {
+    /* The caret of PhoneFrame.css shows after the comment. */
+    .mob-comment-field[data-can-save] .mob-caret {
       display: inline-block;
     }
     /* Save: a 32 point circle, the tint once the comment has text. */

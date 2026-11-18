@@ -49,6 +49,7 @@ export function topButton(scene: Scene, screen: HTMLElement): void {
         duration,
         ease: APP_EASE_OUT,
         clearProps: "opacity,transform",
+        overwrite: true,
       }),
     );
   });

@@ -58,35 +58,24 @@ export function boardPager(scene: Scene, root: HTMLElement) {
           .to(touch, { x: right - reach, duration: DRAG * 0.75, ease: EASE.move }, REST)
           .to(touch, { autoAlpha: 0, duration: 0.15, ease: EASE.exit }, REST + DRAG * 0.75),
       );
-      scene.run(
-        gsap.fromTo(
-          [lanes, pages],
-          { "--lane-progress": from },
-          { "--lane-progress": to, duration: DRAG, ease: EASE.move, delay: REST },
-        ),
-      );
       // The outline and the wash keep the colors that they leave, and mix in the next lane.
       const toned = [pill, board];
       pill.style.setProperty("--tone-from", getComputedStyle(pill).borderTopColor);
       board.style.setProperty("--tone-from", getComputedStyle(board).backgroundColor);
       for (const element of toned) element.dataset.tone = tone;
       scene.run(
-        gsap.fromTo(
-          toned,
-          { "--tone-mix": 0 },
-          {
-            "--tone-mix": 1,
-            duration: DRAG,
-            ease: EASE.move,
-            delay: REST,
+        gsap
+          .timeline({
+            defaults: { duration: DRAG, ease: EASE.move },
             onComplete: () => {
               for (const element of toned) {
                 element.style.removeProperty("--tone-from");
                 element.style.removeProperty("--tone-mix");
               }
             },
-          },
-        ),
+          })
+          .fromTo([lanes, pages], { "--lane-progress": from }, { "--lane-progress": to }, REST)
+          .fromTo(toned, { "--tone-mix": 0 }, { "--tone-mix": 1 }, REST),
       );
     });
     const settled = at + REST + DRAG;

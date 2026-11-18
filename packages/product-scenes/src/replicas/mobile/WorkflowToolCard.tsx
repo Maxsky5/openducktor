@@ -33,7 +33,6 @@ type WorkflowToolCardProps = {
   time: string;
   phase: WorkflowPhase;
   row: string;
-  hidden?: boolean | undefined;
 };
 
 export function WorkflowToolCard({
@@ -43,23 +42,16 @@ export function WorkflowToolCard({
   time,
   phase,
   row,
-  hidden,
 }: WorkflowToolCardProps): ReactElement {
   // The row holds the vertical margins of the card, as the cell of the list holds them, so a row
   // that covers a folding run keeps the colors of the card.
   return (
-    <div
-      className="mob-wf-row"
-      data-row={row}
-      data-workflow-tool=""
-      data-phase={phase}
-      hidden={hidden}
-    >
+    <div className="mob-wf-row" data-row={row} data-workflow-tool="" data-phase={phase}>
       <div className="mob-wf">
         <div className="mob-wf-header">
           <GitPullRequest className="mob-wf-icon" />
           <span className="mob-wf-title">{title}</span>
-          <span className="mob-wf-link" data-pr-link="">
+          <span className="mob-wf-link">
             <GitPullRequest className="mob-wf-link-state" />
             <span>{pullRequestName(pullRequest)}</span>
             <ExternalLink className="mob-wf-link-out" />

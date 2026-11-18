@@ -73,10 +73,7 @@ export const build: SceneBuilder = (scene) => {
   const button = must(sheet, "[data-start-session]");
   const started = tap(() => button, opened + 3.2);
   scene.mark("start", started);
-  scene.at(started, () => {
-    button.toggleAttribute("data-loading", true);
-    sheet.toggleAttribute("data-busy", true);
-  });
+  phone.busy("start", button, started);
   const traced = started + START.snapshot;
   progress.show(traced, { checkout: "running", upstream: "pending", session: "pending" });
   const checkedOut = traced + START.worktree;
@@ -93,10 +90,6 @@ export const build: SceneBuilder = (scene) => {
   scene.mark("session", shown);
   const closed = phone.dismiss("start", shown);
   phone.push("tasks", "session", shown);
-  scene.at(closed, () => {
-    button.removeAttribute("data-loading");
-    sheet.removeAttribute("data-busy");
-  });
 
   // The Builder reads the guide and the app shell and searches the code in one tool run. The run
   // folds when the answer comes after it.

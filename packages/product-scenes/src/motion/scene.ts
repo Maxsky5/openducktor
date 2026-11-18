@@ -1,4 +1,5 @@
 import { cloneTemplate, must } from "./dom";
+import { registerAppEases } from "./gsap";
 
 /**
  * The tools of a scene builder for one run of a view. A builder prepares the first frame in the
@@ -49,6 +50,8 @@ export function createScene(
   stage: HTMLElement,
   timeline: gsap.core.Timeline,
 ): Scene<string> {
+  // The tweens of a builder name the curves of the apps, so they exist before it builds.
+  registerAppEases();
   const templateOf = (name: string): HTMLElement =>
     must(frame, `[data-stock] > [data-tpl="${name}"]`);
   // The time of the `at` change that runs now. The playhead can be later: a tick moves it to the

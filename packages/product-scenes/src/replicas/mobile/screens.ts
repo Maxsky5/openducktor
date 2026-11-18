@@ -4,9 +4,10 @@
 // right edge over its parent, which moves 30% to the left, and a pop moves both back. A workflow
 // sheet, which the app presents as a full-screen modal on Android (fullSheetOptions of
 // src/navigation/sheet-options.ts), fades in and out in 150 ms. The slide and the fade take the
-// accelerate_decelerate interpolator. A host switch replaces the screens at once: the root layout
-// of src/app/_layout.tsx mounts a new navigator for the connection, so the next screen covers the
-// old one in the same frame.
+// accelerate_decelerate interpolator. While the primary action of a sheet runs, the sheet is busy
+// until it closes. A host switch replaces the screens at once: the root layout of
+// src/app/_layout.tsx mounts a new navigator for the connection, so the next screen covers the old
+// one in the same frame.
 import { must } from "../../motion/dom";
 import { fadeHide } from "../../motion/effects";
 import { gsap } from "../../motion/gsap";
@@ -119,6 +120,17 @@ export function screens(scene: Scene, root: HTMLElement) {
     return at + FADE;
   };
 
+  /**
+   * The primary action `button` of the full sheet `sheet` runs from `at`: the button shows its
+   * progress, and the sheet disables its other controls, as WorkflowSheet.tsx shows `data-busy`.
+   * The sheet stays busy until it closes or another step takes its place.
+   */
+  const busy = (sheet: string, button: HTMLElement, at: number): void =>
+    scene.at(at, () => {
+      button.toggleAttribute("data-loading", true);
+      screen(sheet).toggleAttribute("data-busy", true);
+    });
+
   /** Replaces `current` with `next` at once at `at`, as the app does when it switches the host. */
   const replace = (current: string, next: string, at: number): number => {
     scene.at(at, () => {
@@ -134,5 +146,5 @@ export function screens(scene: Scene, root: HTMLElement) {
       display.dataset.bar = colors;
     });
 
-  return { screen, only, push, pop, present, dismiss, replace, bar };
+  return { screen, only, push, pop, present, dismiss, busy, replace, bar };
 }

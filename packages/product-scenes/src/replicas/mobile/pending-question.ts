@@ -13,6 +13,7 @@ import { must } from "../../motion/dom";
 import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
 import { APP_EASE_OUT } from "./app-motion";
+import type { finger } from "./finger";
 import { swapIcon } from "./icon-swap";
 import type { QuestionState } from "./QuestionCard";
 
@@ -20,7 +21,7 @@ import type { QuestionState } from "./QuestionCard";
 export const CARD_LAYOUT = 0.24;
 
 /** A tap of finger.ts: it presses the target at a time and returns the release. */
-type Tap = (find: () => HTMLElement, at: number) => number;
+type Tap = ReturnType<typeof finger>["tap"];
 
 /**
  * Animates the card from the height `from` to its height now, as the layout animation of the app
@@ -90,7 +91,7 @@ export function pendingQuestion(scene: Scene, screen: HTMLElement, tap: Tap) {
    * question call shows its answer and the icon of its tool.
    */
   const answer = (at: number): void => {
-    swapIcon(scene, must(row, "[data-tool-glyph]", SVGElement), at);
+    swapIcon(scene, must(row, "[data-call-glyph]", SVGElement), at);
     scene.at(at, () => {
       card.hidden = true;
       row.removeAttribute("data-running");

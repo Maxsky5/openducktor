@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { NO_ANSWER_YET_LABEL } from "./replicas/transcript/Answers";
 import type { CallData, Row, ToolType } from "./replicas/transcript/model";
 import {
   CALL_KINDS,
@@ -7,11 +6,12 @@ import {
   callKind,
   earlierCallCount,
   LATEST_CALL_COUNT,
+  NO_ANSWER_YET_LABEL,
+  QUESTION_TOOL_NAME,
   runCounts,
   runTitle,
   showEarlierLabel,
 } from "./replicas/transcript/tool-runs";
-import { QUESTION_TOOL_NAME } from "./replicas/transcript/ToolRow";
 import { storySessions } from "./sample/transcripts";
 import { RUNS as CI_RUNS } from "./scenes/ci-checks/sample";
 import { CALLS as CONFLICT_CALLS } from "./scenes/git-conflict/sample";

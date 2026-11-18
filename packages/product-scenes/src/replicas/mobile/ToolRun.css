@@ -85,7 +85,9 @@
       padding: calc(7 * var(--u)) calc(4 * var(--u));
     }
     /* ToolCallIcon: a 14 point box as high as the first text line, so the icon sits on its
-       middle. A call that ended keeps the color of the other tool icons. */
+       middle. A call that ended keeps the color of the other tool icons. A line that runs, or
+       whose row runs, has `data-running`: the bars take the place of the icon, in the running
+       color. */
     .mob-call-icon {
       display: flex;
       flex: 0 0 auto;
@@ -99,12 +101,15 @@
       width: calc(14 * var(--u));
       height: calc(14 * var(--u));
     }
-    .mob-call[data-running] .mob-call-icon {
+    [data-running] .mob-call-icon {
       color: var(--status-running-foreground);
     }
-    .mob-call[data-running] .mob-call-glyph,
-    .mob-call:not([data-running]) .mob-bars {
+    [data-running] .mob-call-glyph,
+    .mob-call-icon > .mob-bars {
       display: none;
+    }
+    [data-running] .mob-call-icon > .mob-bars {
+      display: flex;
     }
     /* ToolRunningBars: three 2 point bars, 2 points apart, in a 12 point box. */
     .mob-bars {
@@ -174,7 +179,7 @@
       font-size: calc(11.5 * var(--u));
       line-height: calc(16 * var(--u));
     }
-    /* ToolTiming: the run time and the clock time in the foreground color at 75 percent. A call
+    /* ToolTiming: the run time and the clock time in the foreground color at 75 percent. A line
        that runs shows no run time. */
     .mob-call-timing {
       display: flex;
@@ -187,7 +192,7 @@
       line-height: calc(16 * var(--u));
       font-variant-numeric: tabular-nums;
     }
-    .mob-call[data-running] .mob-call-duration {
+    [data-running] .mob-call-duration {
       display: none;
     }
   }

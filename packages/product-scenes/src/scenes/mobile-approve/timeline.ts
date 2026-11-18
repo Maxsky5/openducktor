@@ -4,11 +4,11 @@ import type { SceneBuilder } from "../../motion/scene";
 import { approvalChoices } from "../../replicas/mobile/approval-choices";
 import { finger } from "../../replicas/mobile/finger";
 import { menus } from "../../replicas/mobile/menus";
+import { APPROVE_ACTION } from "../../replicas/mobile/review-actions";
 import { screens } from "../../replicas/mobile/screens";
 import { stepList } from "../../replicas/mobile/steps";
 import { toast } from "../../replicas/mobile/toast";
 import { topButton } from "../../replicas/mobile/top-button";
-import { APPROVE_ITEM } from "./sample";
 
 /** Seconds that the host takes to merge locally, and to push and close the task. */
 const MERGE = 1.25;
@@ -43,7 +43,7 @@ export const build: SceneBuilder = (scene) => {
   steps.show(1, 1.0);
   const zap = (): HTMLElement => must(session, "[data-quick-actions]");
   const opened = menu.open("quick", zap, tap(zap, 2.2));
-  const item = menu.item("quick", APPROVE_ITEM);
+  const item = menu.item("quick", APPROVE_ACTION);
   const chosen = tap(() => item, opened + 1.4);
   menu.close("quick", chosen);
   const presented = phone.present("approve", chosen);
@@ -69,17 +69,12 @@ export const build: SceneBuilder = (scene) => {
   steps.show(3, scrolled + 0.1);
   const mergeButton = must(approval.sheet, "[data-merge-locally]");
   const merged = tap(() => mergeButton, scrolled + 2.4);
-  scene.at(merged, () => {
-    mergeButton.toggleAttribute("data-loading", true);
-    approval.sheet.toggleAttribute("data-busy", true);
-  });
+  phone.busy("approve", mergeButton, merged);
   scene.mark("merge", merged);
   // The sheet keeps its place, and the next step of the approval takes the place of the first
   // at once: the title, the lead, and the form change in one frame, as in the app.
   const asked = merged + MERGE;
   scene.at(asked, () => {
-    mergeButton.removeAttribute("data-loading");
-    approval.sheet.removeAttribute("data-busy");
     gsap.set(must(approval.sheet, "[data-sheet-body]"), { clearProps: "transform" });
     approval.sheet.hidden = true;
     publish.hidden = false;
@@ -94,16 +89,9 @@ export const build: SceneBuilder = (scene) => {
   approval.reveal(() => must(publish, "[data-sheet-body] > :last-child"), asked + 1.6, publish);
   const pushButton = must(publish, "[data-publish]");
   const pushed = tap(() => pushButton, asked + 3.6);
-  scene.at(pushed, () => {
-    pushButton.toggleAttribute("data-loading", true);
-    publish.toggleAttribute("data-busy", true);
-  });
+  phone.busy("publish", pushButton, pushed);
   scene.mark("push", pushed);
   const done = phone.dismiss("publish", pushed + PUSH);
-  scene.at(done, () => {
-    pushButton.removeAttribute("data-loading");
-    publish.removeAttribute("data-busy");
-  });
   scene.mark("done", done);
   scene.endAt(doneToast.show(done) + 1.4);
 };

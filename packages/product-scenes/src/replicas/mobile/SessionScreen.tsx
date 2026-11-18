@@ -1,9 +1,10 @@
 // The screen of a task session in the mobile app, as session-view.tsx in
 // apps/mobile/src/features/session: the header, the workflow rail, the transcript that keeps its
 // newest rows at the bottom, the pending requests, and the composer. The track of the transcript
-// has `data-track`, so `follow` of replicas/transcript/rows.ts glides it when rows come in. The
-// round button at the top of the transcript, TranscriptTopButton of transcript-controls.tsx,
-// scrolls to the first message. top-button.ts shows it while the reader is away from that message.
+// has `data-track`: it is the list of rows that tool-runs.ts moves and that top-button.ts
+// measures. The round button at the top of the transcript, TranscriptTopButton of
+// transcript-controls.tsx, scrolls to the first message. top-button.ts shows it while the reader
+// is away from that message.
 import { ArrowUp } from "lucide-react";
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 import type { Session } from "../../sample/sessions";

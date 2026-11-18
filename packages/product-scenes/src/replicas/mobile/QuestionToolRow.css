@@ -8,35 +8,13 @@
       padding: calc(2 * var(--u)) 0;
     }
     /* ToolLine: a 32 point line with the icon, the name, the summary, and the timing, 8 points
-       apart. */
+       apart. The icon and the timing are the parts of a call of ToolRun.css. */
     .mob-tool-line {
       display: flex;
       align-items: center;
       gap: calc(8 * var(--u));
       min-height: calc(32 * var(--u));
       padding: 0 calc(4 * var(--u));
-    }
-    /* ToolCallIcon: a 14 point box as high as the line text. A call that ended has the color of
-       the other tool icons, and a running call has the running color. */
-    .mob-tool-icon {
-      display: flex;
-      flex: 0 0 auto;
-      align-items: center;
-      justify-content: center;
-      width: calc(14 * var(--u));
-      height: calc(18 * var(--u));
-      color: var(--muted-foreground);
-    }
-    .mob-tool[data-running] .mob-tool-icon {
-      color: var(--status-running-foreground);
-    }
-    .mob-tool-glyph.lucide {
-      width: calc(14 * var(--u));
-      height: calc(14 * var(--u));
-    }
-    .mob-tool[data-running] .mob-tool-glyph,
-    .mob-tool:not([data-running]) .mob-bars {
-      display: none;
     }
     .mob-tool-name {
       flex: 0 0 auto;
@@ -49,7 +27,7 @@
       white-space: nowrap;
       text-overflow: ellipsis;
     }
-    /* The summary and the timing in the foreground color at 75 percent. */
+    /* The summary in the foreground color at 75 percent, as the timing. */
     .mob-tool-summary {
       flex: 1 1 0;
       min-width: 0;
@@ -59,20 +37,6 @@
       line-height: calc(18 * var(--u));
       white-space: nowrap;
       text-overflow: ellipsis;
-    }
-    .mob-tool-timing {
-      display: flex;
-      flex: 0 0 auto;
-      align-items: center;
-      gap: calc(8 * var(--u));
-      margin-left: auto;
-      color: color-mix(in oklab, var(--foreground) 75%, transparent);
-      font-size: calc(11.5 * var(--u));
-      line-height: calc(16 * var(--u));
-      font-variant-numeric: tabular-nums;
-    }
-    .mob-tool[data-running] .mob-tool-duration {
-      display: none;
     }
     /* QuestionAnswers: under the tool name, past the line padding, the icon, and the gap. */
     .mob-answers {

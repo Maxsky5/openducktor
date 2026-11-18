@@ -41,6 +41,14 @@ export const QUESTION_ICONS = {
   "loader-circle": LoaderCircle,
 } satisfies Record<string, LucideIcon>;
 
+const {
+  circle: OffMark,
+  "circle-check": OnMark,
+  "message-square-plus": OtherIcon,
+  sparkles: SubmitIcon,
+  "loader-circle": LoaderIcon,
+} = QUESTION_ICONS;
+
 /** The state of the draft: no answer yet, an answer, or an answer that the host takes. */
 export type QuestionState = "open" | "complete" | "submitting";
 
@@ -68,8 +76,8 @@ function OptionRow({
     >
       <span className="mob-qoption-content">
         <span className="mob-qoption-mark">
-          <Circle data-mark="off" />
-          <CircleCheck data-mark="on" />
+          <OffMark data-mark="off" />
+          <OnMark data-mark="on" />
         </span>
         <span className="mob-qoption-text">
           <span className="mob-qoption-label">{label}</span>
@@ -121,7 +129,7 @@ export function QuestionCard({ question, state, chosen, hidden }: QuestionCardPr
         </div>
         <div className="mob-question-other">
           <span className="mob-qsegment" data-feedback="scale">
-            <MessageSquarePlus />
+            <OtherIcon />
             {QUESTION_TEXT.other}
           </span>
         </div>
@@ -138,11 +146,11 @@ export function QuestionCard({ question, state, chosen, hidden }: QuestionCardPr
               label={
                 <>
                   <span className="mob-reply-content" data-when="ready">
-                    <Sparkles />
+                    <SubmitIcon />
                     {QUESTION_TEXT.submit}
                   </span>
                   <span className="mob-reply-content" data-when="submitting">
-                    <LoaderCircle className="spin" />
+                    <LoaderIcon className="spin" />
                     {QUESTION_TEXT.submitting}
                   </span>
                 </>

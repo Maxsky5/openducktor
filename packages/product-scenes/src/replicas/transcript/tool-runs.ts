@@ -1,7 +1,14 @@
-// The words of a tool run, as tool-runs.ts of packages/frontend-core gives them: the kind of each
-// call, the title and the counts of the header of a run, and the bar of the earlier calls of a long
-// run. The view and the controller of a run share them.
+// The words of the tool calls of a transcript, as tool-runs.ts and agent-chat-tool-presentation.ts
+// of packages/frontend-core give them: the kind of each call, the title and the counts of the header
+// of a run, the bar of the earlier calls of a long run, and the name and the empty answer of a
+// question tool. The desktop and the mobile replicas share them.
 import type { Call } from "./model";
+
+/** The name of a question tool on its line: readToolCallName of agent-chat-tool-presentation.ts. */
+export const QUESTION_TOOL_NAME = "Question";
+
+/** NO_ANSWER_YET_LABEL of agent-chat-tool-presentation.ts. */
+export const NO_ANSWER_YET_LABEL = "No answer yet";
 
 /** The kinds of calls in a tool run, in the order that a header counts them. */
 export const CALL_KINDS = ["command", "read", "list", "search", "edit", "web", "tool"] as const;

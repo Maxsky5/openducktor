@@ -75,22 +75,24 @@ export const build: SceneBuilder = (scene) => {
   // The camera shows the computer off center while its screen slides in, and the visitor then
   // centers the code in the viewfinder. The QR code is an SVG element in the center of the screen
   // of the computer, so the scene measures the screen.
-  let aim: { x: number; y: number } | undefined;
   scene.at(tapped, () => {
     const code = must(view, "[data-camera-screen]");
     const finder = must(scan, "[data-viewfinder]");
     const from = offsetIn(code, scan);
     const to = offsetIn(finder, scan);
-    aim = {
+    const aim = {
       x: to.x + finder.offsetWidth / 2 - (from.x + code.offsetWidth / 2),
       y: to.y + finder.offsetHeight / 2 - (from.y + code.offsetHeight / 2),
     };
-    gsap.set(view, { x: aim.x + 70, y: aim.y + 110, rotation: -7, scale: 0.86 });
-  });
-  scene.at(camera, () => {
-    if (!aim) throw new Error("The camera of the phone aims before the scan screen shows.");
     scene.run(
-      gsap.to(view, { ...aim, rotation: 0, scale: 1.04, duration: CAMERA, ease: EASE.move }),
+      gsap
+        .timeline()
+        .fromTo(
+          view,
+          { x: aim.x + 70, y: aim.y + 110, rotation: -7, scale: 0.86 },
+          { ...aim, rotation: 0, scale: 1.04, duration: CAMERA, ease: EASE.move },
+          camera - tapped,
+        ),
     );
   });
 

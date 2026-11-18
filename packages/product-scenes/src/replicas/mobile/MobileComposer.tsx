@@ -65,7 +65,7 @@ export function MobileComposer({
         {notice}
         <p className="mob-composer-field">
           <span className="mob-composer-typed" data-typed="" />
-          <span className="mob-composer-caret" />
+          <span className="mob-caret" />
           <span className="mob-composer-hint" data-for="ready">
             {COMPOSER_PLACEHOLDERS.ready}
           </span>
@@ -106,11 +106,11 @@ export function MobileComposer({
                 {secondary === "steer" ? <Zap /> : <ListPlus />}
               </span>
             )}
-            <span className="mob-composer-stop" data-stop="">
+            <span className="mob-composer-stop" data-stop="" data-feedback="scale">
               <i />
             </span>
             <span className="mob-composer-send-holder">
-              <span className="mob-composer-send" data-send="">
+              <span className="mob-composer-send" data-send="" data-feedback="scale">
                 <SendHorizontal />
               </span>
               {pendingCount > 0 && (

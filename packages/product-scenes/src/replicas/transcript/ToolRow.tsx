@@ -9,9 +9,6 @@ import { CallIcon, CallTiming } from "./CallParts";
 import type { ToolType } from "./model";
 import "./ToolRow.css";
 
-/** The name of a question tool on its line: readToolCallName of agent-chat-tool-presentation.ts. */
-export const QUESTION_TOOL_NAME = "Question";
-
 type ToolRowProps = {
   tool: ToolType;
   /** The name of the call: `Question` for a question tool, or the name of the tool. */

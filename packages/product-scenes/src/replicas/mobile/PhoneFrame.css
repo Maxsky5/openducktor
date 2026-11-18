@@ -25,6 +25,7 @@
       --m-shadow-primary:
         0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(81 0 255 / 0.2),
         0 calc(4 * var(--u)) calc(12 * var(--u)) calc(-4 * var(--u)) rgb(81 0 255 / 0.45);
+      --m-separator: oklch(96.8% 0.007 247.896);
       position: relative;
       flex: 0 0 auto;
       width: calc(429 * var(--u));
@@ -54,6 +55,7 @@
         rgb(0 0 0 / 0.7);
       --m-shadow-primary: 0 calc(4 * var(--u)) calc(14 * var(--u)) calc(-4 * var(--u))
         rgb(81 0 255 / 0.6);
+      --m-separator: oklch(27.9% 0.041 260.031);
       box-shadow:
         inset 0 0 0 calc(1.5 * var(--u)) #4a4a52,
         inset 0 0 0 calc(3 * var(--u)) #141418,
@@ -119,6 +121,16 @@
     }
     .mob-screen[data-layer="over"] {
       z-index: 2;
+    }
+    /* The Android caret after the text of a field: 2 dp in the tint color, as high as the text. It
+       takes no room on the line. A field shows it while it has text. */
+    .mob-caret {
+      display: none;
+      width: calc(2 * var(--u));
+      height: calc(21 * var(--u));
+      margin-right: calc(-2 * var(--u));
+      background: var(--m-tint);
+      vertical-align: text-top;
     }
   }
 }

@@ -4,10 +4,11 @@
 // 10 extends the range, and Comment opens the comment field. The saved comment shows Pending.
 // Back in Changes, Send opens the session, where the composer counts the pending comment. The
 // visitor sends a message, and the comment goes with it. The markup holds the frame where the
-// composer counts the pending comment, so the static frame shows where the comment waits. Sources: session-header.tsx in
-// apps/mobile/src/features/session/header, changes-screen.tsx, file-diff-screen.tsx, and
-// diff-comment-flow.tsx in apps/mobile/src/features/review, and pending-comments-notice.tsx in
-// apps/mobile/src/features/composer. A phone stage shows only the phone.
+// composer counts the pending comment, so the static frame shows where the comment waits.
+// Sources: session-header.tsx in apps/mobile/src/features/session/header, changes-screen.tsx,
+// file-diff-screen.tsx, and diff-comment-flow.tsx in apps/mobile/src/features/review, and
+// pending-comments-notice.tsx in apps/mobile/src/features/composer. A phone stage shows only the
+// phone.
 import type { ReactElement } from "react";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
 import { ActionMenu } from "../../replicas/mobile/ActionMenu";
@@ -101,7 +102,7 @@ export function MobileDiffCommentView(props: SceneViewProps): ReactElement {
                 <>
                   <EarlierRows />
                   <UserMessageRow text={SENT_MESSAGE} time={SENT_TIME} row="sent" hidden />
-                  <ToolRun tools={TOOLS} calls={RUNS.reply} row="reply" folded />
+                  <ToolRun tools={TOOLS} calls={RUNS.reply} row="reply" folded hidden />
                   <AgentMessage paragraphs={[ANSWER]} row="answer" hidden />
                 </>
               }

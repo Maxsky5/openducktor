@@ -4,7 +4,8 @@
 // text and icon controls dim to 40 percent. The feedback comes in 110 ms when the finger presses,
 // and goes in 240 ms when it lifts. A control names its feedback in `data-feedback`, on the target
 // or on a parent of it: `none` for a control without feedback, such as a text field or a segment.
-// A control without the hook scales.
+// A control inside such a parent names its own feedback. A control without the hook on it or on a
+// parent scales.
 import { must } from "../../motion/dom";
 import { gsap } from "../../motion/gsap";
 import { offsetIn } from "../../motion/offset";

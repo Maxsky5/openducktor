@@ -6,10 +6,8 @@ import { CornerDownRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { flag } from "../flag";
 import type { Answer } from "./model";
+import { NO_ANSWER_YET_LABEL } from "./tool-runs";
 import "./Answers.css";
-
-/** NO_ANSWER_YET_LABEL of agent-chat-tool-presentation.ts. */
-export const NO_ANSWER_YET_LABEL = "No answer yet";
 
 export function Answers({
   items,

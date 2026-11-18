@@ -192,17 +192,8 @@
     .mob-composer-card[data-draft] .mob-composer-hint[data-for] {
       display: none;
     }
-    /* The Android caret after the draft: 2 dp in the tint color, as high as the text. It takes no
-       room on the line. */
-    .mob-composer-caret {
-      display: none;
-      width: calc(2 * var(--u));
-      height: calc(21 * var(--u));
-      margin-right: calc(-2 * var(--u));
-      background: var(--m-tint);
-      vertical-align: text-top;
-    }
-    .mob-composer-card[data-draft] .mob-composer-caret {
+    /* The caret of PhoneFrame.css shows after the draft. */
+    .mob-composer-card[data-draft] .mob-caret {
       display: inline-block;
     }
     .mob-composer-card[data-draft] .mob-composer-send,

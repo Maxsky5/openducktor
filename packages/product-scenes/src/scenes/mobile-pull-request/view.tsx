@@ -81,7 +81,7 @@ export function MobilePullRequestView(props: SceneViewProps): ReactElement {
           <PhoneFrame
             overlay={
               <>
-                <QuickActionsMenu items={HUMAN_REVIEW_ACTIONS} hidden />
+                <QuickActionsMenu items={HUMAN_REVIEW_ACTIONS} />
                 <Touch />
               </>
             }

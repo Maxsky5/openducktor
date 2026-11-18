@@ -109,10 +109,7 @@ export const build: SceneBuilder = (scene) => {
   steps.show(3, confirmed + 0.2);
   const button = must(start, "[data-start-session]");
   const started = tap(() => button, confirmed + 3.4);
-  scene.at(started, () => {
-    button.toggleAttribute("data-loading", true);
-    start.toggleAttribute("data-busy", true);
-  });
+  phone.busy("start", button, started);
 
   // The host sends the pull request prompt to the latest Builder session, which starts its turn.
   // The session under the sheet shows it too. The sheet fades out, and the app pushes the session.
@@ -121,11 +118,7 @@ export const build: SceneBuilder = (scene) => {
     row(session, "request").hidden = false;
     sessionState(session, WORKING_RAIL, "working");
   });
-  const closed = phone.dismiss("start", sent);
-  scene.at(closed, () => {
-    button.removeAttribute("data-loading");
-    start.removeAttribute("data-busy");
-  });
+  phone.dismiss("start", sent);
   const arrived = phone.push("session", "pull-request", sent);
   scene.mark("session", arrived);
 

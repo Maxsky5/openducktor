@@ -1,4 +1,11 @@
 // The motion vocabulary of the views, so each tween names its intent and not a curve.
+import type { AppCurve } from "./gsap";
+
+/**
+ * --motion-ease-out of motion.css in packages/frontend/src/components/ui,
+ * cubic-bezier(0.22, 1, 0.36, 1): the curve of the chat and the dialogs of the desktop app.
+ */
+const DESKTOP_EASE_OUT: AppCurve = "desktop-ease-out";
 
 export const EASE = {
   /** An element comes in or grows, and slows down at the end. */
@@ -13,16 +20,13 @@ export const EASE = {
   arrive: "power3.out",
   /** A dialog closes, and its overlay fades out. */
   dismiss: "power1.in",
+  /** A row, a tool call, or a fold of the chat of the app, on --motion-ease-out. */
+  chat: DESKTOP_EASE_OUT,
   /**
-   * A row, a tool call, or a fold of the chat of the app: the --motion-ease-out curve of
-   * motion.css, cubic-bezier(0.22, 1, 0.36, 1), which follows the quint ease-out curve.
+   * A dialog takes the size of its new content: --resize-ease of dialog.css, which is
+   * --motion-ease-out. The fast start takes most of the old size away in the first frames.
    */
-  chat: "power4.out",
-  /**
-   * A dialog takes the size of its new content: --resize-ease of dialog.css, which is the same
-   * --motion-ease-out curve. The fast start takes most of the old size away in the first frames.
-   */
-  resize: "power4.out",
+  resize: DESKTOP_EASE_OUT,
   /** A gentle start and a slow end, for a fade or a short pulse. */
   gentle: "power1.out",
   /** A cross fade between two frames. */
