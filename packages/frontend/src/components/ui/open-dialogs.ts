@@ -1,6 +1,7 @@
 /** Every open `Dialog` and `Sheet` root, so a global shortcut can leave an open dialog alone. */
-const openDialogRoots = new Set<symbol>();
+const openDialogRoots = new Map<symbol, boolean>();
 const listeners = new Set<() => void>();
+const focusReleasedListeners = new Set<() => void>();
 export const subscribeOpenDialogs = (listener: () => void): (() => void) => {
   listeners.add(listener);
   return () => {
@@ -13,10 +14,35 @@ const changed = () => {
 };
 
 export const hasOpenDialog = (): boolean => openDialogRoots.size > 0;
+export const hasOpenModalDialog = (): boolean => {
+  for (const modal of openDialogRoots.values()) {
+    if (modal) return true;
+  }
+  return false;
+};
+
+export const subscribeDialogFocusReleased = (listener: () => void): (() => void) => {
+  focusReleasedListeners.add(listener);
+  return () => {
+    focusReleasedListeners.delete(listener);
+  };
+};
+
+export const afterDialogCloseAutoFocus =
+  (onCloseAutoFocus: ((event: Event) => void) | undefined) =>
+  (event: Event): void => {
+    onCloseAutoFocus?.(event);
+    // Radix runs its default focus restoration and releases the focus scope after this handler.
+    if (focusReleasedListeners.size > 0) {
+      queueMicrotask(() => {
+        for (const listener of focusReleasedListeners) listener();
+      });
+    }
+  };
 
 /** Counts a dialog root as open until the returned cleanup runs. */
-export const trackOpenDialog = (root: symbol): (() => void) => {
-  openDialogRoots.add(root);
+export const trackOpenDialog = (root: symbol, modal = true): (() => void) => {
+  openDialogRoots.set(root, modal);
   changed();
   return () => {
     openDialogRoots.delete(root);

@@ -1,7 +1,8 @@
-import { expect, test } from "bun:test";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { expect, jest, spyOn, test } from "bun:test";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { Activity, useRef, useState } from "react";
 import { createMemoryRouter, NavigationType, RouterProvider } from "react-router";
+import { toast } from "sonner";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import {
   SessionViewContext,
@@ -12,6 +13,14 @@ import {
   VisibleSessionTargetProvider,
 } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import { NotificationAttentionProvider } from "./notification-attention";
 import { useRegisterNotificationTranscript } from "./notification-attention-context";
 
@@ -28,6 +37,7 @@ const target = {
   identity,
 } as const;
 const previous = { ...target, identity: { ...identity, workingDirectory: "/repo/old-worktree" } };
+const search = "?workspace=workspace-1&kind=task&task=task-1&session=current&agent=build";
 
 function Transcript({
   name,
@@ -105,7 +115,6 @@ test.each([
 ] as const)(
   "waits for the requested transcript when %s",
   async (_case, retainedSelection, requestId) => {
-    const search = "?workspace=workspace-1&kind=task&task=task-1&session=current&agent=build";
     const state = {
       notificationTarget: {
         type: "pending_input",
@@ -169,3 +178,71 @@ test.each([
     router.dispose();
   },
 );
+
+function ConversationWithSettings() {
+  usePublishVisibleSessionTarget(target);
+  return (
+    <>
+      <Transcript name="request in active transcript" />
+      <Dialog>
+        <DialogTrigger>Open settings</DialogTrigger>
+        <DialogContent>
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription>Manage app preferences.</DialogDescription>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+test("focuses a notification request after Settings closes, even past the missing request timeout", async () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/sessions",
+        element: (
+          <VisibleSessionTargetProvider>
+            <NotificationAttentionProvider>
+              <SessionViewContext value={{ id: "current-view", isActive: true }}>
+                <ConversationWithSettings />
+              </SessionViewContext>
+            </NotificationAttentionProvider>
+          </VisibleSessionTargetProvider>
+        ),
+      },
+    ],
+    { initialEntries: ["/sessions" + search] },
+  );
+  const view = render(<RouterProvider router={router} />);
+  const reportError = spyOn(toast, "error");
+  const restore = restoreAfterTestBody(() => {
+    jest.useRealTimers();
+    reportError.mockRestore();
+    view.unmount();
+    router.dispose();
+  });
+  try {
+    fireEvent.click(view.getByRole("button", { name: "Open settings" }));
+    const settings = view.getByRole("dialog", { name: "Settings" });
+    const close = view.getByRole("button", { name: "Close" });
+    expect(settings.contains(document.activeElement)).toBe(true);
+    jest.useFakeTimers();
+    await act(async () => {
+      await router.navigate("/sessions" + search + "&attention=question&attentionId=request-1");
+    });
+    await act(async () => jest.advanceTimersByTime(5_001));
+
+    expect(reportError).not.toHaveBeenCalled();
+    expect(settings.contains(document.activeElement)).toBe(true);
+    expect(router.state.location.search).toContain("attentionId=request-1");
+
+    fireEvent.click(close);
+    await act(async () => jest.runOnlyPendingTimers());
+
+    expect(document.activeElement).toBe(view.getByTestId("request in active transcript"));
+    expect(router.state.location.search).toBe(search);
+    expect(reportError).not.toHaveBeenCalled();
+  } finally {
+    restore();
+  }
+});

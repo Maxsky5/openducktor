@@ -9,6 +9,7 @@ import { observeDialogResize } from "./dialog-resize";
 import { DialogRoot, useDialogOpen } from "./dialog-root";
 import { DialogLoadingContent } from "./dialog-loading";
 import { DialogLoadingContext } from "./dialog-loading-context";
+import { afterDialogCloseAutoFocus } from "./open-dialogs";
 
 function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogRoot {...props} data-slot="dialog" />;
@@ -49,6 +50,7 @@ function DialogContent({
   closeButton,
   loading,
   loadingLabel = "Loading…",
+  onCloseAutoFocus,
   ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
@@ -124,6 +126,7 @@ function DialogContent({
             className,
           )}
           {...props}
+          onCloseAutoFocus={afterDialogCloseAutoFocus(onCloseAutoFocus)}
           aria-hidden={!isOpen}
           inert={!isOpen}
           aria-busy={isLoading || undefined}

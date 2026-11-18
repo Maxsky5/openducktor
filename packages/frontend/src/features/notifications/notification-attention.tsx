@@ -6,6 +6,7 @@ import {
 } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { sessionReadStateKey } from "@openducktor/frontend-core/sessions/navigation/session-read-state-store";
 import { notificationRouteStateSchema } from "@openducktor/frontend-core/notifications/notification-route-state";
+import { hasOpenModalDialog, subscribeDialogFocusReleased } from "@/components/ui/open-dialogs";
 import {
   buildSessionNavigationSearch,
   sameSessionSelection,
@@ -80,38 +81,54 @@ function NotificationAttentionFocus({
     },
     [location, navigate],
   );
+  const root = findCommittedTranscriptRoot(transcript, visible, location, kind, id);
   useEffect(() => {
     if (!isNotificationAttentionKind(kind)) {
       finish("The notification attention kind is invalid.");
       return;
     }
-    const timeout = window.setTimeout(
-      () => finish("The requested input or error is no longer visible in this session."),
-      5_000,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [finish, kind]);
+    let missingTimeout: number | undefined;
+    let revealedTarget: HTMLElement | null = null;
+    let waitingForDialog = hasOpenModalDialog();
+    const revealAndFocus = (): void => {
+      if (completed.current === location) return;
+      const target = root && findNotificationAttentionTarget(root, kind, id);
+      if (!target) {
+        revealedTarget = null;
+        missingTimeout ??= window.setTimeout(
+          () => finish("The requested input or error is no longer visible in this session."),
+          5_000,
+        );
+        return;
+      }
 
-  const root = findCommittedTranscriptRoot(transcript, visible, location, kind, id);
-  useEffect(() => {
-    if (root === null || !isNotificationAttentionKind(kind)) return;
-
-    const focus = (): boolean => {
-      if (completed.current === location) return true;
-      const target = findNotificationAttentionTarget(root, kind, id);
-      target?.focus({ preventScroll: true });
-      if (!target || target.ownerDocument.activeElement !== target) return false;
-      revealElement(target);
-      finish();
-      return true;
+      window.clearTimeout(missingTimeout);
+      missingTimeout = undefined;
+      if (target !== revealedTarget) {
+        revealedTarget = target;
+        revealElement(target);
+      }
+      if (waitingForDialog || hasOpenModalDialog()) {
+        waitingForDialog = true;
+        return;
+      }
+      target.focus({ preventScroll: true });
+      if (target.ownerDocument.activeElement === target) finish();
     };
-    if (focus()) return;
 
-    const observer = new MutationObserver(() => {
-      if (focus()) observer.disconnect();
+    const observer = root && new MutationObserver(revealAndFocus);
+    if (root && observer) observer.observe(root, { childList: true, subtree: true });
+    const unsubscribe = subscribeDialogFocusReleased(() => {
+      if (!waitingForDialog) return;
+      waitingForDialog = false;
+      revealAndFocus();
     });
-    observer.observe(root, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    revealAndFocus();
+    return () => {
+      unsubscribe();
+      observer?.disconnect();
+      window.clearTimeout(missingTimeout);
+    };
   }, [finish, id, kind, location, root]);
   return null;
 }

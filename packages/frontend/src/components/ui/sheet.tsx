@@ -5,6 +5,7 @@ import { useCallback } from "react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 import { DialogRoot, useDialogOpen } from "./dialog-root";
+import { afterDialogCloseAutoFocus } from "./open-dialogs";
 import { reserveToasterInset } from "./toaster-inset";
 
 const Sheet = DialogRoot;
@@ -44,6 +45,7 @@ function SheetContent({
   side = "right",
   closeButton,
   visualOverlay = false,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> &
   VariantProps<typeof sheetVariants> & {
@@ -84,6 +86,7 @@ function SheetContent({
         data-side={side}
         className={cn(sheetVariants({ side }), className)}
         {...props}
+        onCloseAutoFocus={afterDialogCloseAutoFocus(onCloseAutoFocus)}
         aria-hidden={!isOpen}
         inert={!isOpen}
       >
