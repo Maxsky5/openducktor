@@ -206,6 +206,7 @@ export const createDemoTaskStore = (
     if (task.worktree)
       workspace.repository.resetBranch(
         workspace.repository.checkout(task.worktree.workingDirectory),
+        (task.record.targetBranch ?? workspace.defaultTargetBranch).branch,
       );
     world.sessions.forgetTaskSessions(workspace, task.record.id, workflow.worktreeRoles);
     unlinkPullRequest(task);

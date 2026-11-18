@@ -92,4 +92,48 @@ describe("demo repository", () => {
     expect(repository.readFile(repository.checkout("/repo"), "src/b.ts")).toBeNull();
     expect(repository.worktreeStatus(task, "odt/a", 0).fileDiffs).toEqual([]);
   });
+
+  test("keeps other worktrees on their base when a branch merges into the target", () => {
+    const repository = createDemoRepository({
+      repoPath: "/repo",
+      targetBranch: "main",
+      files: new Map([["README.md", text("# Notes\n")]]),
+    });
+    const merged = repository.addWorktree({ workingDirectory: "/worktrees/a", branch: "odt/a" });
+    const other = repository.addWorktree({ workingDirectory: "/worktrees/b", branch: "odt/b" });
+    repository.commit(merged, new Map([["src/a.ts", text("export {};\n")]]), "Add a");
+
+    repository.mergeInto(merged, "main");
+
+    expect(repository.readFile(other, "src/a.ts")).toBeNull();
+    expect(repository.worktreeStatus(other, "main", 0).targetAheadBehind).toEqual({
+      ahead: 0,
+      behind: 1,
+    });
+  });
+
+  test("resets a branch to its selected base", () => {
+    const repository = createDemoRepository({
+      repoPath: "/repo",
+      targetBranch: "main",
+      files: new Map([["README.md", text("# Notes\n")]]),
+    });
+    const base = repository.addWorktree({ workingDirectory: "/worktrees/a", branch: "odt/a" });
+    repository.commit(base, new Map([["src/a.ts", text("export {};\n")]]), "Add a");
+    const task = repository.addWorktree({
+      workingDirectory: "/worktrees/b",
+      branch: "odt/b",
+      base: "odt/a",
+    });
+    repository.commit(task, new Map([["src/b.ts", text("export {};\n")]]), "Add b");
+
+    repository.resetBranch(task, "odt/a");
+
+    expect(repository.readFile(task, "src/a.ts")).toEqual(text("export {};\n"));
+    expect(repository.readFile(task, "src/b.ts")).toBeNull();
+    expect(repository.worktreeStatus(task, "odt/a", 0).targetAheadBehind).toEqual({
+      ahead: 0,
+      behind: 0,
+    });
+  });
 });
