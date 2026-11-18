@@ -417,7 +417,9 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     transcript(session, { type: "session_idle", turnOutcome: "completed" });
     session.run = null;
     session.activity = "idle";
-    if (session.goal?.status === "active") session.goal.status = "complete";
+    // A rejected edit leaves the goal unmet. The demo runtime continues it with the next message.
+    if (session.goal?.status === "active")
+      session.goal.status = run.rejected ? "waiting_for_message" : "complete";
     session.contextTokens += 2_400 + entry.text.length * 3;
     session.lastActivityAt = clock.now();
     upsert(session);

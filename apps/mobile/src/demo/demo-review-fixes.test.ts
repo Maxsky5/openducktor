@@ -419,6 +419,52 @@ describe("demo QA fixes", () => {
     expect(status.fileDiffs.map((diff) => diff.type)).toContain("deleted");
   });
 
+  test("keeps a goal unmet after a rejected edit", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const ready = await taskOf(demo, "Restore focus after closing search");
+    const launch = buildLaunch(demo, ready.id, { goal: { objective: "Restore the focus." } });
+    await demo.advance(30_000);
+    const { session } = await launch;
+    if (!session) throw new Error("The launch started no session.");
+    const ref = {
+      repoPath: FIELDNOTES.repoPath,
+      runtimeKind: session.runtimeKind,
+      workingDirectory: session.workingDirectory,
+      externalSessionId: session.externalSessionId,
+    };
+    const target = {
+      ...ref,
+      sessionScope: {
+        kind: "workflow" as const,
+        workspaceId: "fieldnotes",
+        taskId: ready.id,
+        role: "build",
+      },
+    };
+    const goalOf = async () => {
+      const live = await demo.client.agentSessionLiveRead(ref);
+      return live.type === "live" ? live.session.goal?.status : undefined;
+    };
+    expect(await goalOf()).toBe("complete");
+    await demo.client.agentSessionGoalControl({ ...target, action: "resume" });
+    expect(await goalOf()).toBe("waiting_for_message");
+    await demo.client.agentSessionMessageSubmit({
+      ...target,
+      submissionId: "11111111-1111-4111-8111-000000000005",
+      mode: "default",
+      parts: [{ kind: "text", text: "Add a note" }],
+    });
+    await demo.advance(15_000);
+    const live = await demo.client.agentSessionLiveRead(ref);
+    const requestId =
+      live.type === "live" ? live.session.pendingApprovals[0]?.requestId : undefined;
+    if (!requestId) throw new Error("The run asked for no permission.");
+    await demo.client.agentSessionLiveReplyApproval({ ...ref, requestId, outcome: "reject" });
+    await demo.advance(30_000);
+    expect(await goalOf()).toBe("waiting_for_message");
+  });
+
   test("starts a new chat worktree from the selected target branch", async () => {
     const demo = openDemo();
     const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
