@@ -19,7 +19,9 @@ describe("demo repository", () => {
     const checkout = repository.addWorktree({ workingDirectory: "/worktrees/a", branch: "odt/a" });
     repository.commit(checkout, new Map([["src/new.ts", text("export {};\n")]]), "Add new");
     checkout.uncommitted.set("README.md", text("# Notes\n\nDraft\n"));
+    // Branch changes show the commits and the working files, as the host diffs the working tree.
     expect(repository.branchDiffs(checkout).map((diff) => [diff.file, diff.type])).toEqual([
+      ["README.md", "modified"],
       ["src/new.ts", "added"],
     ]);
     expect(
@@ -34,7 +36,7 @@ describe("demo repository", () => {
     repository.mergeInto(checkout, "refs/heads/main");
     const root = repository.checkout("/repo");
     expect(repository.readFile(root, "src/new.ts")).toEqual(text("export {};\n"));
-    expect(repository.branchDiffs(checkout)).toEqual([]);
+    expect(repository.branchDiffs(checkout).map((diff) => diff.file)).toEqual(["README.md"]);
   });
 
   test("compares a branch with the merge base of the selected target branch", () => {

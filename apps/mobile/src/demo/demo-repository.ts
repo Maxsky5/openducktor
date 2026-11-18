@@ -281,13 +281,20 @@ export const createDemoRepository = (input: {
       count += 1;
     return count;
   };
-  /** The changes of a branch since its merge base with `baseLog`, as `git diff base...HEAD`. */
+  /**
+   * The changes of a checkout since its merge base with `baseLog`: the commits and the working
+   * files, as the host diffs the merge base with the working tree.
+   */
   const diffsSince = (checkout: DemoCheckout, baseLog: readonly DemoCommit[]): GitFileDiff[] => {
     const mergeBase = checkout.log.slice(0, sharedCommits(checkout.log, baseLog));
-    return changedPaths(checkout.log.slice(mergeBase.length))
+    const changed = new Set([
+      ...changedPaths(checkout.log.slice(mergeBase.length)),
+      ...checkout.uncommitted.keys(),
+    ]);
+    return [...changed]
       .sort()
-      .filter((path) => !sameFile(fileAfter(mergeBase, path), headFile(checkout, path)))
-      .map((path) => fileDiff(path, fileAfter(mergeBase, path), headFile(checkout, path)));
+      .filter((path) => !sameFile(fileAfter(mergeBase, path), readFile(checkout, path)))
+      .map((path) => fileDiff(path, fileAfter(mergeBase, path), readFile(checkout, path)));
   };
   const branchDiffs = (checkout: DemoCheckout): GitFileDiff[] => diffsSince(checkout, root.log);
   const uncommittedDiffs = (checkout: DemoCheckout): GitFileDiff[] =>
