@@ -252,6 +252,24 @@ Cause: a command of the [Before worktree removal script](/settings-reference/#re
 </Accordion>
 </Accordions>
 
+## Files and diffs [#files-and-diffs]
+
+The desktop and web apps use Pierre Highlights for syntax colors in file previews, diffs, and the editor. Files that match a mapping in the table use the default text color. The diff still marks added and removed lines.
+
+Each entry can match a full filename or a file ending after a dot. For example, `config` matches both `config` and `ssh.config`.
+
+For filenames with multiple dots, the match depends on the full name. Pierre Diffs detects `component.vine.ts` as Vue Vine and `component.test.vine.ts` as TypeScript.
+
+| First character | File endings and names |
+|---|---|
+| 1 to C | `1c`, `apl`, `ara`, `as`, `bal`, `bas`, `be`, `beancount`, `bsl`, `cairo`, `cdc`, `clar`, `config`, `cr`, `cue` |
+| D to H | `dm`, `edge`, `f18`, `fnl`, `ftl`, `gjs`, `gs`, `gts`, `hjson`, `hxml`, `hy` |
+| I to N | `imba`, `jison`, `jssm`, `kql`, `logo`, `marko`, `mediawiki`, `mojo`, `move`, `nar`, `nu` |
+| P to S | `p6`, `pl6`, `polar`, `purs`, `qmldir`, `raku`, `regex`, `rel`, `sdbl`, `soy`, `spl`, `st` |
+| T to Z and symbols | `talon`, `tasl`, `templ`, `tsp`, `vala`, `vapi`, `vb`, `vbs`, `vine.ts`, `vv`, `vy`, `wiki`, `wit`, `wy`, `zs`, `🔥` |
+
+The `.f18` ending uses a different language ID from the fixed-form and free-form Fortran lexers that Highlights supports.
+
 ## Git providers [#git-providers]
 
 These problems show in the **Git** tab of a repository in Settings, or in the Git provider step of the setup wizard.
