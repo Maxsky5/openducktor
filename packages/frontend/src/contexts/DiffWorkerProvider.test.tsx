@@ -9,13 +9,13 @@ import { DiffWorkerProvider } from "./DiffWorkerProvider";
 describe("DiffWorkerProvider", () => {
   // This test starts a real worker and loads its WebAssembly module.
   test("uses Highlights on the page and renders file tokens in the worker pool", async () => {
-    const worker = spyOn(workerModule, "workerFactory").mockImplementation(
+    const workerFactorySpy = spyOn(workerModule, "workerFactory").mockImplementation(
       () => new Worker(import.meta.resolve("@pierre/diffs/worker/worker-portable.js")),
     );
     let unmount: (() => void) | undefined;
     const finishTest = restoreAfterTestBody(() => {
       unmount?.();
-      worker.mockRestore();
+      workerFactorySpy.mockRestore();
     });
     try {
       const view = renderHook(useWorkerPool, { wrapper: DiffWorkerProvider });
@@ -33,10 +33,11 @@ describe("DiffWorkerProvider", () => {
       expect(pool.getPreferredHighlighter()).toBe("highlights");
       expect(getHighlighterIfLoaded()?.name).toBe("highlights");
       const line = pool.getFileResultCache(file)?.result.code[0];
-      expect(
-        line?.type === "element" &&
-          line.children.some((child) => child.type === "element" && child.tagName === "span"),
-      ).toBe(true);
+      const tokens = line?.type === "element" ? line.children : [];
+      const tokenStyles = tokens.flatMap((token) =>
+        token.type === "element" && token.properties.style ? [token.properties.style] : [],
+      );
+      expect(new Set(tokenStyles).size).toBeGreaterThan(1);
     } finally {
       finishTest();
       await disposeHighlighter();
