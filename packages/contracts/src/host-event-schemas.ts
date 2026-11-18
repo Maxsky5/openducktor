@@ -105,8 +105,6 @@ export const agentSessionLiveEnvelopeRepoPath = (envelope: AgentSessionLiveEnvel
       return envelope.acknowledgement.ref.repoPath;
     case "task_completion_updated":
       return envelope.observation.repoPath;
-    case "usage_limit_auto_resume_updated":
-      return envelope.ref.repoPath;
     case "task_session_records_updated":
     case "snapshot":
     case "fault":
@@ -114,6 +112,7 @@ export const agentSessionLiveEnvelopeRepoPath = (envelope: AgentSessionLiveEnvel
     case "session_upsert":
       return envelope.session.ref.repoPath;
     case "session_removed":
+    case "usage_limit_auto_resume_updated":
       return envelope.ref.repoPath;
     case "transcript_event":
       return envelope.event.sessionRef.repoPath;

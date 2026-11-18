@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { fromPromise } from "../claude/claude-agent-sdk-utils";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
-import { createEffectRuntimeQueryAdapter } from "./runtime-query-adapter";
+import { createClaudeRuntimeQueryAdapter } from "./runtime-query-adapter";
 
 const catalogInput = {
   repoPath: "/repo",
@@ -12,7 +12,7 @@ const catalogInput = {
 
 for (const method of ["loadRuntimeCatalog"] as const) {
   test(`${method} passes a combined Claude catalog through the wrapper`, async () => {
-    const adapter = createEffectRuntimeQueryAdapter({
+    const adapter = createClaudeRuntimeQueryAdapter({
       ...unexpectedRuntimeQueries,
       [method]: () =>
         Effect.succeed({
@@ -25,7 +25,7 @@ for (const method of ["loadRuntimeCatalog"] as const) {
   });
 
   test(`${method} keeps connection details inside the host`, async () => {
-    const adapter = createEffectRuntimeQueryAdapter({
+    const adapter = createClaudeRuntimeQueryAdapter({
       ...unexpectedRuntimeQueries,
       [method]: () =>
         fromPromise("claudeRuntime.loadRuntimeCatalog", async () => {

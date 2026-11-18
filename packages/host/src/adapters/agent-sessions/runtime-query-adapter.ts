@@ -1,3 +1,4 @@
+import type { RuntimeOperationFailure, RuntimeQueryFailure } from "@openducktor/contracts";
 import {
   AgentRuntimeQueryError,
   type AgentSessionQueryParentPort,
@@ -47,7 +48,10 @@ const queryLabels = {
   readUsageLimitRecovery: "read usage limit recovery",
 } satisfies Record<QueryMethod, string>;
 
-const unsupportedUsageLimitRead = (method: UsageLimitMethod, input: RuntimeQueryIdentity) =>
+const unsupportedUsageLimitRead = (
+  method: UsageLimitMethod,
+  input: RuntimeQueryIdentity,
+): RuntimeQueryError =>
   runtimeQueryError(
     queryLabels[method],
     input,
@@ -68,6 +72,21 @@ const createQueryAdapter = <Source extends QuerySourceKind>(
     input: RuntimeQueryIdentity,
     run: () => QueryResult<Source, Result>,
   ) => runQuery(run, (cause) => toRuntimeQueryError(method, input, cause));
+  const usageLimitQueries: Pick<AgentRuntimeQueryAdapterPort, UsageLimitMethod> = usageLimits
+    ? {
+        readLatestUsageLimitStop: (input) =>
+          read("readLatestUsageLimitStop", input, () =>
+            usageLimits.readLatestUsageLimitStop(input),
+          ),
+        readUsageLimitRecovery: (input) =>
+          read("readUsageLimitRecovery", input, () => usageLimits.readUsageLimitRecovery(input)),
+      }
+    : {
+        readLatestUsageLimitStop: (input) =>
+          Effect.fail(unsupportedUsageLimitRead("readLatestUsageLimitStop", input)),
+        readUsageLimitRecovery: (input) =>
+          Effect.fail(unsupportedUsageLimitRead("readUsageLimitRecovery", input)),
+      };
   return {
     resolveSessionParent: (input) =>
       read("resolveSessionParent", input, () => native.resolveSessionParent(input)),
@@ -80,14 +99,7 @@ const createQueryAdapter = <Source extends QuerySourceKind>(
       read("loadSessionTodos", input, () => native.loadSessionTodos(input)),
     loadSessionDiff: (input) => read("loadSessionDiff", input, () => native.loadSessionDiff(input)),
     loadFileStatus: (input) => read("loadFileStatus", input, () => native.loadFileStatus(input)),
-    readLatestUsageLimitStop: (input) =>
-      usageLimits
-        ? read("readLatestUsageLimitStop", input, () => usageLimits.readLatestUsageLimitStop(input))
-        : Effect.fail(unsupportedUsageLimitRead("readLatestUsageLimitStop", input)),
-    readUsageLimitRecovery: (input) =>
-      usageLimits
-        ? read("readUsageLimitRecovery", input, () => usageLimits.readUsageLimitRecovery(input))
-        : Effect.fail(unsupportedUsageLimitRead("readUsageLimitRecovery", input)),
+    ...usageLimitQueries,
   };
 };
 
@@ -101,7 +113,7 @@ export const createRuntimeQueryAdapter = (
     usageLimits,
   );
 
-export const createEffectRuntimeQueryAdapter = (
+export const createClaudeRuntimeQueryAdapter = (
   native: RuntimeQuerySource<"effect", keyof NativeQueries | "readLatestUsageLimitStop">,
 ): AgentRuntimeQueryAdapterPort =>
   createQueryAdapter<"effect">(
@@ -117,6 +129,21 @@ export const createEffectRuntimeQueryAdapter = (
     },
   );
 
+const runtimeQueryFailureCode = (
+  code: RuntimeOperationFailure["code"],
+): RuntimeQueryFailure["code"] => {
+  switch (code) {
+    case "identity_mismatch":
+      return "scope_mismatch";
+    case "runtime_unavailable":
+    case "unsupported_operation":
+    case "invalid_runtime_response":
+      return code;
+    default:
+      return "request_failed";
+  }
+};
+
 const toRuntimeQueryError = (
   method: QueryMethod,
   input: RuntimeQueryIdentity,
@@ -126,14 +153,7 @@ const toRuntimeQueryError = (
   const operation = queryLabels[method];
   const operationFailure = readRuntimeOperationFailure(cause)?.runtimeOperationFailure;
   if (operationFailure) {
-    const code =
-      operationFailure.code === "identity_mismatch"
-        ? "scope_mismatch"
-        : operationFailure.code === "runtime_unavailable" ||
-            operationFailure.code === "unsupported_operation" ||
-            operationFailure.code === "invalid_runtime_response"
-          ? operationFailure.code
-          : "request_failed";
+    const code = runtimeQueryFailureCode(operationFailure.code);
     const detail = `${operationFailure.summary} ${operationFailure.nativeReason ?? ""} ${operationFailure.nextAction}`;
     const query = runtimeQueryError(operation, input, code, detail, cause);
     const failure = { ...query.failure, runtimeOperationFailure: operationFailure };

@@ -4,7 +4,7 @@ import {
 } from "./claude-pending-approval-resolution";
 import { createClaudeSessionImportAdapter } from "./claude-session-import";
 import { withForkedSessionCleanup } from "./forked-session-cleanup";
-import { createEffectRuntimeQueryAdapter } from "./runtime-query-adapter";
+import { createClaudeRuntimeQueryAdapter } from "./runtime-query-adapter";
 import {
   unsupportedGeneratedImageSource,
   unsupportedGeneratedImageOperations,
@@ -253,7 +253,7 @@ export const createClaudeLiveSessionAdapterPreparer =
               provenance: "baseline",
             }),
         ),
-        queries: createEffectRuntimeQueryAdapter(service),
+        queries: createClaudeRuntimeQueryAdapter(service),
         ...unsupportedGeneratedImageOperations,
         resolveGeneratedImageSource: unsupportedGeneratedImageSource,
         supportsSessionControl: true,
