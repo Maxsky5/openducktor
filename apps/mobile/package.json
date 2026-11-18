@@ -1,6 +1,6 @@
 {
   "name": "@openducktor/mobile",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "description": "OpenDucktor mobile app for iOS and Android",
   "main": "index.ts",
