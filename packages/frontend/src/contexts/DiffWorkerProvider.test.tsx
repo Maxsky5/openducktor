@@ -38,6 +38,17 @@ describe("DiffWorkerProvider", () => {
         token.type === "element" && token.properties.style ? [token.properties.style] : [],
       );
       expect(new Set(tokenStyles).size).toBeGreaterThan(1);
+
+      // The pinned Highlights release renders CUE as plain text.
+      const cue = {
+        name: "sample.cue",
+        contents: 'label: "café"',
+        cacheKey: "sample.cue",
+      };
+      await pool.primeFileHighlightCache(cue);
+      expect(pool.getFileResultCache(cue)?.result.code[0]).toMatchObject({
+        children: [{ children: [{ type: "text", value: cue.contents }] }],
+      });
     } finally {
       finishTest();
       await disposeHighlighter();

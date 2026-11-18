@@ -254,9 +254,11 @@ Cause: a command of the [Before worktree removal script](/settings-reference/#re
 
 ## Files and diffs [#files-and-diffs]
 
-The desktop and web apps use Pierre Highlights for syntax colors in file previews, diffs, and the editor. Files in the table use the default text color. The diff still marks added and removed lines.
+The desktop and web apps use Pierre Highlights for syntax colors in file previews, diffs, and the editor. Files that match a mapping in the table use the default text color. The diff still marks added and removed lines.
 
 Each entry can match a full filename or a file ending after a dot. For example, `config` matches both `config` and `ssh.config`.
+
+For filenames with multiple dots, the match depends on the full name. Pierre Diffs detects `component.vine.ts` as Vue Vine and `component.test.vine.ts` as TypeScript.
 
 | First character | File endings and names |
 |---|---|
