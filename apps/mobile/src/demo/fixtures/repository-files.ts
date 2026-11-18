@@ -19,9 +19,7 @@ bun install
 bun run dev
 \`\`\`
 
-The app runs on http://localhost:5173 and the API on http://localhost:8787.
-
-![Fieldnotes logo](assets/logo.png)
+The app runs on http://localhost:5173 and the API on http://localhost:8787. The logo is in \`assets/logo.png\`.
 `),
     ],
     [

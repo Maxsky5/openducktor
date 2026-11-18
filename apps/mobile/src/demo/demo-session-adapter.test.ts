@@ -410,4 +410,118 @@ describe("demo backend", () => {
     expect(output).toContain("Demo commands:");
     expect(output).toContain(UNKNOWN_COMMAND_TEXT);
   });
+
+  test("closes a task with a direct merge and imports a GitHub issue as a Backlog task", async () => {
+    const demo = openDemo();
+    const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
+    const merged = await demo.client.taskDirectMerge(FIELDNOTES, reviewed.id, {
+      expected: {
+        taskStatus: reviewed.status,
+        sourceBranch: "odt/branch",
+        targetBranch: { remote: "origin", branch: "main" },
+      },
+      mergeMethod: "squash",
+      removeWorktree: true,
+    });
+    expect(merged.outcome === "completed" && merged.task.status).toBe("closed");
+    expect(await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id)).toBeNull();
+
+    const issues = await demo.client.issueItemsList({ ...FIELDNOTES, search: "accents" });
+    const issue = issues.items[0];
+    if (!issue) throw new Error("The sample has no matching issue.");
+    const imported = await demo.client.issueItemsImport({
+      ...FIELDNOTES,
+      items: [
+        {
+          sourceId: issue.sourceId,
+          revision: issue.revision,
+          issueType: "bug",
+          priority: 1,
+          labels: [],
+        },
+      ],
+    });
+    const result = imported.results[0];
+    if (result?.outcome !== "created") throw new Error("The issue was not imported.");
+    const task = await taskOf(demo, issue.title);
+    expect(task).toMatchObject({ id: result.taskId, status: "open", issueType: "bug" });
+    expect(task.sourceIssue?.number).toBe(issue.number);
+  });
+
+  test("forks, renames, archives, and restores a chat", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { chat, externalSessionId } = await chatOf(demo, "Why do tags drop on sync?");
+    const historyOf = (sessionId: string, workingDirectory: string) =>
+      demo.client.agentRuntimeLoadSessionHistory({
+        repoPath: FIELDNOTES.repoPath,
+        runtimeKind: "claude",
+        workingDirectory,
+        externalSessionId: sessionId,
+        runtimePolicy: { kind: "claude" },
+        limit: 200,
+      });
+    const source = await historyOf(externalSessionId, chat.executionTarget.workingDirectory);
+    const answer = source.findLast((message) => message.role === "assistant");
+    if (!answer) throw new Error("The sample chat has no answer.");
+    const fork = await demo.client.workspaceSessionFork({
+      workspaceId: "fieldnotes",
+      sessionId: chat.id,
+      forkPoint: { messageId: answer.messageId },
+      destination: { kind: "same_folder" },
+    });
+    const forkHistory = await historyOf(
+      fork.runtimeSession.externalSessionId,
+      fork.runtimeSession.workingDirectory,
+    );
+    expect(forkHistory.map((message) => message.messageId)).toEqual(
+      source.map((message) => message.messageId),
+    );
+    const renamed = await demo.client.workspaceSessionRename({
+      workspaceId: "fieldnotes",
+      sessionId: chat.id,
+      manualTitle: "Tag sync",
+    });
+    expect(renamed.manualTitle).toBe("Tag sync");
+    await demo.client.workspaceSessionArchive({
+      workspaceId: "fieldnotes",
+      sessionId: chat.id,
+      confirmStop: false,
+      removeWorktree: false,
+    });
+    const archived = await demo.client.workspaceSessionListArchived("fieldnotes");
+    expect(archived.map((session) => session.id)).toContain(chat.id);
+    await demo.client.workspaceSessionRestore({ workspaceId: "fieldnotes", sessionId: chat.id });
+    const active = await demo.client.workspaceSessionListActive("fieldnotes");
+    expect(active.map((session) => session.id)).toContain(chat.id);
+  });
+
+  test("queues a message during a run and sends it after the run ends", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { chat, externalSessionId } = await chatOf(demo, "How does search rank notes?");
+    const target = {
+      repoPath: FIELDNOTES.repoPath,
+      runtimeKind: chat.runtimeKind,
+      workingDirectory: chat.executionTarget.workingDirectory,
+      externalSessionId,
+      sessionScope: { kind: "repository" as const, workspaceId: "fieldnotes" },
+    };
+    const send = (submissionId: string, text: string) =>
+      demo.client.agentSessionMessageSubmit({
+        ...target,
+        submissionId,
+        mode: "default",
+        parts: [{ kind: "text", text }],
+      });
+    expect((await send("11111111-1111-4111-8111-000000000001", "Where is search?")).kind).toBe(
+      "accepted",
+    );
+    const queued = await send("11111111-1111-4111-8111-000000000002", "And the ranking?");
+    expect(queued.kind).toBe("queued");
+    await demo.advance(30_000);
+    const { sessionScope: _scope, ...ref } = target;
+    const live = await demo.client.agentSessionLiveRead(ref);
+    expect(live.type === "live" && live.session.activity).toBe("idle");
+  });
 });
