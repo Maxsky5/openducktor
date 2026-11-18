@@ -43,14 +43,13 @@ describe("client/_headers", () => {
     expect(lines[0]).toBe("/*");
   });
 
-  test("blocks framing, other scripts, eval, plugins, base changes, and form posts", () => {
+  test("allows WebAssembly and blocks framing, external scripts, JavaScript eval, and form posts", () => {
     expect(policy.get("default-src")).toEqual(["'none'"]);
-    expect(policy.get("script-src")).toEqual(["'self'"]);
+    expect(policy.get("script-src")).toEqual(["'self'", "'wasm-unsafe-eval'"]);
     expect(policy.get("worker-src")).toEqual(["'self'"]);
     expect(policy.get("frame-ancestors")).toEqual(["'none'"]);
     expect(policy.get("base-uri")).toEqual(["'none'"]);
     expect(policy.get("form-action")).toEqual(["'none'"]);
-    expect(headers.get("Content-Security-Policy")).not.toContain("unsafe-eval");
   });
 
   test("blocks inline event handlers and external font sources", () => {
@@ -59,7 +58,7 @@ describe("client/_headers", () => {
     expect(policy.get("script-src-attr")).toEqual(["'none'"]);
     expect(policy.get("style-src")).toEqual(["'self'", "'unsafe-inline'"]);
     expect(policy.get("font-src")).toEqual(["'self'", "data:"]);
-    // `script-src 'self'` blocks inline script elements.
+    // The script policy blocks inline script elements.
     expect(html).not.toMatch(/<script(?![^>]*\ssrc=)[^>]*>/);
   });
 

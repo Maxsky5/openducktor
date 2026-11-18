@@ -1,26 +1,11 @@
-import { preloadHighlighter, type SupportedLanguages } from "@pierre/diffs";
 import { WorkerPoolContextProvider } from "@pierre/diffs/react";
-import { type ReactElement, type ReactNode, useEffect, useMemo } from "react";
+import { type ReactElement, type ReactNode, useMemo } from "react";
+import { PIERRE_DIFF_THEME } from "@/lib/diff/pierre-config";
 import { workerFactory } from "@/lib/diff/workerFactory";
 
-// ─── Pre-warm config ───────────────────────────────────────────────────────────
-
-/** Common languages to preload for fast initial diff rendering. */
-const PRELOAD_LANGS: SupportedLanguages[] = [
-  "typescript",
-  "javascript",
-  "tsx",
-  "jsx",
-  "json",
-  "markdown",
-];
-const PRELOAD_THEMES = ["pierre-light", "pierre-dark"] as const;
-
 /**
- * `ApplicationOverlays` mounts it once, so page and workspace switches keep the warm worker pool.
- * It uses Pierre's built-in WorkerPoolContextProvider to create and pre-warm
- * Shiki WASM worker pools. PatchDiff / FileDiff components rendered below
- * automatically use the worker pool for off-main-thread syntax highlighting.
+ * Keeps the diff workers warm across page and workspace switches.
+ * Pierre also initializes Highlights on the main thread for the editor.
  */
 export function DiffWorkerProvider({ children }: { children: ReactNode }): ReactElement {
   const poolSize = useMemo(() => {
@@ -32,13 +17,6 @@ export function DiffWorkerProvider({ children }: { children: ReactNode }): React
     return Math.min(Math.max(1, concurrency - 1), 3);
   }, []);
 
-  useEffect(() => {
-    void preloadHighlighter({
-      themes: [...PRELOAD_THEMES],
-      langs: PRELOAD_LANGS,
-    });
-  }, []);
-
   return (
     <WorkerPoolContextProvider
       poolOptions={{
@@ -47,8 +25,8 @@ export function DiffWorkerProvider({ children }: { children: ReactNode }): React
         totalASTLRUCacheSize: 56,
       }}
       highlighterOptions={{
-        theme: { light: "pierre-light", dark: "pierre-dark" },
-        langs: PRELOAD_LANGS,
+        preferredHighlighter: "highlights",
+        theme: PIERRE_DIFF_THEME,
         lineDiffType: "word-alt",
       }}
     >
