@@ -1,5 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
-import { taskWorkflowContextQueryOptions } from "@openducktor/frontend-core/queries/task-workflow-context";
+import { useTaskWorkflowContextQuery } from "@openducktor/frontend-core/queries/task-workflow-context";
 import { useMemo, useState } from "react";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { useAgentSessionReadModelState } from "@/state/app-state-provider";
@@ -70,16 +69,13 @@ export function useAgentStudioSelectionController({
 }: UseAgentStudioSelectionControllerArgs): AgentStudioSelectionControllerResult {
   const { sessionReadModelLoadState } = useAgentSessionReadModelState();
   const selectedTaskIsListed = tasks.some(({ id }) => id === selectionState.taskId);
-  const retainedTask = useQuery({
-    ...taskWorkflowContextQueryOptions(
-      activeWorkspaceId && workspaceRepoPath
-        ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }
-        : null,
-      selectionState.taskId,
-    ),
-    enabled:
-      !!workspaceRepoPath && !!selectionState.taskId && !isLoadingTasks && !selectedTaskIsListed,
-  });
+  const retainedTask = useTaskWorkflowContextQuery(
+    activeWorkspaceId && workspaceRepoPath
+      ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath }
+      : null,
+    selectionState.taskId,
+    !!workspaceRepoPath && !!selectionState.taskId && !isLoadingTasks && !selectedTaskIsListed,
+  );
   const navigationTasks = useMemo(
     () => (selectedTaskIsListed || !retainedTask.data ? tasks : [...tasks, retainedTask.data]),
     [selectedTaskIsListed, retainedTask.data, tasks],

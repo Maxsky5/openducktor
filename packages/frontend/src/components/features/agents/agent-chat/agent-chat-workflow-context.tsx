@@ -2,7 +2,7 @@ import { TaskSnapshotContext } from "@openducktor/frontend-core/app-state/app-st
 import { createContext, useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ResolvedTaskCard } from "@openducktor/workflows";
-import { taskWorkflowContextQueryOptions } from "@openducktor/frontend-core/queries/task-workflow-context";
+import { useTaskWorkflowContextQuery } from "@openducktor/frontend-core/queries/task-workflow-context";
 import { optionalWorkspaceWorkflowQueryOptions } from "@openducktor/frontend-core/queries/workflows";
 import { useActiveWorkspace } from "@/state/app-state-provider";
 
@@ -15,10 +15,11 @@ export const useChatToolTask = (taskId: string | null) => {
   const snapshot = useContext(TaskSnapshotContext);
   const inherited =
     taskId && parent?.id === taskId ? parent : snapshot?.tasks.find(({ id }) => id === taskId);
-  const query = useQuery({
-    ...taskWorkflowContextQueryOptions(workspace, taskId ?? ""),
-    enabled: !!workspace && !!taskId && !inherited,
-  });
+  const query = useTaskWorkflowContextQuery(
+    workspace,
+    taskId ?? "",
+    !!workspace && !!taskId && !inherited,
+  );
   const workspaceQuery = useQuery({
     ...optionalWorkspaceWorkflowQueryOptions(workspace),
     enabled: !!workspace && !!taskId,
