@@ -1,3 +1,4 @@
+import { liveSessionRefKey } from "./live-session-ref";
 import {
   type AgentSessionContextUsage,
   type AgentSessionLiveRef,
@@ -23,9 +24,6 @@ import {
 } from "./claude-live-session-inputs";
 
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
-const refKey = (ref: AgentSessionLiveRef): string =>
-  [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
-
 const cloneSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot =>
   agentSessionLiveSnapshotSchema.parse(snapshot);
 
@@ -66,14 +64,14 @@ export const createClaudeLiveSessionState = () => {
   >();
 
   const readSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveSnapshot | undefined =>
-    snapshotsByRef.get(refKey(ref));
+    snapshotsByRef.get(liveSessionRefKey(ref));
 
   const commitSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveAdapterChange[] => {
     const changes: AgentSessionLiveAdapterChange[] = [];
     let current: AgentSessionLiveSnapshot | undefined = snapshot;
     const visited = new Set<string>();
     while (current) {
-      const key = refKey(current.ref);
+      const key = liveSessionRefKey(current.ref);
       if (visited.has(key)) break;
       visited.add(key);
       const activity = inputActivity(
@@ -120,12 +118,12 @@ export const createClaudeLiveSessionState = () => {
     if (!isRoot) {
       snapshot.parentExternalSessionId = session.externalSessionId;
     }
-    nativeActivityByRef.set(refKey(ref), snapshot.activity);
+    nativeActivityByRef.set(liveSessionRefKey(ref), snapshot.activity);
     return snapshot;
   };
 
   const removeSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
-    const key = refKey(ref);
+    const key = liveSessionRefKey(ref);
     retiredSessionKeys.add(key);
     goals.set(key, null);
     contextRevisionsByRef.delete(key);
@@ -162,7 +160,7 @@ export const createClaudeLiveSessionState = () => {
     if (event.parentExternalSessionId)
       snapshot.parentExternalSessionId = event.parentExternalSessionId;
     if (event.type === "approval_required") {
-      nativeActivityByRef.set(refKey(ref), "running");
+      nativeActivityByRef.set(liveSessionRefKey(ref), "running");
       const request = toApproval(event);
       return commitSnapshot({
         ...snapshot,
@@ -175,7 +173,7 @@ export const createClaudeLiveSessionState = () => {
       });
     }
     if (event.type === "question_required") {
-      if (event.blocking !== false) nativeActivityByRef.set(refKey(ref), "running");
+      if (event.blocking !== false) nativeActivityByRef.set(liveSessionRefKey(ref), "running");
       const request = toQuestion(event);
       return commitSnapshot({
         ...snapshot,
@@ -212,7 +210,7 @@ export const createClaudeLiveSessionState = () => {
     const current = ensureSnapshot(session, ref, event.timestamp);
     const running = event.part.status === "pending" || event.part.status === "running";
     const previousParent = readParent(current, readSnapshot);
-    nativeActivityByRef.set(refKey(ref), running ? "running" : "idle");
+    nativeActivityByRef.set(liveSessionRefKey(ref), running ? "running" : "idle");
     const changes = commitSnapshot({
       ...current,
       pendingApprovals: running ? current.pendingApprovals : [],
@@ -224,9 +222,9 @@ export const createClaudeLiveSessionState = () => {
     if (previousParent && previousParent.ref.externalSessionId !== event.externalSessionId) {
       changes.push(...commitSnapshot(previousParent));
     }
-    subagentOwnersByRef.set(refKey(ref), {
+    subagentOwnersByRef.set(liveSessionRefKey(ref), {
       messageId: event.part.messageId,
-      parentRefKey: refKey(eventRef(session, event)),
+      parentRefKey: liveSessionRefKey(eventRef(session, event)),
     });
     return changes;
   };
@@ -247,7 +245,7 @@ export const createClaudeLiveSessionState = () => {
       ];
     }
     const ref = eventRef(session, event);
-    const key = refKey(ref);
+    const key = liveSessionRefKey(ref);
     if (event.type === "session_goal_updated") {
       // A restore reads the goal before the resume summary admits the session again.
       // A restored goal can arrive before the resume ends the retirement, so the goal stays.
@@ -256,7 +254,10 @@ export const createClaudeLiveSessionState = () => {
       const current = readSnapshot(ref);
       return current ? commitSnapshot(current) : [];
     }
-    if (retiredSessionKeys.has(refKey(rootRef(session))) || retiredSessionKeys.has(key)) {
+    if (
+      retiredSessionKeys.has(liveSessionRefKey(rootRef(session))) ||
+      retiredSessionKeys.has(key)
+    ) {
       return [];
     }
     if (event.type === "session_context_error") {
@@ -388,7 +389,7 @@ export const createClaudeLiveSessionState = () => {
         rollback: () => {
           for (const change of changes) {
             if (change.type !== "session_upsert") continue;
-            const key = refKey(change.snapshot.ref);
+            const key = liveSessionRefKey(change.snapshot.ref);
             const snapshot = previous.get(key);
             if (snapshot) snapshotsByRef.set(key, snapshot);
             else snapshotsByRef.delete(key);
@@ -409,7 +410,7 @@ export const createClaudeLiveSessionState = () => {
     ): LoadedContextResult => {
       const snapshot = readSnapshot(ref);
       if (
-        (contextRevisionsByRef.get(refKey(ref)) ?? 0) !== expectedRevision ||
+        (contextRevisionsByRef.get(liveSessionRefKey(ref)) ?? 0) !== expectedRevision ||
         !contextUsage ||
         !snapshot ||
         JSON.stringify(snapshot.contextUsage) === JSON.stringify(contextUsage)
@@ -422,7 +423,7 @@ export const createClaudeLiveSessionState = () => {
       };
     },
     contextRevision: (ref: AgentSessionLiveRef): number =>
-      contextRevisionsByRef.get(refKey(ref)) ?? 0,
+      contextRevisionsByRef.get(liveSessionRefKey(ref)) ?? 0,
     listSnapshots: (): AgentSessionLiveSnapshot[] =>
       [...snapshotsByRef.values()].map(cloneSnapshot),
     readSnapshot: (ref: AgentSessionLiveRef) => {
@@ -442,7 +443,7 @@ export const createClaudeLiveSessionState = () => {
       return refs;
     },
     reactivateSession: (ref: AgentSessionLiveRef): void => {
-      retiredSessionKeys.delete(refKey(ref));
+      retiredSessionKeys.delete(liveSessionRefKey(ref));
     },
     removeSession: removeSessionTree,
     /** Summaries carry no repository, so the caller passes the repository of the request. */
@@ -460,7 +461,7 @@ export const createClaudeLiveSessionState = () => {
         workingDirectory: summary.workingDirectory,
         externalSessionId: summary.externalSessionId,
       };
-      const key = refKey(ref);
+      const key = liveSessionRefKey(ref);
       retiredSessionKeys.delete(key);
       const current = readSnapshot(ref);
       let activity = activityForSummary(summary.status);

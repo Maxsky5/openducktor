@@ -217,9 +217,7 @@ export const resolveModelSelectionForPair = ({
     return null;
   }
 
-  const model = catalog.models.find(
-    (entry) => entry.providerId === value.providerId && entry.modelId === value.modelId,
-  );
+  const model = findCatalogModel(catalog, value);
   if (!model) {
     return null;
   }

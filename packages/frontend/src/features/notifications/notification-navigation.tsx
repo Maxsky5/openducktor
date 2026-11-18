@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactElement, useEffect } from "react";
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useSettingsModal } from "@/components/features/settings/settings-modal";
@@ -10,22 +10,16 @@ import {
   SESSIONS_QUERY_KEYS,
 } from "@/features/session-navigation/sessions-route";
 import { useWorkspaceState } from "@/state/app-state-provider";
-import { revealElement } from "@/lib/reveal-element";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
 import { loadAgentSessionListFromQuery } from "@openducktor/frontend-core/queries/agent-sessions";
 import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/queries/tasks";
 import {
-  ATTENTION_ID_QUERY_KEY,
-  ATTENTION_KIND_QUERY_KEY,
-  findNotificationAttentionTarget,
   notificationTargetReplacesContent,
   openNotificationTarget,
 } from "./notification-navigation-logic";
 
-const staleTarget = (message: string): void => {
-  toast.error("Notification target is no longer available", { description: message });
-};
+import { reportStaleNotificationTarget } from "./notification-target-error";
 
 export function NotificationNavigationRegistrar(): null {
   const { openSettings } = useSettingsModal();
@@ -89,7 +83,7 @@ export function NotificationNavigationRegistrar(): null {
         loadWorkspaceSessions: (workspaceId) =>
           queryClient.fetchQuery(workspaceSessionListQueryOptions(workspaceId)),
         navigate,
-        reportStale: staleTarget,
+        reportStale: reportStaleNotificationTarget,
         openSettings: () =>
           openSettings({ deepLink: { kind: "global", section: "notifications" } }),
       };
@@ -113,59 +107,6 @@ export function NotificationNavigationRegistrar(): null {
     selectWorkspace,
     workspaces,
   ]);
-
-  return null;
-}
-
-export function NotificationAttentionFocus(): ReactElement | null {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (location.pathname !== SESSIONS_PATH) return;
-    const search = new URLSearchParams(location.search);
-    const kind = search.get(ATTENTION_KIND_QUERY_KEY);
-    const id = search.get(ATTENTION_ID_QUERY_KEY);
-    if (!kind || !id) return;
-
-    const clearAttention = (): void => {
-      search.delete(ATTENTION_KIND_QUERY_KEY);
-      search.delete(ATTENTION_ID_QUERY_KEY);
-      const query = search.toString();
-      navigate(`${location.pathname}${query ? `?${query}` : ""}`, {
-        replace: true,
-        state: location.state,
-      });
-    };
-    if (kind !== "permission" && kind !== "question" && kind !== "error") {
-      staleTarget("The notification attention kind is invalid.");
-      clearAttention();
-      return;
-    }
-    const focus = (): boolean => {
-      const target = findNotificationAttentionTarget(kind, id);
-      if (!target) return false;
-      revealElement(target);
-      target.focus({ preventScroll: true });
-      clearAttention();
-      return true;
-    };
-    if (focus()) return;
-
-    const observer = new MutationObserver(() => {
-      if (focus()) observer.disconnect();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    const timeout = window.setTimeout(() => {
-      observer.disconnect();
-      staleTarget("The requested input or error is no longer visible in this session.");
-      clearAttention();
-    }, 5_000);
-    return () => {
-      observer.disconnect();
-      window.clearTimeout(timeout);
-    };
-  }, [location.pathname, location.search, location.state, navigate]);
 
   return null;
 }

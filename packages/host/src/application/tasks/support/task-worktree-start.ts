@@ -5,7 +5,7 @@ import { classifyWorkspaceCheckout } from "../../git/workspace-checkout";
 import { startupStep, updateStartup } from "../../agent-sessions/session-startup-progress";
 import { planWorktreeSetup } from "../../agent-sessions/worktree-setup-plan";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
-import { effectiveTargetBranchForTask, resolveBuildStartPoint } from "./task-worktree-cleanup";
+import { resolveTaskWorktreeStartPoint } from "./task-branches";
 import {
   failOperationAfterRollback,
   rollbackFailedTaskWorktree,
@@ -102,18 +102,11 @@ export const prepareNewTaskWorktree = (
       );
     const setupResult = yield* Effect.result(
       Effect.gen(function* () {
-        const targetBranch = yield* effectiveTargetBranchForTask(
-          dependencies.workspaceSettingsService,
+        const startPoint = yield* resolveTaskWorktreeStartPoint(dependencies, {
+          workspaceId: repoConfig.workspaceId,
+          repoPath: canonicalRepoPath,
           task,
-          canonicalRepoPath,
-          repoConfig.workspaceId,
-        );
-        const startPoint = yield* resolveBuildStartPoint(
-          dependencies,
-          canonicalRepoPath,
-          targetBranch,
-          task.targetBranch === undefined,
-        );
+        });
         yield* planWorktreeSetup({
           label: "Create task worktree",
           worktreePath,

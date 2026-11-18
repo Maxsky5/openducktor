@@ -26,7 +26,7 @@ import { randomBytes } from "node:crypto";
 import type { RemoteAdmissionPort } from "./remote-admission";
 import { localAttachmentPreviewResponse } from "./local-attachment-preview";
 import { routeTaskAssetHttpRequest } from "./task-asset-http-server";
-import { createTaskEventLeaseManager } from "./task-event-leases";
+import { createTaskEventLeaseManager, type TaskEventLeaseManager } from "./task-event-leases";
 import { type BufferedHostEventBus } from "./host-event-bus";
 import {
   createHostChannelSocketData,
@@ -37,6 +37,7 @@ import {
 } from "./host-channel";
 import { HOST_SOCKET_PROTOCOLS, type HostWebSocketData } from "./host-websocket-handler";
 import { offeredSubprotocols, tokensMatch } from "./socket-offer";
+import { stripMountPath } from "./request-path";
 import { type NodeFetchServer } from "./node-fetch-server";
 import { createSocketData } from "./terminals/terminal-websocket-handler";
 import type { WebLogger } from "./logger";
@@ -56,7 +57,7 @@ type Connection = {
   clientId: string;
   token: string;
   abort: AbortController;
-  leases: Set<string>;
+  leases: TaskEventLeaseManager;
   activeStreams: number;
   expiry: ReturnType<typeof setTimeout> | null;
 };
@@ -156,10 +157,6 @@ export const createRemoteWorkInterface = (
     ...(options.frontendOrigins ?? []),
   ]);
   const connections = new Map<string, Connection>();
-  const leases = createTaskEventLeaseManager({
-    taskEventStream: services.taskEventStream,
-    reportDeliveryFailure: ({ cause }) => options.reportFailure(cause),
-  });
   let closed = false;
   const clientsChanged = () =>
     options.onClientsChanged?.(
@@ -176,10 +173,7 @@ export const createRemoteWorkInterface = (
     connections.delete(id);
     if (connection.expiry) clearTimeout(connection.expiry);
     connection.abort.abort();
-    for (const leaseId of connection.leases) {
-      const lease = leases.get(leaseId);
-      if (lease) leases.delete(lease);
-    }
+    connection.leases.dispose();
     if (notify) clientsChanged();
   };
   const armExpiry = (id: string, connection: Connection) => {
@@ -209,7 +203,6 @@ export const createRemoteWorkInterface = (
     closed = true;
     for (const id of connections.keys()) release(id, false);
     clientsChanged();
-    leases.dispose();
   };
   const negotiate = (
     hello: RemoteConnectionRequest,
@@ -290,7 +283,10 @@ export const createRemoteWorkInterface = (
           clientId: admitted.success.clientId,
           token: connectionToken,
           abort: new AbortController(),
-          leases: new Set(),
+          leases: createTaskEventLeaseManager({
+            taskEventStream: services.taskEventStream,
+            reportDeliveryFailure: ({ cause }) => options.reportFailure(cause),
+          }),
           activeStreams: 0,
           expiry: null,
         };
@@ -311,7 +307,6 @@ export const createRemoteWorkInterface = (
     );
   /** Runs a command of a remote client. Shell functions stay with the local shell. */
   const invoke = async (
-    connection: Connection,
     command: string,
     args: HostCommandInputRecord,
     signal: AbortSignal,
@@ -379,11 +374,7 @@ export const createRemoteWorkInterface = (
         cors,
       );
     const url = new URL(request.url);
-    // A proxy may retain the configured prefix or strip it. Both mappings are explicit at this listener.
-    const route =
-      mountPath && (url.pathname === mountPath || url.pathname.startsWith(`${mountPath}/`))
-        ? url.pathname.slice(mountPath.length) || "/"
-        : url.pathname;
+    const route = stripMountPath(url.pathname, mountPath);
     url.pathname = route;
     try {
       if (route === "/" && request.method === "GET") return remoteJson(descriptor, 200, cors);
@@ -475,10 +466,9 @@ export const createRemoteWorkInterface = (
               ? createHostChannelSocketData({
                   hostEvents: services.eventBus.stream(),
                   notifications: services.notificationStream,
-                  leases,
-                  ownedLeases: connection.leases,
+                  leases: connection.leases,
                   maxLeases: MAX_LEASES_PER_CONNECTION,
-                  invoke: (command, args, signal) => invoke(connection, command, args, signal),
+                  invoke,
                   maxReplyBytes: REMOTE_MAX_REPLY_BYTES,
                   refusal: () =>
                     closed || connection.abort.signal.aborted
@@ -533,11 +523,10 @@ export const createRemoteWorkInterface = (
       }
       const resource = await Effect.runPromise(
         routeTaskAssetHttpRequest({
+          authorize: Effect.void,
           request: scoped,
-          appToken: "",
           corsHeaders: cors,
           taskAssetReadService: services.taskAssetReadService,
-          validateAppSessionCookie: () => Effect.void,
         }),
       );
       if (resource) return resource;

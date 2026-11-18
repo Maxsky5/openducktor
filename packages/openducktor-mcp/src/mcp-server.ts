@@ -22,7 +22,7 @@ import {
   getListedToolOutputSchema,
   type RegisteredToolName,
 } from "./listed-tool-schema";
-import { OdtTaskStore } from "./odt-task-store";
+import { OdtTaskStore, type PlainWorkspaceToolName } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
 import {
   mcpToolPayloadSchema,
@@ -36,7 +36,7 @@ import {
 } from "./tool-results";
 
 type RegisteredToolInputSchema = (typeof ODT_TOOL_SCHEMAS)[RegisteredToolName];
-type ToolInput<InputSchema extends z.ZodObject> = Parameters<ToolCallback<InputSchema["shape"]>>[0];
+type ToolInput<InputSchema extends z.ZodObject> = z.output<InputSchema>;
 type ToolOutput<Name extends RegisteredToolName> = z.output<
   (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[Name]
 >;
@@ -217,7 +217,6 @@ const registerOdtTool = <
 
 const defineOdtTool = <Name extends RegisteredToolName>(
   name: Name,
-  inputSchema: (typeof ODT_TOOL_SCHEMAS)[Name],
   definition: ToolDefinitionOptions<Name, (typeof ODT_TOOL_SCHEMAS)[Name]>,
 ): OdtToolDefinition<Name> => {
   const outputSchema =
@@ -229,9 +228,26 @@ const defineOdtTool = <Name extends RegisteredToolName>(
     description: definition.description,
     outputSchema,
     register: (server, store, options) =>
-      registerOdtTool(server, store, name, inputSchema, definition, outputSchema, options),
+      registerOdtTool(
+        server,
+        store,
+        name,
+        ODT_TOOL_SCHEMAS[name],
+        definition,
+        outputSchema,
+        options,
+      ),
   };
 };
+
+const defineWorkspaceTool = <Name extends PlainWorkspaceToolName>(
+  name: Name,
+  definition: Omit<ToolDefinitionOptions<Name, (typeof ODT_TOOL_SCHEMAS)[Name]>, "execute">,
+): OdtToolDefinition<Name> =>
+  defineOdtTool(name, {
+    ...definition,
+    execute: (store, input) => store.callWorkspaceTask(name, input),
+  });
 
 type ListedOdtTool = Pick<OdtToolDefinition, "name" | "description" | "outputSchema">;
 
@@ -301,68 +317,61 @@ const BROWSER_TOOL_DESCRIPTIONS = {
 } satisfies Record<OdtBrowserToolName, string>;
 
 const defineBrowserTool = (name: OdtBrowserToolName): OdtToolDefinition<OdtBrowserToolName> =>
-  defineOdtTool(name, ODT_TOOL_SCHEMAS[name], {
+  defineOdtTool(name, {
     description: BROWSER_TOOL_DESCRIPTIONS[name],
     execute: (store, input, meta) => store.callBrowserTool(name, input, meta),
     nativeResult: toBrowserToolResult,
   });
 
 const ODT_TOOL_DEFINITIONS = [
-  defineOdtTool("odt_get_workspaces", ODT_TOOL_SCHEMAS.odt_get_workspaces, {
+  defineOdtTool("odt_get_workspaces", {
     description: "List the OpenDucktor workspaces with their workspaceId.",
-    execute: (store, input) => store.getWorkspaces(input),
+    execute: (store) => store.getWorkspaces(),
   }),
-  defineOdtTool("odt_create_task", ODT_TOOL_SCHEMAS.odt_create_task, {
+  defineWorkspaceTool("odt_create_task", {
     description: "Create a task, feature, or bug, and return its summary.",
-    execute: (store, input) => store.createTask(input),
   }),
-  defineOdtTool("odt_search_tasks", ODT_TOOL_SCHEMAS.odt_search_tasks, {
+  defineWorkspaceTool("odt_search_tasks", {
     description:
       "Search active tasks. Filters match exactly, title matches a substring, and a task must have all tags. Returns a page of task summaries.",
-    execute: (store, input) => store.searchTasks(input),
   }),
-  defineOdtTool("odt_read_task", ODT_TOOL_SCHEMAS.odt_read_task, {
+  defineWorkspaceTool("odt_read_task", {
     description:
       "Read one task's fields, workflow artifact states, and all current workflow and free artifact metadata. Call it first.",
-    execute: (store, input) => store.readTask(input),
   }),
-  defineOdtTool("odt_read_task_assets", ODT_TOOL_SCHEMAS.odt_read_task_assets, {
+  defineWorkspaceTool("odt_read_task_assets", {
     description:
       "Read description images of a task as image content, in request order. A batch is at most 20 MiB. The call fails when an asset is unavailable.",
-    execute: (store, input) => store.readTaskAssets(input),
     nativeResult: toTaskAssetsToolResult,
   }),
-  defineOdtTool("odt_read_task_artifacts", ODT_TOOL_SCHEMAS.odt_read_task_artifacts, {
+  defineWorkspaceTool("odt_read_task_artifacts", {
     description:
       "Read artifact content by code. Get the workflow and free artifact codes from odt_read_task.",
-    execute: (store, input) => store.readTaskArtifacts(input),
     nativeResult: toTaskArtifactsToolResult,
     outputSchema: readTaskArtifactsOutputSchema,
   }),
-  defineOdtTool("odt_set_task_artifact", ODT_TOOL_SCHEMAS.odt_set_task_artifact, {
+  defineOdtTool("odt_set_task_artifact", {
     description:
       "Save an artifact by code from odt_read_task. Workflow artifacts use Markdown, and a review artifact requires one of its verdicts. Set mediaType for a free artifact's format.",
     execute: (store, input, meta) => store.setTaskArtifact(input, meta),
   }),
-  defineOdtTool("odt_delete_task_artifact", ODT_TOOL_SCHEMAS.odt_delete_task_artifact, {
+  defineOdtTool("odt_delete_task_artifact", {
     description:
       "Delete a free artifact by its stable code. This cannot delete workflow artifacts or change task status.",
     execute: (store, input, meta) => store.deleteTaskArtifact(input, meta),
   }),
-  defineOdtTool("odt_update_task", ODT_TOOL_SCHEMAS.odt_update_task, {
+  defineWorkspaceTool("odt_update_task", {
     description:
       "Update fields of one task. Omitted fields stay. An empty description or labels clears it. It never changes status or artifacts.",
-    execute: (store, input) => store.updateTask(input),
   }),
-  defineOdtTool("odt_apply_workflow_event", ODT_TOOL_SCHEMAS.odt_apply_workflow_event, {
+  defineOdtTool("odt_apply_workflow_event", {
     description:
       "Send a workflow event of the task. Use only an event that your role instructions list, and add a note when they require one.",
     execute: (store, input, meta) => store.applyWorkflowEvent(input, meta),
   }),
-  defineOdtTool("odt_set_pull_request", ODT_TOOL_SCHEMAS.odt_set_pull_request, {
+  defineWorkspaceTool("odt_set_pull_request", {
     description:
       "Save the pull request of a task by its number, after you create or update it. The host reads its details from the repository provider.",
-    execute: (store, input) => store.setPullRequest(input),
   }),
   ...ODT_BROWSER_TOOL_NAMES.map(defineBrowserTool),
 ] satisfies readonly OdtToolDefinition[];

@@ -24,22 +24,24 @@ const record = (
 });
 
 const liveState = (
-  activity: ReadonlyArray<[AgentSessionRecord, AgentSessionActivityState]>,
+  activity: ReadonlyArray<[AgentSessionRecord, AgentSessionActivityState, string?]>,
 ): WorkspaceSessionLiveState => ({
   kind: "ready",
   faults: new Map(),
   sessions: new Map(
-    activity.map(([session, activityState]): [string, WorkspaceSessionLiveFacts] => [
-      agentSessionIdentityKey(session),
-      {
-        activityState,
-        pendingQuestion: false,
-        pendingPermission: false,
-        pendingInputs: new Set(),
-        fault: null,
-        statusUnavailableReason: null,
-      },
-    ]),
+    activity.map(
+      ([session, activityState, statusUnavailableReason]): [string, WorkspaceSessionLiveFacts] => [
+        agentSessionIdentityKey(session),
+        {
+          activityState,
+          pendingQuestion: activityState === "waiting_input",
+          pendingPermission: false,
+          pendingInputs: new Set(),
+          fault: null,
+          statusUnavailableReason: statusUnavailableReason ?? null,
+        },
+      ],
+    ),
   ),
 });
 
@@ -86,6 +88,30 @@ describe("command palette task model", () => {
       session: { role: "build", identity: { externalSessionId: "build-1" } },
     });
   });
+
+  test.each([
+    ["running", "confirmed"],
+    ["waiting_input", "unavailable"],
+  ] as const)(
+    "uses known activity when the newest session last reported %s and status is unavailable",
+    (activity, expected) => {
+      const confirmed = record("confirmed", "spec", "2026-03-01T00:00:00.000Z");
+      const unavailable = record("unavailable", "build", "2026-03-02T00:00:00.000Z");
+      const view = buildPaletteTaskView({
+        task: inProgressTask(),
+        sessions: ready([confirmed, unavailable]),
+        live: liveState([
+          [confirmed, "running"],
+          [unavailable, activity, "The runtime did not report its status."],
+        ]),
+      });
+
+      expect(view.open).toMatchObject({
+        kind: "open_session",
+        session: { identity: { externalSessionId: expected } },
+      });
+    },
+  );
 
   test("opens the task details when the task has no session", () => {
     const view = buildPaletteTaskView({

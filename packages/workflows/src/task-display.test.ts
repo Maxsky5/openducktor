@@ -19,10 +19,8 @@ import {
   pullRequestRoleLabel,
   roleDefaultPanel,
   roleFocusArtifact,
-  taskLaunchOrder,
   taskSessionHistory,
   taskPullRequestSessions,
-  taskSurfaceLaunches,
 } from "./task-launches";
 
 const qaRejected = { qaReport: { present: true, verdict: "rejected" } };
@@ -88,6 +86,18 @@ describe("definition display fields", () => {
     });
     expect(taskActionLabel("build_start", rejected, { surface: "studio" })).toBe(
       "Address QA Feedbacks",
+    );
+  });
+
+  test("rejects launch selection when a task names a different workflow revision", () => {
+    const ready = createTaskCardFixture({ status: "ready_for_dev" });
+    const stale = {
+      ...ready,
+      workflow: { ...ready.workflow, revision: ready.workflow.revision + 1 },
+    };
+
+    expect(() => resolveWorkflowAction(stale, "build_start")).toThrow(
+      expect.objectContaining({ code: "invalid_input" }),
     );
   });
 
@@ -162,7 +172,7 @@ describe("definition display fields", () => {
 
   test("launch order rules match the pull request presence", () => {
     const withoutPullRequest = createTaskCardFixture({ status: "human_review" });
-    expect(taskLaunchOrder(withoutPullRequest)[0]).toBe("pull_request");
+    expect(withoutPullRequest.taskWorkflow.launchOrder(withoutPullRequest)[0]).toBe("pull_request");
     const withPullRequest = createTaskCardFixture({
       status: "human_review",
       pullRequest: {
@@ -175,18 +185,20 @@ describe("definition display fields", () => {
         lastSyncedAt: "2026-01-01T00:00:00.000Z",
       },
     });
-    expect(taskLaunchOrder(withPullRequest)[0]).toBe("build_after_human_request_changes");
-    expect(taskLaunchOrder(createTaskCardFixture({ status: "open" }))).toEqual([]);
+    expect(withPullRequest.taskWorkflow.launchOrder(withPullRequest)[0]).toBe(
+      "build_after_human_request_changes",
+    );
+    const open = createTaskCardFixture({ status: "open" });
+    expect(open.taskWorkflow.launchOrder(open)).toEqual([]);
   });
 
   test("surface launches need an available owning step", () => {
     const building = createTaskCardFixture({ status: "in_progress" });
-    expect(taskSurfaceLaunches(building, "git_conflict").map(({ id }) => id)).toEqual([
-      "build_rebase_conflict_resolution",
-    ]);
     expect(
-      taskSurfaceLaunches(createTaskCardFixture({ status: "closed" }), "git_conflict"),
-    ).toEqual([]);
+      building.taskWorkflow.surfaceLaunches(building, "git_conflict").map(({ id }) => id),
+    ).toEqual(["build_rebase_conflict_resolution"]);
+    const closed = createTaskCardFixture({ status: "closed" });
+    expect(closed.taskWorkflow.surfaceLaunches(closed, "git_conflict")).toEqual([]);
   });
 
   test("session history and role panels use the declared defaults", () => {

@@ -1,7 +1,6 @@
 import type { RuntimeInstanceSummary, RuntimeKind } from "@openducktor/contracts";
 import { HostValidationError, toHostOperationError } from "../../effect/host-errors";
 import { Effect } from "effect";
-import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import {
   isClaudeSessionClosed,
@@ -32,13 +31,6 @@ export const createEventGuard =
     if ("statusUnavailable" in event && event.statusUnavailable) return current === session;
     return current === session && !isClaudeSessionClosing(session);
   };
-
-export const toClaudeLiveSessionRef = (ref: AgentSessionLiveRef): AgentSessionLiveRef => ({
-  repoPath: ref.repoPath,
-  externalSessionId: ref.externalSessionId,
-  runtimeKind: ref.runtimeKind,
-  workingDirectory: ref.workingDirectory,
-});
 
 export const requireClaudeHostServiceRuntime = (
   runtime: RuntimeInstanceSummary,

@@ -1,6 +1,6 @@
 import { mapTaskMutationProgressErrors } from "../task-error-mapping";
 import { loadTaskSessions } from "../support/task-sessions";
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { workflowArtifactChange } from "../artifact-changes";

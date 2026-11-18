@@ -1,5 +1,5 @@
-import { gitTargetBranchSchema, TASK_CLOSED_STATE } from "@openducktor/contracts";
-import { validateWithSchema } from "./sqlite-task-store-validation";
+import { TASK_CLOSED_STATE } from "@openducktor/contracts";
+import { taskTargetBranchFromRow } from "./sqlite-task-store-validation";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { and, asc, desc, eq, ne, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
@@ -135,15 +135,7 @@ export const mergeCandidates = (
     const checked = rows.filter((row) => taskWorkflows.forTask(row).detectsMerge(row.status));
     return yield* Effect.forEach(checked, (row) =>
       Effect.gen(function* () {
-        const targetBranch =
-          row.targetBranch === null
-            ? undefined
-            : yield* validateWithSchema(
-                gitTargetBranchSchema,
-                { branch: row.targetBranch, remote: row.targetRemote ?? undefined },
-                "target branch",
-                { workspaceId, taskId: row.id },
-              );
+        const targetBranch = yield* taskTargetBranchFromRow(row, workspaceId);
         return { id: row.id, status: row.status, targetBranch };
       }),
     );

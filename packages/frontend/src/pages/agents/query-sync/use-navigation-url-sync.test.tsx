@@ -12,7 +12,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
-} from "./agent-studio-test-utils";
+} from "../agent-studio-test-utils";
 import { useNavigationUrlSync } from "./use-navigation-url-sync";
 
 enableReactActEnvironment();

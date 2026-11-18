@@ -4,6 +4,7 @@ import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { openClickedLink } from "@/lib/link-open";
+import type { ExternalUrlOpener } from "@/lib/open-external-url";
 import { type LinkController, createLinkController } from "./terminal-link-controller";
 import { createTerminalTheme } from "./terminal-xterm-options";
 
@@ -81,11 +82,17 @@ const reportOpenError = (_url: string, cause: unknown): void => {
 const createTerminalResources = (
   container: HTMLElement,
   options: ITerminalOptions,
+  openExternalUrl: ExternalUrlOpener,
 ): TerminalResources => {
   const links = createLinkController({
     container,
     openUrl: (url, click) =>
-      openClickedLink(url, click, { x: click.clientX, y: click.clientY, width: 0, height: 0 }),
+      openClickedLink(
+        url,
+        click,
+        { x: click.clientX, y: click.clientY, width: 0, height: 0 },
+        openExternalUrl,
+      ),
     reportOpenError,
   });
   const terminal = new Terminal({ ...options, linkHandler: links.linkHandler });
@@ -107,8 +114,9 @@ export const createTerminalBinding = (
   container: HTMLElement,
   options: ITerminalOptions,
   reportRendererFailure: (cause: Error) => void,
+  openExternalUrl: ExternalUrlOpener,
 ): TerminalBinding => {
-  let resources = createTerminalResources(container, options);
+  let resources = createTerminalResources(container, options, openExternalUrl);
   let disposeRenderer: (() => void) | undefined;
   let webglActive = false;
   let disposed = false;
@@ -126,7 +134,7 @@ export const createTerminalBinding = (
       // Failed GPU initialization can leave listeners in this emulator's services.
       // No output has entered the binding yet, so replace it with a clean standard terminal.
       resources.terminal.dispose();
-      resources = createTerminalResources(container, options);
+      resources = createTerminalResources(container, options, openExternalUrl);
       reportRendererFailure(
         new Error(
           `Terminal graphics acceleration is unavailable: ${errorMessage(cause)} Output remains available with the standard renderer. Check graphics acceleration in your browser or restart OpenDucktor.`,

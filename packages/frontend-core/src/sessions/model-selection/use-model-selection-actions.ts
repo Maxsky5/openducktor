@@ -6,12 +6,14 @@ import {
   resolveModelSelectionForProfileChange,
   resolveModelSelectionForVariantChange,
   canChangeLiveProfile,
+  findCatalogModel,
+  STANDARD_SPEED,
+  withSpeed,
 } from "@openducktor/core";
 import { useCallback, useRef } from "react";
 import type { ModelPickerValue } from "./model-picker-model";
 import { useClientConnection } from "../../connection/client-connection-react";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
-import { STANDARD_SPEED, withSpeed } from "../../lib/model-catalog-selection";
 import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import { reportModelUpdateError } from "./model-update-error";
 
@@ -19,20 +21,6 @@ type SelectionChange = (current: AgentModelSelection | null) => AgentModelSelect
 type PendingSelectionUpdates = {
   selection: AgentModelSelection | null;
   settled: Promise<void>;
-};
-
-const findSelectedCatalogModel = (
-  catalog: AgentModelCatalog | null,
-  selection: AgentModelSelection | null,
-) => {
-  if (!catalog || !selection) {
-    return null;
-  }
-  return (
-    catalog.models.find(
-      (model) => model.providerId === selection.providerId && model.modelId === selection.modelId,
-    ) ?? null
-  );
 };
 
 export const useModelSelectionActions = ({
@@ -102,7 +90,7 @@ export const useModelSelectionActions = ({
         return;
       }
       void applySelection((currentSelection) => {
-        const selectedModel = findSelectedCatalogModel(selectionCatalog, currentSelection);
+        const selectedModel = findCatalogModel(selectionCatalog, currentSelection);
         if (!canChangeLiveProfile(selectedModel, loadedSessionIdentity !== null)) {
           return null;
         }
@@ -151,7 +139,7 @@ export const useModelSelectionActions = ({
     (speed: string): Promise<void> =>
       applySelection((currentSelection) => {
         if (!currentSelection) return null;
-        const selectedModel = findSelectedCatalogModel(selectionCatalog, currentSelection);
+        const selectedModel = findCatalogModel(selectionCatalog, currentSelection);
         if (
           selectedModel &&
           speed !== STANDARD_SPEED &&
@@ -169,7 +157,7 @@ export const useModelSelectionActions = ({
   const handleSelectVariant = useCallback(
     (variant: string): Promise<void> =>
       applySelection((currentSelection) => {
-        const selectedModel = findSelectedCatalogModel(selectionCatalog, currentSelection);
+        const selectedModel = findCatalogModel(selectionCatalog, currentSelection);
         if (loadedSessionIdentity && selectedModel && !selectedModel.variants.includes(variant)) {
           return null;
         }

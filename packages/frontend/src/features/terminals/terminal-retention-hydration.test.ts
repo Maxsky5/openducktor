@@ -58,6 +58,9 @@ const mountTestViewport = (
     isActive: () => false,
     isShown: () => true,
     getPlatform: () => "darwin",
+    openExternalUrl: async () => {
+      throw new Error("No browser is available in this test.");
+    },
     stageFile: async () => "/tmp/image.png",
     preparePathInput: async () => "/tmp/image.png",
     writeClipboard: async () => undefined,

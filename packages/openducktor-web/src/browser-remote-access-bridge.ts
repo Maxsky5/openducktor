@@ -8,6 +8,7 @@ import {
 } from "@openducktor/contracts";
 import { getBrowserBackendUrl, getBrowserAuthToken } from "./browser-config";
 import { ensureLocalHostSession } from "./local-host-transport";
+import { REMOTE_ACCESS_PATH } from "./remote-access-path";
 /** `observeState` delivers the live remote access state of the local operator. */
 export const createBrowserRemoteAccessBridge = (
   observeState: (listener: (state: RemoteAccessState) => void) => Promise<() => void>,
@@ -28,7 +29,7 @@ export const createBrowserRemoteAccessBridge = (
       headers.set("content-type", "application/json");
       init.body = JSON.stringify(body);
     }
-    const response = await fetch(`${getBrowserBackendUrl()}${path}`, init);
+    const response = await fetch(`${getBrowserBackendUrl()}${REMOTE_ACCESS_PATH}${path}`, init);
     if (!response.ok) {
       const detail = await response.text();
       throw new Error(
@@ -40,22 +41,19 @@ export const createBrowserRemoteAccessBridge = (
     return value;
   };
   return {
-    readState: async () => remoteAccessStateSchema.parse(await request("/remote-access")),
-    readNetworks: async () =>
-      remoteAccessNetworksSchema.parse(await request("/remote-access/networks")),
-    enable: async (input) =>
-      remoteAccessStateSchema.parse(await request("/remote-access/enable", input)),
+    readState: async () => remoteAccessStateSchema.parse(await request("")),
+    readNetworks: async () => remoteAccessNetworksSchema.parse(await request("/networks")),
+    enable: async (input) => remoteAccessStateSchema.parse(await request("/enable", input)),
     revokeClient: async (clientId) =>
       remoteAccessStateSchema.parse(
-        await request(`/remote-access/clients/${encodeURIComponent(clientId)}/revoke`, {}),
+        await request(`/clients/${encodeURIComponent(clientId)}/revoke`, {}),
       ),
-    disable: async () => remoteAccessStateSchema.parse(await request("/remote-access/disable", {})),
+    disable: async () => remoteAccessStateSchema.parse(await request("/disable", {})),
     startPairing: async (options) =>
       remoteAccessStateSchema.parse(
-        await request("/remote-access/pairing/start", { renew: options?.renew === true }),
+        await request("/pairing/start", { renew: options?.renew === true }),
       ),
-    stopPairing: async () =>
-      remoteAccessStateSchema.parse(await request("/remote-access/pairing/stop", {})),
+    stopPairing: async () => remoteAccessStateSchema.parse(await request("/pairing/stop", {})),
     subscribeState: observeState,
   };
 };

@@ -1,6 +1,6 @@
 import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
-import { STANDARD_SPEED } from "@openducktor/frontend-core/lib/model-catalog-selection";
+import { type AgentModelSelection, STANDARD_SPEED } from "@openducktor/core";
+
 import type { SelectOption } from "@openducktor/frontend-core/lib/select-option";
 import type {
   ModelPickerRuntime,

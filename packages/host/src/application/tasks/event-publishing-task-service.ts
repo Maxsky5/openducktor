@@ -1,4 +1,4 @@
-import type { TaskChangeSet, WorkspaceRef } from "@openducktor/contracts";
+import type { TaskChangeSet } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { TaskSessionOwnershipCommittedError } from "../agent-sessions/task-session-ownership-error";
 import { removedArtifactChanges } from "./artifact-changes";
@@ -7,11 +7,7 @@ import {
   type ArtifactPublishingMethods,
 } from "./artifact-publication";
 import type { TaskSyncService } from "./sync/task-sync-service";
-import type { TaskMutationOperation } from "./task-mutation-operation";
-import {
-  TaskMutationProgressFailure,
-  TaskCreationProgressFailure,
-} from "./task-mutation-progress-failure";
+import { TaskCreationProgressFailure } from "./task-mutation-progress-failure";
 import { createMutationPublisher } from "./task-mutation-publisher";
 import type {
   TaskService,
@@ -81,43 +77,12 @@ export const createEventPublishingTaskService = ({
                   .pipe(Effect.asVoid),
               }),
       );
-  const publishMutation = createMutationPublisher({ taskSyncService });
+  const { publish: publishMutation, publishWhen } = createMutationPublisher({ taskSyncService });
 
   const publishAfterMutation = <A>(
     ...args: Parameters<typeof publishMutation<A>>
   ): Effect.Effect<A, TaskServiceError> =>
     publishMutation(...args).pipe(Effect.map(({ value }) => value));
-
-  const publishAfterConditionalMutation = <A>(
-    operation: TaskMutationOperation,
-    workspace: WorkspaceRef,
-    changes: TaskChangeSet,
-    mutation: Effect.Effect<A, TaskServiceError | TaskMutationProgressFailure>,
-    mutated: (result: A) => boolean,
-  ): Effect.Effect<A, TaskServiceError> =>
-    taskSyncService.runStatusMutation(workspace, operation, mutation, ({ result, statusChanges }) =>
-      Effect.gen(function* () {
-        if (result._tag === "Failure") {
-          if (result.failure instanceof TaskMutationProgressFailure) {
-            yield* taskSyncService.publishTasksUpdated(
-              workspace,
-              result.failure.changes,
-              operation,
-              statusChanges,
-              result.failure.failure,
-              result.failure.artifactChanges,
-            );
-            return yield* Effect.fail(result.failure.failure);
-          }
-          return yield* Effect.fail(result.failure);
-        }
-        if (!mutated(result.success)) {
-          return result.success;
-        }
-        yield* taskSyncService.publishTasksUpdated(workspace, changes, operation, statusChanges);
-        return result.success;
-      }),
-    );
 
   return {
     ...createArtifactPublishingMethods(taskService, publishMutation),
@@ -212,7 +177,7 @@ export const createEventPublishingTaskService = ({
       ),
     getApprovalContext: (input) => taskService.getApprovalContext(input),
     detectPullRequest: (input) =>
-      publishAfterConditionalMutation(
+      publishWhen(
         "detect-pull-request",
         input,
         changeForTask(input.taskId),
@@ -248,7 +213,7 @@ export const createEventPublishingTaskService = ({
         taskService.linkMergedPullRequest(input),
       ),
     directMerge: (input) =>
-      publishAfterConditionalMutation(
+      publishWhen(
         "direct-merge",
         input,
         changeForTask(input.taskId),

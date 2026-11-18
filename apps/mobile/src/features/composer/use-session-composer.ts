@@ -1,5 +1,6 @@
 import { useSessionGoalRow } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import type { AgentMessageSubmitMode } from "@openducktor/contracts";
+import { findCatalogModel } from "@openducktor/core";
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
@@ -18,10 +19,7 @@ import { useAgentChatComposerSubmit } from "@openducktor/frontend-core/sessions/
 import { useAgentStudioChatSettings } from "@openducktor/frontend-core/sessions/composer/use-agent-studio-chat-settings";
 import { useReviewCommentComposer } from "@openducktor/frontend-core/sessions/composer/use-review-comment-composer";
 import { createWorkspaceSessionChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/workspace-session-chat-draft";
-import {
-  findModelEntry,
-  findRunningTurnMessage,
-} from "@openducktor/frontend-core/sessions/model-selection/model-selection-options";
+import { findRunningTurnMessage } from "@openducktor/frontend-core/sessions/model-selection/model-selection-options";
 import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { hasOngoingWork } from "@openducktor/frontend-core/sessions/send/agent-chat-steering";
 import {
@@ -155,7 +153,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
   });
   const modelCatalog = runtimeInfo.modelCatalog;
   const selectedModelDescriptor = useMemo(
-    () => findModelEntry(modelCatalog, facts.selectedModel),
+    () => findCatalogModel(modelCatalog, facts.selectedModel),
     [facts.selectedModel, modelCatalog],
   );
   const runningTurnMessages = useMemo(

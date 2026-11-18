@@ -5,9 +5,8 @@ import {
   type AgentUserMessagePromptSubagentReference,
   type AgentUserMessageSourceText,
   normalizeAgentUserMessageParts,
+  shouldInsertSyntheticSpaceBeforePart,
 } from "@openducktor/core";
-
-const WORDLIKE_TEXT_START_PATTERN = /[\p{L}\p{N}_]/u;
 
 type OpenCodePromptSkillReference = {
   skill: AgentSkillReference;
@@ -33,22 +32,6 @@ const encodeOpenCodePartToText = (part: AgentUserMessagePart): string | null => 
   return null;
 };
 
-const shouldInsertSyntheticSpaceBeforePart = (
-  previousPart: AgentUserMessagePart | null,
-  part: AgentUserMessagePart,
-): boolean => {
-  if (!previousPart || previousPart.kind === "text") {
-    return false;
-  }
-
-  if (part.kind !== "text") {
-    return true;
-  }
-
-  const firstCharacter = part.text.at(0);
-  return firstCharacter !== undefined && WORDLIKE_TEXT_START_PATTERN.test(firstCharacter);
-};
-
 const collapseLeadingWhitespaceAfterSkippedPart = (
   existingText: string,
   nextText: string,
@@ -63,7 +46,7 @@ const collapseLeadingWhitespaceAfterSkippedPart = (
   return nextText.replace(/^\s+/u, "");
 };
 
-const buildOpenCodeMessageEncoding = (parts: AgentUserMessagePart[]) => {
+export const buildOpenCodePromptText = (parts: AgentUserMessagePart[]) => {
   const normalized = normalizeAgentUserMessageParts(parts, { preserveTextWhitespace: true });
   let text = "";
   const fileReferences: AgentUserMessagePromptFileReference[] = [];
@@ -145,19 +128,4 @@ const buildOpenCodeMessageEncoding = (parts: AgentUserMessagePart[]) => {
     subagentReferences: AgentUserMessagePromptSubagentReference[];
     skillReferences: OpenCodePromptSkillReference[];
   };
-};
-
-export const buildOpenCodeVisibleText = (parts: AgentUserMessagePart[]): string => {
-  return buildOpenCodeMessageEncoding(parts).text;
-};
-
-export const buildOpenCodePromptText = (
-  parts: AgentUserMessagePart[],
-): {
-  text: string;
-  fileReferences: AgentUserMessagePromptFileReference[];
-  subagentReferences: AgentUserMessagePromptSubagentReference[];
-  skillReferences: OpenCodePromptSkillReference[];
-} => {
-  return buildOpenCodeMessageEncoding(parts);
 };

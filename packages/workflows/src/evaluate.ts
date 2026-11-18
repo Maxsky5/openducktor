@@ -44,7 +44,6 @@ export class WorkflowEvaluationError extends Error {
 export type WorkflowPredicate = (input: WorkflowInput) => boolean;
 export type CompiledWorkflowCondition = CompiledWorkflowDefinition["steps"][number]["requiredWhen"];
 
-/** The ID types that a definition declares. */
 export type WorkflowIdsOf<Definition extends WorkflowDefinition> = {
   state: Definition["states"][number]["id"];
   event: Definition["events"][number]["id"];
@@ -74,7 +73,6 @@ export type Workflow<Ids extends WorkflowIds = WorkflowIds> = {
   ): Ids["launchAction"] | null;
   /** The default launch action of an agent step. */
   stepLaunchAction(input: WorkflowInput, stepId: Ids["step"]): Ids["launchAction"];
-  /** The launch action that an action starts. */
   actionLaunchAction(input: WorkflowInput, actionId: Ids["action"]): Ids["launchAction"];
   actionLabel(input: WorkflowInput, actionId: Ids["action"]): string;
   /**
@@ -503,11 +501,9 @@ export const createWorkflow = <const Definition extends WorkflowDefinition>(
   }
 };
 
-/** The first candidate whose selection matches, else the first candidate. */
 const selectLaunchAction = (input: WorkflowInput, candidates: LaunchCandidates): string =>
   candidates.find((candidate) => candidate.select?.(input))?.id ?? candidates[0].id;
 
-/** Ranks the leading actions first, then the declared order. */
 const rankActions = (
   lead: readonly string[],
   order: readonly string[],

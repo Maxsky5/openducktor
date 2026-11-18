@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
@@ -12,8 +12,8 @@ import {
   createTaskCleanupProgressState,
   recordStoppedAgentSessionCount,
 } from "../support/task-cleanup-progress";
+import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
-  managedWorktreeBaseForRepoConfig,
   runTaskLocalCleanup,
   selectWorkflowCleanupSessionRecords,
   taskHasSessionsForRoles,

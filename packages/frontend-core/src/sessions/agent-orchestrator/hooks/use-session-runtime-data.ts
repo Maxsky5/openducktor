@@ -16,7 +16,7 @@ import {
 } from "../../../queries/agent-session-todos";
 import { useRuntimeModelCatalogQuery } from "../../../queries/use-runtime-model-catalogs";
 import { settingsSnapshotQueryOptions } from "../../../queries/workspace";
-import { taskWorkflowContextQueryOptions } from "../../../queries/task-workflow-context";
+import { useTaskWorkflowContextQuery } from "../../../queries/task-workflow-context";
 import {
   EMPTY_SELECTED_SESSION_RUNTIME_DATA,
   type SelectedSessionRuntimeData,
@@ -155,13 +155,11 @@ function useWorkflowSessionRuntimePolicy(
     ...settingsSnapshotQueryOptions(),
     enabled: runtimePolicyTarget?.runtimeKind === "codex",
   });
-  const taskQuery = useQuery({
-    ...taskWorkflowContextQueryOptions(
-      selectedWorkspaceId && repoPath ? { workspaceId: selectedWorkspaceId, repoPath } : null,
-      selectedTaskId ?? "",
-    ),
-    enabled: runtimePolicyTarget?.runtimeKind === "codex" && !!repoPath && !!selectedTaskId,
-  });
+  const taskQuery = useTaskWorkflowContextQuery(
+    selectedWorkspaceId && repoPath ? { workspaceId: selectedWorkspaceId, repoPath } : null,
+    selectedTaskId ?? "",
+    runtimePolicyTarget?.runtimeKind === "codex" && !!repoPath && !!selectedTaskId,
+  );
   const runtimePolicyResult = useMemo(() => {
     if (!runtimePolicyTarget) {
       return { runtimePolicy: null, error: null };

@@ -43,8 +43,8 @@ export const buildTaskActivityStateByTaskId = (
     tasks.map((task) => [task.id, toKanbanTaskActivityState(taskSessionsByTaskId.get(task.id))]),
   );
 
-const getRequiredTaskActivityState = (
-  taskActivityStateByTaskId: Map<string, KanbanTaskActivityState>,
+export const getRequiredTaskActivityState = (
+  taskActivityStateByTaskId: ReadonlyMap<string, KanbanTaskActivityState>,
   taskId: string,
 ): KanbanTaskActivityState => {
   const taskActivityState = taskActivityStateByTaskId.get(taskId);

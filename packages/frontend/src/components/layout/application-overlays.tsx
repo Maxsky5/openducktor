@@ -12,10 +12,7 @@ import {
 import { FeatureTourProvider } from "@/features/feature-tour/feature-tour-context";
 import { FeatureTourDialogHost } from "@/features/feature-tour/feature-tour-dialog-host";
 import { NotificationFailurePrompt } from "@/features/notifications/notification-failure-prompt";
-import {
-  NotificationAttentionFocus,
-  NotificationNavigationRegistrar,
-} from "@/features/notifications/notification-navigation";
+import { NotificationNavigationRegistrar } from "@/features/notifications/notification-navigation";
 import { TaskWorkflowActionsProvider } from "@/features/task-workflow/task-workflow-actions-provider";
 import { useNotificationContext } from "@/state/notifications/notification-context";
 import { StartupNotifications } from "@/features/session-startup/session-startup-stack";
@@ -51,7 +48,6 @@ export function ApplicationOverlays({ children }: PropsWithChildren): ReactEleme
                 <DiffWorkerProvider>
                   <AgentSessionTranscriptDialogHost>
                     <NotificationNavigationRegistrar />
-                    <NotificationAttentionFocus />
                     {children}
                     <StartupNotifications />
                     <AppUpdatePrompt />

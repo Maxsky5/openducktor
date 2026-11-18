@@ -1,3 +1,4 @@
+import { liveSessionRefKey } from "./live-session-ref";
 import { agentSessionStatusFromActivity } from "@openducktor/core";
 import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import type { CodexLiveSessionMutation } from "@openducktor/adapters-codex-app-server";
@@ -80,7 +81,7 @@ export const createCodexLiveSessionProjection = ({
             const settlingUpserts: AgentSessionLiveAdapterChange[] = [];
             const incomingKeys = new Set<string>();
             for (const snapshot of parsed.snapshots) {
-              const key = refKey(snapshot.ref);
+              const key = liveSessionRefKey(snapshot.ref);
               incomingKeys.add(key);
               const previous = snapshotsByRef.get(key);
               snapshotsByRef.set(key, snapshot);
@@ -94,11 +95,11 @@ export const createCodexLiveSessionProjection = ({
             const removals =
               parsed.snapshotMode === "full"
                 ? [...snapshotsByRef.values()]
-                    .filter((snapshot) => !incomingKeys.has(refKey(snapshot.ref)))
+                    .filter((snapshot) => !incomingKeys.has(liveSessionRefKey(snapshot.ref)))
                     .map((snapshot) => snapshot.ref)
                 : parsed.removedRefs;
             for (const ref of removals) {
-              const key = refKey(ref);
+              const key = liveSessionRefKey(ref);
               if (snapshotsByRef.delete(key)) {
                 changes.push({ type: "session_removed", ref });
               }
@@ -265,7 +266,7 @@ export const createCodexLiveSessionProjection = ({
     recordCatalogRepository: (repoPath: string) => void catalogRepoPaths.add(repoPath),
     applyMutation,
     enqueueMutation,
-    hasSnapshot: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(refKey(ref)),
+    hasSnapshot: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(liveSessionRefKey(ref)),
     /** Lists the live sessions of every repository on this runtime. */
     listSnapshots: () =>
       Effect.forEach([...snapshotsByRef.values()], (snapshot) =>
@@ -276,7 +277,7 @@ export const createCodexLiveSessionProjection = ({
         ),
       ),
     readSnapshot: (ref: AgentSessionLiveRef) => {
-      const snapshot = snapshotsByRef.get(refKey(ref));
+      const snapshot = snapshotsByRef.get(liveSessionRefKey(ref));
       return Effect.succeed(
         snapshot && refsEqual(snapshot.ref, ref)
           ? ({ type: "live", session: snapshot } as const)
@@ -322,11 +323,8 @@ export const createCodexLiveSessionProjection = ({
   };
 };
 
-const refKey = (ref: AgentSessionLiveRef): string =>
-  [ref.repoPath, ref.runtimeKind, ref.workingDirectory, ref.externalSessionId].join("\u0000");
-
 const refsEqual = (left: AgentSessionLiveRef, right: AgentSessionLiveRef): boolean =>
-  refKey(left) === refKey(right);
+  liveSessionRefKey(left) === liveSessionRefKey(right);
 
 const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
   JSON.stringify(left) === JSON.stringify(right);

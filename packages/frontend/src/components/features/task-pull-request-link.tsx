@@ -10,7 +10,7 @@ import type { ReactElement } from "react";
 import { toast } from "sonner";
 import { badgeVariants } from "@/components/ui/badge-variants";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import {
   PULL_REQUEST_OPEN_FAILED_TITLE,
@@ -38,6 +38,7 @@ export function TaskPullRequestLink({
   pullRequest: PullRequest;
   className?: string;
 }): ReactElement {
+  const openExternalUrl = useOpenExternalUrl();
   const StatusIcon = PULL_REQUEST_STATUS_ICONS[pullRequest.state];
 
   const openPullRequest = (): void => {

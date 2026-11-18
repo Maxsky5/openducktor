@@ -27,6 +27,7 @@ import { createTerminalOptions } from "./terminal-xterm-options";
 import { restoreTerminalPrecedingJoinState } from "@openducktor/frontend-core/terminals/terminal-rep-state";
 import { createTerminalBinding } from "./shared-terminal-binding";
 import { createTerminalOutputSequencer } from "@openducktor/frontend-core/terminals/terminal-output-sequencer";
+import type { ExternalUrlOpener } from "@/lib/open-external-url";
 
 export type TerminalViewportMount = {
   activate(focus: boolean): void;
@@ -45,6 +46,7 @@ type MountTerminalViewportInput = {
   isActive: () => boolean;
   isShown: () => boolean;
   getPlatform: () => AppPlatform | undefined;
+  openExternalUrl: ExternalUrlOpener;
   stageFile: (file: File) => Promise<string>;
   preparePathInput: (paths: readonly string[]) => Promise<string>;
   writeClipboard: (text: string) => Promise<void>;
@@ -64,6 +66,7 @@ export const mountTerminalViewport = ({
   isActive,
   isShown,
   getPlatform,
+  openExternalUrl,
   stageFile,
   preparePathInput,
   writeClipboard,
@@ -86,6 +89,7 @@ export const mountTerminalViewport = ({
     container,
     createTerminalOptions(container, { cursorBlink: true }),
     (cause) => reportFailure("Terminal renderer failed", cause),
+    openExternalUrl,
   );
   const { fitAddon, terminal } = binding;
   // An exited terminal keeps its output for reading, but its process can no longer take input.

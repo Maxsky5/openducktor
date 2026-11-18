@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { reserveToasterInset } from "@/components/ui/toaster-inset";
 import { errorMessage as readErrorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import {
   type AppUpdateStateController,
@@ -31,22 +31,20 @@ const promptStatuses = new Set(["available", "downloading", "downloaded"]);
 const userCheckStatuses = new Set(["checking", "upToDate", "disabled", "error"]);
 const RELEASES_URL = "https://github.com/Maxsky5/openducktor/releases";
 
-const openReleaseUrl = (url: string, failureMessage: string): void => {
-  void openExternalUrl(url).catch((cause) => {
-    toast.error(failureMessage, {
-      description: readErrorMessage(cause),
+function useOpenReleaseUrl() {
+  const openExternalUrl = useOpenExternalUrl();
+  return (url: string, failureMessage: string): void => {
+    void openExternalUrl(url).catch((cause) => {
+      toast.error(failureMessage, { description: readErrorMessage(cause) });
     });
-  });
-};
+  };
+}
 
 const releaseNotesUrl = (version: string): string =>
   `${RELEASES_URL}/tag/v${encodeURIComponent(version)}`;
 
-const openReleaseVersion = (version: string): void => {
-  openReleaseUrl(releaseNotesUrl(version), "Failed to open the release");
-};
-
 function ReleaseNotesLink({ version }: { version: string }): ReactElement {
+  const openReleaseUrl = useOpenReleaseUrl();
   const url = releaseNotesUrl(version);
   const openLink = (event: MouseEvent<HTMLAnchorElement>): void => {
     event.preventDefault();
@@ -130,6 +128,7 @@ function AppUpdateActions({
   onDownload: () => void;
   onInstall: () => void;
 }): ReactElement {
+  const openReleaseUrl = useOpenReleaseUrl();
   // A blocked install retry offers the release page instead.
   const recoveryVersion =
     state.status === "downloaded" && state.installRetryDisabled === true
@@ -170,7 +169,7 @@ function AppUpdateActions({
           variant="accent"
           className="w-full"
           onClick={() => {
-            openReleaseVersion(recoveryVersion);
+            openReleaseUrl(releaseNotesUrl(recoveryVersion), "Failed to open the release");
           }}
         >
           <ExternalLink data-icon="inline-start" />

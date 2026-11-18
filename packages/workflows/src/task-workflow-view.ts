@@ -3,7 +3,6 @@ import {
   type IssueType,
   type SharedBoardState,
   type TaskCard,
-  type WorkflowInput,
   type WorkflowStepProjection,
   type WorkspaceWorkflowContext,
 } from "@openducktor/contracts";
@@ -27,16 +26,6 @@ export type WorkflowRoleId = string;
 export type WorkflowIssueTypeId = IssueType;
 export type WorkflowLaunchActionId = string;
 export type WorkflowDocumentCode = string;
-
-export const taskWorkflowInput = (
-  task: Pick<ResolvedTaskCard, "workflow" | "status" | "issueType" | "artifactSummary">,
-): WorkflowInput => ({
-  workflowId: task.workflow.id,
-  definitionRevision: task.workflow.revision,
-  state: task.status,
-  facts: { issueType: task.issueType },
-  artifacts: task.artifactSummary,
-});
 
 export const compareBoardTasks = (
   left: Pick<TaskCard, "id" | "priority" | "createdAt" | "updatedAt">,

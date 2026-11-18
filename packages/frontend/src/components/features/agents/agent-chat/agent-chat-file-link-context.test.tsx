@@ -1,3 +1,4 @@
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import { expect, mock, test } from "bun:test";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import type { HostClient } from "@openducktor/host-client";
@@ -222,9 +223,8 @@ for (const [href, workingDirectory, message] of invalidChatFileDestinations) {
   test(`malformed destination reports its target and cause: ${href}`, async () => {
     const { spyOn } = await import("bun:test");
     const { toast } = await import("sonner");
-    const external = await import("@/lib/open-external-url");
     const error = spyOn(toast, "error").mockReturnValue("error");
-    const openExternal = spyOn(external, "openExternalUrl").mockResolvedValue();
+    const openExternal = mock(async (_url: string) => {});
     const connection = createTestClientConnection({ client: defaultHost });
     const client = connection.queryClient;
     client.setQueryData(
@@ -234,19 +234,22 @@ for (const [href, workingDirectory, message] of invalidChatFileDestinations) {
     );
     const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
     const view = render(
-      <ClientConnectionProvider connection={connection}>
-        <ChatFileLinkProvider
-          owner={{
-            workspaceId: "workspace-1",
-            repoPath: "/repo",
-            taskId: "a",
-            ownerKey: "main",
-            onSelectFile,
-          }}
-        >
-          <AgentChatMarkdownRenderer markdown={`[file](${href})`} />
-        </ChatFileLinkProvider>
-      </ClientConnectionProvider>,
+      withShellPlatform(
+        <ClientConnectionProvider connection={connection}>
+          <ChatFileLinkProvider
+            owner={{
+              workspaceId: "workspace-1",
+              repoPath: "/repo",
+              taskId: "a",
+              ownerKey: "main",
+              onSelectFile,
+            }}
+          >
+            <AgentChatMarkdownRenderer markdown={`[file](${href})`} />
+          </ChatFileLinkProvider>
+        </ClientConnectionProvider>,
+        createShellBridgeFixture({ bridge: { openExternalUrl: openExternal } }),
+      ),
     );
     try {
       await act(async () => fireEvent.click(view.getByRole("link")));
@@ -258,7 +261,6 @@ for (const [href, workingDirectory, message] of invalidChatFileDestinations) {
       view.unmount();
       client.clear();
       error.mockRestore();
-      openExternal.mockRestore();
     }
   });
 }
@@ -383,10 +385,9 @@ for (const [path, rootPath, relativePath] of validChatFileDestinations) {
   for (const suffix of chatFileLinkSuffixes) {
     test(`link activation selects the exact workspace path: ${path}${suffix}`, async () => {
       const { spyOn } = await import("bun:test");
-      const external = await import("@/lib/open-external-url");
       const { toast } = await import("sonner");
       const error = spyOn(toast, "error").mockReturnValue("error");
-      const openExternal = spyOn(external, "openExternalUrl").mockResolvedValue();
+      const openExternal = mock(async (_url: string) => {});
       const connection = createTestClientConnection({ client: defaultHost });
       const client = connection.queryClient;
       client.setQueryData(
@@ -396,20 +397,23 @@ for (const [path, rootPath, relativePath] of validChatFileDestinations) {
       );
       const onSelectFile = mock<ChatFileLinkOwner["onSelectFile"]>(() => {});
       const view = render(
-        <ClientConnectionProvider connection={connection}>
-          <ChatFileLinkProvider
-            owner={{
-              workspaceId: "workspace-1",
-              repoPath: "C:/repo",
-              taskId: "a",
-              workingDirectory: rootPath,
-              ownerKey: "main",
-              onSelectFile,
-            }}
-          >
-            <AgentChatMarkdownRenderer markdown={`[file](${path}${suffix})`} />
-          </ChatFileLinkProvider>
-        </ClientConnectionProvider>,
+        withShellPlatform(
+          <ClientConnectionProvider connection={connection}>
+            <ChatFileLinkProvider
+              owner={{
+                workspaceId: "workspace-1",
+                repoPath: "C:/repo",
+                taskId: "a",
+                workingDirectory: rootPath,
+                ownerKey: "main",
+                onSelectFile,
+              }}
+            >
+              <AgentChatMarkdownRenderer markdown={`[file](${path}${suffix})`} />
+            </ChatFileLinkProvider>
+          </ClientConnectionProvider>,
+          createShellBridgeFixture({ bridge: { openExternalUrl: openExternal } }),
+        ),
       );
       try {
         await act(async () => fireEvent.click(view.getByRole("link")));
@@ -420,7 +424,6 @@ for (const [path, rootPath, relativePath] of validChatFileDestinations) {
       } finally {
         view.unmount();
         client.clear();
-        openExternal.mockRestore();
         error.mockRestore();
       }
     });

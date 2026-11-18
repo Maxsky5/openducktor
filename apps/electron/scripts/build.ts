@@ -2,6 +2,10 @@ import { cp } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanDirectory, runCommand } from "@openducktor/build-tools";
+import {
+  type SqliteMigrationCopyPlan,
+  sqliteMigrationCopyPlans,
+} from "@openducktor/host/sqlite-migration-assets";
 import { Effect } from "effect";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
@@ -12,7 +16,6 @@ import {
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
-const workspaceRoot = resolve(packageRoot, "../..");
 
 type CopySqliteMigrationsErrorDetails = { readonly targetDirectory: string };
 type ElectronBuildCommandErrorDetails = {
@@ -20,30 +23,7 @@ type ElectronBuildCommandErrorDetails = {
   readonly label: string;
 };
 
-export type SqliteMigrationCopyPlan = {
-  sourceDirectory: string;
-  targetDirectory: string;
-};
-
-export const resolveSqliteMigrationCopyPlans = ({
-  electronPackageRoot,
-  workspaceRoot,
-}: {
-  electronPackageRoot: string;
-  workspaceRoot: string;
-}): SqliteMigrationCopyPlan[] =>
-  ["drizzle", "drizzle-host"].map((folder) => ({
-    sourceDirectory: join(workspaceRoot, "packages", "host", "src", "adapters", "sqlite", folder),
-    targetDirectory: join(electronPackageRoot, "dist", folder),
-  }));
-
-export const copySqliteMigrations = ({
-  sourceDirectory,
-  targetDirectory,
-}: SqliteMigrationCopyPlan): Promise<void> =>
-  runElectronEffect(copySqliteMigrationsEffect({ sourceDirectory, targetDirectory }));
-
-export const copySqliteMigrationsEffect = ({
+const copySqliteMigrationsEffect = ({
   sourceDirectory,
   targetDirectory,
 }: SqliteMigrationCopyPlan): Effect.Effect<
@@ -60,6 +40,11 @@ export const copySqliteMigrationsEffect = ({
         cause,
         details: { targetDirectory },
       }),
+  });
+
+export const copyElectronSqliteMigrationsEffect = () =>
+  Effect.forEach(sqliteMigrationCopyPlans(join(packageRoot, "dist")), copySqliteMigrationsEffect, {
+    discard: true,
   });
 
 const runBuildCommandEffect = (
@@ -107,11 +92,7 @@ export const buildElectronPackageEffect = (): Effect.Effect<
       ],
       { concurrency: "unbounded" },
     );
-    yield* Effect.forEach(
-      resolveSqliteMigrationCopyPlans({ electronPackageRoot: packageRoot, workspaceRoot }),
-      copySqliteMigrationsEffect,
-      { discard: true },
-    );
+    yield* copyElectronSqliteMigrationsEffect();
   });
 
 export const buildElectronPackage = (): Promise<void> =>

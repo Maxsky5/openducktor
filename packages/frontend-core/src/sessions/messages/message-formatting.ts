@@ -3,11 +3,8 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { agentModelInfoParts } from "../../lib/agent-model-presentation";
 import { isFinalAssistantChatMessage } from "../agent-orchestrator/support/messages";
-import { SYSTEM_PROMPT_PREFIX } from "../agent-orchestrator/support/session-prompt";
 import type { AgentChatMessage } from "../../types/agent-orchestrator";
 import { stripToolPrefix } from "./tool-text-utils";
-
-export { SYSTEM_PROMPT_PREFIX };
 
 const MESSAGE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   hour: "2-digit",

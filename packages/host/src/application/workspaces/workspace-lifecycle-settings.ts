@@ -7,6 +7,7 @@ import {
   type WorkspaceRemovalRecord,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { workspaceLifecyclePathChange } from "../../domain/workspace-scope";
 import { HostValidationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import {
@@ -200,12 +201,10 @@ const requireWorkspace = (
   expectedRepoPath?: string,
 ): RepoConfig => {
   const workspace = requireConfiguredWorkspace(config, workspaceId);
-  if (expectedRepoPath !== undefined && workspace.repoPath !== expectedRepoPath)
-    throw new HostValidationError({
-      field: "repoPath",
-      message: `Workspace ${workspaceId} changed since the dialog opened. Reload workspaces and retry.`,
-      details: { expectedRepoPath, actualRepoPath: workspace.repoPath },
-    });
+  if (expectedRepoPath !== undefined) {
+    const change = workspaceLifecyclePathChange(workspace, expectedRepoPath);
+    if (change) throw change;
+  }
   return workspace;
 };
 

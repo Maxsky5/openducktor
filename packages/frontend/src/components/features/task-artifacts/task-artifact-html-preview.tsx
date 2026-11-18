@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ArtifactPreviewEnvironment } from "@openducktor/contracts";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import { z } from "zod";
 
 const previewMessageSchema = z.strictObject({
@@ -14,30 +14,29 @@ type PreviewState =
   | { status: "error"; message: string };
 
 export function TaskArtifactHtmlPreview({ html, name }: { html: string; name: string }) {
+  const { getArtifactPreviewEnvironment } = useShellPlatform();
   const [state, setState] = useState<PreviewState>({ status: "loading" });
   useEffect(() => {
     let current = true;
-    void getShellBridge()
-      .getArtifactPreviewEnvironment()
-      .then(
-        (environment) => {
-          if (current) setState({ status: "environment", environment });
-        },
-        (cause: unknown) => {
-          if (current)
-            setState({
-              status: "error",
-              message:
-                cause instanceof Error
-                  ? cause.message
-                  : "Cannot check HTML preview isolation. Reopen the artifact to try again.",
-            });
-        },
-      );
+    void getArtifactPreviewEnvironment().then(
+      (environment) => {
+        if (current) setState({ status: "environment", environment });
+      },
+      (cause: unknown) => {
+        if (current)
+          setState({
+            status: "error",
+            message:
+              cause instanceof Error
+                ? cause.message
+                : "Cannot check HTML preview isolation. Reopen the artifact to try again.",
+          });
+      },
+    );
     return () => {
       current = false;
     };
-  }, []);
+  }, [getArtifactPreviewEnvironment]);
 
   let preview;
   if (state.status === "loading") {

@@ -2,10 +2,10 @@ import {
   encodeHostChannelFrame,
   type HostEventChannel,
   type HostEventEnvelope,
+  hostEventStreamEventName,
   parseHostEventChannel,
 } from "@openducktor/contracts";
 import type { HostEventBusPort, HostEventListener, HostEventUnsubscribe } from "@openducktor/host";
-import { hostEventStreamEventName } from "@openducktor/host-client";
 import { WebResourceError } from "./effect/web-errors";
 
 /** A host event, retained as the host channel frame that every channel sends. */
@@ -16,7 +16,7 @@ export type BufferedHostEvent = {
 };
 export type BufferedHostEventReplay = {
   events: BufferedHostEvent[];
-  /** SSE event names whose missed events are no longer retained. */
+  /** Event names whose missed events are no longer retained. */
   gaps: string[];
 };
 export type BufferedHostEventDeliveryReporter = {
@@ -36,7 +36,7 @@ const DEFAULT_REPLAY_LIMITS: ReplayLimits = {
 };
 
 /**
- * Retains recent host events for SSE reconnects. Each SSE event name has its own buffer, so a busy
+ * Retains recent host events for channel reconnects. Each event name has its own buffer, so a busy
  * repository or channel cannot evict the events of another one until all buffers reach
  * `totalBytes`.
  */

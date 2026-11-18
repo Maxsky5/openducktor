@@ -17,6 +17,7 @@ import type {
   TaskStorePort,
 } from "../../../ports/task-repository-ports";
 import { blockUnpublishedDirectMerge } from "./direct-merge-block";
+import { managedWorktreeRoots } from "../../git/managed-worktree-roots";
 
 /**
  * Commits the transition of a workflow event. Every workflow event commits here, so a local direct
@@ -37,7 +38,6 @@ export const commitWorkflowEvent = <E>(
     });
   });
 
-/** Adds the workflow projection to stored tasks. */
 export const enrichTasks = (
   taskWorkflows: TaskWorkflowResolver,
   tasks: readonly TaskRecord[],
@@ -56,7 +56,7 @@ export const validateAgentSessionWorkingDirectory = (
   session: AgentSessionRecord,
 ) =>
   Effect.gen(function* () {
-    const { repoPath, workspaceId } = workspace;
+    const { repoPath } = workspace;
     const canonicalRepoPath = yield* canonicalizeRequiredPath(
       settingsConfig,
       repoPath,
@@ -70,27 +70,9 @@ export const validateAgentSessionWorkingDirectory = (
     if (pathStartsWith(canonicalWorkingDirectory, canonicalRepoPath)) {
       return;
     }
-    const canonicalEffectiveWorktreeBase = yield* tryCanonicalizePath(
-      settingsConfig,
-      workspace.worktreeBasePath === undefined
-        ? settingsConfig.defaultWorktreeBasePath(workspaceId)
-        : settingsConfig.resolveConfiguredPath(workspace.worktreeBasePath),
-    );
-    if (
-      canonicalEffectiveWorktreeBase &&
-      pathStartsWith(canonicalWorkingDirectory, canonicalEffectiveWorktreeBase)
-    ) {
-      return;
-    }
-    const canonicalRepoDefaultWorktreeBase = yield* tryCanonicalizePath(
-      settingsConfig,
-      settingsConfig.defaultRepoWorktreeBasePath(canonicalRepoPath),
-    );
-    if (
-      canonicalRepoDefaultWorktreeBase &&
-      pathStartsWith(canonicalWorkingDirectory, canonicalRepoDefaultWorktreeBase)
-    ) {
-      return;
+    for (const root of managedWorktreeRoots(settingsConfig, workspace, canonicalRepoPath)) {
+      const canonicalRoot = yield* tryCanonicalizePath(settingsConfig, root);
+      if (canonicalRoot && pathStartsWith(canonicalWorkingDirectory, canonicalRoot)) return;
     }
     return yield* Effect.fail(
       new HostValidationError({

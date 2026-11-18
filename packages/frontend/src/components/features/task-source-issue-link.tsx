@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { badgeVariants } from "@/components/ui/badge-variants";
 import { sourceIssueLabel } from "@openducktor/frontend-core/git/git-provider-label";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 
 export function TaskSourceIssueLink({
@@ -15,6 +15,7 @@ export function TaskSourceIssueLink({
   sourceIssue: SourceIssueReference;
   className?: string;
 }): ReactElement {
+  const openExternalUrl = useOpenExternalUrl();
   return (
     <button
       type="button"

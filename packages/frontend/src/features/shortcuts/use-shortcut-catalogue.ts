@@ -6,11 +6,16 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { workflowCatalogQueryOptions } from "@openducktor/frontend-core/queries/workflows";
+import { useShellPlatform } from "@/lib/shell-platform";
 import {
   SHORTCUT_COMMANDS,
   type ShortcutCommandDefinition,
+  type ShortcutShell,
   workflowCommandDefinition,
 } from "./catalogue";
+
+export const useShortcutShell = (): ShortcutShell =>
+  useShellPlatform().browser.surface === "electron" ? "electron" : "browser";
 
 /** Built-in commands, the workflow actions of this host, and saved unavailable workflow keys. */
 export function useShortcutCatalogue(

@@ -21,7 +21,10 @@ export type OdtTaskStoreDeps = {
 };
 
 type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Name]>;
-type WorkspaceScopedToolName = WorkspaceScopedOdtToolName;
+export type PlainWorkspaceToolName = Exclude<
+  WorkspaceTaskToolName,
+  "odt_set_task_artifact" | "odt_delete_task_artifact" | "odt_apply_workflow_event"
+>;
 
 export class OdtTaskStore {
   readonly workspaceId: string | undefined;
@@ -37,8 +40,8 @@ export class OdtTaskStore {
   }
 
   private resolveWorkspaceId(
-    toolName: WorkspaceScopedToolName,
-    input: Pick<ToolInput<WorkspaceScopedToolName>, "workspaceId">,
+    toolName: WorkspaceScopedOdtToolName,
+    input: Pick<ToolInput<WorkspaceScopedOdtToolName>, "workspaceId">,
   ): string {
     const workspaceId = input.workspaceId ?? this.workspaceId;
     if (workspaceId) {
@@ -52,7 +55,7 @@ export class OdtTaskStore {
     });
   }
 
-  private async executeWorkspaceScoped<Name extends WorkspaceTaskToolName>(
+  async callWorkspaceTask<Name extends PlainWorkspaceToolName>(
     toolName: Name,
     input: ToolInput<Name>,
   ) {
@@ -71,20 +74,8 @@ export class OdtTaskStore {
     return this.client.callBrowserTool(toolName, workspaceId, input, caller);
   }
 
-  async getWorkspaces(_input: ToolInput<"odt_get_workspaces">) {
+  async getWorkspaces() {
     return this.client.getWorkspaces();
-  }
-
-  async readTask(input: ToolInput<"odt_read_task">) {
-    return this.executeWorkspaceScoped("odt_read_task", input);
-  }
-
-  async readTaskAssets(input: ToolInput<"odt_read_task_assets">) {
-    return this.executeWorkspaceScoped("odt_read_task_assets", input);
-  }
-
-  async readTaskArtifacts(input: ToolInput<"odt_read_task_artifacts">) {
-    return this.executeWorkspaceScoped("odt_read_task_artifacts", input);
   }
 
   async setTaskArtifact(input: ToolInput<"odt_set_task_artifact">, meta?: RequestMeta) {
@@ -104,26 +95,10 @@ export class OdtTaskStore {
     return this.client.call("odt_delete_task_artifact", workspaceId, input, caller);
   }
 
-  async updateTask(input: ToolInput<"odt_update_task">) {
-    return this.executeWorkspaceScoped("odt_update_task", input);
-  }
-
-  async createTask(input: ToolInput<"odt_create_task">) {
-    return this.executeWorkspaceScoped("odt_create_task", input);
-  }
-
-  async searchTasks(input: ToolInput<"odt_search_tasks">) {
-    return this.executeWorkspaceScoped("odt_search_tasks", input);
-  }
-
   async applyWorkflowEvent(input: ToolInput<"odt_apply_workflow_event">, meta?: RequestMeta) {
     const caller = this.callerSource ? resolveNativeCaller(this.callerSource, meta) : undefined;
     const workspaceId = this.resolveWorkspaceId("odt_apply_workflow_event", input);
     return this.client.call("odt_apply_workflow_event", workspaceId, input, caller);
-  }
-
-  async setPullRequest(input: ToolInput<"odt_set_pull_request">) {
-    return this.executeWorkspaceScoped("odt_set_pull_request", input);
   }
 }
 

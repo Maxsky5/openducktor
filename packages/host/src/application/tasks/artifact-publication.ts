@@ -44,7 +44,7 @@ export type ArtifactPublishingMethods = Pick<
 
 export const createArtifactPublishingMethods = (
   taskService: TaskServiceWithMutationProgress,
-  publishMutation: ReturnType<typeof createMutationPublisher>,
+  publishMutation: ReturnType<typeof createMutationPublisher>["publish"],
 ): ArtifactPublishingMethods => {
   const publishArtifactSave = (
     operation: "create-artifact" | "rename-artifact" | "replace-artifact",

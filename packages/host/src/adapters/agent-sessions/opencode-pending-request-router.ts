@@ -1,3 +1,4 @@
+import { liveSessionRefKey, toLiveSessionRef } from "./live-session-ref";
 import {
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
@@ -7,7 +8,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentPendingApprovalRequest, AgentPendingQuestionRequest } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
-import { refKey, refsEqual, toSessionRef } from "./opencode-live-session-normalization";
+import { refsEqual } from "./opencode-live-session-normalization";
 
 export type OpenCodePendingRoute = {
   readonly occurrenceId: string;
@@ -32,7 +33,7 @@ const nativeRouteKey = (
   ref: AgentSessionLiveRef,
   kind: OpenCodePendingRoute["kind"],
   nativeRequestId: string,
-): string => `${refKey(ref)}\u0000${kind}\u0000${nativeRequestId}`;
+): string => `${liveSessionRefKey(ref)}\u0000${kind}\u0000${nativeRequestId}`;
 
 export const createOpenCodePendingRequestRouter = ({
   runtimeId,
@@ -52,7 +53,7 @@ export const createOpenCodePendingRequestRouter = ({
       occurrenceId,
       nativeRequestId,
       kind,
-      ref: toSessionRef(ref),
+      ref: toLiveSessionRef(ref),
     };
   };
 

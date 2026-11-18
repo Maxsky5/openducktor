@@ -6,7 +6,7 @@ import type {
   TaskRecordData,
 } from "@openducktor/contracts";
 import { TASK_CLOSED_STATE, workflowActionSurfaceSchema } from "@openducktor/contracts";
-import { taskWorkflowInput, type ResolvedTaskCard } from "./task-workflow-view";
+import type { ResolvedTaskCard } from "./task-workflow-view";
 import type { TaskWorkflow } from "./task-workflow/task-workflow";
 
 export type TaskWorkflowAction = string;
@@ -100,7 +100,7 @@ export const taskReviewRejection = (
 export const isReviewRejectedTask = (task: ResolvedTaskCard | null | undefined): boolean =>
   taskReviewRejection(task) !== null;
 export const taskNeedsInput = (task: ResolvedTaskCard): boolean =>
-  task.taskWorkflow.needsInput(taskWorkflowInput(task));
+  task.taskWorkflow.needsInput(task);
 
 type ResolveTaskCardActionsOptions = {
   include?: readonly string[] | undefined;
@@ -113,7 +113,6 @@ export const resolveTaskCardActions = (
   task: ResolvedTaskCard,
   options: ResolveTaskCardActionsOptions = {},
 ) => {
-  const { evaluator } = task.taskWorkflow;
   const surface = options.surface ?? "kanban";
   const declared = task.taskWorkflow;
   // A task without a session page has no session to open, so it shows no session view action.
@@ -141,7 +140,7 @@ export const resolveTaskCardActions = (
   const ahead = options.hasActiveSession
     ? [...activeViews, ...views.map(({ action }) => action)]
     : undefined;
-  const ordered = evaluator.orderActions(taskWorkflowInput(task), [...new Set(enabled)], ahead);
+  const ordered = declared.orderActions(task, [...new Set(enabled)], ahead);
   const primaryAction = ordered[0] ?? null;
   return { primaryAction, secondaryActions: ordered.slice(1), allActions: ordered };
 };
@@ -150,8 +149,7 @@ export const taskActionLabel = (
   task: ResolvedTaskCard,
   options: { surface?: WorkflowActionSurface } = {},
 ): string => {
-  const { evaluator } = task.taskWorkflow;
-  const label = evaluator.actionLabel(taskWorkflowInput(task), action);
+  const label = task.taskWorkflow.actionLabel(task, action);
   const declaration = task.taskWorkflow.action(action);
   return options.surface === "studio" &&
     declaration.studioLabel !== undefined &&
@@ -197,7 +195,7 @@ export const resolveWorkflowAction = (
   if (action.kind === "session")
     return {
       kind: "session",
-      launchActionId: task.taskWorkflow.evaluator.actionLaunchAction(taskWorkflowInput(task), id),
+      launchActionId: task.taskWorkflow.actionLaunchAction(task, id),
     };
   if (action.kind === "approval") return { kind: "approval" };
   const launchActionIds = action.launchActionIds ?? [];

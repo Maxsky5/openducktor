@@ -572,6 +572,25 @@ describe("createEventPublishingTaskService", () => {
     ).resolves.toBe(failure);
     expect(events).toEqual([]);
   });
+  test("returns a pull request detection result without publishing when no link changes", async () => {
+    const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
+    const result = {
+      outcome: "not_found" as const,
+      sourceBranch: "odt/task-1",
+      targetBranch: "main",
+    };
+    const service = createEventPublishingTaskService({
+      taskService: fakeTaskService({ detectPullRequest: () => Effect.succeed(result) }),
+      taskSyncService: sync(events),
+    });
+
+    const detected = await Effect.runPromise(
+      service.detectPullRequest({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+    );
+
+    expect(detected).toEqual(result);
+    expect(events).toEqual([]);
+  });
   test("does not publish when pull request detection fails", async () => {
     const events: Array<{ changes: { taskIds: string[]; removedTaskIds: string[] } }> = [];
     const failure = new HostOperationError({

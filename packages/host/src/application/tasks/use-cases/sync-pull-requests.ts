@@ -1,5 +1,5 @@
 import { pullRequestRecordsMatch } from "../support/pull-request-records-match";
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { requirePullRequestProviderMatch } from "../../pull-requests/pull-request-provider-match";
 import {

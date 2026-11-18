@@ -957,12 +957,17 @@ describe("host-owned Workspace Session lifecycle", () => {
       // Enable OpenCode through a saved settings change.
       await Effect.runPromise(
         orchestrator.withSettingsChange(["opencode"], (session) =>
-          session.apply(
-            planSettingsChange(
-              testRuntimeSettings(),
-              testRuntimeSettings({ opencode: "opencode" }),
-            ),
-          ),
+          Effect.gen(function* () {
+            const check = yield* session.check(
+              planSettingsChange(
+                testRuntimeSettings(),
+                testRuntimeSettings({ opencode: "opencode" }),
+              ),
+              undefined,
+            );
+            if (check.type !== "accepted") throw new Error("Expected an accepted settings change.");
+            yield* check.apply;
+          }),
         ),
       );
       const created = await Effect.runPromise(service.start(ref));

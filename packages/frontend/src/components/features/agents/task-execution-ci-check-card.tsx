@@ -11,7 +11,7 @@ import {
 import type { MouseEvent, ReactElement } from "react";
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { cn } from "@/lib/utils";
 import {
   checkBadgeVariant,
@@ -35,19 +35,19 @@ const CHECK_TEXT_CLASS_BY_VARIANT = {
   warning: "text-warning-muted",
 } as const;
 
-const openCheckUrl = (url: string): void => {
-  void openExternalUrl(url).catch((error) => {
-    toast.error("Failed to open check", {
-      description: errorMessage(error),
-    });
-  });
-};
-
 export function TaskExecutionCiCheckCard({
   check,
 }: {
   check: PullRequestReviewCheck;
 }): ReactElement {
+  const openExternalUrl = useOpenExternalUrl();
+  const openCheckUrl = (url: string): void => {
+    void openExternalUrl(url).catch((error) => {
+      toast.error("Failed to open check", {
+        description: errorMessage(error),
+      });
+    });
+  };
   const variant = checkBadgeVariant(check);
   const StatusIcon = CHECK_ICON_BY_VARIANT[variant];
   const label = checkLabel(check);

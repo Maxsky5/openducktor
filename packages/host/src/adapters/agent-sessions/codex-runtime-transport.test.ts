@@ -12,9 +12,10 @@ import { HostOperationError } from "../../effect/host-errors";
 import { CodexAppServerRpcError } from "../../ports/codex-app-server-port";
 import { CodexSessionHistoryError } from "../../ports/codex-session-history-error";
 import { createCodexRuntimeTransport } from "./codex-runtime-transport";
-import { createRuntimeQueryAdapter, toRuntimeQueryError } from "./runtime-query-adapter";
+import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import { createCodexAppServerTransportRegistry } from "../codex/codex-app-server-transport-registry";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
+import { unexpectedNativeRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 
 const createTransportWithRequest = (
   request: Parameters<typeof createCodexRuntimeTransport>[0]["request"],
@@ -30,6 +31,27 @@ const createTransportWithRequest = (
     "private-runtime",
   );
 
+const readHistoryFailure = (cause: unknown) => {
+  const query = createRuntimeQueryAdapter({
+    ...unexpectedNativeRuntimeQueries,
+    loadSessionHistory: () => Promise.reject(cause),
+  });
+  return Effect.runPromise(
+    Effect.flip(
+      query.loadSessionHistory({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+        externalSessionId: "thread-1",
+        runtimePolicy: {
+          kind: "codex",
+          policy: { ...DEFAULT_CODEX_RUNTIME_POLICY, approvalsReviewerApplies: true },
+        },
+      }),
+    ),
+  );
+};
+
 test("an actual missing-transport failure keeps native identity inside the host", async () => {
   const registry = createCodexAppServerTransportRegistry();
   const error = await Effect.runPromise(
@@ -41,13 +63,7 @@ test("an actual missing-transport failure keeps native identity inside the host"
     ),
   );
   expect(error.failure.detail).toContain("private-runtime-repro");
-  const failure = hostInvokeFailureFromError(
-    toRuntimeQueryError(
-      "load session history",
-      { repoPath: "/repo", runtimeKind: "codex", externalSessionId: "thread-1" },
-      error,
-    ),
-  );
+  const failure = hostInvokeFailureFromError(await readHistoryFailure(error));
   expect(failure).toMatchObject({
     kind: "runtime_query",
     runtimeQueryFailure: {
@@ -93,11 +109,7 @@ test("host-native Codex queries preserve paged history diagnostics", async () =>
   };
   await expect(transport.request(request)).rejects.toBe(error);
   expect(listThreadTurns).toHaveBeenCalledWith({ runtimeId: "private-runtime", ...request.params });
-  const queryError = toRuntimeQueryError(
-    "load session history",
-    { repoPath: "/repo", runtimeKind: "codex", externalSessionId: "thread-1" },
-    error,
-  );
+  const queryError = await readHistoryFailure(error);
   expect(queryError.failure.sessionHistoryFailure).toMatchObject({
     code: failure.code,
     method: failure.method,
@@ -127,10 +139,18 @@ test("reports a dead Codex transport as an unreachable runtime", async () => {
 
   expect(error).toBeInstanceOf(AgentRuntimeQueryError);
   expect(error).toMatchObject({ code: "runtime_unavailable" });
-  const queryError = toRuntimeQueryError(
-    "load runtime catalog",
-    { repoPath: "/repo", runtimeKind: "codex", workingDirectory: "/repo" },
-    error,
+  const query = createRuntimeQueryAdapter({
+    ...unexpectedNativeRuntimeQueries,
+    loadRuntimeCatalog: () => Promise.reject(error),
+  });
+  const queryError = await Effect.runPromise(
+    Effect.flip(
+      query.loadRuntimeCatalog({
+        repoPath: "/repo",
+        runtimeKind: "codex",
+        workingDirectory: "/repo",
+      }),
+    ),
   );
   expect(queryError.failure.code).toBe("runtime_unavailable");
   expect(JSON.stringify(queryError.failure)).not.toContain("private-runtime");

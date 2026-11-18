@@ -4,7 +4,7 @@ import {
 } from "./claude-pending-approval-resolution";
 import { createClaudeSessionImportAdapter } from "./claude-session-import";
 import { withForkedSessionCleanup } from "./forked-session-cleanup";
-import { createClaudeRuntimeQueryAdapter } from "./claude-runtime-query-adapter";
+import { createClaudeRuntimeQueryAdapter } from "./runtime-query-adapter";
 import {
   unsupportedGeneratedImageSource,
   unsupportedGeneratedImageOperations,
@@ -60,8 +60,8 @@ import {
   createEventGuard,
   requireClaudeHostServiceRuntime,
   createClaudeRequiredSession,
-  toClaudeLiveSessionRef,
 } from "./claude-live-session-runtime-guards";
+import { toLiveSessionRef } from "./live-session-ref";
 
 export type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 export { createClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
@@ -123,7 +123,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                 {
                   type: "fault",
                   repoPath: session.input.repoPath,
-                  ref: toClaudeLiveSessionRef({
+                  ref: toLiveSessionRef({
                     ...session.input,
                     externalSessionId: session.externalSessionId,
                   }),
@@ -248,7 +248,10 @@ export const createClaudeLiveSessionAdapterPreparer =
           service,
           runtime.runtimeId,
           (repoPath, attach) =>
-            runSummary("claude-live-session.import", repoPath, attach, { keepActivity: true }),
+            runSummary("claude-live-session.import", repoPath, attach, {
+              keepActivity: true,
+              provenance: "baseline",
+            }),
         ),
         queries: createClaudeRuntimeQueryAdapter(service),
         ...unsupportedGeneratedImageOperations,
@@ -375,7 +378,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         continueInterruptedTurn: (input) =>
           Effect.suspend(() => {
             const operation = "claude-live-session.continue-interrupted-turn";
-            const sessionRef = toClaudeLiveSessionRef(input);
+            const sessionRef = toLiveSessionRef(input);
             let continuationAdmitted = false;
             return requireSessionWorkingDirectory(input, "continue-interrupted-turn").pipe(
               Effect.flatMap(() =>

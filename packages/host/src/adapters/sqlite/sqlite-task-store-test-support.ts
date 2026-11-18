@@ -21,7 +21,7 @@ import {
 } from "./sqlite-task-repository-context";
 import type { OpenHostDatabaseConnection } from "./sqlite-host-database-connection";
 import { ensureSchema } from "./sqlite-host-database-migrations";
-import { legacyMigrationsFolder } from "./sqlite-legacy-task-store-migrations";
+import { legacyMigrationsFolder } from "./sqlite-migration-assets";
 import { createSqliteTaskOwnershipReader } from "./sqlite-workspace-ownership-reads";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { importHostSharedConfig } from "./sqlite-host-settings-store";

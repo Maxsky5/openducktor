@@ -11,7 +11,7 @@ import { refreshWorkspaceFileQueries } from "@openducktor/frontend-core/queries/
 import {
   type UseAgentsPageRightPanelModelArgs,
   useAgentsPageRightPanelModel,
-} from "../use-agents-page-right-panel-model";
+} from "../right-panel/use-agents-page-right-panel-model";
 import type {
   AgentStudioBuildWorktreeRefreshModel,
   AgentStudioSelectedFileRefreshModel,

@@ -5,7 +5,7 @@ import type {
 } from "@openducktor/frontend-core/platform/device-file";
 import type { HostClient } from "@openducktor/host-client";
 import { readFileAsBase64 } from "./read-file-as-base64";
-import { getShellBridge } from "./shell-bridge";
+import type { ShellPlatform } from "./shell-bridge";
 import type { ResourceData } from "@/types/resource-source";
 
 /** In the browser, every device file reference of a composer attachment is a `File`. */
@@ -38,6 +38,7 @@ export const createBrowserAttachmentStager =
 export const resolveLocalAttachmentPreview = async (
   path: string,
   signal: AbortSignal,
+  readPreview: ShellPlatform["resolveLocalAttachmentPreview"],
 ): Promise<ResourceData> => {
   signal.throwIfAborted();
   const trimmedPath = path.trim();
@@ -48,5 +49,5 @@ export const resolveLocalAttachmentPreview = async (
     return { kind: "url", src: trimmedPath };
   }
 
-  return getShellBridge().resolveLocalAttachmentPreview(trimmedPath, signal);
+  return readPreview(trimmedPath, signal);
 };

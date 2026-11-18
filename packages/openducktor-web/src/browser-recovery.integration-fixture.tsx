@@ -46,8 +46,8 @@ const { createTestClientConnection } =
   await import("@openducktor/frontend-core/test-support/test-client-connection");
 const { ClientConnectionProvider } =
   await import("@openducktor/frontend-core/connection/client-connection-react");
-const { configureShellBridge, createUnavailableShellBridge } =
-  await import("@openducktor/frontend/lib/shell-bridge");
+const { createUnavailableShellBridge } = await import("@openducktor/frontend/lib/shell-bridge");
+const { ShellPlatformContext } = await import("@openducktor/frontend/lib/shell-platform");
 const { HostRuntimeStatusProvider } =
   await import("@openducktor/frontend-core/app-state/providers/host-runtime-status-provider");
 const { AutopilotProvider } = await import("../../frontend/src/state/providers/autopilot-provider");
@@ -243,7 +243,6 @@ try {
       queryClient,
     });
     const clientConnection = createTestClientConnection({ host: bridge, queryClient });
-    configureShellBridge(bridge);
     const connection = bridge.remoteConnection!;
     const controller = createTerminalTransportController(bridge.terminals, () => {});
     let view: ReturnType<typeof render> | undefined;
@@ -251,52 +250,54 @@ try {
       await waitFor(() => assert.equal(connection.readState().status, "connected"));
       await act(async () => {
         view = render(
-          <ClientConnectionProvider connection={clientConnection}>
-            <WorkspaceStateContext
-              value={fixtures.createWorkspaceStateFixture({
-                activeWorkspace: workspace,
-                workspaces: [workspace],
-              })}
-            >
-              <AgentOperationsContext value={createAgentOperationsFixture()}>
-                <NotificationContext
-                  value={{
-                    deliveryFailure: null,
-                    getCapability: async () => ({
-                      platform: "browser",
-                      supported: false,
-                      permission: "not_applicable",
-                      canGuaranteeSilent: false,
-                      canOpenSystemSettings: false,
-                    }),
-                    requestPermission: async () => {
-                      throw new Error("Unexpected permission request.");
-                    },
-                    openSystemSettings: async () => {},
-                    previewCue: async () => {},
-                    testInApp: async () => {},
-                    testOs: async () => ({ status: "shown" }),
-                    registerNavigator: () => () => {},
-                    sessionStartNotifications: {
-                      publishSessionStarted: () => {},
-                      publishSessionError: async () => true,
-                      markInAppFeedbackHandled: () => {},
-                      reportFailure: () => {},
-                    },
-                  }}
-                >
-                  <HostRuntimeStatusProvider>
-                    <AutopilotProvider>
-                      <RemoteConnectionBoundary connection={connection}>
-                        <RuntimeState />
-                      </RemoteConnectionBoundary>
-                      <Toaster />
-                    </AutopilotProvider>
-                  </HostRuntimeStatusProvider>
-                </NotificationContext>
-              </AgentOperationsContext>
-            </WorkspaceStateContext>
-          </ClientConnectionProvider>,
+          <ShellPlatformContext value={bridge}>
+            <ClientConnectionProvider connection={clientConnection}>
+              <WorkspaceStateContext
+                value={fixtures.createWorkspaceStateFixture({
+                  activeWorkspace: workspace,
+                  workspaces: [workspace],
+                })}
+              >
+                <AgentOperationsContext value={createAgentOperationsFixture()}>
+                  <NotificationContext
+                    value={{
+                      deliveryFailure: null,
+                      getCapability: async () => ({
+                        platform: "browser",
+                        supported: false,
+                        permission: "not_applicable",
+                        canGuaranteeSilent: false,
+                        canOpenSystemSettings: false,
+                      }),
+                      requestPermission: async () => {
+                        throw new Error("Unexpected permission request.");
+                      },
+                      openSystemSettings: async () => {},
+                      previewCue: async () => {},
+                      testInApp: async () => {},
+                      testOs: async () => ({ status: "shown" }),
+                      registerNavigator: () => () => {},
+                      sessionStartNotifications: {
+                        publishSessionStarted: () => {},
+                        publishSessionError: async () => true,
+                        markInAppFeedbackHandled: () => {},
+                        reportFailure: () => {},
+                      },
+                    }}
+                  >
+                    <HostRuntimeStatusProvider>
+                      <AutopilotProvider>
+                        <RemoteConnectionBoundary connection={connection}>
+                          <RuntimeState />
+                        </RemoteConnectionBoundary>
+                        <Toaster />
+                      </AutopilotProvider>
+                    </HostRuntimeStatusProvider>
+                  </NotificationContext>
+                </AgentOperationsContext>
+              </WorkspaceStateContext>
+            </ClientConnectionProvider>
+          </ShellPlatformContext>,
         );
       });
       await waitFor(() => {
@@ -426,7 +427,6 @@ try {
       });
       bridge.notifications.dispose();
       await clientConnection.dispose();
-      configureShellBridge(createUnavailableShellBridge());
     }
   }
 } finally {

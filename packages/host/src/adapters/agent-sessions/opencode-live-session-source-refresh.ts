@@ -1,3 +1,4 @@
+import { liveSessionRefKey } from "./live-session-ref";
 import { agentSessionTranscriptEventSchema } from "@openducktor/contracts";
 import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import type {
@@ -10,7 +11,7 @@ import type {
   AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
-import { refKey, toContextUsage } from "./opencode-live-session-normalization";
+import { toContextUsage } from "./opencode-live-session-normalization";
 import type {
   OpenCodePendingRequestRouter,
   StagedOpenCodeRequest,
@@ -80,7 +81,7 @@ export const applyOpenCodeSessionSources = ({
       workingDirectory: source.workingDirectory,
       externalSessionId: source.externalSessionId,
     };
-    seenKeys.add(refKey(ref));
+    seenKeys.add(liveSessionRefKey(ref));
     const scope = readScope(ref);
     if (scope === "none") {
       continue;
@@ -144,7 +145,7 @@ export const applyOpenCodeSessionSources = ({
   const childrenByParent = new Map<string, AgentSessionLiveRef[]>();
   for (const { snapshot } of sessions.values()) {
     if (snapshot.ref.repoPath !== repoPath || !snapshot.parentExternalSessionId) continue;
-    const parentKey = refKey({
+    const parentKey = liveSessionRefKey({
       ...snapshot.ref,
       externalSessionId: snapshot.parentExternalSessionId,
     });
@@ -159,14 +160,14 @@ export const applyOpenCodeSessionSources = ({
       workingDirectory: failure.workingDirectory,
       externalSessionId: failure.externalSessionId,
     };
-    const failureKey = refKey(ref);
+    const failureKey = liveSessionRefKey(ref);
     const message = `Failed to refresh OpenCode session '${failure.externalSessionId}' in '${failure.workingDirectory}': ${failure.message}`;
     // A failed ancestor leaves unread descendants unknown. Keep their snapshots and pending
     // input. A source or live status confirmed during the read still takes priority.
     const unreadRefs = [ref];
     const visited = new Set<string>();
     for (const unreadRef of unreadRefs) {
-      const key = refKey(unreadRef);
+      const key = liveSessionRefKey(unreadRef);
       if (visited.has(key)) continue;
       visited.add(key);
       unreadRefs.push(...(childrenByParent.get(key) ?? []));
@@ -194,7 +195,7 @@ export const applyOpenCodeSessionSources = ({
   const missingSessions = [...sessions.values()].filter(
     ({ snapshot }) =>
       snapshot.ref.repoPath === repoPath &&
-      !seenKeys.has(refKey(snapshot.ref)) &&
+      !seenKeys.has(liveSessionRefKey(snapshot.ref)) &&
       readScope(snapshot.ref) === "session",
   );
   for (const { snapshot } of missingSessions) {

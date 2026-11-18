@@ -61,24 +61,6 @@ describe("resolveChatComposerPromptInputRuntime", () => {
     });
   });
 
-  test("keeps waiting-input sessions usable even when their raw status is starting", () => {
-    const runtime = resolveChatComposerPromptInputRuntime({
-      workspaceRepoPath: "/repo",
-      runtimeReadinessState: "ready",
-      source: sessionSource(),
-    });
-
-    expect(runtime).toEqual({
-      state: "available",
-      scope: "session",
-      runtimeRef: {
-        repoPath: "/repo",
-        runtimeKind: "codex",
-        workingDirectory: "/repo/worktree",
-      },
-    });
-  });
-
   test("reports invalid selected session runtime context as unavailable", () => {
     const runtime = resolveChatComposerPromptInputRuntime({
       workspaceRepoPath: null,

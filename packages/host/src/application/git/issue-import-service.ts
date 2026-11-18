@@ -1,5 +1,5 @@
 import { TASK_OPEN_STATE } from "@openducktor/contracts";
-import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
+import { getScopedRepoConfig } from "../workspaces/scoped-repo-config";
 import type {
   IssueItemsImportInput,
   IssueItemsImportResult,

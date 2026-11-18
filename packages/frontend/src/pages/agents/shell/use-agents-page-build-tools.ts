@@ -1,4 +1,5 @@
 import { taskGitConflictLaunch } from "@openducktor/workflows";
+import type { GitCurrentBranch } from "@openducktor/contracts";
 import { useMemo } from "react";
 import type { BuildToolsSelectedView } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-bootstrap";
 import {
@@ -6,10 +7,8 @@ import {
   useAgentStudioBuildToolsWorktreeSnapshot,
 } from "@/features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot";
 import { collectUnmergedFilePaths } from "@openducktor/frontend-core/git/model/unmerged-file-paths";
-import type { useWorkspaceState } from "@/state";
 import type { ActiveWorkspace, RepoSettingsInput } from "@/types/state-slices";
 import { useAgentStudioGitActions } from "../use-agent-studio-git-actions";
-import type { useAgentStudioRepoSettings } from "../use-agent-studio-repo-settings";
 
 export type AgentsPageBuildTools = {
   buildToolsSnapshot: AgentStudioBuildToolsWorktreeSnapshot;
@@ -32,14 +31,14 @@ export function useAgentsPageBuildTools({
   onResolveGitConflict,
 }: {
   activeWorkspace: ActiveWorkspace | null;
-  activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
+  activeBranch: GitCurrentBranch | null;
   selectedView: BuildToolsSelectedView;
   /** True while the Diffs tab is selected in the shown right panel. */
   isDiffsActive: boolean;
   isPanelOpen: boolean;
   repoSettings: RepoSettingsInput | null;
-  repoSettingsError: ReturnType<typeof useAgentStudioRepoSettings>["repoSettingsError"];
-  loadRepoSettings: ReturnType<typeof useAgentStudioRepoSettings>["loadRepoSettings"];
+  repoSettingsError: Error | null;
+  loadRepoSettings: () => Promise<RepoSettingsInput>;
   onResolveGitConflict: Parameters<typeof useAgentStudioGitActions>[0]["onResolveGitConflict"];
 }): AgentsPageBuildTools {
   const workspaceRepoPath = activeWorkspace?.repoPath ?? null;

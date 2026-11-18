@@ -10,6 +10,7 @@ const DialogOpenContext = createContext<boolean | null>(null);
 export function DialogRoot({
   open,
   defaultOpen,
+  modal = true,
   onOpenChange,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -18,12 +19,13 @@ export function DialogRoot({
   const isOpen = useContext(DialogEnabledContext) && (open ?? internalOpen);
   useEffect(() => {
     if (!isOpen) return;
-    return trackOpenDialog(registration);
-  }, [isOpen, registration]);
+    return trackOpenDialog(registration, modal);
+  }, [isOpen, modal, registration]);
   return (
     <DialogOpenContext.Provider value={isOpen}>
       <DialogPrimitive.Root
         {...props}
+        modal={modal}
         open={isOpen}
         onOpenChange={(nextOpen) => {
           if (open === undefined) setInternalOpen(nextOpen);

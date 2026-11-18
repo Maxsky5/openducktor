@@ -6,25 +6,20 @@ import { WebHostRequestError } from "./effect/web-errors";
 const TASK_ASSET_PATH_PATTERN = /^\/task-assets\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/;
 
 type TaskAssetHttpServerContext = {
-  appToken: string;
+  authorize: Effect.Effect<void, WebHostRequestError>;
   corsHeaders: HeadersInit;
   request: Request;
   taskAssetReadService: TaskAssetReadService;
-  validateAppSessionCookie: (
-    request: Request,
-    expectedToken: string,
-  ) => Effect.Effect<void, WebHostRequestError>;
 };
 
 const reject = (message: string, status: number): Effect.Effect<never, WebHostRequestError> =>
   Effect.fail(new WebHostRequestError({ message, status }));
 
 export const routeTaskAssetHttpRequest = ({
-  appToken,
+  authorize,
   corsHeaders,
   request,
   taskAssetReadService,
-  validateAppSessionCookie,
 }: TaskAssetHttpServerContext): Effect.Effect<Response | null, WebHostRequestError> =>
   Effect.gen(function* () {
     const taskAssetMatch = TASK_ASSET_PATH_PATTERN.exec(new URL(request.url).pathname);
@@ -32,7 +27,7 @@ export const routeTaskAssetHttpRequest = ({
       return null;
     }
 
-    yield* validateAppSessionCookie(request, appToken);
+    yield* authorize;
     const [, workspaceId = "", taskId = "", scope = "", assetId = ""] = taskAssetMatch;
     const parsedContext = taskAssetRenderContextSchema.safeParse({
       workspaceId,

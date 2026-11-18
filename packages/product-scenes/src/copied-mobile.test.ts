@@ -60,10 +60,6 @@ const { tabBarEdgePath } = await importProduct<{ tabBarEdgePath: (width: number)
 const { approvalMutationLabel } = await importProduct<{
   approvalMutationLabel: (mutation: "unknown") => string | null;
 }>("apps/mobile/src/features/session/pending-input/permission-reply-options.ts");
-// SAFETY: needs-you.ts exports this function.
-const { needsYouBadgeText } = await importProduct<{ needsYouBadgeText: (count: number) => string }>(
-  "apps/mobile/src/navigation/tab-bar/needs-you.ts",
-);
 
 // The setup screens have their words in their markup, so the test reads the product source as
 // text.
@@ -85,8 +81,6 @@ describe("the mobile app copied in the replicas", () => {
       expect(view.label).toBe(SESSION_GROUP_LABELS[view.group] ?? "");
     }
     expect(Object.values(ATTENTION_REASON_LABELS)).toContain("Permission");
-    const needsYou = navGroupViews(PHONE_SESSIONS).find((view) => view.group === "needs_you");
-    expect(needsYouBadgeText(needsYou?.count ?? 0)).toBe("1");
   });
 
   test("the tab bar has the cradle of the app at the width of the phone", () => {

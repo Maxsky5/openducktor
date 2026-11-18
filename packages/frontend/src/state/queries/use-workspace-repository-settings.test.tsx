@@ -1,16 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RepoConfig, RepositoryGitProviderContext } from "@openducktor/contracts";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
+import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { createDeferred, createGitProviderContextFixture } from "@/test-utils/shared-test-fixtures";
-import {
-  createHookHarness as createSharedHookHarness,
-  enableReactActEnvironment,
-} from "./agent-studio-test-utils";
-import { useAgentStudioRepoSettings } from "./use-agent-studio-repo-settings";
+import { QueryProvider } from "@/test-utils/query-provider";
+import { useWorkspaceRepositorySettings } from "./use-workspace-repository-settings";
 
 enableReactActEnvironment();
 
-type HookArgs = Parameters<typeof useAgentStudioRepoSettings>[0];
+type HookArgs = Parameters<typeof useWorkspaceRepositorySettings>[0];
 
 const createRepoConfig = (overrides: Partial<RepoConfig> = {}): RepoConfig => ({
   workspaceId: "repo",
@@ -43,12 +42,14 @@ const createRepoConfigHost = (
 const createHookHarness = (
   initialProps: HookArgs,
   hostClient: ReturnType<typeof createRepoConfigHost>,
-) =>
-  createSharedHookHarness(useAgentStudioRepoSettings, initialProps, {
-    connection: createTestClientConnection({ client: hostClient }),
+) => {
+  const connection = createTestClientConnection({ client: hostClient });
+  return createSharedHookHarness(useWorkspaceRepositorySettings, initialProps, {
+    wrapper: ({ children }) => <QueryProvider connection={connection}>{children}</QueryProvider>,
   });
+};
 
-describe("useAgentStudioRepoSettings", () => {
+describe("useWorkspaceRepositorySettings", () => {
   test("exposes repo settings loading while the canonical config query is pending", async () => {
     const config = createDeferred<RepoConfig>();
     const hostClient = createRepoConfigHost(() => config.promise);

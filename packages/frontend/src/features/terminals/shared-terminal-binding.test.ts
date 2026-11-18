@@ -3,7 +3,18 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { Terminal } from "@xterm/xterm";
-import { createTerminalBinding } from "./shared-terminal-binding";
+import { createTerminalBinding as bindTerminal } from "./shared-terminal-binding";
+
+const createTerminalBinding = (
+  ...input: [
+    container: Parameters<typeof bindTerminal>[0],
+    options: Parameters<typeof bindTerminal>[1],
+    reportRendererFailure: Parameters<typeof bindTerminal>[2],
+  ]
+) =>
+  bindTerminal(...input, async () => {
+    throw new Error("No browser is available in this test.");
+  });
 import { createTerminalOptions } from "./terminal-xterm-options";
 
 if (globalThis.document === undefined) GlobalRegistrator.register();

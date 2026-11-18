@@ -17,7 +17,6 @@ import {
   isToolMessageCancelled,
   isToolMessageFailure,
   roleLabel,
-  SYSTEM_PROMPT_PREFIX,
   stripToolPrefix,
   toSingleLineMarkdown,
 } from "./agent-chat-message-card-model";
@@ -44,10 +43,6 @@ const createMessage = (overrides: Partial<AgentChatMessage> = {}): AgentChatMess
 });
 
 describe("agent-chat-message-card-model", () => {
-  test("exports system prompt prefix constant", () => {
-    expect(SYSTEM_PROMPT_PREFIX).toBe("System prompt:\n\n");
-  });
-
   describe("formatting helpers", () => {
     test("formats time and returns empty string for invalid timestamps", () => {
       const timestamp = "2026-02-22T10:00:00.000Z";

@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  buildOpenCodePromptText,
-  buildOpenCodeVisibleText,
-} from "./opencode-user-message-encoding";
+import { buildOpenCodePromptText } from "./opencode-user-message-encoding";
 
 const FIRST_FILE = {
   id: "file-a",
@@ -50,7 +47,6 @@ describe("opencode-user-message-encoding", () => {
       { kind: "file_reference" as const, file: SECOND_FILE },
     ];
 
-    expect(buildOpenCodeVisibleText(parts)).toBe("@src/a.ts @src/b.ts");
     expect(buildOpenCodePromptText(parts)).toEqual({
       text: "@src/a.ts @src/b.ts",
       fileReferences: [

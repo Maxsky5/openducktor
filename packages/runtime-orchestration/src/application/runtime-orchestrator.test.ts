@@ -256,8 +256,9 @@ describe("runtime orchestrator", () => {
     const applied = await Effect.runPromise(
       harness.orchestrator.withSettingsChange(["codex"], (session) =>
         Effect.gen(function* () {
-          expect(yield* session.check(enable, undefined)).toEqual({ type: "accepted" });
-          return yield* session.apply(enable);
+          const checked = yield* session.check(enable, undefined);
+          if (checked.type !== "accepted") throw new Error("Expected an accepted settings change.");
+          return yield* checked.apply;
         }),
       ),
     );

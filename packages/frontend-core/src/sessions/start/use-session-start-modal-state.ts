@@ -1,11 +1,12 @@
 import { supportsTaskTargetBranchSelection } from "@openducktor/workflows";
 import type { GitBranch, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type {
-  AgentModelCatalog,
-  AgentModelSelection,
-  AgentRuntimeCatalog,
-  AgentSessionStartMode,
-  RuntimeWorkingDirectoryRef,
+import {
+  type AgentModelCatalog,
+  type AgentModelSelection,
+  type AgentRuntimeCatalog,
+  type AgentSessionStartMode,
+  type RuntimeWorkingDirectoryRef,
+  findCatalogModel,
 } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { toPrimaryAgentOptions } from "../model-selection/catalog-select-options";
@@ -285,18 +286,10 @@ export function useSessionStartModalState({
     [handleSelectStartMode],
   );
 
-  const selectedModelEntry = useMemo(() => {
-    if (!catalog || !visibleSelection) {
-      return null;
-    }
-    return (
-      catalog.models.find(
-        (entry) =>
-          entry.providerId === visibleSelection.providerId &&
-          entry.modelId === visibleSelection.modelId,
-      ) ?? null
-    );
-  }, [catalog, visibleSelection]);
+  const selectedModelEntry = useMemo(
+    () => findCatalogModel(catalog, visibleSelection),
+    [catalog, visibleSelection],
+  );
 
   const runtimeProfileOptions = useMemo<SelectOption[]>(() => {
     const options = toPrimaryAgentOptions(catalog);

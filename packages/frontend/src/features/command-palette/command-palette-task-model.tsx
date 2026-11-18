@@ -9,10 +9,7 @@ import {
 } from "@openducktor/workflows";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Copy, History, PanelRightOpen, Pencil, Trash2 } from "lucide-react";
-import {
-  type KanbanTaskSession,
-  toKanbanTaskActivityState,
-} from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
+import { toKanbanTaskActivityState } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import {
   getTaskFooter,
   type WorkflowPendingState,
@@ -30,6 +27,10 @@ import type { WorkspaceSessionLiveState } from "@openducktor/frontend-core/works
 import { roleIconForHint } from "@/lib/agent-role-presentation";
 import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import {
+  type AgentSessionOptionSummary,
+  resolveLatestTaskSession,
+} from "@openducktor/frontend-core/lib/agent-session-options";
 import {
   type SessionNavigationRead,
   sessionLiveFactsOf,
@@ -103,7 +104,10 @@ export const buildPaletteTaskView = ({
     surface: "palette",
   });
   const { primaryAction, allActions } = footer.actions;
-  const latest = latestTaskSession(liveSessions, records);
+  const latestSession = resolveLatestTaskSession(liveSessions, records);
+  const latest = latestSession
+    ? { role: latestSession.role, identity: toAgentSessionIdentity(latestSession) }
+    : null;
   const sessionOptionsByRole: PaletteTaskView["sessionOptionsByRole"] = {};
   const sessionActions: PaletteTaskAction[] = [];
   for (const { role, label, options } of footer.sessions) {
@@ -165,12 +169,12 @@ type TaskSessionsRead = SessionNavigationRead<AgentSessionRecord[]> | undefined;
 const liveTaskSessions = (
   records: readonly AgentSessionRecord[],
   live: WorkspaceSessionLiveState,
-): KanbanTaskSession[] => {
+): AgentSessionOptionSummary[] => {
   if (live.kind !== "ready") return [];
   return records
-    .flatMap((record): KanbanTaskSession[] => {
+    .flatMap((record): AgentSessionOptionSummary[] => {
       const { facts, statusFailure } = sessionLiveFactsOf(live, record);
-      if (!facts || statusFailure !== null || !isAgentSessionActivityActive(facts.activityState)) {
+      if (!facts || !isAgentSessionActivityActive(facts.activityState, statusFailure)) {
         return [];
       }
       return [
@@ -179,38 +183,11 @@ const liveTaskSessions = (
           role: record.role,
           startedAt: record.startedAt,
           activityState: facts.activityState,
+          statusUnavailableReason: statusFailure,
         },
       ];
     })
     .sort(compareActiveSessionForPrimary);
-};
-
-/** The live session that started last, else the saved session of any role that started last. */
-const latestTaskSession = (
-  liveSessions: readonly KanbanTaskSession[],
-  records: readonly AgentSessionRecord[],
-): TaskSessionTarget | null => {
-  let latestLive: KanbanTaskSession | null = null;
-  for (const session of liveSessions) {
-    if (
-      !latestLive ||
-      (session.startedAt === undefined ? -Infinity : Date.parse(session.startedAt)) >
-        (latestLive.startedAt === undefined ? -Infinity : Date.parse(latestLive.startedAt))
-    ) {
-      latestLive = session;
-    }
-  }
-  if (latestLive) {
-    return { role: latestLive.role, identity: toAgentSessionIdentity(latestLive) };
-  }
-  let latestRecord: AgentSessionRecord | null = null;
-  for (const record of records) {
-    if (!latestRecord || Date.parse(record.startedAt) > Date.parse(latestRecord.startedAt))
-      latestRecord = record;
-  }
-  return latestRecord
-    ? { role: latestRecord.role, identity: toAgentSessionIdentity(latestRecord) }
-    : null;
 };
 
 /** Keep the order of each part and put the destructive actions at the end. */

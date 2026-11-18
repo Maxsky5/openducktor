@@ -12,6 +12,7 @@ import {
   type Visitor,
 } from "lightningcss";
 import { SCENE_STYLES_DIR } from "../config/site";
+import { BRAND_MARK_SVG } from "../lib/brand-mark";
 
 const app = new URL("../", import.meta.url);
 const publicDir = new URL("public/", app);
@@ -140,13 +141,13 @@ async function bundleSceneStyles(): Promise<void> {
 export async function prepareAssets(): Promise<void> {
   await mkdir(publicDir, { recursive: true });
   const copies: [string, URL][] = [
-    ["favicon.svg", new URL("../../packages/frontend/src/assets/openducktor-mark.svg", app)],
     ["space-grotesk-license.txt", new URL("@fontsource-variable/space-grotesk/LICENSE", modules)],
     ["ibm-plex-mono-license.txt", new URL("@fontsource/ibm-plex-mono/LICENSE", modules)],
     ["lucide-license.txt", new URL("lucide-react/LICENSE", modules)],
   ];
   await Promise.all([
     ...copies.map(([name, from]) => copyFile(from, new URL(name, publicDir))),
+    writeFile(new URL("favicon.svg", publicDir), BRAND_MARK_SVG),
     bundleSceneStyles(),
   ]);
 }

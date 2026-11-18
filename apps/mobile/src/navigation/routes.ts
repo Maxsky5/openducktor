@@ -1,4 +1,10 @@
 import type { HumanReviewFeedbackRequest } from "@openducktor/frontend-core/tasks/workflow/human-review-feedback-types";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import type { WorkflowLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
+import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { ChangedFileGroup } from "@/features/review/changes-model";
+import type { ChangesFocus } from "@/features/review/changes-view-state";
+
 type RequestChangesParams = {
   workspaceId: string;
   taskId: string;
@@ -7,20 +13,13 @@ type RequestChangesParams = {
   launch?: string;
   continuation?: string;
 };
-import type { WorkflowLaunchActionId as SessionLaunchActionId } from "@openducktor/workflows";
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
-import type { ChangedFileGroup } from "@/features/review/changes-model";
-import type { ChangesFocus } from "@/features/review/changes-view-state";
 
 /**
  * Typed route builders. The root screen of each tab lives in the stack of its tab. Sessions,
  * tasks, and work views are pushed on the app stack above the tabs, so they cover the tab bar.
  */
-export type SessionRouteParams = {
+export type SessionRouteParams = AgentSessionIdentity & {
   workspaceId: string;
-  externalSessionId: string;
-  runtimeKind: string;
-  workingDirectory: string;
   /** Opens a Subagent session as a Read-only Session View. */
   readOnly?: "1";
   /** Scrolls to the pending input of the session. */
@@ -34,21 +33,14 @@ export type SessionRouteParams = {
 /** The owner of work views: a task, or a chat (Workspace Session). */
 export type WorkOwnerParams =
   | { workspaceId: string; taskId: string }
-  | {
-      workspaceId: string;
-      externalSessionId: string;
-      runtimeKind: string;
-      workingDirectory: string;
-    };
+  | (AgentSessionIdentity & { workspaceId: string });
 
 export const sessionParams = (
   workspaceId: string,
   identity: AgentSessionIdentity,
 ): SessionRouteParams => ({
   workspaceId,
-  externalSessionId: identity.externalSessionId,
-  runtimeKind: identity.runtimeKind,
-  workingDirectory: identity.workingDirectory,
+  ...toAgentSessionIdentity(identity),
 });
 
 /**
@@ -81,9 +73,7 @@ export const routes = {
     ({
       pathname: "/tool-call",
       params: {
-        externalSessionId: identity.externalSessionId,
-        runtimeKind: identity.runtimeKind,
-        workingDirectory: identity.workingDirectory,
+        ...toAgentSessionIdentity(identity),
         messageId,
         title,
       },
@@ -168,7 +158,4 @@ export const routes = {
 export type StartSessionSheetAction = string;
 
 /** The session whose message options the composer options sheet changes. */
-export type ComposerOptionsParams = Pick<
-  SessionRouteParams,
-  "workspaceId" | "externalSessionId" | "runtimeKind" | "workingDirectory"
->;
+export type ComposerOptionsParams = AgentSessionIdentity & { workspaceId: string };

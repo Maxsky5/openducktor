@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import {
   gitlabAccountsQueryOptionsOrSkip,
   gitlabConnectionStatusQueryOptionsOrSkip,
@@ -67,6 +67,7 @@ export function useGitlabAccountController({
   fromSavedSettings,
   onLink,
 }: UseGitlabAccountControllerInput) {
+  const openExternalUrl = useOpenExternalUrl();
   const queryClient = useQueryClient();
   const instanceUrl = enabled ? gitlabDraftInstanceUrl(draft) : null;
   const accountsQuery = useQuery(gitlabAccountsQueryOptionsOrSkip(instanceUrl));

@@ -2,6 +2,7 @@ import {
   type AgentModelCatalog,
   type AgentModelSelection,
   canChangeLiveProfile,
+  findCatalogModel,
 } from "@openducktor/core";
 import { toPrimaryAgentOptions } from "./catalog-select-options";
 import type { SelectOption } from "../../lib/select-option";
@@ -22,7 +23,7 @@ export const resolveModelSelectionOptions = ({
   selectionCatalog: AgentModelCatalog | null;
   selectedModelSelection: AgentModelSelection | null;
 }): ModelSelectionOptions => {
-  const selectedModelEntry = findModelEntry(selectionCatalog, selectedModelSelection);
+  const selectedModelEntry = findCatalogModel(selectionCatalog, selectedModelSelection);
   const profileOptions = toAgentProfileOptions(
     selectionCatalog,
     selectedModelSelection,
@@ -39,20 +40,6 @@ export const resolveModelSelectionOptions = ({
         })),
     variantOptions: toVariantOptions(selectedModelEntry, selectedModelSelection, liveSession),
   };
-};
-
-export const findModelEntry = (
-  selectionCatalog: AgentModelCatalog | null,
-  model: Pick<AgentModelSelection, "providerId" | "modelId"> | null,
-): AgentModelCatalog["models"][number] | null => {
-  if (!selectionCatalog || !model) {
-    return null;
-  }
-  return (
-    selectionCatalog.models.find(
-      (entry) => entry.providerId === model.providerId && entry.modelId === model.modelId,
-    ) ?? null
-  );
 };
 
 type RunningTurnMessage = AgentChatMessage & {
@@ -81,10 +68,7 @@ export const findRunningTurnModelEntry = (
   selectionCatalog: AgentModelCatalog | null,
   messages: readonly AgentChatMessage[],
 ): AgentModelCatalog["models"][number] | null => {
-  const meta = findRunningTurnMessage(messages)?.meta;
-  return meta
-    ? findModelEntry(selectionCatalog, { providerId: meta.providerId, modelId: meta.modelId })
-    : null;
+  return findCatalogModel(selectionCatalog, findRunningTurnMessage(messages)?.meta);
 };
 
 const toAgentProfileOptions = (

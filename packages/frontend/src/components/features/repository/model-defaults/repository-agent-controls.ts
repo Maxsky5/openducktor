@@ -1,9 +1,9 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import { type AgentModelCatalog, resolveSavedModelAlias } from "@openducktor/core";
 import { toPrimaryAgentOptions } from "@openducktor/frontend-core/sessions/model-selection/catalog-select-options";
 import type { ModelPickerValue } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import type { ComboboxOption } from "@/components/ui/combobox";
-import { resolveSavedModelAlias } from "@openducktor/frontend-core/lib/model-catalog-selection";
+
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
 import { selectedModelKey, toVariantOptionsForModelKey } from "./model-defaults-model";
 

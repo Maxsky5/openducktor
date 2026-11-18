@@ -14,7 +14,6 @@ import os from "node:os";
 import {
   REMOTE_BASELINE_CAPABILITIES,
   REMOTE_CONNECTION_HEADER,
-  HOST_CHANNEL_HEARTBEAT_INTERVAL_MS,
   HOST_CHANNEL_SUBPROTOCOL,
   TERMINAL_PROTOCOL_SUBPROTOCOL,
   TERMINAL_PROTOCOL_VERSION,
@@ -41,7 +40,7 @@ import { hostWebSocketHandler } from "./host-websocket-handler";
 import { openRemoteChannelClient } from "./host-channel.test-support";
 import { createRemoteAccessController } from "./remote-access-controller";
 import { createHostCommandLifetime } from "./host-command-lifetime";
-import { holdIntervals, holdTimeouts } from "./timers.test-support";
+import { holdTimeouts } from "./timers.test-support";
 
 afterAll(removeFakeShell);
 const hello: RemoteConnectionRequest = {
@@ -968,22 +967,6 @@ test("ending the listener leaves accepted channel work under the host command li
     expect(drained).toBe(true);
   } finally {
     release();
-    await f.close();
-  }
-});
-
-test("keeps an idle channel busy with heartbeat messages", async () => {
-  const f = await fixture();
-  const heartbeats = holdIntervals(HOST_CHANNEL_HEARTBEAT_INTERVAL_MS);
-  try {
-    const channel = await f.channel((await f.negotiate()).result.connectionId);
-    await channel.request({ method: "events.open", cursor: null, notificationCursor: null });
-    // With no host event, only the heartbeat keeps messages on the channel.
-    for (const beat of heartbeats.held.values()) beat();
-    expect((await channel.next("heartbeat")).header).toEqual({ type: "heartbeat" });
-    await channel.close();
-  } finally {
-    heartbeats.restore();
     await f.close();
   }
 });

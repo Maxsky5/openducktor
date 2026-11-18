@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import {
   closeLinkMenu,
   inAppLinkTarget,
@@ -130,13 +131,14 @@ function ChoiceButton({
   keys: string[];
   disabledReason: string | null;
 }): ReactElement {
+  const openExternalUrl = useOpenExternalUrl();
   return (
     <button
       type="button"
       disabled={disabledReason !== null}
       className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm text-foreground outline-none hover:bg-accent focus-visible:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
       onClick={() =>
-        void openLink(url, choice).catch((cause: unknown) =>
+        void openLink(url, choice, openExternalUrl).catch((cause: unknown) =>
           toast.error("Could not open the link", { description: errorMessage(cause) }),
         )
       }

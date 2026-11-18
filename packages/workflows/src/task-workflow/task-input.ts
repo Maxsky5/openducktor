@@ -3,6 +3,7 @@ import {
   type TaskArtifactSummary,
   type TaskCard,
   type WorkflowInput,
+  type WorkflowReference,
   ISSUE_TYPE_VALUES,
   type IssueType,
 } from "@openducktor/contracts";
@@ -10,10 +11,13 @@ import { WorkflowEvaluationError } from "../evaluate";
 
 /** The task fields that a task workflow reads. */
 export type TaskFacts = Pick<TaskCard, "id" | "status" | "issueType" | "artifactSummary">;
+export type TaskCardFacts = TaskFacts & Pick<TaskCard, "workflow">;
 
 export type TaskInputs = {
   /** The task artifact summary is the artifact input. Extra entry fields do not affect evaluation. */
   input(task: TaskFacts): WorkflowInput;
+  /** The evaluator checks the card's workflow reference when it reads this input. */
+  fromTaskCard(task: TaskCardFacts): WorkflowInput;
   /**
    * Evaluation is pure, so task lists reuse results for tasks with equal inputs. The key numbers
    * the status, the issue type, and the state of each artifact. An input outside the definition
@@ -39,14 +43,17 @@ export const taskIssueTypes = (definition: CompiledWorkflowDefinition): readonly
 };
 
 export const createTaskInputs = (definition: CompiledWorkflowDefinition): TaskInputs => {
-  const { id: workflowId, revision: definitionRevision } = definition;
-  const input = (task: TaskFacts): WorkflowInput => ({
+  const toInput = (
+    task: TaskFacts,
+    { id: workflowId, revision: definitionRevision }: WorkflowReference,
+  ): WorkflowInput => ({
     workflowId,
     definitionRevision,
     state: task.status,
     facts: { issueType: task.issueType },
     artifacts: task.artifactSummary,
   });
+  const input = (task: TaskFacts): WorkflowInput => toInput(task, definition);
 
   const statusIndexes = new Map(definition.states.map(({ id }, index) => [id, index]));
   const issueTypeIndexes = new Map(
@@ -82,6 +89,7 @@ export const createTaskInputs = (definition: CompiledWorkflowDefinition): TaskIn
 
   return {
     input,
+    fromTaskCard: (task) => toInput(task, task.workflow),
     cached: <T>(evaluate: (input: WorkflowInput) => T) => {
       const cache = new Map<number, T>();
       return (task: TaskFacts): T => {

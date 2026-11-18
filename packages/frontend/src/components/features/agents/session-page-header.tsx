@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 
 export function SessionPageHeader({
   title,
@@ -13,13 +13,14 @@ export function SessionPageHeader({
   openIn: ReactNode;
   viewControls: ReactNode;
 }): ReactElement {
+  const { remoteConnection } = useShellPlatform();
   return (
     <TooltipProvider disableHoverableContent>
       <header className="electron-titlebar-safe-area @container/session-header flex h-10 min-w-0 shrink-0 items-center gap-3 border-b border-border bg-card px-3">
         <div className="min-w-0 flex-1">{title}</div>
         <div className="flex shrink-0 items-center gap-2">
           {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
-          {openIn && !getShellBridge().remoteConnection ? (
+          {openIn && !remoteConnection ? (
             <div className="flex items-center @max-[640px]/session-header:[&_button>span]:hidden">
               {openIn}
             </div>

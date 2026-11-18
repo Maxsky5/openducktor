@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import {
   ISSUE_IMPORT_LABELS,
   type IssueImportStep,
@@ -55,6 +55,7 @@ function IssueImportDialogSession({
   provider,
   onCloseAutoFocus,
 }: Omit<IssueImportDialogProps, "open">): ReactElement {
+  const openExternalUrl = useOpenExternalUrl();
   const { openSettings } = useSettingsModal();
   const [step, setStep] = useState<IssueImportStep>("select");
   const {

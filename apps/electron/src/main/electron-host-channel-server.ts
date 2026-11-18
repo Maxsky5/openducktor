@@ -2,7 +2,10 @@ import {
   HOST_CHANNEL_SUBPROTOCOL,
   REMOTE_SOCKET_AUTHORIZATION_PREFIX,
 } from "@openducktor/contracts";
-import type { HostChannelSocketData } from "@openducktor/remote-host/host-channel";
+import {
+  createHostChannelSocketData,
+  type HostChannelOptions,
+} from "@openducktor/remote-host/host-channel";
 import {
   hostWebSocketHandler,
   type HostWebSocketData,
@@ -29,11 +32,11 @@ export type ElectronHostChannelServer = {
  */
 export const startElectronHostChannelServer = async ({
   rendererOrigins,
-  createChannel,
+  channel,
   onError,
 }: {
   rendererOrigins: ReadonlySet<string>;
-  createChannel(): HostChannelSocketData;
+  channel: HostChannelOptions;
   onError(cause: unknown): void;
 }): Promise<ElectronHostChannelServer> => {
   const token = randomBytes(32).toString("base64url");
@@ -59,13 +62,16 @@ export const startElectronHostChannelServer = async ({
         !tokensMatch(offered[1], authorization)
       )
         return new Response("Socket authorization is missing or invalid.", { status: 401 });
-      return requestServer.upgrade({ data: createChannel() })
+      return requestServer.upgrade({ data: createHostChannelSocketData(channel) })
         ? undefined
         : new Response("WebSocket upgrade failed.", { status: 500 });
     },
   });
   return {
     endpoint: { url: `ws://${LOOPBACK_HOST}:${server.port}/channel`, token },
-    stop: () => server.stop(true),
+    stop: () => {
+      channel.leases.dispose();
+      return server.stop(true);
+    },
   };
 };

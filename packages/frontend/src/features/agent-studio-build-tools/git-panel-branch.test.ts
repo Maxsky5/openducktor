@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   buildAgentStudioGitPanelBranchIdentityKey,
   resolveAgentStudioGitPanelBranch,
-} from "./agents-page-git-panel";
+} from "./git-panel-branch";
 
-describe("agents-page-git-panel", () => {
+describe("Git panel branch", () => {
   test("uses workspace activeBranch in repository mode", () => {
     expect(
       resolveAgentStudioGitPanelBranch({

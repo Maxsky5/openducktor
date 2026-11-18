@@ -11,7 +11,7 @@ import {
   useMemo,
 } from "react";
 import type { Components } from "react-markdown";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import { cn } from "@/lib/utils";
 import { renderMarkdownElement } from "./markdown-render-element";
 import {
@@ -73,20 +73,6 @@ const selectMarkdownCandidate = (
   return null;
 };
 
-const resolveTaskAssetProps = (
-  taskAssetContext: MarkdownRendererProps["taskAssetContext"],
-): MarkdownTaskAssetProps => {
-  if (!taskAssetContext) {
-    return {};
-  }
-  const props: MarkdownTaskAssetProps = { taskAssetContext };
-  const resolveTaskAssetSource = getShellBridge().resolveTaskAssetSource;
-  if (resolveTaskAssetSource) {
-    props.resolveTaskAssetSource = resolveTaskAssetSource;
-  }
-  return props;
-};
-
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   markdown,
   variant = "document",
@@ -99,6 +85,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   stripTaskDescriptionFrontMatter = false,
   lightweight = false,
 }: MarkdownRendererProps): ReactElement | null {
+  const { resolveTaskAssetSource } = useShellPlatform();
   const components = useMemo(
     () => markdownLinkComponents(MARKDOWN_COMPONENTS[variant], componentOverrides, linkPolicy),
     [variant, componentOverrides, linkPolicy],
@@ -111,7 +98,9 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   const candidate = selectMarkdownCandidate(content, lightweight);
   const needsRichRenderer =
     taskAssetContext !== undefined || (!lightweight && content.includes(TASK_ASSET_URI_PREFIX));
-  const taskAssetProps = resolveTaskAssetProps(taskAssetContext);
+  const taskAssetProps: MarkdownTaskAssetProps = taskAssetContext
+    ? { taskAssetContext, resolveTaskAssetSource }
+    : {};
   const loadingFallback =
     fallback === undefined
       ? createElement(renderMarkdownElement, { markdown: content, components, linkPolicy })

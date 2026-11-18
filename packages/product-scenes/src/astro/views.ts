@@ -4,7 +4,6 @@
 // website loads no style of a scene that only the documentation shows. No page script imports
 // this module.
 import type { SceneViews } from "../frame/SceneFrame";
-import type { SiteSceneName } from "../registry";
 import { ActionsView } from "../scenes/actions/view";
 import { AutopilotView } from "../scenes/autopilot/view";
 import { ChatView } from "../scenes/chat/view";
@@ -27,4 +26,6 @@ export const ASTRO_VIEWS = {
   prompts: PromptsView,
   actions: ActionsView,
   local: LocalView,
-} as const satisfies SceneViews<SiteSceneName>;
+} as const satisfies Partial<SceneViews>;
+
+export type SiteSceneName = keyof typeof ASTRO_VIEWS;

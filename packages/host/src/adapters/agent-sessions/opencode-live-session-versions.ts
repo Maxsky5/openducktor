@@ -1,5 +1,5 @@
+import { liveSessionRefKey } from "./live-session-ref";
 import type { AgentSessionLiveRef } from "@openducktor/contracts";
-import { refKey } from "./opencode-live-session-normalization";
 
 /** The session versions when a runtime read starts. */
 export type OpenCodeSessionReadStart = {
@@ -20,18 +20,18 @@ export class OpenCodeSessionVersions {
   private readonly statuses = new Map<string, number>();
 
   snapshotChanged(ref: AgentSessionLiveRef): void {
-    increment(this.snapshots, refKey(ref));
+    increment(this.snapshots, liveSessionRefKey(ref));
   }
 
   /** Counts each update that confirms the status, also when the snapshot stays equal. */
   statusConfirmed(ref: AgentSessionLiveRef): void {
-    increment(this.statuses, refKey(ref));
+    increment(this.statuses, liveSessionRefKey(ref));
   }
 
   /** A removed session makes every read in progress outdated for that session. */
   removed(ref: AgentSessionLiveRef): void {
-    increment(this.snapshots, refKey(ref));
-    increment(this.statuses, refKey(ref));
+    increment(this.snapshots, liveSessionRefKey(ref));
+    increment(this.statuses, liveSessionRefKey(ref));
   }
 
   readStart(): OpenCodeSessionReadStart {
@@ -39,7 +39,7 @@ export class OpenCodeSessionVersions {
   }
 
   readScope(ref: AgentSessionLiveRef, start: OpenCodeSessionReadStart): OpenCodeReadScope {
-    const key = refKey(ref);
+    const key = liveSessionRefKey(ref);
     if (changedSince(start.statuses, this.statuses, key)) {
       return "none";
     }

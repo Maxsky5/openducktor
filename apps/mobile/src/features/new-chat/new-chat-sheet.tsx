@@ -14,8 +14,8 @@ import {
   useWorkspaceSessionCreate,
   useWorkspaceSessionCreateDefaults,
 } from "@openducktor/frontend-core/workspace-sessions/create/use-workspace-session-create";
-import { useNavigation, usePreventRemove, useRouter } from "expo-router";
-import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { useNavigation, useRouter } from "expo-router";
+import { type ReactElement, useCallback, useEffect } from "react";
 import { ActionForm } from "@/ui/action-form";
 import { FormBody, FormLead } from "@/ui/form-rows";
 import { useCommandGate } from "@/host-session/active-session-context";
@@ -29,6 +29,7 @@ import { StartupTrace } from "@/features/session-startup/startup-trace";
 import { useVisibleHandoff } from "@/features/session-startup/use-visible-handoff";
 import { useStartupSheetClose } from "@/features/session-startup/startup-presentation-context";
 import { useRepairedStartupHandoff } from "@/features/session-startup/use-repaired-startup-handoff";
+import { useGuardedStartupSheetClose } from "@/features/session-startup/use-guarded-startup-sheet-close";
 import { ExistingWorktreeField } from "./new-chat-existing-worktree-field";
 import { CustomRoleField, WorkLocationField } from "./new-chat-location-fields";
 import { ModelFields } from "./new-chat-model-fields";
@@ -37,7 +38,6 @@ import { NewChatWorkspaceField } from "./new-chat-workspace-field";
 import { WorktreeFields } from "./new-chat-worktree-fields";
 import { TargetBranchField } from "./target-branch-field";
 import { useNewChatModel } from "./use-new-chat-model";
-import { closeScreen } from "@/navigation/close-screen";
 
 export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): ReactElement {
   const router = useRouter();
@@ -244,20 +244,11 @@ const openCreated = ({
 const useClose = (edited: boolean, running: boolean) => {
   const navigation = useNavigation();
   const confirmDiscard = useConfirmDiscard();
-  const [closing, setClosing] = useState(false);
-  const closed = useRef(false);
-  const allowRemoval = usePreventRemove(!closing && (edited || running), () => {
-    // oxlint-disable-next-line react-compiler/immutability -- usePreventRemove calls back into the close that needs its result; the hook memoizes by hand
+  const close = useGuardedStartupSheetClose(navigation, edited || running, () => {
+    // oxlint-disable-next-line react-compiler/immutability -- The removal guard calls back into the close that needs its result.
     if (!running) requestClose();
   });
-  const close = useCallback(() => {
-    if (closed.current) return;
-    closed.current = true;
-    setClosing(true);
-    allowRemoval();
-    closeScreen(navigation);
-  }, [allowRemoval, navigation]);
-  // oxlint-disable-next-line react-compiler/preserve-manual-memoization -- usePreventRemove calls back into the close that needs its result; the hook memoizes by hand
+  // oxlint-disable-next-line react-compiler/preserve-manual-memoization -- The removal guard calls back into the close that needs its result.
   const requestClose = useCallback(() => {
     if (running) return;
     if (!edited) {

@@ -6,7 +6,6 @@ import {
   classifyAgentChatMessage,
   resolveInstructionsMessage,
 } from "./agent-chat-message-kind";
-import { SYSTEM_PROMPT_PREFIX } from "./message-formatting";
 
 const toolMessage = buildMessage("tool", "", {
   meta: {
@@ -51,7 +50,7 @@ describe("classifyAgentChatMessage", () => {
 
   test("reads the system prompt body and hides the time of approximate timestamps", () => {
     const kind = classifyAgentChatMessage({
-      message: buildMessage("system", `${SYSTEM_PROMPT_PREFIX}  Follow the plan.`, {
+      message: buildMessage("system", "System prompt:\n\n  Follow the plan.", {
         timestampIsApproximate: true,
       }),
       toolCallPresentation: null,
@@ -75,7 +74,7 @@ describe("canCopyAssistantMessage", () => {
 describe("resolveInstructionsMessage", () => {
   test("reads system prompts and instruction updates", () => {
     expect(
-      resolveInstructionsMessage(buildMessage("system", `${SYSTEM_PROMPT_PREFIX}Body`), "Body"),
+      resolveInstructionsMessage(buildMessage("system", "System prompt:\n\nBody"), "Body"),
     ).toEqual({ kind: "system_prompt", toggleLabel: "Show system prompt", markdown: "Body" });
     expect(
       resolveInstructionsMessage(

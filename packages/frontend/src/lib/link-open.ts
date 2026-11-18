@@ -1,5 +1,5 @@
 import { isBrowserNavigableUrl } from "@openducktor/contracts";
-import { openExternalUrl } from "./open-external-url";
+import type { ExternalUrlOpener } from "./open-external-url";
 
 /** Where a link opens: the default browser of the system, or a browser tab of OpenDucktor. */
 export type LinkOpenChoice = "system" | "app";
@@ -69,7 +69,11 @@ export const closeLinkMenu = (): void => {
 };
 
 /** Opens a link in the chosen browser. A browser tab fails with the reason when none can open. */
-export const openLink = async (url: string, choice: LinkOpenChoice): Promise<void> => {
+export const openLink = async (
+  url: string,
+  choice: LinkOpenChoice,
+  openExternalUrl: ExternalUrlOpener,
+): Promise<void> => {
   closeLinkMenu();
   if (choice === "system") {
     await openExternalUrl(url);
@@ -92,14 +96,15 @@ export const openClickedLink = async (
   url: string,
   click: LinkClick,
   anchor: LinkMenuAnchor,
+  openExternalUrl: ExternalUrlOpener,
 ): Promise<void> => {
   const choice = linkOpenChoiceForClick(click);
   if (choice !== null) {
-    await openLink(url, choice);
+    await openLink(url, choice, openExternalUrl);
     return;
   }
   if (inAppLinkTarget() === null || !isBrowserNavigableUrl(url)) {
-    await openLink(url, "system");
+    await openLink(url, "system", openExternalUrl);
     return;
   }
   menu = { url, anchor };

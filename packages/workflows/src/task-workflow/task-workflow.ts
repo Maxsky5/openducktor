@@ -8,25 +8,22 @@ import {
   type AgentWorkflows,
   type CompiledWorkflowDefinition,
   type NotificationKindSetting,
+  type TaskCard,
   type TaskArtifactSummary,
   type WorkflowDefinition,
   type WorkflowReference,
   type TaskWorkflowStepState,
   type HostEffectId,
-  type WorkflowInput,
   type WorkflowNotificationKind,
+  type WorkflowSessionActivity,
+  type WorkflowStepDisplayRule,
 } from "@openducktor/contracts";
 import { deepFreeze } from "../deep-freeze";
-import {
-  createWorkflow,
-  WorkflowEvaluationError,
-  type Workflow,
-  type WorkflowPredicate,
-} from "../evaluate";
+import { createWorkflow, WorkflowEvaluationError } from "../evaluate";
 import { workflowNotificationDefaults } from "../notification-defaults";
 import { unsupportedGoalObjectivePlaceholder } from "./launch-goal";
 import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
-import { createTaskInputs, taskIssueTypes, type TaskFacts } from "./task-input";
+import { createTaskInputs, taskIssueTypes, type TaskCardFacts, type TaskFacts } from "./task-input";
 import {
   createTaskPrompts,
   type PromptTemplate,
@@ -42,12 +39,8 @@ export type TaskWorkflowArtifact = Definition["artifacts"][number];
 type AgentStep = Extract<Definition["steps"][number], { kind: "agent" }>;
 export type TaskWorkflowAction = Definition["actions"][number];
 export type TaskWorkflowAgentStep = AgentStep;
-/** A launch action that shows as an extra control on a surface, with its owning step. */
-export type TaskWorkflowSurfaceLaunch = {
-  readonly launch: TaskWorkflowLaunchAction;
-  readonly stepId: string;
-  readonly show: WorkflowPredicate;
-};
+type LaunchSurface = "studio" | "git_conflict";
+type StepDisplay = Pick<WorkflowStepDisplayRule, "completion" | "attention">;
 /** A view action that opens the latest session of its step role. */
 export type TaskWorkflowSessionView = { action: string; role: string; label: string };
 /** A launch action as a workflow step or the core pull request launch declares it. */
@@ -109,10 +102,7 @@ export type TaskStateNotification = {
  */
 export type TaskWorkflow = {
   readonly definition: Definition;
-  /** The ID and revision that identify the definition. */
   readonly reference: WorkflowReference;
-  /** The compiled evaluator of the definition. */
-  readonly evaluator: Workflow;
   readonly prompts: TaskPrompts;
   /** The catalog roles that the workflow binds, merged with their bindings, in binding order. */
   readonly roles: readonly TaskWorkflowRole[];
@@ -125,7 +115,6 @@ export type TaskWorkflow = {
   readonly worktreeRoles: readonly string[];
   /** The declared pull request roles. Empty: the sessions of every role can create it. */
   readonly pullRequestRoles: readonly string[];
-  /** Whether the sessions of the role can create the pull request of a task. */
   createsPullRequest(roleId: string): boolean;
   /**
    * Whether the core pull request launch is available for the task: the task is not closed and
@@ -180,14 +169,29 @@ export type TaskWorkflow = {
   readonly approvalAction: TaskWorkflowAction | undefined;
   /** Whether the approval action of the workflow is available for the task. */
   approvalAvailable(task: TaskFacts): boolean;
-  /** The agent step of a role, if the workflow has one. */
   agentStep(roleId: string): TaskWorkflowAgentStep | undefined;
   /** The role whose session a view action with a step opens. */
   viewActionRole(actionId: string): string | undefined;
   readonly sessionViews: readonly TaskWorkflowSessionView[];
-  surfaceLaunches(surface: "studio" | "git_conflict"): readonly TaskWorkflowSurfaceLaunch[];
+  /** The launch actions that show as extra controls for available steps. */
+  surfaceLaunches(
+    task: TaskCardFacts & Pick<TaskCard, "workflowSteps">,
+    surface: LaunchSurface,
+  ): TaskWorkflowLaunchAction[];
+  /** The explicit launch order for the task, or an empty list to keep declaration order. */
+  launchOrder(task: TaskCardFacts & Pick<TaskCard, "pullRequest">): readonly string[];
+  selectLaunchAction(task: TaskCardFacts, launchActionIds: readonly string[]): string | null;
+  stepLaunchAction(task: TaskCardFacts, stepId: string): string;
+  actionLaunchAction(task: TaskCardFacts, actionId: string): string;
+  actionLabel(task: TaskCardFacts, actionId: string): string;
+  orderActions(
+    task: TaskCardFacts,
+    actionIds: readonly string[],
+    ahead?: readonly string[],
+  ): string[];
+  stepDisplay(task: TaskCardFacts, role: string, activity: WorkflowSessionActivity): StepDisplay;
   /** Whether a display rule of an agent step asks the user for input. */
-  needsInput(input: WorkflowInput): boolean;
+  needsInput(task: TaskCardFacts): boolean;
   /** The event that a session start of the role step must admit, if any. */
   roleStartEvent(roleId: string): string | undefined;
   /** The role of the step that the event starts. */
@@ -351,7 +355,7 @@ export const createTaskWorkflow = (
       label: role(roleId).label,
     })),
   );
-  const surfaceLaunches = (surface: "studio" | "git_conflict") =>
+  const compileSurfaceLaunches = (surface: LaunchSurface) =>
     agentSteps.flatMap((step) =>
       step.launchActions
         .filter((launch) => launch.surface === surface)
@@ -361,45 +365,44 @@ export const createTaskWorkflow = (
           show: evaluator.condition(launch.showWhen ?? true),
         })),
     );
-  const needsInputRules = agentSteps.flatMap((step) =>
-    (step.displayRules ?? [])
-      .filter(({ attention }) => attention === "needs_input")
-      .map(({ when }) => evaluator.condition(when)),
-  );
   const launchesBySurface = {
-    studio: surfaceLaunches("studio"),
-    git_conflict: surfaceLaunches("git_conflict"),
+    studio: compileSurfaceLaunches("studio"),
+    git_conflict: compileSurfaceLaunches("git_conflict"),
   };
-
-  const agentWorkflowsOf = (input: Parameters<Workflow["steps"]>[0]): AgentWorkflows => {
-    const steps = new Map(evaluator.steps(input).map((step) => [step.id, step]));
-    return Object.fromEntries(
-      agentSteps.map((step): [string, AgentWorkflowState] => {
-        const projection = steps.get(step.id);
-        if (!projection)
-          throw new Error(`Task workflow "${definition.id}" lost step "${step.id}".`);
-        return [
-          step.roleId,
-          {
-            required: projection.required,
-            canSkip: !projection.required,
-            available: projection.available,
-            completed: projection.completed,
-          },
-        ];
-      }),
-    );
-  };
-  const project = inputs.cached((input): TaskProjection =>
-    deepFreeze({
-      workflow: { id: definition.id, revision: definition.revision },
-      workflowSteps: evaluator
-        .steps(input)
-        .map(({ id, required, available, completed }) => ({ id, required, available, completed })),
-      availableActions: evaluator.availableActions(input),
-      agentWorkflows: agentWorkflowsOf(input),
-    }),
+  const launchOrderRules = definition.launchOrder.map(({ when, ...rule }) => ({
+    ...rule,
+    matches: evaluator.condition(when),
+  }));
+  const displayRulesByRole = new Map(
+    agentSteps.map((step) => [
+      step.roleId,
+      (step.displayRules ?? []).map(({ when, ...rule }) => ({
+        ...rule,
+        matches: evaluator.condition(when),
+      })),
+    ]),
   );
+  const needsInputRules = [...displayRulesByRole.values()]
+    .flat()
+    .filter(({ attention }) => attention === "needs_input");
+
+  const project = inputs.cached((input): TaskProjection => {
+    const workflowSteps: TaskWorkflowStepState[] = [];
+    const agentWorkflows: [string, AgentWorkflowState][] = [];
+    for (const step of evaluator.steps(input)) {
+      const { id, required, available, completed } = step;
+      workflowSteps.push({ id, required, available, completed });
+      if (step.kind === "agent") {
+        agentWorkflows.push([step.roleId, { required, canSkip: !required, available, completed }]);
+      }
+    }
+    return deepFreeze({
+      workflow: { id: definition.id, revision: definition.revision },
+      workflowSteps,
+      availableActions: evaluator.availableActions(input),
+      agentWorkflows: Object.fromEntries(agentWorkflows),
+    });
+  });
 
   const allowedStatuses = (eventId: string, task: TaskFacts): string[] => {
     const input = inputs.input(task);
@@ -424,7 +427,6 @@ export const createTaskWorkflow = (
   return {
     definition,
     reference: deepFreeze({ id: definition.id, revision: definition.revision }),
-    evaluator,
     prompts,
     roles,
     workflowTemplates,
@@ -495,8 +497,53 @@ export const createTaskWorkflow = (
     agentStep: (roleId) => stepByRole.get(roleId),
     viewActionRole: (actionId) => viewActionRoles.get(actionId),
     sessionViews,
-    surfaceLaunches: (surface) => launchesBySurface[surface],
-    needsInput: (input) => needsInputRules.some((test) => test(input)),
+    surfaceLaunches: (task, surface) => {
+      const candidates = launchesBySurface[surface];
+      if (candidates.length === 0) return [];
+      const input = inputs.fromTaskCard(task);
+      const available = new Set(
+        task.workflowSteps.filter((step) => step.available).map(({ id }) => id),
+      );
+      return candidates.flatMap(({ launch, stepId, show }) =>
+        available.has(stepId) && show(input) ? [launch] : [],
+      );
+    },
+    launchOrder: (task) => {
+      const input = inputs.fromTaskCard(task);
+      const hasPullRequest = Boolean(task.pullRequest);
+      return (
+        launchOrderRules.find(
+          (rule) =>
+            (rule.pullRequest === undefined || rule.pullRequest === hasPullRequest) &&
+            rule.matches(input),
+        )?.order ?? []
+      );
+    },
+    selectLaunchAction: (task, launchActionIds) =>
+      evaluator.selectLaunchAction(inputs.fromTaskCard(task), launchActionIds),
+    stepLaunchAction: (task, stepId) =>
+      evaluator.stepLaunchAction(inputs.fromTaskCard(task), stepId),
+    actionLaunchAction: (task, actionId) =>
+      evaluator.actionLaunchAction(inputs.fromTaskCard(task), actionId),
+    actionLabel: (task, actionId) => evaluator.actionLabel(inputs.fromTaskCard(task), actionId),
+    orderActions: (task, actionIds, ahead) =>
+      evaluator.orderActions(inputs.fromTaskCard(task), actionIds, ahead),
+    stepDisplay: (task, role, activity) => {
+      const input = inputs.fromTaskCard(task);
+      const rules = displayRulesByRole
+        .get(role)
+        ?.filter(
+          (rule) => rule.matches(input) && (!rule.session || rule.session.includes(activity)),
+        );
+      return {
+        completion: rules?.find((rule) => rule.completion !== undefined)?.completion,
+        attention: rules?.find((rule) => rule.attention !== undefined)?.attention,
+      };
+    },
+    needsInput: (task) => {
+      const input = inputs.fromTaskCard(task);
+      return needsInputRules.some((rule) => rule.matches(input));
+    },
     roleStartEvent: (roleId) => stepByRole.get(roleId)?.startEventId,
     startEventRole: (eventId) => agentSteps.find((step) => step.startEventId === eventId)?.roleId,
     automation,

@@ -9,7 +9,8 @@ import { applyThemeToDocument } from "./components/layout/theme-dom";
 import { readSystemAppearance, resolveThemePreference } from "./components/layout/theme-preference";
 import { watchClientPage } from "./lib/client-page";
 import { createShellConnection, releaseShellConnection } from "./lib/shell-connection";
-import { configureShellBridge, type ShellBridge } from "./lib/shell-bridge";
+import type { ShellBridge } from "./lib/shell-bridge";
+import { ShellPlatformContext } from "./lib/shell-platform";
 import {
   type OpenDucktorShellBootstrapOptions,
   resolveRootElement,
@@ -153,7 +154,6 @@ export async function bootstrapOpenDucktorShell(
   }
   if (!bridge) throw new Error("The local host connection is unavailable.");
   if (local && bridge.notifications !== local.notifications) local.notifications.dispose();
-  configureShellBridge(bridge);
   const connection = createShellConnection(bridge, queryClient, target.kind);
   leavePage = watchPage({
     ...bridge,
@@ -180,11 +180,13 @@ export async function bootstrapOpenDucktorShell(
       <StartupSplashLifecycle />
       <AppCrashShell kanbanLocation={kanbanLocationForRouter(mode)}>
         <ClientConnectionProvider connection={connection}>
-          <ShellStateProvider remoteAccess={bridge.remoteAccess}>
-            <HostConnectionProvider selection={selection} connection={bridge.remoteConnection}>
-              <App routerMode={mode} />
-            </HostConnectionProvider>
-          </ShellStateProvider>
+          <ShellPlatformContext value={bridge}>
+            <ShellStateProvider remoteAccess={bridge.remoteAccess}>
+              <HostConnectionProvider selection={selection} connection={bridge.remoteConnection}>
+                <App routerMode={mode} />
+              </HostConnectionProvider>
+            </ShellStateProvider>
+          </ShellPlatformContext>
         </ClientConnectionProvider>
       </AppCrashShell>
     </StrictMode>,

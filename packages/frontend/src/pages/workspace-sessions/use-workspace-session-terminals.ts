@@ -6,7 +6,7 @@ import {
 } from "@openducktor/frontend-core/terminals/use-terminals";
 import { useMemo } from "react";
 import { sessionPanelOwnerKey } from "@/features/session-panels";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import type { ActiveWorkspace } from "@/types/state-slices";
 
 export function useWorkspaceSessionTerminals({
@@ -16,6 +16,7 @@ export function useWorkspaceSessionTerminals({
   workspace: ActiveWorkspace;
   selected: WorkspaceSession | null;
 }): ReturnType<typeof useTerminals> {
+  const { terminals } = useShellPlatform();
   const scope = useMemo((): TerminalScope | null => {
     if (!selected) return null;
     return workspaceSessionTerminalScope({
@@ -29,8 +30,5 @@ export function useWorkspaceSessionTerminals({
       record: selected,
     });
   }, [selected, workspace.repoPath, workspace.workspaceId]);
-  return useTerminals(
-    { scope, isScopeLoading: false },
-    { terminalBridge: getShellBridge().terminals },
-  );
+  return useTerminals({ scope, isScopeLoading: false }, { terminalBridge: terminals });
 }

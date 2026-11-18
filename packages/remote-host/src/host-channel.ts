@@ -25,7 +25,11 @@ import { Effect, Fiber, Stream } from "effect";
 import { errorMessage } from "./effect/web-errors";
 import type { BufferedHostEventStream } from "./host-event-bus";
 import type { NodeServerSocket } from "./node-fetch-server";
-import type { TaskEventFrameSink, TaskEventLeaseManager } from "./task-event-leases";
+import type {
+  TaskEventFrameSink,
+  TaskEventLease,
+  TaskEventLeaseManager,
+} from "./task-event-leases";
 
 /** Frames of at least this size use per-message deflate when the client negotiated it. */
 const COMPRESS_MIN_BYTES = 1024;
@@ -42,10 +46,8 @@ type HostChannelResult = HostCommandResult | HostEventsOpened | TaskEventLeaseRe
 export type HostChannelOptions = {
   hostEvents: BufferedHostEventStream;
   notifications: EffectNodeHostCommandRouter["notificationStream"];
+  /** Task leases of this admission or local operator. */
   leases: TaskEventLeaseManager;
-  /** The task leases of this client's principal. All local channels share one set. */
-  ownedLeases: Set<string>;
-  /** The most task leases that `ownedLeases` can hold. */
   maxLeases?: number;
   /**
    * Runs a command under the policy of this listener. `signal` aborts when the client cancels a
@@ -275,10 +277,9 @@ const leaseSink = (socket: HostChannelSocket, subscriptionId: string): TaskEvent
   },
 });
 
-const attachLease = (socket: HostChannelSocket, subscriptionId: string): void => {
+const attachLease = (socket: HostChannelSocket, lease: TaskEventLease): void => {
   const { leases } = socket.data.options;
-  const lease = leases.get(subscriptionId);
-  if (!lease) return;
+  const { subscriptionId } = lease;
   // Attach closes the previous sink first, which can belong to this socket.
   const generation = leases.attach(lease, leaseSink(socket, subscriptionId));
   socket.data.leases.set(subscriptionId, generation);
@@ -286,10 +287,8 @@ const attachLease = (socket: HostChannelSocket, subscriptionId: string): void =>
 
 /** The owned lease, or a refusal that tells the client to subscribe again. */
 const ownedLease = (socket: HostChannelSocket, id: number, subscriptionId: string) => {
-  const { leases, ownedLeases } = socket.data.options;
-  const lease = ownedLeases.has(subscriptionId) ? leases.get(subscriptionId) : undefined;
+  const lease = socket.data.options.leases.get(subscriptionId);
   if (!lease) {
-    ownedLeases.delete(subscriptionId);
     refuse(
       socket,
       id,
@@ -305,14 +304,13 @@ const subscribeTaskEvents = (
   socket: HostChannelSocket,
   request: Extract<HostChannelRequestMessage, { method: "task_events.subscribe" }>,
 ): void => {
-  const { leases, ownedLeases, maxLeases, refusal } = socket.data.options;
+  const { leases, maxLeases, refusal } = socket.data.options;
   const refused = refusal();
   if (refused) {
     sendError(socket, request.id, { kind: "refused", failure: refused });
     return;
   }
-  for (const leaseId of ownedLeases) if (!leases.get(leaseId)) ownedLeases.delete(leaseId);
-  if (maxLeases !== undefined && ownedLeases.size >= maxLeases) {
+  if (maxLeases !== undefined && leases.size >= maxLeases) {
     refuse(
       socket,
       request.id,
@@ -324,14 +322,13 @@ const subscribeTaskEvents = (
   }
   const subscriptionId = crypto.randomUUID();
   const lease = leases.create(request.input, subscriptionId);
-  ownedLeases.add(subscriptionId);
   const result: TaskEventLeaseResult = {
     subscriptionId,
     replayBoundary: lease.hostSubscription.replayBoundary,
   };
   // The client registers the subscription from the result, so frames follow it.
   sendResult(socket, request.id, result);
-  attachLease(socket, subscriptionId);
+  attachLease(socket, lease);
 };
 
 const observeRemoteAccess = (socket: HostChannelSocket, id: number): void => {
@@ -379,7 +376,6 @@ const runInvoke = async (
       request.args,
       cancel?.signal ?? NEVER_CANCELLED,
     );
-    // The client stopped waiting, so a cancelled read sends no answer.
     if (cancel?.signal.aborted) return;
     if ("error" in reply) sendError(socket, request.id, reply.error);
     else sendResult(socket, request.id, reply.result);
@@ -389,7 +385,7 @@ const runInvoke = async (
 };
 
 const handleRequest = (socket: HostChannelSocket, request: HostChannelRequestMessage): void => {
-  const { leases, ownedLeases } = socket.data.options;
+  const { leases } = socket.data.options;
   switch (request.method) {
     case "events.open":
       openEvents(socket, request);
@@ -403,11 +399,13 @@ const handleRequest = (socket: HostChannelSocket, request: HostChannelRequestMes
     case "task_events.subscribe":
       subscribeTaskEvents(socket, request);
       return;
-    case "task_events.attach":
-      if (!ownedLease(socket, request.id, request.subscriptionId)) return;
+    case "task_events.attach": {
+      const lease = ownedLease(socket, request.id, request.subscriptionId);
+      if (!lease) return;
       sendResult(socket, request.id, null);
-      attachLease(socket, request.subscriptionId);
+      attachLease(socket, lease);
       return;
+    }
     case "task_events.ack": {
       const lease = ownedLease(socket, request.id, request.subscriptionId);
       if (!lease) return;
@@ -428,8 +426,7 @@ const handleRequest = (socket: HostChannelSocket, request: HostChannelRequestMes
     }
     case "task_events.release": {
       const lease = leases.get(request.subscriptionId);
-      if (lease && ownedLeases.has(request.subscriptionId)) leases.delete(lease);
-      ownedLeases.delete(request.subscriptionId);
+      if (lease) leases.delete(lease);
       socket.data.leases.delete(request.subscriptionId);
       sendResult(socket, request.id, null);
       return;
@@ -497,7 +494,6 @@ export const hostChannelWebSocketHandler = {
   },
   close(socket: HostChannelSocket): void {
     socket.data.closed = true;
-    // No client waits for these reads any more.
     for (const read of socket.data.reads.values())
       read.abort(new Error("The host channel closed."));
     socket.data.reads.clear();

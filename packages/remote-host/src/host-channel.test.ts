@@ -88,7 +88,6 @@ const createHost = (overrides: Partial<HostChannelOptions> = {}) => {
     hostEvents,
     notifications,
     leases,
-    ownedLeases: new Set(),
     invoke: async () => ({ result: null }),
     refusal: () => null,
     reportFailure: (cause) => failures.push(cause),
@@ -582,7 +581,6 @@ test("sends the task lease before its frames and delivers live frames", async ()
     [lease.subscriptionId, "snapshot_required", 0],
     [lease.subscriptionId, "change", 1],
   ]);
-  expect(host.options.ownedLeases.has(lease.subscriptionId)).toBe(true);
 });
 
 test("refuses task subscriptions over the lease limit and while the host refuses work", () => {
@@ -611,7 +609,12 @@ test("refuses attach, ack, and release of a lease that another principal owns", 
   const owner = host.connect();
   const id = owner.request({ method: "task_events.subscribe", input: { cursor: null } });
   const { subscriptionId } = taskEventLeaseSchema.parse(owner.result(id));
-  const other = host.connect({ ownedLeases: new Set() });
+  const other = host.connect({
+    leases: createTaskEventLeaseManager({
+      taskEventStream: host.taskStream,
+      reportDeliveryFailure: () => {},
+    }),
+  });
   const attach = other.request({ method: "task_events.attach", subscriptionId });
   const ack = other.request({ method: "task_events.ack", subscriptionId, cursor: taskCursor(0) });
   const release = other.request({ method: "task_events.release", subscriptionId });
@@ -670,7 +673,6 @@ test("releases an owned lease", () => {
 
   expect(socket.result(release)).toBeNull();
   expect(host.leases.get(subscriptionId)).toBeUndefined();
-  expect(host.options.ownedLeases.has(subscriptionId)).toBe(false);
 });
 
 test("pauses task frames while the socket buffers and resumes them on drain", async () => {

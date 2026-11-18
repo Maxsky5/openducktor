@@ -9,10 +9,9 @@
 // loads each one once, so a page loads only the styles of its scenes, and a client navigation
 // shows a scene after its styles load. The view sits in `[data-page-scene="<name>"]`.
 import type { ReactElement, ReactNode } from "react";
-import type { SceneTheme } from "../frame/SceneFrame";
+import { type SceneTheme, viewElement } from "../frame/SceneFrame";
 import { type KeyLabels, MAC_KEYS } from "../replicas/keys";
 import type { SceneName, SceneOptionsProp } from "../registry";
-import { viewElement } from "../views";
 import { PAGE_VIEWS } from "./page-views";
 import { ScenePlayer } from "./ScenePlayer";
 

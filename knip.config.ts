@@ -22,8 +22,6 @@ export default {
     },
     "apps/marketing-website": {
       project: ["src/**/*.{ts,astro}", "config/**/*.ts", "scripts/**/*.ts"],
-      // src/styles/tokens.css `@import`s the theme.
-      ignoreDependencies: ["@openducktor/theme"],
     },
     "apps/electron": electronKnipConfig,
     "apps/mobile": {

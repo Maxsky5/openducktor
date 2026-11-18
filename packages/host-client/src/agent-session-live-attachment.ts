@@ -1,4 +1,5 @@
 import {
+  agentSessionLiveEnvelopeRepoPath,
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveSnapshotEnvelope,
   isAgentSessionLiveStateEnvelope,
@@ -17,40 +18,6 @@ type AgentSessionLiveAttachment = {
   resume: () => void;
   /** Drops held changes and holds new ones until the next `install`. */
   restart: () => void;
-};
-
-/** The host event stream name of the live changes of a repository. Its replay gaps name it. */
-export const liveSessionStreamEventName = (repoPath: string): string =>
-  // JSON escaping keeps repository paths on one SSE field line, including unusual path characters.
-  `agent-session-live:${JSON.stringify(repoPath)}`;
-
-export const envelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
-  switch (envelope.type) {
-    case "session_operation_updated":
-      return envelope.observation.ref.repoPath;
-    case "submission_acknowledged":
-      return envelope.acknowledgement.ref.repoPath;
-    case "task_completion_updated":
-      return envelope.observation.repoPath;
-    case "usage_limit_auto_resume_updated":
-      return envelope.ref.repoPath;
-    case "task_session_records_updated":
-    case "snapshot":
-    case "fault":
-      return envelope.repoPath;
-    case "session_upsert":
-      return envelope.session.ref.repoPath;
-    case "session_removed":
-      return envelope.ref.repoPath;
-    case "transcript_event":
-      return envelope.event.sessionRef.repoPath;
-    case "message_queue_updated":
-      return envelope.queue.target.repoPath;
-    case "catalog_invalidated":
-    case "runtime_notice":
-    case "slash_command_catalog_updated":
-      return envelope.scope.repoPath;
-  }
 };
 
 /**
@@ -87,7 +54,7 @@ export const createAgentSessionLiveAttachment = (
 
   return {
     accept: (envelope) => {
-      if (envelopeRepoPath(envelope) !== repoPath) {
+      if (agentSessionLiveEnvelopeRepoPath(envelope) !== repoPath) {
         return;
       }
       if (

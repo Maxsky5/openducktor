@@ -1,10 +1,16 @@
-import { getShellBridge } from "./shell-bridge";
+import { useCallback } from "react";
+import { useShellPlatform } from "./shell-platform";
 
-export const openExternalUrl = async (url: string): Promise<void> => {
-  const trimmed = url.trim();
-  if (!trimmed) {
-    throw new Error("Cannot open an empty URL.");
-  }
+export type ExternalUrlOpener = (url: string) => Promise<void>;
 
-  await getShellBridge().openExternalUrl(trimmed);
+export const useOpenExternalUrl = (): ExternalUrlOpener => {
+  const { openExternalUrl } = useShellPlatform();
+  return useCallback(
+    async (url) => {
+      const trimmed = url.trim();
+      if (!trimmed) throw new Error("Cannot open an empty URL.");
+      await openExternalUrl(trimmed);
+    },
+    [openExternalUrl],
+  );
 };

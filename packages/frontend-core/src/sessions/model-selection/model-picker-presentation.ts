@@ -1,5 +1,5 @@
 import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelAttachmentSupport } from "@openducktor/core";
+import { type AgentModelAttachmentSupport, findCatalogModel } from "@openducktor/core";
 import { formatTokenCompact } from "../../lib/format-token-count";
 import type {
   ModelPickerFavoriteState,
@@ -123,9 +123,7 @@ export function resolveModelPickerPresentation({
   const selectedRuntime = runtimes.find(
     (runtime) => runtime.descriptor.kind === value?.runtimeKind,
   );
-  const selectedModel = selectedRuntime?.resource.catalog?.models.find(
-    (model) => model.providerId === value?.providerId && model.modelId === value?.modelId,
-  );
+  const selectedModel = findCatalogModel(selectedRuntime?.resource.catalog, value);
   const triggerRuntime = selectedRuntime?.descriptor ?? null;
   const triggerModelLabel = selectedModel?.modelName ?? value?.modelId ?? placeholder;
   const triggerAriaLabel = triggerRuntime

@@ -1,4 +1,4 @@
-import { type AgentSessionLiveRef, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import type { RuntimeInstanceSummary } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 
@@ -15,13 +15,6 @@ const isCodexRuntimeInstance = (
   runtime: RuntimeInstanceSummary,
 ): runtime is CodexLiveRuntimeInstance =>
   runtime.kind === "codex" && runtime.runtimeRoute.type === "stdio";
-
-export const toCodexLiveSessionRef = (ref: AgentSessionLiveRef): AgentSessionLiveRef => ({
-  repoPath: ref.repoPath,
-  runtimeKind: ref.runtimeKind,
-  workingDirectory: ref.workingDirectory,
-  externalSessionId: ref.externalSessionId,
-});
 
 export const requireCodexStdioRuntime = (
   runtime: RuntimeInstanceSummary,

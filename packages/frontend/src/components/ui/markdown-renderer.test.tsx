@@ -1,3 +1,4 @@
+import { withShellPlatform } from "@/test-utils/focused-fixture";
 import { IsolatedMarkdownWrapper } from "@/test-utils/isolated-markdown-wrapper";
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { useQueryClient } from "@tanstack/react-query";
@@ -5,11 +6,10 @@ import { fireEvent, render as renderView, waitFor } from "@testing-library/react
 import { createElement, type ReactNode, useLayoutEffect, useState } from "react";
 import { toast } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
-import * as externalUrl from "@/lib/open-external-url";
 import { withAnimationFrameTestDriver } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
 import { createIntersectionObserverTestDriver } from "@/test-utils/intersection-observer-test-driver";
 import { QueryProvider } from "@/test-utils/query-provider";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
+import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createSettingsSnapshotFixture } from "@/test-utils/shared-test-fixtures";
 import { MarkdownMermaid } from "./markdown-mermaid";
@@ -19,12 +19,19 @@ import { MarkdownRenderer } from "./markdown-renderer";
 
 const render = (element: ReactNode) => renderView(element, { wrapper: IsolatedMarkdownWrapper });
 
-const renderMarkdownLink = (href: string, label: string) => {
+const renderMarkdownLink = (
+  href: string,
+  label: string,
+  openExternalUrl: (url: string) => Promise<void>,
+) => {
   return render(
-    createElement(MarkdownRenderer, {
-      markdown: `[${label}](${href})`,
-      variant: "document",
-    }),
+    withShellPlatform(
+      createElement(MarkdownRenderer, {
+        markdown: `[${label}](${href})`,
+        variant: "document",
+      }),
+      { ...createUnavailableShellBridge(), openExternalUrl },
+    ),
   );
 };
 
@@ -43,67 +50,58 @@ const StaticThemeProvider = ({ children }: { children: ReactNode }) => {
   return ready ? <ThemeProvider>{children}</ThemeProvider> : null;
 };
 
-test("opens rendered links through the external URL shell bridge", () => {
-  const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+test("uses the external URL bridge of the rendered link", () => {
+  const openExternalUrl = mock(async (_url: string) => {});
   const markdownUrl = "https://example.com/docs";
+  const otherOpenExternalUrl = mock(async (_url: string) => {});
+  renderMarkdownLink("https://example.com/other", "Other shell docs", otherOpenExternalUrl);
 
-  try {
-    const view = renderMarkdownLink(markdownUrl, "Open docs");
-    const link = view.getByRole("link", { name: "Open docs" });
+  const view = renderMarkdownLink(markdownUrl, "Open docs", openExternalUrl);
+  const link = view.getByRole("link", { name: "Open docs" });
 
-    expect(link.getAttribute("href")).toBe(markdownUrl);
-    expect(link.getAttribute("target")).toBeNull();
-    expect(fireEvent.click(link)).toBe(false);
-    expect(openExternalUrlSpy).toHaveBeenCalledWith(markdownUrl);
-  } finally {
-    openExternalUrlSpy.mockRestore();
-  }
+  expect(link.getAttribute("href")).toBe(markdownUrl);
+  expect(link.getAttribute("target")).toBeNull();
+  expect(fireEvent.click(link)).toBe(false);
+  expect(openExternalUrl).toHaveBeenCalledWith(markdownUrl);
+  expect(otherOpenExternalUrl).not.toHaveBeenCalled();
 });
 
 test("opens rendered links through the shell bridge on middle click", () => {
-  const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+  const openExternalUrl = mock(async (_url: string) => {});
   const markdownUrl = "https://example.com/middle-click";
 
-  try {
-    const view = renderMarkdownLink(markdownUrl, "Open link");
-    const link = view.getByRole("link", { name: "Open link" });
+  const view = renderMarkdownLink(markdownUrl, "Open link", openExternalUrl);
+  const link = view.getByRole("link", { name: "Open link" });
 
-    const event = new MouseEvent("auxclick", { bubbles: true, button: 1, cancelable: true });
-    expect(fireEvent(link, event)).toBe(false);
-    expect(openExternalUrlSpy).toHaveBeenCalledWith(markdownUrl);
-  } finally {
-    openExternalUrlSpy.mockRestore();
-  }
+  const event = new MouseEvent("auxclick", { bubbles: true, button: 1, cancelable: true });
+  expect(fireEvent(link, event)).toBe(false);
+  expect(openExternalUrl).toHaveBeenCalledWith(markdownUrl);
 });
 
 test("prevents unsupported auxiliary and context-menu navigation", () => {
-  const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockResolvedValue();
+  const openExternalUrl = mock(async (_url: string) => {});
 
-  try {
-    const view = renderMarkdownLink("https://example.com/context-menu", "Open link");
-    const link = view.getByRole("link", { name: "Open link" });
+  const view = renderMarkdownLink("https://example.com/context-menu", "Open link", openExternalUrl);
+  const link = view.getByRole("link", { name: "Open link" });
 
-    const auxiliaryEvent = new MouseEvent("auxclick", {
-      bubbles: true,
-      button: 2,
-      cancelable: true,
-    });
-    expect(fireEvent(link, auxiliaryEvent)).toBe(false);
-    expect(fireEvent.contextMenu(link)).toBe(false);
-    expect(openExternalUrlSpy).not.toHaveBeenCalled();
-  } finally {
-    openExternalUrlSpy.mockRestore();
-  }
+  const auxiliaryEvent = new MouseEvent("auxclick", {
+    bubbles: true,
+    button: 2,
+    cancelable: true,
+  });
+  expect(fireEvent(link, auxiliaryEvent)).toBe(false);
+  expect(fireEvent.contextMenu(link)).toBe(false);
+  expect(openExternalUrl).not.toHaveBeenCalled();
 });
 
 test("shows an actionable error without falling back when the shell rejects a link", async () => {
-  const openExternalUrlSpy = spyOn(externalUrl, "openExternalUrl").mockRejectedValue(
-    new Error("Shell rejected the URL"),
-  );
+  const openExternalUrl = mock(async (_url: string) => {
+    throw new Error("Shell rejected the URL");
+  });
   const toastErrorSpy = spyOn(toast, "error").mockImplementation(() => "toast-id");
 
   try {
-    const view = renderMarkdownLink("https://example.com/rejected", "Open link");
+    const view = renderMarkdownLink("https://example.com/rejected", "Open link", openExternalUrl);
     const link = view.getByRole("link", { name: "Open link" });
 
     expect(fireEvent.click(link)).toBe(false);
@@ -112,10 +110,9 @@ test("shows an actionable error without falling back when the shell rejects a li
         description: "Shell rejected the URL",
       });
     });
-    expect(openExternalUrlSpy).toHaveBeenCalledTimes(1);
+    expect(openExternalUrl).toHaveBeenCalledTimes(1);
   } finally {
     toastErrorSpy.mockRestore();
-    openExternalUrlSpy.mockRestore();
   }
 });
 
@@ -161,7 +158,6 @@ describe("rich task description rendering", () => {
 
   afterEach(() => {
     intersections.restore();
-    configureShellBridge(createUnavailableShellBridge());
   });
 
   test("omits preserved front matter and renders math through KaTeX", async () => {
@@ -333,20 +329,23 @@ describe("rich task description rendering", () => {
       kind: "url" as const,
       src: "openducktor-task-asset://asset/resolved",
     }));
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource,
-    });
+    };
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const view = render(
-      <MarkdownRenderer
-        markdown={`![Architecture](odt-asset:${assetId} "Diagram")`}
-        taskAssetContext={{
-          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-          taskId: "task-1",
-          scope: "description",
-        }}
-      />,
+      withShellPlatform(
+        <MarkdownRenderer
+          markdown={`![Architecture](odt-asset:${assetId} "Diagram")`}
+          taskAssetContext={{
+            workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+            taskId: "task-1",
+            scope: "description",
+          }}
+        />,
+        shellPlatform,
+      ),
     );
 
     await waitFor(
@@ -368,23 +367,26 @@ describe("rich task description rendering", () => {
   }, 4000);
 
   test("shows an actionable error when a resolved task asset response cannot load", async () => {
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource: async () => ({
-        kind: "url",
+        kind: "url" as const,
         src: "openducktor-task-asset://asset/missing",
       }),
-    });
+    };
     const assetId = "550e8400-e29b-41d4-a716-446655440000";
     const view = render(
-      <MarkdownRenderer
-        markdown={`![Architecture](odt-asset:${assetId})`}
-        taskAssetContext={{
-          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-          taskId: "task-1",
-          scope: "description",
-        }}
-      />,
+      withShellPlatform(
+        <MarkdownRenderer
+          markdown={`![Architecture](odt-asset:${assetId})`}
+          taskAssetContext={{
+            workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+            taskId: "task-1",
+            scope: "description",
+          }}
+        />,
+        shellPlatform,
+      ),
     );
     const image = await view.findByRole("img", { name: "Architecture" });
 
@@ -400,10 +402,10 @@ describe("rich task description rendering", () => {
       kind: "url" as const,
       src: "openducktor-task-asset://asset/resolved",
     }));
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource,
-    });
+    };
     const first = "550e8400-e29b-41d4-a716-446655440000";
     const second = "750e8400-e29b-41d4-a716-446655440001";
     const markdown = [
@@ -413,14 +415,17 @@ describe("rich task description rendering", () => {
       `[diagram]: odt-asset:${second}`,
     ].join("\n");
     const view = render(
-      <MarkdownRenderer
-        markdown={markdown}
-        taskAssetContext={{
-          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-          taskId: "task-1",
-          scope: "description",
-        }}
-      />,
+      withShellPlatform(
+        <MarkdownRenderer
+          markdown={markdown}
+          taskAssetContext={{
+            workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+            taskId: "task-1",
+            scope: "description",
+          }}
+        />,
+        shellPlatform,
+      ),
     );
 
     await waitFor(
@@ -447,12 +452,15 @@ describe("rich task description rendering", () => {
       kind: "url" as const,
       src: "openducktor-task-asset://asset/resolved",
     }));
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource,
-    });
+    };
     const view = render(
-      <MarkdownRenderer markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)" />,
+      withShellPlatform(
+        <MarkdownRenderer markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)" />,
+        shellPlatform,
+      ),
     );
 
     expect(view.getByRole("alert").textContent).toContain("task context is unavailable");
@@ -465,17 +473,20 @@ describe("rich task description rendering", () => {
       kind: "url" as const,
       src: "openducktor-task-asset://asset/resolved",
     }));
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource,
-    });
+    };
     const view = render(
-      <MarkdownRenderer
-        markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)"
-        components={{
-          img: ({ alt }) => <span data-testid="image-placeholder">{alt}</span>,
-        }}
-      />,
+      withShellPlatform(
+        <MarkdownRenderer
+          markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)"
+          components={{
+            img: ({ alt }) => <span data-testid="image-placeholder">{alt}</span>,
+          }}
+        />,
+        shellPlatform,
+      ),
     );
 
     expect((await view.findByTestId("image-placeholder")).textContent).toBe("Architecture");
@@ -488,18 +499,21 @@ describe("rich task description rendering", () => {
       kind: "url" as const,
       src: "openducktor-task-asset://asset/resolved",
     }));
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource,
-    });
+    };
     const view = render(
-      <MarkdownRenderer
-        markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)"
-        lightweight
-        components={{
-          img: ({ alt }) => <span data-testid="image-placeholder">{alt}</span>,
-        }}
-      />,
+      withShellPlatform(
+        <MarkdownRenderer
+          markdown="![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000)"
+          lightweight
+          components={{
+            img: ({ alt }) => <span data-testid="image-placeholder">{alt}</span>,
+          }}
+        />,
+        shellPlatform,
+      ),
     );
 
     expect(view.getByTestId("image-placeholder").textContent).toBe("Architecture");
@@ -526,22 +540,25 @@ describe("rich task description rendering", () => {
       kind: "url" as const,
       src: "openducktor-task-asset://asset/resolved",
     }));
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource,
-    });
+    };
     const view = render(
-      <MarkdownRenderer
-        markdown='![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000 "Diagram")'
-        components={{
-          img: ({ alt }) => <span data-testid="image-placeholder">{alt}</span>,
-        }}
-        taskAssetContext={{
-          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-          taskId: "task-1",
-          scope: "description",
-        }}
-      />,
+      withShellPlatform(
+        <MarkdownRenderer
+          markdown='![Architecture](odt-asset:550e8400-e29b-41d4-a716-446655440000 "Diagram")'
+          components={{
+            img: ({ alt }) => <span data-testid="image-placeholder">{alt}</span>,
+          }}
+          taskAssetContext={{
+            workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+            taskId: "task-1",
+            scope: "description",
+          }}
+        />,
+        shellPlatform,
+      ),
     );
 
     await waitFor(
@@ -559,19 +576,22 @@ describe("rich task description rendering", () => {
       kind: "url" as const,
       src: "openducktor-task-asset://asset/resolved",
     }));
-    configureShellBridge({
+    const shellPlatform = {
       ...createUnavailableShellBridge(),
       resolveTaskAssetSource,
-    });
+    };
     const view = render(
-      <MarkdownRenderer
-        markdown="![Forged](odt-asset:550e8400e29b-41d4-a716-446655440000-)"
-        taskAssetContext={{
-          workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
-          taskId: "task-1",
-          scope: "description",
-        }}
-      />,
+      withShellPlatform(
+        <MarkdownRenderer
+          markdown="![Forged](odt-asset:550e8400e29b-41d4-a716-446655440000-)"
+          taskAssetContext={{
+            workspaceId: "9f66372b-e956-47f4-af2f-77e0df2ad4e1",
+            taskId: "task-1",
+            scope: "description",
+          }}
+        />,
+        shellPlatform,
+      ),
     );
 
     expect(view.getByRole("alert").textContent).toContain("task asset reference is invalid");

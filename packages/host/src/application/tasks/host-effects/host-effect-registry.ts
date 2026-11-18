@@ -7,7 +7,6 @@ import { createWorktreeResetEffect } from "./worktree-reset";
 
 export type HostEffectError = TaskServiceError | TaskMutationProgressFailure;
 
-/** What a host effect gets from the event that runs it. */
 export type HostEffectContext = {
   readonly input: TaskIdInput;
   readonly eventId: string;
@@ -24,7 +23,6 @@ export type HostEffectHandler = (
   commit: Effect.Effect<TaskCard, HostEffectError, Scope.Scope>,
 ) => Effect.Effect<TaskCard, HostEffectError, Scope.Scope>;
 
-/** The handler of each host effect. */
 export const createHostEffectRegistry = (input: TaskServiceUseCaseInput) =>
   ({
     "worktree.reset": createWorktreeResetEffect(input),

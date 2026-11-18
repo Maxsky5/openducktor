@@ -4,21 +4,13 @@ import type { MouseEvent, ReactElement } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { TaskExecutionCiChecksList } from "./task-execution-ci-checks-list";
 import { TaskExecutionCiCommentsList } from "./task-execution-ci-comments-list";
 import { checksSummaryLabel } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 
 type LoadedPullRequestReviewContext = Extract<PullRequestReviewContext, { status: "loaded" }>;
 type RefreshState = "idle" | "refreshing";
-
-const openPullRequestUrl = (url: string): void => {
-  void openExternalUrl(url).catch((error) => {
-    toast.error("Failed to open pull request", {
-      description: errorMessage(error),
-    });
-  });
-};
 
 export function TaskExecutionCiLoaded({
   context,
@@ -29,6 +21,14 @@ export function TaskExecutionCiLoaded({
   onRefresh: () => void;
   refreshState: RefreshState;
 }): ReactElement {
+  const openExternalUrl = useOpenExternalUrl();
+  const openPullRequestUrl = (url: string): void => {
+    void openExternalUrl(url).catch((error) => {
+      toast.error("Failed to open pull request", {
+        description: errorMessage(error),
+      });
+    });
+  };
   const isRefreshing = refreshState === "refreshing";
   const checkSummary = checksSummaryLabel(context.checks);
   const openPullRequestLink = (event: MouseEvent<HTMLAnchorElement>): void => {

@@ -34,7 +34,6 @@ const createHarness = () => {
     hostEvents: new BufferedHostEventStream(),
     notifications: createNotificationStream(),
     leases: manager,
-    ownedLeases: new Set(),
     invoke: async () => ({ result: null }),
     refusal: () => null,
     reportFailure: (cause) => failures.push(cause),

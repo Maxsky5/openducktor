@@ -199,9 +199,18 @@ export const notificationTargetReplacesContent = (
   );
 };
 
-export const findNotificationAttentionTarget = (kind: string, id: string): HTMLElement | null => {
-  if (kind !== "permission" && kind !== "question" && kind !== "error") return null;
-  const candidates = document.querySelectorAll<HTMLElement>("[data-notification-attention-kind]");
+export const isNotificationAttentionKind = (
+  kind: string | null,
+): kind is "permission" | "question" | "error" =>
+  kind === "permission" || kind === "question" || kind === "error";
+
+export const findNotificationAttentionTarget = (
+  root: HTMLElement,
+  kind: string,
+  id: string,
+): HTMLElement | null => {
+  if (!isNotificationAttentionKind(kind)) return null;
+  const candidates = root.querySelectorAll<HTMLElement>("[data-notification-attention-kind]");
   return (
     Array.from(candidates).find(
       (element) =>

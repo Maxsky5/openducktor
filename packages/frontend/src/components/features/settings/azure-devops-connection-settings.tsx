@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { openExternalUrl } from "@/lib/open-external-url";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import type { AzureDevOpsGitProviderFormController } from "./use-azure-devops-git-provider-form";
 
@@ -410,6 +410,7 @@ function PendingMicrosoftSignIn({
     errorLogContext: "AzureDevOpsConnectionSettings.copyDeviceCode",
   });
   const { userCode, verificationUri } = deviceCode;
+  const openExternalUrl = useOpenExternalUrl();
   const openSignIn = (event: MouseEvent<HTMLAnchorElement>): void => {
     event.preventDefault();
     if (disabled) return;

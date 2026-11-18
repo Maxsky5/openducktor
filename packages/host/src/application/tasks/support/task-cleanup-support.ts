@@ -1,5 +1,5 @@
 import type { TaskWorkflow } from "@openducktor/workflows";
-import { type AgentSessionRecord, type RepoConfig } from "@openducktor/contracts";
+import type { AgentSessionRecord } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import { cleanTaskBranchPrefix } from "../../../domain/task";
@@ -56,13 +56,6 @@ export const collectSessionsUsingCanonicalWorktree = (
     }
     return { canonicalExists, guarded };
   });
-export const managedWorktreeBaseForRepoConfig = (
-  settingsConfig: SettingsConfigPort,
-  repoConfig: RepoConfig,
-): string =>
-  repoConfig.worktreeBasePath !== undefined
-    ? settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
-    : settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
 export const isRelatedTaskBranch = (
   branchName: string,
   branchPrefix: string,

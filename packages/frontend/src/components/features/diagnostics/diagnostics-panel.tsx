@@ -13,7 +13,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import { cn } from "@/lib/utils";
 import { useChecksState, useWorkspaceState } from "@/state";
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
@@ -43,7 +43,7 @@ const noSubscription = (): (() => void) => () => {};
 
 /** A remote host connection is live only while it is connected. A local host is always live. */
 function useHostConnectionLive(): boolean {
-  const connection = getShellBridge().remoteConnection;
+  const connection = useShellPlatform().remoteConnection;
   return useSyncExternalStore(
     connection?.subscribeState ?? noSubscription,
     () => connection === undefined || connection.readState().status === "connected",

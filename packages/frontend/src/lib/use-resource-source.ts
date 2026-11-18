@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { resourceSourceQueryOptions } from "@/state/queries/resource-sources";
 import type { ResourceRead } from "@/types/resource-source";
-import { getShellBridge } from "./shell-bridge";
+import { useShellPlatform } from "./shell-platform";
 
 type ResourceSourceState = { src: string | null; error: Error | null; isLoading: boolean };
 const noSubscription = (): (() => void) => () => {};
@@ -12,7 +12,7 @@ export const useResourceSource = (
   key: readonly string[],
   read: ResourceRead | undefined,
 ): ResourceSourceState => {
-  const connection = getShellBridge().remoteConnection;
+  const connection = useShellPlatform().remoteConnection;
   const generation = useSyncExternalStore(
     connection?.subscribeState ?? noSubscription,
     () => connection?.readState().generation ?? 0,

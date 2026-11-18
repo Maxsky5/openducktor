@@ -7,7 +7,7 @@ import {
   useTaskSessionStartFlow,
 } from "@openducktor/frontend-core/tasks/workflow/use-task-session-start-flow";
 
-type UseKanbanSessionStartFlowArgs = Omit<
+type UseDesktopTaskSessionStartFlowArgs = Omit<
   Parameters<typeof useTaskSessionStartFlow>[0],
   "openTaskView"
 > & {
@@ -16,11 +16,11 @@ type UseKanbanSessionStartFlowArgs = Omit<
 };
 
 /** The task session start flow with desktop routes. */
-export function useKanbanSessionStartFlow({
+export function useDesktopTaskSessionStartFlow({
   navigate,
   closeTaskDetails,
   ...args
-}: UseKanbanSessionStartFlowArgs): UseTaskSessionStartFlowResult {
+}: UseDesktopTaskSessionStartFlowArgs): UseTaskSessionStartFlowResult {
   const openTaskView = useCallback<OpenTaskView>(
     (target, selected) => {
       // The task view replaces the current view, so the task details must not stay over it.

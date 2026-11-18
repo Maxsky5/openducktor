@@ -30,7 +30,6 @@ export const gitlabInstanceLabel = (instanceUrl: string): string => {
   return canonical.startsWith("https://") ? canonical.slice("https://".length) : canonical;
 };
 
-/** Compares GitLab projects by canonical instance URL and lowercase project path. */
 export const gitlabRepositoryKey = (repository: GitlabRepository): string =>
   [
     "gitlab",

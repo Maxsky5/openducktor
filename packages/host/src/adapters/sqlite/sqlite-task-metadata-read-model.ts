@@ -1,5 +1,4 @@
 import {
-  gitTargetBranchSchema,
   pullRequestSchema,
   directMergeRecordSchema,
   type TaskMetadataArtifact,
@@ -10,7 +9,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { HostResourceError } from "../../effect/host-errors";
 import { and, eq } from "drizzle-orm";
-import { validateWithSchema } from "./sqlite-task-store-validation";
+import { taskTargetBranchFromRow, validateWithSchema } from "./sqlite-task-store-validation";
 import { readTaskSessions } from "./sqlite-task-relations";
 import {
   latestWorkflowArtifactRows,
@@ -49,15 +48,7 @@ export const taskMetadata = (
     }
     const agentSessions = yield* readTaskSessions(session, row.workspaceId, row.id);
     const delivery = yield* taskDelivery(session, row.workspaceId, row.id, "");
-    const targetBranch =
-      row.targetBranch === null
-        ? undefined
-        : yield* validateWithSchema(
-            gitTargetBranchSchema,
-            { branch: row.targetBranch, remote: row.targetRemote ?? undefined },
-            "target branch",
-            { workspaceId: row.workspaceId, taskId: row.id },
-          );
+    const targetBranch = yield* taskTargetBranchFromRow(row, row.workspaceId);
     return yield* validateWithSchema(
       taskMetadataPayloadSchema,
       {

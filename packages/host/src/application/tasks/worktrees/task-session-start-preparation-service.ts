@@ -1,4 +1,4 @@
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { resolveTaskSessionStartTarget } from "./task-session-start-target";
 import { startupStep } from "../../agent-sessions/session-startup-progress";
 import type { RuntimeKind } from "@openducktor/contracts";

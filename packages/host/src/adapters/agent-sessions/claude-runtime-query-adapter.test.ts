@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { fromPromise } from "../claude/claude-agent-sdk-utils";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
-import { createClaudeRuntimeQueryAdapter } from "./claude-runtime-query-adapter";
+import { createClaudeRuntimeQueryAdapter } from "./runtime-query-adapter";
 
 const catalogInput = {
   repoPath: "/repo",

@@ -21,6 +21,7 @@ import { RemoteAccessError, createRemoteAdmission, remoteDisabled } from "./remo
 import { createRemoteWorkInterface, type RemoteHostServices } from "./remote-work-interface";
 import { startNodeFetchServer, type NodeFetchServer } from "./node-fetch-server";
 import { hostWebSocketHandler, type HostWebSocketData } from "./host-websocket-handler";
+import { stripMountPath } from "./request-path";
 import type { WebLogger } from "./logger";
 
 export { RemoteAccessError };
@@ -79,13 +80,6 @@ const carriesRemoteHeaders = (request: Request): boolean => {
     .toLowerCase()
     .split(",")
     .some((header) => REMOTE_REQUEST_HEADERS.includes(header.trim()));
-};
-
-/** The request path below the shared mount path. */
-const sharedRoute = (request: Request, mountPath: string): string => {
-  const path = new URL(request.url).pathname;
-  if (!mountPath || (path !== mountPath && !path.startsWith(`${mountPath}/`))) return path;
-  return path.slice(mountPath.length) || "/";
 };
 
 /** Listener changes run in order so a late start cannot reopen disabled access. */
@@ -396,7 +390,8 @@ export const createRemoteAccessController = (
     handleSharedRequest: (request, requestServer) => {
       if (!sharedWork || !options.sharedListener) return null;
       const explicitRemote =
-        carriesRemoteHeaders(request) || REMOTE_ROUTES.has(sharedRoute(request, sharedMountPath));
+        carriesRemoteHeaders(request) ||
+        REMOTE_ROUTES.has(stripMountPath(new URL(request.url).pathname, sharedMountPath));
       if (!explicitRemote && options.sharedListener.isPrivateRequest(request)) return null;
       return sharedWork.handle(request, requestServer);
     },

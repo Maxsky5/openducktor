@@ -1,6 +1,5 @@
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import {
-  type RepoConfig,
   type TaskWorktreeSummary,
   type WorkspaceRef,
   taskWorktreeSummarySchema,
@@ -11,6 +10,7 @@ import {
   type HostValidationErrorAggregate,
 } from "../../../effect/host-errors";
 import type { SettingsConfigError, SettingsConfigPort } from "../../../ports/settings-config-port";
+import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import type {
   WorkspaceSettingsError,
   WorkspaceSettingsService,
@@ -34,15 +34,6 @@ export type CreateTaskWorktreeServiceInput = {
   settingsConfig: SettingsConfigPort;
   workspaceSettingsService: WorkspaceSettingsService;
 };
-const resolveWorktreeBasePath = (
-  settingsConfig: SettingsConfigPort,
-  repoConfig: RepoConfig,
-): string => {
-  if (repoConfig.worktreeBasePath !== undefined) {
-    return settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath);
-  }
-  return settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-};
 export const createTaskWorktreeService = ({
   settingsConfig,
   workspaceSettingsService,
@@ -54,7 +45,7 @@ export const createTaskWorktreeService = ({
       if (idError) return yield* idError;
       const repoConfig = yield* getScopedRepoConfig(workspaceSettingsService, input);
       const worktreePath = settingsConfig.join(
-        resolveWorktreeBasePath(settingsConfig, repoConfig),
+        managedWorktreeBaseForRepoConfig(settingsConfig, repoConfig),
         taskId,
       );
       if (!(yield* settingsConfig.pathExists(worktreePath))) {

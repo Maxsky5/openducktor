@@ -49,8 +49,8 @@ Build these parts from their replicas. Do not copy their markup, their styles, o
 ## Add a scene
 
 1. Create `src/scenes/<name>/` with `view.tsx`, `view.css`, `timeline.ts` (exports `build`), and `sample.ts`. The view renders the static frame, and the timeline builds each run from it.
-2. Add the name to `SCENE_NAMES` and the entry to `SCENES` in `src/registry.ts`, and `VIEWS` in `src/views.ts`.
-3. For a scene of the website, add the name to `SITE_SCENE_NAMES` in `src/registry.ts`, and add the entries to `ASTRO_VIEWS` and `ASTRO_TIMELINES` in `src/astro/`. `PAGE_VIEWS` in `src/react/page-views.ts` gets the view from `ASTRO_VIEWS`.
+2. Add the entry to `SCENES` in `src/registry.ts` and to `VIEWS` in `src/views.ts`.
+3. For a scene of the website, add the view to `ASTRO_VIEWS` and the timeline to `ASTRO_TIMELINES` or `ASTRO_CHAPTERS` in `src/astro/`. `PAGE_VIEWS` in `src/react/page-views.ts` gets the view from `ASTRO_VIEWS`.
 4. For a scene that only the documentation shows, add the view to `PAGE_VIEWS` in `src/react/page-views.ts` only. The Astro maps do not hold it, so the website loads none of its styles and none of its timeline.
 5. The `satisfies` checks fail until the maps match the names.
 6. For a scene with options, add its options to `OPTIONS` in `src/scenes.test.ts`. The type check fails until `OPTIONS` holds them. A scene without options needs no entry. Run `bun run test` in `packages/product-scenes`. The test renders the static view of each registered scene and builds its timeline from it, so it finds a hook or a template that the view does not render.
@@ -79,7 +79,7 @@ Build these parts from their replicas. Do not copy their markup, their styles, o
 |---|---|
 | `./react` | The React `Scene` and `preloadScene` |
 | `./react/page` | The React `PageScene` for a page that a React server renders |
-| `./astro` | `Scene.astro` for an Astro page. It renders only the scenes in `SITE_SCENE_NAMES` |
+| `./astro` | `Scene.astro` for an Astro page. It renders only the scenes in `ASTRO_VIEWS` |
 | `./styles.css` | The base styles of every scene |
 | `./page-styles` | `pageStyles()`, a build-time function that runs in Bun: the stylesheet files of `PageScene`, for the base styles and for each scene. A host bundles them |
 | `./keys` | The key labels of macOS (`MAC_KEYS`) and of Windows and Linux (`PC_KEYS`) |

@@ -35,16 +35,6 @@ describe("resolveLaunchStartMode", () => {
     ).toBe("reuse");
   });
 
-  test("falls back to the first allowed non-reuse mode when no reusable sessions exist", () => {
-    expect(
-      resolveLaunchStartMode({
-        taskWorkflow: specPlanBuildWorkflow,
-        launchActionId: "build_implementation_start",
-        existingSessionOptions: [],
-      }),
-    ).toBe("fresh");
-  });
-
   test("keeps reuse as the default when the launch action allows reuse and fork", () => {
     expect(
       resolveLaunchStartMode({

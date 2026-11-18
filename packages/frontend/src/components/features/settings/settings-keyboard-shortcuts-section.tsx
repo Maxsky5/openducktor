@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { ToolbarSearchField } from "@/components/ui/search-field";
 import { RadioGroup, RadioGroupSegmentItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
-import { currentShortcutShell } from "@/features/shortcuts/catalogue";
 import { spokenShortcut } from "@openducktor/frontend-core/shortcuts/key-labels";
-import { useShortcutCatalogue } from "@/features/shortcuts/use-shortcut-catalogue";
+import {
+  useShortcutCatalogue,
+  useShortcutShell,
+} from "@/features/shortcuts/use-shortcut-catalogue";
 import { useShortcutPreferences } from "@/features/shortcuts/use-shortcut-preferences";
 import { readDevicePlatform } from "@/lib/device-platform";
 import { cn } from "@/lib/utils";
@@ -48,7 +50,7 @@ export function SettingsKeyboardShortcutsSection({ disabled }: { disabled: boole
   const editable = Boolean(draft.preferences) && !disabled;
   const catalogue = useShortcutCatalogue(draft.preferences);
   const platform = readDevicePlatform();
-  const shell = currentShortcutShell();
+  const shell = useShortcutShell();
   const heading = useRef<HTMLHeadingElement>(null);
   const editor = useShortcutEditor({ catalogue, platform, shell, heading, draft });
   const [search, setSearch] = useState("");

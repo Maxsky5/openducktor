@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
-import { findCatalogModel, STANDARD_SPEED, withSpeed } from "../../lib/model-catalog-selection";
+import { findCatalogModel, STANDARD_SPEED, withSpeed } from "@openducktor/core";
 import { selectableModelPickerCatalog } from "../model-selection/model-picker-model";
 import { type SpeedControlModel, useSpeedControl } from "../model-selection/use-speed-control";
 import type { SessionStartModalModel } from "./session-start-modal-model";

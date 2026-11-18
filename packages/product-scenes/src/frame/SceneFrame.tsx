@@ -1,7 +1,13 @@
 // The frame of a product scene: the root that the timeline mounts on, the stage with the copied
 // UI, and the hidden stock of templates that the timeline clones. The stage is an image for
 // assistive technology, with the text alternative of the view.
-import type { ComponentType, ReactElement, ReactNode, Ref } from "react";
+import {
+  type ComponentType,
+  createElement,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+} from "react";
 import type { KeyLabels } from "../replicas/keys";
 import { classes } from "../replicas/classes";
 import { flag } from "../replicas/flag";
@@ -31,6 +37,16 @@ export type ViewPropsOf<Name extends SceneName> = SceneViewProps & { options: Sc
 export type SceneViews<Names extends SceneName = SceneName> = {
   [Name in Names]: ComponentType<ViewPropsOf<Name>>;
 };
+
+/** Renders the view of the scene `name` from a map of static views. */
+export function viewElement<Names extends SceneName, Name extends Names>(
+  views: SceneViews<Names>,
+  name: Name,
+  props: ViewPropsOf<Name>,
+): ReactElement {
+  const view: ComponentType<ViewPropsOf<Name>> = views[name];
+  return createElement(view, props);
+}
 
 type SceneFrameProps = SceneViewProps & {
   name: SceneName;

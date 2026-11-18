@@ -46,7 +46,11 @@ import { createRuntimeAdmissionGate, type RuntimeAdmissionGate } from "./runtime
 import { createRuntimeRegistry, type RuntimeLifecycleReservation } from "./runtime-registry";
 
 export type RuntimeSettingsCheck =
-  | { type: "accepted" }
+  | {
+      type: "accepted";
+      /** Applies the checked change after the settings write, while the reservation is held. */
+      apply: Effect.Effect<RuntimeSettingsApplication[]>;
+    }
   | { type: "impact_changed"; impact: RuntimeLifecycleImpact };
 
 /** A settings change that owns the lifecycle of its kinds until it ends. */
@@ -59,8 +63,6 @@ export type RuntimeSettingsChangeSession<E> = {
     change: RuntimeSettingsChange,
     confirmation: string | undefined,
   ): Effect.Effect<RuntimeSettingsCheck, E | RuntimeSettingsError>;
-  /** Applies each changed kind independently, after the settings are written. */
-  apply(change: RuntimeSettingsChange): Effect.Effect<RuntimeSettingsApplication[]>;
 };
 
 export type RuntimeOrchestrator<E> = {
@@ -210,6 +212,34 @@ export const createRuntimeOrchestrator = <E>({
       ),
     );
 
+  const applySettingsChange = (
+    reservation: RuntimeLifecycleReservation,
+    change: RuntimeSettingsChange,
+  ) =>
+    Effect.gen(function* () {
+      yield* configurePlans(change.plans.filter((plan) => !hasLifecycleEffect(plan)));
+      return yield* Effect.forEach(
+        change.plans.filter(hasLifecycleEffect),
+        (plan) =>
+          reservation
+            .apply(plan.kind, {
+              trigger: "settings",
+              enabled: plan.enabled,
+              configuredExecutablePath: plan.executablePath,
+            })
+            .pipe(
+              Effect.map((outcome): RuntimeSettingsApplication => ({
+                kind: plan.kind,
+                effect: plan.effect,
+                outcome: outcome.type === "completed" ? "applied" : "failed",
+                message:
+                  outcome.type === "completed" ? null : (outcome.status.failure?.message ?? null),
+              })),
+            ),
+        { concurrency: "unbounded" },
+      );
+    });
+
   const settingsChangeSession = (
     reservation: RuntimeLifecycleReservation,
   ): RuntimeSettingsChangeSession<E> => ({
@@ -225,7 +255,11 @@ export const createRuntimeOrchestrator = <E>({
             message: SETTINGS_CHANGED_MESSAGE,
           });
         }
-        if (change.lifecycleKinds.length === 0) return { type: "accepted" as const };
+        const accepted = {
+          type: "accepted" as const,
+          apply: applySettingsChange(reservation, change),
+        };
+        if (change.lifecycleKinds.length === 0) return accepted;
         yield* Effect.forEach(
           change.plans.filter((plan) => plan.effect === "start" || plan.effect === "replace"),
           (plan) =>
@@ -246,31 +280,7 @@ export const createRuntimeOrchestrator = <E>({
         if (hasSessions && !confirmations.accept(confirmation, current.review)) {
           return { type: "impact_changed" as const, impact: current.impact };
         }
-        return { type: "accepted" as const };
-      }),
-    apply: (change) =>
-      Effect.gen(function* () {
-        yield* configurePlans(change.plans.filter((plan) => !hasLifecycleEffect(plan)));
-        return yield* Effect.forEach(
-          change.plans.filter(hasLifecycleEffect),
-          (plan) =>
-            reservation
-              .apply(plan.kind, {
-                trigger: "settings",
-                enabled: plan.enabled,
-                configuredExecutablePath: plan.executablePath,
-              })
-              .pipe(
-                Effect.map((outcome): RuntimeSettingsApplication => ({
-                  kind: plan.kind,
-                  effect: plan.effect,
-                  outcome: outcome.type === "completed" ? "applied" : "failed",
-                  message:
-                    outcome.type === "completed" ? null : (outcome.status.failure?.message ?? null),
-                })),
-              ),
-          { concurrency: "unbounded" },
-        );
+        return accepted;
       }),
   });
 

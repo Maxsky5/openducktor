@@ -1,3 +1,4 @@
+import { liveSessionRefKey, toLiveSessionRef } from "./live-session-ref";
 import type { WorkflowRolePolicyResolver } from "@openducktor/core";
 import { createRuntimeSessionImportAdapter } from "./runtime-session-import-adapter";
 import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
@@ -35,12 +36,7 @@ import type {
   PreparedRuntimeLiveSessionAdapter,
   RuntimeLiveSessionLifecyclePort,
 } from "../../ports/runtime-live-session-lifecycle-port";
-import {
-  refKey,
-  requireRuntime,
-  toSessionRef,
-  toRuntimeSignalChanges,
-} from "./opencode-live-session-normalization";
+import { requireRuntime, toRuntimeSignalChanges } from "./opencode-live-session-normalization";
 import { createOpenCodeAdapterRelease } from "./opencode-live-session-release";
 import { createOpenCodeLiveSessionState } from "./opencode-live-session-state";
 import { createOpenCodeSessionControlAdapter } from "./opencode-session-control-adapter";
@@ -297,7 +293,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
       ): Promise<AgentSessionContextUsage | null> => {
         const readStart = state.readStart();
         const operation = Effect.tryPromise({
-          try: () => prepared.connection.loadContextUsage(toSessionRef(input)),
+          try: () => prepared.connection.loadContextUsage(toLiveSessionRef(input)),
           catch: (cause) =>
             toHostOperationError(cause, "opencode-live-session.load-context", {
               runtimeId: runtime.runtimeId,
@@ -368,7 +364,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
             if (usage) {
               return Effect.succeed(usage);
             }
-            const key = refKey(input);
+            const key = liveSessionRefKey(input);
             const existing = contextLoads.get(key);
             if (existing) {
               return Effect.tryPromise({

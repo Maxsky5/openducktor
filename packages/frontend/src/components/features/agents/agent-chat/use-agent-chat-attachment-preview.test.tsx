@@ -1,11 +1,7 @@
+import { withShellPlatform } from "@/test-utils/focused-fixture";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import {
-  configureShellBridge,
-  createDisabledAppUpdateBridge,
-  createUnavailableShellBridge,
-  type ShellBridge,
-} from "@/lib/shell-bridge";
+import { createUnavailableShellBridge, type ShellBridge } from "@/lib/shell-bridge";
 import { createHookHarness as createHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import {
   readAttachmentPreviewLoadFailureMessage,
@@ -15,36 +11,26 @@ import {
 const createHookHarness = (
   hook: typeof useAgentChatAttachmentPreview,
   props: Parameters<typeof useAgentChatAttachmentPreview>[0],
-) => createHarness(hook, props, { wrapper: QueryProvider });
+  shellPlatform = createUnavailableShellBridge(),
+) =>
+  createHarness(hook, props, {
+    wrapper: ({ children }) =>
+      withShellPlatform(<QueryProvider>{children}</QueryProvider>, shellPlatform),
+  });
 
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;
 
-const configureAttachmentPreviewShellBridge = (
+const attachmentPreviewShell = (
   resolveLocalAttachmentPreview: ShellBridge["resolveLocalAttachmentPreview"],
-): void => {
-  configureShellBridge({
-    ...createUnavailableShellBridge(),
-    appUpdates: createDisabledAppUpdateBridge({
-      status: "disabled",
-      currentVersion: "unknown",
-      disabledCode: "updater_unavailable",
-      disabledReason: "Updates are unavailable in this test shell.",
-    }),
-    capabilities: {
-      canOpenExternalUrls: true,
-      canPreviewLocalAttachments: true,
-    },
-    openExternalUrl: async () => {},
-    resolveLocalAttachmentPreview,
-    resolveTaskAssetSource: async () => ({ kind: "url", src: "asset://task-preview" }),
-  });
-};
+): ShellBridge => ({
+  ...createUnavailableShellBridge(),
+  resolveLocalAttachmentPreview,
+});
 
 afterEach(() => {
   URL.createObjectURL = originalCreateObjectUrl;
   URL.revokeObjectURL = originalRevokeObjectUrl;
-  configureShellBridge(createUnavailableShellBridge());
 });
 
 describe("useAgentChatAttachmentPreview", () => {
@@ -143,23 +129,27 @@ describe("useAgentChatAttachmentPreview", () => {
   });
 
   test("resolves transcript image previews through the desktop asset protocol", async () => {
-    configureAttachmentPreviewShellBridge(
+    const shellPlatform = attachmentPreviewShell(
       mock(async (path) => ({
         kind: "url" as const,
         src: `asset://localhost/${encodeURIComponent(`/tmp/openducktor-local-attachments/${path}`)}`,
       })),
     );
 
-    const harness = createHookHarness(useAgentChatAttachmentPreview, {
-      attachment: {
-        id: "attachment-4",
-        name: "preview.png",
-        kind: "image" as const,
-        mime: "image/png",
-        path: "uuid-preview.png",
+    const harness = createHookHarness(
+      useAgentChatAttachmentPreview,
+      {
+        attachment: {
+          id: "attachment-4",
+          name: "preview.png",
+          kind: "image" as const,
+          mime: "image/png",
+          path: "uuid-preview.png",
+        },
+        externalError: null,
       },
-      externalError: null,
-    });
+      shellPlatform,
+    );
 
     await harness.mount();
     await harness.waitFor((state) => state.showResolvedPreview === true);
@@ -173,22 +163,26 @@ describe("useAgentChatAttachmentPreview", () => {
   });
 
   test("surfaces transcript preview resolution failures as explicit errors", async () => {
-    configureAttachmentPreviewShellBridge(
+    const shellPlatform = attachmentPreviewShell(
       mock(async () => {
         throw new Error("Attachment path is not a staged local attachment.");
       }),
     );
 
-    const harness = createHookHarness(useAgentChatAttachmentPreview, {
-      attachment: {
-        id: "attachment-5",
-        name: "preview.png",
-        kind: "image" as const,
-        mime: "image/png",
-        path: "/tmp/preview.png",
+    const harness = createHookHarness(
+      useAgentChatAttachmentPreview,
+      {
+        attachment: {
+          id: "attachment-5",
+          name: "preview.png",
+          kind: "image" as const,
+          mime: "image/png",
+          path: "/tmp/preview.png",
+        },
+        externalError: null,
       },
-      externalError: null,
-    });
+      shellPlatform,
+    );
 
     await harness.mount();
     await harness.waitFor((state) => state.isResolvingPreview === false);
@@ -206,18 +200,22 @@ describe("useAgentChatAttachmentPreview", () => {
       kind: "url" as const,
       src: "asset://localhost/unexpected",
     }));
-    configureAttachmentPreviewShellBridge(resolveLocalAttachmentPreviewUrl);
+    const shellPlatform = attachmentPreviewShell(resolveLocalAttachmentPreviewUrl);
 
-    const harness = createHookHarness(useAgentChatAttachmentPreview, {
-      attachment: {
-        id: "attachment-history",
-        name: "Claude image attachment.png",
-        kind: "image" as const,
-        path: "runtime-history-attachment",
-        localPreviewAvailable: false,
+    const harness = createHookHarness(
+      useAgentChatAttachmentPreview,
+      {
+        attachment: {
+          id: "attachment-history",
+          name: "Claude image attachment.png",
+          kind: "image" as const,
+          path: "runtime-history-attachment",
+          localPreviewAvailable: false,
+        },
+        externalError: null,
       },
-      externalError: null,
-    });
+      shellPlatform,
+    );
 
     await harness.mount();
 

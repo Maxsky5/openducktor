@@ -1,14 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { withShellPlatform } from "@/test-utils/focused-fixture";
+import { describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { AppUpdatePrompt } from "./app-update-prompt";
 import { createFakeAppUpdateBridge, createTestShellBridge } from "./app-update-test-utils";
 import { SettingsAppUpdatesSection } from "./settings-app-updates-section";
-
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
 
 const longUpdateError =
   "OpenDucktor could not read latest-mac.yml for release v0.4.3. Make sure the GitHub release is published and includes the Electron updater metadata asset, then try again. https://github.com/Maxsky5/openducktor/releases/download/v0.4.3/latest-mac.yml x-github-request-id-4BDD-2F6204-154326FB-1101F3BB-6A501D61";
@@ -28,8 +24,8 @@ describe("SettingsAppUpdatesSection", () => {
           resolveInitialState = resolve;
         }),
     );
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     expect(await screen.findByText("Loading update status")).toBeTruthy();
     expect(screen.getByText("Loading update information.")).toBeTruthy();
@@ -63,8 +59,8 @@ describe("SettingsAppUpdatesSection", () => {
         checkedAt: "2026-07-08T22:00:00.000Z",
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
 
@@ -80,8 +76,8 @@ describe("SettingsAppUpdatesSection", () => {
     appUpdates.check.mockImplementation(async () => {
       throw new Error("bridge check failed");
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     fireEvent.click(await screen.findByRole("button", { name: "Check for updates" }));
 
@@ -97,8 +93,8 @@ describe("SettingsAppUpdatesSection", () => {
       disabledCode: "not_packaged",
       disabledReason: "Updates are available only in packaged desktop builds.",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     expect(await screen.findByText("Development build")).toBeTruthy();
     expect(
@@ -123,8 +119,8 @@ describe("SettingsAppUpdatesSection", () => {
         operation: "check",
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     expect(await screen.findByText("Update error")).toBeTruthy();
     expect(screen.getByText("OpenDucktor could not complete the update check.")).toBeTruthy();
@@ -138,8 +134,8 @@ describe("SettingsAppUpdatesSection", () => {
       availableVersion: "0.4.3",
       progressPercent: 67,
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     expect(await screen.findByText("Downloading update")).toBeTruthy();
     expect(screen.queryByRole("progressbar", { name: "Update download progress" })).toBeNull();
@@ -192,12 +188,15 @@ describe("SettingsAppUpdatesSection", () => {
       appUpdates.emit(availableState);
       return { accepted: true, state: availableState };
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
     render(
-      <>
-        <AppUpdatePrompt />
-        <SettingsAppUpdatesSection disabled={false} />
-      </>,
+      withShellPlatform(
+        <>
+          <AppUpdatePrompt />
+          <SettingsAppUpdatesSection disabled={false} />
+        </>,
+        shellPlatform,
+      ),
     );
 
     expect(await screen.findByRole("button", { name: "Download Signed Release" })).toBeTruthy();
@@ -218,8 +217,8 @@ describe("SettingsAppUpdatesSection", () => {
       progressPercent: 100,
       installRequested: true,
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     expect(await screen.findByText("Installing update")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Restart to Install" })).toBeNull();
@@ -241,8 +240,8 @@ describe("SettingsAppUpdatesSection", () => {
         operation: "install",
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     expect(await screen.findByText("Install needs attention")).toBeTruthy();
     expect(screen.queryByText("Quit and reopen OpenDucktor before trying again.")).toBeNull();
@@ -267,8 +266,8 @@ describe("SettingsAppUpdatesSection", () => {
         operation: "install",
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     expect(await screen.findByText("Manual update required")).toBeTruthy();
     expect(screen.queryByText(recoveryMessage)).toBeNull();
@@ -282,8 +281,8 @@ describe("SettingsAppUpdatesSection", () => {
       disabledCode: "unsupported_web_runner",
       disabledReason: "The browser runner does not install updates in OpenDucktor.",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<SettingsAppUpdatesSection disabled={false} />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<SettingsAppUpdatesSection disabled={false} />, shellPlatform));
 
     expect(await screen.findByText("Browser runner")).toBeTruthy();
     expect(

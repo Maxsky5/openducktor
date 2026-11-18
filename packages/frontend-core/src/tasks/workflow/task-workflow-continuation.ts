@@ -1,6 +1,6 @@
 import { useSessionStartContext } from "../../sessions/start/use-session-start-context";
 import type { TaskCard, WorkflowReference, WorkspaceRef } from "@openducktor/contracts";
-import { taskWorkflowInput, type ResolvedTaskCard } from "@openducktor/workflows";
+import type { ResolvedTaskCard } from "@openducktor/workflows";
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useClientConnection } from "../../connection/client-connection-react";
@@ -38,10 +38,7 @@ export const selectTaskWorkflowContinuation = (
     throw new Error(
       "The committed task workflow changed. Reload the task before starting a session.",
     );
-  return task.taskWorkflow.evaluator.selectLaunchAction(
-    taskWorkflowInput(task),
-    continuation.launchActionIds,
-  );
+  return task.taskWorkflow.selectLaunchAction(task, continuation.launchActionIds);
 };
 
 /** Called only after a successful command. A later launch failure never repeats that command. */

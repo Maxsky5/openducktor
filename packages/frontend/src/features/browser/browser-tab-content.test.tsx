@@ -14,13 +14,8 @@ import type { ReactElement } from "react";
 import { browserAnnotationStoreOf } from "@/features/browser-annotations/browser-annotation-store";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import {
-  type BrowserBridge,
-  type BrowserFrameBridge,
-  configureShellBridge,
-  createUnavailableShellBridge,
-} from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { type BrowserBridge, type BrowserFrameBridge } from "@/lib/shell-bridge";
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import {
   browserTabIdFixture,
   createBrowserTabSummaryFixture,
@@ -132,33 +127,35 @@ const renderTab = (
       browserDevToolsOpen: async () => ({ frontendUrl: "devtools://devtools/bundled/app.html" }),
     },
   });
-  configureShellBridge(createShellBridgeFixture({ bridge: { openExternalUrl, browser } }));
+  const shellPlatform = createShellBridgeFixture({ bridge: { openExternalUrl, browser } });
   let runtime: BrowserRuntime | null = null;
   function Probe(): ReactElement | null {
     runtime = useBrowserRuntime();
     return null;
   }
   /** `inPanel` false leaves the tab out of the panels, as for an owner that no panel shows. */
-  const tree = (inPanel: boolean, shown = options.shown ?? true) => (
-    <QueryProvider connection={connection}>
-      <BrowserRuntimeProvider>
-        <Probe />
-        {options.withLayer ? <BrowserLayer /> : null}
-        {inPanel ? (
-          <BrowserTabContent
-            entry={{
-              id: `browser:${TAB_ID}`,
-              kind: "browser",
-              tabId: TAB_ID,
-            }}
-            tab={options.listed === false ? null : tab}
-            isShown={shown}
-            addressFocusRequest={0}
-          />
-        ) : null}
-      </BrowserRuntimeProvider>
-    </QueryProvider>
-  );
+  const tree = (inPanel: boolean, shown = options.shown ?? true) =>
+    withShellPlatform(
+      <QueryProvider connection={connection}>
+        <BrowserRuntimeProvider>
+          <Probe />
+          {options.withLayer ? <BrowserLayer /> : null}
+          {inPanel ? (
+            <BrowserTabContent
+              entry={{
+                id: `browser:${TAB_ID}`,
+                kind: "browser",
+                tabId: TAB_ID,
+              }}
+              tab={options.listed === false ? null : tab}
+              isShown={shown}
+              addressFocusRequest={0}
+            />
+          ) : null}
+        </BrowserRuntimeProvider>
+      </QueryProvider>,
+      shellPlatform,
+    );
   const view = render(tree(options.inPanel ?? true));
   const requireRuntime = (): BrowserRuntime => {
     if (runtime === null) throw new Error("The runtime did not render.");
@@ -186,7 +183,6 @@ const renderTab = (
 };
 
 afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
   useBrowserDevToolsStore.setState({ docks: {} });
 });
 

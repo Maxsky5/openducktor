@@ -2,8 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { configureShellBridge } from "@/lib/shell-bridge";
-import { createShellBridgeFixture } from "@/test-utils/focused-fixture";
+import { createShellBridgeFixture, withShellPlatform } from "@/test-utils/focused-fixture";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { gitlabDraftFromConfig } from "./gitlab-provider-model";
 import { useGitlabAccountController } from "./use-gitlab-account-controller";
@@ -29,7 +28,10 @@ const deviceCode = {
   nextPollAt: new Date(Date.now() + 60_000).toISOString(),
 };
 
-const renderController = (fromSavedSettings: boolean) => {
+const renderController = (
+  fromSavedSettings: boolean,
+  shellPlatform = createShellBridgeFixture(),
+) => {
   const onLink = mock((_accountId: string | null, _instanceUrl: string) => undefined);
   const connection = createTestClientConnection({
     client: {
@@ -38,7 +40,7 @@ const renderController = (fromSavedSettings: boolean) => {
     },
   });
   const wrapper = ({ children }: PropsWithChildren) =>
-    createElement(QueryProvider, { connection }, children);
+    withShellPlatform(createElement(QueryProvider, { connection }, children), shellPlatform);
   const { result } = renderHook(
     () =>
       useGitlabAccountController({
@@ -72,8 +74,10 @@ describe("GitLab account auto-link", () => {
 describe("GitLab browser sign-in", () => {
   test("opens the sign-in page with the one-time code when sign-in starts", async () => {
     const openExternalUrl = mock(async (_url: string) => {});
-    configureShellBridge(createShellBridgeFixture({ bridge: { openExternalUrl } }));
-    const { result } = renderController(false);
+    const { result } = renderController(
+      false,
+      createShellBridgeFixture({ bridge: { openExternalUrl } }),
+    );
 
     result.current.startSignIn();
 

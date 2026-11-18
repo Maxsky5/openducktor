@@ -1,5 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
-import { taskWorkflowContextQueryOptions } from "@openducktor/frontend-core/queries/task-workflow-context";
+import { useTaskWorkflowContextQuery } from "@openducktor/frontend-core/queries/task-workflow-context";
 import type { AgentSessionRecord, WorkspaceRef } from "@openducktor/contracts";
 import { useAgentSessionLists } from "@openducktor/frontend-core/queries/use-agent-session-lists";
 import { useAgentSessionSummaries } from "@openducktor/frontend-core/sessions/session-store-hooks";
@@ -16,10 +15,7 @@ const NO_TASK_IDS: string[] = [];
  * nothing.
  */
 export function useTaskSessionGroups(scope: WorkspaceRef, taskId: string | null) {
-  const taskQuery = useQuery({
-    ...taskWorkflowContextQueryOptions(scope, taskId ?? ""),
-    enabled: taskId !== null,
-  });
+  const taskQuery = useTaskWorkflowContextQuery(scope, taskId ?? "", taskId !== null);
   const summaries = useAgentSessionSummaries();
   const queryClient = useQueryClient();
   const taskIds = useMemo(() => (taskId ? [taskId] : NO_TASK_IDS), [taskId]);

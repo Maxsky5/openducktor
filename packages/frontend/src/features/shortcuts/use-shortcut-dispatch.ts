@@ -17,7 +17,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import { hasOpenDialog, openDialogCount, subscribeOpenDialogs } from "@/components/ui/open-dialogs";
-import { currentShortcutShell } from "./catalogue";
 import {
   CommandPaletteRegistryContext,
   useCommandPaletteCommands,
@@ -36,7 +35,7 @@ import { shortcutControlLabel } from "./shortcut-label-store";
 import { useFrameShortcutRouting } from "./use-frame-shortcut-routing";
 import { type NativeShortcutRoutes, useNativeShortcutRouting } from "./use-native-shortcut-routing";
 import { usePositionHints } from "./use-position-hints";
-import { useShortcutCatalogue } from "./use-shortcut-catalogue";
+import { useShortcutCatalogue, useShortcutShell } from "./use-shortcut-catalogue";
 import { useShortcutPreferences } from "./use-shortcut-preferences";
 
 type Invocation = { owner: string | null; run(): void };
@@ -165,7 +164,7 @@ export function useShortcutDispatch({
     shortcutRecording.isActive,
   );
   const preferences = useShortcutPreferences();
-  const shell = currentShortcutShell();
+  const shell = useShortcutShell();
   const electron = shell === "electron";
   const catalogue = useShortcutCatalogue(preferences.query.data);
   const compiled = useMemo(

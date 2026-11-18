@@ -1,12 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
-import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { repoConfigQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/workspace";
 import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/types/agent-session-read-model";
 import { buildAgentStudioStateLoad } from "./agent-studio-workspace-state-load-model";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
-
-const INACTIVE_AGENT_STUDIO_WORKSPACE_ID = "__inactive_agent_studio_workspace__";
 
 export function useAgentStudioWorkspaceStateLoad({
   activeWorkspaceId,
@@ -23,15 +21,9 @@ export function useAgentStudioWorkspaceStateLoad({
   sessions: AgentSessionSummary[];
   sessionReadModelLoadState: AgentSessionReadModelLoadState;
 }) {
-  const queryOptions = repoConfigQueryOptions(
-    activeWorkspaceId ?? INACTIVE_AGENT_STUDIO_WORKSPACE_ID,
-  );
   const repoConfigQuery = useQuery({
-    ...queryOptions,
-    enabled: activeWorkspaceId !== null,
+    ...repoConfigQueryOptionsOrSkip(activeWorkspaceId),
     refetchOnMount: false,
-    refetchOnReconnect: false,
-    refetchOnWindowFocus: false,
   });
   const loadModel = useMemo(
     () =>

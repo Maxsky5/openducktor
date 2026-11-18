@@ -4,9 +4,6 @@ import {
   actionShowsOn,
   launchSessionCommand,
   pullRequestRoleLabel,
-  taskLaunchOrder,
-  taskSurfaceLaunches,
-  taskWorkflowInput,
   taskActionLabel,
   taskGitConflictLaunch,
   taskWaitsForMergePublication,
@@ -103,8 +100,7 @@ export const buildAgentStudioQuickActions = (
 ): AgentStudioQuickActionOption[] => {
   const task = params.selectedTask;
   if (!task) return [];
-  const { evaluator } = task.taskWorkflow;
-  const input = taskWorkflowInput(task);
+  const { taskWorkflow } = task;
   const options: AgentStudioSessionQuickActionOption[] = [];
   const availableSteps = new Set(
     task.workflowSteps.filter(({ available }) => available).map(({ id }) => id),
@@ -146,17 +142,17 @@ export const buildAgentStudioQuickActions = (
   );
   const actionById = new Map(launchActions.map((action) => [action.id, action]));
   const launchActionIds = new Set(actionById.keys());
-  for (const id of evaluator.orderActions(input, [...launchActionIds])) {
+  for (const id of taskWorkflow.orderActions(task, [...launchActionIds])) {
     append(
-      evaluator.actionLaunchAction(input, id),
+      taskWorkflow.actionLaunchAction(task, id),
       taskActionLabel(id, task, { surface: "studio" }),
       actionById.get(id)?.description,
     );
   }
   // One record per available task action. An event action whose following launch collects human
   // feedback places itself among the session starts, and its launches leave the step starts.
-  const taskEntries = evaluator
-    .orderActions(input, task.availableActions)
+  const taskEntries = taskWorkflow
+    .orderActions(task, task.availableActions)
     .filter((id) => !launchActionIds.has(id))
     .map((id) => {
       const action = task.taskWorkflow.action(id);
@@ -168,10 +164,10 @@ export const buildAgentStudioQuickActions = (
   const effectLaunches = new Set(taskEntries.flatMap(({ followingLaunches }) => followingLaunches));
   for (const step of task.taskWorkflow.definition.steps) {
     if (step.kind !== "agent" || !availableSteps.has(step.id)) continue;
-    const launch = evaluator.stepLaunchAction(input, step.id);
+    const launch = taskWorkflow.stepLaunchAction(task, step.id);
     if (!effectLaunches.has(launch)) append(launch);
   }
-  for (const launch of taskSurfaceLaunches(task, "studio")) append(launch.id);
+  for (const launch of taskWorkflow.surfaceLaunches(task, "studio")) append(launch.id);
   const pullRequestOption = buildPullRequestQuickAction(task, params);
   if (pullRequestOption) options.push(pullRequestOption);
   const leading: AgentStudioTaskQuickActionOption[] = [];
@@ -209,12 +205,12 @@ export const buildAgentStudioQuickActions = (
     else if (placement === "leading") leading.push(option);
     else trailing.push(option);
   }
-  const launchOrder = taskLaunchOrder(task);
+  const launchOrder = taskWorkflow.launchOrder(task);
   const rank = (option: AgentStudioQuickActionOption) => {
     let id = "";
     if (option.kind === "session_start") id = option.launchActionId;
     else if (option.taskAction.kind === "workflow")
-      id = evaluator.actionLaunchAction(input, option.taskAction.action);
+      id = taskWorkflow.actionLaunchAction(task, option.taskAction.action);
     const index = launchOrder.indexOf(id);
     return index < 0 ? launchOrder.length : index;
   };

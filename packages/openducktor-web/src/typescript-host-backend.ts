@@ -9,6 +9,8 @@ import {
   type RemoteAccessOperator,
 } from "@openducktor/remote-host";
 import { handleRemoteAccessHttp } from "./remote-access-http";
+import { REMOTE_ACCESS_PATH } from "./remote-access-path";
+import { stripMountPath } from "@openducktor/remote-host/request-path";
 import webPackage from "../package.json";
 import { localAttachmentPreviewResponse } from "@openducktor/remote-host/local-attachment-preview";
 import {
@@ -439,7 +441,7 @@ const routeCorsRequest = ({
       return jsonResponse({ ok: true }, { status: 202 }, corsHeaders);
     }
 
-    if (remoteAccess && requestUrl.pathname.startsWith("/remote-access")) {
+    if (remoteAccess && requestUrl.pathname.startsWith(REMOTE_ACCESS_PATH)) {
       yield* validateAppCookieOrHeader(request, appToken, appSessionCookieName);
       if (shutdownStarted) {
         return yield* rejectWebHostRequest("The host is shutting down. Reopen OpenDucktor.", 503);
@@ -463,12 +465,12 @@ const routeCorsRequest = ({
     }
 
     const taskAssetResponse = yield* routeTaskAssetHttpRequest({
-      appToken,
+      authorize: Effect.suspend(() =>
+        validateAppSessionCookie(request, appToken, appSessionCookieName),
+      ),
       corsHeaders,
       request,
       taskAssetReadService,
-      validateAppSessionCookie: (sessionRequest, expectedToken) =>
-        validateAppSessionCookie(sessionRequest, expectedToken, appSessionCookieName),
     });
     if (taskAssetResponse) {
       return taskAssetResponse;
@@ -556,15 +558,10 @@ const stripBasePath = (basePath: string | undefined, requestUrl: string): string
     return requestUrl;
   }
   const parsed = new URL(requestUrl);
-  if (parsed.pathname === basePath) {
-    parsed.pathname = "/";
-    return parsed.toString();
-  }
-  if (parsed.pathname.startsWith(`${basePath}/`)) {
-    parsed.pathname = parsed.pathname.slice(basePath.length);
-    return parsed.toString();
-  }
-  return requestUrl;
+  const pathname = stripMountPath(parsed.pathname, basePath);
+  if (pathname === parsed.pathname) return requestUrl;
+  parsed.pathname = pathname;
+  return parsed.toString();
 };
 
 type HostFetchInput = Omit<Parameters<typeof handleTypescriptHostBackendRequest>[0], "request"> & {
@@ -768,14 +765,11 @@ export const startTypescriptHostBackendEffect = ({
         ),
       taskEventStream: hostCommandRouter.taskEventStream,
     });
-    /** All local channels share the app session, so they share their task leases. */
-    const localTaskLeases = new Set<string>();
     const createChannel = (): HostChannelSocketData =>
       createHostChannelSocketData({
         hostEvents: eventBus.stream(),
         notifications: hostCommandRouter.notificationStream,
         leases: taskEventLeaseManager,
-        ownedLeases: localTaskLeases,
         invoke: (command, args, signal) =>
           invokeLocalHostCommand(hostCommandRouter, command, args, signal),
         remoteAccessStates: remoteAccessOperator.states,

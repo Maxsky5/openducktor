@@ -6,6 +6,7 @@
     "./tokens.css": "./src/tokens.css",
     "./blocks": "./src/blocks.ts",
     "./colors": "./src/colors.ts",
+    "./runtime-icons": "./src/runtime-icons.ts",
     "./site-palette.css": "./src/site-palette.css"
   },
   "scripts": {

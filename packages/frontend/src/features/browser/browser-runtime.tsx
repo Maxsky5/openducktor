@@ -10,10 +10,11 @@ import {
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
 import {
+  type BrowserBridge,
   type ElectronBrowserBridge,
   type FrameBrowserBridge,
-  getShellBridge,
 } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 import { type BrowserChannel, createBrowserChannel } from "./browser-channel";
 import { type BrowserTabRequests, createBrowserTabRequests } from "./browser-tab-requests";
 import {
@@ -57,8 +58,7 @@ export type BrowserRuntime = ElectronBrowserRuntime | FrameBrowserRuntime;
 
 const BrowserRuntimeContext = createContext<BrowserRuntime | null>(null);
 
-const createBrowserRuntime = (host: HostConnection): BrowserRuntime => {
-  const bridge = getShellBridge().browser;
+const createBrowserRuntime = (host: HostConnection, bridge: BrowserBridge): BrowserRuntime => {
   const hostClient = host.client;
   const hostPage = bridge.surface === "electron";
   // Electron shows host pages. The web runner shows its frame pages: its user tabs. Its agent tabs
@@ -100,7 +100,8 @@ const createBrowserRuntime = (host: HostConnection): BrowserRuntime => {
 /** Owns the browser tab state and the browser channel for the whole app shell. */
 export function BrowserRuntimeProvider({ children }: { children: ReactNode }) {
   const { host } = useClientConnection();
-  const [runtime] = useState(() => createBrowserRuntime(host));
+  const { browser } = useShellPlatform();
+  const [runtime] = useState(() => createBrowserRuntime(host, browser));
   useEffect(() => {
     void runtime.store.start();
     if (runtime.surface === "electron") void runtime.channel.connect();

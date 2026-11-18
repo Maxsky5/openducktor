@@ -7,70 +7,6 @@ import type { ChatOptions } from "./scenes/chat/view";
 import type { HeroOptions } from "./scenes/hero/view";
 import type { PaletteOptions } from "./scenes/palette/view";
 
-/** The names of the scenes, in the order of the site. */
-export const SCENE_NAMES = [
-  "hero",
-  "workflow",
-  "palette",
-  "runtimes",
-  "autopilot",
-  "chat",
-  "mcp",
-  "prompts",
-  "actions",
-  "local",
-  "composer",
-  "queue",
-  "question",
-  "terminal",
-  "browser",
-  "annotate",
-  "agent-browser",
-  "new-session",
-  "fork",
-  "import-session",
-  "ci-checks",
-  "pr-comments",
-  "git-conflict",
-  "mobile-pair",
-  "mobile-needs-you",
-  "mobile-steer",
-  "mobile-diff-comment",
-  "mobile-start-builder",
-  "mobile-approve",
-  "goal-mode",
-  "goal-command",
-] as const;
-export type SceneName = (typeof SCENE_NAMES)[number];
-
-/**
- * The scenes that the website renders. The Astro entry bundles only these, so the website loads
- * no style and no timeline of a scene that only the documentation shows.
- */
-const SITE_SCENE_NAMES = [
-  "hero",
-  "workflow",
-  "palette",
-  "runtimes",
-  "autopilot",
-  "chat",
-  "mcp",
-  "prompts",
-  "actions",
-  "local",
-] as const satisfies readonly SceneName[];
-export type SiteSceneName = (typeof SITE_SCENE_NAMES)[number];
-
-/**
- * The scenes that play their steps one after the other in tabs, such as the workflow. The other
- * scenes play in a loop.
- */
-export const CHAPTER_SCENE_NAMES = ["workflow"] as const satisfies readonly SceneName[];
-export type ChapterSceneName = (typeof CHAPTER_SCENE_NAMES)[number];
-
-/** The scenes that play in a loop. A host with a handle, such as the React `Scene`, mounts them. */
-export type LoopSceneName = Exclude<SceneName, ChapterSceneName>;
-
 /** The builders of a chapter player: one builder for each chapter, by the id of the chapter. */
 export type ChapterBuilders = Readonly<Record<string, SceneBuilder<string>>>;
 
@@ -78,10 +14,10 @@ export type ChapterBuilders = Readonly<Record<string, SceneBuilder<string>>>;
 type SceneSize = { width: number; height: number };
 
 /** A loop scene: its size and the loader of the builder of each run of its loop. */
-export type SceneEntry = { size: SceneSize; timeline: () => Promise<SceneBuilder<string>> };
+type SceneEntry = { size: SceneSize; timeline: () => Promise<SceneBuilder<string>> };
 
 /** A chapter player: its size and the loader of the builders of its chapters. */
-export type ChapterEntry = { size: SceneSize; chapters: () => Promise<ChapterBuilders> };
+type ChapterEntry = { size: SceneSize; chapters: () => Promise<ChapterBuilders> };
 
 export const SCENES = {
   hero: {
@@ -96,13 +32,13 @@ export const SCENES = {
     size: { width: 1440, height: 740 },
     timeline: async () => (await import("./scenes/palette/timeline")).build,
   },
-  autopilot: {
-    size: { width: 1328, height: 576 },
-    timeline: async () => (await import("./scenes/autopilot/timeline")).build,
-  },
   runtimes: {
     size: { width: 760, height: 620 },
     timeline: async () => (await import("./scenes/runtimes/timeline")).build,
+  },
+  autopilot: {
+    size: { width: 1328, height: 576 },
+    timeline: async () => (await import("./scenes/autopilot/timeline")).build,
   },
   chat: {
     size: { width: 740, height: 600 },
@@ -208,9 +144,23 @@ export const SCENES = {
     size: { width: 640, height: 500 },
     timeline: async () => (await import("./scenes/goal-command/timeline")).build,
   },
-} as const satisfies {
-  [Name in SceneName]: Name extends ChapterSceneName ? ChapterEntry : SceneEntry;
-};
+} as const satisfies Record<string, SceneEntry | ChapterEntry>;
+
+export type SceneName = keyof typeof SCENES;
+export const SCENE_NAMES =
+  // SAFETY: The registry is a closed object literal. Its enumerable keys are its scene names.
+  Object.keys(SCENES) as readonly SceneName[];
+
+/** The scenes that play their steps one after the other in tabs. */
+export type ChapterSceneName = {
+  [Name in SceneName]: (typeof SCENES)[Name] extends ChapterEntry ? Name : never;
+}[SceneName];
+
+export const isChapterScene = (name: SceneName): name is ChapterSceneName =>
+  "chapters" in SCENES[name];
+
+/** The scenes that play in a loop. A host with a handle, such as the React `Scene`, mounts them. */
+export type LoopSceneName = Exclude<SceneName, ChapterSceneName>;
 
 /** The options of the scenes that take more from their host than the theme and the keys. */
 type OptionsOf = { hero: HeroOptions; palette: PaletteOptions; chat: ChatOptions };

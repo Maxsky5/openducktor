@@ -28,6 +28,7 @@ import { LinkOpenMenu } from "@/components/features/link-open-menu";
 import { BrowserLayer, BrowserRuntimeProvider, BrowserTabCoordinator } from "@/features/browser";
 import type { CommandPaletteShell } from "@/features/command-palette/command-palette-types";
 import { RecentItemsRecorder } from "@/features/command-palette/recent-items-recorder";
+import { NotificationAttentionProvider } from "@/features/notifications/notification-attention";
 import { VisibleSessionTargetProvider } from "@openducktor/frontend-core/sessions/navigation/visible-session-target";
 import { SessionReadStateProvider } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
 import { useFeatureTour } from "@/features/feature-tour/feature-tour-context";
@@ -39,13 +40,12 @@ import {
   useWorkspacePresence,
   useWorkspaceState,
 } from "@/state/app-state-provider";
-import { repoConfigQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { repoConfigQueryOptionsOrSkip } from "@openducktor/frontend-core/queries/workspace";
 
 type AppShellSidebarPreference = "opened" | "collapsed";
 
 const APP_SHELL_LEFT_SIDEBAR_STORAGE_KEY = "openducktor:app-shell:left-sidebar";
 const DEFAULT_APP_SHELL_SIDEBAR_PREFERENCE: AppShellSidebarPreference = "opened";
-const NO_ACTIVE_WORKSPACE_ID = "__no_active_workspace__";
 
 type RepositoryModalRequest = { open: boolean; view: OpenRepositoryModalView | undefined };
 
@@ -88,12 +88,7 @@ const persistLeftSidebarPreference = (preference: AppShellSidebarPreference): vo
 // whole shell again.
 function ActiveRepoConfigQuery(): null {
   const activeWorkspace = useActiveWorkspace();
-  useQuery({
-    ...repoConfigQueryOptions(activeWorkspace?.workspaceId ?? NO_ACTIVE_WORKSPACE_ID),
-    enabled: activeWorkspace !== null,
-    refetchOnReconnect: false,
-    refetchOnWindowFocus: false,
-  });
+  useQuery(repoConfigQueryOptionsOrSkip(activeWorkspace?.workspaceId ?? null));
   return null;
 }
 
@@ -174,7 +169,9 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
                         className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
                       >
                         <AgentChatTranscriptCacheProvider>
-                          <Outlet />
+                          <NotificationAttentionProvider>
+                            <Outlet />
+                          </NotificationAttentionProvider>
                         </AgentChatTranscriptCacheProvider>
                       </main>
                     </section>

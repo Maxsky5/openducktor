@@ -1,10 +1,11 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
 import {
+  type AgentModelSelection,
   findCatalogModel,
   resolveSavedModelAlias,
   STANDARD_SPEED,
-} from "@openducktor/frontend-core/lib/model-catalog-selection";
+} from "@openducktor/core";
+
 import type { SelectOption } from "@openducktor/frontend-core/lib/select-option";
 import {
   type ModelPickerRuntime,

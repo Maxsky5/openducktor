@@ -1,6 +1,10 @@
-import type { AgentEvent, AgentPendingQuestionRequest } from "@openducktor/core";
+import {
+  type AgentEvent,
+  type AgentPendingQuestionRequest,
+  normalizeSessionErrorMessage,
+} from "@openducktor/core";
 import type { AgentSessionState } from "../../../types/agent-orchestrator";
-import { normalizeSessionErrorMessage } from "../../../lib/session-error-message";
+
 import { isStopAbortSessionErrorMessage } from "../support/tool-messages";
 
 export type AgentSessionTranscriptActivityFacts = Pick<

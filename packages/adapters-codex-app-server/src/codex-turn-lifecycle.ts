@@ -217,7 +217,6 @@ const requireTurnSession = async (
   return session;
 };
 
-/** Returns the turn that still runs in the thread. */
 export const runningTurnOf = (
   activeTurnsBySessionId: ReadonlyMap<string, ActiveCodexTurn>,
   threadId: string,

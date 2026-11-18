@@ -7,22 +7,18 @@ import {
 } from "@openducktor/frontend-core/queries/git-provider-context";
 import {
   repoConfigQueryOptions,
+  repoConfigQueryOptionsOrSkip,
   toRepoSettingsInput,
 } from "@openducktor/frontend-core/queries/workspace";
 import type { RepoSettingsInput } from "@/types/state-slices";
 
-const INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY = "__inactive_workspace__";
-
-export function useAgentStudioRepoSettings(args: {
+export function useWorkspaceRepositorySettings(args: {
   activeWorkspaceId: string | null;
   activeRepoPath: string | null;
 }) {
   const { activeRepoPath, activeWorkspaceId } = args;
   const queryClient = useQueryClient();
-  const repoConfigQuery = useQuery({
-    ...repoConfigQueryOptions(activeWorkspaceId ?? INACTIVE_WORKSPACE_REPO_CONFIG_QUERY_KEY),
-    enabled: activeWorkspaceId !== null,
-  });
+  const repoConfigQuery = useQuery(repoConfigQueryOptionsOrSkip(activeWorkspaceId));
   const repoConfig = repoConfigQuery.data;
   const loadRepoSettings = useCallback(async (): Promise<RepoSettingsInput> => {
     if (activeWorkspaceId === null)

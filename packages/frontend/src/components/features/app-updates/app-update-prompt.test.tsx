@@ -1,13 +1,9 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { withShellPlatform } from "@/test-utils/focused-fixture";
+import { describe, expect, mock, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
-import { configureShellBridge, createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { AppUpdatePrompt } from "./app-update-prompt";
 import { createFakeAppUpdateBridge, createTestShellBridge } from "./app-update-test-utils";
-
-afterEach(() => {
-  configureShellBridge(createUnavailableShellBridge());
-});
 
 const longUpdateError =
   "OpenDucktor could not read latest-mac.yml for release v0.4.3. Make sure the GitHub release is published and includes the Electron updater metadata asset, then try again. https://github.com/Maxsky5/openducktor/releases/download/v0.4.3/latest-mac.yml x-github-request-id-4BDD-2F6204-154326FB-1101F3BB-6A501D61";
@@ -20,9 +16,9 @@ describe("AppUpdatePrompt", () => {
       checkInitiator: "background",
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
     await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
 
     expect(screen.queryByText("OpenDucktor is up to date")).toBeNull();
@@ -37,9 +33,9 @@ describe("AppUpdatePrompt", () => {
       checkInitiator: "menu",
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Updates unavailable")).toBeTruthy();
     expect(screen.getByText("Electron update feed configuration is missing.")).toBeTruthy();
@@ -56,9 +52,9 @@ describe("AppUpdatePrompt", () => {
       checkInitiator: "menu",
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Development build")).toBeTruthy();
     expect(
@@ -76,9 +72,9 @@ describe("AppUpdatePrompt", () => {
       checkInitiator: "settings",
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
     await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
 
     expect(screen.queryByText("Development build")).toBeNull();
@@ -90,9 +86,9 @@ describe("AppUpdatePrompt", () => {
       status: "idle",
       currentVersion: "0.4.2",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
     await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
 
     act(() => {
@@ -119,9 +115,9 @@ describe("AppUpdatePrompt", () => {
         operation: "check",
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Update error")).toBeTruthy();
     expect(screen.getByText("OpenDucktor could not complete the update check.")).toBeTruthy();
@@ -151,9 +147,9 @@ describe("AppUpdatePrompt", () => {
       checkedAt: "2026-07-08T22:00:00.000Z",
       error: repeatedError,
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Update error")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Dismiss update prompt"));
@@ -192,9 +188,9 @@ describe("AppUpdatePrompt", () => {
           resolveInitialSnapshot = resolve;
         }),
     );
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
     await waitFor(() => expect(appUpdates.getState).toHaveBeenCalled());
 
     act(() => {
@@ -227,9 +223,9 @@ describe("AppUpdatePrompt", () => {
         operation: "check",
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Update error")).toBeTruthy();
     expect(screen.getByText("OpenDucktor could not complete the update check.")).toBeTruthy();
@@ -245,9 +241,9 @@ describe("AppUpdatePrompt", () => {
       checkInitiator: "background",
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
+    const shellPlatform = createTestShellBridge(appUpdates);
 
-    render(<AppUpdatePrompt />);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Update available")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("Update available");
@@ -285,8 +281,8 @@ describe("AppUpdatePrompt", () => {
         progressPercent: 40,
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<AppUpdatePrompt />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     fireEvent.click(await screen.findByRole("button", { name: "Download Update" }));
 
@@ -313,8 +309,8 @@ describe("AppUpdatePrompt", () => {
     appUpdates.download.mockImplementation(async () => {
       throw new Error("bridge download failed");
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<AppUpdatePrompt />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     fireEvent.click(await screen.findByRole("button", { name: "Download Update" }));
 
@@ -332,8 +328,8 @@ describe("AppUpdatePrompt", () => {
       progressPercent: 100,
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<AppUpdatePrompt />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect((await screen.findByRole("link", { name: "Release note" })).getAttribute("href")).toBe(
       "https://github.com/Maxsky5/openducktor/releases/tag/v0.4.3",
@@ -354,8 +350,8 @@ describe("AppUpdatePrompt", () => {
     appUpdates.install.mockImplementation(async () => {
       throw new Error("bridge install failed");
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<AppUpdatePrompt />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     fireEvent.click(await screen.findByRole("button", { name: "Restart to Install" }));
 
@@ -373,8 +369,8 @@ describe("AppUpdatePrompt", () => {
       installRequested: true,
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<AppUpdatePrompt />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Installing update")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("Installing update");
@@ -404,8 +400,8 @@ describe("AppUpdatePrompt", () => {
         installRequested: true,
       },
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<AppUpdatePrompt />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     fireEvent.click(await screen.findByRole("button", { name: "Restart to Install" }));
 
@@ -444,11 +440,11 @@ describe("AppUpdatePrompt", () => {
       },
     });
     const openExternalUrl = mock(async () => {});
-    configureShellBridge({
+    const shellPlatform = {
       ...createTestShellBridge(appUpdates),
       openExternalUrl,
-    });
-    render(<AppUpdatePrompt />);
+    };
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Install needs attention")).toBeTruthy();
     expect(screen.getByText("Quit and reopen OpenDucktor before trying again.")).toBeTruthy();
@@ -477,11 +473,11 @@ describe("AppUpdatePrompt", () => {
       },
     });
     const openExternalUrl = mock(async () => {});
-    configureShellBridge({
+    const shellPlatform = {
       ...createTestShellBridge(appUpdates),
       openExternalUrl,
-    });
-    render(<AppUpdatePrompt />);
+    };
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Manual update required")).toBeTruthy();
     expect(screen.getByText(recoveryMessage)).toBeTruthy();
@@ -513,8 +509,8 @@ describe("AppUpdatePrompt", () => {
       progressPercent: 100,
       checkedAt: "2026-07-08T22:00:00.000Z",
     });
-    configureShellBridge(createTestShellBridge(appUpdates));
-    render(<AppUpdatePrompt />);
+    const shellPlatform = createTestShellBridge(appUpdates);
+    render(withShellPlatform(<AppUpdatePrompt />, shellPlatform));
 
     expect(await screen.findByText("Ready to install")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Dismiss update prompt"));

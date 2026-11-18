@@ -1,13 +1,14 @@
 import { pathStartsWith } from "@openducktor/path-support";
 import type { AgentSessionScope } from "@openducktor/contracts";
 import { Effect } from "effect";
-import { getScopedRepoConfig } from "../tasks/support/scoped-repo-config";
+import { getScopedRepoConfig } from "../workspaces/scoped-repo-config";
 import {
   hasNestedNodeErrorCode,
   type HostOperationErrorAggregate,
   HostValidationError,
 } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import { managedWorktreeRoots } from "../git/managed-worktree-roots";
 import {
   classifyWorkspaceCheckout,
   type WorkspaceCheckoutGitPort,
@@ -61,30 +62,14 @@ export const requireRuntimeWorkingDirectory = (
       return;
     }
 
-    const worktreeBasePath =
-      repoConfig.worktreeBasePath !== undefined
-        ? dependencies.settingsConfig.resolveConfiguredPath(repoConfig.worktreeBasePath)
-        : dependencies.settingsConfig.defaultWorktreeBasePath(repoConfig.workspaceId);
-    const canonicalWorktreeBasePath = yield* canonicalizeWorktreeBasePath(
+    for (const root of managedWorktreeRoots(
       dependencies.settingsConfig,
-      worktreeBasePath,
-    );
-    if (
-      canonicalWorktreeBasePath !== null &&
-      pathStartsWith(canonicalWorkingDirectory, canonicalWorktreeBasePath)
-    ) {
-      return;
-    }
-
-    const canonicalLegacyWorktreeBasePath = yield* canonicalizeWorktreeBasePath(
-      dependencies.settingsConfig,
-      dependencies.settingsConfig.defaultRepoWorktreeBasePath(canonicalRepoPath),
-    );
-    if (
-      canonicalLegacyWorktreeBasePath !== null &&
-      pathStartsWith(canonicalWorkingDirectory, canonicalLegacyWorktreeBasePath)
-    ) {
-      return;
+      repoConfig,
+      canonicalRepoPath,
+    )) {
+      const canonicalRoot = yield* canonicalizeWorktreeBasePath(dependencies.settingsConfig, root);
+      if (canonicalRoot !== null && pathStartsWith(canonicalWorkingDirectory, canonicalRoot))
+        return;
     }
 
     // External worktrees match only at their root, the same as session import.

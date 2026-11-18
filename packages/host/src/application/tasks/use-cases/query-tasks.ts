@@ -1,7 +1,7 @@
 import type { WorkspaceRef } from "@openducktor/contracts";
 import { HostValidationError } from "../../../effect/host-errors";
 import { loadTaskSessions } from "../support/task-sessions";
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../../effect/host-errors";
 import { requireAgentSessionDependencies } from "../support/required-task-dependencies";

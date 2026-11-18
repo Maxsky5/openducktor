@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { sessionStartupProgressEventSchema } from "./session-startup-schemas";
-import { agentSessionLiveEnvelopeSchema } from "./agent-session-live-schemas";
+import {
+  agentSessionLiveEnvelopeSchema,
+  type AgentSessionLiveEnvelope,
+} from "./agent-session-live-schemas";
 import { autopilotRunEventSchema } from "./autopilot-schemas";
 import { browserHostEventSchema } from "./browser-tab-schemas";
 import { azureDevOpsConnectionStateSchema } from "./azure-devops-schemas";
@@ -87,6 +90,54 @@ export type HostEventEnvelopeFor<Channel extends HostEventChannel> = Extract<
 >;
 export type HostEventPayload<Channel extends HostEventChannel> =
   HostEventEnvelopeFor<Channel>["payload"];
+
+export const BROWSER_EVENT_STREAM_NAME = "browser";
+export const STARTUP_EVENT_STREAM_NAME = "startup";
+
+export const liveSessionStreamEventName = (repoPath: string): string =>
+  `agent-session-live:${JSON.stringify(repoPath)}`;
+
+export const agentSessionLiveEnvelopeRepoPath = (envelope: AgentSessionLiveEnvelope): string => {
+  switch (envelope.type) {
+    case "session_operation_updated":
+      return envelope.observation.ref.repoPath;
+    case "submission_acknowledged":
+      return envelope.acknowledgement.ref.repoPath;
+    case "task_completion_updated":
+      return envelope.observation.repoPath;
+    case "task_session_records_updated":
+    case "snapshot":
+    case "fault":
+      return envelope.repoPath;
+    case "session_upsert":
+      return envelope.session.ref.repoPath;
+    case "session_removed":
+    case "usage_limit_auto_resume_updated":
+      return envelope.ref.repoPath;
+    case "transcript_event":
+      return envelope.event.sessionRef.repoPath;
+    case "message_queue_updated":
+      return envelope.queue.target.repoPath;
+    case "catalog_invalidated":
+    case "runtime_notice":
+    case "slash_command_catalog_updated":
+      return envelope.scope.repoPath;
+  }
+};
+
+/** The host keeps a replay buffer per name. Clients can select an event by name before parsing it. */
+export const hostEventStreamEventName = (envelope: HostEventEnvelope): string => {
+  switch (envelope.channel) {
+    case "openducktor://agent-session-live-event":
+      return liveSessionStreamEventName(agentSessionLiveEnvelopeRepoPath(envelope.payload));
+    case "openducktor://browser-event":
+      return BROWSER_EVENT_STREAM_NAME;
+    case "openducktor://session-startup-progress":
+      return STARTUP_EVENT_STREAM_NAME;
+    default:
+      return "message";
+  }
+};
 
 const hostEventChannelSet = new Set<string>(HOST_EVENT_CHANNELS);
 

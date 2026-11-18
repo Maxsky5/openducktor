@@ -9,7 +9,7 @@ import {
   findChatRecord,
   type PendingOwnerResolution,
 } from "@/features/work-owner/work-owner-model";
-import type { WorkOwnerParams } from "@/navigation/routes";
+import { sessionParams, type WorkOwnerParams } from "@/navigation/routes";
 import type { SessionOwner } from "./session-target";
 
 /** A query result as the resolver needs it. */
@@ -164,13 +164,6 @@ export const workOwnerParamsFor = (
   identity: AgentSessionIdentity,
 ): WorkOwnerParams | null => {
   if (owner.kind === "task") return { workspaceId, taskId: owner.taskId };
-  if (owner.kind === "chat") {
-    return {
-      workspaceId,
-      externalSessionId: identity.externalSessionId,
-      runtimeKind: identity.runtimeKind,
-      workingDirectory: identity.workingDirectory,
-    };
-  }
+  if (owner.kind === "chat") return sessionParams(workspaceId, identity);
   return null;
 };

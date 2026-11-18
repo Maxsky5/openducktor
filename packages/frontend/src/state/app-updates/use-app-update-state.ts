@@ -5,7 +5,7 @@ import type {
   AppUpdateState,
 } from "@openducktor/contracts";
 import { useCallback, useEffect, useState } from "react";
-import { getShellBridge } from "@/lib/shell-bridge";
+import { useShellPlatform } from "@/lib/shell-platform";
 
 const unavailableState = (message: string, operation: AppUpdateOperation): AppUpdateState => ({
   status: "error",
@@ -40,6 +40,7 @@ export type AppUpdateStateController = {
 };
 
 export function useAppUpdateState(): AppUpdateStateController {
+  const { appUpdates } = useShellPlatform();
   const [state, setState] = useState<AppUpdateState | null>(null);
   const [isLoadingInitialState, setIsLoadingInitialState] = useState(true);
   const [actionInFlight, setActionInFlight] = useState<AppUpdateAction | null>(null);
@@ -50,7 +51,6 @@ export function useAppUpdateState(): AppUpdateStateController {
     let disposed = false;
     let receivedSubscribedState = false;
     let unsubscribe: (() => void) | null = null;
-    const appUpdates = getShellBridge().appUpdates;
 
     const loadInitialState = async (): Promise<void> => {
       try {
@@ -89,7 +89,7 @@ export function useAppUpdateState(): AppUpdateStateController {
       disposed = true;
       unsubscribe?.();
     };
-  }, []);
+  }, [appUpdates]);
 
   const runAction = useCallback(
     async (
@@ -125,13 +125,11 @@ export function useAppUpdateState(): AppUpdateStateController {
   return {
     actionInFlight,
     checkFromSettings: () =>
-      runAction("check", "check", () =>
-        getShellBridge().appUpdates.check({ initiator: "settings" }),
-      ),
+      runAction("check", "check", () => appUpdates.check({ initiator: "settings" })),
     commandError,
-    download: () => runAction("download", "download", () => getShellBridge().appUpdates.download()),
+    download: () => runAction("download", "download", () => appUpdates.download()),
     hasReceivedStateEvent,
-    install: () => runAction("install", "install", () => getShellBridge().appUpdates.install()),
+    install: () => runAction("install", "install", () => appUpdates.install()),
     isLoadingInitialState,
     state,
   };

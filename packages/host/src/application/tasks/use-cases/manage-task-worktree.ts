@@ -1,5 +1,5 @@
 import { TASK_CLOSED_STATE } from "@openducktor/contracts";
-import { getScopedRepoConfig } from "../support/scoped-repo-config";
+import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
 import { hasCheckableTaskBranch } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
@@ -16,10 +16,8 @@ import {
   appendTaskCleanupProgress,
   createTaskCleanupProgressState,
 } from "../support/task-cleanup-progress";
-import {
-  managedWorktreeBaseForRepoConfig,
-  runTaskLocalCleanup,
-} from "../support/task-cleanup-support";
+import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
+import { runTaskLocalCleanup } from "../support/task-cleanup-support";
 import {
   collectCloseWorktreePaths,
   collectTaskCleanupTargets,

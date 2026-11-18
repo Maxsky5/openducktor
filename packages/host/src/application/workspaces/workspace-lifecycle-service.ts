@@ -5,6 +5,7 @@ import type {
   WorkspaceRemovalResult,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { workspaceLifecyclePathChange } from "../../domain/workspace-scope";
 import type { TaskAssetError } from "../../effect/task-asset-error";
 import {
   hasNestedNodeErrorCode,
@@ -21,8 +22,8 @@ import type {
   TaskOwnershipReader,
 } from "../../ports/task-repository-ports";
 import type { WorktreeFileError, WorktreeFilePort } from "../../ports/worktree-file-port";
+import { managedWorktreeBaseForRepoConfig } from "../git/managed-worktree-roots";
 import { removeWorktreeAndFilesystemPath } from "../git/worktree-removal";
-import { managedWorktreeBaseForRepoConfig } from "../tasks/support/task-cleanup-support";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import type {
   WorkspaceActivityBlocker,
@@ -120,15 +121,8 @@ export const createWorkspaceLifecycleService = ({
   const requireTarget = (workspaceId: string, expectedRepoPath: string) =>
     Effect.gen(function* () {
       const repoConfig = yield* workspaceSettingsService.getRepoConfig(workspaceId);
-      if (repoConfig.repoPath !== expectedRepoPath) {
-        return yield* Effect.fail(
-          new HostValidationError({
-            message: `Workspace ${workspaceId} changed since the dialog opened. Reload workspaces and retry.`,
-            field: "repoPath",
-            details: { expectedRepoPath, actualRepoPath: repoConfig.repoPath },
-          }),
-        );
-      }
+      const change = workspaceLifecyclePathChange(repoConfig, expectedRepoPath);
+      if (change) return yield* change;
       return repoConfig;
     });
 

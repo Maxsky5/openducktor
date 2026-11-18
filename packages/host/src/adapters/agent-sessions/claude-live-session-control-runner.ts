@@ -15,6 +15,7 @@ import type { createClaudeLiveSessionEventCoordinator } from "./claude-live-sess
 import { commitTitleUpdate } from "../../application/agent-sessions/agent-session-title-update";
 import type { HostError } from "../../effect/host-errors";
 import type {
+  AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
   AgentSessionTitleUpdateOutcome,
 } from "../../ports/agent-session-live-adapter-port";
@@ -23,6 +24,7 @@ type SummaryOptions = {
   readonly sessionScope?: AgentSessionScope;
   readonly parentExternalSessionId?: string;
   readonly keepActivity?: boolean;
+  readonly provenance?: AgentSessionLiveAdapterChange["provenance"];
 };
 
 type CommitMutation = <Value>(
@@ -59,16 +61,16 @@ export const createClaudeControlRunner = ({
     summary: AgentSessionSummary,
     options: SummaryOptions,
   ) =>
-    commit(`${operation}.retain-summary`, () => ({
-      value: summary,
-      admittedRoot: options.sessionScope
-        ? toStartedSessionRoot({ repoPath, sessionScope: options.sessionScope }, summary)
-        : undefined,
-      changes:
-        operation === "claude-live-session.import"
-          ? baselineLiveSessionChanges(applyControlSummary(repoPath, summary, options))
-          : applyControlSummary(repoPath, summary, options),
-    }));
+    commit(`${operation}.retain-summary`, () => {
+      const changes = applyControlSummary(repoPath, summary, options);
+      return {
+        value: summary,
+        admittedRoot: options.sessionScope
+          ? toStartedSessionRoot({ repoPath, sessionScope: options.sessionScope }, summary)
+          : undefined,
+        changes: options.provenance === "baseline" ? baselineLiveSessionChanges(changes) : changes,
+      };
+    });
   return {
     runClosure: (
       operation: string,

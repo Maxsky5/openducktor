@@ -4,12 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PageStyleSheet } from "../src/react/PageScene";
-import { SCENE_NAMES, type SceneName } from "../src/registry";
-
-/** The modules that hold the views of `PageScene`. */
-const VIEW_MAPS = ["../src/react/page-views.ts", "../src/astro/views.ts"].map((path) =>
-  fileURLToPath(new URL(path, import.meta.url)),
-);
+import { SCENE_NAMES } from "../src/registry";
 
 /** The base styles, which declare the order of the layers. Every page with a scene links them first. */
 const BASE_STYLES = fileURLToPath(new URL("../styles/index.css", import.meta.url));
@@ -48,17 +43,6 @@ function importedStyles(entry: string): string[] {
   return styles;
 }
 
-/** The view module of each scene of `PageScene`, by scene name. */
-function sceneViews(): Map<SceneName, string> {
-  const views = new Map<SceneName, string>();
-  for (const file of VIEW_MAPS.flatMap(localImports)) {
-    const folder = /[/\\]scenes[/\\]([^/\\]+)[/\\]view\.tsx$/.exec(file)?.[1];
-    const name = SCENE_NAMES.find((scene) => scene === folder);
-    if (name) views.set(name, file);
-  }
-  return views;
-}
-
 /**
  * The stylesheet files of each stylesheet of `PageScene`, as absolute paths in import order:
  * `base` holds the base styles, and each scene holds the stylesheet of each part of its view,
@@ -66,7 +50,8 @@ function sceneViews(): Map<SceneName, string> {
  */
 export function pageStyles(): Map<PageStyleSheet, string[]> {
   const sheets = new Map<PageStyleSheet, string[]>([["base", [BASE_STYLES]]]);
-  for (const [name, view] of sceneViews()) {
+  for (const name of SCENE_NAMES) {
+    const view = fileURLToPath(new URL(`../src/scenes/${name}/view.tsx`, import.meta.url));
     sheets.set(
       name,
       importedStyles(view).filter((file) => file !== BASE_STYLES),

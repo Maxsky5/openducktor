@@ -1,6 +1,6 @@
 import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
-import { resolveSavedModelAlias } from "@openducktor/frontend-core/lib/model-catalog-selection";
+import { type AgentModelSelection, resolveSavedModelAlias } from "@openducktor/core";
+
 import {
   buildModelPickerItems,
   type ModelPickerRuntime,

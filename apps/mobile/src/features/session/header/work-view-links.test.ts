@@ -22,7 +22,7 @@ describe("buildWorkViewLinks", () => {
     const owner = {
       workspaceId: "ws",
       externalSessionId: "session-1",
-      runtimeKind: "opencode",
+      runtimeKind: "opencode" as const,
       workingDirectory: "/repo",
     };
     const links = buildWorkViewLinks(owner);

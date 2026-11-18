@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { cn } from "@/lib/utils";
+import { useOpenExternalUrl } from "@/lib/open-external-url";
 import { type TerminalViewportMount, mountTerminalViewport } from "./terminal-viewport-mount";
 import type { TerminalTransportController } from "@openducktor/frontend-core/terminals/terminal-transport-controller";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -41,6 +42,7 @@ export function TerminalViewport({
   onTitleChange,
 }: TerminalViewportProps): ReactElement {
   const { host, stageAttachment } = useClientConnection();
+  const openExternalUrl = useOpenExternalUrl();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mountRef = useRef<TerminalViewportMount | null>(null);
   const platformRef = useRef(platform);
@@ -75,6 +77,7 @@ export function TerminalViewport({
         isActive,
         isShown,
         getPlatform: () => platformRef.current,
+        openExternalUrl,
         stageFile: stageAttachment,
         preparePathInput: async (paths) => {
           const response = await host.client.terminalPreparePathInput({
@@ -103,7 +106,7 @@ export function TerminalViewport({
       mountRef.current = null;
       if (interactionToastShown) toast.dismiss(interactionToastId);
     };
-  }, [controller, host, stageAttachment, terminalId]);
+  }, [controller, host, openExternalUrl, stageAttachment, terminalId]);
 
   useLayoutEffect(() => {
     mountRef.current?.setShown(shown);

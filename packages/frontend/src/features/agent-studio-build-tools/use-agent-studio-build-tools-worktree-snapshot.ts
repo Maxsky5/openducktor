@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import type { GitCurrentBranch } from "@openducktor/contracts";
 import type { DiffDataState } from "@openducktor/frontend-core/git/contracts";
 import type { GitPanelReads } from "@openducktor/frontend-core/git/reads/use-git-panel-reads";
 import type {
@@ -20,9 +21,8 @@ import {
 import {
   buildAgentStudioGitPanelBranchIdentityKey,
   resolveAgentStudioGitPanelBranch,
-} from "@/pages/agents/right-panel/agents-page-git-panel";
-import type { useAgentStudioRepoSettings } from "@/pages/agents/use-agent-studio-repo-settings";
-import type { useWorkspaceState } from "@/state/app-state-provider";
+} from "./git-panel-branch";
+import type { RepoSettingsInput } from "@openducktor/frontend-core/types/session-slices";
 import {
   type BuildToolsSelectedView,
   useAgentStudioBuildToolsBootstrap,
@@ -31,13 +31,13 @@ import {
 type UseAgentStudioBuildToolsWorktreeSnapshotArgs = {
   workspaceId: string | null;
   workspaceRepoPath: string | null;
-  activeBranch: ReturnType<typeof useWorkspaceState>["activeBranch"];
+  activeBranch: GitCurrentBranch | null;
   selectedView: BuildToolsSelectedView;
   isGitTabActive: boolean;
   isRightPanelOpen: boolean;
-  repoSettings: ReturnType<typeof useAgentStudioRepoSettings>["repoSettings"];
-  repoSettingsError: ReturnType<typeof useAgentStudioRepoSettings>["repoSettingsError"];
-  loadRepoSettings: ReturnType<typeof useAgentStudioRepoSettings>["loadRepoSettings"];
+  repoSettings: RepoSettingsInput | null;
+  repoSettingsError: Error | null;
+  loadRepoSettings: () => Promise<RepoSettingsInput>;
 };
 
 export type AgentStudioBuildToolsWorktreeSnapshot = {

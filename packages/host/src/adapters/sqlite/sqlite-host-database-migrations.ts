@@ -1,18 +1,15 @@
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type { HostDatabaseSession } from "./sqlite-host-database-schema";
+import { hostMigrationsFolder } from "./sqlite-migration-assets";
 import { applyMigrations } from "./sqlite-migrations";
-
-const migrationsFolder = resolve(dirname(fileURLToPath(import.meta.url)), "drizzle-host");
 
 export const ensureSchema = (
   session: HostDatabaseSession,
   databasePath: string,
 ): Effect.Effect<void, TaskStoreError> =>
-  applyMigrations(session, migrationsFolder, databasePath, "exact").pipe(
+  applyMigrations(session, hostMigrationsFolder, databasePath, "exact").pipe(
     Effect.mapError(
       (cause) =>
         new HostOperationError({

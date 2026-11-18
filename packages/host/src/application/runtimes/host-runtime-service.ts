@@ -86,11 +86,11 @@ export const createHostRuntimeService = ({
                   return { type: "runtime_impact_changed" as const, impact: check.impact };
                 }
                 const persistence = yield* write;
-                return { type: "saved" as const, ...persistence, change };
+                return { type: "saved" as const, ...persistence, apply: check.apply };
               }),
             );
             if (committed.type === "runtime_impact_changed") return committed;
-            const runtimeApplications = yield* session.apply(committed.change);
+            const runtimeApplications = yield* committed.apply;
             if (committed.preferences !== "saved" && committed.preferences !== "unchanged")
               return {
                 type: "partial" as const,

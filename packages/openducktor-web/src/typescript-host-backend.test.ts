@@ -290,7 +290,6 @@ const createTestChannel = (
       taskEventStream: nodeRouter.taskEventStream,
       reportDeliveryFailure: () => {},
     }),
-    ownedLeases: new Set(),
     invoke: (command, args) => invokeLocalHostCommand(hostCommandRouter, command, args),
     refusal: () => null,
     reportFailure: () => {},

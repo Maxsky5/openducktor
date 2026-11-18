@@ -1,5 +1,5 @@
 import type { AgentToolData, AgentToolPart } from "@openducktor/contracts";
-import { normalizeSessionErrorMessage } from "../../../lib/session-error-message";
+import { normalizeSessionErrorMessage } from "@openducktor/core";
 import type { AgentChatMessage } from "../../../types/agent-orchestrator";
 import { isRunningToolStatus } from "../agent-tool-messages";
 import {
