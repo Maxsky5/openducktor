@@ -64,7 +64,6 @@ export function DemoHostSection(): ReactElement {
             disabled={busy !== null}
             onPress={() => void run("reset")}
             fill
-            style={styles.action}
           />
           <Button
             label="Exit demo"
@@ -74,7 +73,6 @@ export function DemoHostSection(): ReactElement {
             disabled={busy !== null}
             onPress={() => void run("exit")}
             fill
-            style={styles.action}
           />
         </View>
       </DividedCard>
@@ -90,11 +88,5 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.space.lg,
   },
   text: { flex: 1, minWidth: 0, gap: 2 },
-  actions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.space.sm,
-    padding: theme.space.lg,
-  },
-  action: { flexGrow: 1, flexBasis: 140, minWidth: 0 },
+  actions: { gap: theme.space.sm, padding: theme.space.lg },
 }));
