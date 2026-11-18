@@ -604,10 +604,12 @@ export const createDemoTerminals = (world: DemoTerminalWorld, clock: DemoClock):
     },
     runHostAction: ({ action, context, workingDir, delayMs }) => {
       const terminal = create({ label: action.name, context, workingDir, startedBy: "host" });
-      return {
-        terminalId: terminal.summary.terminalId,
-        finished: startAction(terminal, action, delayMs),
-      };
+      // A setup step that the end of the demo cuts off fails, so its launch does not wait forever.
+      const finished = new Promise<readonly string[]>((resolve, reject) => {
+        void startAction(terminal, action, delayMs).then(resolve);
+        clock.onEnd(() => reject(new Error("The demo ended. Open the demo again.")));
+      });
+      return { terminalId: terminal.summary.terminalId, finished };
     },
     seed: ({ label, context, workingDir, history, createdAt }) => {
       const terminal = create({ label, context, workingDir, startedBy: "user", createdAt });

@@ -65,7 +65,7 @@ const documentResult = (
 };
 
 /** The task card of a stored task, as the host builds it: the workflow projection of the task. */
-export const taskCard = (task: DemoTask): TaskCard => {
+const taskCard = (task: DemoTask): TaskCard => {
   const projection = workflow.project(task.record);
   return taskCardSchema.parse({
     ...task.record,
@@ -183,7 +183,10 @@ export const createDemoTaskStore = (world: DemoWorld) => {
     return publish(workspace, change);
   };
 
-  /** An implementation reset drops the review documents and the worktree changes. */
+  /**
+   * An implementation reset keeps the worktree and its branch, restores its files to the target
+   * branch, and drops the review documents, the worktree role sessions, and the pull request link.
+   */
   const resetWorktree = (workspace: DemoWorkspace, task: DemoTask) => {
     for (const code of workflow.reviewArtifactCodes) {
       if (isDocumentCode(code)) delete task.documents[code];
@@ -196,8 +199,20 @@ export const createDemoTaskStore = (world: DemoWorld) => {
         ),
       },
     });
-    if (task.worktree) workspace.repository.removeWorktree(task.worktree.workingDirectory);
-    task.worktree = null;
+    if (task.worktree) {
+      const checkout = workspace.repository.checkout(task.worktree.workingDirectory);
+      checkout.committed.clear();
+      checkout.uncommitted.clear();
+      checkout.commits = 0;
+    }
+    world.sessions.forgetTaskSessions(workspace, task.record.id, workflow.worktreeRoles);
+    unlinkPullRequest(task);
+  };
+
+  const unlinkPullRequest = (task: DemoTask) => {
+    const { pullRequest: _unlinked, ...record } = task.record;
+    task.record = record;
+    delete task.pullRequestTitle;
   };
 
   /** Saves a workflow document, and applies its submit event when `submit` is true. */
@@ -425,7 +440,7 @@ export const createDemoTaskStore = (world: DemoWorld) => {
     taskDelete: async (scope, taskId) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
-      world.sessions.stopTaskSessions(workspace, taskId);
+      world.sessions.forgetTaskSessions(workspace, taskId);
       if (task.worktree) workspace.repository.removeWorktree(task.worktree.workingDirectory);
       workspace.tasks.delete(taskId);
       publish(workspace, { taskIds: [taskId], removedTaskIds: [taskId] });
@@ -450,10 +465,10 @@ export const createDemoTaskStore = (world: DemoWorld) => {
     taskReset: async (scope, taskId) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
-      world.sessions.stopTaskSessions(workspace, taskId);
       world.sessions.forgetTaskSessions(workspace, taskId);
       const previousStatus = task.record.status;
       task.documents = {};
+      task.freeArtifacts = [];
       if (task.worktree) workspace.repository.removeWorktree(task.worktree.workingDirectory);
       task.worktree = null;
       touch(task, {
@@ -522,7 +537,7 @@ export const createDemoTaskStore = (world: DemoWorld) => {
       return { artifact, dataBase64: free?.base64 ?? "" };
     },
     taskAssetStage: async (input) => {
-      const assetId = demoUuid(0xa55e70000 + world.resources.size + 1);
+      const assetId = demoUuid(0xa55e70000 + world.nextNumber());
       world.resources.set(`asset:${assetId}`, {
         mime: input.declaredMediaType,
         base64: input.bytesBase64,
@@ -618,14 +633,15 @@ export const createDemoTaskStore = (world: DemoWorld) => {
     taskDirectMerge: async (scope, taskId, input) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
+      if (!task.worktree)
+        throw new Error("This task has no worktree to merge. Refresh the task, then try again.");
       world.sessions.stopTaskSessions(workspace, taskId);
-      if (task.worktree) {
-        const checkout = workspace.repository.checkout(task.worktree.workingDirectory);
-        workspace.repository.mergeIntoTarget(checkout);
-        if (input.removeWorktree) {
-          workspace.repository.removeWorktree(task.worktree.workingDirectory);
-          task.worktree = null;
-        }
+      workspace.repository.mergeIntoTarget(
+        workspace.repository.checkout(task.worktree.workingDirectory),
+      );
+      if (input.removeWorktree) {
+        workspace.repository.removeWorktree(task.worktree.workingDirectory);
+        task.worktree = null;
       }
       // The demo repository has no publish target, so the merge closes the task at once.
       const previousStatus = task.record.status;
@@ -642,9 +658,7 @@ export const createDemoTaskStore = (world: DemoWorld) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
       if (!task.record.pullRequest) return false;
-      const { pullRequest: _unlinked, ...record } = task.record;
-      task.record = record;
-      delete task.pullRequestTitle;
+      unlinkPullRequest(task);
       touch(task, {});
       publish(workspace, { taskIds: [taskId] });
       return true;
@@ -762,7 +776,7 @@ const decodedSize = (base64: string): number =>
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /** UTF-8 text as base64, without platform globals. */
-export const toBase64 = (text: string): string => {
+const toBase64 = (text: string): string => {
   const bytes = new TextEncoder().encode(text);
   let output = "";
   for (let index = 0; index < bytes.length; index += 3) {

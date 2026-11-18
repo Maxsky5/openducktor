@@ -59,7 +59,7 @@ type OpenedHostSession = SessionParts & {
 export type RemoteHostSession = OpenedHostSession & { readonly lifecycle: LifecycleController };
 
 /** The name that the demo shows for its host. */
-export const DEMO_HOST_LABEL = "Demo host";
+const DEMO_HOST_LABEL = "Demo host";
 
 /**
  * The demo: fictional sample data in memory on this device. It has no saved host, no address, no

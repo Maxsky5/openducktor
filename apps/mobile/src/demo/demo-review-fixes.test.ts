@@ -1,0 +1,252 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
+import { createManualTimers } from "../test-support/manual-timers";
+import { createDemoSessionAdapter } from "./demo-session-adapter";
+
+const FIELDNOTES = { workspaceId: "fieldnotes", repoPath: "/Users/sam/code/fieldnotes" };
+const lifetimes: AbortController[] = [];
+afterEach(() => {
+  for (const lifetime of lifetimes.splice(0)) lifetime.abort();
+});
+
+const openDemo = () => {
+  const lifetime = new AbortController();
+  lifetimes.push(lifetime);
+  const manual = createManualTimers();
+  const adapter = createDemoSessionAdapter(lifetime.signal, manual.timers);
+  return { adapter, client: adapter.host.client, lifetime, ...manual };
+};
+type Demo = ReturnType<typeof openDemo>;
+
+const observeLive = async (demo: Demo) => {
+  const envelopes: AgentSessionLiveEnvelope[] = [];
+  await demo.adapter.host.observeAgentSessionLive({ repoPath: FIELDNOTES.repoPath }, (envelope) =>
+    envelopes.push(envelope),
+  );
+  await demo.advance(0);
+  return envelopes;
+};
+
+const chatOf = async (demo: Demo, title: string) => {
+  const chats = await demo.client.workspaceSessionListActive("fieldnotes");
+  const chat = chats.find((candidate) => candidate.manualTitle === title);
+  if (!chat?.externalSessionId) throw new Error(`The sample has no chat "${title}".`);
+  const ref = {
+    repoPath: FIELDNOTES.repoPath,
+    runtimeKind: chat.runtimeKind,
+    workingDirectory: chat.executionTarget.workingDirectory,
+    externalSessionId: chat.externalSessionId,
+  };
+  return {
+    chat,
+    ref,
+    target: { ...ref, sessionScope: { kind: "repository" as const, workspaceId: "fieldnotes" } },
+  };
+};
+
+const taskOf = async (demo: Demo, title: string) => {
+  const task = (await demo.client.tasksListAll(FIELDNOTES)).find((item) => item.title === title);
+  if (!task) throw new Error(`The sample has no task "${title}".`);
+  return task;
+};
+
+const PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AAAAMBAQBQ3ap3AAAAAElFTkSuQmCC";
+
+describe("demo backend review fixes", () => {
+  test("never reuses a staged asset ID after a discard", async () => {
+    const demo = openDemo();
+    const stage = () =>
+      demo.client.taskAssetStage({
+        workspaceId: "fieldnotes",
+        scope: "description",
+        originalName: "a.png",
+        declaredMediaType: "image/png",
+        bytesBase64: PNG,
+      });
+    const first = await stage();
+    const second = await stage();
+    await demo.client.taskAssetDiscardStaged({
+      workspaceId: "fieldnotes",
+      assetIds: [first.assetId],
+    });
+    const third = await stage();
+    expect(new Set([first.assetId, second.assetId, third.assetId]).size).toBe(3);
+  });
+
+  test("keeps a shared worktree on archive and forks a new worktree with the source commits", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { chat } = await chatOf(demo, "Why do tags drop on sync?");
+    const history = await demo.client.agentRuntimeLoadSessionHistory({
+      repoPath: FIELDNOTES.repoPath,
+      runtimeKind: "claude",
+      workingDirectory: chat.executionTarget.workingDirectory,
+      externalSessionId: chat.externalSessionId ?? "",
+      runtimePolicy: { kind: "claude" },
+      limit: 200,
+    });
+    const forkPoint = { messageId: history.at(-1)?.messageId ?? "" };
+    await demo.client.workspaceSessionFork({
+      workspaceId: "fieldnotes",
+      sessionId: chat.id,
+      forkPoint,
+      destination: { kind: "same_folder" },
+    });
+    const preview = await demo.client.workspaceSessionArchivePreview({
+      workspaceId: "fieldnotes",
+      sessionId: chat.id,
+    });
+    expect(preview.sharedWith).toHaveLength(1);
+    await expect(
+      demo.client.workspaceSessionArchive({
+        workspaceId: "fieldnotes",
+        sessionId: chat.id,
+        confirmStop: false,
+        removeWorktree: true,
+      }),
+    ).rejects.toThrow("Other chats or tasks still use this worktree");
+
+    const forked = demo.client.workspaceSessionFork({
+      workspaceId: "fieldnotes",
+      sessionId: chat.id,
+      forkPoint,
+      destination: { kind: "new_worktree", name: "tags-sync-copy", branchName: "odt/tags-copy" },
+    });
+    await demo.advance(5_000);
+    const result = await forked;
+    const status = await demo.client.gitGetWorktreeStatus(
+      FIELDNOTES.repoPath,
+      "refs/remotes/origin/main",
+      "target",
+      result.runtimeSession.workingDirectory,
+    );
+    expect(status.fileDiffs.map((diff) => diff.file)).toContain("src/tags/tags.ts");
+  });
+
+  test("removes the sessions of a deleted task and clears free artifacts on Reset Task", async () => {
+    const demo = openDemo();
+    const envelopes = await observeLive(demo);
+    const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
+    await demo.client.taskReset(FIELDNOTES, reviewed.id);
+    const artifacts = await demo.client.taskArtifactsList({ ...FIELDNOTES, taskId: reviewed.id });
+    expect(artifacts.artifacts).toEqual([]);
+
+    const offline = await taskOf(demo, "Show an error when sync fails offline");
+    await demo.client.taskDelete(FIELDNOTES, offline.id);
+    await demo.advance(0);
+    const snapshot = await demo.client.agentSessionLiveAttach({ repoPath: FIELDNOTES.repoPath });
+    expect(snapshot.sessions.some((session) => session.title.includes(offline.title))).toBe(false);
+    expect(envelopes.some((envelope) => envelope.type === "session_removed")).toBe(true);
+  });
+
+  test("keeps the worktree on Reset Implementation and drops the Builder and QA sessions", async () => {
+    const demo = openDemo();
+    const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
+    const worktree = await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id);
+    await demo.client.taskApplyEvent(FIELDNOTES, reviewed.id, "reset-implementation");
+    expect(await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id)).toEqual(worktree);
+    const [records] = await demo.client.agentSessionsListForTasks(FIELDNOTES, [reviewed.id]);
+    expect(records?.agentSessions.map((session) => session.role).sort()).toEqual([
+      "planner",
+      "spec",
+    ]);
+    expect((await taskOf(demo, reviewed.title)).status).toBe("ready_for_dev");
+  });
+
+  test("keeps queue order while the first message is edited, and steers the chosen message", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { target } = await chatOf(demo, "How does search rank notes?");
+    const send = (submissionId: string, text: string) =>
+      demo.client.agentSessionMessageSubmit({
+        ...target,
+        submissionId,
+        mode: "default",
+        parts: [{ kind: "text", text }],
+      });
+    await send("11111111-1111-4111-8111-000000000001", "First run");
+    await send("11111111-1111-4111-8111-000000000002", "Queued A");
+    await send("11111111-1111-4111-8111-000000000003", "Queued B");
+    const editing = await demo.client.agentSessionMessageQueueManage({
+      ...target,
+      action: { kind: "begin_edit", submissionId: "11111111-1111-4111-8111-000000000002" },
+    });
+    const entry = editing.queue.entries[0];
+    if (entry?.state !== "editing") throw new Error("The edit did not start.");
+    await demo.advance(30_000);
+    const waiting = await demo.client.agentSessionMessageQueueManage({
+      ...target,
+      action: { kind: "resume" },
+    });
+    expect(waiting.queue.entries.map((item) => item.submissionId)).toEqual([
+      "11111111-1111-4111-8111-000000000002",
+      "11111111-1111-4111-8111-000000000003",
+    ]);
+    await expect(
+      demo.client.agentSessionMessageQueueManage({
+        ...target,
+        action: { kind: "cancel_edit", submissionId: entry.submissionId, editId: "edit-stale" },
+      }),
+    ).rejects.toThrow("This edit is no longer current");
+    const steered = await demo.client.agentSessionMessageQueueManage({
+      ...target,
+      action: { kind: "steer", submissionId: "11111111-1111-4111-8111-000000000003" },
+    });
+    expect(
+      steered.acceptedMessage?.type === "user_message" && steered.acceptedMessage.message,
+    ).toBe("Queued B");
+  });
+
+  test("accepts an approval only for the pending request, and saves a chat model choice", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { ref, target } = await chatOf(demo, "Why do tags drop on sync?");
+    await demo.client.agentSessionMessageSubmit({
+      ...target,
+      submissionId: "11111111-1111-4111-8111-000000000004",
+      mode: "default",
+      parts: [{ kind: "text", text: "Add a note" }],
+    });
+    await demo.advance(15_000);
+    await expect(
+      demo.client.agentSessionLiveReplyApproval({
+        ...ref,
+        requestId: "old-request",
+        outcome: "approve_once",
+      }),
+    ).rejects.toThrow("already answered");
+    await demo.client.agentSessionControlUpdateModel({
+      ...ref,
+      sessionScope: target.sessionScope,
+      model: { providerId: "claude", modelId: "claude-wren-3" },
+    });
+    const chats = await demo.client.workspaceSessionListActive("fieldnotes");
+    expect(
+      chats.find((chat) => chat.externalSessionId === ref.externalSessionId)?.selectedModel
+        ?.modelId,
+    ).toBe("claude-wren-3");
+  });
+
+  test("ends a worktree setup when the demo ends", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const ready = await taskOf(demo, "Restore focus after closing search");
+    const launch = demo.client.agentSessionWorkflowLaunch({
+      ...FIELDNOTES,
+      taskId: ready.id,
+      policy: {
+        kind: "manual",
+        actionId: "build_implementation_start",
+        decision: {
+          startMode: "fresh",
+          selectedModel: { runtimeKind: "opencode", providerId: "vega", modelId: "vega-2-pro" },
+        },
+      },
+      instruction: { kind: "kickoff" },
+    });
+    await demo.advance(100);
+    demo.lifetime.abort();
+    await expect(launch).rejects.toThrow("The demo ended");
+  });
+});

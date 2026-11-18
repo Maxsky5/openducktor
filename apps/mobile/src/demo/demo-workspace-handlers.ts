@@ -29,7 +29,7 @@ const RUNTIME_DESCRIPTORS = {
 } as const;
 
 /** The ID of a provider of the fictional catalogs, such as `kestrel-ai`. */
-export const providerIdOf = (provider: string): string =>
+const providerIdOf = (provider: string): string =>
   provider.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
 /** The fictional model catalog of a runtime, from the Fieldnotes story. */
@@ -198,7 +198,7 @@ export const createDemoWorkspaceHandlers = (world: DemoWorld) => {
         }));
     },
     workspaceStageLocalAttachment: async (input) => {
-      const path = `/Users/sam/.openducktor/attachments/demo-${world.resources.size + 1}-${input.name}`;
+      const path = `/Users/sam/.openducktor/attachments/demo-${world.nextNumber()}-${input.name}`;
       world.resources.set(path, {
         mime: input.mime ?? "application/octet-stream",
         base64: input.base64Data,

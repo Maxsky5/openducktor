@@ -13,7 +13,7 @@ import { type DemoWorld, findWorkspace } from "./demo-world";
 import { seedDemo } from "./fixtures/seed";
 
 /** The workspace that the demo opens on. */
-export const DEMO_INITIAL_WORKSPACE_ID = "fieldnotes";
+const DEMO_INITIAL_WORKSPACE_ID = "fieldnotes";
 
 const resourceOf = (entry: { mime: string; base64: string }): SessionResource => ({
   bytes: fromBase64(entry.base64),
@@ -54,7 +54,7 @@ export const createDemoSessionAdapter = (
       runningTaskSessionCount: () => 0,
     },
     nextPullRequestNumber: 128,
-    nextId: (prefix) => `${prefix}-${nextNumber++}`,
+    nextNumber: () => nextNumber++,
   };
 
   const contextWorkspace = (context: TerminalContext) =>
@@ -99,8 +99,13 @@ export const createDemoSessionAdapter = (
     stopTaskSessions: (workspace, taskId) => {
       for (const session of engine.taskSessions(workspace, taskId)) engine.stopRun(session);
     },
-    forgetTaskSessions: (workspace, taskId) => {
-      for (const session of engine.taskSessions(workspace, taskId)) engine.forget(session);
+    forgetTaskSessions: (workspace, taskId, roles) => {
+      const forgotten = roles ? new Set(roles) : null;
+      for (const session of engine.taskSessions(workspace, taskId)) {
+        if (forgotten && session.owner.kind === "task" && !forgotten.has(session.owner.role))
+          continue;
+        engine.forget(session);
+      }
       engine.publishTaskRecords(workspace, taskId);
     },
     taskSessionRecords: (workspace, taskId) =>

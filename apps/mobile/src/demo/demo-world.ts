@@ -49,8 +49,11 @@ export type DemoTask = {
 export type DemoTaskSessionHooks = {
   /** Stops the runs of the sessions of a task, without their outcomes. */
   stopTaskSessions(workspace: DemoWorkspace, taskId: string): void;
-  /** Removes the sessions of a task, as a task reset does. */
-  forgetTaskSessions(workspace: DemoWorkspace, taskId: string): void;
+  /**
+   * Stops and removes the sessions of a task, as a task reset does. With `roles`, only the
+   * sessions of these roles go.
+   */
+  forgetTaskSessions(workspace: DemoWorkspace, taskId: string, roles?: readonly string[]): void;
   taskSessionRecords(workspace: DemoWorkspace, taskId: string): AgentSessionRecord[];
   runningTaskSessionCount(workspace: DemoWorkspace, taskId: string): number;
 };
@@ -83,7 +86,8 @@ export type DemoWorld = {
   sessions: DemoTaskSessionHooks;
   /** The PR numbers that the demo gives out. */
   nextPullRequestNumber: number;
-  nextId(prefix: string): string;
+  /** A number that the demo never gives out twice, for staged file IDs. */
+  nextNumber(): number;
 };
 
 export const findWorkspace = (world: DemoWorld, workspaceId: string): DemoWorkspace => {

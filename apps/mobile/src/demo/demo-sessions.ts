@@ -32,7 +32,7 @@ import {
 } from "./demo-world";
 
 /** The time between two steps of a scripted run. A run of eight steps ends within 15 seconds. */
-export const DEMO_STEP_MS = 1300;
+const DEMO_STEP_MS = 1300;
 const TOOL_RUN_MS = 700;
 const CONTEXT_WINDOW = 200_000;
 
@@ -127,6 +127,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
   const sessions = new Map<string, DemoSession>();
   const liveSequence = new Map<string, number>();
   let messageNumber = 1;
+  let editNumber = 1;
 
   const nextSequence = (repoPath: string): number => {
     const next = (liveSequence.get(repoPath) ?? 0) + 1;
@@ -501,8 +502,9 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
   /** Only a normal end sends the next queued message, as on a real host. */
   const drainQueue = (session: DemoSession) => {
     if (session.run || session.queue.paused) return;
-    const next = session.queue.entries.find((entry) => entry.state === "queued");
-    if (!next) return;
+    // The queue keeps its order: a first message that the user edits holds the others.
+    const next = session.queue.entries[0];
+    if (next?.state !== "queued") return;
     session.queue.entries = session.queue.entries.filter(
       (entry) => entry.submissionId !== next.submissionId,
     );
@@ -686,6 +688,12 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     },
     agentSessionMessageSubmit: async (input) => {
       const session = find(input);
+      // Steering adds the message to the running turn at once.
+      if (input.mode === "steer" && session.run)
+        return {
+          kind: "accepted",
+          acceptedMessage: acceptUserMessage(session, input.parts, input.submissionId),
+        };
       if (session.run || session.queue.entries.length > 0 || session.queue.paused) {
         session.queue.entries = [
           ...session.queue.entries,
@@ -713,36 +721,55 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
           ? entries.findIndex((entry) => entry.submissionId === action.submissionId)
           : -1;
       const entry = at >= 0 ? entries[at] : undefined;
+      const currentEdit = (editId: string) => {
+        if (entry?.state !== "editing" || entry.editId !== editId)
+          throw new Error("This edit is no longer current. Open the queued message again.");
+        return entry;
+      };
+      let steered: AcceptedAgentUserMessage | undefined;
       switch (action.kind) {
         case "begin_edit":
-          if (!entry) throw new Error("This message already left the queue.");
-          entries[at] = { ...entry, state: "editing", editId: `${entry.submissionId}-edit` };
+          if (entry?.state !== "queued") throw new Error("This message already left the queue.");
+          entries[at] = { ...entry, state: "editing", editId: `edit-${editNumber++}` };
           break;
-        case "save_edit":
-          if (!entry) throw new Error("This message already left the queue.");
+        case "save_edit": {
+          const edited = currentEdit(action.editId);
           entries[at] = {
-            submissionId: entry.submissionId,
+            submissionId: edited.submissionId,
             parts: action.parts,
-            queuedAt: entry.queuedAt,
+            queuedAt: edited.queuedAt,
             state: "queued",
           };
           break;
-        case "cancel_edit":
-          if (!entry) throw new Error("This message already left the queue.");
+        }
+        case "cancel_edit": {
+          const edited = currentEdit(action.editId);
           entries[at] = {
-            submissionId: entry.submissionId,
-            parts: entry.parts,
-            queuedAt: entry.queuedAt,
+            submissionId: edited.submissionId,
+            parts: edited.parts,
+            queuedAt: edited.queuedAt,
             state: "queued",
           };
           break;
+        }
         case "remove":
           session.queue.entries = entries.filter((_, index) => index !== at);
           break;
         case "steer":
+          if (entry?.state !== "queued") throw new Error("This message already left the queue.");
+          session.queue.entries = entries.filter((_, index) => index !== at);
+          session.queue.paused = false;
+          steered = session.run
+            ? acceptUserMessage(session, entry.parts, entry.submissionId)
+            : deliver(session, entry.parts, entry.submissionId);
+          break;
         case "resume":
           session.queue.paused = false;
           break;
+      }
+      if (steered) {
+        publishQueue(session);
+        return { queue: queueOf(session), acceptedMessage: steered };
       }
       publishQueue(session);
       const before = session.history.length;
@@ -770,12 +797,23 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     agentSessionControlUpdateModel: async (input) => {
       const session = find(input);
       if (input.model) session.model = { ...input.model, runtimeKind: session.ref.runtimeKind };
+      if (session.owner.kind === "chat") {
+        session.owner.record = {
+          ...session.owner.record,
+          selectedModel: { ...session.model, runtimeKind: session.ref.runtimeKind },
+        };
+        publishChat(session);
+      }
       upsert(session);
     },
     agentSessionLiveReplyApproval: async (input) => {
       const session = find(input);
       const run = session.run;
-      if (!run || run.waiting !== "permission")
+      if (
+        !run ||
+        run.waiting !== "permission" ||
+        session.pendingApprovals[0]?.requestId !== input.requestId
+      )
         throw new Error("This request was already answered. Refresh the session.");
       run.waiting = null;
       run.rejected = input.outcome === "reject";
@@ -787,7 +825,11 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     agentSessionLiveReplyQuestion: async (input) => {
       const session = find(input);
       const run = session.run;
-      if (!run || run.waiting !== "question")
+      if (
+        !run ||
+        run.waiting !== "question" ||
+        session.pendingQuestions[0]?.requestId !== input.requestId
+      )
         throw new Error("This question was already answered. Refresh the session.");
       run.waiting = null;
       session.pendingQuestions = [];

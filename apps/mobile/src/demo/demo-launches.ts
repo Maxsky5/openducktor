@@ -379,6 +379,27 @@ export const createDemoLaunches = ({
     });
   };
 
+  /** The other active chats and the tasks that use the worktree of a chat. */
+  const worktreeOwners = (
+    chat: DemoSession & { owner: { kind: "chat"; record: WorkspaceSession } },
+  ) => {
+    const folder = chat.owner.record.executionTarget.workingDirectory;
+    const workspaceId = chat.workspace.record.workspaceId;
+    return {
+      sharedWith: chats(chat.workspace)
+        .filter(
+          (other) =>
+            other !== chat &&
+            other.owner.record.archivedAt === null &&
+            other.owner.record.executionTarget.workingDirectory === folder,
+        )
+        .map((other) => ({ workspaceId, sessionId: other.owner.record.id, title: other.title })),
+      taskOwners: [...chat.workspace.tasks.values()]
+        .filter((task) => task.worktree?.workingDirectory === folder)
+        .map((task) => ({ workspaceId, taskId: task.record.id, title: task.record.title })),
+    };
+  };
+
   /** Chats that wait for their start keep the steps of their new worktree. */
   const pendingSteps = new Map<string, StartupStep[]>();
 
@@ -473,8 +494,6 @@ export const createDemoLaunches = ({
       } else {
         const branch = input.worktree.branchName ?? `odt/${input.worktree.name}`;
         const workingDirectory = `${workspace.worktreeRoot}/${input.worktree.name}`;
-        if (workspace.repository.findCheckout(workingDirectory))
-          throw new Error("A worktree with this name already exists. Enter another name.");
         const checkout = workspace.repository.addWorktree({ workingDirectory, branch });
         executionTarget = {
           kind: "local_worktree",
@@ -523,9 +542,11 @@ export const createDemoLaunches = ({
       let steps: StartupStep[] = [];
       if (input.destination.kind === "new_worktree") {
         const workingDirectory = `${source.workspace.worktreeRoot}/${input.destination.name}`;
+        // The fork branch starts from the commits of the source chat.
         const checkout = source.workspace.repository.addWorktree({
           workingDirectory,
           branch: input.destination.branchName,
+          from: source.workspace.repository.checkout(source.ref.workingDirectory),
         });
         executionTarget = {
           kind: "local_worktree",
@@ -577,8 +598,7 @@ export const createDemoLaunches = ({
         branchName: target.kind === "local_worktree" ? target.branchName : null,
         worktreeExists: target.kind === "local_worktree" && checkout !== null,
         hasUncommittedChanges: (checkout?.uncommitted.size ?? 0) > 0,
-        sharedWith: [],
-        taskOwners: [],
+        ...worktreeOwners(chat),
       };
     },
     workspaceSessionArchive: async ({ workspaceId, sessionId, removeWorktree }) => {
@@ -587,6 +607,11 @@ export const createDemoLaunches = ({
       const target = chat.owner.record.executionTarget;
       let executionTarget = target;
       if (removeWorktree && target.kind === "local_worktree") {
+        const owners = worktreeOwners(chat);
+        if (owners.sharedWith.length > 0 || owners.taskOwners.length > 0)
+          throw new Error(
+            "Other chats or tasks still use this worktree. Archive them first, or keep the worktree.",
+          );
         chat.workspace.repository.removeWorktree(target.workingDirectory);
         executionTarget = { ...target, worktreeState: "removed" };
       }
@@ -596,6 +621,13 @@ export const createDemoLaunches = ({
     },
     workspaceSessionRestore: async ({ workspaceId, sessionId }) => {
       const chat = findChat(workspaceId, sessionId);
+      if (
+        chat.owner.record.executionTarget.kind === "local_worktree" &&
+        chat.owner.record.executionTarget.worktreeState === "removed"
+      )
+        throw new Error(
+          "The worktree of this chat was removed, so it cannot continue. Start a new chat.",
+        );
       const record = saveChat(chat, { archivedAt: null });
       engine.upsert(chat);
       return record;

@@ -36,7 +36,7 @@ export type DemoCheckout = {
 const CONTEXT_LINES = 3;
 
 /** A 64-bit FNV-1a hash as 16 hex digits, for the snapshot hashes of the Git reads. */
-export const hash16 = (text: string): string => {
+const hash16 = (text: string): string => {
   let hash = 0xcbf29ce484222325n;
   for (let index = 0; index < text.length; index += 1) {
     hash ^= BigInt(text.charCodeAt(index));
@@ -46,7 +46,7 @@ export const hash16 = (text: string): string => {
 };
 
 /** A commit ID of 40 hex digits made from `seed`. */
-export const commitId = (seed: string): string =>
+const commitId = (seed: string): string =>
   `${hash16(seed)}${hash16(`${seed}:1`)}${hash16(`${seed}:2`)}`.slice(0, 40);
 
 const linesOf = (file: DemoFile | null | undefined): string[] => {
@@ -176,8 +176,15 @@ export type DemoRepository = {
   readonly targetBranch: string;
   checkout(workingDirectory: string): DemoCheckout;
   findCheckout(workingDirectory: string): DemoCheckout | null;
-  /** Adds a worktree on a new branch from the target branch. */
-  addWorktree(input: { workingDirectory: string; branch: string }): DemoCheckout;
+  /**
+   * Adds a worktree on a new branch from the target branch, or from the commits of `from`. An
+   * existing checkout at that folder stops it.
+   */
+  addWorktree(input: {
+    workingDirectory: string;
+    branch: string;
+    from?: DemoCheckout;
+  }): DemoCheckout;
   removeWorktree(workingDirectory: string): void;
   worktrees(): DemoCheckout[];
   /** The file at `path` in the working files of a checkout, or null. */
@@ -267,14 +274,16 @@ export const createDemoRepository = (input: {
       return found;
     },
     findCheckout: (workingDirectory) => checkouts.get(workingDirectory) ?? null,
-    addWorktree({ workingDirectory, branch }) {
+    addWorktree({ workingDirectory, branch, from }) {
+      if (checkouts.has(workingDirectory))
+        throw new Error("A worktree already uses this folder. Enter another name.");
       const created: DemoCheckout = {
         workingDirectory,
         branch,
-        revision: targetRevision,
-        committed: new Map(),
+        revision: from?.revision ?? targetRevision,
+        committed: new Map(from?.committed),
         uncommitted: new Map(),
-        commits: 0,
+        commits: from?.commits ?? 0,
       };
       checkouts.set(workingDirectory, created);
       return created;
