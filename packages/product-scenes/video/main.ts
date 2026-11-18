@@ -87,6 +87,12 @@ function optionsOf(version: string): OptionsByScene {
     "mobile-approve": {},
     "goal-mode": {},
     "goal-command": {},
+    "mobile-question": {},
+    "mobile-pull-request": {},
+    artifacts: {},
+    gitlab: {},
+    "approve-merged": {},
+    "keyboard-shortcuts": {},
   };
 }
 

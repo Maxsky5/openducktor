@@ -46,6 +46,13 @@ const CAPTIONS = {
     "Approve the task with a squash merge, then push main and move the task to Done.",
   "goal-mode": "Start the Builder in Goal mode. It works turn after turn until the goal is met.",
   "goal-command": "Set a goal with /goal, then pause it with /goal pause while the agent works.",
+  artifacts:
+    "The Builder saves an HTML page on the task. Open the page in the Artifacts tab, then expand its preview.",
+  gitlab: "Select GitLab, fill the project with Detect from origin, then sign in with GitLab.",
+  "approve-merged":
+    "The task branch is merged, so the card shows Merged. Select Close Task, then confirm. The task moves to Done.",
+  "keyboard-shortcuts":
+    "Hold Command to see the number of each session, and press a number to open its session. Then record new keys for Fork from message in Settings, and save them.",
 } as const satisfies { [Name in PageSceneProps["name"]]?: string };
 
 type DemoScene = keyof typeof CAPTIONS;

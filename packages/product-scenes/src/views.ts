@@ -36,12 +36,20 @@ export const VIEWS = {
   "mobile-pair": async () => (await import("./scenes/mobile-pair/view")).MobilePairView,
   "mobile-needs-you": async () =>
     (await import("./scenes/mobile-needs-you/view")).MobileNeedsYouView,
+  "mobile-question": async () => (await import("./scenes/mobile-question/view")).MobileQuestionView,
   "mobile-steer": async () => (await import("./scenes/mobile-steer/view")).MobileSteerView,
   "mobile-diff-comment": async () =>
     (await import("./scenes/mobile-diff-comment/view")).MobileDiffCommentView,
   "mobile-start-builder": async () =>
     (await import("./scenes/mobile-start-builder/view")).MobileStartBuilderView,
   "mobile-approve": async () => (await import("./scenes/mobile-approve/view")).MobileApproveView,
+  "mobile-pull-request": async () =>
+    (await import("./scenes/mobile-pull-request/view")).MobilePullRequestView,
   "goal-mode": async () => (await import("./scenes/goal-mode/view")).GoalModeView,
   "goal-command": async () => (await import("./scenes/goal-command/view")).GoalCommandView,
+  artifacts: async () => (await import("./scenes/artifacts/view")).ArtifactsView,
+  gitlab: async () => (await import("./scenes/gitlab/view")).GitlabView,
+  "approve-merged": async () => (await import("./scenes/approve-merged/view")).ApproveMergedView,
+  "keyboard-shortcuts": async () =>
+    (await import("./scenes/keyboard-shortcuts/view")).KeyboardShortcutsView,
 } as const satisfies SceneViewLoaders;

@@ -77,6 +77,10 @@ Before a merge or a pull request, commit or discard the changes in the task work
 
 **Pull request** shows only when the repository has a [Git provider](#git-provider). The dialog then selects it first. If the provider is not ready, the choice shows the reason. If the task branch is already merged into the target branch, the dialog selects **Close task**.
 
+OpenDucktor checks the task branches of each open workspace when it starts, then every 5 minutes. When a task branch is merged into its target branch, the task card shows **Merged**, and its main button is <Action>Close Task</Action>. To check now, run **Check merged tasks** from the [command palette](/command-palette/#git-actions).
+
+<ProductDemo id="approve-merged" />
+
 ### Merge directly [#direct-merge]
 
 <Screenshot id="approve-dialog" alt="The Approve task dialog with Direct merge selected, the Merge commit, Squash, and Rebase methods, the Remove worktree and branch switch on, and Merge locally." />

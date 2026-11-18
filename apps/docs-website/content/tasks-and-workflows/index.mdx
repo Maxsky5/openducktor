@@ -101,6 +101,10 @@ Select a card to open the task details. Artifacts are the files that an agent or
 | Workflow artifact | A Markdown document that the workflow declares, such as a spec. A review artifact also has a verdict. | When an agent saves it, the workflow can move the task. |
 | Other artifact | Any file that an agent or you add, such as an HTML page, an image, or a Markdown document, up to 10 MiB. | None. The task keeps its lane and its review verdict. |
 
+An agent saves a file with the `odt_set_task_artifact` tool. The transcript shows the save as a card with an <Action>Open</Action> button. The **Artifacts** tab shows the file under the workflow documents. Select the file to see its preview. Select <Action>Expand</Action> to see the preview in a large dialog.
+
+<ProductDemo id="artifacts" />
+
 Your own edits never move the task. To edit a workflow document, open it in the **Artifacts** tab and select the pencil button. When a task closes, its other artifacts become read-only. You can still edit its workflow documents.
 
 ## Approve a task [#approval]

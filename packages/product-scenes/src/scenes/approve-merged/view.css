@@ -1,0 +1,42 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * Approve merged: the Kanban board with the Collapsed display for empty columns. Human Review
+     * and Done are open, and all lanes fit. The window holds the lanes and the Close task dialog
+     * with the margin of its positioner.
+     */
+    .am-stage {
+      --design-width: 1040;
+    }
+    .am-window {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      height: calc(640 * var(--u));
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(14 * var(--u));
+      background: var(--card);
+      box-shadow: var(--shadow-window);
+    }
+    /* A phone stage: one lane at a time, and the toasts take the width of the window. The static
+       frame shows Human Review: the track scrolls by the collapsed lanes and keeps its padding on
+       the right of the lane. */
+    @container stage (width <= 500px) {
+      .am-stage {
+        --design-width: 400;
+      }
+      .am-window {
+        height: calc(664 * var(--u));
+      }
+      .am-window .board-track {
+        transform: translateX(calc(-282 * var(--u)));
+      }
+      .am-window .toast-stack {
+        right: calc(16 * var(--u));
+        bottom: calc(16 * var(--u));
+        width: calc(100% - 32 * var(--u));
+      }
+    }
+  }
+}
