@@ -63,6 +63,7 @@ export const build: SceneBuilder = (scene) => {
   const qr = click(() => desktop.trigger("qr"), added + 1.2, 0.7);
   desktop.select("qr", qr);
   scene.mark("qr", qr);
+  scene.mark("qr-rest-end", qr + 0.6);
   cursor.hide(qr + 0.6);
   for (let second = 0; second < 9; second += 1) tick(OPENED_LEFT - second, added + second);
 
@@ -108,6 +109,7 @@ export const build: SceneBuilder = (scene) => {
 
   // The host takes the code: the computer shows Device paired, and the phone opens its sessions
   // with the toast.
+  scene.mark("connect", closed);
   const connected = closed + CONNECT;
   desktop.paired(connected);
   scene.mark("paired", connected);

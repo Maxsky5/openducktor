@@ -8,6 +8,7 @@ import { ForkView } from "../../scenes/fork/view";
 import { GitlabView } from "../../scenes/gitlab/view";
 import { GoalModeView } from "../../scenes/goal-mode/view";
 import { KeyboardShortcutsView } from "../../scenes/keyboard-shortcuts/view";
+import { MobilePairView } from "../../scenes/mobile-pair/view";
 import { MobileQuestionView } from "../../scenes/mobile-question/view";
 import { MobileStartBuilderView } from "../../scenes/mobile-start-builder/view";
 import { Caption } from "../frame/Caption";
@@ -29,21 +30,23 @@ export const FRAME = { width: 1920, height: 1080 } as const;
  * centered on the middle of the row, at y = 430, and the keyboard-shortcuts set is 20 px lower.
  */
 export const PLACES = {
-  "mobile-start-builder": { x: 0, y: 0 },
-  "mobile-question": { x: 700, y: 0 },
-  "goal-mode": { x: 1720, y: 40 },
-  fork: { x: 3280, y: 78 },
-  artifacts: { x: 4360, y: 130 },
-  gitlab: { x: 5200, y: 65 },
-  "keyboard-shortcuts": { x: 6380, y: 98 },
+  "mobile-pair": { x: 0, y: -60 },
+  "mobile-start-builder": { x: 1120, y: 0 },
+  "mobile-question": { x: 1820, y: 0 },
+  "goal-mode": { x: 2840, y: 40 },
+  fork: { x: 4400, y: 78 },
+  artifacts: { x: 5480, y: 130 },
+  gitlab: { x: 6320, y: 65 },
+  "keyboard-shortcuts": { x: 7500, y: 98 },
 } as const satisfies Partial<Record<LoopSceneName, { x: number; y: number }>>;
 
-export const WORLD = { width: 7500, height: 900 } as const;
+export const WORLD = { width: 8620, height: 900 } as const;
 
 export type SetName = keyof typeof PLACES;
 
 /** The product view of each set, which the wall of the opening and the closing shows. */
 export const VIEWS_OF = {
+  "mobile-pair": "[data-root]",
   "mobile-start-builder": "[data-phone]",
   "mobile-question": "[data-phone]",
   "goal-mode": "[data-root]",
@@ -64,9 +67,12 @@ export function ReleaseFilmView({ keys, theme }: FilmViewProps): ReactElement {
       theme={theme}
       size={FRAME}
       world={WORLD}
-      alt={`The OpenDucktor ${RELEASE.to} release film shows what changed since ${RELEASE.from}: the mobile app shows the task board, starts a Builder, and answers the question of a Spec agent; Goal mode makes an agent work toward a goal; a session forks from a reply; the Builder saves an HTML wireframe on the task; a repository connects to GitLab; and keyboard shortcuts open a session and record new keys for a command. The captions are in French.`}
+      alt={`The OpenDucktor ${RELEASE.to} release film shows what changed since ${RELEASE.from}: the mobile app pairs with the computer by QR code, shows the task board, starts a Builder, and answers the question of a Spec agent; Goal mode makes an agent work toward a goal; a session forks from a reply; the Builder saves an HTML wireframe on the task; a repository connects to GitLab; and keyboard shortcuts open a session and record new keys for a command. The captions are in French.`}
       sets={
         <>
+          <FilmSet name="mobile-pair" {...PLACES["mobile-pair"]}>
+            <MobilePairView {...scene} />
+          </FilmSet>
           <FilmSet name="mobile-start-builder" {...PLACES["mobile-start-builder"]}>
             <MobileStartBuilderView {...scene} />
           </FilmSet>

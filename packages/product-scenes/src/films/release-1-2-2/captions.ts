@@ -25,11 +25,17 @@ function kicker(chapter: (typeof CHAPTERS)[number]): string {
 }
 
 export const CAPTIONS = {
+  pair: {
+    id: "pair",
+    kicker: kicker("Mobile"),
+    title: ["App mobile", "*iOS et Android*"],
+    sub: "En bêta. Elle se connecte à votre machine avec un QR code.",
+  },
   tasks: {
     id: "tasks",
     kicker: kicker("Mobile"),
-    title: ["App mobile", "*iOS et Android*"],
-    sub: "En bêta, connectée à votre machine. Ici, elle lance un agent.",
+    title: ["Vos tâches", "*sur le téléphone*"],
+    sub: "Le Kanban de votre machine. Ici, on lance un agent.",
   },
   question: {
     id: "question",

@@ -1,12 +1,23 @@
-// Chapter 1 of the release film: the mobile app. The opening dives into the phone, which shows the
-// task board and starts a Builder. A Spec agent then asks a question, which the phone answers.
+// Chapter 1 of the release film: the mobile app. The opening dives into Remote control on the
+// computer, which shows a QR code, and the phone scans it and connects. The phone then shows the
+// task board and starts a Builder, and a Spec agent asks a question, which the phone answers.
 // Each beat plays its own scene of the package at the speed of the app. Only the rests with no
 // change on the screen and the startup steps play faster. The camera frames the phone, so it fills
 // the height of the frame, and pushes in once on the part that matters.
-import type { Framing } from "../engine/camera";
+import type { Framed, Framing } from "../engine/camera";
 import type { Film } from "../engine/film";
 import { CAPTIONS } from "./captions";
-import { BEAT_TRAVEL, BESIDE, partOf, playBeat, REST, STEPS, unionShot } from "./shots";
+import {
+  BEAT_TRAVEL,
+  BESIDE,
+  partOf,
+  playBeat,
+  REST,
+  STEPS,
+  shotOf,
+  TRAVEL_EASE,
+  unionShot,
+} from "./shots";
 
 /** The framing of a phone: the phone fills the height of the frame. */
 const PHONE: Framing = { ...BESIDE, margin: 50, maxZoom: 1.6 };
@@ -14,27 +25,71 @@ const PHONE: Framing = { ...BESIDE, margin: 50, maxZoom: 1.6 };
 const CLOSE: Framing = { ...BESIDE, margin: 80, maxZoom: 2 };
 /** Seconds of the push in on the question. */
 const PUSH = 1.1;
-/** The part of the first set that the opening dives into, and its framing. */
-export const FIRST = { set: "mobile-start-builder", part: "[data-phone]", framing: PHONE } as const;
+/** The framing of the computer and the phone of the pairing, side by side. */
+const PAIR: Framing = { ...BESIDE, margin: 60, maxZoom: 1.2 };
+/**
+ * How much slower the rest on the QR code plays, before the finger comes to the phone: the viewer
+ * sees the code, and the camera reaches the phone before the tap.
+ */
+const QR_REST = 0.4;
+/** The set that the opening dives into. */
+export const FIRST_SET = "mobile-pair";
 
-/** Plays the chapter from `at`, when the camera is on the first phone. Returns its end. */
+/** The first shot of the chapter: Remote control on the computer and the phone, side by side. */
+export const firstShot = (film: Film): (() => Framed) =>
+  unionShot(
+    film,
+    [partOf(film, FIRST_SET, "[data-stage-lead]"), partOf(film, FIRST_SET, "[data-phone]")],
+    PAIR,
+  );
+
+/** Plays the chapter from `at`, when the camera is on the first shot. Returns its end. */
 export function mobileChapter(film: Film, at: number): number {
-  // The Tasks tab shows the board one lane at a time. Two swipes reach Ready for Dev, Start
-  // Builder opens the start sheet, and Start session shows the startup steps of the app until the
-  // session is ready and opens. The camera is already on the phone.
-  const tasks = playBeat(
+  // Add device opens the pairing window, and Scan a QR code shows the code. The camera then goes
+  // to the phone, which scans the code, connects, and opens its sessions. The wait for the host
+  // plays faster.
+  const pair = playBeat(
     film,
     {
-      set: FIRST.set,
-      caption: CAPTIONS.tasks.id,
-      mark: "swipe",
-      part: FIRST.part,
-      framing: FIRST.framing,
-      lead: 0.6,
-      result: { mark: "session", hold: 1.1 },
+      set: FIRST_SET,
+      caption: CAPTIONS.pair.id,
+      mark: "add-device",
+      shot: firstShot(film),
+      lead: 0.5,
+      result: { mark: "paired", hold: 1.4 },
       travel: 0,
     },
     at,
+  );
+  const scan = pair.run;
+  scan.speed("qr", QR_REST);
+  scan.speed("qr-rest-end", 1);
+  scan.speed("connect", STEPS);
+  scan.speed("paired", 1);
+  film.camera.move(
+    shotOf(film, partOf(film, FIRST_SET, "[data-phone]"), PHONE),
+    scan.mark("qr") + 0.6,
+    BEAT_TRAVEL,
+    TRAVEL_EASE,
+  );
+  const paired = pair.close();
+
+  // The Tasks tab shows the board one lane at a time. Two swipes reach Ready for Dev, Start
+  // Builder opens the start sheet, and Start session shows the startup steps of the app until the
+  // session is ready and opens.
+  const tasks = playBeat(
+    film,
+    {
+      set: "mobile-start-builder",
+      caption: CAPTIONS.tasks.id,
+      mark: "swipe",
+      part: "[data-phone]",
+      framing: PHONE,
+      lead: 0.6,
+      result: { mark: "session", hold: 1.1 },
+      travel: BEAT_TRAVEL,
+    },
+    paired,
   );
   // The rests of the board, of the card, and of the sheet play faster, and so do the startup
   // steps of the new worktree. The session then holds still once it has slid in, before the
@@ -60,7 +115,7 @@ export function mobileChapter(film: Film, at: number): number {
       set: "mobile-question",
       caption: CAPTIONS.question.id,
       mark: "open",
-      part: FIRST.part,
+      part: "[data-phone]",
       framing: PHONE,
       lead: 0.6,
       result: { mark: "answered", hold: 1.0 },

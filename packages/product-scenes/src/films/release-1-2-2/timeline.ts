@@ -9,10 +9,10 @@ import { artifactsChapter } from "./artifacts";
 import { CHAPTERS } from "./captions";
 import { gitlabChapter } from "./gitlab";
 import { goalChapter } from "./goal";
-import { FIRST, mobileChapter } from "./mobile";
+import { FIRST_SET, firstShot, mobileChapter } from "./mobile";
 import { sessionsChapter } from "./sessions";
 import { shortcutsChapter } from "./shortcuts";
-import { partOf, shotOf } from "./shots";
+import { partOf } from "./shots";
 import { type SetName, VIEWS_OF, WORLD } from "./view";
 
 /**
@@ -22,7 +22,7 @@ import { type SetName, VIEWS_OF, WORLD } from "./view";
  */
 const WALL_ROWS: readonly (readonly SetName[])[] = [
   ["goal-mode", "mobile-question", "artifacts", "gitlab"],
-  ["fork", "mobile-start-builder", "keyboard-shortcuts"],
+  ["fork", "mobile-pair", "mobile-start-builder", "keyboard-shortcuts"],
 ];
 
 /** The builder of each chapter, by its name in the chapter bar. It plays from `at` and returns its end. */
@@ -51,10 +51,10 @@ export const build: FilmBuilder = (film) => {
   film.lightAll(0);
   const { dive, arrived } = playIntro(film, {
     layout: layoutMosaic(camera, wall()),
-    first: partOf(film, FIRST.set)(),
-    shot: shotOf(film, partOf(film, FIRST.set, FIRST.part), FIRST.framing)(),
+    first: partOf(film, FIRST_SET)(),
+    shot: firstShot(film)(),
   });
-  film.light(FIRST.set, dive, arrived);
+  film.light(FIRST_SET, dive, arrived);
 
   // The chapters, one after the other, in the order of the chapter bar. The bar fills while each
   // one plays.
