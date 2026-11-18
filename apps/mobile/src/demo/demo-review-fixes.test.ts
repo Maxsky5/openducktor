@@ -370,8 +370,11 @@ describe("demo QA fixes", () => {
     expect(generated.text).toContain(ready.title);
     const launch = buildLaunch(demo, ready.id, { goal: { objective: generated.text } });
     await demo.advance(5_000);
-    const { session } = await launch;
+    const { session, acceptedMessage } = await launch;
     if (!session) throw new Error("The launch started no session.");
+    expect(acceptedMessage?.type === "user_message" && acceptedMessage.message).toContain(
+      generated.text,
+    );
     const live = await demo.client.agentSessionLiveRead({
       repoPath: FIELDNOTES.repoPath,
       runtimeKind: session.runtimeKind,

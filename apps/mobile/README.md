@@ -179,6 +179,7 @@ flowchart TD
 - `src/demo/` owns the demo backend. `createDemoSessionAdapter` supplies a `HostConnection`, a terminal bridge, and a resource reader for one demo session.
 - The demo host client runs each call through the production `createHostClient`, so the contract schemas check every demo input and result.
 - The demo state holds the workspaces, tasks, sessions, a virtual Git repository for each workspace, terminals, and staged files. Every change goes out on the same task and live session streams as a host change, so all screens show one state.
+- The virtual Git repository keeps the commits of each branch. Changes compares a branch with its merge base on the selected target branch, as `git diff target...HEAD` does.
 - Prompts and workflow role runs follow short scripts. A prompt that asks for a change in a worktree asks for one permission first. A role run applies its workflow outcome only when it ends normally.
 - Demo terminals print scripted output for a fixed set of commands. No command starts a shell.
 - The owner keeps the demo state in memory only. Reset demo and Exit demo abort the demo lifetime, so no scripted event shows after them. The owner disposes the demo connection only after the connection tree has unmounted and released its preview files.

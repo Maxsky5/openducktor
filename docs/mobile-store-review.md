@@ -6,18 +6,22 @@ The demo does not guarantee store acceptance. [Apple guideline 2.1](https://deve
 
 ## Reviewer steps
 
-Give these steps to the reviewers in the App Review notes and in the Google Play app access instructions.
+Give these steps to the reviewers in the App Review notes and in the Google Play app access instructions. The steps take about 15 minutes. Each step starts from the tab that it names.
 
 1. Install the app and open it. No account, computer, network, or code is necessary.
 2. On the "Connect to a host" screen, tap "Try demo" at the bottom of the card. The app opens the Sessions tab. A "Demo mode" label shows at the top of each screen.
 3. Sessions: open "Explain what to do in an empty notebook". The agent asks a question. Select "Create a note", then tap "Confirm Answers". The agent continues and finishes.
 4. Sessions: open "Export a notebook as Markdown". The agent asks for a permission to edit a file. Tap "Approve once" or "Reject". The agent continues.
-5. Sessions: open "Why do tags drop on sync?". Type "Add a test for tag sync" in the message field and tap Send. The agent works, asks for a permission, then answers. Open the session menu (three dots) and select Changes, Files, or Terminals.
-6. Tasks: tap "Start Spec" on "Pin notes to the top of a notebook", then "Start session". The Spec agent writes a specification, and the task moves to Spec ready.
-7. Tasks: open a task card to see its details, documents, and actions. Use the plus button to create a task. Use Import to import a sample GitHub issue.
-8. Tasks: open "Open search with a keyboard shortcut" (Human review). Tap Approve to try Direct Merge or Pull Request, and open Checks.
-9. Terminals: in a task or chat, open Terminals, tap New terminal, and type `help`. The terminal says that it is simulated and lists the demo commands.
-10. Host tab: tap "Reset demo" to restore the sample data. Tap "Exit demo" to return to host selection.
+5. Sessions: open "Why do tags drop on sync?". Type "Add a test for tag sync" in the message field and tap Send. The agent works, asks for a permission, then answers. Scroll up to the "reviewer" card and tap "Subagent session" to read the transcript of the subagent.
+6. In the same session, open the session menu (three dots) and select Changes. Switch between Uncommitted changes and Branch changes, and between the list and tree views. Tap the target branch to compare with another branch. Tap a line of a diff and write a comment. The comment goes with your next message to the agent.
+7. From the session menu, open Files to read code, Markdown, and the image `assets/logo.png`. Open Terminals, tap New terminal, and type `help`. The terminal says that it is simulated and lists the demo commands.
+8. Sessions: tap the plus button, then "New Session". Select a new worktree, a model, and the "Reviewer" role, then start it. The setup steps run, and the session opens. In a session, tap "Fork from this reply" under an answer. From the session menu, try "Rename" and "Archive Session". Tap the archive button at the top of the Sessions tab to restore an archived session.
+9. Tasks: tap "Start Spec" on "Pin notes to the top of a notebook", then "Start session". The Spec agent writes a specification, and the task moves to Spec ready.
+10. Tasks: open the Ready for dev column and tap "Start Builder" on "Restore focus after closing search". Turn on "Goal mode", tap "Generate goal", then tap "Start session". The worktree setup runs, the Builder works toward the goal, and the task moves to AI review.
+11. Tasks: use the plus button to create a task, open it to edit it, and delete it from its menu. Use Import to import a sample GitHub issue.
+12. Tasks: open "Open search with a keyboard shortcut" (Human review). Tap Approve to try Direct Merge, or Pull Request with "Write manually" or a generated draft. Then open Checks.
+13. Tasks: on "Show an error when sync fails offline" (AI review), tap the more actions button of the card. Try "Request Changes", "Reset Implementation", "Reset Task", or "Close Task".
+14. Host tab: tap "Reset demo" to restore the sample data. Tap "Exit demo" to return to host selection.
 
 ## Feature coverage
 
@@ -27,7 +31,7 @@ The table lists each area of the app and how the demo covers it.
 |---|---|---|
 | Host selection | Try demo, theme menu | Add a host by address, code, or QR scan |
 | Sessions list | Groups, search, scope, Needs you count, archived chats | None |
-| Session screen | Transcript, thinking, tool calls with diffs, todos, subagent card, model picker, message options, context usage | Real model answers |
+| Session screen | Transcript, thinking, tool calls with diffs, todos, subagent session, model picker, message options, context usage | Real model answers |
 | Prompts | Scripted answers within about 15 seconds, queue, stop | Real agent work |
 | Questions and permissions | Answer, allow, and reject | None |
 | New session | Current checkout, new worktree with setup steps, existing worktree, model, custom role | None |
@@ -35,10 +39,10 @@ The table lists each area of the app and how the demo covers it.
 | Tasks board | Board, search, filters, workspace switcher | None |
 | Task details | Fields, documents, artifacts, sessions, actions | None |
 | Create and edit tasks | Fields, labels, description images | None |
-| Workflow actions | Start Spec, Planning, Build, QA, Request Changes, Reset, Close | None |
+| Workflow actions | Start Spec, Planning, Build, QA, Goal mode with a generated goal, Request Changes, Reset Implementation, Reset Task, Close | Goals that a real model writes |
 | Approval | Direct Merge, Pull Request with a written or generated draft, Checks | Opening a pull request on the web |
 | Issue import | Sample GitHub issues | Real GitHub issues |
-| Changes and Files | Uncommitted and branch changes, diffs, inline comments, file tree, code, Markdown, image | None |
+| Changes and Files | Uncommitted and branch changes against any demo branch, added, changed, and deleted files, inline comments, file tree, code, Markdown, image | None |
 | Terminals | New terminal, repository actions, scripted commands, key bar, restart, close | Real shell commands |
 | Host tab | Demo host, Reset demo, Exit demo, diagnostics | Saved host list, pairing, remove host |
 | Settings | Theme, display preferences | None |

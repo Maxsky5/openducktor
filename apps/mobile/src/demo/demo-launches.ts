@@ -1,14 +1,15 @@
-import type {
-  AgentSessionModelSelection,
-  AgentWorkflowSessionForkResult,
-  RuntimeKind,
-  StartupOperationContext,
-  StartupOperationSnapshot,
-  StartupStep,
-  WorkflowLaunchResult,
-  WorkspaceSession,
-  WorkspaceSessionForkResult,
-  WorkspaceSessionStartResult,
+import {
+  type AgentSessionModelSelection,
+  type AgentWorkflowSessionForkResult,
+  goalCommandParts,
+  type RuntimeKind,
+  type StartupOperationContext,
+  type StartupOperationSnapshot,
+  type StartupStep,
+  type WorkflowLaunchResult,
+  type WorkspaceSession,
+  type WorkspaceSessionForkResult,
+  type WorkspaceSessionStartResult,
 } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
@@ -218,17 +219,17 @@ export const createDemoLaunches = ({
     engine.publishTaskRecords(workspace, task.record.id, session);
     const liveStateSequence = engine.upsert(session);
 
+    // Goal mode sets the goal instead of a first message, as the runtime `/goal` command does.
+    const instruction = request.instruction;
+    const parts = request.goal
+      ? goalCommandParts(request.goal.objective)
+      : instruction.kind === "message"
+        ? instruction.parts
+        : instruction.kind === "kickoff"
+          ? [{ kind: "text" as const, text: kickoffText(role, pullRequest, instruction) }]
+          : null;
     let acceptedMessage: ReturnType<DemoSessionEngine["acceptUserMessage"]> | undefined;
-    if (request.instruction.kind !== "none") {
-      const parts =
-        request.instruction.kind === "message"
-          ? request.instruction.parts
-          : [
-              {
-                kind: "text" as const,
-                text: kickoffText(role, pullRequest, request.instruction),
-              },
-            ];
+    if (parts) {
       acceptedMessage = engine.acceptUserMessage(session, parts);
       const round = (roleRounds.get(`${task.record.id}:${role}`) ?? 0) + 1;
       roleRounds.set(`${task.record.id}:${role}`, round);
