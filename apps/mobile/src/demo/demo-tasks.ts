@@ -169,6 +169,13 @@ export const createDemoTaskStore = (
           `This action is not available while the task is ${task.record.status}. Refresh the task.`,
       );
     }
+    const resetsWorktree = workflow.eventEffects(eventId).includes("worktree.reset");
+    // The branch reset goes first: a missing base branch stops the action before any task change.
+    if (resetsWorktree && task.worktree)
+      workspace.repository.resetBranch(
+        workspace.repository.checkout(task.worktree.workingDirectory),
+        (task.record.targetBranch ?? workspace.defaultTargetBranch).branch,
+      );
     const statusChanges: TaskEventStatusChange[] = [];
     if (decision.kind === "transition") {
       touch(task, { status: decision.to });
@@ -181,15 +188,15 @@ export const createDemoTaskStore = (
     } else {
       touch(task, {});
     }
-    if (workflow.eventEffects(eventId).includes("worktree.reset")) resetWorktree(workspace, task);
+    if (resetsWorktree) resetWorktree(workspace, task);
     const change: Parameters<typeof publish>[1] = { taskIds: [taskId], statusChanges };
     if (extra?.artifactCodes) change.artifactCodes = new Map([[taskId, extra.artifactCodes]]);
     return publish(workspace, change);
   };
 
   /**
-   * An implementation reset keeps the worktree and its branch, restores its files to the target
-   * branch, and drops the review documents, the worktree role sessions, and the pull request link.
+   * An implementation reset keeps the worktree and its branch, and drops the review documents, the
+   * worktree role sessions, and the pull request link. `applyEvent` restores the branch first.
    */
   const resetWorktree = (workspace: DemoWorkspace, task: DemoTask) => {
     for (const code of workflow.reviewArtifactCodes) {
@@ -203,11 +210,6 @@ export const createDemoTaskStore = (
         ),
       },
     });
-    if (task.worktree)
-      workspace.repository.resetBranch(
-        workspace.repository.checkout(task.worktree.workingDirectory),
-        (task.record.targetBranch ?? workspace.defaultTargetBranch).branch,
-      );
     world.sessions.forgetTaskSessions(workspace, task.record.id, workflow.worktreeRoles);
     unlinkPullRequest(task);
   };

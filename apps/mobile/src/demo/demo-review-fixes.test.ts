@@ -465,6 +465,20 @@ describe("demo QA fixes", () => {
     expect(await goalOf()).toBe("waiting_for_message");
   });
 
+  test("leaves the task unchanged when Reset Implementation has no base branch", async () => {
+    const demo = openDemo();
+    const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
+    await demo.client.taskUpdate(FIELDNOTES, reviewed.id, {
+      targetBranch: { branch: "odt/missing" },
+    });
+    await expect(
+      demo.client.taskApplyEvent(FIELDNOTES, reviewed.id, "reset-implementation"),
+    ).rejects.toThrow("has no branch odt/missing");
+    const after = await taskOf(demo, reviewed.title);
+    expect(after.status).toBe("human_review");
+    expect(after.artifactSummary.qaReport?.present).toBe(true);
+  });
+
   test("starts a new chat worktree from the selected target branch", async () => {
     const demo = openDemo();
     const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
