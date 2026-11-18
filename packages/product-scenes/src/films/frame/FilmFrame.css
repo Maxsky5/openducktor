@@ -1,0 +1,132 @@
+@layer views {
+  :where(.stage) {
+    /* The film frame keeps its pixel size. Only the video tool renders it. */
+    &.film-stage {
+      overflow: hidden;
+    }
+    .film {
+      --film-ink: #141a2b;
+      --film-muted: #5a6478;
+      --film-brand: #5100ff;
+      --film-brand-soft: #7c4dff;
+      --film-card: rgb(255 255 255 / 0.72);
+      --film-card-line: rgb(20 26 43 / 0.08);
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      color: var(--film-ink);
+      font-family: "Space Grotesk Variable", "Space Grotesk", sans-serif;
+      isolation: isolate;
+      -webkit-font-smoothing: antialiased;
+    }
+    :where([data-theme="dark"]) & .film {
+      --film-ink: #f1f3fb;
+      --film-muted: #a3adc2;
+      --film-brand: #a28aff;
+      --film-brand-soft: #8b6dff;
+      --film-card: rgb(17 20 34 / 0.7);
+      --film-card-line: rgb(255 255 255 / 0.08);
+    }
+
+    /* The backdrop: two slow glows of light and a grid of dots that fades to the edges. */
+    .film-backdrop,
+    .film-dots {
+      position: absolute;
+      inset: 0;
+    }
+    .film-backdrop {
+      overflow: hidden;
+      background:
+        radial-gradient(120% 90% at 50% 0%, #ffffff 0%, transparent 60%),
+        linear-gradient(165deg, #f4f2fc 0%, #edf0fa 48%, #f3eefe 100%);
+    }
+    :where([data-theme="dark"]) & .film-backdrop {
+      background:
+        radial-gradient(90% 70% at 50% 18%, #191338 0%, transparent 70%),
+        linear-gradient(170deg, #0b0d1b 0%, #080a14 60%, #06070d 100%);
+    }
+    .film-glow {
+      position: absolute;
+      width: 1300px;
+      height: 1300px;
+      border-radius: 50%;
+      filter: blur(140px);
+      opacity: 0.42;
+    }
+    .film-glow[data-glow="a"] {
+      top: -620px;
+      left: -380px;
+      background: #8f6bff;
+    }
+    .film-glow[data-glow="b"] {
+      right: -460px;
+      bottom: -720px;
+      background: #57c2ff;
+      opacity: 0.32;
+    }
+    :where([data-theme="dark"]) & .film-glow[data-glow="a"] {
+      background: #4d24ff;
+      opacity: 0.38;
+    }
+    :where([data-theme="dark"]) & .film-glow[data-glow="b"] {
+      background: #0b84c9;
+      opacity: 0.22;
+    }
+    /* A still grain over the glows, so the encoder of a video does not draw their soft gradients
+       as bands. */
+    .film-backdrop::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+      opacity: 0.035;
+    }
+    .film-dots {
+      inset: -120px;
+      background-image: radial-gradient(circle, rgb(60 40 160 / 0.13) 1.2px, transparent 1.6px);
+      background-size: 32px 32px;
+      mask-image: radial-gradient(ellipse 65% 60% at 50% 50%, #000 20%, transparent 100%);
+    }
+    :where([data-theme="dark"]) & .film-dots {
+      background-image: radial-gradient(circle, rgb(255 255 255 / 0.07) 1.2px, transparent 1.6px);
+    }
+
+    /* The camera. The column of the captions on the left shows only the backdrop, so the world
+       fades out before it. The viewport has a perspective only while the world tilts, because a
+       3D context keeps the raster of the world at an old scale while the zoom changes. */
+    .film-viewport {
+      position: absolute;
+      inset: 0;
+      mask-image: linear-gradient(90deg, transparent 0, transparent 780px, #000 930px);
+    }
+    /* A long perspective keeps the near side of a tilted wall close to its raster scale. */
+    .film-viewport[data-tilted] {
+      perspective: 4200px;
+      perspective-origin: 50% 50%;
+    }
+    .film-rig {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+    }
+    .film-cam {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: 0 0;
+    }
+    .film-world {
+      position: relative;
+    }
+    /* A set holds one scene at its design width. */
+    .film-set {
+      position: absolute;
+    }
+
+    .film-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+  }
+}

@@ -8,6 +8,8 @@ type SceneVideo = {
   ready: Promise<number>;
   /** Shows the frame at `time` seconds. Call it with times that increase. */
   seek: (time: number) => void;
+  /** True when the last seek moved the camera of a film. A scene has no camera. */
+  moved: () => boolean;
 };
 
 declare global {

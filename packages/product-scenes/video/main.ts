@@ -1,8 +1,8 @@
-// The page of the video renderer. It renders one loop scene from its query, scales the scene to
-// fit the video frame, and mounts the timeline, which stays paused. The renderer then shows each
-// frame with `window.__sceneVideo.seek`. Query: `scene`, `width`, and `height` are necessary;
+// The page of the video renderer. It renders one loop scene or one film from its query, and mounts
+// its timeline, which stays paused. A scene scales to fit the video frame. The renderer then shows
+// each frame with `window.__sceneVideo.seek`. Query: `scene` with `width` and `height`, or `film`;
 // `theme` (light or dark, default light), `keys` (mac or pc, default mac), and `version` (default
-// the version of the repository) are optional.
+// the version of the repository) are optional. With `preview`, the page plays in real time.
 import "../styles/index.css";
 import "./page.css";
 import { createElement } from "react";
@@ -10,11 +10,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import rootPackage from "../../../package.json";
 import type { SceneTheme, ViewPropsOf } from "../src/frame/SceneFrame";
 import { must } from "../src/motion/dom";
+import { gsap } from "../src/motion/gsap";
 import { mountScene, type SceneHandle } from "../src/motion/mount";
 import { type KeyLabels, MAC_KEYS, PC_KEYS } from "../src/replicas/keys";
 import { type LoopSceneName, SCENES, type SceneOptions } from "../src/registry";
 import { type SceneViewLoaders, VIEWS } from "../src/views";
+import { filmName, startFilm } from "./film";
+import { startPreview } from "./preview";
 import { videoScene } from "./scenes";
+
+// A tween of GSAP moves its element with a 3D transform by default, which gives the element its
+// own layer while it moves. A video renders each frame by itself, so 2D transforms keep the text
+// of a moving element sharp, with no change of sharpness when the tween ends.
+gsap.config({ force3D: false });
 
 /** The empty space around the scene, as a part of the short side of the video. */
 const MARGIN = 0.06;
@@ -81,14 +89,14 @@ function optionsOf(version: string): OptionsByScene {
     "git-conflict": {},
     "mobile-pair": {},
     "mobile-needs-you": {},
+    "mobile-question": {},
     "mobile-steer": {},
     "mobile-diff-comment": {},
     "mobile-start-builder": {},
     "mobile-approve": {},
+    "mobile-pull-request": {},
     "goal-mode": {},
     "goal-command": {},
-    "mobile-question": {},
-    "mobile-pull-request": {},
     artifacts: {},
     gitlab: {},
     "approve-merged": {},
@@ -128,6 +136,9 @@ const births = new WeakMap<Animation, number>();
  * to the scene time `time`. They do not follow GSAP, so each one stays paused and gets its time from
  * the frame clock. A frame then has the same pixels in each run.
  */
+/** Seconds of one frame step of a seek, as the scenes and the films play. */
+const FRAME_STEP = 1 / 60;
+
 function holdCssMotion(time: number): void {
   for (const animation of document.getAnimations()) {
     const birth = births.get(animation) ?? time;
@@ -137,7 +148,10 @@ function holdCssMotion(time: number): void {
   }
 }
 
-async function start(): Promise<SceneHandle> {
+/** A mounted scene or film, as the renderer drives it. */
+type Mounted = { duration: number; seek: (time: number) => void };
+
+async function startScene(): Promise<Mounted> {
   const name = videoScene(param("scene"));
   const width = pixels("width");
   const height = pixels("height");
@@ -168,18 +182,53 @@ async function start(): Promise<SceneHandle> {
     SCENES[name].timeline(),
     loadFonts(),
   ]);
-  return mountScene(root, build);
+  const handle: SceneHandle = mountScene(root, build);
+  return { duration: handle.duration(), seek: handle.seek };
 }
 
-let mounted: SceneHandle | undefined;
+async function startFilmPage(value: string): Promise<Mounted> {
+  const theme = choice("theme", THEMES, "light");
+  document.documentElement.dataset.theme = theme;
+  const parent = document.createElement("div");
+  document.body.append(parent);
+  return startFilm(filmName(value), theme, choice("keys", KEYS, "mac"), parent, loadFonts());
+}
+
+const film = query.get("film");
+let mounted: Mounted | undefined;
+const ready = (film === null ? startScene() : startFilmPage(film)).then((handle) => {
+  mounted = handle;
+  return handle.duration;
+});
+/** The time of the frame that shows. */
+let shown = 0;
+/** The transform of the camera of a film after the last seek, and whether the seek changed it. */
+let camera = "";
+let moved = false;
+const cameraOf = (): string =>
+  [...document.querySelectorAll<HTMLElement>("[data-rig], [data-cam]")]
+    .map((element) => element.style.transform)
+    .join(" ");
 window.__sceneVideo = {
-  ready: start().then((handle) => {
-    mounted = handle;
-    return handle.duration();
-  }),
+  ready,
+  moved: () => moved,
   seek: (time) => {
     if (!mounted) throw new Error("Wait for ready before the first seek.");
-    mounted.seek(time);
-    holdCssMotion(time);
+    // The page holds the CSS motion after each frame step of a long seek, such as for a still
+    // image, so a transition that starts during the seek starts at its own time.
+    if (time <= shown) {
+      mounted.seek(time);
+      holdCssMotion(time);
+    }
+    for (let at = shown; at < time;) {
+      at = Math.min(time, at + FRAME_STEP);
+      mounted.seek(at);
+      holdCssMotion(at);
+    }
+    shown = time;
+    const now = cameraOf();
+    moved = now !== camera;
+    camera = now;
   },
 };
+if (query.has("preview")) void ready.then((duration) => startPreview(duration, query));
