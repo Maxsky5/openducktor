@@ -5,7 +5,8 @@
 // message, and the cleanup switch removes the worktree and the branch. A pull request chooses its
 // draft. When the target branch has a remote, Merge locally leads to the step that pushes the
 // target branch and marks the task done. A scene shows the parts of a choice by
-// `data-for-mode` and `data-for-method`.
+// `data-for-mode` and `data-for-method`. While the approval reads the task details, a scene sets
+// `data-preparing` on the sheet, and the loader of approve-task-sheet.tsx shows.
 import {
   ArrowDown,
   Check,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { taskId as idOf } from "../../sample/workspace";
+import { APPROVAL_MODES, type ApprovalMode } from "../approval";
 import { TASKS, type TaskKey } from "../../sample/tasks";
 import {
   FormPanel,
@@ -28,15 +30,7 @@ import {
 import { SheetButton, WorkflowSheet } from "./WorkflowSheet";
 import "./ApproveSheet.css";
 
-export type ApprovalMode = "direct_merge" | "pull_request" | "close_task";
 export type MergeMethod = "merge_commit" | "squash" | "rebase";
-
-/** The approval modes of TASK_APPROVAL_MODE_OPTIONS. */
-export const APPROVAL_MODES = [
-  { value: "direct_merge", label: "Direct merge" },
-  { value: "pull_request", label: "Pull request" },
-  { value: "close_task", label: "Close task" },
-] as const satisfies readonly { value: ApprovalMode; label: string }[];
 
 /** The merge methods of TASK_APPROVAL_MERGE_METHOD_OPTIONS. */
 export const MERGE_METHODS = [
@@ -60,6 +54,7 @@ export const MERGE_METHODS = [
 /** The fixed text of the approval sheet, from TASK_APPROVAL_COPY and the cleanup choice. */
 export const APPROVAL_TEXT = {
   title: "Approve task",
+  loadingDetails: "Loading task details…",
   approvalAction: "Approval action",
   mergeMethod: "Merge method",
   squashMessage: "Squash commit message",
@@ -74,6 +69,51 @@ export const APPROVAL_TEXT = {
   pushTo: "Push to",
   finishLater: "Finish later",
 } as const;
+
+/**
+ * The draft of a pull request that the approval opens with. useTaskApprovalFlow opens the approval
+ * with the draft that an agent writes, so Ask Builder is chosen first.
+ */
+export const ASKED_DRAFT = "generate_ai";
+
+/** The pull request draft choices of taskApprovalPullRequestDraftOptions for the role `role`. */
+export function pullRequestDraftOptions(
+  role: string,
+): readonly { value: "manual" | typeof ASKED_DRAFT; label: string; description: string }[] {
+  return [
+    {
+      value: "manual",
+      label: "Write manually",
+      description: "Write the pull request title and description.",
+    },
+    {
+      value: ASKED_DRAFT,
+      label: `Ask ${role}`,
+      description: `Let ${role} create or update the pull request.`,
+    },
+  ];
+}
+
+/**
+ * The notice of a draft that the role writes, as taskApprovalGeneratePullRequestNotice: the next
+ * step chooses the session that creates the pull request.
+ */
+export function pullRequestNotice(role: string): string {
+  return `Next, choose the ${role} session to use.`;
+}
+
+/** The confirm label of a draft that the role writes, as getTaskApprovalSubmitState names it. */
+export function chooseSessionLabel(role: string): string {
+  return `Choose ${role} session`;
+}
+
+/**
+ * The label of the button that publishes a local merge, as directMergeCompletionButtonLabel
+ * names it before and during the push.
+ */
+export function publishButtonLabel(branch: string, pushing: boolean): string {
+  return pushing ? `Pushing ${branch}…` : `Push ${branch} and mark done`;
+}
 
 /** A sentence with a branch name in the code font. */
 export type CodeSentence = { before: string; code: string; after: string };
@@ -139,7 +179,9 @@ export function ApproveTaskSheet({
       id="approve"
       title={APPROVAL_TEXT.title}
       intro={<TaskIntro task={task} />}
+      loadingLabel={APPROVAL_TEXT.loadingDetails}
       hidden={hidden}
+      className="mob-approve-form"
       primary={
         <>
           <SheetButton
@@ -153,9 +195,10 @@ export function ApproveTaskSheet({
           <SheetButton
             variant="filled"
             Icon={GitPullRequest}
-            label={`Choose ${pullRequestRole} session`}
+            label={chooseSessionLabel(pullRequestRole)}
             hidden={!pullRequest}
             data-for-mode="pull_request"
+            data-choose-session=""
           />
         </>
       }
@@ -191,22 +234,19 @@ export function ApproveTaskSheet({
       </div>
       <div className="mob-approve-section" hidden={!pullRequest} data-for-mode="pull_request">
         <SectionLabel text={APPROVAL_TEXT.pullRequestDraft} />
-        <OptionCard
-          value="manual"
-          title="Write manually"
-          description="Write the pull request title and description."
-          selected={false}
-        />
-        <OptionCard
-          value="generate_ai"
-          title={`Ask ${pullRequestRole}`}
-          description={`Let ${pullRequestRole} create or update the pull request.`}
-          selected
-        />
+        {pullRequestDraftOptions(pullRequestRole).map((option) => (
+          <OptionCard
+            key={option.value}
+            value={option.value}
+            title={option.label}
+            description={option.description}
+            selected={option.value === ASKED_DRAFT}
+          />
+        ))}
       </div>
       <div hidden={!pullRequest} data-for-mode="pull_request">
         <FormPanel muted>
-          <p className="mob-approve-muted">{`Next, choose the ${pullRequestRole} session to use.`}</p>
+          <p className="mob-approve-muted">{pullRequestNotice(pullRequestRole)}</p>
         </FormPanel>
       </div>
     </WorkflowSheet>
@@ -252,7 +292,8 @@ export function PublishSheet({
         <SheetButton
           variant="warning"
           Icon={CircleCheckBig}
-          label={`Push ${branch} and mark done`}
+          label={publishButtonLabel(branch, false)}
+          busyLabel={publishButtonLabel(branch, true)}
           data-publish=""
         />
       }

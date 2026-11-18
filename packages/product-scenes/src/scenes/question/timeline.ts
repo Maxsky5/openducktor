@@ -1,5 +1,5 @@
 import { must } from "../../motion/dom";
-import { fadeIn, growIn, pop } from "../../motion/effects";
+import { fadeIn, pop } from "../../motion/effects";
 import type { SceneBuilder } from "../../motion/scene";
 import { composerActivity } from "../../replicas/shell/composer";
 import { pointer } from "../../replicas/shell/cursor";
@@ -31,6 +31,8 @@ export const build: SceneBuilder = (scene) => {
   const requests = studioRequests(scene, specPage, cursor);
   const setActivity = composerActivity(specPage);
   const form = questionCard(scene, card, cursor);
+  const answers = must(row("question"), "[data-answers]");
+  const answered = rows.running(row("question"));
   const resetFollow = follow(scene, must(specPage, "[data-track]"));
   /** The pane that a phone stage shows. */
   const setPane = (pane: "sidebar" | "main"): void => {
@@ -62,14 +64,13 @@ export const build: SceneBuilder = (scene) => {
     form.next(index, picked + 0.35);
   }
 
-  // Confirm Answers sends the answers.
+  // Confirm Answers sends the answers. The question tool ends, and its answers show under it.
   const confirmed = form.confirm(picked + 1.8, 0.8);
   const resumed = confirmed + 0.6;
   requests.undock(card, resumed);
+  answered(resumed);
   scene.at(resumed, () => {
-    must(row("question"), "[data-tool]").removeAttribute("data-running");
-    row("answers").hidden = false;
-    scene.run(growIn(row("answers")));
+    answers.toggleAttribute("data-answered", true);
     specStep.dataset.tone = "in_progress";
     scene.run(pop(specStep, 1.06));
     setActivity("working");

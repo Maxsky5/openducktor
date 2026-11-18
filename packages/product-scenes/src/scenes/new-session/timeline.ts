@@ -1,5 +1,4 @@
 import { must } from "../../motion/dom";
-import { fadeIn } from "../../motion/effects";
 import type { SceneBuilder } from "../../motion/scene";
 import { composerActivity, composerDraft } from "../../replicas/shell/composer";
 import { createMenu } from "../../replicas/shell/create-menu";
@@ -53,22 +52,28 @@ export const build: SceneBuilder<NewSessionTemplate> = (scene) => {
   // New session closes the menu and opens the dialog.
   const picked = menu.pick("session", opened + 0.6, 0.6);
   dialog.open(picked + 0.15);
+  scene.mark("dialog", picked + 0.15);
 
   // The visitor names the session. The runtime, the model, and the effort keep the defaults.
   const named = cursor.click(() => dialog.field("name"), picked + 0.7, 0.7);
   const typed = dialog.type("name", NAME, named + 0.2);
   dialog.focus("name", named, typed + 0.3);
 
-  // New worktree shows its fields under Target branch, and the body scrolls to them.
+  // New worktree shows its fields under Target branch. The window shows the whole dialog, and on a
+  // phone stage the body scrolls to them.
   const worktree = cursor.click(() => dialog.location("local_worktree"), typed + 0.3, 0.8);
   dialog.select("local_worktree", worktree);
+  scene.mark("location", worktree);
   const scrolled = dialog.scrollToEnd(worktree + 0.3);
 
   // The visitor checks the target branch, then names the worktree. Its directory and its branch
   // show under the name.
   const checked = cursor.point(dialog.target, scrolled + 0.1, 0.7);
+  scene.mark("target", checked);
   const focused = cursor.click(() => dialog.field("worktree"), checked + 0.6, 0.6);
   const worktreeTyped = dialog.typeWorktree(WORKTREE, BRANCH_PREFIX, focused + 0.2);
+  scene.mark("naming", focused + 0.2);
+  scene.mark("named", worktreeTyped);
   dialog.focus("worktree", focused, worktreeTyped + 0.3);
   const revealed = dialog.scrollToEnd(worktreeTyped + 0.1, 0.3);
 
@@ -76,20 +81,23 @@ export const build: SceneBuilder<NewSessionTemplate> = (scene) => {
   const created = cursor.click(dialog.create, revealed + 0.2, 0.8);
   const progress = created + 0.35;
   dialog.start(created, progress);
+  scene.mark("create", created);
   const started = dialog.runSteps(progress, 1);
   cursor.hide(progress + 0.3);
 
-  // The ready session opens. The board leaves, and the session joins the sidebar.
+  // The ready session opens, as onCreated of workspace-session-create-dialog.tsx opens it before
+  // the handoff closes the dialog: the session page takes the place of the board at once under the
+  // dialog, the session joins the sidebar, and then the dialog closes over the page.
   const ready = started + 0.3;
-  dialog.close(ready);
-  scene.at(ready + 0.1, () => {
+  scene.at(ready, () => {
     board.hidden = true;
     page.hidden = false;
     root.dataset.pane = "main";
     kanban.removeAttribute("aria-current");
-    scene.run(fadeIn(page, 0.3));
   });
-  sessions.update(ENTRY.id, ready + 0.1, { selected: true, time: "now" });
+  sessions.update(ENTRY.id, ready, { selected: true, time: "now" });
+  dialog.close(ready);
+  scene.mark("ready", ready);
 
   // The visitor types the first message and sends it. The agent starts, and the session runs.
   const clicked = cursor.click(() => composer.editor, ready + 0.8, 0.8);
@@ -97,6 +105,7 @@ export const build: SceneBuilder<NewSessionTemplate> = (scene) => {
   const written = composer.type(MESSAGE, clicked + 0.3, 26);
   const sent = cursor.click(() => composer.button, written + 0.25, 0.7);
   composer.send(sent);
+  scene.mark("sent", sent);
   scene.at(sent, () => setActivity("working"));
   rows.show(message, sent + 0.1);
   sessions.update(ENTRY.id, sent + 0.1, { running: true });

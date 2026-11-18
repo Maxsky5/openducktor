@@ -8,6 +8,9 @@ import { NAV_SESSIONS } from "../../sample/nav";
 import type { Session } from "../../sample/sessions";
 import { CONFIG_PATH, WORKSPACE } from "../../sample/workspace";
 
+/** The tooltip of the fork button of a reply, from agent-chat-fork-actions.tsx. */
+export const FORK_TIP = "Fork from this reply";
+
 /** The model of the source session, which the fork keeps. */
 export const SESSION = {
   runtime: "codex",
@@ -69,21 +72,36 @@ export const TURNS = {
   second: {
     message: "Build the index in a background worker.",
     time: "10:33:40 AM",
-    worked: "1m 14s",
+    worked: "1m14s",
     reply: "The worker builds the index when a notebook opens, and search now reads the index.",
   },
 } as const;
 
+/**
+ * The separator where the turns of the fork start: the title of codexForkBoundaryHistoryMessage.
+ * The history of a Codex fork shows it after the turns that the fork keeps.
+ */
+export const FORK_BOUNDARY = "Session forked here";
+
 /** The other follow-up that the visitor sends in the fork. */
 export const FOLLOW_UP = "Cache the results of recent queries instead of an index.";
 
-/** The source session in the sidebar: a workspace session in Recent. */
+/**
+ * The time of the follow-up. The second turn of the source ended at 10:34:54 AM, so the source is
+ * less than a minute old for the whole scene.
+ */
+export const FOLLOW_UP_TIME = "10:35:50 AM";
+
+/**
+ * The source session in the sidebar: a workspace session in Recent. formatElapsedShort writes an
+ * age under a minute as now, as the sidebar of the new session scene shows this session.
+ */
 export const SOURCE_ENTRY = {
   workspace: WORKSPACE,
   id: "fork-source",
   title: TITLE,
   runtime: SESSION.runtime,
-  time: "1m",
+  time: "now",
   selected: true,
 } as const satisfies NavEntry;
 
@@ -96,11 +114,17 @@ export const FORK_ENTRY = {
 } as const satisfies NavEntry;
 
 /**
- * The sidebar of the workspace: a Builder runs, and the source session is recent. The short window
- * leaves out the empty Needs you group, so it shows the fork in Recent and in Running.
+ * The sidebar of the workspace, with the rows of the new session scene: a Builder runs, and the
+ * source session and the chat of the tags are recent. The short window leaves out the empty Needs
+ * you group, so it shows the fork in Recent and in Running.
  */
 export const NAV: NavData = {
   scope: "current",
-  entries: [{ ...FORK_ENTRY, later: true }, SOURCE_ENTRY, NAV_SESSIONS["shortcut-build"]],
+  entries: [
+    { ...FORK_ENTRY, later: true },
+    SOURCE_ENTRY,
+    NAV_SESSIONS["shortcut-build"],
+    NAV_SESSIONS["tags-chat"],
+  ],
   omitted: ["needs_you"],
 };

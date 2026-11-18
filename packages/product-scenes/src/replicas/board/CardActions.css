@@ -1,17 +1,21 @@
 @layer replica {
   :where(.stage) {
-    /* The action group of a card: the button of the next step, or the session, and the menu. */
+    /* TaskWorkflowActionGroup: flex items-center gap-2, with the button of the next step, or the
+       session, and the menu. The button of the next step has min-w-0 flex-1 h-9 rounded-lg
+       font-semibold shadow-sm. */
     .card-actions {
       display: flex;
-      gap: calc(6 * var(--u));
+      align-items: center;
+      gap: calc(8 * var(--u));
     }
     .card-action {
       flex: 1;
       min-width: 0;
       gap: calc(8 * var(--u));
       height: calc(36 * var(--u));
-      border-radius: calc(8 * var(--u));
+      border-radius: calc(12 * var(--u));
       font-weight: 600;
+      box-shadow: var(--shadow-sm);
     }
     .card-action[data-variant="default"] {
       border-color: var(--primary);
@@ -48,13 +52,20 @@
     .card-session[data-waiting] em {
       color: var(--warning-surface-foreground);
     }
-    /* The menu of the other actions. */
+    /* The menu of the other actions: an outline button of size sm with px-2.5 shrink-0 h-9
+       shadow-sm, rounded-md, and a size-3.5 ChevronDown at 80% opacity. */
     .card-menu {
       flex: 0 0 auto;
       width: calc(36 * var(--u));
       height: calc(36 * var(--u));
       padding: 0;
-      border-radius: calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      box-shadow: var(--shadow-sm);
+    }
+    .card-menu .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      opacity: 0.8;
     }
   }
 }

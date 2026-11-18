@@ -7,10 +7,12 @@
       z-index: 30;
     }
     /* scrimSoft of theme/colors.ts. */
+    /* The scrim fades with the card: menus.ts moves `--menu-progress` of the layer. */
     .mob-menu-scrim {
       position: absolute;
       inset: 0;
       background: rgb(2 6 24 / 0.06);
+      opacity: var(--menu-progress, 1);
     }
     :where([data-theme="dark"]) & .mob-menu-scrim {
       background: rgb(0 0 0 / 0.25);

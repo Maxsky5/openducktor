@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { NO_CHANGES } from "./replicas/mobile/ChangesScreen";
+import { NO_CHANGES, SCOPE_TABS } from "./replicas/mobile/ChangesScreen";
 import { COMMENT_PLACEHOLDER } from "./replicas/mobile/DiffScreen";
 import { commentRangeLabel, selectionLabel } from "./replicas/mobile/diff-comment-text";
 import { QUEUE_STATUS_LABELS } from "./replicas/mobile/MessageQueue";
 import { pendingCommentsText } from "./replicas/mobile/PendingCommentsNotice";
-import { COMMENT, HOOK, RANGE, SENT_MESSAGE, TYPED } from "./scenes/mobile-diff-comment/sample";
+import {
+  COMMENT,
+  HOOK,
+  RANGE,
+  SENT_MESSAGE,
+  SESSION_ACTIONS,
+  TYPED,
+} from "./scenes/mobile-diff-comment/sample";
 import { importProduct, readProduct } from "./test-support/product-source";
 
 type ContextLine = { lineNumber: number; text: string; isSelected: boolean };
@@ -62,6 +69,29 @@ const { createInlineCommentDraftStore } = await importProduct<{
 const { languageForFilePath } = await importProduct<{
   languageForFilePath: (path: string) => string | null;
 }>("apps/mobile/src/rich-content/code/highlight.ts");
+// SAFETY: changes-model.ts exports these options.
+const { CHANGES_SCOPE_OPTIONS } = await importProduct<{
+  CHANGES_SCOPE_OPTIONS: readonly { value: string; label: string }[];
+}>("apps/mobile/src/features/review/changes-model.ts");
+// SAFETY: work-view-links.ts exports this function, and its routes import only types.
+const { buildWorkViewLinks } = await importProduct<{
+  buildWorkViewLinks: (owner: { workspaceId: string; taskId: string }) => {
+    key: string;
+    label: string;
+    icon: string;
+  }[];
+}>("apps/mobile/src/features/session/header/work-view-links.ts");
+// SAFETY: icon-names.ts exports this map of app icons to Lucide names.
+const { ICONS } = await importProduct<{ ICONS: Record<string, string> }>(
+  "apps/mobile/src/ui/icon-names.ts",
+);
+
+/** The component name of a Lucide icon, such as FileDiff for file-diff. */
+const lucideComponent = (name: string): string =>
+  name
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
 
 /** Storage that keeps nothing: the test formats a message and saves no draft. */
 const NO_STORAGE: Storage = {
@@ -108,6 +138,25 @@ describe("the work views of the mobile app copied in the replicas", () => {
     expect(await readProduct("apps/mobile/src/features/review/diff-comment-flow.tsx")).toContain(
       `"${COMMENT_PLACEHOLDER}"`,
     );
+  });
+
+  test("the session menu of a task session lists the work views of the app", () => {
+    const links = buildWorkViewLinks({ workspaceId: "workspace", taskId: "task" });
+    // Task Details and Copy Task ID come first, as session-header.tsx adds them.
+    const views = SESSION_ACTIONS.slice(2);
+    expect(views.map(({ id, title }) => [id, title])).toEqual(
+      links.map(({ key, label }) => [key, label]),
+    );
+    // An app icon without a Lucide name gives undefined, so the test fails on it.
+    const names = links.map(({ icon }) => ICONS[icon]);
+    expect(views.map(({ icon }) => icon.displayName)).toEqual(
+      names.map((name) => name && lucideComponent(name)),
+    );
+  });
+
+  test("Changes shows the scope tabs of the app", () => {
+    const tabs: readonly { value: string; label: string }[] = SCOPE_TABS;
+    expect(tabs).toEqual(CHANGES_SCOPE_OPTIONS);
   });
 
   test("Changes shows the empty state of the app for no uncommitted changes", () => {

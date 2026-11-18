@@ -15,19 +15,13 @@ import { Composer } from "../../replicas/studio/Composer";
 import { SessionPage } from "../../replicas/studio/SessionPage";
 import { Paragraph } from "../../replicas/ui/InlineCode";
 import { AgentText } from "../../replicas/transcript/AgentText";
-import { ToolRow } from "../../replicas/transcript/ToolRow";
+import { ToolRun } from "../../replicas/transcript/ToolRun";
 import { WorkflowCard } from "../../replicas/transcript/WorkflowCard";
 import { signature } from "../../sample/sessions";
 import { BUILDER_PR_SESSION, PR_TITLE } from "../../sample/studio";
-import { CAUSE, CHECKS, FINAL, PR_NUMBER, READS, ROWS } from "./sample";
+import { CAUSE, CHECKS, FINAL, PR_NUMBER, READS, RUNS } from "./sample";
 import "../../replicas/studio/PanelTabs.css";
 import "./view.css";
-
-/** A Bash row of the turn, from ROWS. */
-function Bash({ id }: { id: keyof typeof ROWS }): ReactElement {
-  const { args, duration, time } = ROWS[id];
-  return <ToolRow kind="bash" name="Bash" args={args} duration={duration} time={time} row={id} />;
-}
 
 /**
  * The right panel with the tool tabs of the task. CI Checks shows with a linked pull request. The
@@ -57,9 +51,7 @@ export function CiChecksView(props: SceneViewProps): ReactElement {
         actions={<PullRequestLink number={PR_NUMBER} />}
         chat={
           <>
-            <Bash id="checks" />
-            <Bash id="publish" />
-            <Bash id="create" />
+            <ToolRun calls={RUNS.publish} folded />
             <WorkflowCard
               title="Set Pull Request"
               icon="pull_request"
@@ -68,20 +60,17 @@ export function CiChecksView(props: SceneViewProps): ReactElement {
               time="10:24:44 AM"
               row="set"
             />
-            <Bash id="watch" />
-            <Bash id="log" />
+            <ToolRun calls={RUNS.watch} folded />
             <AgentText row="cause">
               <Paragraph text={CAUSE} />
             </AgentText>
-            <Bash id="test" />
-            <Bash id="push" />
-            <Bash id="rewatch" />
-            <AgentText signature={signature(BUILDER_PR_SESSION)} worked="5m 31s" row="final">
+            <ToolRun calls={RUNS.fix} folded />
+            <AgentText signature={signature(BUILDER_PR_SESSION)} worked="5m31s" row="final">
               <Paragraph text={FINAL} />
             </AgentText>
           </>
         }
-        composer={<Composer session={BUILDER_PR_SESSION} />}
+        composer={<Composer session={BUILDER_PR_SESSION} keys={props.keys} />}
         panel={<RightPanel />}
       />
     </SceneFrame>

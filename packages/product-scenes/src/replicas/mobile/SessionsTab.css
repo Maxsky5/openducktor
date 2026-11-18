@@ -7,13 +7,13 @@
       min-height: 0;
       overflow: hidden;
     }
-    /* The scope switch: SegmentedControl of ui/fields.tsx in 16 point margins. */
+    /* The scope switch: SegmentedControl of ui/fields.tsx in 16 point margins. The segments
+       share the track with no space between them, and the thumb covers the selected one. */
     .mob-scope {
       padding: calc(8 * var(--u)) calc(16 * var(--u)) calc(4 * var(--u));
     }
     .mob-scope-track {
       display: flex;
-      gap: calc(3 * var(--u));
       padding: calc(3 * var(--u));
       border: calc(1 * var(--u)) solid var(--border);
       border-radius: calc(12 * var(--u));
@@ -41,7 +41,7 @@
       box-shadow: var(--m-shadow-card);
     }
     /* The group header of session-group-header.tsx: a muted bar with the icon, the name, the
-       count, and the chevron. */
+       count, and the chevron, as high as the 48 dp touch target of Android. */
     .mob-group-cell {
       padding: calc(12 * var(--u)) calc(16 * var(--u)) calc(4 * var(--u));
     }
@@ -49,7 +49,7 @@
       display: flex;
       align-items: center;
       gap: calc(8 * var(--u));
-      min-height: calc(44 * var(--u));
+      min-height: calc(48 * var(--u));
       padding: 0 calc(12 * var(--u));
       border-radius: calc(10 * var(--u));
       background: var(--m-chip-fill);

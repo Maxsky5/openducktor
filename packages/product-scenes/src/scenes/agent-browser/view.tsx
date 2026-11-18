@@ -63,7 +63,7 @@ export function AgentBrowserView(props: SceneViewProps): ReactElement {
             <p>{CHECK_REPLY}</p>
           </AgentText>
         </Thread>
-        <Composer session={BUILDER_SESSION} />
+        <Composer session={BUILDER_SESSION} keys={props.keys} />
       </BrowserSession>
     </SceneFrame>
   );

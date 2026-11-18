@@ -1,0 +1,210 @@
+@layer replica {
+  :where(.stage) {
+    /* ToolRunListRow: 2 points above and under the run. */
+    .mob-run {
+      position: relative;
+      padding: calc(2 * var(--u)) 0;
+    }
+    /* The header: the kind icon, the name, the counts, and the disclosure marker on a 32 point
+       line. */
+    .mob-run-head {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(32 * var(--u));
+      padding: 0 calc(4 * var(--u));
+    }
+    .mob-run-icon.lucide {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-run-title {
+      flex: 0 0 auto;
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-run-counts {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* DisclosureMarker: an 11 point chevron that turns down while the run is open. */
+    .mob-run-chevron.lucide {
+      flex: 0 0 auto;
+      width: calc(11 * var(--u));
+      height: calc(11 * var(--u));
+      color: var(--muted-foreground);
+      transform: rotate(90deg);
+    }
+    .mob-run:not([data-fold="open"]) .mob-run-chevron {
+      transform: none;
+    }
+    /* The guide line runs under the kind icon of the header, and the calls start under its name. */
+    .mob-run-calls {
+      margin-left: calc(10.5 * var(--u));
+      padding-left: calc(10.5 * var(--u));
+      border-left: calc(1 * var(--u)) solid var(--border);
+    }
+    .mob-run[data-fold="folded"] .mob-run-fold {
+      display: none;
+    }
+    /* FoldReveal: while the run folds, its calls lie over the rows under it from where they start,
+       so they take no height of the run. */
+    .mob-run[data-fold="folding"] .mob-run-fold {
+      position: relative;
+      height: 0;
+    }
+    .mob-run[data-fold="folding"] .mob-run-calls {
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+    }
+    /* While a run opens or folds, the rows under it lie over its calls on the opaque screen
+       color, so they cover the calls while they move. */
+    .mob-track > [data-cover] {
+      position: relative;
+      z-index: 1;
+      background: var(--chat-background);
+    }
+    /* One call: 7 points above and under its first line, which is 18 points high. */
+    .mob-call {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(32 * var(--u));
+      padding: calc(7 * var(--u)) calc(4 * var(--u));
+    }
+    /* ToolCallIcon: a 14 point box as high as the first text line, so the icon sits on its
+       middle. A call that ended keeps the color of the other tool icons. */
+    .mob-call-icon {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(14 * var(--u));
+      height: calc(18 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-call-glyph.lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    .mob-call[data-running] .mob-call-icon {
+      color: var(--status-running-foreground);
+    }
+    .mob-call[data-running] .mob-call-glyph,
+    .mob-call:not([data-running]) .mob-bars {
+      display: none;
+    }
+    /* ToolRunningBars: three 2 point bars, 2 points apart, in a 12 point box. */
+    .mob-bars {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(2 * var(--u));
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+    .mob-bars > i {
+      width: calc(2 * var(--u));
+      height: calc(10 * var(--u));
+      border-radius: calc(1 * var(--u));
+      background: currentColor;
+      animation: mob-bar-pulse 1200ms cubic-bezier(0.23, 1, 0.32, 1) infinite;
+    }
+    .mob-bars > i:nth-child(2) {
+      animation-delay: 120ms;
+    }
+    .mob-bars > i:nth-child(3) {
+      animation-delay: 240ms;
+    }
+    /* With reduced motion, the bars stay still at three quarters of their height. */
+    @media (prefers-reduced-motion: reduce) {
+      .mob-bars > i {
+        opacity: 0.75;
+        transform: scaleY(0.75);
+      }
+    }
+    /* The tool name and the command or the summary, on their baseline. */
+    .mob-call-text {
+      display: flex;
+      flex: 1;
+      align-items: baseline;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .mob-call-name {
+      flex: 0 0 auto;
+      color: var(--muted-foreground);
+      font-size: calc(12.5 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-call-code,
+    .mob-call-summary {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--foreground);
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-call-code {
+      font-family: var(--mono);
+      font-size: calc(12.5 * var(--u));
+    }
+    .mob-call-summary {
+      font-size: calc(13 * var(--u));
+    }
+    /* The count of the other lines of a command, after its first line. */
+    .mob-call-more {
+      flex: 0 0 auto;
+      color: var(--muted-foreground);
+      font-size: calc(11.5 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* ToolTiming: the run time and the clock time in the foreground color at 75 percent. A call
+       that runs shows no run time. */
+    .mob-call-timing {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      margin-left: auto;
+      color: color-mix(in oklab, var(--foreground) 75%, transparent);
+      font-size: calc(11.5 * var(--u));
+      line-height: calc(16 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .mob-call[data-running] .mob-call-duration {
+      display: none;
+    }
+  }
+  /* The desktop `agent-tool-running-pulse` of one bar. */
+  @keyframes mob-bar-pulse {
+    0% {
+      opacity: 0.45;
+      transform: scaleY(0.4);
+    }
+    15% {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+    45%,
+    100% {
+      opacity: 0.45;
+      transform: scaleY(0.4);
+    }
+  }
+}

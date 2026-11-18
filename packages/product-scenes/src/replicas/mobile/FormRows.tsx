@@ -1,7 +1,8 @@
 // The fields of a mobile workflow sheet, as form-rows.tsx, fields.tsx, and switch-card.tsx in
 // apps/mobile/src/ui: a labeled field, an uppercase section label, the select trigger, the
 // segmented control, the option cards of the approval, a bordered panel, a multiline text field,
-// and a switch in a card. A scene changes `data-selected`, `data-on`, and `--segment-index`.
+// and a switch in a card. A scene changes `data-selected`, `data-on`, and `--segment-index`. In a
+// sheet with `data-busy`, the controls show the look of disabled controls.
 import { Check, ChevronsUpDown } from "lucide-react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { classes } from "../classes";
@@ -37,21 +38,27 @@ export function SectionLabel({ text }: { text: string }): ReactElement {
   return <span className="mob-section-label">{text}</span>;
 }
 
-/** The outlined select trigger with the chosen value and the up-down chevrons. */
+/**
+ * The outlined select trigger with the chosen value and the up-down chevrons. A disabled trigger,
+ * such as the model of a reused session, has the chip fill, the half opacity of a disabled
+ * Touchable, and no chevrons.
+ */
 export function SelectTrigger({
   value,
   detail,
   leading,
   mono = false,
+  disabled = false,
 }: {
   value: string;
   detail?: string;
   /** A mark before the value, such as the runtime brand mark or the branch icon. */
   leading?: ReactNode;
   mono?: boolean;
+  disabled?: boolean;
 }): ReactElement {
   return (
-    <span className="mob-select" data-mono={flag(mono)}>
+    <span className="mob-select" data-mono={flag(mono)} data-disabled={flag(disabled)}>
       {leading}
       <span className="mob-select-text">
         <span className="mob-select-value">{value}</span>
@@ -90,6 +97,7 @@ export function SegmentedControl({
           className="mob-segment"
           data-selected={flag(option.value === selected)}
           data-segment={option.value}
+          data-feedback="none"
         >
           {option.label}
         </span>

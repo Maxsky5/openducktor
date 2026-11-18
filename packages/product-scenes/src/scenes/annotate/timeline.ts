@@ -21,7 +21,7 @@ export const build: SceneBuilder = (scene) => {
   const root = must(scene.stage, "[data-root]");
   const panel = sessionPanel(root);
   const cursor = pointer(scene, root);
-  const tip = tooltip(root);
+  const tip = tooltip(scene, root);
   const browser = browserTab(scene, root, cursor);
   const track = must(root, "[data-track]");
   const rows = transcript(scene, root);
@@ -43,7 +43,7 @@ export const build: SceneBuilder = (scene) => {
   browser.page.dataset.version = "before";
   browser.reset();
   badge.textContent = "";
-  for (const name of ["message", "patch", "answer"]) row(name).hidden = true;
+  for (const name of ["message", "answer"]) row(name).hidden = true;
   for (const part of all(track, '[data-annotation="2"]')) part.hidden = notes.length < 2;
   must(browser.page, '[data-fn="import-link"]').hidden = notes.length < 2;
   setActivity("idle");

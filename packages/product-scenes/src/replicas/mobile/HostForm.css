@@ -93,10 +93,11 @@
       font-weight: 500;
       line-height: calc(18 * var(--u));
     }
+    /* The frame draws the border around the 48 point input. */
     .mob-field-input {
       display: flex;
       align-items: center;
-      min-height: calc(48 * var(--u));
+      min-height: calc(50 * var(--u));
       padding: 0 calc(14 * var(--u));
       border: calc(1 * var(--u)) solid var(--input);
       border-radius: calc(12 * var(--u));
@@ -117,26 +118,35 @@
     .mob-host-destination-text {
       display: grid;
       flex: 1;
+      gap: calc(2 * var(--u));
       min-width: 0;
     }
+    /* Connecting to: footnote text. */
     .mob-host-destination .mob-host-muted {
       font-size: calc(12 * var(--u));
       line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
     }
     .mob-host-mono {
       font-family: var(--mono);
       font-size: calc(11.5 * var(--u));
       line-height: calc(16 * var(--u));
     }
-    /* Change: a plain small Button. It is disabled while the form connects, at half opacity. */
+    /* Change: a plain small Button, 32 points high with a 13 point label. It is disabled while
+       the form connects, at half opacity. */
     .mob-host-change {
+      display: flex;
+      align-items: center;
+      min-height: calc(32 * var(--u));
       padding: 0 calc(12 * var(--u));
       color: var(--m-tint);
       font-size: calc(13 * var(--u));
       font-weight: 500;
+      line-height: calc(18 * var(--u));
+      letter-spacing: calc(-0.1 * var(--u));
       opacity: 0.5;
     }
-    /* PairingCodeInput: six 56 point slots in two groups. */
+    /* PairingCodeInput: six 56 point slots in two groups, with the digits in the mono font. */
     .mob-code {
       display: flex;
       gap: calc(6 * var(--u));
@@ -151,6 +161,7 @@
       border: calc(1 * var(--u)) solid var(--input);
       border-radius: calc(12 * var(--u));
       background: var(--card);
+      font-family: var(--mono);
       font-size: calc(26 * var(--u));
       line-height: calc(34 * var(--u));
     }
@@ -162,7 +173,8 @@
       gap: calc(8 * var(--u));
       padding-top: calc(4 * var(--u));
     }
-    /* Button of ui/button.tsx at size lg: 48 points, rounded 12, 15 point medium text. */
+    /* Button of ui/button.tsx at size lg: 48 points, rounded 12, 15 point medium text, and 18
+       point icons. */
     .mob-button {
       display: flex;
       flex: 1 1 0;
@@ -177,7 +189,12 @@
       font-size: calc(15 * var(--u));
       font-weight: 500;
       line-height: calc(20 * var(--u));
+      letter-spacing: calc(-0.1 * var(--u));
       white-space: nowrap;
+    }
+    .mob-button .lucide {
+      width: calc(18 * var(--u));
+      height: calc(18 * var(--u));
     }
     .mob-button[data-variant="filled"] {
       background: var(--primary);
@@ -189,9 +206,20 @@
       background: var(--card);
       color: var(--foreground);
     }
-    .mob-button[data-disabled] {
-      opacity: 0.45;
+    /* A disabled button at half opacity. Android draws each part of the button at that opacity,
+       one over the other: the background and its shadow, and then the label, so the violet shows
+       through the label. */
+    .mob-button[data-variant="filled"][data-disabled] {
+      background: color-mix(in oklab, var(--primary) 50%, transparent);
+      color: color-mix(in oklab, var(--primary-foreground) 50%, transparent);
+      box-shadow:
+        0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(81 0 255 / 0.1),
+        0 calc(4 * var(--u)) calc(12 * var(--u)) calc(-4 * var(--u)) rgb(81 0 255 / 0.225);
     }
+    :where([data-theme="dark"]) & .mob-button[data-variant="filled"][data-disabled] {
+      box-shadow: 0 calc(4 * var(--u)) calc(14 * var(--u)) calc(-4 * var(--u)) rgb(81 0 255 / 0.3);
+    }
+    /* RemoteNetworkNotice: footnote text between the info icon and the chevron. */
     .mob-host-notice {
       display: flex;
       align-items: center;
@@ -200,6 +228,7 @@
       color: var(--muted-foreground);
       font-size: calc(12 * var(--u));
       line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
     }
     .mob-host-notice > .lucide:first-child {
       width: calc(15 * var(--u));

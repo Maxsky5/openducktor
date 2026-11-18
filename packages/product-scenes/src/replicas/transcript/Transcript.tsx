@@ -1,12 +1,14 @@
 // The transcript of one or more sessions. One session shows. The others wait hidden for the scene
 // that switches the session of the window. Each turn wraps its rows, so a row id is unique in its
-// turn. The wrappers take no box, so the rows lay out as one list.
+// turn. The wrappers take no box, so the rows lay out as one list. Consecutive calls of a turn
+// show as one tool run, which folds when another row of the session follows it, as the
+// transcript of the app groups and folds them with its default chat settings.
 import type { ReactElement } from "react";
 import { AgentText } from "./AgentText";
 import { Answers } from "./Answers";
-import type { Row, SessionData } from "./model";
-import { PatchCard } from "./PatchCard";
-import { ToolRow } from "./ToolRow";
+import type { CallData, Row, SessionData } from "./model";
+import { QUESTION_TOOL_NAME, ToolRow } from "./ToolRow";
+import { ToolRun } from "./ToolRun";
 import { UserMessage } from "./UserMessage";
 import { WorkflowCard } from "./WorkflowCard";
 import { Paragraph } from "../ui/InlineCode";
@@ -18,7 +20,23 @@ type TranscriptProps = {
   shown: string;
 };
 
-function TranscriptRow({ row }: { row: Row }): ReactElement {
+/** A part of a turn: a row alone, or the consecutive calls of a tool run. */
+type Item =
+  | { kind: "row"; row: Exclude<Row, { kind: "call" }> }
+  | { kind: "run"; calls: CallData[] };
+
+function itemsOf(rows: readonly Row[]): Item[] {
+  const items: Item[] = [];
+  for (const row of rows) {
+    const last = items.at(-1);
+    if (row.kind !== "call") items.push({ kind: "row", row });
+    else if (last?.kind === "run") last.calls.push(row);
+    else items.push({ kind: "run", calls: [row] });
+  }
+  return items;
+}
+
+function TranscriptRow({ row }: { row: Exclude<Row, { kind: "call" }> }): ReactElement {
   switch (row.kind) {
     case "user":
       return (
@@ -26,17 +44,17 @@ function TranscriptRow({ row }: { row: Row }): ReactElement {
           {row.text}
         </UserMessage>
       );
-    case "tool":
+    case "question":
       return (
         <ToolRow
-          kind={row.tool}
-          name={row.name}
-          args={row.args}
+          tool="question"
+          name={QUESTION_TOOL_NAME}
+          summary={row.summary}
           duration={row.duration}
           time={row.time}
           row={row.id}
         >
-          {row.answers && <Answers items={row.answers} />}
+          <Answers items={row.answers} />
         </ToolRow>
       );
     case "workflow":
@@ -50,10 +68,6 @@ function TranscriptRow({ row }: { row: Row }): ReactElement {
           row={row.id}
         />
       );
-    case "patch":
-      return (
-        <PatchCard path={row.path} kind={row.change} add={row.add} del={row.del} row={row.id} />
-      );
     case "agent":
       return (
         <AgentText signature={row.signature} worked={row.worked} row={row.id}>
@@ -63,6 +77,31 @@ function TranscriptRow({ row }: { row: Row }): ReactElement {
         </AgentText>
       );
   }
+}
+
+/** The turns of a session. A run folds when another row of the session follows it. */
+function SessionTurns({ session }: { session: SessionData }): ReactElement {
+  const turns = session.turns.map((turn) => ({ id: turn.id, items: itemsOf(turn.rows) }));
+  const last = turns.findLast((turn) => turn.items.length > 0);
+  return (
+    <>
+      {turns.map((turn) => (
+        <div key={turn.id} className="st-turn" data-turn={turn.id}>
+          {turn.items.map((item, index) =>
+            item.kind === "row" ? (
+              <TranscriptRow key={item.row.id} row={item.row} />
+            ) : (
+              <ToolRun
+                key={item.calls[0]?.id}
+                calls={item.calls}
+                folded={turn !== last || index < turn.items.length - 1}
+              />
+            ),
+          )}
+        </div>
+      ))}
+    </>
+  );
 }
 
 export function Transcript({ sessions, shown }: TranscriptProps): ReactElement {
@@ -75,13 +114,7 @@ export function Transcript({ sessions, shown }: TranscriptProps): ReactElement {
           data-session={session.id}
           hidden={session.id !== shown}
         >
-          {session.turns.map((turn) => (
-            <div key={turn.id} className="st-turn" data-turn={turn.id}>
-              {turn.rows.map((row) => (
-                <TranscriptRow key={row.id} row={row} />
-              ))}
-            </div>
-          ))}
+          <SessionTurns session={session} />
         </div>
       ))}
     </>

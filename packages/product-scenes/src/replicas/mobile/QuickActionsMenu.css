@@ -1,6 +1,7 @@
 @layer replica {
   :where(.stage) {
-    /* The menu covers the screen under the status bar with the soft scrim of AnchoredPopover. */
+    /* The menu covers the screen under the status bar with the soft scrim of AnchoredPopover.
+       The scrim fades with the card: menus.ts moves `--menu-progress` of the layer. */
     .mob-qmenu-layer {
       position: absolute;
       inset: 0;
@@ -10,6 +11,7 @@
       position: absolute;
       inset: 0;
       background: #0206180f;
+      opacity: var(--menu-progress, 1);
     }
     :where([data-theme="dark"]) & .mob-qmenu-scrim {
       background: #00000040;
@@ -63,8 +65,9 @@
     :where([data-theme="dark"]) & .mob-qmenu-item[data-destructive] > .lucide {
       color: var(--rose-300);
     }
+    /* A disabled row has the half opacity of a disabled Touchable. */
     .mob-qmenu-item[data-disabled] {
-      opacity: 0.45;
+      opacity: 0.5;
     }
     .mob-qmenu-text {
       display: grid;

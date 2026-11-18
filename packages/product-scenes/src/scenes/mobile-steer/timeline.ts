@@ -5,11 +5,13 @@ import { composerDraft } from "../../replicas/mobile/draft";
 import { finger } from "../../replicas/mobile/finger";
 import { screens } from "../../replicas/mobile/screens";
 import { stepList } from "../../replicas/mobile/steps";
-import { follow, transcript } from "../../replicas/transcript/rows";
+import { toolRuns } from "../../replicas/mobile/tool-runs";
+import { topButton } from "../../replicas/mobile/top-button";
+import { transcript } from "../../replicas/transcript/rows";
 import { MESSAGES } from "./sample";
 
-/** The rows that come in while the scene plays, in order. */
-const LATER_ROWS = ["queued", "answer", "readTest", "steered", "keymapTests"];
+/** The messages that come in while the scene plays, in order. The tool runs show their calls. */
+const LATER_ROWS = ["queued", "answer", "steered"];
 
 /** Seconds from a steer to the message in the transcript. */
 const DELIVERY = 0.6;
@@ -32,28 +34,29 @@ export const build: SceneBuilder = (scene) => {
   const tap = finger(scene, root).tap;
   const session = phone.screen("session");
   const rows = transcript(scene, session);
+  const runs = toolRuns(scene, session);
   const row = (id: string): HTMLElement => must(session, `[data-row="${id}"]`);
   const draft = composerDraft(scene, session);
   const queue = must(session, "[data-queue]");
   const card = must(queue, "[data-queue-card]");
-  const track = must(session, "[data-track]");
-  follow(scene, track);
+  topButton(scene, session);
 
   // Start: the Builder runs the search tests, and the queue is empty.
   phone.only("session");
   for (const id of LATER_ROWS) row(id).hidden = true;
-  const tests = must(row("test"), "[data-tool]");
-  tests.toggleAttribute("data-running", true);
+  runs.later("readTest", "keymapTests");
+  const endTests = runs.running("test");
 
   /**
-   * Shows `id` as a message that the agent reads `READ` seconds later. The transcript scrolls to
-   * the message at once, so the composer never hides it.
+   * Shows `id` as a message that the agent reads `READ` seconds later. The message shows at once
+   * at the bottom of the transcript, as a new row of the app.
    */
   const deliver = (id: string, at: number): number => {
     const message = row(id);
     message.toggleAttribute("data-unread", true);
-    scene.at(at, () => track.toggleAttribute("data-snap", true));
-    rows.show(message, at);
+    scene.at(at, () => {
+      message.hidden = false;
+    });
     scene.at(at + READ, () => message.removeAttribute("data-unread"));
     return at + READ;
   };
@@ -70,7 +73,7 @@ export const build: SceneBuilder = (scene) => {
 
   // A tap opens the queued message, and its zap button, Steer now, sends it to the running turn.
   steps.show(1, queued + 0.8);
-  const opened = tap(() => card, queued + 2);
+  const opened = tap(() => must(card, "[data-queue-open]"), queued + 2);
   scene.at(opened, () => {
     card.dataset.spread = "true";
   });
@@ -80,13 +83,15 @@ export const build: SceneBuilder = (scene) => {
   });
   const delivered = steered + DELIVERY;
   scene.at(delivered, () => scene.run(shrinkOut(queue, 0.25)));
-  scene.at(delivered + 0.3, () => tests.removeAttribute("data-running"));
 
-  // The transcript shows the message as Unread. The agent reads it at its next step and answers.
+  // The transcript shows the message as Unread. The tests end, and their run folds, because the
+  // message follows it. The agent reads the message at its next step and answers.
   steps.show(2, delivered);
   const read = deliver("queued", delivered + 0.05);
+  endTests(delivered + 0.3);
+  runs.fold("tests", delivered + 0.3);
   const answered = rows.say(row("answer"), read + 0.3);
-  const checked = rows.tool(row("readTest"), answered + 0.2, 0.4);
+  const checked = runs.call("readTest", answered + 0.2, 0.4);
 
   // The visitor types a second message. The zap button shows next to Stop and steers it at once.
   steps.show(3, checked + 0.5);
@@ -94,6 +99,7 @@ export const build: SceneBuilder = (scene) => {
   const zapped = tap(() => must(session, '[data-secondary="steer"]'), typedAgain + 0.6);
   draft.send(zapped);
   const readAgain = deliver("steered", zapped + DELIVERY);
-  rows.start(row("keymapTests"), readAgain + 0.3);
+  runs.fold("testRead", zapped + DELIVERY);
+  runs.start("keymapTests", readAgain + 0.3);
   scene.endAt(readAgain + 3.6);
 };

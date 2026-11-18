@@ -82,6 +82,16 @@
       background: var(--rejected-surface);
       color: var(--rejected-muted);
     }
+    /* MergedBadge: a success Badge with h-6 gap-1 rounded-full px-2 text-[11px] font-medium, and a
+       size-3 GitMerge icon. */
+    .badge[data-tone="merged"] {
+      gap: calc(4 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-color: transparent;
+      background: var(--success-surface);
+      color: var(--success-surface-foreground);
+      font-weight: 500;
+    }
     .badge[data-tone="pr"] {
       border-color: var(--border);
       background: var(--card);

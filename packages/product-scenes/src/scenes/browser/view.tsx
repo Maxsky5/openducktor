@@ -27,7 +27,7 @@ export function BrowserView(props: SceneViewProps): ReactElement {
         <Thread>
           <BuilderReply />
         </Thread>
-        <Composer session={BUILDER_SESSION} />
+        <Composer session={BUILDER_SESSION} keys={props.keys} />
       </BrowserSession>
       <KeyHud />
     </SceneFrame>

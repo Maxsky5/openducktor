@@ -20,7 +20,7 @@ export function progressDialog(
   overlay: HTMLElement,
   options: { attach?: boolean } = {},
 ) {
-  const { box, open, close } = modal(scene, root, overlay, options);
+  const { box, open, close, unmount } = modal(scene, root, overlay, options);
   const count = must(box, "[data-step-count]");
   const step = (id: string): HTMLElement => must(box, `[data-step="${id}"]`);
 
@@ -38,7 +38,11 @@ export function progressDialog(
     return at + duration;
   };
 
-  /** The dialog narrows to the startup progress at `at`. */
+  /**
+   * The dialog narrows to the startup progress at `at`, as observeDialogResize of
+   * dialog-resize.ts resizes it: the progress takes the place of the form at once, and the box
+   * goes from the size of the form to the size of the progress in --resize-dur, 300 ms.
+   */
   const progress = (at: number): void =>
     scene.at(at, () => {
       const from = { width: box.offsetWidth, height: box.offsetHeight };
@@ -49,7 +53,7 @@ export function progressDialog(
         gsap.fromTo(box, from, {
           ...to,
           duration: 0.3,
-          ease: EASE.move,
+          ease: EASE.resize,
           clearProps: "width,height",
         }),
       );
@@ -85,5 +89,16 @@ export function progressDialog(
     return at + 1.3 + sessionSeconds;
   };
 
-  return { box, reset, open, close, scrollToEnd: scrollBody, progress, start, setStep, runSteps };
+  return {
+    box,
+    reset,
+    open,
+    close,
+    unmount,
+    scrollToEnd: scrollBody,
+    progress,
+    start,
+    setStep,
+    runSteps,
+  };
 }

@@ -1,0 +1,155 @@
+@layer replica {
+  :where(.stage) {
+    /* QuestionStep: the prompt, the options, and the Other answer switch, 8 points apart. */
+    .mob-question {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: calc(8 * var(--u));
+    }
+    /* The question in 14 point medium text on 20 point lines, after its eyebrow: the title of the
+       question in 11 point semibold capitals, and two spaces. */
+    .mob-question-prompt {
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .mob-question-eyebrow {
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 600;
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.6 * var(--u));
+      text-transform: uppercase;
+      white-space: pre-wrap;
+    }
+    /* The `mob-q` names keep these rules off the option cards and the segments of FormRows.css,
+       which a page with both replicas also loads. */
+    .mob-qoptions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: calc(4 * var(--u));
+    }
+    /* OptionRow: at least the 48 dp touch target of Android, rounded 10, with 8 by 6 points of
+       padding. A chosen option has the muted foreground outline on the secondary surface. */
+    .mob-qoption {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: calc(48 * var(--u));
+      padding: calc(6 * var(--u)) calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+    }
+    .mob-qoption[data-selected] {
+      border-color: var(--muted-foreground);
+      background: var(--secondary);
+    }
+    .mob-qoption-content {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(6 * var(--u));
+    }
+    /* The 16 point mark sits 2 points down, on the letters of the first line of the label. */
+    .mob-qoption-mark {
+      display: flex;
+      flex: 0 0 auto;
+      padding-top: calc(2 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-qoption[data-selected] .mob-qoption-mark {
+      color: var(--foreground);
+    }
+    .mob-qoption[data-selected] [data-mark="off"],
+    .mob-qoption:not([data-selected]) [data-mark="on"] {
+      display: none;
+    }
+    .mob-qoption-text {
+      display: grid;
+      flex: 1;
+      min-width: 0;
+    }
+    .mob-qoption-label {
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-qoption-description {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* The Other answer switch: a SegmentItem of size xs that is off, 32 points high. */
+    .mob-question-other {
+      display: flex;
+    }
+    .mob-qsegment {
+      display: flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      min-height: calc(32 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-qsegment .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The footer: a hairline, then the hint and the actions, 8 points apart. */
+    .mob-question-footer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: calc(8 * var(--u));
+      padding-top: calc(6 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--input);
+    }
+    .mob-question-hint {
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      line-height: calc(14 * var(--u));
+    }
+    .mob-question-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    /* The main action takes the rest of the row, and its button fills it. */
+    .mob-question-main {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .mob-reply-content {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+    }
+    /* The parts of each state of the draft. */
+    .mob-request[data-request-state="open"] [data-when="complete"],
+    .mob-request:not([data-request-state="open"]) [data-when="open"],
+    .mob-request[data-request-state="submitting"] [data-when="ready"],
+    .mob-request:not([data-request-state="submitting"]) [data-when="submitting"],
+    .mob-request:not([data-request-state="submitting"]) > .mob-request-feedback {
+      display: none;
+    }
+    /* A disabled control of Touchable shows at half opacity: Confirm Answers until an option is
+       chosen, and the inputs and Reset while the answer submits. Confirm Answers stays bright with
+       its loader. */
+    .mob-request[data-request-state="open"] [data-reply="confirm"],
+    .mob-request[data-request-state="submitting"]
+      :is(.mob-qoption, .mob-qsegment, [data-reply="reset"]) {
+      opacity: 0.5;
+    }
+  }
+}

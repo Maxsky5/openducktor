@@ -91,7 +91,7 @@ export function TerminalView(props: SceneViewProps): ReactElement {
             </SessionHeader>
           }
           chat={<Transcript sessions={storySessions([{ id: "build", turns: 1 }])} shown="build" />}
-          composer={<Composer session={BUILDER_SESSION} />}
+          composer={<Composer session={BUILDER_SESSION} keys={props.keys} />}
           panel={<RightPanel />}
           bottom={<BottomPanel />}
         />

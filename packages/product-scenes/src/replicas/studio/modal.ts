@@ -85,5 +85,15 @@ export function modal(
       );
     });
 
-  return { box, open, close };
+  /**
+   * Removes the dialog at `at` with no close motion, as when React unmounts the dialog with its
+   * parent: the close animation of dialog.css needs a dialog that stays mounted.
+   */
+  const unmount = (at: number): void =>
+    scene.at(at, () => {
+      if (attach) overlay.remove();
+      else overlay.hidden = true;
+    });
+
+  return { box, open, close, unmount };
 }

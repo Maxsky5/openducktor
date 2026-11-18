@@ -7,6 +7,7 @@
 import { ChevronDown, Globe, ImageIcon } from "lucide-react";
 import type { ReactElement } from "react";
 import { flag } from "../flag";
+import { RunningBars } from "./RunningBars";
 import "./BrowserToolCard.css";
 
 type BrowserToolCardProps = {
@@ -42,11 +43,7 @@ export function BrowserToolCard({
             </span>
           )}
           <span className="st-action-time">
-            <span className="st-action-running">
-              <span />
-              <span />
-              <span />
-            </span>
+            <RunningBars className="st-action-running" />
             <span className="st-action-duration">{duration}</span>
             <span>{time}</span>
           </span>

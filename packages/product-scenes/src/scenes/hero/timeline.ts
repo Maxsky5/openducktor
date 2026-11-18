@@ -3,12 +3,12 @@ import { designPixel, shrinkOut } from "../../motion/effects";
 import { gsap } from "../../motion/gsap";
 import { offsetIn } from "../../motion/offset";
 import { EASE } from "../../motion/tokens";
+import { scrollBoardTo } from "../../replicas/board/board-scroll";
 import {
   addCard,
   boardOf,
   moveCard,
   openLane,
-  scrollBoardTo,
   setActivity,
   swapIn,
 } from "../../replicas/board/cards";
@@ -44,6 +44,7 @@ export const build: SceneBuilder<HeroTemplate> = (scene) => {
   // so the Planner session takes the place of the Spec session, at the top of Running.
   scrollBoardTo(scene, track, lane("spec_ready"), 0.4);
   const planClick = cursor.click(action("titles"), 1.1, 1);
+  scene.mark("plan", planClick);
   swapIn(scene, actions("titles"), "planner-starting", planClick + 0.1);
   running(card("titles"), true, planClick + 0.1);
   sessions.hide("titles-spec", planClick + 0.15);
@@ -53,6 +54,7 @@ export const build: SceneBuilder<HeroTemplate> = (scene) => {
 
   // 2. A build finishes. The task moves to AI Review and you request the QA review.
   const built = planClick + 1.5;
+  scene.mark("built", built);
   running(card("shortcut"), false, built);
   swapIn(scene, actions("shortcut"), "request-qa", built);
   sessions.update("shortcut-build", built, { ...settled, status: "ai_review" });
@@ -69,6 +71,7 @@ export const build: SceneBuilder<HeroTemplate> = (scene) => {
 
   // 3. QA approves another task. It moves to Human Review.
   const approved = qaClick + 1.4;
+  scene.mark("approved", approved);
   running(card("focus"), false, approved);
   swapIn(scene, actions("focus"), "approve", approved);
   sessions.update("focus-qa", approved, { ...settled, status: "human_review" });
@@ -79,6 +82,7 @@ export const build: SceneBuilder<HeroTemplate> = (scene) => {
   // 4. The pull request of a reviewed task merges. The task closes by itself, its card keeps no
   // actions, and its session leaves the sidebar.
   const merged = reviewed + 0.5;
+  scene.mark("merged", merged);
   const badge = scene.template("merged");
   scene.at(merged, () => {
     must(card("typing"), "[data-pr-badge]").replaceWith(badge);
@@ -98,6 +102,7 @@ export const build: SceneBuilder<HeroTemplate> = (scene) => {
   addCard(scene, body("open"), scene.template("new-task"), closed + 1.6);
   scrollBoardTo(scene, track, lane("in_progress"), closed + 3, 1);
   const asked = closed + 3.6;
+  scene.mark("asked", asked);
   swapIn(scene, actions("empty"), "builder-waiting", asked);
   scene.at(asked, () => setActivity(card("empty"), "waiting"));
   sessions.update("empty-build", asked, { attention: "Question", running: false });

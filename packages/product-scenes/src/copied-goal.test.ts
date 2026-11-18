@@ -6,13 +6,14 @@ import {
   GOAL_STATUS_TONES,
   type GoalStatus,
 } from "./replicas/studio/GoalRow";
+import { START_FOOTER_TEXT } from "./replicas/studio/StartDialog";
 import { GOAL_CHIP_LABEL } from "./replicas/transcript/ReferenceChip";
 import { COMPACT_COMMAND, GOAL_COMMAND, SLASH_COMMANDS } from "./scenes/composer/sample";
 import { COMMAND_SESSION, GOAL_COMMAND as COMMAND_OF_SCENE } from "./scenes/goal-command/sample";
 import { DEFAULT_GOAL, GOAL_SESSION } from "./scenes/goal-mode/sample";
 import { TASK_ID } from "./sample/studio";
 import { TASKS } from "./sample/tasks";
-import { importProduct } from "./test-support/product-source";
+import { importProduct, readProduct } from "./test-support/product-source";
 
 type SlashCommand = {
   id: string;
@@ -146,5 +147,17 @@ describe("the goal copied from the app", () => {
       .replaceAll("{{task.id}}", TASK_ID)
       .replaceAll("{{task.title}}", TASKS.k3x9.title);
     expect(objective).toBe(DEFAULT_GOAL);
+  });
+
+  test("the start dialog has the footer labels of the app, also while the start runs", async () => {
+    // The labels are in the markup of the modal and in its model, so the test reads them as text.
+    const [modal, runner] = await Promise.all([
+      readProduct("packages/frontend/src/components/features/agents/session-start-modal.tsx"),
+      readProduct("packages/frontend-core/src/sessions/start/use-session-start-modal-runner.ts"),
+    ]);
+    expect(runner).toContain(`confirmLabel: "${START_FOOTER_TEXT.start}"`);
+    expect(runner).toContain(`backgroundConfirmLabel: "${START_FOOTER_TEXT.background}"`);
+    expect(modal).toContain(`"${START_FOOTER_TEXT.starting}"`);
+    expect(modal).toContain(`"${START_FOOTER_TEXT.continue}"`);
   });
 });

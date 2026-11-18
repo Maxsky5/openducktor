@@ -46,7 +46,7 @@ export function TaskBoard({ counts, cards, selected, hidden }: TaskBoardProps): 
         <span className="mob-board-icon">
           <Ellipsis />
         </span>
-        <span className="mob-board-icon">
+        <span className="mob-board-icon" data-native="">
           <Search />
         </span>
       </header>

@@ -1,8 +1,10 @@
 // A fork of a workspace session: the session page with two turns, the Fork session dialog over the
-// window, and the page of the new session that opens after the fork. The markup holds the dialog
-// with New worktree selected, the frame that shows the most. Sources:
+// window, and the page of the new session that opens after the fork. The history of the Codex fork
+// shows the separator where its own turns start. The markup holds the dialog with New worktree
+// selected, the frame that shows the most. Sources:
 // packages/frontend/src/components/features/agents/agent-chat/agent-chat-fork-actions.tsx,
-// packages/frontend/src/pages/workspace-sessions, and packages/frontend/src/features/session-startup.
+// packages/frontend/src/pages/workspace-sessions, packages/frontend/src/features/session-startup,
+// and packages/adapters-codex-app-server/src/codex-fork-boundary.ts.
 import type { ReactElement } from "react";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
 import { Composer, ComposerDraft } from "../../replicas/studio/Composer";
@@ -12,10 +14,13 @@ import { WorkspaceSessionHeader } from "../../replicas/studio/WorkspaceSessionHe
 import { ForkDialog } from "../../replicas/studio/ForkDialog";
 import { StartupProgress } from "../../replicas/studio/StartupProgress";
 import { AgentText } from "../../replicas/transcript/AgentText";
+import { TranscriptSeparator } from "../../replicas/transcript/TranscriptSeparator";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
 import { signature } from "../../sample/sessions";
 import {
   FOLLOW_UP,
+  FOLLOW_UP_TIME,
+  FORK_BOUNDARY,
   FORK_TITLE,
   NAV,
   ORIGIN,
@@ -26,6 +31,7 @@ import {
   TURNS,
   WORKTREE,
 } from "./sample";
+import "./view.css";
 
 /** A turn of the session: the message and the final reply with its copy and fork buttons. */
 function Turn({
@@ -52,13 +58,14 @@ export function ForkView(props: SceneViewProps): ReactElement {
     <SceneFrame
       {...props}
       name="fork"
-      alt="A workspace session, Profile the slow search, in the worktree search-profile, with two turns. The visitor selects Fork from this reply on the first reply of the agent. The Fork session dialog opens. The visitor selects New worktree, and the form suggests the worktree name search-profile-fork and the branch odt/search-profile-fork. Then the visitor selects Fork session. The dialog shows the startup steps: Create workspace worktree, Set branch upstream, and Start session. The new session, Profile the slow search (fork), opens with the first turn only and shows in the sidebar next to the source session. The visitor sends another follow-up, and the agent starts to work."
+      alt="A workspace session, Profile the slow search, in the worktree search-profile, with two turns. The pointer rests on the fork button of the first reply of the agent, and its tooltip shows Fork from this reply. The visitor selects the button, and the Fork session dialog opens. The visitor selects New worktree, and the form suggests the worktree name search-profile-fork and the branch odt/search-profile-fork. Then the visitor selects Fork session. The dialog shows the startup steps: Create workspace worktree, Set branch upstream, and Start session. The new session, Profile the slow search (fork), opens with the first turn only, followed by the separator Session forked here, and shows in the sidebar next to the source session. The visitor sends another follow-up, and the agent starts to work."
     >
       <SessionWindow
         nav={NAV}
         keys={props.keys}
         session={SESSION}
         pane="main"
+        className="fk-window"
         dialog={
           <ForkDialog
             location="new_worktree"
@@ -77,7 +84,7 @@ export function ForkView(props: SceneViewProps): ReactElement {
               <Turn turn={TURNS.second} row="second" />
             </>
           }
-          composer={<Composer session={SESSION} />}
+          composer={<Composer session={SESSION} keys={props.keys} />}
         />
         <SessionPane
           hidden
@@ -86,13 +93,14 @@ export function ForkView(props: SceneViewProps): ReactElement {
           chat={
             <>
               <Turn turn={TURNS.first} row="first" />
-              <UserMessage time="10:36:02 AM" row="follow-up">
+              <TranscriptSeparator label={FORK_BOUNDARY} row="fork-boundary" />
+              <UserMessage time={FOLLOW_UP_TIME} row="follow-up">
                 {FOLLOW_UP}
               </UserMessage>
             </>
           }
           composer={
-            <Composer session={SESSION}>
+            <Composer session={SESSION} keys={props.keys}>
               <ComposerDraft />
             </Composer>
           }

@@ -3,6 +3,7 @@
 // next goal turn by itself, so the turns have no user message. The times are fictional.
 import type { StartupStep } from "../../replicas/studio/StartupProgress";
 import type { Row, SessionData } from "../../replicas/transcript/model";
+import { bash, catFile, edit, readTask } from "../../sample/calls";
 import { signature } from "../../sample/sessions";
 import { BUILDER_SESSION, FIXED_FILES, HOOK_PATH, TASK_ID, TEST_PATH } from "../../sample/studio";
 import { TASKS } from "../../sample/tasks";
@@ -28,10 +29,11 @@ export const DEFAULT_GOAL = [
 /**
  * The goal that Generate goal returns. It follows the Goal Writer prompt: one outcome sentence with
  * the task, binary criteria from the spec, the criteria of the default goal, the scope, when to
- * ask, and the taskId sentence.
+ * ask, and the taskId sentence. The outcome comes first, so the new goal differs from the default
+ * goal from its first word.
  */
 export const GENERATED_GOAL = [
-  `Implement task ${TASK_ID} "${TITLE}": Cmd+K on macOS and Ctrl+K on Windows and Linux open the search dialog.`,
+  `Cmd+K on macOS and Ctrl+K on Windows and Linux open the search dialog, for task ${TASK_ID} "${TITLE}".`,
   "- The shortcut does nothing with Shift, in a text field, or in the note editor.",
   "- The shortcut does nothing while another dialog is open.",
   "- `bun test src/search` passes, with a test for each of these cases.",
@@ -64,50 +66,29 @@ export const GOAL_FILES = FIXED_FILES.filter(
 
 const sig = signature(GOAL_SESSION);
 
-/** The goal turns of the Builder. Each turn ends with its time and its final message. */
+/**
+ * The goal turns of the Builder. The calls of each turn show as one tool run, which folds when the
+ * final message of the turn comes. Each turn ends with its time and its final message.
+ */
 const TURNS = {
   write: [
-    {
-      kind: "tool",
-      id: "read-task",
-      tool: "tool",
-      name: "read_task",
-      args: TASK_ID,
-      duration: "131ms",
-      time: "09:46:32 AM",
-    },
-    {
-      kind: "tool",
-      id: "read-guide",
-      tool: "read",
-      name: "Read",
-      args: "AGENTS.md",
-      duration: "6ms",
-      time: "09:46:35 AM",
-    },
-    { kind: "patch", id: "hook", path: HOOK_PATH, change: "A", add: 21, del: 0 },
-    { kind: "patch", id: "shell", path: "src/app/app-shell.tsx", change: "M", add: 3, del: 0 },
+    readTask(TASK_ID, "131ms", "09:46:32 AM"),
+    catFile("read-guide", "AGENTS.md", "6ms", "09:46:35 AM"),
+    edit("hook", HOOK_PATH, { add: 21, del: 0 }, "44ms", "09:47:02 AM"),
+    edit("shell", "src/app/app-shell.tsx", { add: 3, del: 0 }, "37ms", "09:47:19 AM"),
     {
       kind: "agent",
       id: "final",
       signature: sig,
-      worked: "1m04s",
+      worked: "1m4s",
       paragraphs: [
         "The hook opens search with `Cmd+K` and `Ctrl+K`, and the app shell mounts it once. The tests come next.",
       ],
     },
   ],
   test: [
-    { kind: "patch", id: "test", path: TEST_PATH, change: "A", add: 76, del: 0 },
-    {
-      kind: "tool",
-      id: "run",
-      tool: "bash",
-      name: "Bash",
-      args: "bun test src/search",
-      duration: "2.4s",
-      time: "09:48:12 AM",
-    },
+    edit("test", TEST_PATH, { add: 76, del: 0 }, "52ms", "09:47:58 AM"),
+    bash("run", "bun test src/search", "2.4s", "09:48:12 AM"),
     {
       kind: "agent",
       id: "final",
@@ -119,24 +100,8 @@ const TURNS = {
     },
   ],
   submit: [
-    {
-      kind: "tool",
-      id: "checks",
-      tool: "bash",
-      name: "Bash",
-      args: "bun run lint && bun run typecheck",
-      duration: "5.8s",
-      time: "09:48:40 AM",
-    },
-    {
-      kind: "tool",
-      id: "commit",
-      tool: "bash",
-      name: "Bash",
-      args: 'git commit -m "feat(search): open search with Cmd+K"',
-      duration: "0.3s",
-      time: "09:48:49 AM",
-    },
+    bash("checks", "bun run lint && bun run typecheck", "5.8s", "09:48:40 AM"),
+    bash("commit", 'git commit -m "feat(search): open search with Cmd+K"', "312ms", "09:48:49 AM"),
     {
       kind: "workflow",
       id: "completed",

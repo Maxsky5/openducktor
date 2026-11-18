@@ -5,6 +5,7 @@
 // agent-studio-header.tsx in packages/frontend/src.
 import { Zap } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
+import type { KeyLabels } from "../../replicas/keys";
 import { Composer } from "../../replicas/studio/Composer";
 import type { RailTones } from "../../replicas/studio/model";
 import { PanelToggles } from "../../replicas/studio/PanelToggles";
@@ -24,6 +25,8 @@ type SessionPageProps = {
   /** The label of the quick action, which an agent at work disables. */
   action: string;
   session: Session;
+  /** The keys of the platform, which the composer names. */
+  keys: KeyLabels;
   activity: Activity;
   hidden?: boolean;
   /** The request cards that dock above the composer. */
@@ -39,6 +42,7 @@ export function SessionPage({
   role,
   action,
   session,
+  keys,
   activity,
   hidden = false,
   stack,
@@ -59,7 +63,7 @@ export function SessionPage({
       chat={children}
       stack={stack ?? null}
       composer={
-        <Composer session={session} activity={activity}>
+        <Composer session={session} keys={keys} activity={activity}>
           <span className="when-waiting" data-waiting="">
             {WAITING.question}
           </span>

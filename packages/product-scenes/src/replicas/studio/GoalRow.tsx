@@ -2,8 +2,8 @@
 // the top edge of the composer. The label Goal, the status in its tone, and the objective share one
 // line. A click opens the whole objective. The actions follow agent-session-goal-row.ts in
 // packages/frontend-core: Pause goal while the goal is active, Resume goal while it waits, and Clear
-// goal always. A runtime without pause and resume shows only Clear goal. goal-row.ts changes the
-// status and opens the row.
+// goal always. A runtime without pause and resume shows only Clear goal. goal-row.ts raises the row
+// and changes its status. A view shows the open row with `expanded`.
 import {
   ChevronDown,
   CircleAlert,

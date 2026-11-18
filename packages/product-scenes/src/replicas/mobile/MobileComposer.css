@@ -1,7 +1,7 @@
 @layer replica {
   :where(.stage) {
-    /* The composer sits on the bottom edge of the session with the 8 dp edge padding. Android
-       gives no bottom inset. */
+    /* The composer sits on the bottom edge of the session: 12 dp at the sides, 4 dp above, and the
+       8 dp edge padding below. The screenshots crop the Android navigation bar and its inset. */
     .mob-composer {
       flex: 0 0 auto;
       padding: calc(4 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u));
@@ -14,15 +14,22 @@
       background: var(--chat-surface);
       box-shadow: var(--m-shadow-raised);
     }
-    /* `.odt-waiting-input-card`: a warning outline and a warning glow. */
+    /* `.odt-waiting-input-card`: a 1 dp warning border, a 72% warning ring around it, and a 30%
+       warning glow. The border makes the card 2 dp higher. */
     .mob-composer-card[data-activity="waiting"] {
+      border: calc(1 * var(--u)) solid var(--warning-border);
       box-shadow:
-        0 0 0 calc(1 * var(--u)) var(--warning-border),
-        0 0 0 calc(2 * var(--u)) color-mix(in oklab, var(--warning-border) 72%, transparent),
+        0 0 0 calc(1 * var(--u)) color-mix(in oklab, var(--warning-border) 72%, transparent),
         0 0 calc(18 * var(--u)) color-mix(in oklab, var(--warning-ring) 30%, transparent);
     }
+    /* BorderRay of border-ray.tsx: a 2.6 dp ray in the runtime accent, 12% of the edge long, half
+       a dp outside the card. It turns once in 3 s. */
     .mob-composer-ray rect {
-      rx: calc(16 * var(--u));
+      x: calc(0.5 * var(--u));
+      y: calc(0.5 * var(--u));
+      width: calc(100% - 1 * var(--u));
+      height: calc(100% - 1 * var(--u));
+      rx: calc(16.5 * var(--u));
       stroke: var(--runtime-accent);
       stroke-width: calc(2.6 * var(--u));
       stroke-dasharray: 12 88;
@@ -31,8 +38,10 @@
     .mob-composer-card:not([data-activity="working"]) > .mob-composer-ray {
       display: none;
     }
-    /* The field: 16 points on a 22 point line, 12 and 10 points of padding. */
+    /* The field of composer-text-field.tsx: 16 dp text, 12 and 10 dp of padding, and 44 dp high
+       at least. */
     .mob-composer-field {
+      min-height: calc(44 * var(--u));
       padding: calc(10 * var(--u)) calc(12 * var(--u));
       color: var(--muted-foreground);
       font-size: calc(16 * var(--u));
@@ -45,13 +54,31 @@
     .mob-composer-card[data-activity="waiting"] .mob-composer-hint[data-for="waiting"] {
       display: inline;
     }
+    /* The controls of composer-controls.tsx. The gaps hold the touch areas of the controls: 20 dp
+       between the two groups, 10 dp between attach and the model, and 16 dp between the 32 dp
+       squares at the end. */
     .mob-composer-bar {
       display: flex;
-      align-items: center;
-      gap: calc(8 * var(--u));
+      align-items: flex-end;
+      gap: calc(20 * var(--u));
       padding: calc(4 * var(--u)) calc(8 * var(--u)) calc(8 * var(--u));
       color: var(--muted-foreground);
     }
+    .mob-composer-start {
+      display: flex;
+      flex: 1 1 0;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      min-width: 0;
+      min-height: calc(32 * var(--u));
+    }
+    .mob-composer-end {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(16 * var(--u));
+    }
+    /* QuietIconControl: a muted 14 dp paperclip in a 28 dp square. */
     .mob-composer-quiet {
       display: flex;
       flex: 0 0 auto;
@@ -61,8 +88,8 @@
       height: calc(28 * var(--u));
     }
     .mob-composer-quiet .lucide {
-      width: calc(18 * var(--u));
-      height: calc(18 * var(--u));
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
     }
     /* QuietSelector: the runtime mark, the model, the effort, and the up and down chevrons. */
     .mob-composer-model {
@@ -91,12 +118,20 @@
       width: calc(14 * var(--u));
       height: calc(14 * var(--u));
     }
-    /* The context ring of context-usage-indicator.tsx: 16 points, the used share in green. */
-    .mob-composer-ring {
+    /* The context ring of context-usage-indicator.tsx: 16 dp in a 28 dp trigger, the used share in
+       green. The trigger stands 2 dp more from the next control. */
+    .mob-composer-usage {
+      display: flex;
       flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(28 * var(--u));
+      margin-right: calc(2 * var(--u));
+      padding: 0 calc(6 * var(--u));
+    }
+    .mob-composer-ring {
       width: calc(16 * var(--u));
       height: calc(16 * var(--u));
-      margin: 0 calc(6 * var(--u));
       transform: rotate(-90deg);
     }
     .mob-composer-ring circle {
@@ -119,12 +154,12 @@
       height: calc(32 * var(--u));
       border-radius: calc(12 * var(--u));
     }
-    /* Stop: a red square with a filled square. It shows while the agent works. */
+    /* Stop: a red square with a filled square. It shows while the agent works or waits for input. */
     .mob-composer-stop {
       display: none;
       background: var(--destructive);
     }
-    .mob-composer-card[data-activity="working"] .mob-composer-stop {
+    .mob-composer-card:is([data-activity="working"], [data-activity="waiting"]) .mob-composer-stop {
       display: flex;
     }
     .mob-composer-stop i {
@@ -133,12 +168,12 @@
       border-radius: calc(2 * var(--u));
       background: var(--destructive-foreground);
     }
-    /* Send stays closed and dimmed without a draft. */
+    /* Send stays closed and dimmed to half without a draft. */
     .mob-composer-send {
       background: var(--primary);
       color: var(--primary-foreground);
       box-shadow: var(--m-shadow-card);
-      opacity: 0.45;
+      opacity: 0.5;
     }
     .mob-composer-send .lucide {
       width: calc(14 * var(--u));
@@ -154,8 +189,21 @@
       white-space: pre-wrap;
     }
     .mob-composer-typed:empty,
-    .mob-composer-card[data-draft] .mob-composer-hint {
+    .mob-composer-card[data-draft] .mob-composer-hint[data-for] {
       display: none;
+    }
+    /* The Android caret after the draft: 2 dp in the tint color, as high as the text. It takes no
+       room on the line. */
+    .mob-composer-caret {
+      display: none;
+      width: calc(2 * var(--u));
+      height: calc(21 * var(--u));
+      margin-right: calc(-2 * var(--u));
+      background: var(--m-tint);
+      vertical-align: text-top;
+    }
+    .mob-composer-card[data-draft] .mob-composer-caret {
+      display: inline-block;
     }
     .mob-composer-card[data-draft] .mob-composer-send,
     .mob-composer-card[data-comments] .mob-composer-send {
@@ -179,19 +227,25 @@
       width: calc(14 * var(--u));
       height: calc(14 * var(--u));
     }
-    /* The count of the pending review comments on the corner of Send: amber-300 with a card ring. */
+    /* The count of the pending review comments on the corner of Send: amber-300 with a card ring,
+       8 dp past the top and the end of Send. */
+    .mob-composer-send-holder {
+      position: relative;
+      display: flex;
+      flex: 0 0 auto;
+    }
     .mob-composer-card:not([data-comments]) .mob-composer-count {
       display: none;
     }
     .mob-composer-count {
       position: absolute;
-      right: 0;
-      bottom: calc(28 * var(--u));
+      top: calc(-8 * var(--u));
+      right: calc(-8 * var(--u));
       display: flex;
       align-items: center;
       justify-content: center;
       min-width: calc(20 * var(--u));
-      height: calc(20 * var(--u));
+      min-height: calc(20 * var(--u));
       padding: 0 calc(4 * var(--u));
       border: calc(2 * var(--u)) solid var(--card);
       border-radius: 999px;
@@ -200,6 +254,7 @@
       font-size: calc(10 * var(--u));
       font-weight: 600;
       line-height: calc(12 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
       font-variant-numeric: tabular-nums;
     }
   }

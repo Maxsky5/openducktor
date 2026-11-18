@@ -1,12 +1,15 @@
 // The Inline Diff Comment flow of DiffScreen.tsx, as diff-comment-flow.tsx moves it: a tap selects
-// a line, a tap on another line extends the range, Comment opens the comment field, and the save
-// adds the pending comment under the last line of the range. The labels are in
-// diff-comment-text.ts.
+// a line and the selection bar fades in, a tap on another line extends the range, Comment opens
+// the comment field, and the save shows the pending comment under the last line of the range at
+// once, as a new row of the list. The labels are in diff-comment-text.ts.
 import { must } from "../../motion/dom";
-import { fadeIn, growIn } from "../../motion/effects";
+import { fadeIn } from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
 import { typeText } from "../../motion/text";
 import { selectionLabel } from "./diff-comment-text";
+
+/** Seconds that the selection bar takes to fade in: motion.fast of the app. */
+const BAR_FADE = 0.18;
 
 /** The comment flow of the diff screen `screen`. Build time clears it. */
 export function diffComments(scene: Scene, screen: HTMLElement) {
@@ -40,7 +43,7 @@ export function diffComments(scene: Scene, screen: HTMLElement) {
       last = number;
       mark();
       bar.hidden = false;
-      scene.run(fadeIn(bar, 0.2));
+      scene.run(fadeIn(bar, BAR_FADE));
     });
 
   /** Extends the selection to the line `number` at `at`. */
@@ -60,13 +63,17 @@ export function diffComments(scene: Scene, screen: HTMLElement) {
       composer.hidden = false;
     });
 
-  /** Types the comment from `at`. Returns the end of the typing. */
-  const type = (text: string, at: number): number => {
-    scene.at(at, () => field.toggleAttribute("data-can-save", true));
-    return typeText(scene, typed, text, at, { charsPerSecond: 22 });
-  };
+  /**
+   * Types the comment from `at`. Save turns violet and the placeholder goes once the text holds
+   * more than spaces. Returns the end of the typing.
+   */
+  const type = (text: string, at: number): number =>
+    typeText(scene, typed, text, at, {
+      charsPerSecond: 22,
+      onText: (shown) => field.toggleAttribute("data-can-save", shown.trim().length > 0),
+    });
 
-  /** Saves the comment at `at`: the field closes, and the card grows under the last line. */
+  /** Saves the comment at `at`: the field closes, and the card shows under the last line. */
   const save = (at: number): void =>
     scene.at(at, () => {
       composer.hidden = true;
@@ -74,7 +81,6 @@ export function diffComments(scene: Scene, screen: HTMLElement) {
       last = 0;
       mark();
       card.hidden = false;
-      scene.run(growIn(card, 0.35));
     });
 
   return { line, select, extend, start, type, save };

@@ -2,7 +2,7 @@
 // right panel, the session transcript, and the sidebar. A scene applies a frame at build time,
 // then patches the window at the time of each change.
 import { all, data, must } from "../../motion/dom";
-import { fadeIn, pop } from "../../motion/effects";
+import { fadeIn } from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
 import { EASE } from "../../motion/tokens";
 import { modelName } from "../../sample/models";
@@ -50,6 +50,7 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
       step.setAttribute("aria-pressed", String(ROLES[index] === role)),
     );
   const setActivity = (activity: Activity): void => {
+    root.dataset.activity = activity;
     setComposer(activity);
     split.toggleAttribute("data-disabled", activity !== "idle");
   };
@@ -78,31 +79,27 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
     sessions.place(frame.nav);
   };
 
-  /** Changes the window at `at`. A changed step pops, and a new action or panel fades in. */
+  /**
+   * Changes the window at `at`. The steps, the action, and the panel change at once, as in the app:
+   * the rail buttons have transition-none, and the header and the panel have no motion.
+   */
   const patch = (at: number, change: StudioChange): void =>
     scene.at(at, () => {
-      const { tones } = change;
-      if (tones) {
-        const changed = steps.filter((step, index) => step.dataset.tone !== tones[index]);
-        setTones(tones);
-        for (const step of changed) scene.run(pop(step, 1.06));
-      }
+      if (change.tones) setTones(change.tones);
       if (change.selected) setSelected(change.selected);
       if (change.activity) setActivity(change.activity);
-      if (change.action) {
-        actionLabel.textContent = change.action;
-        scene.run(fadeIn(actionLabel, 0.35));
-      }
+      if (change.action) actionLabel.textContent = change.action;
       if (change.actionDisabled !== undefined)
         split.toggleAttribute("data-disabled", change.actionDisabled);
       if (change.session) setSession(change.session);
       if (change.checksTab !== undefined) panels.showTab("ci_checks", change.checksTab);
-      if (change.panel) {
-        panels.setPanel(change.panel);
-        scene.run(fadeIn(panels.panel(change.panel)));
-      }
+      if (change.panel) panels.setPanel(change.panel);
       if (change.focus) setFocus(change.focus);
     });
+
+  /** A new session has no token use at `at`, so the composer shows no context meter. */
+  const clearContext = (at: number): void =>
+    scene.at(at, () => setContext({ percent: 0, tokens: 0 }));
 
   /**
    * Fills the context meter of `session` in steps, as token usage arrives with each response. The
@@ -151,6 +148,7 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
     track,
     apply,
     patch,
+    clearContext,
     context,
     row,
     hideTurns,

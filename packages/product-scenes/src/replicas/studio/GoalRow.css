@@ -70,7 +70,7 @@
     }
     /*
      * The status and the objective share one line, with a hanging indent under the label. Open,
-     * the line grows to its whole height. It stays wrapped while it closes, and the scene gives it
+     * the line grows to its whole height. It stays wrapped while it closes, and the app gives it
      * the ellipsis when the height transition ends.
      */
     .gr-line {

@@ -96,6 +96,17 @@
       height: calc(16 * var(--u));
       color: var(--muted-foreground);
     }
+    /* A disabled trigger, alone or in a busy form: the chip fill, no chevrons, and the half
+       opacity of a disabled Touchable. */
+    [data-busy] .mob-select,
+    .mob-select[data-disabled] {
+      background: var(--m-chip-fill);
+      opacity: 0.5;
+    }
+    [data-busy] .mob-select-chevrons,
+    .mob-select[data-disabled] .mob-select-chevrons {
+      display: none;
+    }
 
     /* SegmentedControl: a muted well, with the thumb 3 points inside its edge. */
     .mob-segments {
@@ -119,6 +130,7 @@
       transform: translateX(calc(var(--segment-index) * 100%));
       transition: transform 0.24s cubic-bezier(0.23, 1, 0.32, 1);
     }
+    /* A segment changes its color at once. Only the thumb moves. */
     .mob-segment {
       position: relative;
       display: flex;
@@ -126,19 +138,22 @@
       align-items: center;
       justify-content: center;
       min-height: calc(34 * var(--u));
-      padding: 0 calc(8 * var(--u));
+      padding: calc(4 * var(--u)) calc(8 * var(--u));
       color: var(--muted-foreground);
       font-size: calc(13 * var(--u));
       font-weight: 500;
       line-height: calc(18 * var(--u));
       white-space: nowrap;
-      transition: color 0.24s;
     }
     .mob-segment[data-selected] {
       color: var(--foreground);
     }
+    [data-busy] .mob-segments {
+      opacity: 0.5;
+    }
 
-    /* OptionCard, info variant: the sky card and check circle of the approval choices. */
+    /* OptionCard, info variant: the sky card and check circle of the approval choices. A choice
+       changes the colors at once. */
     .mob-option {
       display: flex;
       align-items: flex-start;
@@ -147,9 +162,9 @@
       border: calc(1 * var(--u)) solid var(--border);
       border-radius: calc(16 * var(--u));
       background: var(--card);
-      transition:
-        background-color 0.18s,
-        border-color 0.18s;
+    }
+    [data-busy] .mob-option {
+      opacity: 0.5;
     }
     .mob-option[data-selected] {
       border-color: var(--info-border);
@@ -228,8 +243,13 @@
       font-size: calc(16 * var(--u));
       line-height: calc(22 * var(--u));
     }
+    /* A read-only field of a busy form. */
+    [data-busy] .mob-textarea {
+      opacity: 0.6;
+    }
 
-    /* The switch: a 46 by 28 point track with a 22 point thumb. */
+    /* The switch: a 46 by 28 point track with a 22 point thumb. The thumb and the track color
+       follow one spring that settles in 320 ms without overshoot. */
     .mob-toggle {
       display: flex;
       flex: 0 0 auto;
@@ -239,7 +259,7 @@
       padding: calc(3 * var(--u));
       border-radius: calc(14 * var(--u));
       background: var(--input);
-      transition: background-color 0.24s;
+      transition: background-color 0.32s cubic-bezier(0.23, 1, 0.32, 1);
     }
     .mob-toggle[data-on] {
       background: var(--switch-checked);
@@ -250,10 +270,14 @@
       border-radius: 50%;
       background: var(--switch-thumb);
       box-shadow: 0 calc(1 * var(--u)) calc(3 * var(--u)) rgb(15 23 42 / 0.25);
-      transition: transform 0.24s cubic-bezier(0.23, 1, 0.32, 1);
+      transition: transform 0.32s cubic-bezier(0.23, 1, 0.32, 1);
     }
     .mob-toggle[data-on] i {
       transform: translateX(calc(18 * var(--u)));
+    }
+    /* The switch of a disabled row in a busy form. */
+    [data-busy] .mob-toggle {
+      opacity: 0.45;
     }
     .mob-switch-card {
       overflow: hidden;

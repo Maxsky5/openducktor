@@ -1,8 +1,8 @@
 // The navigation bars of the mobile app on Android. A tab screen shows its title on the left and its
 // plain header actions on the right, as the Sessions tab of sessions-screen.tsx. A session shows
-// the back control, the task title with its open icon, and the outline buttons of the task
-// sessions, the quick actions, and the session menu, as session-header.tsx and
-// session-header-title.tsx in apps/mobile/src/features/session/header.
+// the back control of stack-header.tsx in apps/mobile/src/navigation, the task title with its open
+// icon, and the plain buttons of the task sessions, the quick actions, and the session menu, as
+// session-header.tsx and session-header-title.tsx in apps/mobile/src/features/session/header.
 import {
   Archive,
   ArrowLeft,
@@ -16,7 +16,10 @@ import {
 import type { ReactElement } from "react";
 import "./MobileHeader.css";
 
-/** The header of the Sessions tab: the grouping switch, Archived Sessions, and the search. */
+/**
+ * The header of the Sessions tab: the grouping switch of the task grouping, Archived Sessions, and
+ * the search button of the native search bar.
+ */
 export function SessionsHeader(): ReactElement {
   return (
     <header className="mob-header" data-kind="tab">
@@ -27,7 +30,7 @@ export function SessionsHeader(): ReactElement {
       <span className="mob-header-icon">
         <Archive />
       </span>
-      <span className="mob-header-icon">
+      <span className="mob-header-icon" data-search="">
         <Search />
       </span>
     </header>
@@ -38,8 +41,10 @@ export function SessionsHeader(): ReactElement {
 export function SessionHeader({ title }: { title: string }): ReactElement {
   return (
     <header className="mob-header" data-kind="session">
-      <span className="mob-header-back" data-back="">
-        <ArrowLeft />
+      <span className="mob-header-nav">
+        <span className="mob-header-back" data-back="" data-feedback="opacity">
+          <ArrowLeft />
+        </span>
       </span>
       <span className="mob-header-center">
         <span className="mob-header-task">
@@ -48,13 +53,13 @@ export function SessionHeader({ title }: { title: string }): ReactElement {
         </span>
       </span>
       <span className="mob-header-actions">
-        <span className="mob-outline-icon">
+        <span className="mob-header-action" data-feedback="opacity">
           <History />
         </span>
-        <span className="mob-outline-icon" data-quick-actions="">
+        <span className="mob-header-action" data-quick-actions="" data-feedback="opacity">
           <Zap />
         </span>
-        <span className="mob-outline-icon" data-session-menu="">
+        <span className="mob-header-action" data-session-menu="" data-feedback="opacity">
           <Ellipsis />
         </span>
       </span>

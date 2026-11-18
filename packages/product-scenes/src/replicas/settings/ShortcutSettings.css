@@ -1,0 +1,131 @@
+@layer replica {
+  :where(.stage) {
+    /* The section: grid gap-4 p-4. The header has space-y-2, with the title in text-sm
+       font-semibold and the text in text-xs text-muted-foreground. */
+    .ss-section {
+      display: grid;
+      gap: calc(16 * var(--u));
+      padding: calc(16 * var(--u));
+    }
+    .ss-head {
+      display: grid;
+      gap: calc(8 * var(--u));
+    }
+    .ss-head b {
+      font-size: calc(14 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+    }
+    .ss-head p {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* The toolbar: flex flex-wrap items-center gap-2. The search has min-w-56 flex-1. */
+    .ss-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    /* ToolbarSearchField at size lg: an Input with pl-9 pr-10, the size-4 search icon at left-3,
+       and a size-9 clear button at the end while the field has text. */
+    .ss-search {
+      position: relative;
+      flex: 1;
+      min-width: calc(224 * var(--u));
+      padding: calc(4 * var(--u)) calc(40 * var(--u)) calc(4 * var(--u)) calc(36 * var(--u));
+    }
+    .ss-search-icon {
+      position: absolute;
+      top: 50%;
+      left: calc(12 * var(--u));
+      color: var(--muted-foreground);
+      transform: translateY(-50%);
+    }
+    .ss-clear {
+      position: absolute;
+      top: 0;
+      right: 0;
+      display: grid;
+      place-items: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      color: var(--foreground);
+    }
+    .ss-search:not([data-filled]) > .ss-clear {
+      display: none;
+    }
+    /* The choice of the list: a segmented RadioGroup with grid h-9 grid-cols-2 items-center gap-1
+       rounded-lg bg-muted p-1. A search disables it, so its items have opacity-50. */
+    .ss-filter {
+      display: grid;
+      flex: none;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center;
+      gap: calc(4 * var(--u));
+      height: calc(36 * var(--u));
+      padding: calc(4 * var(--u));
+      border-radius: calc(12 * var(--u));
+      background: var(--muted);
+    }
+    /* RadioGroupSegmentItem with px-3: inline-flex h-6 items-center justify-center rounded-md
+       text-xs font-medium text-muted-foreground. The checked item has bg-segmented-selected
+       text-foreground shadow-sm ring-1 ring-input. */
+    .ss-filter-item {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: calc(24 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .ss-filter-item[data-checked] {
+      background: var(--segmented-selected);
+      box-shadow:
+        0 0 0 calc(1 * var(--u)) var(--input),
+        var(--shadow-sm);
+      color: var(--foreground);
+    }
+    .ss-filter[data-disabled] > .ss-filter-item {
+      opacity: 0.5;
+    }
+    /* Reset all: an outline Button with RotateCcw. */
+    .ss-reset {
+      flex: none;
+    }
+    /* The groups: flex flex-col gap-6. A group is flex-col gap-2, under its ListHeading in
+       text-sm font-medium. */
+    .ss-groups {
+      display: flex;
+      flex-direction: column;
+      gap: calc(24 * var(--u));
+    }
+    .ss-group {
+      display: flex;
+      flex-direction: column;
+      gap: calc(8 * var(--u));
+    }
+    .ss-group h4 {
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    /* ROW_LIST_CLASS_NAME: divide-y divide-border overflow-hidden rounded-md border bg-card. A row
+       that the search hides is not in the list of the app, so only the shown rows divide. */
+    .ss-rows {
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+    }
+    .ss-rows > :not([hidden]) ~ :not([hidden]) {
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+  }
+}

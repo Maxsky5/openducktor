@@ -1,10 +1,10 @@
 // The phone of the sample story: the host that it pairs with, and the sessions of the open
 // workspaces on its Sessions tab. The phone lists the sessions of the desktop sidebar, so its rows
 // come from NAV_SESSIONS. The Builder of the search shortcut task waits for a permission. The
-// Builder session of the task shows the same tool calls and plan in each scene. The times are
-// fictional.
+// Builder session of the task shows the same tool calls and plan in each scene. The commands and
+// the times are fictional.
 import type { RailStep } from "../replicas/mobile/MobileRail";
-import type { MobileTool } from "../replicas/mobile/TranscriptRows";
+import type { MobileCall, MobileToolType } from "../replicas/mobile/ToolRun";
 import type { NavEntry } from "../replicas/shell/nav";
 import type { RoleId } from "../replicas/vocabulary";
 import { NAV_SESSIONS } from "./nav";
@@ -87,60 +87,40 @@ export const PHONE_SESSIONS: readonly NavEntry[] = [
   NAV_SESSIONS["theme-plan"],
 ];
 
+/**
+ * A shell command of the Builder. The Builder runs on Codex, which runs its file reads, lists, and
+ * searches as shell commands, so the transcript names each call bash and shows its command. `type`
+ * is the action that Codex reports for the command, which picks its icon.
+ */
+export function codexCommand(
+  type: MobileToolType,
+  text: string,
+  duration: string,
+  time: string,
+): MobileCall {
+  return { type, kind: "command", name: "bash", text, code: true, duration, time };
+}
+
 /** The tool calls of the Builder session of the search shortcut task, in order. */
 export const BUILDER_TOOLS = {
-  guide: { type: "read", name: "read", summary: "AGENTS.md", duration: "1ms", time: "9:46:35 AM" },
-  keymap: {
-    type: "read",
-    name: "read",
-    summary: "src/app/keymap.ts",
-    duration: "1ms",
-    time: "9:46:38 AM",
-  },
-  list: { type: "list", name: "list", summary: "src/search", duration: "1ms", time: "9:46:41 AM" },
-  search: {
-    type: "bash",
-    name: "bash",
-    summary: "rg -n keydown src",
-    duration: "88ms",
-    time: "9:46:43 AM",
-  },
-  shell: {
-    type: "read",
-    name: "read",
-    summary: "src/app/app-shell.tsx",
-    duration: "1ms",
-    time: "9:46:45 AM",
-  },
-  dialog: {
-    type: "read",
-    name: "read",
-    summary: "src/search/search-dialog.tsx",
-    duration: "1ms",
-    time: "9:46:46 AM",
-  },
-  lint: {
-    type: "bash",
-    name: "bash",
-    summary: "bun run lint",
-    duration: "3.8s",
-    time: "9:48:20 AM",
-  },
-  test: {
-    type: "bash",
-    name: "bash",
-    summary: "bun test src/search",
-    duration: "2.4s",
-    time: "9:48:51 AM",
-  },
-  typecheck: {
-    type: "bash",
-    name: "bash",
-    summary: "bun run typecheck",
-    duration: "4.1s",
-    time: "9:49:00 AM",
-  },
-} as const satisfies Record<string, MobileTool>;
+  guide: codexCommand("read", "cat AGENTS.md", "18ms", "9:46:35 AM"),
+  keymap: codexCommand("read", "sed -n '1,120p' src/app/keymap.ts", "21ms", "9:46:38 AM"),
+  list: codexCommand("list", "ls src/search", "15ms", "9:46:41 AM"),
+  search: codexCommand("search", "rg -n keydown src", "88ms", "9:46:43 AM"),
+  shell: codexCommand("read", "sed -n '1,160p' src/app/app-shell.tsx", "19ms", "9:46:45 AM"),
+  dialog: codexCommand(
+    "read",
+    "sed -n '1,200p' src/search/search-dialog.tsx",
+    "22ms",
+    "9:46:46 AM",
+  ),
+  lint: codexCommand("bash", "bun run lint", "3.8s", "9:48:20 AM"),
+  test: codexCommand("bash", "bun test src/search", "2.4s", "9:48:51 AM"),
+  typecheck: codexCommand("bash", "bun run typecheck", "4.1s", "9:49:00 AM"),
+} as const satisfies Record<string, MobileCall>;
+
+/** The time of the first message of the Builder session: the kickoff prompt of the build. */
+export const BUILD_KICKOFF_TIME = "9:46:30 AM";
 
 /** The plan of the Builder after it reads the code. */
 export const BUILDER_PLAN =

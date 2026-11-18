@@ -18,58 +18,33 @@ import {
 } from "./studio";
 import { signature } from "./sessions";
 import { TASK_BRANCH } from "./worktree";
-import type { Row, SessionData, ToolKind } from "../replicas/transcript/model";
+import type { Row, SessionData } from "../replicas/transcript/model";
+import { bash, catFile, edit, readTask } from "./calls";
 
-type ToolRow = Extract<Row, { kind: "tool" }>;
-
-function tool<Id extends string>(
-  id: Id,
-  kind: ToolKind,
-  name: string,
-  args: string,
-  duration: string,
-  time: string,
-): ToolRow & { id: Id } {
-  return { kind: "tool", id, tool: kind, name, args, duration, time };
+/** A search of Codex with a shell command. */
+function search(pattern: string, duration: string, time: string) {
+  return bash("search", `rg -n "${pattern}" src`, duration, time, "search");
 }
 
-function readTask(duration: string, time: string) {
-  return tool("read-task", "tool", "read_task", TASK_ID, duration, time);
-}
-
-function bash<Id extends string>(id: Id, args: string, duration: string, time: string) {
-  return tool(id, "bash", "Bash", args, duration, time);
-}
-
-function read<Id extends string>(id: Id, args: string, duration: string, time: string) {
-  return tool(id, "read", "Read", args, duration, time);
-}
-
-function search(args: string, duration: string, time: string) {
-  return tool("search", "search", "Search", args, duration, time);
-}
+/** The times of the edits of the build, in the order of BUILD_FILES. */
+const BUILD_EDIT_TIMES = ["09:47:10 AM", "09:47:31 AM", "09:47:58 AM", "09:48:24 AM"];
 
 const TURNS = {
   spec: [
     { kind: "user", id: "kickoff", time: "09:41:12 AM", text: KICKOFF.spec },
-    readTask("184ms", "09:41:14 AM"),
-    search("openSearch in src", "96ms", "09:41:17 AM"),
-    read("read-dialog", "src/search/search-dialog.tsx", "12ms", "09:41:19 AM"),
+    readTask(TASK_ID, "184ms", "09:41:14 AM"),
+    search("openSearch", "96ms", "09:41:17 AM"),
+    catFile("read-dialog", "src/search/search-dialog.tsx", "12ms", "09:41:19 AM"),
     {
-      kind: "tool",
+      kind: "question",
       id: "question",
-      tool: "tool",
-      name: "Question",
-      args: "Which shortcut opens search?",
+      summary: "2 questions",
+      answers: [
+        { label: "Shortcut", answer: "Cmd+K / Ctrl+K" },
+        { label: "Text fields", answer: "No, ignore it in text fields" },
+      ],
       duration: "38s",
       time: "09:41:22 AM",
-      answers: [
-        { prompt: "Which shortcut opens search?", answer: "Cmd+K / Ctrl+K" },
-        {
-          prompt: "Should the shortcut work while typing in a text field?",
-          answer: "No, ignore it in text fields",
-        },
-      ],
     },
     {
       kind: "workflow",
@@ -92,11 +67,11 @@ const TURNS = {
   ],
   plan: [
     { kind: "user", id: "kickoff", time: "09:44:05 AM", text: KICKOFF.planner },
-    readTask("142ms", "09:44:07 AM"),
-    search("keydown in src", "88ms", "09:44:10 AM"),
-    read("read-shell", "src/app/app-shell.tsx", "9ms", "09:44:12 AM"),
-    read("read-keymap", "src/app/keymap.ts", "7ms", "09:44:13 AM"),
-    read("read-dialog", "src/search/search-dialog.tsx", "11ms", "09:44:15 AM"),
+    readTask(TASK_ID, "142ms", "09:44:07 AM"),
+    search("keydown", "88ms", "09:44:10 AM"),
+    catFile("read-shell", "src/app/app-shell.tsx", "9ms", "09:44:12 AM"),
+    catFile("read-keymap", "src/app/keymap.ts", "7ms", "09:44:13 AM"),
+    catFile("read-dialog", "src/search/search-dialog.tsx", "11ms", "09:44:15 AM"),
     {
       kind: "workflow",
       id: "set-plan",
@@ -109,7 +84,7 @@ const TURNS = {
       kind: "agent",
       id: "final",
       signature: signature(PLANNER_SESSION),
-      worked: "1m08s",
+      worked: "1m8s",
       paragraphs: [
         "I saved the plan. A new shortcut hook opens the existing search dialog, and the app shell mounts it once. The diagram shows the flow, and the tables map each requirement to the design.",
         "`src/app/keymap.ts` already binds `Cmd+Shift+K`, so the hook ignores `Shift`.",
@@ -118,18 +93,19 @@ const TURNS = {
   ],
   build: [
     { kind: "user", id: "kickoff", time: "09:46:30 AM", text: KICKOFF.build },
-    readTask("131ms", "09:46:32 AM"),
-    read("read-guide", "AGENTS.md", "6ms", "09:46:35 AM"),
-    ...BUILD_FILES.map((file, index) => ({
-      kind: "patch" as const,
-      id: `patch-${index}` as const,
-      path: file.path,
-      change: file.type === "added" ? ("A" as const) : ("M" as const),
-      add: file.add,
-      del: file.del,
-    })),
+    readTask(TASK_ID, "131ms", "09:46:32 AM"),
+    catFile("read-guide", "AGENTS.md", "6ms", "09:46:35 AM"),
+    ...BUILD_FILES.map((file, index) =>
+      edit(
+        `patch-${index}` as const,
+        file.path,
+        { add: file.add, del: file.del },
+        "41ms",
+        BUILD_EDIT_TIMES[index] ?? "",
+      ),
+    ),
     bash("test", "bun test src/search", "2.4s", "09:48:51 AM"),
-    bash("commit", 'git commit -m "feat(search): open search with Cmd+K"', "0.3s", "09:49:02 AM"),
+    bash("commit", 'git commit -m "feat(search): open search with Cmd+K"', "312ms", "09:49:02 AM"),
     {
       kind: "workflow",
       id: "completed",
@@ -151,10 +127,10 @@ const TURNS = {
   ],
   qa: [
     { kind: "user", id: "kickoff", time: "09:51:40 AM", text: KICKOFF.qa },
-    readTask("120ms", "09:51:42 AM"),
-    read("read-hook", HOOK_PATH, "8ms", "09:51:45 AM"),
+    readTask(TASK_ID, "120ms", "09:51:42 AM"),
+    catFile("read-hook", HOOK_PATH, "8ms", "09:51:45 AM"),
     bash("test", "bun test src/search", "2.3s", "09:51:49 AM"),
-    search("aria-modal in src", "74ms", "09:51:55 AM"),
+    search("aria-modal", "74ms", "09:51:55 AM"),
     {
       kind: "workflow",
       id: "rejected",
@@ -176,14 +152,14 @@ const TURNS = {
   ],
   fix: [
     { kind: "user", id: "kickoff", time: "09:54:02 AM", text: KICKOFF.fix },
-    readTask("118ms", "09:54:04 AM"),
-    { kind: "patch", id: "hook", path: HOOK_PATH, change: "M", add: 1, del: 0 },
-    { kind: "patch", id: "test", path: TEST_PATH, change: "M", add: 12, del: 0 },
+    readTask(TASK_ID, "118ms", "09:54:04 AM"),
+    edit("hook", HOOK_PATH, { add: 1, del: 0 }, "36ms", "09:54:31 AM"),
+    edit("test", TEST_PATH, { add: 12, del: 0 }, "39ms", "09:54:52 AM"),
     bash("run", "bun test src/search", "2.5s", "09:55:12 AM"),
     bash(
       "commit",
       'git commit -m "fix(search): keep search closed while a dialog is open"',
-      "0.3s",
+      "312ms",
       "09:55:20 AM",
     ),
     {
@@ -207,13 +183,13 @@ const TURNS = {
   ],
   review: [
     { kind: "user", id: "comment", time: "10:21:40 AM", text: REVIEW_MESSAGE },
-    { kind: "patch", id: "hook", path: HOOK_PATH, change: "M", add: 1, del: 1 },
-    { kind: "patch", id: "test", path: TEST_PATH, change: "M", add: 11, del: 0 },
+    edit("hook", HOOK_PATH, { add: 1, del: 1 }, "34ms", "10:22:02 AM"),
+    edit("test", TEST_PATH, { add: 11, del: 0 }, "37ms", "10:22:19 AM"),
     bash("run", "bun test src/search", "2.4s", "10:22:31 AM"),
     bash(
       "commit",
       'git commit -m "fix(search): leave a handled Cmd+K alone"',
-      "0.3s",
+      "312ms",
       "10:22:38 AM",
     ),
     {
@@ -228,7 +204,7 @@ const TURNS = {
   ],
   pr: [
     { kind: "user", id: "kickoff", time: "10:24:05 AM", text: KICKOFF.pullRequest },
-    bash("fetch", "git fetch origin main", "0.9s", "10:24:09 AM"),
+    bash("fetch", "git fetch origin main", "870ms", "10:24:09 AM"),
     bash("checks", "bun run lint && bun test", "6.1s", "10:24:16 AM"),
     bash("push", `git push -u origin ${TASK_BRANCH}`, "1.4s", "10:24:31 AM"),
     bash("create", `gh pr create --base main --title "${PR_TITLE}"`, "1.9s", "10:24:40 AM"),
@@ -241,7 +217,7 @@ const TURNS = {
       duration: "52ms",
       time: "10:24:44 AM",
     },
-    bash("watch", "gh pr checks 42 --watch", "1m 48s", "10:24:47 AM"),
+    bash("watch", "gh pr checks 42 --watch", "1m48s", "10:24:47 AM"),
     {
       kind: "agent",
       id: "final",

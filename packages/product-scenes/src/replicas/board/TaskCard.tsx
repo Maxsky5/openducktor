@@ -1,8 +1,8 @@
 // A task card of kanban-task-card.tsx: the title, the kind and the priority with the task ID, the
-// QA verdict and the pull request, the links to the saved sessions, and the workflow actions. The
-// whole card opens the task details. A card with an active session shows the running ray, and a
-// session that waits for input glows.
-import { Copy, SquareArrowOutUpRight } from "lucide-react";
+// Merged badge, the QA verdict, and the pull request, the links to the saved sessions, and the
+// workflow actions. The whole card opens the task details. A card with an active session shows the
+// running ray, and a session that waits for input glows.
+import { Copy, GitMerge, SquareArrowOutUpRight } from "lucide-react";
 import type { ReactElement } from "react";
 import { TASKS } from "../../sample/tasks";
 import { taskId } from "../../sample/workspace";
@@ -27,6 +27,7 @@ export function TaskCard({
   session,
   pr,
   rejected = false,
+  merged = false,
   links = [],
 }: CardData): ReactElement {
   const { title, kind, priority } = TASKS[task];
@@ -43,6 +44,12 @@ export function TaskCard({
           </span>
         </div>
         <div className="card-status" data-badges="">
+          {merged && (
+            <Badge tone="merged" data-merged-badge>
+              <GitMerge />
+              Merged
+            </Badge>
+          )}
           {rejected && (
             <Badge tone="rejected" data-qa-badge>
               QA Rejected

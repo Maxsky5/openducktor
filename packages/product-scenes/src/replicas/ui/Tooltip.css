@@ -26,5 +26,11 @@
       translate: -50% 50%;
       rotate: 45deg;
     }
+    /* On the top side of the trigger, the square sits over the bottom edge and points down. */
+    .ui-tip[data-side="top"] i {
+      top: 100%;
+      bottom: auto;
+      translate: -50% -50%;
+    }
   }
 }

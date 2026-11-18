@@ -1,0 +1,299 @@
+@layer replica {
+  :where(.stage) {
+    /* The positioner of the dialog: p-4 around DialogContent, which is in the center from the sm
+       breakpoint. */
+    .ctd-overlay {
+      padding: calc(16 * var(--u));
+    }
+    /* DialogContent with max-w-lg overflow-hidden p-0: rounded-xl border bg-popover shadow-xl, at
+       most the height of the window less 2rem. The body sits between the header and the footer,
+       and it clips its content while the dialog takes a new size. */
+    .ctd-dialog {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: calc(512 * var(--u));
+      max-width: 100%;
+      max-height: 100%;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-xl);
+    }
+    /* TaskDialogHeader: DialogHeader with gap-4 px-6 pb-5 pt-6 pr-14. The title row is items-start
+       gap-3. */
+    .ctd-head {
+      display: flex;
+      flex: none;
+      flex-direction: column;
+      gap: calc(16 * var(--u));
+      padding: calc(24 * var(--u)) calc(56 * var(--u)) calc(20 * var(--u)) calc(24 * var(--u));
+    }
+    .ctd-heading {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(12 * var(--u));
+    }
+    /* The icon: size-9 rounded-lg bg-muted text-muted-foreground, with a size-4 icon. */
+    .ctd-icon {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: calc(12 * var(--u));
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    /* DialogTitle: text-lg font-semibold leading-6. DialogDescription: text-sm leading-5
+       text-muted-foreground. They have gap-1. */
+    .ctd-titles {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+    }
+    .ctd-titles > b {
+      font-size: calc(18 * var(--u));
+      font-weight: 600;
+      line-height: calc(24 * var(--u));
+    }
+    .ctd-titles > p {
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    /* TaskIdentity: flex-wrap items-baseline gap-x-2 gap-y-1, the title in text-sm font-medium,
+       and TaskIdBadge: the ID in font-mono text-[11px] text-muted-foreground and a size-4 copy
+       button with a 12 pixel icon, gap-1. */
+    .ctd-identity {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: calc(4 * var(--u)) calc(8 * var(--u));
+      min-width: 0;
+    }
+    .ctd-task {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .ctd-id {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      color: var(--muted-foreground);
+      font-family: var(--mono);
+      font-size: calc(11 * var(--u));
+    }
+    .ctd-copy {
+      display: grid;
+      place-items: center;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+    }
+    .ctd-copy > svg {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+    /* DialogBody: min-w-0 flex-1 px-6 pb-6, which scrolls in the app. */
+    .ctd-body {
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 0;
+      padding: 0 calc(24 * var(--u)) calc(24 * var(--u));
+      overflow: hidden;
+    }
+    /* DialogLoadingContent: min-h-40 flex-col justify-center gap-5 py-6. The spinner is in a size-9
+       rounded-full bg-muted circle, and its label is text-sm text-muted-foreground. */
+    .ctd-loading {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: calc(20 * var(--u));
+      min-height: calc(160 * var(--u));
+      padding: calc(24 * var(--u)) 0;
+    }
+    .ctd-loading-row {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .ctd-spinner {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    /* Two Skeleton lines: h-2 rounded-md bg-accent animate-pulse, w-4/5 and w-3/5, gap-2.5. */
+    .ctd-skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: calc(10 * var(--u));
+    }
+    .ctd-skeleton i {
+      width: 80%;
+      height: calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      background: var(--accent);
+      animation: ctd-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .ctd-skeleton i + i {
+      width: 60%;
+    }
+    /* TaskCloseConfirmContent: grid gap-4 text-sm. */
+    .ctd-content {
+      display: grid;
+      gap: calc(16 * var(--u));
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    /* The merge status of a merged branch: rounded-lg border p-3 with the success colors, a size-4
+       GitMerge icon with gap-2.5, and the status in font-medium. */
+    .ctd-merge {
+      display: flex;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--success-border);
+      border-radius: calc(12 * var(--u));
+      background: var(--success-surface);
+      color: var(--success-surface-foreground);
+    }
+    .ctd-merge > svg {
+      flex: none;
+    }
+    .ctd-merge > p {
+      min-width: 0;
+      font-weight: 500;
+    }
+    /* SwitchCard: flex-col gap-3 rounded-lg border border-border p-3. Its row has a size-4 muted
+       icon, the label in font-medium leading-5, and the switch. */
+    .ctd-cleanup {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      padding: calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+    }
+    .ctd-cleanup-row {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+    }
+    .ctd-cleanup-row > svg {
+      flex: none;
+      color: var(--muted-foreground);
+    }
+    .ctd-cleanup-label {
+      flex: 1;
+      font-weight: 500;
+    }
+    /* TaskCleanupTargets: flex-col gap-2. The note is text-xs leading-5 text-muted-foreground, and
+       Worktree details is a ghost button of size sm with -ml-2 h-7 gap-1.5. */
+    .ctd-targets {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: calc(8 * var(--u));
+    }
+    .ctd-targets > p {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    .ctd-dialog .ctd-details {
+      gap: calc(6 * var(--u));
+      height: calc(28 * var(--u));
+      margin-left: calc(-8 * var(--u));
+    }
+    /* After closing: flex-col gap-2.5 with a text-xs font-medium muted heading. Each note is a row
+       of gap-2.5 leading-5 with a size-4 muted check. */
+    .ctd-after,
+    .ctd-after ul {
+      display: flex;
+      flex-direction: column;
+      gap: calc(10 * var(--u));
+    }
+    .ctd-after h3 {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    .ctd-after ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .ctd-after li {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(10 * var(--u));
+    }
+    .ctd-after li > svg {
+      flex: none;
+      margin-top: calc(2 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* DialogFooter with mt-0 border-t border-border px-6 py-4: Cancel at the start and Close task at
+       the end. */
+    .ctd-foot {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    /* While the dialog reads, the loader takes the place of the content, and the footer hides. */
+    .ctd-dialog[data-loading] :is(.ctd-content, .ctd-foot),
+    .ctd-dialog:not([data-loading]) .ctd-loading {
+      display: none;
+    }
+    /* While the close runs, the switch and the buttons are disabled, and Close task spins. */
+    .ctd-busy,
+    .ctd-dialog[data-closing] .ctd-idle {
+      display: none;
+    }
+    .ctd-dialog[data-closing] .ctd-busy {
+      display: inline;
+    }
+    .ctd-dialog[data-closing] :is(.ctd-cleanup .ui-switch, .ctd-foot .ui-button) {
+      opacity: 0.5;
+    }
+    /* A phone stage: below the sm breakpoint, the dialog sits at the top of the window and takes
+       its width, and the footer stacks its buttons with min-h-11, Close task on top. */
+    @container stage (width <= 500px) {
+      .ctd-overlay {
+        align-items: start;
+      }
+      .ctd-dialog {
+        width: 100%;
+      }
+      .ctd-foot {
+        flex-direction: column-reverse;
+        align-items: stretch;
+      }
+      .ctd-foot .ui-button {
+        height: calc(44 * var(--u));
+      }
+    }
+  }
+  @keyframes ctd-pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+}

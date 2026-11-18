@@ -17,16 +17,20 @@ import { PhoneFrame } from "../../replicas/mobile/PhoneFrame";
 import { QuickActionsMenu } from "../../replicas/mobile/QuickActionsMenu";
 import { SessionScreen } from "../../replicas/mobile/SessionScreen";
 import { Touch } from "../../replicas/mobile/Touch";
-import { AgentMessage, ToolRow, UserBubble } from "../../replicas/mobile/TranscriptRows";
+import { ToolRun } from "../../replicas/mobile/ToolRun";
+import { AgentMessage, TurnSeparator } from "../../replicas/mobile/TranscriptRows";
+import { UserMessageRow } from "../../replicas/mobile/UserMessageRow";
 import { BUILDER_FIX_SESSION, KICKOFF } from "../../sample/studio";
 import {
   BRANCH,
   DESTINATIONS,
   DONE,
+  FIX_KICKOFF_TIME,
   MERGED_COMMIT,
   QUICK_ACTIONS,
   RAIL,
   REMOTE_BRANCH,
+  RUN,
   SQUASH_HINT,
   SQUASH_MESSAGE,
   STEPS,
@@ -34,6 +38,7 @@ import {
   TASK,
   TITLE,
   TOOLS,
+  WORKED,
 } from "./sample";
 import "./view.css";
 
@@ -70,11 +75,10 @@ export function MobileApproveView(props: SceneViewProps): ReactElement {
               activity="idle"
               rows={
                 <>
-                  <UserBubble text={KICKOFF.fix} />
-                  <ToolRow tools={TOOLS} id="test" />
-                  <ToolRow tools={TOOLS} id="lint" />
-                  <ToolRow tools={TOOLS} id="commit" />
-                  <AgentMessage paragraphs={[SUMMARY]} row="summary" />
+                  <UserMessageRow text={KICKOFF.fix} time={FIX_KICKOFF_TIME} />
+                  <ToolRun tools={TOOLS} calls={RUN} row="fix" folded />
+                  <TurnSeparator worked={WORKED} />
+                  <AgentMessage paragraphs={[SUMMARY]} footer={BUILDER_FIX_SESSION} row="summary" />
                 </>
               }
             />

@@ -28,6 +28,11 @@ export type SceneViewProps = {
    * pointer of a visitor. The website does not frame its scenes.
    */
   framed?: boolean | undefined;
+  /**
+   * The host shows its own captions next to the scene, such as a film. The scene then hides the
+   * step list of the documentation, and the product view keeps its scale.
+   */
+  captioned?: boolean | undefined;
 };
 
 /** The props of the view of the scene `Name`: the props of every view and the scene options. */
@@ -66,6 +71,7 @@ export function SceneFrame({
   ref,
   stageClass,
   framed = false,
+  captioned = false,
   stock,
   children,
 }: SceneFrameProps): ReactElement {
@@ -75,6 +81,7 @@ export function SceneFrame({
       data-scene={name}
       data-theme={theme}
       data-framed={flag(framed)}
+      data-captioned={flag(captioned)}
       ref={ref}
     >
       <div className={classes("stage", stageClass)} data-stage="" role="img" aria-label={alt}>

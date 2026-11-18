@@ -27,25 +27,27 @@
     .mob-file-diff-head > span:first-of-type {
       flex: 1;
     }
-    /* The bars sit on the bottom edge: Android gives no bottom inset, so the bar keeps only its own
-       padding and the 4 dp edge padding of diff-comment-flow.tsx. */
+    /* The bars sit on the bottom edge. The phone shows no navigation bar, so the bottom padding
+       of the selection bar is only the 4 dp edge padding of diff-comment-flow.tsx, which
+       replaces its own bottom padding. */
     .mob-selection-bar {
       display: flex;
       flex: 0 0 auto;
       align-items: center;
       gap: calc(4 * var(--u));
-      padding: calc(4 * var(--u)) calc(12 * var(--u)) calc(8 * var(--u)) calc(4 * var(--u));
+      padding: calc(4 * var(--u)) calc(12 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u));
       border-top: calc(1 * var(--u)) solid var(--border);
       background: var(--card);
       color: var(--foreground);
     }
+    /* Clear: a plain IconButton with a 44 point touch area and a 20 point icon. */
     .mob-selection-clear {
       display: flex;
       flex: 0 0 auto;
       align-items: center;
       justify-content: center;
-      width: calc(40 * var(--u));
-      height: calc(40 * var(--u));
+      width: calc(44 * var(--u));
+      height: calc(44 * var(--u));
       color: var(--m-secondary);
     }
     .mob-selection-clear .lucide {
@@ -73,15 +75,20 @@
       font-size: calc(11.5 * var(--u));
       line-height: calc(16 * var(--u));
     }
-    /* The comment field of comment-composer.tsx: the title with Cancel, then a 20 point field. */
+    /* The comment field of comment-composer.tsx: the title with Cancel, then a field with 20
+       point corners. The separator color draws the line over it: slate 100, or slate 800 in the
+       dark theme. */
     .mob-comment-composer {
       display: grid;
       flex: 0 0 auto;
       gap: calc(4 * var(--u));
       padding: calc(8 * var(--u)) calc(12 * var(--u));
-      border-top: calc(1 * var(--u)) solid var(--border);
+      border-top: calc(1 * var(--u)) solid oklch(96.8% 0.007 247.896);
       background: var(--chat-background);
       color: var(--foreground);
+    }
+    :where([data-theme="dark"]) & .mob-comment-composer {
+      border-top-color: oklch(27.9% 0.041 260.031);
     }
     .mob-comment-context {
       display: flex;
@@ -112,10 +119,13 @@
       border-radius: calc(20 * var(--u));
       background: var(--muted);
     }
+    /* The input: body text from its top, with the 4 dp vertical padding of Android, at least 32
+       points high. */
     .mob-comment-field p {
       flex: 1;
       min-width: 0;
-      padding: calc(5 * var(--u)) 0;
+      min-height: calc(32 * var(--u));
+      padding: calc(4 * var(--u)) 0;
       font-size: calc(15 * var(--u));
       line-height: calc(22 * var(--u));
     }
@@ -125,6 +135,19 @@
     .mob-comment-typed:empty,
     .mob-comment-field[data-can-save] .mob-comment-hint {
       display: none;
+    }
+    /* The Android caret after the comment, as the caret of the composer: 2 dp in the tint color,
+       as high as the text. It takes no room on the line. */
+    .mob-comment-caret {
+      display: none;
+      width: calc(2 * var(--u));
+      height: calc(21 * var(--u));
+      margin-right: calc(-2 * var(--u));
+      background: var(--m-tint);
+      vertical-align: text-top;
+    }
+    .mob-comment-field[data-can-save] .mob-comment-caret {
+      display: inline-block;
     }
     /* Save: a 32 point circle, the tint once the comment has text. */
     .mob-comment-save {

@@ -41,6 +41,11 @@
       width: calc(9 * var(--u));
       height: calc(9 * var(--u));
     }
+    /* The glow of a running dot: a flat 15 dp disc in the running color at 28%, with no blur. */
+    .mob-row .mob-dot[data-dot="running"]::before {
+      background: color-mix(in oklab, var(--status-running) 28%, transparent);
+      box-shadow: none;
+    }
     .mob-row-ws {
       flex: 1;
       min-width: 0;

@@ -73,11 +73,11 @@
     .sh-icon[aria-pressed="true"] {
       color: var(--foreground);
     }
-    /* SessionActionButton and SessionActionMenuTrigger: a 28 pixel split button. */
+    /* SessionActionButton and SessionActionMenuTrigger: a 28 pixel split button. A disabled button
+       has disabled:opacity-50 at once, with no transition. */
     .sh-split {
       display: flex;
       height: calc(28 * var(--u));
-      transition: opacity 200ms;
     }
     .sh-split[data-disabled] {
       opacity: 0.5;

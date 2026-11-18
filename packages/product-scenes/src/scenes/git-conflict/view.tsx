@@ -18,7 +18,7 @@ import { SessionPage } from "../../replicas/studio/SessionPage";
 import { Paragraph } from "../../replicas/ui/InlineCode";
 import { StartDialog } from "../../replicas/studio/StartDialog";
 import { AgentText } from "../../replicas/transcript/AgentText";
-import { ToolRow } from "../../replicas/transcript/ToolRow";
+import { ToolRun } from "../../replicas/transcript/ToolRun";
 import { Transcript } from "../../replicas/transcript/Transcript";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
 import { signature } from "../../sample/sessions";
@@ -32,19 +32,9 @@ import {
   GIT_OUTPUT,
   type GitConflictTemplate,
   MESSAGE_TIME,
-  ROWS,
+  CALLS,
 } from "./sample";
 import "./view.css";
-
-/** A row of the Builder turn, from ROWS. */
-function Row({ id }: { id: keyof typeof ROWS }): ReactElement {
-  const { args, duration, time } = ROWS[id];
-  return id === "conflict-read" ? (
-    <ToolRow kind="read" name="Read" args={args} duration={duration} time={time} row={id} />
-  ) : (
-    <ToolRow kind="bash" name="Bash" args={args} duration={duration} time={time} row={id} />
-  );
-}
 
 function RightPanel(): ReactElement {
   const { ahead, behind, push } = COUNTS.after;
@@ -95,16 +85,13 @@ export function GitConflictView(props: SceneViewProps): ReactElement {
             <UserMessage time={MESSAGE_TIME} row="conflict-message">
               {CONFLICT_MESSAGE}
             </UserMessage>
-            <Row id="conflict-status" />
-            <Row id="conflict-read" />
-            <Row id="conflict-test" />
-            <Row id="conflict-rebase" />
+            <ToolRun calls={CALLS} folded />
             <AgentText signature={signature(BUILDER_FIX_SESSION)} worked="44s" row="conflict-final">
               <Paragraph text={FINAL} />
             </AgentText>
           </>
         }
-        composer={<Composer session={BUILDER_FIX_SESSION} />}
+        composer={<Composer session={BUILDER_FIX_SESSION} keys={props.keys} />}
         panel={<RightPanel />}
       />
     </SceneFrame>

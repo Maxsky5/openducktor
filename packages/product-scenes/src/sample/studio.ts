@@ -132,7 +132,11 @@ export function fileOf(files: readonly GitFile[], path: string): GitFile {
 
 export const TASK_ID = taskId("k3x9");
 
-/** Kickoff prompt samples from packages/workflows/src/builtin/spec-plan-build/prompt-templates.ts. */
+/**
+ * Kickoff prompt samples from packages/workflows/src/builtin/spec-plan-build/prompt-templates.ts.
+ * The pull request prompt names the base branch without its remote, as requirePullRequestTarget of
+ * task-prompts.ts gives it.
+ */
 export const KICKOFF = {
   spec: `Write the specification for this task and save it with odt_set_task_artifact and code spec. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
   planner: `Write the implementation plan for this task and save it with odt_set_task_artifact and code plan. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
@@ -141,7 +145,7 @@ export const KICKOFF = {
   fix: `Address the latest QA rejection for this task. Check each finding against the current code. Fix valid in-scope issues and explain why you decline any other finding. Submit the completed change with odt_apply_workflow_event with eventId build-completed. Use taskId ${TASK_ID} for every task-bound odt_* tool call.`,
   pullRequest: [
     "Publish a review-ready pull request for the current task.",
-    "Pull request base:\norigin/main",
+    "Pull request base:\nmain",
     [
       "Prepare:",
       "- Use the base branch for Git diffs, rebases, and pull request provider tools.",

@@ -1,0 +1,117 @@
+@layer replica {
+  :where(.stage) {
+    /* WorkflowToolRow: the desktop article `rounded-md border px-3 py-2 my-2` in the colors of the
+       phase. A call that ended has the success colors, and a running call the info colors. The
+       header holds the icon, the name, the pull request, and the pill, and wraps on the start
+       side. The timing stays at the end of the first header line. */
+    .mob-wf-row {
+      --wf-surface: var(--success-surface);
+      --wf-border: var(--success-border);
+      --wf-text: var(--success-surface-foreground);
+      padding: calc(8 * var(--u)) 0;
+    }
+    .mob-wf-row[data-phase="executing"] {
+      --wf-surface: var(--info-surface);
+      --wf-border: var(--info-border);
+      --wf-text: var(--info-surface-foreground);
+    }
+    .mob-wf {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(8 * var(--u));
+      padding: calc(8 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--wf-border);
+      border-radius: calc(10 * var(--u));
+      background: var(--wf-surface);
+      color: var(--wf-text);
+    }
+    .mob-wf-header {
+      display: flex;
+      flex: 1;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(4 * var(--u)) calc(8 * var(--u));
+      min-width: 0;
+    }
+    .mob-wf-icon.lucide {
+      flex: 0 0 auto;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+    /* The name: semibold 12 point text on a line as high as the pull request link. */
+    .mob-wf-title {
+      display: flex;
+      flex: 0 1 auto;
+      align-items: center;
+      min-width: 0;
+      min-height: calc(28 * var(--u));
+      font-size: calc(12 * var(--u));
+      font-weight: 600;
+      line-height: calc(16 * var(--u));
+    }
+    /* PullRequestLinkButton: an outlined capsule on the card color. */
+    .mob-wf-link {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-height: calc(28 * var(--u));
+      padding: 0 calc(10 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 600;
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+      white-space: nowrap;
+    }
+    .mob-wf-link-state.lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--emerald-600);
+    }
+    :where([data-theme="dark"]) & .mob-wf-link-state.lucide {
+      color: var(--emerald-400);
+    }
+    .mob-wf-link-out.lucide {
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+    }
+    /* StatusPill: semibold 10.5 point capitals in the info colors. */
+    .mob-wf-pill {
+      flex: 0 0 auto;
+      padding: calc(1 * var(--u)) calc(7 * var(--u));
+      border: calc(1 * var(--u)) solid var(--info-border);
+      border-radius: 999px;
+      background: var(--info-surface);
+      color: var(--info-surface-foreground);
+      font-size: calc(10.5 * var(--u));
+      font-weight: 600;
+      line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.5 * var(--u));
+      white-space: nowrap;
+    }
+    /* ToolTiming: the bars while the call runs, then its run time, and the clock time, in the
+       text color of the card at 75 percent. */
+    .mob-wf-timing {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(28 * var(--u));
+      color: color-mix(in oklab, var(--wf-text) 75%, transparent);
+      font-size: calc(11.5 * var(--u));
+      line-height: calc(16 * var(--u));
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    /* A running call has no pull request and no run time yet. A call that ended has no pill and
+       no bars. */
+    .mob-wf-row[data-phase="executing"] :is(.mob-wf-link, .mob-wf-duration),
+    .mob-wf-row:not([data-phase="executing"]) :is(.mob-wf-pill, .mob-bars) {
+      display: none;
+    }
+  }
+}

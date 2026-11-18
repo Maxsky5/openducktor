@@ -8,6 +8,7 @@ import { RotateCcwClock, Zap } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { OPEN_IN_TERMINAL } from "../../sample/worktree";
 import { classes } from "../classes";
+import type { KeyLabels } from "../keys";
 import { AppWindow } from "../shell/AppWindow";
 import { Pointer } from "../shell/Pointer";
 import { Thread } from "../transcript/Thread";
@@ -27,6 +28,8 @@ import "./StudioWindow.css";
 type StudioWindowProps = {
   /** The window state of the frame that the markup holds. */
   frame: StudioFrame;
+  /** The keys of the platform, which the composer names. */
+  keys: KeyLabels;
   /** The rows of the transcript. */
   children?: ReactNode;
   /** The pull request link of the top bar. */
@@ -66,6 +69,7 @@ function StudioHeader({
 
 export function StudioWindow({
   frame,
+  keys,
   children,
   pr,
   openIn,
@@ -100,6 +104,7 @@ export function StudioWindow({
               <div className="st-stack" data-stack="" />
               <Composer
                 session={frame.session}
+                keys={keys}
                 sendBadge={{ kind: "comments", count: 0 }}
                 goal={goal}
               >

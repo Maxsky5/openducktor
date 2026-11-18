@@ -3,10 +3,11 @@
     /*
      * The phone of the mobile replicas. One design pixel is one dp. The tokens copy the
      * semantic colors of apps/mobile/src/theme/colors.ts and the shadows of tokens.ts: the app
-     * takes the desktop theme, and the slate palette for its secondary text.
+     * takes the desktop theme, and the slate palette for its secondary text. `--m-status` is the
+     * top safe area: the 24 dp status bar of the emulator of the screenshots.
      */
     .mob-phone {
-      --m-status: 25;
+      --m-status: 24;
       --m-secondary: oklch(44.6% 0.043 257.281);
       --m-quaternary: oklch(70.4% 0.04 256.788);
       --m-fill-strong: oklch(92.9% 0.013 255.508);

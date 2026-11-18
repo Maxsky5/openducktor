@@ -1,9 +1,5 @@
 @layer views {
   :where(.stage) {
-    /* Approve: the shared layout of MobileStage.tsx. The chosen menu item takes the highlight of
-       a pressed row. */
-    .mob-qmenu-item[data-pressed] {
-      background: var(--muted);
-    }
+    /* Approve: the shared layout of MobileStage.tsx. */
   }
 }

@@ -3,7 +3,8 @@
 // edge, over a light scrim. The card names the menu, then lists the desktop quick actions, primary
 // action first. A session action shows the icon of its role, and a task action its workflow icon.
 // A destructive action shows in red after a divider. A disabled action tells why under its name.
-// menus.ts opens and closes it by `data-menu`, and a scene finds an item by `data-menu-item`.
+// menus.ts opens and closes it by `data-menu` and fades the scrim with `--menu-progress`, and a
+// scene finds an item by `data-menu-item`.
 import { type LucideIcon } from "lucide-react";
 import { Fragment, type ReactElement } from "react";
 import { flag } from "../flag";
@@ -52,6 +53,7 @@ export function QuickActionsMenu({ items, hidden }: QuickActionsMenuProps): Reac
                 data-destructive={flag(item.destructive)}
                 data-disabled={flag(item.disabled)}
                 data-menu-item={item.id}
+                data-feedback="highlight"
               >
                 <ItemIcon icon={item.icon} />
                 <span className="mob-qmenu-text">

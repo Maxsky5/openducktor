@@ -24,16 +24,18 @@ export type PermissionRequest = {
 
 /**
  * The working directory on one line with the ellipsis in the middle, as `ellipsizeMode="middle"`
- * shows it: the start of the path gives way, and its last two folders stay.
+ * shows it on Android: the end of the line keeps the whole characters that fit in half of the
+ * line less the ellipsis, and the start keeps the whole characters that fit in the rest. The two
+ * parts show the same line.
  */
 function WorkingDirectory({ path }: { path: string }): ReactElement {
-  const parts = path.split("/");
-  const tail = parts.slice(-2).join("/");
-  const head = `In ${parts.slice(0, -2).join("/")}/`;
+  const line = `In ${path}`;
   return (
     <p className="mob-approval-path">
-      <span>{head}</span>
-      <span>{tail}</span>
+      <span className="mob-approval-path-start">{line}</span>
+      <span className="mob-approval-path-end">
+        <span>{line}</span>
+      </span>
     </p>
   );
 }

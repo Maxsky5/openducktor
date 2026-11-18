@@ -58,6 +58,7 @@ export function DiffScreen({ id, path, lines, comment, hidden }: DiffScreenProps
         <div className="mob-comment-field" data-comment-field="">
           <p>
             <span className="mob-comment-typed" data-comment-typed="" />
+            <span className="mob-comment-caret" />
             <span className="mob-comment-hint">{COMMENT_PLACEHOLDER}</span>
           </p>
           <span className="mob-comment-save" data-comment-save="">

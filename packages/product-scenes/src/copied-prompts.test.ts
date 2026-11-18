@@ -24,9 +24,7 @@ function template(id: string): string {
 
 /** The built-in prompt with the placeholder values of the sample task. */
 function builtin(id: string): string {
-  return template(id)
-    .replaceAll("{{task.id}}", TASK_ID)
-    .replaceAll("{{git.targetBranch}}", "origin/main");
+  return template(id).replaceAll("{{task.id}}", TASK_ID).replaceAll("{{git.targetBranch}}", "main");
 }
 
 describe("prompts copied from the product", () => {

@@ -5,7 +5,15 @@ import type { ComponentProps, ReactElement } from "react";
 import { classes } from "../classes";
 import "./Button.css";
 
-type ButtonVariant = "default" | "secondary" | "ghost" | "outline" | "destructive" | "accent";
+type ButtonVariant =
+  | "default"
+  | "secondary"
+  | "ghost"
+  | "outline"
+  | "destructive"
+  | "destructiveGhost"
+  | "warning"
+  | "accent";
 
 type ButtonProps = ComponentProps<"span"> & {
   variant?: ButtonVariant;

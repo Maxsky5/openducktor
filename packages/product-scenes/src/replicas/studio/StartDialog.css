@@ -1,6 +1,7 @@
 @layer replica {
   :where(.stage) {
-    /* Dialogs over the window: components/ui/dialog.tsx and session-start-modal.tsx. */
+    /* Dialogs over the window: components/ui/dialog.tsx and session-start-modal.tsx. DialogOverlay
+       is bg-black/45 backdrop-blur-sm, which is 8px in Tailwind 4. */
     .st-overlay {
       position: absolute;
       inset: 0;
@@ -8,7 +9,7 @@
       display: grid;
       place-items: center;
       background: rgb(0 0 0 / 0.45);
-      backdrop-filter: blur(calc(4 * var(--u)));
+      backdrop-filter: blur(calc(8 * var(--u)));
     }
     /* DialogContent: at most the height of the window less 2rem. The dialog scrolls, and its
        header and its footer stay (sticky top-0 and bottom-0). */
@@ -27,14 +28,17 @@
       color: var(--popover-foreground);
       box-shadow: var(--shadow-xl);
     }
+    /* The close button: absolute right-3 top-3 size-9 rounded-md, with an X in size-4. */
     .st-dialog-close {
       position: absolute;
       z-index: 20;
-      top: calc(16 * var(--u));
-      right: calc(16 * var(--u));
+      top: calc(12 * var(--u));
+      right: calc(12 * var(--u));
       display: grid;
       place-items: center;
-      padding: calc(4 * var(--u));
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: calc(10 * var(--u));
       color: var(--muted-foreground);
     }
     .st-dialog-head {
@@ -176,6 +180,23 @@
     /* Button: gap-2, and an icon with data-icon="inline-start". */
     .st-dialog-foot .ui-button {
       gap: calc(8 * var(--u));
+    }
+    /* While the start runs, the fieldset disables the fields, and Cancel and Start session are
+       disabled: disabled:opacity-50 dims the controls, not their labels. The dialog has no close
+       button, Start session shows LoaderCircle and Starting…, and Run in background becomes
+       Continue in background, which stays enabled. */
+    .st-dialog:not([data-starting]) .st-starting,
+    .st-dialog[data-starting] .st-ready,
+    .st-dialog[data-starting] > .st-dialog-close {
+      display: none;
+    }
+    .st-dialog[data-starting]
+      :is(
+        .st-dialog-body :is(.ui-combobox, .ui-switch, .ui-button, .ui-segment),
+        .st-cancel,
+        .st-start
+      ) {
+      opacity: 0.5;
     }
     /* A narrow stage shows a smaller dialog with one field in each row. */
     @container stage (width <= 699px) {

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { CONTINUE_IN_BACKGROUND, STARTUP_PHASES } from "./replicas/mobile/StartupTrace";
 import { STARTING_ACTIVITY, startupToastTitles } from "./replicas/shell/StartupToast";
 import { REPOSITORY_PATH } from "./sample/workspace";
 import { ORIGIN, STEPS } from "./scenes/chat/sample";
+import { STARTUP_STEPS } from "./scenes/mobile-start-builder/sample";
 import { PLANNER_ORIGIN } from "./scenes/palette/sample";
-import { importProduct } from "./test-support/product-source";
+import { importProduct, readProduct } from "./test-support/product-source";
 
 type Phase = "running" | "ready";
 type Step = {
@@ -79,5 +81,17 @@ describe("the startup notification copied from the app", () => {
   test("a new task worktree shows its steps, then the session start", () => {
     const rows = startupTraceRows(attempt("Builder", "fieldnotes-w5j3", "running", plan));
     expect(rows.map(({ step }) => step.label)).toEqual(STEPS.map((step) => step.label));
+  });
+
+  test("the start sheet of the mobile app shows the steps, the phases, and the action of the app", async () => {
+    const rows = startupTraceRows(attempt("Builder", "fieldnotes-k3x9", "running", plan));
+    expect(rows.map(({ step }) => step.label)).toEqual(STARTUP_STEPS.map((step) => step.label));
+    const trace = await readProduct("apps/mobile/src/features/session-startup/startup-trace.tsx");
+    expect(trace).toContain(`running: "${STARTUP_PHASES.running}"`);
+    expect(trace).toContain(`ready: "${STARTUP_PHASES.ready}"`);
+    expect(trace).toContain("` · ${attempt.origin.scope.taskId} · ${attempt.origin.scope.role}`");
+    expect(
+      await readProduct("apps/mobile/src/features/session-startup/startup-attempt-actions.tsx"),
+    ).toContain(`label: "${CONTINUE_IN_BACKGROUND}"`);
   });
 });

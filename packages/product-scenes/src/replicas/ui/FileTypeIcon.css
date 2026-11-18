@@ -1,0 +1,11 @@
+@layer replica {
+  :where(.stage) {
+    /* The icon of a file type: size-3.5 shrink-0. Its color is the color of its type, which wins
+       over the text color of the icon. */
+    .ft-icon {
+      flex-shrink: 0;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+  }
+}

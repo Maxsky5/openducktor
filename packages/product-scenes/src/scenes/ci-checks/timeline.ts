@@ -26,16 +26,15 @@ export const build: SceneBuilder = (scene) => {
   // Start: the Builder opened the pull request and watches its checks. Lint and typecheck pass,
   // and test and build run.
   checks.set(READS.first.states, READS.first.updated);
-  for (const id of ["log", "cause", "test", "push", "rewatch", "final"]) row(id).hidden = true;
-  const watch = must(row("watch"), "[data-tool]");
-  watch.toggleAttribute("data-running", true);
+  for (const id of ["cause", "final"]) row(id).hidden = true;
+  const endWatch = rows.running(row("watch"));
   setActivity("working");
 
   // The visitor refreshes the tab. The test check failed, and the build check passed. The watch
   // of the Builder ends with the failure.
   const refreshed = cursor.click(() => checks.button, 0.5);
   const failed = checks.refresh(refreshed, READS.failed.states, READS.failed.updated);
-  scene.at(failed + 0.2, () => watch.removeAttribute("data-running"));
+  endWatch(failed + 0.2);
 
   // The visitor opens the failed check to read its details and its times.
   const opened = cursor.click(() => must(checks.row(FAILING), "[data-check-row]"), failed + 0.8);

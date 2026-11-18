@@ -1,8 +1,8 @@
 // The window of a workspace session in the scenes of the documentation: the open sidebar next to
-// the page, a dialog over the window, and the pointer. The sidebar stays on a tablet stage,
-// because the scenes start in it or change it. A phone stage shows one pane, the sidebar or the
-// page, and a scene switches `data-pane`. A scene sets the height of its window with
-// --window-height in design pixels.
+// the page, a dialog over the window, the tooltip, and the pointer. The sidebar stays on a tablet
+// stage, because the scenes start in it or change it. A phone stage shows one pane, the sidebar or
+// the page, and a scene switches `data-pane`. A scene sets the height of its window with
+// --window-height in design pixels. A scene that presses keys shows them in the keystrokes display.
 import type { ReactElement, ReactNode } from "react";
 import type { Session } from "../../sample/sessions";
 import { classes } from "../classes";
@@ -10,6 +10,8 @@ import type { KeyLabels } from "../keys";
 import { AppWindow } from "../shell/AppWindow";
 import type { NavData } from "../shell/nav";
 import { Pointer } from "../shell/Pointer";
+import { Keystrokes } from "../ui/Keystrokes";
+import { Tooltip } from "../ui/Tooltip";
 import "./SessionWindow.css";
 
 type SessionWindowProps = {
@@ -22,6 +24,10 @@ type SessionWindowProps = {
   pane: "sidebar" | "main";
   /** The dialog over the window. */
   dialog: ReactNode;
+  /** The window shows the keys that the visitor holds. */
+  keystrokes?: boolean;
+  /** The host shows the held keys itself, so the window keeps its display out. */
+  keysByHost?: boolean;
   className?: string;
   /** The pages of the window. */
   children: ReactNode;
@@ -34,6 +40,8 @@ export function SessionWindow({
   session,
   pane,
   dialog,
+  keystrokes = false,
+  keysByHost = false,
   className,
   children,
 }: SessionWindowProps): ReactElement {
@@ -47,6 +55,8 @@ export function SessionWindow({
       overlay={
         <>
           {dialog}
+          <Tooltip />
+          {keystrokes && <Keystrokes byHost={keysByHost} />}
           <Pointer />
         </>
       }

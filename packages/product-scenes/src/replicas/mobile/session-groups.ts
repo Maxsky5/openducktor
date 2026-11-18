@@ -2,6 +2,7 @@
 // read model of the app, as the session list of the desktop sidebar does: a session that needs you
 // goes to Needs you, a running one goes to Running, and the others go to Recent. The rows also
 // show the card and the title colors of the app, and the badge counts Needs you and hides at 0.
+// The list of the app has no layout animation, so a row moves and a count changes at once.
 import { must } from "../../motion/dom";
 import type { Scene } from "../../motion/scene";
 import { type NavEntry, navGroupViews } from "../shell/nav";
@@ -25,5 +26,5 @@ export function sessionGroups(scene: Scene, root: HTMLElement) {
     badge.hidden = count === 0;
     badge.textContent = String(count);
   };
-  return sessionList(scene, tab, { render, badges });
+  return sessionList(scene, tab, { render, badges, instant: true });
 }

@@ -1,8 +1,9 @@
 // The pager of TaskBoard.tsx. A swipe moves the board one lane to the left or the right. While the
 // finger moves, the pages, the selection pill, and the lane titles follow it through
-// `--lane-progress`. The pill outline and the board wash take the colors of the next lane. When
-// the page settles, the lane is selected and the rail scrolls to center its cell, as
-// board-pager.tsx and board-lane-switcher.tsx do.
+// `--lane-progress`. The pill outline and the board wash mix the colors of the lane that they
+// leave into the colors of the next lane through `--tone-mix`, as interpolateColor mixes them with
+// the page progress. When the page settles, the lane is selected and the rail scrolls to center
+// its cell, as board-pager.tsx and board-lane-switcher.tsx do.
 import { all, must } from "../../motion/dom";
 import { designPixel } from "../../motion/effects";
 import { gsap } from "../../motion/gsap";
@@ -64,10 +65,29 @@ export function boardPager(scene: Scene, root: HTMLElement) {
           { "--lane-progress": to, duration: DRAG, ease: EASE.move, delay: REST },
         ),
       );
-    });
-    scene.at(at + REST + DRAG / 2, () => {
-      pill.dataset.tone = tone;
-      board.dataset.tone = tone;
+      // The outline and the wash keep the colors that they leave, and mix in the next lane.
+      const toned = [pill, board];
+      pill.style.setProperty("--tone-from", getComputedStyle(pill).borderTopColor);
+      board.style.setProperty("--tone-from", getComputedStyle(board).backgroundColor);
+      for (const element of toned) element.dataset.tone = tone;
+      scene.run(
+        gsap.fromTo(
+          toned,
+          { "--tone-mix": 0 },
+          {
+            "--tone-mix": 1,
+            duration: DRAG,
+            ease: EASE.move,
+            delay: REST,
+            onComplete: () => {
+              for (const element of toned) {
+                element.style.removeProperty("--tone-from");
+                element.style.removeProperty("--tone-mix");
+              }
+            },
+          },
+        ),
+      );
     });
     const settled = at + REST + DRAG;
     scene.at(settled, () => select(to));

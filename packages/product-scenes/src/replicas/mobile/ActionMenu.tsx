@@ -24,7 +24,7 @@ export function ActionMenu({ menu, title, actions }: ActionMenuProps): ReactElem
       <div className="mob-menu" data-menu-card="">
         {title && <span className="mob-menu-title">{title}</span>}
         {actions.map(({ id, title: label, icon: Icon }) => (
-          <span key={id} className="mob-menu-item" data-menu-item={id}>
+          <span key={id} className="mob-menu-item" data-menu-item={id} data-feedback="highlight">
             <Icon />
             <span>{label}</span>
           </span>

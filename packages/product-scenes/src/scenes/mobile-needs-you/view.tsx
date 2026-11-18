@@ -13,11 +13,13 @@ import { PhoneFrame } from "../../replicas/mobile/PhoneFrame";
 import { SessionScreen } from "../../replicas/mobile/SessionScreen";
 import { SessionsTab } from "../../replicas/mobile/SessionsTab";
 import { Touch } from "../../replicas/mobile/Touch";
-import { AgentMessage, ToolRow, UserBubble } from "../../replicas/mobile/TranscriptRows";
-import { BUILDER_PLAN } from "../../sample/mobile";
+import { ToolRun } from "../../replicas/mobile/ToolRun";
+import { AgentMessage } from "../../replicas/mobile/TranscriptRows";
+import { UserMessageRow } from "../../replicas/mobile/UserMessageRow";
+import { BUILD_KICKOFF_TIME, BUILDER_PLAN } from "../../sample/mobile";
 import { BUILDER_SESSION, KICKOFF } from "../../sample/studio";
 import { TASKS } from "../../sample/tasks";
-import { LAST_SESSIONS, PASSED, RAIL, READY, REQUEST, STEPS, TOOLS } from "./sample";
+import { LAST_SESSIONS, PASSED, RAIL, READY, REQUEST, RUNS, STEPS, TOOLS } from "./sample";
 import "./view.css";
 
 export function MobileNeedsYouView(props: SceneViewProps): ReactElement {
@@ -25,7 +27,7 @@ export function MobileNeedsYouView(props: SceneViewProps): ReactElement {
     <SceneFrame
       {...props}
       name="mobile-needs-you"
-      alt={`The OpenDucktor mobile app on a phone. The Sessions tab lists the sessions of every open workspace in the groups Needs you, Running, and Recent. The Sessions tab icon shows a red badge with 1. In Needs you, the Builder session of the task "${TASKS.k3x9.title}" shows the badge In progress and the chip Permission. The user taps the session. The session opens with the workflow rail, where the Builder step waits for input, and with an amber card: Approval required, Bash approval requested, Effect unknown, Codex wants to run a shell command, Command: ${REQUEST.command}, Action: Bash, and the buttons Approve once, Approve for session, and Reject. The composer asks to respond to the pending approval request. The user taps Approve once. The card goes, the Builder runs ${REQUEST.command}, reports that 5 tests pass, and starts the type check. The user goes back. The session is now in Running, Needs you shows 0, and the badge is gone. Next to the phone, a list of five steps highlights the current step.`}
+      alt={`The OpenDucktor mobile app on a phone. The Sessions tab lists the sessions of every open workspace in the groups Needs you, Running, and Recent. The Sessions tab icon shows a red badge with 1. In Needs you, the Builder session of the task "${TASKS.k3x9.title}" shows the badge In progress and the chip Permission. The user taps the session. The session opens with the workflow rail, where the Builder step waits for input. Its finished tool runs are folded to one line each, such as Shell, 8 commands. Under the transcript is an amber card: Approval required, Bash approval requested, Effect unknown, Codex wants to run a shell command, Command: ${REQUEST.command}, Action: Bash, and the buttons Approve once, Approve for session, and Reject. The composer shows Waiting and a Stop button. The user taps Approve once. The card goes, and the Builder runs ${REQUEST.command} in a new tool run, with moving bars in place of the icon of the command. It reports that 5 tests pass, the tool run folds, and the Builder starts the type check. The user goes back. The session is now in Running, Needs you shows 0, and the badge is gone. Next to the phone, a list of five steps highlights the current step.`}
     >
       <MobileStage
         steps={STEPS}
@@ -42,23 +44,14 @@ export function MobileNeedsYouView(props: SceneViewProps): ReactElement {
               hidden
               rows={
                 <>
-                  <UserBubble text={KICKOFF.build} />
-                  <ToolRow tools={TOOLS} id="guide" />
-                  <ToolRow tools={TOOLS} id="status" />
-                  <ToolRow tools={TOOLS} id="keymap" />
-                  <ToolRow tools={TOOLS} id="search" />
-                  <ToolRow tools={TOOLS} id="app" />
-                  <ToolRow tools={TOOLS} id="shell" />
-                  <ToolRow tools={TOOLS} id="dialog" />
-                  <ToolRow tools={TOOLS} id="dialogTest" />
+                  <UserMessageRow text={KICKOFF.build} time={BUILD_KICKOFF_TIME} />
+                  <ToolRun tools={TOOLS} calls={RUNS.lookups} row="lookups" folded />
                   <AgentMessage paragraphs={[BUILDER_PLAN]} />
-                  <ToolRow tools={TOOLS} id="read" />
-                  <ToolRow tools={TOOLS} id="list" />
-                  <ToolRow tools={TOOLS} id="lint" />
+                  <ToolRun tools={TOOLS} calls={RUNS.checks} row="checks" folded />
                   <AgentMessage paragraphs={[READY]} row="ready" />
-                  <ToolRow tools={TOOLS} id="test" />
+                  <ToolRun tools={TOOLS} calls={RUNS.tests} row="tests" folded />
                   <AgentMessage paragraphs={[PASSED]} row="passed" />
-                  <ToolRow tools={TOOLS} id="typecheck" />
+                  <ToolRun tools={TOOLS} calls={RUNS.types} row="types" running="typecheck" />
                 </>
               }
               pending={<PermissionCard request={REQUEST} hidden />}

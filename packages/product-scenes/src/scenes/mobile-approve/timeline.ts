@@ -1,18 +1,17 @@
 import { must } from "../../motion/dom";
-import { fadeHide, fadeIn } from "../../motion/effects";
 import { gsap } from "../../motion/gsap";
 import type { SceneBuilder } from "../../motion/scene";
-import { EASE } from "../../motion/tokens";
 import { approvalChoices } from "../../replicas/mobile/approval-choices";
 import { finger } from "../../replicas/mobile/finger";
 import { menus } from "../../replicas/mobile/menus";
 import { screens } from "../../replicas/mobile/screens";
 import { stepList } from "../../replicas/mobile/steps";
 import { toast } from "../../replicas/mobile/toast";
+import { topButton } from "../../replicas/mobile/top-button";
 import { APPROVE_ITEM } from "./sample";
 
 /** Seconds that the host takes to merge locally, and to push and close the task. */
-const MERGE = 1.1;
+const MERGE = 1.25;
 const PUSH = 1.3;
 
 /**
@@ -31,6 +30,7 @@ export const build: SceneBuilder = (scene) => {
   const menu = menus(scene, root);
   const approval = approvalChoices(scene, root);
   const session = phone.screen("session");
+  topButton(scene, session);
   const publish = phone.screen("publish");
   const doneToast = toast(scene, root, "done");
 
@@ -38,16 +38,16 @@ export const build: SceneBuilder = (scene) => {
   phone.only("session");
   approval.show("pull_request", "merge_commit");
 
-  // The zap button opens Quick Actions, and Approve Task opens the approval sheet.
+  // The zap button opens Quick Actions, and Approve Task opens the approval sheet. On Android, the
+  // chosen action opens its sheet at once, while the menu fades over it.
   steps.show(1, 1.0);
   const zap = (): HTMLElement => must(session, "[data-quick-actions]");
   const opened = menu.open("quick", zap, tap(zap, 2.2));
   const item = menu.item("quick", APPROVE_ITEM);
   const chosen = tap(() => item, opened + 1.4);
-  scene.at(chosen - 0.2, () => item.toggleAttribute("data-pressed", true));
-  const closed = menu.close("quick", chosen);
-  scene.at(closed, () => item.removeAttribute("data-pressed"));
-  const presented = phone.present("approve", closed);
+  menu.close("quick", chosen);
+  const presented = phone.present("approve", chosen);
+  scene.mark("approve", presented);
 
   // The sheet opens on Pull request. Direct merge shows the merge methods, and Squash adds the
   // suggested message, and the form scrolls until the message shows in full.
@@ -58,40 +58,52 @@ export const build: SceneBuilder = (scene) => {
   approval.choose("direct_merge", "merge_commit", direct);
   const squash = tap(() => must(approval.sheet, '[data-option="squash"]'), direct + 1.3);
   approval.choose("direct_merge", "squash", squash);
+  scene.mark("squash", squash);
   const scrolled = approval.reveal(
     () => must(approval.sheet, '[data-for-method="squash"]'),
     squash + 0.4,
   );
 
-  // The visitor reads the message and merges locally. The button shows the progress, then the
-  // sheet asks to publish the local merge.
+  // The visitor reads the message and merges locally. The button shows the progress, and the
+  // merge disables the other controls. Then the sheet asks to publish the local merge.
   steps.show(3, scrolled + 0.1);
   const mergeButton = must(approval.sheet, "[data-merge-locally]");
   const merged = tap(() => mergeButton, scrolled + 2.4);
-  scene.at(merged, () => mergeButton.toggleAttribute("data-loading", true));
-  // The sheet keeps its place. The approval step fades out, then the next step fades in, so the
-  // two forms never show together.
-  const swapped = merged + MERGE;
-  scene.at(swapped, () => {
-    scene.run(fadeHide(approval.sheet, 0.15, EASE.dismiss));
+  scene.at(merged, () => {
+    mergeButton.toggleAttribute("data-loading", true);
+    approval.sheet.toggleAttribute("data-busy", true);
   });
-  const asked = swapped + 0.15;
+  scene.mark("merge", merged);
+  // The sheet keeps its place, and the next step of the approval takes the place of the first
+  // at once: the title, the lead, and the form change in one frame, as in the app.
+  const asked = merged + MERGE;
   scene.at(asked, () => {
     mergeButton.removeAttribute("data-loading");
+    approval.sheet.removeAttribute("data-busy");
     gsap.set(must(approval.sheet, "[data-sheet-body]"), { clearProps: "transform" });
+    approval.sheet.hidden = true;
     publish.hidden = false;
-    scene.run(fadeIn(publish, 0.2));
   });
+  scene.mark("publish", asked);
 
   // The visitor reads Local merge ready and the push target. Push main and mark done publishes
-  // the merge. The sheet closes, and the toast says that the task moved to Done. When the toast
-  // goes, the workflow rail shows every step done.
+  // the merge: the button reads Pushing main, and the push disables the other controls. The
+  // sheet closes, and the toast says that the task moved to Done. When the toast goes, the
+  // workflow rail shows every step done.
   steps.show(4, asked + 0.2);
   approval.reveal(() => must(publish, "[data-sheet-body] > :last-child"), asked + 1.6, publish);
   const pushButton = must(publish, "[data-publish]");
   const pushed = tap(() => pushButton, asked + 3.6);
-  scene.at(pushed, () => pushButton.toggleAttribute("data-loading", true));
+  scene.at(pushed, () => {
+    pushButton.toggleAttribute("data-loading", true);
+    publish.toggleAttribute("data-busy", true);
+  });
+  scene.mark("push", pushed);
   const done = phone.dismiss("publish", pushed + PUSH);
-  scene.at(done, () => pushButton.removeAttribute("data-loading"));
+  scene.at(done, () => {
+    pushButton.removeAttribute("data-loading");
+    publish.removeAttribute("data-busy");
+  });
+  scene.mark("done", done);
   scene.endAt(doneToast.show(done) + 1.4);
 };

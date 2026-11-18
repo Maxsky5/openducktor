@@ -2,7 +2,7 @@
 // launches with a goal of the built-in workflow offer it: Start Implementation, Fix QA Rejection,
 // and Apply Human Changes. The switch is off each time the dialog opens. Turned on, the field opens
 // like an accordion with the default goal, and Customize first message closes. Generate goal asks a
-// model for a goal, and the result replaces the text. start-dialog.ts plays these steps.
+// model for a goal, and the result replaces the text. goal-dialog.ts plays these steps.
 import { LoaderCircle, Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "../ui/Button";

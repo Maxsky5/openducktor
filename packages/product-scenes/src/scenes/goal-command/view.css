@@ -29,9 +29,13 @@
       min-height: 0;
       isolation: isolate;
     }
-    /* The keys show over the transcript, so they cover neither the goal row nor the composer. */
+    /* The keys show in the empty middle of the bottom bar of the composer, between the effort and
+       the context meter, so they cover no message, no goal row, and no draft. Their middle is on
+       the middle of the bar: 40 points over the bottom, less half the 62 pixels of the keys. */
     .gcm-panel ~ .key-hud {
-      top: 30%;
+      top: auto;
+      bottom: calc(40 * var(--u) - 31px);
+      left: 67%;
     }
     /* A phone stage shows a narrower column. The composer and the transcript take their phone
        rules from their replicas. */
@@ -39,6 +43,10 @@
       .gcm-panel {
         --design-width: 400;
         height: calc(560 * var(--u));
+      }
+      /* The phone composer has 12 points under its bar, and the smaller keys are 46 pixels high. */
+      .gcm-panel ~ .key-hud {
+        bottom: calc(36 * var(--u) - 23px);
       }
     }
   }

@@ -5,7 +5,6 @@
 // the hint of Steer now. The rows that come after it are hidden.
 import type { ReactElement } from "react";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
-import { steerKey } from "../../replicas/keys";
 import { Replica } from "../../replicas/Replica";
 import { KeyHud } from "../../replicas/shell/KeyHud";
 import { Pointer } from "../../replicas/shell/Pointer";
@@ -13,40 +12,20 @@ import { ChatColumn } from "../../replicas/studio/ChatColumn";
 import { Composer, ComposerDraft } from "../../replicas/studio/Composer";
 import { QueueStack } from "../../replicas/studio/QueueStack";
 import { AgentText } from "../../replicas/transcript/AgentText";
-import { PatchCard } from "../../replicas/transcript/PatchCard";
 import { Thread } from "../../replicas/transcript/Thread";
-import { ToolRow } from "../../replicas/transcript/ToolRow";
+import { ToolRun } from "../../replicas/transcript/ToolRun";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
 import { signature } from "../../sample/sessions";
-import { BUILD_FILES, KICKOFF, TASK_ID } from "../../sample/studio";
-import { HELP_SEARCH, QUEUE_SESSION, QUEUED, SENT, TESTS } from "./sample";
+import { KICKOFF } from "../../sample/studio";
+import { BUILD_CALLS, HELP_SEARCH, KEYMAP_TESTS, QUEUE_SESSION, QUEUED, SENT } from "./sample";
 import "./view.css";
 
-/** The turn of the Builder until the search tests run. */
+/** The turn of the Builder until the search tests run, in one long tool run. */
 function BuildRows(): ReactElement {
   return (
     <>
       <UserMessage time={SENT.kickoff}>{KICKOFF.build}</UserMessage>
-      <ToolRow kind="tool" name="read_task" args={TASK_ID} duration="131ms" time="09:46:32 AM" />
-      <ToolRow kind="read" name="Read" args="AGENTS.md" duration="6ms" time="09:46:35 AM" />
-      {BUILD_FILES.map((file) => (
-        <PatchCard
-          key={file.path}
-          path={file.path}
-          kind={file.type === "added" ? "A" : "M"}
-          add={file.add}
-          del={file.del}
-        />
-      ))}
-      <ToolRow
-        kind="bash"
-        name="Bash"
-        args={TESTS.search.args}
-        duration={TESTS.search.duration}
-        time={TESTS.search.time}
-        row="search-tests"
-        running
-      />
+      <ToolRun calls={BUILD_CALLS} running={["search-tests"]} />
     </>
   );
 }
@@ -66,15 +45,7 @@ function LaterRows(): ReactElement {
           </p>
         </AgentText>
       </div>
-      <div hidden data-row="keymap-tests">
-        <ToolRow
-          kind="bash"
-          name="Bash"
-          args={TESTS.keymap.args}
-          duration={TESTS.keymap.duration}
-          time={TESTS.keymap.time}
-        />
-      </div>
+      <ToolRun calls={[KEYMAP_TESTS]} hidden />
       <div hidden data-row="final">
         <AgentText signature={signature(QUEUE_SESSION)} worked="2m45s">
           <p>
@@ -86,15 +57,7 @@ function LaterRows(): ReactElement {
       <div hidden data-row="next">
         <UserMessage time={SENT.next}>{QUEUED.next.text}</UserMessage>
       </div>
-      <div hidden data-row="help-search">
-        <ToolRow
-          kind="search"
-          name="Search"
-          args={HELP_SEARCH.args}
-          duration="64ms"
-          time={HELP_SEARCH.time}
-        />
-      </div>
+      <ToolRun calls={[HELP_SEARCH]} hidden />
     </>
   );
 }
@@ -115,7 +78,7 @@ export function QueueView(props: SceneViewProps): ReactElement {
           <Composer
             session={QUEUE_SESSION}
             activity="working"
-            steerKey={steerKey(props.keys)}
+            keys={props.keys}
             queue={<QueueStack cards={[QUEUED.next, { ...QUEUED.steer, hover: true }]} spread />}
           >
             <ComposerDraft />

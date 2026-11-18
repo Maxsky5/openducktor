@@ -15,6 +15,8 @@
       padding: 0 calc(16 * var(--u)) 0 calc(20 * var(--u));
     }
     .mob-fsheet-head strong {
+      flex: 1;
+      min-width: 0;
       overflow: hidden;
       color: var(--foreground);
       font-size: calc(20 * var(--u));
@@ -23,6 +25,32 @@
       letter-spacing: calc(-0.3 * var(--u));
       white-space: nowrap;
       text-overflow: ellipsis;
+    }
+    /* The close control of the header: a filled IconButton, a 30 point circle in the strong fill
+       with a 17 point X in the secondary label color. The header shows it only when no form
+       footer takes its place, and it shows the half opacity of a disabled Touchable while a
+       start runs. */
+    .mob-fsheet-close {
+      display: none;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(30 * var(--u));
+      height: calc(30 * var(--u));
+      margin-left: calc(12 * var(--u));
+      border-radius: 50%;
+      background: var(--m-fill-strong);
+      color: var(--m-secondary);
+    }
+    .mob-fsheet-close .lucide {
+      width: calc(17 * var(--u));
+      height: calc(17 * var(--u));
+    }
+    .mob-fsheet:is([data-preparing], [data-progress]) .mob-fsheet-close {
+      display: flex;
+    }
+    .mob-fsheet[data-busy] .mob-fsheet-close {
+      opacity: 0.5;
     }
     .mob-fsheet-intro {
       display: grid;
@@ -51,6 +79,68 @@
       font-family: var(--mono);
       font-size: calc(13 * var(--u));
       line-height: calc(19 * var(--u));
+    }
+    /* ModalLoadingContent: the spinner in a 36 point muted circle and the subhead label 12 points
+       apart, then two 6 point placeholder lines, 16 points under them. */
+    .mob-fsheet-loading {
+      display: none;
+      gap: calc(16 * var(--u));
+      min-height: calc(160 * var(--u));
+      padding: calc(24 * var(--u)) calc(16 * var(--u));
+    }
+    .mob-fsheet-loading-row {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      color: var(--m-secondary);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .mob-fsheet-spinner {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border-radius: 50%;
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    .mob-fsheet-spinner .lucide {
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+    }
+    .mob-fsheet-lines {
+      display: grid;
+      gap: calc(8 * var(--u));
+    }
+    .mob-fsheet-lines > i {
+      height: calc(6 * var(--u));
+      border-radius: calc(3 * var(--u));
+      background: var(--muted);
+    }
+    .mob-fsheet-lines > i:first-child {
+      width: 80%;
+    }
+    .mob-fsheet-lines > i:last-child {
+      width: 60%;
+    }
+    .mob-fsheet[data-preparing] .mob-fsheet-loading {
+      display: grid;
+    }
+    /* The startup progress takes the place of the form and its footer. */
+    .mob-fsheet-progress {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .mob-fsheet[data-progress] .mob-fsheet-progress {
+      display: flex;
+    }
+    .mob-fsheet:is([data-preparing], [data-progress]) :is(.mob-fsheet-scroll, .mob-fsheet-foot) {
+      display: none;
     }
     /* The fields scroll above the footer. A scene moves the body to scroll it. */
     .mob-fsheet-scroll {
@@ -92,15 +182,16 @@
       flex: 0 0 auto;
     }
 
-    /* A large button of a form footer: 48 dp high with the 12 dp radius. A footer button has the
-       12 dp side padding of the small size, and a long label wraps instead of an ellipsis. */
+    /* A large button of a form footer: 48 dp high with the 12 dp radius and 4 dp above and below
+       the label. A footer button has the 12 dp side padding of the small size, and a long label
+       wraps instead of an ellipsis. */
     .mob-fbutton {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: calc(6 * var(--u));
       min-height: calc(48 * var(--u));
-      padding: 0 calc(12 * var(--u));
+      padding: calc(4 * var(--u)) calc(12 * var(--u));
       border: calc(1 * var(--u)) solid transparent;
       border-radius: calc(12 * var(--u));
       font-size: calc(15 * var(--u));
@@ -132,15 +223,24 @@
       min-width: 0;
       text-align: center;
     }
+    /* While the action runs, the spinner and the busy label show. The button keeps its full
+       color, because the app does not dim a loading button. */
     .mob-fbutton-spinner,
-    .mob-fbutton[data-loading] .mob-fbutton-icon {
+    .mob-fbutton[data-loading] .mob-fbutton-icon,
+    .mob-fbutton-label[data-busy-label],
+    .mob-fbutton[data-loading] .mob-fbutton-label[data-idle-label] {
       display: none;
     }
     .mob-fbutton[data-loading] .mob-fbutton-spinner {
       display: block;
     }
-    .mob-fbutton[data-loading] {
-      opacity: 0.85;
+    .mob-fbutton[data-loading] .mob-fbutton-label[data-busy-label] {
+      display: inline;
+    }
+    /* A busy sheet disables the other buttons, such as Cancel, at the half opacity of a disabled
+       Touchable. */
+    .mob-fsheet[data-busy] .mob-fbutton:not([data-loading]) {
+      opacity: 0.5;
     }
   }
 }

@@ -1,52 +1,55 @@
-// A regular tool row of agent-chat-regular-tool-summary.tsx, with the icon of agent-chat-tool-icon.tsx.
-import { FileText, type LucideIcon, Search, Terminal, Wrench } from "lucide-react";
+// A tool call on its own line, outside a tool run: RegularToolMessage and RegularToolSummary of
+// agent-chat-regular-tool-message.tsx and agent-chat-regular-tool-summary.tsx. A question tool and
+// a task tool, such as create_task, show this way, with their answers or their task under the line.
+// A running line has `data-running`, as a call of a run.
 import type { ReactElement, ReactNode } from "react";
 import { flag } from "../flag";
-import type { ToolKind } from "./model";
-import { RowTime } from "./RowTime";
+import { FileTypeIcon } from "../ui/FileTypeIcon";
+import { CallIcon, CallTiming } from "./CallParts";
+import type { ToolType } from "./model";
 import "./ToolRow.css";
 
+/** The name of a question tool on its line: readToolCallName of agent-chat-tool-presentation.ts. */
+export const QUESTION_TOOL_NAME = "Question";
+
 type ToolRowProps = {
-  kind: ToolKind;
+  tool: ToolType;
+  /** The name of the call: `Question` for a question tool, or the name of the tool. */
   name: string;
-  args?: string;
+  summary?: string;
+  /** The summary is the path of a file, and the icon of its type shows before it. */
+  file?: boolean;
   duration: string;
   time: string;
   row?: string;
-  /** The tool still runs in the static frame: a spinner takes the place of the duration. */
+  /** The call still runs in the static frame. */
   running?: boolean;
   children?: ReactNode;
 };
 
-const ICONS = {
-  read: FileText,
-  search: Search,
-  bash: Terminal,
-  tool: Wrench,
-} as const satisfies Record<ToolKind, LucideIcon>;
-
 export function ToolRow({
-  kind,
+  tool,
   name,
-  args,
+  summary,
+  file = false,
   duration,
   time,
   row,
   running = false,
   children,
 }: ToolRowProps): ReactElement {
-  const Icon = ICONS[kind];
   return (
     <div className="st-tool-wrap" data-row={row}>
       <div className="st-tool" data-tool="" data-running={flag(running)}>
-        <Icon className="i14" />
-        <b>{name}</b>
-        {args && (
-          <span className="st-tool-args" data-tool-args="">
-            {args}
+        <CallIcon tool={tool} />
+        <span className="st-tool-name">{name}</span>
+        {summary && (
+          <span className="st-tool-summary" data-call-text="">
+            {file && <FileTypeIcon path={summary} />}
+            <span data-call-summary="">{summary}</span>
           </span>
         )}
-        <RowTime duration={duration} time={time} />
+        <CallTiming duration={duration} time={time} className="st-tool-time" />
       </div>
       {children}
     </div>

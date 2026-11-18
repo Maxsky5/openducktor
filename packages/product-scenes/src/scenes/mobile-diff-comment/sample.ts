@@ -19,9 +19,9 @@ import type { MenuAction } from "../../replicas/mobile/ActionMenu";
 import type { ChangesRow } from "../../replicas/mobile/ChangesScreen";
 import { commentRangeLabel } from "../../replicas/mobile/diff-comment-text";
 import type { RailStep } from "../../replicas/mobile/MobileRail";
-import type { MobileTool } from "../../replicas/mobile/TranscriptRows";
+import type { MobileCall } from "../../replicas/mobile/ToolRun";
 import type { RoleId } from "../../replicas/vocabulary";
-import { BUILDER_RAIL, BUILDER_TOOLS } from "../../sample/mobile";
+import { BUILDER_RAIL, BUILDER_TOOLS, codexCommand } from "../../sample/mobile";
 import { modelPath } from "../../sample/models";
 import { BUILD_FILES, BUILDER_SESSION, HOOK_LINES, HOOK_PATH } from "../../sample/studio";
 import { TASK_BRANCH } from "../../sample/worktree";
@@ -57,8 +57,11 @@ export const FILE_ACTIONS: readonly MenuAction[] = [
   { id: "copy-path", title: "Copy path", icon: Copy },
 ];
 
-/** The task branch, shortened in the middle as the branch card shows it on the phone. */
-export const BRANCH = `${TASK_BRANCH.slice(0, 11)}…${TASK_BRANCH.slice(-10)}`;
+/**
+ * The task branch, shortened in the middle as the branch card of a 411 dp phone shows it next to
+ * Not published: 13 characters at each side of the ellipsis.
+ */
+export const BRANCH = `${TASK_BRANCH.slice(0, 13)}…${TASK_BRANCH.slice(-13)}`;
 
 /** The file that the visitor comments on. */
 export const HOOK = { id: "hook", path: HOOK_PATH, lines: HOOK_LINES } as const;
@@ -148,15 +151,23 @@ export const TOOLS = {
   lint: BUILDER_TOOLS.lint,
   test: BUILDER_TOOLS.test,
   typecheck: BUILDER_TOOLS.typecheck,
-  commit: {
-    type: "bash",
-    name: "bash",
-    summary: 'git commit -m "feat(search): open search with Cmd+K"',
-    duration: "180ms",
-    time: "9:49:20 AM",
-  },
+  commit: codexCommand(
+    "bash",
+    'git commit -m "feat(search): open search with Cmd+K"',
+    "180ms",
+    "9:49:20 AM",
+  ),
   keymap: { ...BUILDER_TOOLS.keymap, time: "9:52:21 AM" },
-} as const satisfies Record<string, MobileTool>;
+} as const satisfies Record<string, MobileCall>;
+
+/** The tool runs of the session. The build run is folded, because the last reply follows it. */
+export const RUNS = {
+  build: ["guide", "keymapRead", "list", "shell", "lint", "test", "typecheck", "commit"],
+  reply: ["keymap"],
+} as const satisfies Record<string, readonly (keyof typeof TOOLS)[]>;
+
+/** The time that the turn of the build took, from the kickoff to the last reply. */
+export const WORKED = "2m54s";
 
 /** The last reply of the Builder before the scene starts. */
 export const DONE =

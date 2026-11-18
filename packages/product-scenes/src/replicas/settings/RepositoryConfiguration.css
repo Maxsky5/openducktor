@@ -1,0 +1,103 @@
+@layer replica {
+  :where(.stage) {
+    /* RepositoryConfigurationSection: grid gap-4 p-4, then the card: grid gap-3 rounded-md border
+       border-border bg-muted/30 p-4. */
+    .rc-section {
+      display: grid;
+      gap: calc(16 * var(--u));
+      padding: calc(16 * var(--u));
+    }
+    .rc-card {
+      display: grid;
+      gap: calc(12 * var(--u));
+      padding: calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: color-mix(in oklab, var(--muted) 30%, transparent);
+    }
+    /* The title is text-sm font-medium, and the text under it is text-xs text-muted-foreground. */
+    .rc-card-head {
+      display: grid;
+      gap: calc(4 * var(--u));
+    }
+    .rc-card-head b,
+    .rc-field > b {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .rc-card-head p,
+    .rc-hint {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* Workspace ID and Workspace name: grid gap-3 md:grid-cols-2. */
+    .rc-pair {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: calc(12 * var(--u));
+    }
+    /* A field: grid gap-2, with the Label over its control. */
+    .rc-field {
+      display: grid;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    /* A read-only Input: read-only:bg-muted/60 read-only:text-muted-foreground. */
+    .rc-read-only {
+      background: color-mix(in oklab, var(--muted) 60%, transparent);
+      color: var(--muted-foreground);
+    }
+    .rc-abbreviation {
+      max-width: calc(96 * var(--u));
+    }
+    .rc-row {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    .rc-grow {
+      flex: 1;
+    }
+    .rc-row > .ui-button {
+      flex: none;
+    }
+    /* The # before the Hex code field: font-mono text-sm text-muted-foreground. The field has
+       max-w-40 font-mono. */
+    .rc-hash {
+      color: var(--muted-foreground);
+      font-family: var(--mono);
+      font-size: calc(14 * var(--u));
+    }
+    .rc-hex {
+      flex: 1;
+      max-width: calc(160 * var(--u));
+    }
+    /* The swatches: flex flex-wrap items-center gap-2 of size-8 rounded-md border-border/60 buttons.
+       The selected Default swatch has ring-2 ring-ring ring-offset-2 ring-offset-background. */
+    .rc-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    .rc-swatch {
+      display: grid;
+      place-items: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border: calc(1 * var(--u)) solid color-mix(in oklab, var(--border) 60%, transparent);
+      border-radius: calc(10 * var(--u));
+    }
+    .rc-default {
+      background: var(--card);
+      color: var(--muted-foreground);
+    }
+    .rc-swatch[data-selected] {
+      box-shadow:
+        0 0 0 calc(2 * var(--u)) var(--background),
+        0 0 0 calc(4 * var(--u)) var(--ring);
+    }
+  }
+}

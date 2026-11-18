@@ -1,0 +1,27 @@
+@layer replica {
+  :where(.stage) {
+    /* AgentTranscriptSeparator: flex items-center gap-3 px-1 pt-8 pb-2 text-xs, with a h-px line
+       in bg-border on each side of a font-medium tracking-wide label. */
+    .st-separator {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      padding: calc(32 * var(--u)) calc(4 * var(--u)) calc(8 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .st-separator::before,
+    .st-separator::after {
+      content: "";
+      flex: 1;
+      height: calc(1 * var(--u));
+      background: var(--border);
+    }
+    .st-separator span {
+      flex: none;
+      font-weight: 500;
+      letter-spacing: 0.025em;
+    }
+  }
+}

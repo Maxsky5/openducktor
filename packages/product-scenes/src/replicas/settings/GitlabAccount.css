@@ -1,0 +1,227 @@
+@layer replica {
+  :where(.stage) {
+    /* GitlabAccountPanel: grid gap-3 border-t border-border pt-5. The buttons have gap-2. */
+    .gla {
+      display: grid;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+      padding-top: calc(20 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    .gla .ui-button {
+      gap: calc(8 * var(--u));
+    }
+    /* A title and its note: space-y-1, with text-sm font-medium and text-xs
+       text-muted-foreground. */
+    .gla-text {
+      display: grid;
+      align-content: start;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+    }
+    .gla-text b {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    .gla-text p {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .gla-text .gla-heading {
+      font-weight: 600;
+    }
+    /* IconTile: size-9 rounded-md border border-border bg-muted text-muted-foreground. */
+    .gla-tile {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--muted);
+      color: var(--muted-foreground);
+    }
+    /* Progress: flex items-center gap-2 text-xs text-muted-foreground with a size-4 spinner. */
+    .gla-text .gla-progress {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    .gla-progress > svg {
+      flex: none;
+    }
+    /* ConnectOptions: the option cards in columns of at least 18rem, gap-3. */
+    .gla-options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(288 * var(--u))), 1fr));
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    /* OptionCard: flex flex-col gap-4 rounded-lg border border-border p-4, with the content at the
+       bottom (mt-auto). */
+    .gla-option {
+      display: flex;
+      flex-direction: column;
+      gap: calc(16 * var(--u));
+      min-width: 0;
+      padding: calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+    }
+    .gla-option-head {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    .gla-option-body {
+      margin-top: auto;
+    }
+    .gla-wide {
+      width: 100%;
+    }
+    /* CreateTokenLink: a ghost Button of size xs with -mx-2, and ExternalLink at the end. */
+    .gla-link {
+      display: inline-flex;
+      align-items: center;
+      align-self: start;
+      justify-self: start;
+      gap: calc(8 * var(--u));
+      height: calc(24 * var(--u));
+      margin: 0 calc(-8 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(10 * var(--u));
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    /* The stacked TokenForm: the hidden label row leaves its gap-2 above the field and the button,
+       which have gap-2. The field has the KeyRound icon at left-3 and pl-9. */
+    .gla-token {
+      display: grid;
+      gap: calc(8 * var(--u));
+      padding-top: calc(8 * var(--u));
+    }
+    .gla-token-field {
+      position: relative;
+      display: block;
+      min-width: 0;
+    }
+    .gla-token-field > svg {
+      position: absolute;
+      top: 50%;
+      left: calc(12 * var(--u));
+      z-index: 1;
+      color: var(--muted-foreground);
+      transform: translateY(-50%);
+    }
+    .gla-token-field .ui-input {
+      padding-left: calc(36 * var(--u));
+    }
+    /* While the sign-in starts, the controls are disabled, and the sign-in button spins. */
+    .gla-busy-icon,
+    .gla-options[data-starting] .gla-idle-icon {
+      display: none;
+    }
+    .gla-options[data-starting] .gla-busy-icon {
+      display: block;
+    }
+    .gla-options[data-starting] :is(.ui-button, .ui-input) {
+      opacity: 0.5;
+    }
+    /* PendingSignIn: grid gap-4. From sm, the title row and the code row put their button at the
+       end. */
+    .gla-pending {
+      display: grid;
+      gap: calc(16 * var(--u));
+      min-width: 0;
+    }
+    .gla-pending-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    /* The one-time code: rounded-md border border-border bg-muted/30 px-3 py-2.5. The code is
+       font-mono text-base font-semibold tracking-wide. */
+    .gla-code {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+      padding: calc(10 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: color-mix(in oklab, var(--muted) 30%, transparent);
+    }
+    .gla-code strong {
+      font-family: var(--mono);
+      font-size: calc(16 * var(--u));
+      font-weight: 600;
+      line-height: calc(24 * var(--u));
+      letter-spacing: 0.025em;
+      overflow-wrap: anywhere;
+    }
+    .gla-end {
+      display: flex;
+      justify-content: flex-end;
+    }
+    /* LinkedAccount: grid gap-3 rounded-lg border border-border p-4. The row wraps its buttons, and
+       its title and detail have space-y-0.5. */
+    .gla-linked {
+      display: grid;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+      padding: calc(16 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(12 * var(--u));
+    }
+    .gla-linked-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    .gla-linked-who {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    .gla-linked-who .gla-text {
+      gap: calc(2 * var(--u));
+    }
+    .gla-linked-who b,
+    .gla-detail {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gla-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(8 * var(--u));
+    }
+    /* While the app checks the link, the detail shows the progress. */
+    .gla-linked:not([data-checking]) .gla-checking,
+    .gla-linked[data-checking] .gla-detail {
+      display: none;
+    }
+    /* A phone stage: below sm, the title row and the code row of the pending sign-in stack. */
+    @container stage (width <= 500px) {
+      .gla-pending-head,
+      .gla-code {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+  }
+}

@@ -4,6 +4,8 @@
 // the file to the line of the comment. The names, the times, and the coverage are fictional.
 // Sources: threads.ts and suggestions.ts in packages/host/src/adapters/git-providers/github/review.
 import type { CiComment } from "../../replicas/studio/comments";
+import type { CallData } from "../../replicas/transcript/model";
+import { bash, edit } from "../../sample/calls";
 import { HOOK_PATH, REVIEWED_HOOK_LINES } from "../../sample/studio";
 import { TASK_BRANCH } from "../../sample/worktree";
 
@@ -105,21 +107,31 @@ export const COMMENTS: readonly CiComment[] = [
 /** The message that the visitor sends to the Builder. */
 export const ASK = "Apply maya's suggestion in use-search-shortcut.ts and push.";
 
-/** The rows of the turn before the comments, and of the turn that applies the suggestion. */
-export const ROWS = {
-  create: {
-    args: 'gh pr create --base main --title "feat(search): open search from anywhere with Cmd+K"',
-    duration: "1.9s",
-    time: "10:24:40 AM",
-  },
-  watch: { args: `gh pr checks ${PR_NUMBER} --watch`, duration: "1m 52s", time: "10:27:43 AM" },
-  commit: {
-    args: 'git commit -am "fix(search): skip the shortcut while text composes"',
-    duration: "0.3s",
-    time: "10:43:41 AM",
-  },
-  push: { args: `git push origin ${TASK_BRANCH}`, duration: "1.2s", time: "10:43:44 AM" },
-} as const;
+/**
+ * The tool runs of the turn before the comments, which the Set Pull Request card and the final
+ * reply divide, and of the turn that applies the suggestion.
+ */
+export const RUNS = {
+  create: [
+    bash(
+      "create",
+      'gh pr create --base main --title "feat(search): open search from anywhere with Cmd+K"',
+      "1.9s",
+      "10:24:40 AM",
+    ),
+  ],
+  watch: [bash("watch", `gh pr checks ${PR_NUMBER} --watch`, "1m52s", "10:27:43 AM")],
+  apply: [
+    edit("edit", HOOK_PATH, { add: 1, del: 0 }, "33ms", "10:43:31 AM"),
+    bash(
+      "commit",
+      'git commit -am "fix(search): skip the shortcut while text composes"',
+      "304ms",
+      "10:43:41 AM",
+    ),
+    bash("push", `git push origin ${TASK_BRANCH}`, "1.2s", "10:43:44 AM"),
+  ],
+} as const satisfies Record<string, readonly CallData[]>;
 
 /** The final reply of the turn that published the pull request. */
 export const READY =

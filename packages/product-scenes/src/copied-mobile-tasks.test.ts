@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { APPROVAL_MODES, APPROVAL_TEXT, MERGE_METHODS } from "./replicas/mobile/ApproveSheet";
+import { APPROVAL_MODES } from "./replicas/approval";
+import { APPROVAL_TEXT, MERGE_METHODS, publishButtonLabel } from "./replicas/mobile/ApproveSheet";
 import { PHONE_LANES } from "./replicas/mobile/LaneSwitcher";
 import { START_SHEET_TEXT } from "./replicas/mobile/StartSessionSheet";
 import {
@@ -192,9 +193,11 @@ describe("the task screens of the mobile app copied in the replicas", () => {
 
   test("the publish step pushes the target branch and names it in the toast", () => {
     const publishTarget = { branch: BRANCH, remote: "origin" };
-    expect(approval.directMergeCompletionButtonLabel({ isSubmitting: false, publishTarget })).toBe(
-      `Push ${BRANCH} and mark done`,
-    );
+    for (const isSubmitting of [false, true]) {
+      expect(approval.directMergeCompletionButtonLabel({ isSubmitting, publishTarget })).toBe(
+        publishButtonLabel(BRANCH, isSubmitting),
+      );
+    }
     expect(canonicalTargetBranch(publishTarget)).toBe(REMOTE_BRANCH);
     expect(DONE.description).toBe(REMOTE_BRANCH);
   });

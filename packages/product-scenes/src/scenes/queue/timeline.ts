@@ -32,6 +32,7 @@ export const build: SceneBuilder = (scene) => {
 
   // Start: the agent runs the search tests, and the queue is empty.
   stack.clear();
+  const endSearchTests = rows.running(row("search-tests"));
 
   /** Types `text` in the composer, and Enter queues it as the card `id`. Returns the time of Enter. */
   const queue = (id: string, text: string, at: number): number => {
@@ -76,10 +77,9 @@ export const build: SceneBuilder = (scene) => {
   cursor.hide(delivered);
   rows.show(row("steer"), delivered + 0.05);
 
-  // The search tests end. The agent reads the message and adds the keymap tests to the run.
-  scene.at(delivered + 0.5, () =>
-    must(row("search-tests"), "[data-tool]").removeAttribute("data-running"),
-  );
+  // The search tests end, and their tool run folds under the steered message. The agent reads the
+  // message and adds the keymap tests to the run.
+  endSearchTests(delivered + 0.5);
   const answered = rows.say(row("ack"), delivered + 0.7);
   const tested = rows.tool(row("keymap-tests"), answered + 0.2, 0.9);
 

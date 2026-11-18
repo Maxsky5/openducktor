@@ -41,7 +41,7 @@ export const build: SceneBuilder<ChatTemplate> = (scene) => {
   const menu = must(root, "[data-slash]");
   const meter = must(root, "[data-meter]");
   const row = (name: string): HTMLElement => must(track, `[data-row="${name}"]`);
-  const searchArgs = must(row("search"), "[data-tool-args]");
+  const searchArgs = must(row("search"), "[data-call-summary]");
   const setActivity = composerActivity(root);
   const sessions = sessionList(scene, root);
   const setContext = contextMeter(meter);

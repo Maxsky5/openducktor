@@ -19,5 +19,14 @@
     :where([data-framed]) & .mob-touch {
       display: none;
     }
+    /* The highlight feedback of Touchable: the strong fill under the content of a row. finger.ts
+       moves `--press` from 0 to 1 while the finger presses the row. */
+    .mob-phone [data-feedback="highlight"] {
+      --press: 0;
+      background-image: linear-gradient(
+        color-mix(in oklab, var(--m-fill-strong) calc(var(--press) * 100%), transparent),
+        color-mix(in oklab, var(--m-fill-strong) calc(var(--press) * 100%), transparent)
+      );
+    }
   }
 }

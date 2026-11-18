@@ -1,18 +1,60 @@
 @layer replica {
   :where(.stage) {
     /* The transcript is an inverted list: its newest row sits at the bottom, and the older rows
-       leave at the top under the rail. */
+       leave at the top under the rail. The rows keep the 16 point screen margins, and the space
+       under the latest message is 16 points high. */
     .mob-transcript {
+      position: relative;
       display: flex;
       flex: 1;
       flex-direction: column;
       justify-content: flex-end;
       min-height: 0;
       overflow: hidden;
-      padding: 0 calc(14 * var(--u));
+      padding: 0 calc(16 * var(--u)) calc(16 * var(--u));
     }
     .mob-track {
       flex: 0 0 auto;
+    }
+    /* The space under the latest message is a cell of the list of the app. While a tool run opens
+       or folds, it is opaque, as the rows under the run are, so it covers the calls that move. */
+    .mob-transcript:has(> .mob-track > [data-cover])::after {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 1;
+      height: calc(16 * var(--u));
+      background: var(--chat-background);
+      content: "";
+    }
+    /* TranscriptTopButton: a round 36 point card with an up arrow, 8 points under the top of the
+       transcript. While it hides, it is 12 points higher and transparent. */
+    .mob-top-button {
+      position: absolute;
+      top: calc(8 * var(--u));
+      left: calc(50% - 18 * var(--u));
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      box-shadow: var(--m-shadow-raised);
+      color: var(--muted-foreground);
+      opacity: 0;
+      transform: translateY(calc(-12 * var(--u)));
+    }
+    .mob-top-button[data-shown] {
+      opacity: 1;
+      transform: none;
+    }
+    .mob-top-button .lucide {
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
     }
     /* SessionPendingInput: 12 point margins, 8 points above and 4 points under the cards. */
     .mob-pending {

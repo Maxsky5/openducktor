@@ -14,11 +14,12 @@
       border-color: var(--warning-border);
       background: var(--warning-surface);
     }
+    /* The header: as high as the 48 dp touch target of Android at least. */
     .mob-request-head {
       display: flex;
       align-items: center;
       gap: calc(8 * var(--u));
-      min-height: calc(44 * var(--u));
+      min-height: calc(48 * var(--u));
       padding: calc(6 * var(--u)) calc(12 * var(--u));
     }
     .mob-request-text {
@@ -28,6 +29,7 @@
     }
     .mob-request-title {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: calc(8 * var(--u));
       color: var(--foreground);
@@ -70,6 +72,18 @@
       gap: calc(8 * var(--u));
       padding: calc(10 * var(--u));
       border-top: calc(1 * var(--u)) solid var(--request-line);
+    }
+    /* The feedback rows under the body, and RequestStatusLine of request-feedback.tsx: a quiet
+       footnote line, such as the submit progress. */
+    .mob-request-feedback {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: calc(8 * var(--u));
+      padding: 0 calc(10 * var(--u)) calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
     }
     /* A reply button of session-button.tsx: 36 points high, rounded 10, 13 point medium text. */
     .mob-reply {

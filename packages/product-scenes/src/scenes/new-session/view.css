@@ -1,0 +1,18 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * New session: the window is as tall as the New session dialog with the filled fields of New
+     * worktree and the margin of its positioner, so the dialog shows every field without a scroll,
+     * as in a window of normal height. A phone stage keeps the height of the other scenes, and the
+     * dialog body scrolls.
+     */
+    .ns-window {
+      --window-height: 936;
+    }
+    @container stage (width <= 500px) {
+      .ns-window {
+        --window-height: 640;
+      }
+    }
+  }
+}

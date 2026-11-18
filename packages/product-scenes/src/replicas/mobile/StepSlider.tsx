@@ -1,7 +1,8 @@
 // The stepped track of the effort and speed fields, as step-track.tsx in apps/mobile/src/ui at
-// rest: a rounded shell with a tick at each stop, the fill up to the thumb, and the white thumb
-// on the chosen stop. The space over the track holds the label that shows only while the finger
-// drags, so it stays empty here. Sources: model-field.tsx and step-track-geometry.ts.
+// rest: a rounded shell, the fill up to the thumb, the white thumb on the chosen stop, and a tick
+// at each stop over them. The tick under the thumb turns dark, or hides when the thumb shows a
+// mark. The space over the track holds the label that shows only while the finger drags, so it
+// stays empty here. Sources: model-field.tsx and step-track-geometry.ts.
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { flag } from "../flag";
 import "./StepSlider.css";
@@ -15,16 +16,31 @@ type StepSliderProps = {
   fill: "effort" | "standard";
   /** A mark in the thumb, such as the speed icon. */
   mark?: ReactNode;
+  /** The track takes no change, such as the effort of a reused session: it shows at half opacity. */
+  disabled?: boolean;
 };
 
-export function StepSlider({ stops, value, fill, mark }: StepSliderProps): ReactElement {
+export function StepSlider({
+  stops,
+  value,
+  fill,
+  mark,
+  disabled = false,
+}: StepSliderProps): ReactElement {
   const place: CSSProperties & { "--slider-at": number } = {
     "--slider-at": stops > 1 ? value / (stops - 1) : 0,
   };
   return (
-    <span className="mob-slider" style={place} data-fill={fill}>
+    <span
+      className="mob-slider"
+      style={place}
+      data-fill={fill}
+      data-marked={flag(mark !== undefined)}
+      data-disabled={flag(disabled)}
+    >
       <span className="mob-slider-shell">
         <i className="mob-slider-fill" />
+        <span className="mob-slider-thumb">{mark}</span>
         {Array.from({ length: stops }, (_, index) => {
           const tick: CSSProperties & { "--slider-tick": number } = {
             "--slider-tick": stops > 1 ? index / (stops - 1) : 0,
@@ -35,11 +51,10 @@ export function StepSlider({ stops, value, fill, mark }: StepSliderProps): React
               key={index}
               className="mob-slider-tick"
               style={tick}
-              data-under={flag(index < value)}
+              data-on-thumb={flag(index === value)}
             />
           );
         })}
-        <span className="mob-slider-thumb">{mark}</span>
       </span>
     </span>
   );

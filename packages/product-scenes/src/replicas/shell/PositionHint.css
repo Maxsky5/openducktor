@@ -1,0 +1,22 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The Kbd of PositionHint: h-4 min-w-4 max-w-24 text-foreground. It keeps its place while it
+     * is hidden, and the window shows it with data-hints, with no fade, as position-hints.css does.
+     */
+    .position-hint {
+      visibility: hidden;
+    }
+    .position-hint kbd {
+      height: calc(16 * var(--u));
+      min-width: calc(16 * var(--u));
+      max-width: calc(96 * var(--u));
+      overflow: hidden;
+      color: var(--foreground);
+      white-space: nowrap;
+    }
+    [data-hints] .position-hint {
+      visibility: visible;
+    }
+  }
+}

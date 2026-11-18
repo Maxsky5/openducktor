@@ -1,0 +1,17 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * Fork: the window is as tall as the Fork session dialog with New worktree and the margin of
+     * its positioner, so the dialog shows every field without a scroll, as in a window of normal
+     * height. A phone stage keeps the height of the other scenes, and the dialog body scrolls.
+     */
+    .fk-window {
+      --window-height: 704;
+    }
+    @container stage (width <= 500px) {
+      .fk-window {
+        --window-height: 640;
+      }
+    }
+  }
+}

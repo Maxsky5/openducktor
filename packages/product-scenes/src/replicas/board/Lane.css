@@ -1,6 +1,7 @@
 @layer replica {
   :where(.stage) {
-    /* The status colors of task-status-presentation.ts. Each lane status sets its hue below. */
+    /* The status colors of task-status-presentation.ts. Each lane status sets its hue below. An
+       open lane is as tall as its cards, as KanbanColumn in kanban-column.tsx is. */
     .lane {
       --lane-border: color-mix(in oklab, var(--lane-200) 90%, transparent);
       --lane-surface: color-mix(in oklab, var(--lane-50) 55%, transparent);
@@ -13,7 +14,6 @@
       flex-direction: column;
       width: calc(328 * var(--u));
       flex: 0 0 auto;
-      min-height: calc(384 * var(--u));
       overflow: hidden;
       border: calc(1 * var(--u)) solid var(--lane-border);
       border-radius: calc(16 * var(--u));
@@ -190,9 +190,11 @@
       font-weight: 500;
       line-height: calc(16 * var(--u));
     }
-    /* A collapsed lane is an empty lane at 36px. The same element expands when a task arrives. */
+    /* A collapsed lane is an empty lane at 36px, with min-h-96 of kanban-collapsed-column.tsx. The
+       same element expands when a task arrives. */
     .lane[data-collapsed] {
       width: calc(36 * var(--u));
+      min-height: calc(384 * var(--u));
     }
     .lane[data-collapsed] .lane-head {
       align-items: center;

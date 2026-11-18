@@ -30,6 +30,11 @@ export type Scene<Template extends string = never> = {
   templateOf: (name: Template) => HTMLElement;
   /** Keeps the last frame on screen until `time`, where the scene ends. */
   endAt: (time: number) => void;
+  /**
+   * Names a key moment of the run, such as the tap that approves a request. A film reads these
+   * names to move its camera and to show its captions at the same time as the scene.
+   */
+  mark: (name: string, time: number) => void;
 };
 
 /** The builder of a view. It gets a new scene for each run. */
@@ -75,6 +80,10 @@ export function createScene(
     templateOf,
     endAt: (time) => {
       timeline.set({}, {}, time);
+    },
+    mark: (name, time) => {
+      if (name in timeline.labels) throw new Error(`The scene marks ${name} twice.`);
+      timeline.addLabel(name, time);
     },
   };
 }

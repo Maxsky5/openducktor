@@ -24,11 +24,13 @@ export function QueuePanel({ text, hidden }: QueuePanelProps): ReactElement {
   return (
     <div className="mob-queue" data-queue="" hidden={hidden}>
       <div className="mob-queue-card" data-queue-card="" data-state="queued" data-spread="false">
-        <span className="mob-queue-glyph">
-          <Clock3 className="mob-queue-wait" />
-          <LoaderCircle className="mob-queue-busy spin" />
+        <span className="mob-queue-content" data-queue-open="" data-feedback="opacity">
+          <span className="mob-queue-glyph">
+            <Clock3 className="mob-queue-wait" />
+            <LoaderCircle className="mob-queue-busy spin" />
+          </span>
+          <p className="mob-queue-text">{text}</p>
         </span>
-        <p className="mob-queue-text">{text}</p>
         <span className="mob-queue-status" data-for="queued">
           {QUEUE_STATUS_LABELS.queued}
         </span>
@@ -36,13 +38,13 @@ export function QueuePanel({ text, hidden }: QueuePanelProps): ReactElement {
           {QUEUE_STATUS_LABELS.steering}
         </span>
         <span className="mob-queue-actions">
-          <span className="mob-queue-action" data-queue-action="steer">
+          <span className="mob-queue-action" data-queue-action="steer" data-feedback="opacity">
             <Zap />
           </span>
-          <span className="mob-queue-action" data-queue-action="edit">
+          <span className="mob-queue-action" data-queue-action="edit" data-feedback="opacity">
             <Pencil />
           </span>
-          <span className="mob-queue-action" data-queue-action="remove">
+          <span className="mob-queue-action" data-queue-action="remove" data-feedback="opacity">
             <Trash2 />
           </span>
         </span>

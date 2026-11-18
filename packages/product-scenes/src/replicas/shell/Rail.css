@@ -47,6 +47,18 @@
       gap: calc(2 * var(--u));
       transform: translateY(-33.333%);
     }
+    /* The position hint of a workspace: absolute -bottom-1 left-1/2 max-w-12 -translate-x-1/2
+       shadow-sm, under the middle of the tile. */
+    .rail .tile-hint {
+      position: absolute;
+      bottom: calc(-4 * var(--u));
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    .rail .tile-hint kbd {
+      max-width: calc(48 * var(--u));
+      box-shadow: var(--shadow-sm);
+    }
     .tile-badge.input {
       width: calc(10 * var(--u));
       height: calc(10 * var(--u));

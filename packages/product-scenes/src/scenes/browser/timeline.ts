@@ -20,7 +20,7 @@ export const build: SceneBuilder = (scene) => {
   const root = must(scene.stage, "[data-root]");
   const panel = sessionPanel(root);
   const cursor = pointer(scene, root);
-  const tip = tooltip(root);
+  const tip = tooltip(scene, root);
   const keys = keystrokes(scene);
   const browser = browserTab(scene, root, cursor);
   const add = must(panel.strip, "[data-strip-add]");

@@ -19,20 +19,33 @@
     .mob-approval-muted {
       color: var(--muted-foreground);
     }
-    /* The working directory on one line: the start of the path shrinks and ends with an
-       ellipsis, and its last two folders stay. */
+    /* The working directory on one line with the ellipsis in the middle. The end part is half of
+       the line and the ellipsis, 0.69 em of Space Grotesk, wide at most. Its right to left
+       direction keeps the end of the line, and its ellipsis shows before the first whole
+       character. The start part wraps at any character and shows its first line, so it ends
+       with a whole character too. */
     .mob-approval-path {
       display: flex;
       color: var(--muted-foreground);
-      white-space: nowrap;
     }
-    .mob-approval-path > span:first-child {
+    .mob-approval-path-start {
+      flex: 1 1 0;
       min-width: 0;
+      height: calc(16 * var(--u));
       overflow: hidden;
+      word-break: break-all;
+    }
+    .mob-approval-path-end {
+      flex: 0 0 auto;
+      max-width: calc(50% + 0.345em);
+      overflow: hidden;
+      direction: rtl;
+      white-space: nowrap;
       text-overflow: ellipsis;
     }
-    .mob-approval-path > span:last-child {
-      flex: 0 0 auto;
+    .mob-approval-path-end > span {
+      direction: ltr;
+      unicode-bidi: isolate;
     }
     .mob-replies {
       display: flex;

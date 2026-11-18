@@ -7,8 +7,9 @@
 // times are fictional.
 import type { RailStep } from "../../replicas/mobile/MobileRail";
 import type { MenuItem } from "../../replicas/mobile/QuickActionsMenu";
-import type { MobileTool } from "../../replicas/mobile/TranscriptRows";
+import type { MobileCall } from "../../replicas/mobile/ToolRun";
 import type { RoleId } from "../../replicas/vocabulary";
+import { codexCommand } from "../../sample/mobile";
 import { TASKS } from "../../sample/tasks";
 import {
   CircleCheckBig,
@@ -76,30 +77,26 @@ export const DESTINATIONS = ["github.com:sam/fieldnotes.git"] as const;
 /** The toast of a completed direct merge: the message and the remote branch. */
 export const DONE = { message: "Task moved to Done", description: REMOTE_BRANCH } as const;
 
-/** The last tool calls of the Builder before the review. */
+/** The time of the message that starts the fix turn of the Builder. */
+export const FIX_KICKOFF_TIME = "10:11:12 AM";
+
+/** The last tool calls of the Builder before the review, in one run. */
 export const TOOLS = {
-  test: {
-    type: "bash",
-    name: "bash",
-    summary: "bun test src/search",
-    duration: "2.4s",
-    time: "10:12:08 AM",
-  },
-  lint: {
-    type: "bash",
-    name: "bash",
-    summary: "bun run lint",
-    duration: "3.8s",
-    time: "10:12:15 AM",
-  },
-  commit: {
-    type: "bash",
-    name: "bash",
-    summary: 'git commit -m "fix: keep focus in the search field"',
-    duration: "0.3s",
-    time: "10:12:21 AM",
-  },
-} as const satisfies Record<string, MobileTool>;
+  test: codexCommand("bash", "bun test src/search", "2.4s", "10:12:08 AM"),
+  lint: codexCommand("bash", "bun run lint", "3.8s", "10:12:15 AM"),
+  commit: codexCommand(
+    "bash",
+    'git commit -m "fix: keep focus in the search field"',
+    "300ms",
+    "10:12:21 AM",
+  ),
+} as const satisfies Record<string, MobileCall>;
+
+/** The calls of the run, which is folded, because the last reply follows it. */
+export const RUN = ["test", "lint", "commit"] as const satisfies readonly (keyof typeof TOOLS)[];
+
+/** The time that the fix turn took, from its first message to the last reply. */
+export const WORKED = "1m13s";
 
 /** The last reply of the Builder, after its fix for the QA review. */
 export const SUMMARY =

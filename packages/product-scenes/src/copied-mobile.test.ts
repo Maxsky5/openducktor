@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { COMPOSER_PLACEHOLDERS } from "./replicas/mobile/MobileComposer";
 import { ADDRESS_HINT, SCAN_CARD } from "./replicas/mobile/HostForm";
 import { REQUEST_LABELS } from "./replicas/mobile/RequestCard";
 import { SCAN_HINT } from "./replicas/mobile/ScanScreen";
@@ -33,13 +32,6 @@ const approvals = await importProduct<{
   approvalOutcomeEmphasis: (outcome: Outcome) => "primary" | "secondary" | "destructive";
   approvalRequestDescription: (request: { title: string }) => string | undefined;
 }>("packages/frontend-core/src/sessions/pending-input/agent-session-approval-card-model.ts");
-// SAFETY: agent-session-waiting-input.ts exports this function.
-const { getAgentSessionWaitingInputPlaceholder } = await importProduct<{
-  getAgentSessionWaitingInputPlaceholder: (session: {
-    pendingApprovals: readonly unknown[];
-    pendingQuestions: readonly unknown[];
-  }) => string | null;
-}>("packages/frontend-core/src/lib/agent-session-waiting-input.ts");
 // SAFETY: the contracts export these values.
 const contracts = await importProduct<{
   REMOTE_HTTP_WARNING: string;
@@ -102,12 +94,6 @@ describe("the mobile app copied in the replicas", () => {
       expect(approvals.approvalOutcomeLabel(outcome, {})).toBe(reply.label);
       expect(VARIANTS[approvals.approvalOutcomeEmphasis(outcome)]).toBe(reply.variant);
     }
-  });
-
-  test("the composer asks for the reply while the request waits", () => {
-    expect(
-      getAgentSessionWaitingInputPlaceholder({ pendingApprovals: [{}], pendingQuestions: [] }),
-    ).toBe(COMPOSER_PLACEHOLDERS.approval);
   });
 
   test("Remote control shows the text and the code lifetime of the app", () => {

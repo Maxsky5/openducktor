@@ -1,14 +1,16 @@
 // The session start modal of session-start-modal.tsx. Session mode shows only when the launch
 // action allows more than one mode. Reuse and fork are disabled when no session exists yet.
 // Reuse mode keeps the model of the existing session. The target branch shows for the
-// implementation start and the pull request launch actions. A start from the task actions of
-// the board or the command palette can also run in the background: the dialog then closes, and the
-// startup notification shows the progress. A model with more than one
-// speed shows Speed next to Effort, and a fresh session starts at Standard. The title names the
-// role, and the description follows the start modes, as use-session-start-modal-coordinator.ts
-// builds them. A launch with a goal shows the Goal mode switch above Customize first message, and
-// a start that makes a new worktree shows its startup progress in the dialog.
-import { Layers, Play, X } from "lucide-react";
+// implementation start and the pull request launch actions. The start runner of
+// use-session-start-modal-runner.ts offers Run in background for each start: the dialog then
+// closes, and the startup notification shows the progress. A model with more than one speed shows
+// Speed next to Effort, and a fresh session starts at Standard. The title names the role, and the
+// description follows the start modes, as use-session-start-modal-coordinator.ts builds them. A
+// launch with a goal shows the Goal mode switch above Customize first message, and a start that
+// makes a new worktree shows its startup progress in the dialog. While the start runs, the dialog
+// has `data-starting`: the fields and Cancel are disabled, the close button goes, Start session
+// shows the spinner and Starting…, and Run in background becomes Continue in background.
+import { Layers, LoaderCircle, Play, X } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import type { Session } from "../../sample/sessions";
 import { flag } from "../flag";
@@ -48,6 +50,14 @@ const MODE_LABELS = {
   reuse: "Reuse existing",
   fork: "Fork existing",
 } as const satisfies Record<Mode, string>;
+
+/** The labels of the footer of session-start-modal.tsx, before and while the start runs. */
+export const START_FOOTER_TEXT = {
+  start: "Start session",
+  starting: "Starting…",
+  background: "Run in background",
+  continue: "Continue in background",
+} as const;
 
 /** The description of a dialog with one start mode. */
 const MODE_DESCRIPTIONS = {
@@ -137,17 +147,22 @@ export function StartDialog({
           </div>
         </div>
         <div className="st-dialog-foot">
-          <Button variant="outline">Cancel</Button>
+          <Button variant="outline" className="st-cancel">
+            Cancel
+          </Button>
           <span className="st-dialog-actions">
             {background && (
               <Button variant="secondary" data-background>
                 <Layers className="i16" />
-                Run in background
+                <span className="st-ready">{START_FOOTER_TEXT.background}</span>
+                <span className="st-starting">{START_FOOTER_TEXT.continue}</span>
               </Button>
             )}
-            <Button data-start>
-              <Play className="i16" />
-              Start session
+            <Button className="st-start" data-start>
+              <Play className="i16 st-ready" />
+              <LoaderCircle className="i16 spin st-starting" />
+              <span className="st-ready">{START_FOOTER_TEXT.start}</span>
+              <span className="st-starting">{START_FOOTER_TEXT.starting}</span>
             </Button>
           </span>
         </div>
@@ -157,7 +172,7 @@ export function StartDialog({
             <div className="st-progress-foot">
               <Button variant="secondary" size="sm">
                 <Layers className="i16" />
-                Continue in background
+                {START_FOOTER_TEXT.continue}
               </Button>
             </div>
           </div>

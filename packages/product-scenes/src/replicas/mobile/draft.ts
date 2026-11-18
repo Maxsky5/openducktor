@@ -1,5 +1,6 @@
-// The draft of the composer of MobileComposer.tsx. A typed draft replaces the placeholder, opens
-// Send, and shows the second send control while the agent works. A send empties the field.
+// The draft of the composer of MobileComposer.tsx. A typed draft replaces the placeholder, shows
+// the caret after the text, opens Send, and shows the second send control while the agent works. A
+// send empties the field.
 import { must } from "../../motion/dom";
 import type { Scene } from "../../motion/scene";
 import { typeText } from "../../motion/text";

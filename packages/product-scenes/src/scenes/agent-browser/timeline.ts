@@ -31,7 +31,7 @@ export const build: SceneBuilder = (scene) => {
   const root = must(scene.stage, "[data-root]");
   const panel = sessionPanel(root);
   const cursor = pointer(scene, root);
-  const tip = tooltip(root);
+  const tip = tooltip(scene, root);
   const browser = browserTab(scene, root, cursor);
   const marker = agentMarker(scene, root);
   const track = must(root, "[data-track]");

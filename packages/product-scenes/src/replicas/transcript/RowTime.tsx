@@ -1,13 +1,13 @@
-// The duration and the time of a transcript row. A running row shows a spinner instead of the
-// duration.
-import { LoaderCircle } from "lucide-react";
+// The timing of an ODT tool card: ToolMessageTiming of agent-chat-tool-message-timing.tsx. A
+// running card shows moving bars and no duration yet.
 import type { ReactElement } from "react";
+import { RunningBars } from "./RunningBars";
 import "./RowTime.css";
 
 export function RowTime({ duration, time }: { duration: string; time: string }): ReactElement {
   return (
     <span className="st-time">
-      <LoaderCircle className="i12 spin" />
+      <RunningBars className="st-time-bars" />
       <span className="st-duration">{duration}</span>
       <span>{time}</span>
     </span>

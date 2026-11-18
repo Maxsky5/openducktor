@@ -23,6 +23,11 @@ export function offsetIn(element: HTMLElement, root: HTMLElement): Point {
       y += node.clientTop - node.scrollTop;
     }
   }
-  if (node !== root) throw new Error("Scene element is outside its positioned root.");
+  if (node !== root) {
+    const hooks = [...element.attributes].map((attribute) => attribute.name).join(" ");
+    throw new Error(
+      `Scene element <${element.localName} ${hooks}> is outside its positioned root.`,
+    );
+  }
   return { x, y };
 }

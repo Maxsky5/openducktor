@@ -1,11 +1,13 @@
 // The workflow rail of a task session in agent-studio-header-workflow-rail.tsx: one step for each
-// role, above the chat column. A step shows the role icon, its label, and the icon of its state.
-// The compact rail is WorkflowRailPreview, in the session preview of the sidebar.
+// role, above the chat column. A step shows the role icon, its label, and the icon of its state. An
+// in-progress step shows the spinner while its session works, and CircleDotDashed when the session
+// does not work. The compact rail is WorkflowRailPreview, in the session preview of the sidebar.
 import {
   Check,
   ChevronRight,
   Circle,
   CircleDashed,
+  CircleDotDashed,
   LoaderCircle,
   TriangleAlert,
 } from "lucide-react";
@@ -40,6 +42,7 @@ export function WorkflowRail({
                 <span className="st-step-state">
                   <Check className="i14 done" />
                   <LoaderCircle className="i14 spin working" />
+                  <CircleDotDashed className="i14 idle" />
                   <CircleDashed className="i14 waiting" />
                   <TriangleAlert className="i14 alert" />
                   <Circle className="i12 available" />

@@ -17,7 +17,7 @@ export const PAGE_TITLE = "Fieldnotes";
 export const BLANK_PAGE = "Blank page";
 
 /** The time that the last answer of the Builder took. */
-export const BUILDER_WORKED = "3m 12s";
+export const BUILDER_WORKED = "3m12s";
 
 /** The last answer of the Builder. Backticks mark the inline code. */
 export const BUILDER_REPLY =

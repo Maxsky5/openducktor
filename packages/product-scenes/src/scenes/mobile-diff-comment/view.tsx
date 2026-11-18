@@ -19,8 +19,10 @@ import { PendingCommentsNotice } from "../../replicas/mobile/PendingCommentsNoti
 import { PhoneFrame } from "../../replicas/mobile/PhoneFrame";
 import { SessionScreen } from "../../replicas/mobile/SessionScreen";
 import { Touch } from "../../replicas/mobile/Touch";
-import { AgentMessage, ToolRow, UserBubble } from "../../replicas/mobile/TranscriptRows";
+import { ToolRun } from "../../replicas/mobile/ToolRun";
+import { AgentMessage, TurnSeparator } from "../../replicas/mobile/TranscriptRows";
 import { UserMessageRow } from "../../replicas/mobile/UserMessageRow";
+import { BUILD_KICKOFF_TIME } from "../../sample/mobile";
 import { BUILDER_SESSION, KICKOFF } from "../../sample/studio";
 import { TASKS } from "../../sample/tasks";
 import {
@@ -33,11 +35,13 @@ import {
   MENU_TITLE,
   RAIL,
   ROWS,
+  RUNS,
   SENT_MESSAGE,
   SENT_TIME,
   SESSION_ACTIONS,
   STEPS,
   TOOLS,
+  WORKED,
 } from "./sample";
 import "./view.css";
 
@@ -45,16 +49,10 @@ import "./view.css";
 function EarlierRows(): ReactElement {
   return (
     <>
-      <UserBubble text={KICKOFF.build} />
-      <ToolRow tools={TOOLS} id="guide" />
-      <ToolRow tools={TOOLS} id="keymapRead" />
-      <ToolRow tools={TOOLS} id="list" />
-      <ToolRow tools={TOOLS} id="shell" />
-      <ToolRow tools={TOOLS} id="lint" />
-      <ToolRow tools={TOOLS} id="test" />
-      <ToolRow tools={TOOLS} id="typecheck" />
-      <ToolRow tools={TOOLS} id="commit" />
-      <AgentMessage paragraphs={[DONE]} />
+      <UserMessageRow text={KICKOFF.build} time={BUILD_KICKOFF_TIME} />
+      <ToolRun tools={TOOLS} calls={RUNS.build} row="build" folded />
+      <TurnSeparator worked={WORKED} />
+      <AgentMessage paragraphs={[DONE]} footer={BUILDER_SESSION} />
     </>
   );
 }
@@ -103,7 +101,7 @@ export function MobileDiffCommentView(props: SceneViewProps): ReactElement {
                 <>
                   <EarlierRows />
                   <UserMessageRow text={SENT_MESSAGE} time={SENT_TIME} row="sent" hidden />
-                  <ToolRow tools={TOOLS} id="keymap" hidden />
+                  <ToolRun tools={TOOLS} calls={RUNS.reply} row="reply" folded />
                   <AgentMessage paragraphs={[ANSWER]} row="answer" hidden />
                 </>
               }

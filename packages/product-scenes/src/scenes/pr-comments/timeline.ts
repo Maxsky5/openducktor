@@ -29,7 +29,7 @@ export const build: SceneBuilder = (scene) => {
   const row = (id: string): HTMLElement => must(root, `[data-row="${id}"]`);
   const setActivity = composerActivity(root);
   const cursor = pointer(scene, root);
-  const tip = tooltip(root);
+  const tip = tooltip(scene, root);
   const refresh = must(root, "[data-checks-refresh]");
   const updated = must(root, "[data-checks-updated]");
   const composer = composerDraft(scene, root);
@@ -40,7 +40,7 @@ export const build: SceneBuilder = (scene) => {
   // every item, before the new review.
   comments.reset([APPROVAL], NOW.first);
   updated.textContent = UPDATED.first;
-  for (const id of CHAT_ROWS) row(id).hidden = true;
+  for (const id of ["ask", "applied"]) row(id).hidden = true;
   setActivity("idle");
 
   // Humans leaves out the comment of the bot, and All shows it again.
@@ -94,9 +94,7 @@ export const build: SceneBuilder = (scene) => {
   // suggestion.
   const turn = (at: number): number => {
     cursor.hide(at - 0.3);
-    scene.at(at + 1.6, () => {
-      for (const id of CHAT_ROWS) row(id).hidden = false;
-    });
+    for (const id of CHAT_ROWS) rows.show(row(id), at + 1.6);
     return at + 1.6;
   };
   const replied = narrow ? turn(read + 0.5) : ask(read + 0.5);

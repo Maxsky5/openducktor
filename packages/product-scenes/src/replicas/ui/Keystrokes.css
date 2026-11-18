@@ -1,0 +1,41 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The held keys over the bottom of the window, in the middle. The display is not app UI: it
+     * shows the caps on a popover surface, so they read over the page and over a dialog.
+     */
+    .keystrokes {
+      position: absolute;
+      right: 0;
+      bottom: calc(28 * var(--u));
+      left: 0;
+      z-index: 28;
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+    }
+    /* The host shows the keys itself. held-keys.ts still fills the display, which stays out. */
+    .keystrokes[data-by-host] {
+      display: none;
+    }
+    .keystrokes-tray {
+      gap: calc(8 * var(--u));
+      padding: calc(8 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(20 * var(--u));
+      background: var(--popover);
+      box-shadow: var(--shadow-xl);
+    }
+    /* Each cap is the key cap of a Keyboard shortcuts row at twice its size: h-6 min-w-6
+       rounded-md px-1.5 text-xs text-foreground. */
+    .keystrokes-tray kbd {
+      min-width: calc(48 * var(--u));
+      height: calc(48 * var(--u));
+      padding: 0 calc(12 * var(--u));
+      border-width: calc(2 * var(--u));
+      border-radius: calc(20 * var(--u));
+      color: var(--foreground);
+      font-size: calc(24 * var(--u));
+    }
+  }
+}
