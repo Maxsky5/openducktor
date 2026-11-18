@@ -22,7 +22,7 @@
       line-height: calc(16 * var(--u));
     }
     /* The radio group: grid gap-2, with four columns from the 3xl width of the form and two from
-       its sm width. A view sets the columns for the width of its form. */
+       its sm width. A phone stage shows the two columns. */
     .gps-tiles {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));

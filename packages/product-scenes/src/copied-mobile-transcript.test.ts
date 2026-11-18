@@ -14,6 +14,7 @@ import * as pullRequest from "./scenes/mobile-pull-request/sample";
 import * as question from "./scenes/mobile-question/sample";
 import * as startBuilder from "./scenes/mobile-start-builder/sample";
 import * as steer from "./scenes/mobile-steer/sample";
+import { lucideName } from "./test-support/lucide-name";
 import { importProduct, readProduct } from "./test-support/product-source";
 
 type ToolMeta = {
@@ -178,10 +179,6 @@ const componentName = (name: string | undefined): string =>
 /** The names that lucide-react exports `Icon` under, such as CircleHelp and CircleQuestionMark. */
 const exportNames = (Icon: LucideIcon): string[] =>
   Object.entries(lucide).flatMap(([name, value]) => (value === Icon ? [name] : []));
-
-/** The Lucide name of a lucide-react icon, such as file-text for FileText. */
-const lucideName = (displayName: string | undefined): string =>
-  (displayName ?? "").replace(/[a-z0-9](?=[A-Z])/g, "$&-").toLowerCase();
 
 describe("the transcript of the mobile app copied in the replicas", () => {
   test("a Codex command shows as bash with its command and the icon of its action", () => {

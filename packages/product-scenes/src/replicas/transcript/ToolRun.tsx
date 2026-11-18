@@ -14,8 +14,7 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { flag } from "../flag";
-import { FileTypeIcon } from "../ui/FileTypeIcon";
-import { CallIcon, CallTiming } from "./CallParts";
+import { CallIcon, CallSummary, CallTiming } from "./CallParts";
 import type { CallData } from "./model";
 import {
   callKind,
@@ -76,10 +75,11 @@ function RunCall({
             </span>
           ) : (
             call.summary && (
-              <span className="st-call-summary" data-call-text="">
-                {call.file && <FileTypeIcon path={call.summary} />}
-                <span data-call-summary="">{call.summary}</span>
-              </span>
+              <CallSummary
+                summary={call.summary}
+                file={call.file === true}
+                className="st-call-summary"
+              />
             )
           )}
         </span>
@@ -103,7 +103,7 @@ export function ToolRun({
 }: ToolRunProps): ReactElement {
   const kinds = calls.map(callKind);
   const title = runTitle(kinds);
-  const earlier = folded ? 0 : earlierCallCount(calls.length);
+  const earlier = earlierCallCount(calls.length);
   return (
     <section
       className="st-run"

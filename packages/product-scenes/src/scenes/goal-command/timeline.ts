@@ -4,14 +4,11 @@ import type { SceneBuilder } from "../../motion/scene";
 import { typeText } from "../../motion/text";
 import { composerActivity, composerDraft } from "../../replicas/shell/composer";
 import { pointer } from "../../replicas/shell/cursor";
-import { keystrokes } from "../../replicas/shell/keystrokes";
+import { keyPresses } from "../../replicas/ui/held-keys";
 import { composerMenu } from "../../replicas/studio/composer-menu";
 import { goalRow } from "../../replicas/studio/goal-row";
 import { follow, transcript } from "../../replicas/transcript/rows";
 import { OBJECTIVE, PAUSE, QUERY } from "./sample";
-
-/** The goal message and the final message of the goal turn. The calls join their run later. */
-const LATER_ROWS = ["goal", "final"];
 
 /**
  * The goal command: the visitor types /go, and the slash menu shows /goal with its hints. Enter
@@ -29,13 +26,12 @@ export const build: SceneBuilder = (scene) => {
   const setActivity = composerActivity(root);
   const rows = transcript(scene, root);
   const cursor = pointer(scene, root);
-  const keys = keystrokes(scene);
+  const keys = keyPresses(scene);
   const slash = composerMenu(root, "slash");
   const goal = goalRow(scene, root);
   follow(scene, track);
 
   // Start: the earlier turn ended, the session has no goal, and the draft is empty.
-  for (const name of LATER_ROWS) row(name).hidden = true;
   slash.close();
   goal.reset("active");
   setActivity("idle");

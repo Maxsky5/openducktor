@@ -14,8 +14,8 @@
       justify-content: center;
       pointer-events: none;
     }
-    /* The host shows the keys itself. held-keys.ts still fills the display, which stays out. */
-    .keystrokes[data-by-host] {
+    /* A captioned scene: the host shows the keys in its captions, so the display stays out. */
+    :where([data-captioned]) & .keystrokes {
       display: none;
     }
     .keystrokes-tray {

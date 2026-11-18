@@ -30,7 +30,8 @@ export type SceneViewProps = {
   framed?: boolean | undefined;
   /**
    * The host shows its own captions next to the scene, such as a film. The scene then hides the
-   * step list of the documentation, and the product view keeps its scale.
+   * step list of the documentation and the display of the held keys, and the product view keeps its
+   * scale. The host shows the held keys in its captions.
    */
   captioned?: boolean | undefined;
 };

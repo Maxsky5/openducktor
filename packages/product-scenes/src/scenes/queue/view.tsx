@@ -17,7 +17,8 @@ import { ToolRun } from "../../replicas/transcript/ToolRun";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
 import { signature } from "../../sample/sessions";
 import { KICKOFF } from "../../sample/studio";
-import { BUILD_CALLS, HELP_SEARCH, KEYMAP_TESTS, QUEUE_SESSION, QUEUED, SENT } from "./sample";
+import { BUILD_CALLS } from "../../sample/transcripts";
+import { HELP_SEARCH, KEYMAP_TESTS, QUEUE_SESSION, QUEUED, SENT } from "./sample";
 import "./view.css";
 
 /** The turn of the Builder until the search tests run, in one long tool run. */
@@ -25,7 +26,7 @@ function BuildRows(): ReactElement {
   return (
     <>
       <UserMessage time={SENT.kickoff}>{KICKOFF.build}</UserMessage>
-      <ToolRun calls={BUILD_CALLS} running={["search-tests"]} />
+      <ToolRun calls={BUILD_CALLS} running={["test"]} />
     </>
   );
 }

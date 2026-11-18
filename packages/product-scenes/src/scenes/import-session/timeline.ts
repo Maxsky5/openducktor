@@ -46,7 +46,6 @@ export const build: SceneBuilder<ImportSessionTemplate> = (scene) => {
   sessions.place(NAV.entries);
   dialog.reset();
   page.hidden = true;
-  followUp.hidden = true;
   must(page, "[data-meter]").hidden = true;
   setActivity("idle");
 

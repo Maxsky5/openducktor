@@ -85,7 +85,7 @@ export function createScene(
       timeline.set({}, {}, time);
     },
     mark: (name, time) => {
-      if (name in timeline.labels) throw new Error(`The scene marks ${name} twice.`);
+      if (Object.hasOwn(timeline.labels, name)) throw new Error(`The scene marks ${name} twice.`);
       timeline.addLabel(name, time);
     },
   };

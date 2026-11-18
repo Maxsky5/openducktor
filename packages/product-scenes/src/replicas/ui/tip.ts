@@ -1,10 +1,12 @@
 // The tooltip of Tooltip.tsx in a replica root. It opens with the motion of tooltip.css: it fades
-// in from 98 % over 150 ms with ease-out, and it closes in 50 ms.
+// in from 0 and grows from 98 % over 150 ms with ease-out, and it fades out in 50 ms. An open
+// tooltip that gets a new label keeps its place in the motion, as Radix changes only its content.
 import { must } from "../../motion/dom";
-import { designPixel } from "../../motion/effects";
+import { designPixel, fadeHide } from "../../motion/effects";
 import { gsap } from "../../motion/gsap";
 import { offsetIn } from "../../motion/offset";
 import type { Scene } from "../../motion/scene";
+import { EASE } from "../../motion/tokens";
 
 /** Seconds of the open and the close of a tooltip: --tooltip-open-dur and --tooltip-close-dur. */
 const OPEN = 0.15;
@@ -12,7 +14,8 @@ const CLOSE = 0.05;
 
 /**
  * The side of the trigger where a tooltip shows. TooltipContent of Radix shows on the top side
- * when the product gives no side.
+ * when the product gives no side, but the toolbar buttons of the scenes give `bottom`, so the
+ * replica shows there when a step gives no side.
  */
 type Side = "top" | "bottom";
 
@@ -33,6 +36,7 @@ export function tooltip(scene: Scene, root: HTMLElement): Tip {
   const arrow = must(tip, "[data-tip-arrow]");
 
   const show = (target: HTMLElement, label: string, side: Side = "bottom"): void => {
+    const opening = tip.hidden;
     text.textContent = label;
     tip.dataset.side = side;
     tip.hidden = false;
@@ -51,27 +55,24 @@ export function tooltip(scene: Scene, root: HTMLElement): Tip {
         : place.y + target.offsetHeight + 5 * pixel;
     gsap.set(tip, { x: left, y: top });
     gsap.set(arrow, { left: center - left });
+    if (!opening) return;
     scene.run(
       gsap.fromTo(
         tip,
-        { opacity: 0, scale: 0.98 },
-        { opacity: 1, scale: 1, duration: OPEN, ease: "power1.out", clearProps: "opacity" },
+        { autoAlpha: 0, scale: 0.98 },
+        {
+          autoAlpha: 1,
+          scale: 1,
+          duration: OPEN,
+          ease: EASE.gentle,
+          clearProps: "opacity,visibility",
+        },
       ),
     );
   };
 
   const hide = (): void => {
-    scene.run(
-      gsap.to(tip, {
-        opacity: 0,
-        duration: CLOSE,
-        ease: "power1.out",
-        onComplete: () => {
-          tip.hidden = true;
-          gsap.set(tip, { clearProps: "opacity" });
-        },
-      }),
-    );
+    scene.run(fadeHide(tip, CLOSE, EASE.gentle));
   };
 
   return { show, hide };

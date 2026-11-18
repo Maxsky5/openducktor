@@ -123,11 +123,6 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
   /** A row of a turn in the transcript. */
   const row = (turn: string, id: string): HTMLElement =>
     must(track, `[data-turn="${turn}"] [data-row="${id}"]`);
-  /** Hides the rows of `turns` at build time, so the scene can show them one by one. */
-  const hideTurns = (...turns: string[]): void => {
-    for (const turn of turns)
-      for (const item of all(track, `[data-turn="${turn}"] > *`)) item.hidden = true;
-  };
   const setSessionShown = (id: string): void => {
     for (const item of all(track, "[data-session]")) item.hidden = data(item, "session") !== id;
   };
@@ -151,7 +146,6 @@ export function studioWindow<Template extends string>(scene: Scene<Template>) {
     clearContext,
     context,
     row,
-    hideTurns,
     setSessionShown,
     switchSession,
     rows,

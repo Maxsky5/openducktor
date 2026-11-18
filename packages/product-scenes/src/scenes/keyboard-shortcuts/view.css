@@ -2,8 +2,8 @@
   :where(.stage) {
     /*
      * Keyboard shortcuts: the window is wider than the lg breakpoint, so the repository settings
-     * show their menu next to the section, as in the gitlab scene. It is tall enough for Settings to
-     * show the search and the first rows of the list.
+     * show their menu next to the section. It is tall enough for Settings to show the search and
+     * the first rows of the list.
      */
     .ks-window {
       --design-width: 1040;
@@ -18,13 +18,6 @@
       top: calc(430 * var(--u));
       bottom: auto;
       left: calc(280 * var(--u));
-    }
-    /* Repositories: lg:grid-cols-[240px_minmax(0,1fr)] with min-h-full, so the repository menu
-       fills the height of the pane. */
-    .ks-repositories {
-      display: grid;
-      grid-template-columns: calc(240 * var(--u)) minmax(0, 1fr);
-      min-height: 100%;
     }
   }
 }

@@ -17,5 +17,5 @@ export function keyPlatform(keys: KeyLabels): KeyPlatform {
 
 /** The steer shortcut of the platform of `keys`, as steerShortcutLabel of steer-shortcut.ts writes it. */
 export function steerKey(keys: KeyLabels): string {
-  return keys.modifier === MAC_KEYS.modifier ? `${keys.modifier} Enter` : `${keys.modifier}+Enter`;
+  return keyPlatform(keys) === "mac" ? `${keys.modifier} Enter` : `${keys.modifier}+Enter`;
 }

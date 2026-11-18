@@ -26,8 +26,6 @@ type SessionWindowProps = {
   dialog: ReactNode;
   /** The window shows the keys that the visitor holds. */
   keystrokes?: boolean;
-  /** The host shows the held keys itself, so the window keeps its display out. */
-  keysByHost?: boolean;
   className?: string;
   /** The pages of the window. */
   children: ReactNode;
@@ -41,7 +39,6 @@ export function SessionWindow({
   pane,
   dialog,
   keystrokes = false,
-  keysByHost = false,
   className,
   children,
 }: SessionWindowProps): ReactElement {
@@ -56,7 +53,7 @@ export function SessionWindow({
         <>
           {dialog}
           <Tooltip />
-          {keystrokes && <Keystrokes byHost={keysByHost} />}
+          {keystrokes && <Keystrokes />}
           <Pointer />
         </>
       }

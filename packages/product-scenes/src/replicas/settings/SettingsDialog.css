@@ -102,6 +102,10 @@
       min-height: 0;
       overflow: hidden;
     }
+    /* The wrapper of a section gives no box, so the content of the section fills the pane. */
+    .set-section {
+      display: contents;
+    }
     /* The footer: border-t px-6 py-4 sm:flex-row sm:items-center sm:gap-3, with Cancel at the
        start and Save settings at the end. The message part is empty, so it hides. */
     .set-dialog-foot {
@@ -113,8 +117,9 @@
       padding: calc(16 * var(--u)) calc(24 * var(--u));
       border-top: calc(1 * var(--u)) solid var(--border);
     }
-    .set-save:not([data-saving]) :is(.set-saving-icon, .set-saving-label),
-    .set-save[data-saving] :is(.set-save-icon, .set-save-label) {
+    /* A busy Save settings shows Saving… in the place of its label. */
+    .set-save:not([data-busy]) .set-saving-label,
+    .set-save[data-busy] .set-save-label {
       display: none;
     }
   }

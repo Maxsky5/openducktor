@@ -61,10 +61,10 @@ function Field({
   children: ReactNode;
 }): ReactElement {
   return (
-    <div className="rc-field">
+    <div className="repo-cfg-field">
       <b>{label}</b>
       {children}
-      {hint && <p className="rc-hint">{hint}</p>}
+      {hint && <p className="repo-cfg-hint">{hint}</p>}
     </div>
   );
 }
@@ -76,42 +76,46 @@ export function RepositoryConfiguration({
   repositoryPath,
 }: RepositoryConfigurationProps): ReactElement {
   return (
-    <div className="rc-section">
-      <div className="rc-card">
-        <div className="rc-card-head">
+    <div className="repo-cfg-section">
+      <div className="repo-cfg-card">
+        <div className="repo-cfg-card-head">
           <b>{IDENTITY_TEXT.title}</b>
           <p>{IDENTITY_TEXT.description}</p>
         </div>
-        <div className="rc-pair">
+        <div className="repo-cfg-pair">
           <Field label={IDENTITY_TEXT.workspaceId}>
-            <Input placeholder="" value={workspaceId} className="rc-read-only" />
+            <Input placeholder="" value={workspaceId} className="repo-cfg-read-only" />
           </Field>
           <Field label={IDENTITY_TEXT.workspaceName}>
             <Input placeholder="" value={workspaceName} />
           </Field>
         </div>
         <Field label={IDENTITY_TEXT.abbreviation} hint={IDENTITY_TEXT.abbreviationHint}>
-          <Input placeholder={initials} className="rc-abbreviation" />
+          <Input placeholder={initials} className="repo-cfg-abbreviation" />
         </Field>
         <Field label={IDENTITY_TEXT.tileColor}>
-          <span className="rc-swatches">
-            <span className="rc-swatch rc-default" data-selected="">
+          <span className="repo-cfg-swatches">
+            <span className="repo-cfg-swatch repo-cfg-default" data-selected="">
               <Slash />
             </span>
             {TILE_PALETTE.map((hex) => (
-              <span className="rc-swatch" style={{ backgroundColor: hex }} key={hex} />
+              <span className="repo-cfg-swatch" style={{ backgroundColor: hex }} key={hex} />
             ))}
           </span>
         </Field>
         <Field label={IDENTITY_TEXT.hexCode}>
-          <span className="rc-row">
-            <span className="rc-hash">#</span>
-            <Input placeholder="" className="rc-hex" />
+          <span className="repo-cfg-row">
+            <span className="repo-cfg-hash">#</span>
+            <Input placeholder="" className="repo-cfg-hex" />
           </span>
         </Field>
         <Field label={IDENTITY_TEXT.repositoryPath} hint={IDENTITY_TEXT.repositoryPathHint}>
-          <span className="rc-row">
-            <Input placeholder="" value={repositoryPath} className="rc-read-only rc-grow" />
+          <span className="repo-cfg-row">
+            <Input
+              placeholder=""
+              value={repositoryPath}
+              className="repo-cfg-read-only repo-cfg-grow"
+            />
             <Button variant="outline">
               <FolderOpen />
               {IDENTITY_TEXT.changeFolder}

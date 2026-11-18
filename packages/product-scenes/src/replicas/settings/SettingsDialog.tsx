@@ -1,8 +1,8 @@
 // The Settings dialog of settings-modal.tsx over a window: the header, the section menu of
-// SettingsSidebar in settings-modal-sidebars.tsx, the pane of the open section in the children,
-// and the footer of settings-modal-footer.tsx. The window is at least md wide, so the menu is a
-// column of buttons. Each pane in the children has `data-settings-section` with the label of its
-// section, and settings-dialog.ts shows one pane at a time.
+// SettingsSidebar in settings-modal-sidebars.tsx, the panes of the sections that a scene shows, and
+// the footer of settings-modal-footer.tsx. The window is at least md wide, so the menu is a column
+// of buttons. The static frame shows the pane of `section`, and settings-dialog.ts shows one pane
+// at a time.
 import {
   Bell,
   Columns3,
@@ -59,13 +59,13 @@ export const SETTINGS_TEXT = {
 } as const;
 
 type SettingsDialogProps = {
-  /** The section that the menu selects in the static frame. */
+  /** The section that the menu selects and whose pane shows in the static frame. */
   section: SettingsSection;
-  /** The panes of the sections, each with `data-settings-section`. */
-  children: ReactNode;
+  /** The pane of each section that the scene shows. */
+  panes: Partial<Record<SettingsSection, ReactNode>>;
 };
 
-export function SettingsDialog({ section, children }: SettingsDialogProps): ReactElement {
+export function SettingsDialog({ section, panes }: SettingsDialogProps): ReactElement {
   return (
     <div className="st-overlay" data-settings-dialog="">
       <div className="set-dialog" data-dialog-box="">
@@ -89,15 +89,26 @@ export function SettingsDialog({ section, children }: SettingsDialogProps): Reac
               </Button>
             ))}
           </div>
-          <div className="set-dialog-pane">{children}</div>
+          <div className="set-dialog-pane">
+            {Object.entries(panes).map(([label, pane]) => (
+              <div
+                className="set-section"
+                hidden={label !== section}
+                data-settings-section={label}
+                key={label}
+              >
+                {pane}
+              </div>
+            ))}
+          </div>
         </div>
         <div className="set-dialog-foot">
           <Button variant="outline" data-settings-cancel="">
             {SETTINGS_TEXT.cancel}
           </Button>
           <Button className="set-save" data-settings-save="">
-            <Save className="set-save-icon" />
-            <LoaderCircle className="set-saving-icon spin" />
+            <Save className="ui-idle-icon" />
+            <LoaderCircle className="ui-busy-icon spin" />
             <span className="set-save-label">{SETTINGS_TEXT.save}</span>
             <span className="set-saving-label">{SETTINGS_TEXT.saving}</span>
           </Button>

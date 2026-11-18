@@ -1,11 +1,9 @@
 import { must } from "../../motion/dom";
-import { designPixel } from "../../motion/effects";
-import { gsap } from "../../motion/gsap";
-import type { Scene, SceneBuilder } from "../../motion/scene";
-import { EASE } from "../../motion/tokens";
+import { designPixel, revealTween } from "../../motion/effects";
+import type { SceneBuilder } from "../../motion/scene";
 import { gitSettings } from "../../replicas/settings/git-settings";
 import { pointer } from "../../replicas/shell/cursor";
-import { INSTANCE_URL, PROJECT_PATH } from "./sample";
+import { PROJECT_PATH } from "./sample";
 
 /** Seconds that Detect from origin takes to read the origin remote. */
 const DETECT = 0.9;
@@ -26,25 +24,6 @@ const SCROLL = 0.6;
 const SCROLL_MARGIN = 16;
 
 /**
- * Scrolls the Git tab `tab` from `at` as far as the element of `find` must move to show in full. A
- * tab that shows it already stays, as on a wide stage. Returns the end of the scroll.
- */
-function reveal(scene: Scene, tab: HTMLElement, find: () => HTMLElement, at: number): number {
-  scene.at(at, () => {
-    // The rectangles include the scale of the stage, and the scroll offset does not.
-    const view = tab.getBoundingClientRect();
-    const scale = view.height / tab.offsetHeight;
-    const below = (find().getBoundingClientRect().bottom - view.bottom) / scale;
-    const distance = below + SCROLL_MARGIN * designPixel(tab);
-    if (distance <= 0) return;
-    scene.run(
-      gsap.to(tab, { scrollTop: tab.scrollTop + distance, duration: SCROLL, ease: EASE.move }),
-    );
-  });
-  return at + SCROLL;
-}
-
-/**
  * The visitor connects the repository to GitLab. GitLab shows its setup card, and the empty Project
  * path shows its error. Detect from origin fills the project, and Sign in with GitLab shows the
  * one-time code while the browser asks for the approval. The account links, the app checks it, and
@@ -57,7 +36,7 @@ export const build: SceneBuilder = (scene) => {
   const cursor = pointer(scene, root);
 
   // Start: the repository has no provider.
-  git.reset(INSTANCE_URL);
+  git.reset();
 
   // The visitor selects GitLab. The card shows at once and asks to link the project, and the empty
   // Project path shows its error.
@@ -69,12 +48,17 @@ export const build: SceneBuilder = (scene) => {
   // card asks for an account.
   const clicked = cursor.click(git.detectButton, picked + 0.9, 0.9);
   const detected = git.detect(PROJECT_PATH, clicked, DETECT);
-  git.readiness("connect", detected);
   scene.mark("detected", detected);
 
   // Sign in with GitLab opens the sign-in in the browser, and the card waits for the approval. A
-  // phone stage scrolls the tab to the button first.
-  const revealed = reveal(scene, tab, git.signInButton, detected + 0.4);
+  // phone stage scrolls the tab to show the button first. A wide stage shows it already.
+  const revealing = detected + 0.4;
+  scene.at(revealing, () => {
+    const margin = SCROLL_MARGIN * designPixel(tab);
+    const scroll = revealTween(tab, git.signInButton(), margin, SCROLL);
+    if (scroll) scene.run(scroll);
+  });
+  const revealed = revealing + SCROLL;
   const signedIn = cursor.click(git.signInButton, revealed + 0.1, 0.8);
   const waiting = git.startSignIn(signedIn, SIGN_IN);
   scene.mark("waiting", waiting);

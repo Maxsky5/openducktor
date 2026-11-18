@@ -15,7 +15,6 @@ export type PlanTemplate = "spec-artifact" | "planner-dialog";
 export function plan(scene: Scene<PlanTemplate>): void {
   const studio = studioWindow(scene);
   const row = (id: RowId<"plan">): HTMLElement => studio.row("plan", id);
-  studio.hideTurns("plan");
   studio.setSessionShown("spec");
   const planArtifact = studio.panels.takeArtifact();
   studio.panels.putArtifact(scene.template("spec-artifact"));

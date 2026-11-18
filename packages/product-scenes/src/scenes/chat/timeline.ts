@@ -41,7 +41,7 @@ export const build: SceneBuilder<ChatTemplate> = (scene) => {
   const menu = must(root, "[data-slash]");
   const meter = must(root, "[data-meter]");
   const row = (name: string): HTMLElement => must(track, `[data-row="${name}"]`);
-  const searchArgs = must(row("search"), "[data-call-summary]");
+  const searchSummary = must(row("search"), "[data-call-summary]");
   const setActivity = composerActivity(root);
   const sessions = sessionList(scene, root);
   const setContext = contextMeter(meter);
@@ -58,7 +58,7 @@ export const build: SceneBuilder<ChatTemplate> = (scene) => {
   for (const card of all(track, "[data-task]")) card.hidden = true;
   meter.hidden = true;
   toast.hide();
-  searchArgs.textContent = SEARCH.running;
+  searchSummary.textContent = SEARCH.running;
   setActivity("idle");
 
   // The visitor clicks the composer and types a slash query. The menu lists the matching prompts.
@@ -97,7 +97,7 @@ export const build: SceneBuilder<ChatTemplate> = (scene) => {
   // The agent searches the tasks for export, and finds the Markdown export task.
   const searched = rows.tool(row("search"), sent + 0.8, 0.9);
   scene.at(searched, () => {
-    searchArgs.textContent = SEARCH.done;
+    searchSummary.textContent = SEARCH.done;
     setContext(contextUse(CHAT_SESSION, SEARCH_USED));
     meter.hidden = false;
     scene.run(fadeIn(meter));

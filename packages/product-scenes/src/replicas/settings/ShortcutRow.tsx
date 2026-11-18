@@ -4,7 +4,7 @@
 // recorder too: the Custom badge, the recording hint, Cancel with Esc, and Remove. Its static
 // frame shows the recorded keys. shortcut-settings.ts changes them.
 import { ChevronDown } from "lucide-react";
-import type { ComponentProps, ReactElement } from "react";
+import type { ReactElement } from "react";
 import type { KeyPlatform } from "../keys";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -38,7 +38,7 @@ export const ROW_TEXT = {
 } as const;
 
 /** The modifiers that a recorded shortcut needs: recordingModifierNames of key-labels.ts. */
-export const RECORDING_MODIFIERS = {
+const RECORDING_MODIFIERS = {
   mac: "⌘ ⌃ or ⌥",
   pc: "Ctrl or Alt",
 } as const satisfies Record<KeyPlatform, string>;
@@ -51,14 +51,6 @@ export function recordingHint(platform: KeyPlatform): string {
 /** The text of the field of the recorder while modifiers are down, such as "⇧ ⌘ …". */
 export function heldText(modifiers: readonly string[]): string {
   return `${modifiers.join(" ")} …`;
-}
-
-/** ShortcutKeycaps: KbdGroup gap-1 of Kbd caps with h-6 min-w-6 rounded-md px-1.5 text-xs. */
-export function ShortcutKeycaps({
-  keys,
-  ...attributes
-}: ComponentProps<"span"> & { keys: readonly string[] }): ReactElement {
-  return <Kbd keys={keys} className="sr-keycaps" {...attributes} />;
 }
 
 type ShortcutRowProps = {
@@ -121,7 +113,7 @@ export function ShortcutRow({
           <span className="sr-add" hidden={Boolean(keys)} data-add-keys="">
             {ROW_TEXT.addKeys}
           </span>
-          {keys && <ShortcutKeycaps keys={keys} data-keycaps="" />}
+          {keys && <Kbd keys={keys} className="sr-keycaps" data-keycaps="" />}
         </Button>
         {recorded && (
           <Button variant="ghost" size="sm" className="sr-cancel" hidden data-record-cancel="">

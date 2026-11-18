@@ -8,8 +8,8 @@ import type { ReactElement } from "react";
 import { flag } from "../flag";
 import type { KeyPlatform } from "../keys";
 import { Button } from "../ui/Button";
+import { Input } from "../ui/Input";
 import { type PlatformKeys, type ShortcutCommand, ShortcutRow } from "./ShortcutRow";
-import "../ui/Input.css";
 import "./ShortcutSettings.css";
 
 /** The words of the section. */
@@ -30,12 +30,15 @@ export const SEARCH_PLACEHOLDER = {
 /** The commands of one group, in the order of groupCommandViews of settings-shortcut-model.ts. */
 export type ShortcutGroup = { group: string; commands: readonly ShortcutCommand[] };
 
+/** A text of the search, and the ids of the commands that the list keeps for it. */
+export type SearchStep = { term: string; commands: readonly string[] };
+
 type ShortcutSettingsProps = {
   platform: KeyPlatform;
   /** Every row that the scene shows, by group. */
   groups: readonly ShortcutGroup[];
-  /** The search of the static frame, and the ids of the commands that it keeps. */
-  search: { term: string; commands: readonly string[] };
+  /** The search of the static frame. */
+  search: SearchStep;
   /** The command that the scene records, with its new keys. The draft has a change. */
   recorded: { id: string; keys: PlatformKeys };
 };
@@ -55,16 +58,17 @@ export function ShortcutSettings({
         <p>{SHORTCUT_TEXT.description}</p>
       </header>
       <div className="ss-toolbar">
-        <span className="ui-input ss-search" data-filled={flag(searching)} data-shortcut-search="">
+        <Input
+          placeholder={SEARCH_PLACEHOLDER[platform]}
+          value={search.term}
+          className="ss-search"
+          data-shortcut-search=""
+        >
           <Search className="ss-search-icon" />
-          <span className="typed" data-typed="">
-            {search.term}
-          </span>
-          <span className="ui-input-placeholder">{SEARCH_PLACEHOLDER[platform]}</span>
           <span className="ss-clear">
             <X />
           </span>
-        </span>
+        </Input>
         <span className="ss-filter" data-disabled={flag(searching)} data-shortcut-filter="">
           {SHORTCUT_TEXT.filters.map((label, index) => (
             <span className="ss-filter-item" data-checked={flag(index === 0)} key={label}>

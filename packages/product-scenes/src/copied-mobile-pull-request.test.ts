@@ -10,18 +10,16 @@ import {
 import { HUMAN_REVIEW_ACTIONS } from "./replicas/mobile/review-actions";
 import { START_MODE_LABELS, START_SHEET_TEXT } from "./replicas/mobile/StartSessionSheet";
 import { pullRequestName, WORKFLOW_RUNNING_LABEL } from "./replicas/mobile/WorkflowToolCard";
-import { PULL_REQUEST, SET_PULL_REQUEST, START_MODES } from "./scenes/mobile-pull-request/sample";
-import { importProduct, readProduct } from "./test-support/product-source";
-
-type TaskWorkflow = { createsPullRequest: (role: string) => boolean };
-type TaskCard = { id: string; taskWorkflow: TaskWorkflow };
-type ArtifactState = { present: boolean; verdict?: string };
-type TaskFixture = (overrides: {
-  id: string;
-  issueType: string;
-  status: string;
-  artifactSummary: Record<string, ArtifactState>;
-}) => TaskCard;
+import { taskId } from "./sample/workspace";
+import {
+  PULL_REQUEST,
+  SET_PULL_REQUEST,
+  START_MODES,
+  TASK,
+} from "./scenes/mobile-pull-request/sample";
+import { lucideName } from "./test-support/lucide-name";
+import { importProduct, readProduct, readProductWords } from "./test-support/product-source";
+import { reviewTask, type TaskCard, type TaskWorkflow } from "./test-support/review-task";
 type BuilderSession = {
   externalSessionId: string;
   runtimeKind: string;
@@ -67,11 +65,6 @@ type LaunchDefinition = {
   defaultStartMode: string;
 };
 
-// SAFETY: the test support of the workflows exports these fixtures.
-const workflowSupport = await importProduct<{
-  createTaskCardFixture: TaskFixture;
-  emptyArtifactSummary: () => Record<string, { present: boolean }>;
-}>("packages/workflows/test-support/index.ts");
 // SAFETY: the workflows package exports these values and functions.
 const workflows = await importProduct<{
   PULL_REQUEST_LAUNCH: LaunchDefinition;
@@ -154,25 +147,8 @@ const { ICONS } = await importProduct<{ ICONS: Record<string, string> }>(
   "apps/mobile/src/ui/icon-names.ts",
 );
 
-/** The Lucide name of a lucide-react icon, such as git-pull-request for GitPullRequest. */
-const lucideName = (displayName: string | undefined): string =>
-  (displayName ?? "").replace(/[a-z0-9](?=[A-Z])/g, "$&-").toLowerCase();
-
 /** The search shortcut task in Human Review, with its spec, its plan, and an approved QA report. */
-const reviewTask = (): TaskCard => {
-  const artifacts: Record<string, ArtifactState> = {};
-  for (const code of Object.keys(workflowSupport.emptyArtifactSummary())) {
-    const state: ArtifactState = { present: true };
-    if (code === "qaReport") state.verdict = "approved";
-    artifacts[code] = state;
-  }
-  return workflowSupport.createTaskCardFixture({
-    id: "fieldnotes-k3x9",
-    issueType: "feature",
-    status: "human_review",
-    artifactSummary: artifacts,
-  });
-};
+const searchTask = (): TaskCard => reviewTask(taskId(TASK));
 
 /** The one Builder session of the task, which waits for the next message. */
 const builderSession = (task: TaskCard): BuilderSession => ({
@@ -188,7 +164,7 @@ const builderSession = (task: TaskCard): BuilderSession => ({
 
 describe("the pull request approval of the mobile app copied in the replicas", () => {
   test("Quick Actions of a task in Human Review list the actions of the app", () => {
-    const task = reviewTask();
+    const task = searchTask();
     const options = quick.buildAgentStudioQuickActions({
       selectedTask: task,
       sessionsForTask: [
@@ -218,7 +194,7 @@ describe("the pull request approval of the mobile app copied in the replicas", (
   });
 
   test("the approval asks the Builder to write the pull request first", async () => {
-    const role = workflows.pullRequestRoleLabel(reviewTask().taskWorkflow);
+    const role = workflows.pullRequestRoleLabel(searchTask().taskWorkflow);
     expect(role).toBe("Builder");
     const builder = role ?? "";
     expect(pullRequestDraftOptions(builder)).toEqual(
@@ -254,7 +230,7 @@ describe("the pull request approval of the mobile app copied in the replicas", (
   });
 
   test("the start of the pull request launch reuses the latest Builder session", async () => {
-    const task = reviewTask();
+    const task = searchTask();
     const { taskWorkflow } = task;
     const launch = workflows.PULL_REQUEST_LAUNCH;
     expect(start.buildSessionStartModalTitle("build", taskWorkflow)).toBe("Start Builder session");
@@ -313,7 +289,7 @@ describe("the pull request approval of the mobile app copied in the replicas", (
     expect(lucideName(GitPullRequest.displayName)).toBe(ICONS[state] ?? "");
     expect(lucideName(ExternalLink.displayName)).toBe(ICONS["external-link"] ?? "");
     expect(
-      await readProduct("apps/mobile/src/features/tasks/presentation/task-chip-paint.ts"),
-    ).toContain('case "open":\n      return dark ? palette.emerald400 : palette.emerald600;');
+      await readProductWords(["apps/mobile/src/features/tasks/presentation/task-chip-paint.ts"]),
+    ).toContain('case "open": return dark ? palette.emerald400 : palette.emerald600;');
   });
 });

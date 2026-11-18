@@ -10,7 +10,6 @@ import {
   GOAL_SESSION,
   type GoalModeTemplate,
   type GoalRowId,
-  TURN_IDS,
   TURN_USE,
   type TurnId,
 } from "./sample";
@@ -37,7 +36,6 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   const builder = STORY_SESSIONS.build.id;
 
   // Start: the Planner session of the task in Ready for dev, with its plan in the Artifacts tab.
-  studio.hideTurns(...TURN_IDS);
   studio.setSessionShown("planner");
   studio.apply(FRAMES.plan);
   studio.panels.clearFiles();
@@ -74,7 +72,7 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   dialog.step("session", "running", traced + 1.0);
   dialog.step("session", "completed", traced + 1.6);
   const opened = traced + 1.8;
-  dialog.close(opened);
+  dialog.unmount(opened);
 
   // The Builder session opens on the Diffs tab. It has no token use yet, so the composer shows no
   // context meter. The goal row rises, and the Builder works with no first message.
@@ -97,9 +95,9 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   goal.show(opened + 0.35);
   scene.mark("session", opened);
 
-  /** A patch row lands its file in the Diffs tab. */
-  const land = (patch: HTMLElement, path: string, files: number, at: number): number => {
-    studio.rows.show(patch, at);
+  /** An edit call joins its run, and its file lands in the Diffs tab. */
+  const land = (edit: HTMLElement, path: string, files: number, at: number): number => {
+    studio.rows.show(edit, at);
     studio.panels.landFile(path, at + 0.2);
     studio.panels.totals(GOAL_FILES.slice(0, files), at + 0.2);
     return at + 0.4;

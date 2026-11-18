@@ -33,3 +33,11 @@ export async function importProductDependency<Exports>(
 export function readProduct(repoPath: string): Promise<string> {
   return Bun.file(productUrl(repoPath)).text();
 }
+
+/**
+ * Reads the files of the product as one text, with each run of white space as one space, for words
+ * that the markup wraps over lines.
+ */
+export async function readProductWords(repoPaths: readonly string[]): Promise<string> {
+  return (await Promise.all(repoPaths.map(readProduct))).join("\n").replace(/\s+/g, " ");
+}

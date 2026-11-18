@@ -1,6 +1,7 @@
 // Button of components/ui/button.tsx, with the variants and the sizes that the replicas use. A
 // consumer changes the height or the radius with its own class, as the product does with
-// `className`. A disabled button has `data-disabled`, and a scene can set it.
+// `className`. A disabled button has `data-disabled`, and a scene can set it. A busy button has
+// `data-busy`: its spinner, with `ui-busy-icon`, takes the place of its icon, with `ui-idle-icon`.
 import type { ComponentProps, ReactElement } from "react";
 import { classes } from "../classes";
 import "./Button.css";
@@ -11,7 +12,6 @@ type ButtonVariant =
   | "ghost"
   | "outline"
   | "destructive"
-  | "destructiveGhost"
   | "warning"
   | "accent";
 

@@ -26,7 +26,6 @@ export const build: SceneBuilder = (scene) => {
   // Start: the Builder opened the pull request and watches its checks. Lint and typecheck pass,
   // and test and build run.
   checks.set(READS.first.states, READS.first.updated);
-  for (const id of ["cause", "final"]) row(id).hidden = true;
   const endWatch = rows.running(row("watch"));
   setActivity("working");
 

@@ -65,11 +65,11 @@ export const ARTIFACT_GROUPS = {
 export const ASK =
   "Save a wireframe of the search dialog on the task first. I want to check the layout before you change the code.";
 
-/** The reply of the Builder before the save. Backticks mark the inline code. */
+/** The reply of the Builder before the save. */
 export const INTRO =
   "I will draw the search dialog as a wireframe in one HTML page, with a note on each part.";
 
-/** The last message of the turn. */
+/** The last message of the turn. Backticks mark the inline code. */
 export const SAVED =
   "The wireframe is on the task as Search dialog wireframe. It shows the field with the `Cmd+K` hint, the recent notes, and the keys of the dialog. Tell me what to change before I edit `search-dialog.tsx`.";
 
@@ -77,9 +77,6 @@ export const SAVED =
 export const TIMES = { ask: "09:47:02 AM", save: "09:47:31 AM" } as const;
 export const SAVE_DURATION = "48ms";
 export const WORKED = "41s";
-
-/** The rows of the turn, which the scene shows one by one. */
-export const TURN_ROWS = ["intro", "save", "saved"] as const;
 
 /** The preview dialog that Expand opens. */
 export type ArtifactsTemplate = "preview-dialog";

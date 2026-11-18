@@ -45,8 +45,8 @@ export function rowEntry(row: HTMLElement): gsap.core.Tween {
 /**
  * The call or the tool line `line` ends: its icon fades and grows in. Its command or its summary
  * keeps its place: the app fades the same text in again for 180 ms, which reads as a blink in a
- * video, most of all in a time lapse. A line without a call icon, such as a line of the mobile
- * replica, only ends.
+ * video, most of all in a time lapse. A line without a call icon, such as the line of
+ * BrowserToolCard, only ends.
  */
 export function endLine(scene: Scene, line: HTMLElement): void {
   line.removeAttribute("data-running");
@@ -65,6 +65,13 @@ export function endLine(scene: Scene, line: HTMLElement): void {
       },
     ),
   );
+}
+
+/** The transcript track around `element`. */
+export function trackOf(element: HTMLElement): HTMLElement {
+  const track = element.closest("[data-track]");
+  if (!(track instanceof HTMLElement)) throw new Error("The row is in no transcript track.");
+  return track;
 }
 
 /** The rows of the transcript of `track`: its children, and the children of its turns. */
@@ -87,10 +94,6 @@ export function toolRuns(scene: Scene, root: HTMLElement) {
   };
   const added = (run: HTMLElement): HTMLElement[] =>
     all(run, "[data-run-list] > [data-row]").filter((call) => !call.hidden);
-  const trackOf = (run: HTMLElement): HTMLElement => {
-    const track = run.closest("[data-track]");
-    return track instanceof HTMLElement ? track : root;
-  };
   /**
    * The element shows in the transcript `track`: neither it nor a wrapper of it in the track is
    * hidden. At build time, a row that the scene shows later does not show yet.
@@ -131,26 +134,30 @@ export function toolRuns(scene: Scene, root: HTMLElement) {
     must(run, "[data-run-body]").hidden = folded;
   };
 
-  /** Build time: each run that shows folds when it settled before the rows that come later. */
+  /**
+   * Build time: a run with no call hides, and each other run folds when it settled before the rows
+   * that come later.
+   */
   const arrange = (): void => {
     for (const run of all(root, "[data-tool-run]")) {
-      if (added(run).length === 0) run.hidden = true;
-      else setFolded(run, settled(run, true));
+      const empty = added(run).length === 0;
+      if (empty) run.hidden = true;
+      setFolded(run, !empty && settled(run, true));
     }
   };
 
-  /** Build time: the scene shows the row `row` later. */
+  /** Build time: the scene shows the row `row` later, so it hides until then. */
   const comesLater = (row: HTMLElement): void => {
+    row.hidden = true;
     later.add(row);
     arrange();
   };
 
   /** Build time: the call `call` joins its run later. */
   const prepare = (call: HTMLElement): void => {
-    call.hidden = true;
     call.removeAttribute("data-running");
-    layout(runOf(call));
     comesLater(call);
+    layout(runOf(call));
   };
 
   /** Build time: the call `call` runs in the first frame, so its run is open. */

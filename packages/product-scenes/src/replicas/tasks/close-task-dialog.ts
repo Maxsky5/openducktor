@@ -2,18 +2,13 @@
 // its reads. Then its content shows at once, and the dialog takes the size of the content, as
 // observeDialogResize of dialog-resize.ts resizes it. The close runs from its confirm button.
 import { must } from "../../motion/dom";
-import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
-import { EASE } from "../../motion/tokens";
 import { modal } from "../studio/modal";
-
-/** Seconds of a resize of the dialog: --resize-dur of dialog.css. */
-const RESIZE = 0.3;
 
 /** The dialog in the window `root`. */
 export function closeTaskDialog(scene: Scene, root: HTMLElement) {
   const overlay = must(root, "[data-close-dialog]");
-  const { box, open, close } = modal(scene, root, overlay);
+  const { box, open, close, resize } = modal(scene, root, overlay);
   const confirm = must(box, "[data-confirm]");
 
   /** Build time: the dialog is closed, and it reads the task when it opens. */
@@ -31,17 +26,7 @@ export function closeTaskDialog(scene: Scene, root: HTMLElement) {
   const openAndRead = (at: number, seconds: number): number => {
     open(at);
     const read = at + seconds;
-    scene.at(read, () => {
-      const from = box.offsetHeight;
-      box.removeAttribute("data-loading");
-      scene.run(
-        gsap.fromTo(
-          box,
-          { height: from },
-          { height: box.offsetHeight, duration: RESIZE, ease: EASE.resize, clearProps: "height" },
-        ),
-      );
-    });
+    resize(read, () => box.removeAttribute("data-loading"));
     return read;
   };
 

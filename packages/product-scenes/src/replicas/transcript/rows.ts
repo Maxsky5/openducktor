@@ -6,7 +6,7 @@ import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
 import { stream, streamUpdates } from "../../motion/text";
 import { EASE } from "../../motion/tokens";
-import { endLine, rowEntry, toolRuns } from "./runs";
+import { endLine, rowEntry, toolRuns, trackOf } from "./runs";
 
 /** Seconds that the track takes to glide to its new place. */
 const GLIDE = 0.45;
@@ -65,10 +65,10 @@ export function follow(scene: Scene, track: HTMLElement): () => void {
 }
 
 /**
- * The row steps of the transcript in `root`. Rows that come later are hidden at build time: the
- * scene hides them, and each call of a tool run leaves its run when the scene schedules it. A row
- * of the desktop chat, in a `data-thread`, comes in as the app brings in a new row. Each new row
- * and each call that ends can fold a tool run before it.
+ * The row steps of the transcript in `root`. A step that shows a row later hides the row at build
+ * time, and a call of a tool run leaves its run until its time. A row of the desktop chat, in a
+ * `data-thread`, comes in as the app brings in a new row. Each new row and each call that ends can
+ * fold a tool run before it.
  */
 export function transcript(scene: Scene, root: HTMLElement) {
   const runs = toolRuns(scene, root);
@@ -177,7 +177,7 @@ export function transcript(scene: Scene, root: HTMLElement) {
       : stream(scene, text, at, wordsPerSecond);
     if (ending.length > 0)
       scene.at(end, () => {
-        if (separated) row.closest("[data-track]")?.toggleAttribute("data-snap", true);
+        if (separated) trackOf(row).toggleAttribute("data-snap", true);
         for (const part of ending) part.hidden = false;
       });
     return end;

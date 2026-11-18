@@ -41,7 +41,6 @@ export const build: SceneBuilder<NewSessionTemplate> = (scene) => {
   sessions.place(NAV.entries);
   dialog.reset();
   page.hidden = true;
-  message.hidden = true;
   must(page, "[data-meter]").hidden = true;
   setActivity("idle");
 

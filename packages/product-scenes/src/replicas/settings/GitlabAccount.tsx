@@ -2,8 +2,8 @@
 // packages/frontend/src/components/features/settings shows it on GitLab.com: the ways to connect,
 // GitLab sign-in and Access token, then the pending sign-in with its one-time code, then the linked
 // account. The markup renders each step, and a scene shows one with `hidden`. While the sign-in
-// starts, the connect step has `data-starting`: its controls are disabled, and the sign-in button
-// shows the spinner. While the app checks the new link, the linked step has `data-checking`.
+// starts, the connect step has `data-starting`, so its controls are disabled, and the sign-in
+// button is busy. While the app checks the new link, the linked step has `data-checking`.
 import {
   Copy,
   ExternalLink,
@@ -113,8 +113,8 @@ function ConnectOptions({ hidden }: { hidden: boolean }): ReactElement {
     <div className="gla-options" data-account-step="connect" hidden={hidden}>
       <OptionCard icon={LogIn} title={text.signInTitle} description={text.signInDescription}>
         <Button className="gla-wide" data-sign-in>
-          <LogIn className="gla-idle-icon" />
-          <LoaderCircle className="spin gla-busy-icon" />
+          <LogIn className="ui-idle-icon" />
+          <LoaderCircle className="spin ui-busy-icon" />
           {text.signIn}
         </Button>
       </OptionCard>

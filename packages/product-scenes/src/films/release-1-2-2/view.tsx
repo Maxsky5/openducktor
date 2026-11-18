@@ -86,7 +86,7 @@ export function ReleaseFilmView({ keys, theme }: FilmViewProps): ReactElement {
             <GitlabView {...scene} />
           </FilmSet>
           <FilmSet name="keyboard-shortcuts" {...PLACES["keyboard-shortcuts"]}>
-            <KeyboardShortcutsView {...scene} keysByHost />
+            <KeyboardShortcutsView {...scene} />
           </FilmSet>
         </>
       }

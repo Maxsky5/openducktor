@@ -29,6 +29,27 @@ function search(pattern: string, duration: string, time: string) {
 /** The times of the edits of the build, in the order of BUILD_FILES. */
 const BUILD_EDIT_TIMES = ["09:47:10 AM", "09:47:31 AM", "09:47:58 AM", "09:48:24 AM"];
 
+/**
+ * The calls of the build turn until the tests: the Builder reads the task and the guide, edits
+ * each file of BUILD_FILES, and runs the tests.
+ */
+export const BUILD_CALLS = [
+  readTask(TASK_ID, "131ms", "09:46:32 AM"),
+  catFile("read-guide", "AGENTS.md", "6ms", "09:46:35 AM"),
+  ...BUILD_FILES.map((file, index) => {
+    const time = BUILD_EDIT_TIMES[index];
+    if (!time) throw new Error(`The build has no edit time for ${file.path}.`);
+    return edit(
+      `patch-${index}` as const,
+      file.path,
+      { add: file.add, del: file.del },
+      "41ms",
+      time,
+    );
+  }),
+  bash("test", "bun test src/search", "2.4s", "09:48:51 AM"),
+];
+
 const TURNS = {
   spec: [
     { kind: "user", id: "kickoff", time: "09:41:12 AM", text: KICKOFF.spec },
@@ -93,18 +114,7 @@ const TURNS = {
   ],
   build: [
     { kind: "user", id: "kickoff", time: "09:46:30 AM", text: KICKOFF.build },
-    readTask(TASK_ID, "131ms", "09:46:32 AM"),
-    catFile("read-guide", "AGENTS.md", "6ms", "09:46:35 AM"),
-    ...BUILD_FILES.map((file, index) =>
-      edit(
-        `patch-${index}` as const,
-        file.path,
-        { add: file.add, del: file.del },
-        "41ms",
-        BUILD_EDIT_TIMES[index] ?? "",
-      ),
-    ),
-    bash("test", "bun test src/search", "2.4s", "09:48:51 AM"),
+    ...BUILD_CALLS,
     bash("commit", 'git commit -m "feat(search): open search with Cmd+K"', "312ms", "09:49:02 AM"),
     {
       kind: "workflow",

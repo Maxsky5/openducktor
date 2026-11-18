@@ -1,0 +1,11 @@
+@layer replica {
+  :where(.stage) {
+    /* lg:grid-cols-[240px_minmax(0,1fr)] with min-h-full, so the repository menu fills the height
+       of the pane. */
+    .repos-pane {
+      display: grid;
+      grid-template-columns: calc(240 * var(--u)) minmax(0, 1fr);
+      min-height: 100%;
+    }
+  }
+}

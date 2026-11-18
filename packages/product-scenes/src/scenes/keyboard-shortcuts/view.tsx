@@ -9,8 +9,8 @@
 import type { ReactElement } from "react";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
 import { type KeyLabels, keyPlatform } from "../../replicas/keys";
+import { RepositoriesPane } from "../../replicas/settings/RepositoriesPane";
 import { RepositoryConfiguration } from "../../replicas/settings/RepositoryConfiguration";
-import { RepositorySidebar } from "../../replicas/settings/RepositorySidebar";
 import { SettingsDialog } from "../../replicas/settings/SettingsDialog";
 import { ShortcutSettings } from "../../replicas/settings/ShortcutSettings";
 import { Composer } from "../../replicas/studio/Composer";
@@ -27,11 +27,11 @@ import {
   FIRST,
   FIRST_REPOSITORY_SECTION,
   FIRST_SECTION,
+  FOUND,
   GROUPS,
   JUMP_DIGIT,
   RECORDED,
   SEARCH,
-  SEARCH_STEPS,
   STEP_KEYS,
   THIRD,
 } from "./sample";
@@ -68,15 +68,9 @@ function ChatPage({
   );
 }
 
-/** With `keysByHost`, the host shows the held keys itself, such as a film in its caption column. */
-export function KeyboardShortcutsView({
-  keysByHost = false,
-  ...props
-}: SceneViewProps & { keysByHost?: boolean }): ReactElement {
+export function KeyboardShortcutsView(props: SceneViewProps): ReactElement {
   const platform = keyPlatform(props.keys);
   const { words } = STEP_KEYS[platform];
-  const final = SEARCH_STEPS.find((step) => step.term === SEARCH);
-  if (!final) throw new Error(`The scene has no rows for the search "${SEARCH}".`);
   return (
     <SceneFrame
       {...props}
@@ -90,27 +84,30 @@ export function KeyboardShortcutsView({
         pane="main"
         className="ks-window"
         keystrokes
-        keysByHost={keysByHost}
         dialog={
-          <SettingsDialog section="Keyboard shortcuts">
-            <div className="ks-repositories" hidden data-settings-section={FIRST_SECTION}>
-              <RepositorySidebar repository={WORKSPACE} section={FIRST_REPOSITORY_SECTION} />
-              <RepositoryConfiguration
-                workspaceId={WORKSPACE}
-                workspaceName={WORKSPACE}
-                initials={WORKSPACES[0].tile}
-                repositoryPath={REPOSITORY_PATH}
-              />
-            </div>
-            <div data-settings-section="Keyboard shortcuts">
-              <ShortcutSettings
-                platform={platform}
-                groups={GROUPS}
-                search={final}
-                recorded={RECORDED}
-              />
-            </div>
-          </SettingsDialog>
+          <SettingsDialog
+            section="Keyboard shortcuts"
+            panes={{
+              [FIRST_SECTION]: (
+                <RepositoriesPane repository={WORKSPACE} section={FIRST_REPOSITORY_SECTION}>
+                  <RepositoryConfiguration
+                    workspaceId={WORKSPACE}
+                    workspaceName={WORKSPACE}
+                    initials={WORKSPACES[0].tile}
+                    repositoryPath={REPOSITORY_PATH}
+                  />
+                </RepositoriesPane>
+              ),
+              "Keyboard shortcuts": (
+                <ShortcutSettings
+                  platform={platform}
+                  groups={GROUPS}
+                  search={FOUND}
+                  recorded={RECORDED}
+                />
+              ),
+            }}
+          />
         }
       >
         <ChatPage page="first" chat={FIRST} keys={props.keys} hidden />

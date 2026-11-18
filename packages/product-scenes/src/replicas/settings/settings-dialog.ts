@@ -46,7 +46,7 @@ export function settingsDialog(scene: Scene, root: HTMLElement) {
    */
   const saveAndClose = (at: number, end: number): void => {
     scene.at(at, () => {
-      save.toggleAttribute("data-saving", true);
+      save.toggleAttribute("data-busy", true);
       for (const button of [save, cancel]) button.toggleAttribute("data-disabled", true);
     });
     unmount(end);

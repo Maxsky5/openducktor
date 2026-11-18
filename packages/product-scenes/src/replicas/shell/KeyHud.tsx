@@ -1,5 +1,5 @@
 // The keys that the visitor presses during a scene. This is site UI over the product view, like
-// the pointer: the product shows no such overlay. keystrokes.ts fills it.
+// the pointer: the product shows no such overlay. keyPresses of replicas/ui/held-keys.ts fills it.
 import type { ReactElement } from "react";
 import { flag } from "../flag";
 import "./KeyHud.css";

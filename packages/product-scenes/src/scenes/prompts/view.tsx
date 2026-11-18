@@ -215,8 +215,8 @@ export function PromptsView(props: SceneViewProps): ReactElement {
           </Button>
           <span className="pd-message" />
           <Button className="pd-save" data-save>
-            <Save className="i16 pd-save-icon" />
-            <LoaderCircle className="i16 spin pd-saving-icon" />
+            <Save className="i16 ui-idle-icon" />
+            <LoaderCircle className="i16 spin ui-busy-icon" />
             <span data-save-label="">Save settings</span>
           </Button>
         </div>

@@ -38,7 +38,6 @@ export const build: SceneBuilder = (scene) => {
   follow(scene, track);
 
   // Start: the earlier turn ended, and the draft is empty.
-  for (const name of ["message", "answer"]) row(name).hidden = true;
   setActivity("idle");
 
   /** Puts the caret at the end of the typed part `name`. */

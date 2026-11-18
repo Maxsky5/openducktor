@@ -123,7 +123,7 @@ const TURNS = {
 } as const satisfies Record<string, readonly Row[]>;
 
 export type TurnId = keyof typeof TURNS;
-export const TURN_IDS = ["write", "test", "submit"] as const satisfies readonly TurnId[];
+const TURN_IDS = ["write", "test", "submit"] as const satisfies readonly TurnId[];
 
 /** The row ids of a goal turn. */
 export type GoalRowId<Turn extends TurnId> = (typeof TURNS)[Turn][number]["id"];

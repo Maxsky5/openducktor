@@ -40,7 +40,6 @@ export const build: SceneBuilder = (scene) => {
   // every item, before the new review.
   comments.reset([APPROVAL], NOW.first);
   updated.textContent = UPDATED.first;
-  for (const id of ["ask", "applied"]) row(id).hidden = true;
   setActivity("idle");
 
   // Humans leaves out the comment of the bot, and All shows it again.

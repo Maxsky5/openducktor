@@ -44,7 +44,7 @@ function Sidebars({ chrome, keys }: { chrome: Chrome; keys: KeyLabels }): ReactN
     case "full":
       return (
         <>
-          <Rail entries={chrome.nav.entries} hints={chrome.nav.hints ? keys : undefined} />
+          <Rail entries={chrome.nav.entries} hintKeys={chrome.nav.hints ? keys : undefined} />
           <Sidebar
             nav={chrome.nav}
             kanban={chrome.kanban ?? false}

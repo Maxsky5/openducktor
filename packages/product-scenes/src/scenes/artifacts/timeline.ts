@@ -5,7 +5,7 @@ import { modal } from "../../replicas/studio/modal";
 import { studioWindow } from "../../replicas/studio/studio";
 import { tooltip } from "../../replicas/ui/tip";
 import { STORY_SESSIONS } from "../../sample/studio-nav";
-import { type ArtifactsTemplate, MOCKUP, TURN_ROWS, WORKING } from "./sample";
+import { type ArtifactsTemplate, MOCKUP, WORKING } from "./sample";
 
 /** The tooltip of the Expand button: ToolButton of artifact-controls.tsx. */
 const EXPAND = "Expand";
@@ -31,7 +31,6 @@ export const build: SceneBuilder<ArtifactsTemplate> = (scene) => {
 
   // Start: the visitor sent the message, and the Builder works on its turn. The Artifacts tab lists
   // the documents of the Spec and the Planner.
-  for (const id of TURN_ROWS) row(id).hidden = true;
   studio.apply(WORKING, "working");
   tab.showCollection();
 

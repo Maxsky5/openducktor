@@ -4,8 +4,7 @@
 // A running line has `data-running`, as a call of a run.
 import type { ReactElement, ReactNode } from "react";
 import { flag } from "../flag";
-import { FileTypeIcon } from "../ui/FileTypeIcon";
-import { CallIcon, CallTiming } from "./CallParts";
+import { CallIcon, CallSummary, CallTiming } from "./CallParts";
 import type { ToolType } from "./model";
 import "./ToolRow.css";
 
@@ -40,12 +39,7 @@ export function ToolRow({
       <div className="st-tool" data-tool="" data-running={flag(running)}>
         <CallIcon tool={tool} />
         <span className="st-tool-name">{name}</span>
-        {summary && (
-          <span className="st-tool-summary" data-call-text="">
-            {file && <FileTypeIcon path={summary} />}
-            <span data-call-summary="">{summary}</span>
-          </span>
-        )}
+        {summary && <CallSummary summary={summary} file={file} className="st-tool-summary" />}
         <CallTiming duration={duration} time={time} className="st-tool-time" />
       </div>
       {children}

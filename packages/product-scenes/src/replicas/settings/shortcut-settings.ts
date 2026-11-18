@@ -7,9 +7,7 @@ import type { Scene } from "../../motion/scene";
 import { typeText } from "../../motion/text";
 import type { KeyPlatform } from "../keys";
 import { heldText, ROW_TEXT } from "./ShortcutRow";
-
-/** A text of the search, and the ids of the commands that the list keeps for it. */
-export type SearchStep = { term: string; commands: readonly string[] };
+import type { SearchStep } from "./ShortcutSettings";
 
 /** The section in `root`, the search steps of the scene, and the steps that change them. */
 export function shortcutSettings(scene: Scene, root: HTMLElement, steps: readonly SearchStep[]) {
@@ -63,7 +61,7 @@ export function shortcutSettings(scene: Scene, root: HTMLElement, steps: readonl
     showSearch("");
     resetAll.hidden = true;
     const parts = recorderOf(id);
-    for (const recorded of [parts.keycaps, parts.badge]) recorded.hidden = true;
+    for (const part of [parts.keycaps, parts.badge]) part.hidden = true;
     parts.add.hidden = false;
   };
 
@@ -119,7 +117,7 @@ export function shortcutSettings(scene: Scene, root: HTMLElement, steps: readonl
    * The recorded keys go into the draft at `at`. The row stops recording and shows the keys with
    * the Custom badge, and Reset all shows. The key field keeps the focus, so Remove shows.
    */
-  const recorded = (id: string, at: number): void =>
+  const assign = (id: string, at: number): void =>
     scene.at(at, () => {
       const parts = recorderOf(id);
       parts.row.removeAttribute("data-recording");
@@ -153,7 +151,7 @@ export function shortcutSettings(scene: Scene, root: HTMLElement, steps: readonl
     leave,
     record,
     hold,
-    recorded,
+    assign,
     disable,
     search: (): HTMLElement => search,
     keyField: (id: string): HTMLElement => recorderOf(id).field,

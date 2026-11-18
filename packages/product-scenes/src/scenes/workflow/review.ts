@@ -1,10 +1,14 @@
 import { must } from "../../motion/dom";
-import { offsetIn } from "../../motion/offset";
-import { designPixel, growIn, pop, replaceGrow, shrinkOut } from "../../motion/effects";
-import { gsap } from "../../motion/gsap";
+import {
+  designPixel,
+  growIn,
+  pop,
+  replaceGrow,
+  revealTween,
+  shrinkOut,
+} from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
 import { typeText } from "../../motion/text";
-import { EASE } from "../../motion/tokens";
 import { studioWindow } from "../../replicas/studio/studio";
 import {
   BUILDER_FIX_SESSION,
@@ -49,7 +53,6 @@ export function review(scene: Scene<ReviewTemplate>): void {
   const before = must(scene.template("old-diff"), '[data-line="10"]');
 
   // Start: QA approved the fix, and the task waits for your review before the pull request.
-  studio.hideTurns("review", "pr");
   studio.apply({
     ...FRAMES.review,
     action: "Generate Pull Request",
@@ -78,11 +81,10 @@ export function review(scene: Scene<ReviewTemplate>): void {
   scene.at(plus + 0.15, () => {
     before.removeAttribute("data-hover");
     before.after(form);
-    const bottom = offsetIn(form, files).y + form.offsetHeight + 12 * designPixel(studio.root);
-    const scroll = bottom - files.clientHeight;
+    // The scroll measures the form before it grows from zero height.
+    const scroll = revealTween(files, form, 12 * designPixel(studio.root), 0.5);
     scene.run(growIn(form, 0.35));
-    if (scroll > files.scrollTop)
-      scene.run(gsap.to(files, { scrollTop: scroll, duration: 0.5, ease: EASE.move }));
+    if (scroll) scene.run(scroll);
   });
   // The pointer follows the text box after the list scrolls.
   const typing = studio.cursor.point(() => text, plus + 0.65, 0.35) + 0.05;

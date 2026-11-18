@@ -47,13 +47,12 @@ export function gitSettings(scene: Scene, root: HTMLElement) {
 
   /**
    * Build time: no provider is selected, and the GitLab card, which shows when the visitor picks
-   * GitLab, has the draft of a new GitLab provider: the GitLab.com instance, no project, and no
+   * GitLab, has the draft of a new GitLab provider: the instance of the view, no project, and no
    * account.
    */
-  const reset = (instanceUrl: string): void => {
+  const reset = (): void => {
     selectNow("none");
     setReadiness("link");
-    setField("instance-url", instanceUrl);
     setField("project-path", "");
     showStep("connect");
   };
@@ -62,20 +61,21 @@ export function gitSettings(scene: Scene, root: HTMLElement) {
   const select = (provider: GitProviderId, at: number): void =>
     scene.at(at, () => selectNow(provider));
 
-  /** The readiness badge shows `state` at `at`. */
-  const readiness = (state: GitlabReadiness, at: number): void =>
-    scene.at(at, () => setReadiness(state));
-
   /**
    * Detect from origin reads the origin remote from `at` for `seconds`, then fills the project
-   * path, and the error of the empty path goes. Returns the time when the fields are filled.
+   * path. The error of the empty path goes, and the card asks for an account, as the draft has a
+   * project and no account. Returns the time when the fields are filled.
    */
   const detect = (projectPath: string, at: number, seconds: number): number => {
-    scene.at(at, () => detectButton.toggleAttribute("data-detecting", true));
+    const busy = (on: boolean): void => {
+      for (const state of ["data-busy", "data-disabled"]) detectButton.toggleAttribute(state, on);
+    };
+    scene.at(at, () => busy(true));
     const done = at + seconds;
     scene.at(done, () => {
-      detectButton.removeAttribute("data-detecting");
+      busy(false);
       setField("project-path", projectPath);
+      setReadiness("connect");
     });
     return done;
   };
@@ -87,10 +87,15 @@ export function gitSettings(scene: Scene, root: HTMLElement) {
    */
   const startSignIn = (at: number, seconds: number): number => {
     const connect = step("connect");
-    scene.at(at, () => connect.toggleAttribute("data-starting", true));
+    const signIn = must(connect, "[data-sign-in]");
+    const busy = (on: boolean): void => {
+      connect.toggleAttribute("data-starting", on);
+      signIn.toggleAttribute("data-busy", on);
+    };
+    scene.at(at, () => busy(true));
     const shown = at + seconds;
     scene.at(shown, () => {
-      connect.removeAttribute("data-starting");
+      busy(false);
       showStep("pending");
     });
     return shown;
@@ -105,11 +110,13 @@ export function gitSettings(scene: Scene, root: HTMLElement) {
     scene.at(at, () => {
       linked.toggleAttribute("data-checking", true);
       showStep("linked");
+      setReadiness("checking");
     });
-    readiness("checking", at);
     const ready = at + seconds;
-    scene.at(ready, () => linked.removeAttribute("data-checking"));
-    readiness("ready", ready);
+    scene.at(ready, () => {
+      linked.removeAttribute("data-checking");
+      setReadiness("ready");
+    });
     return ready;
   };
 
@@ -119,7 +126,6 @@ export function gitSettings(scene: Scene, root: HTMLElement) {
     signInButton: (): HTMLElement => must(step("connect"), "[data-sign-in]"),
     reset,
     select,
-    readiness,
     detect,
     startSignIn,
     link,

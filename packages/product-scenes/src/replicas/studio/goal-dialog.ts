@@ -105,6 +105,6 @@ export function goalDialog(scene: Scene, root: HTMLElement, cursor: Pointer, ove
     generateGoal,
     start,
     step: dialog.setStep,
-    close: dialog.unmount,
+    unmount: dialog.unmount,
   };
 }

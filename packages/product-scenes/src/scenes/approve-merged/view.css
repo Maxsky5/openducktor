@@ -19,9 +19,13 @@
       background: var(--card);
       box-shadow: var(--shadow-window);
     }
-    /* A phone stage: one lane at a time, and the toasts take the width of the window. The static
-       frame shows Human Review: the track scrolls by the collapsed lanes and keeps its padding on
-       the right of the lane. */
+    /*
+     * A phone stage: one lane at a time, and the toasts take the width of the window. The static
+     * frame shows Human Review as scrollFor of board-scroll.ts scrolls to it: the right edge of the
+     * lane and the padding of the track meet the right edge of the window. The track holds 6
+     * collapsed lanes of 36 before the lane of 328, with gaps of 16 and a padding of 20 (Lane.css
+     * and Board.css), and the window is 398 wide inside its border.
+     */
     @container stage (width <= 500px) {
       .am-stage {
         --design-width: 400;
@@ -30,7 +34,7 @@
         height: calc(664 * var(--u));
       }
       .am-window .board-track {
-        transform: translateX(calc(-282 * var(--u)));
+        transform: translateX(calc((398 - 6 * (36 + 16) - 328 - 2 * 20) * var(--u)));
       }
       .am-window .toast-stack {
         right: calc(16 * var(--u));

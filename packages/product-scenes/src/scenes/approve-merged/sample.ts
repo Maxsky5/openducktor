@@ -10,7 +10,7 @@ import { TASKS } from "../../sample/tasks";
 import { taskId } from "../../sample/workspace";
 
 /** The task whose branch is merged. */
-export const TASK = "c7v2" as const;
+const TASK = "c7v2" as const;
 
 /** The title and the ID of the task. */
 export const TASK_IDENTITY = { title: TASKS[TASK].title, id: taskId(TASK) } as const;

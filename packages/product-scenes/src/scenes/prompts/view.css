@@ -310,14 +310,6 @@
     .pd-save {
       border: 0;
     }
-    /* The Save icon changes to a spinner while the settings save. */
-    .pd-saving-icon,
-    .pd-save[data-saving] .pd-save-icon {
-      display: none;
-    }
-    .pd-save[data-saving] .pd-saving-icon {
-      display: block;
-    }
     .pd-footer {
       display: flex;
       flex: 0 0 auto;

@@ -37,7 +37,7 @@ export const PAUSE = "pause";
 
 /** The file of the fix and its test. */
 export const FIX_PATH = "src/notes/move-note.ts";
-export const TEST_PATH = "src/notes/move-note.test.ts";
+const TEST_PATH = "src/notes/move-note.test.ts";
 
 /** The time of the goal message. */
 export const GOAL_TIME = "10:12:04 AM";

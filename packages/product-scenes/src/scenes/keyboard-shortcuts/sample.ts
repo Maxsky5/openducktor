@@ -5,8 +5,7 @@ import type { KeyPlatform } from "../../replicas/keys";
 import type { RepositorySection } from "../../replicas/settings/RepositorySidebar";
 import type { SettingsSection } from "../../replicas/settings/SettingsDialog";
 import type { PlatformKeys, ShortcutCommand } from "../../replicas/settings/ShortcutRow";
-import type { ShortcutGroup } from "../../replicas/settings/ShortcutSettings";
-import type { SearchStep } from "../../replicas/settings/shortcut-settings";
+import type { SearchStep, ShortcutGroup } from "../../replicas/settings/ShortcutSettings";
 import type { NavData, NavEntry } from "../../replicas/shell/nav";
 import { NAV_SESSIONS } from "../../sample/nav";
 import type { Session } from "../../sample/sessions";
@@ -85,7 +84,7 @@ export const START_NAV: NavData = { scope: "current", entries: entries(FIRST), h
 export const END_NAV: NavData = { ...START_NAV, entries: entries(THIRD) };
 
 /** The keys of each step, as shortcutKeyParts and modifierKeyParts of key-labels.ts write them. */
-export type StepKeys = {
+type StepKeys = {
   /** Mod: Command on macOS and Control elsewhere. */
   mod: string;
   /** The default keys of Open Settings: chord(",", CTRL) of catalogue.ts. */
@@ -94,7 +93,10 @@ export type StepKeys = {
   recording: readonly (readonly string[])[];
   /** The keys that the recorder takes: Mod Shift F. */
   recorded: readonly string[];
-  /** The keys in words for the text of the view, as spokenShortcut of key-labels.ts says them. */
+  /**
+   * The keys in words for the text alternative of the view. `mod` and `recorded` are as
+   * spokenShortcut of key-labels.ts says them, and `settings` is prose.
+   */
   words: { mod: string; settings: string; recorded: string };
 };
 
@@ -203,6 +205,9 @@ export const GROUPS: readonly ShortcutGroup[] = [
 /** The text that the visitor types in the search. */
 export const SEARCH = "fork";
 
+/** The rows that the search keeps for SEARCH. The static frame shows them. */
+export const FOUND: SearchStep = { term: SEARCH, commands: ["message-fork"] };
+
 /**
  * The rows of the list for the empty search and after each letter of SEARCH, from the top. Each
  * list starts as the list of the app and goes past the bottom of the pane.
@@ -234,7 +239,7 @@ export const SEARCH_STEPS: readonly SearchStep[] = [
     ],
   },
   { term: "for", commands: ["browser-forward", "message-fork"] },
-  { term: SEARCH, commands: ["message-fork"] },
+  FOUND,
 ];
 
 /** The command that the visitor gives keys, and its new keys: Mod Shift F. */

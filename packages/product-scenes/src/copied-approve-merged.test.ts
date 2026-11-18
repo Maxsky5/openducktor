@@ -9,15 +9,7 @@ import {
   TASK_IDENTITY,
 } from "./scenes/approve-merged/sample";
 import { importProduct, readProduct } from "./test-support/product-source";
-
-type TaskCard = { id: string };
-type ArtifactState = { present: boolean; verdict?: string };
-type TaskFixture = (overrides: {
-  id: string;
-  issueType: string;
-  status: string;
-  artifactSummary: Record<string, ArtifactState>;
-}) => TaskCard;
+import { reviewTask, type TaskCard } from "./test-support/review-task";
 type Footer = {
   leadingCoreAction: { label: string; emphasis: string; confirmation: string } | null;
   shortcuts: readonly { label: string }[];
@@ -25,11 +17,6 @@ type Footer = {
 };
 type TargetBranch = { branch: string; remote: string };
 
-// SAFETY: the test support of the workflows exports these fixtures.
-const workflowSupport = await importProduct<{
-  createTaskCardFixture: TaskFixture;
-  emptyArtifactSummary: () => Record<string, ArtifactState>;
-}>("packages/workflows/test-support/index.ts");
 // SAFETY: kanban-task-footer.ts exports this function, and a missing export fails the test.
 const { getTaskFooter } = await importProduct<{
   getTaskFooter: (inputs: {
@@ -78,21 +65,6 @@ const markup = (
   ])
 ).join("\n");
 
-/** The task of the scene in Human Review, whose spec, plan, and approved QA report are present. */
-const reviewTask = (): TaskCard => {
-  const artifacts: Record<string, ArtifactState> = {};
-  for (const code of Object.keys(workflowSupport.emptyArtifactSummary())) {
-    artifacts[code] =
-      code === "qaReport" ? { present: true, verdict: "approved" } : { present: true };
-  }
-  return workflowSupport.createTaskCardFixture({
-    id: TASK_IDENTITY.id,
-    issueType: "feature",
-    status: "human_review",
-    artifactSummary: artifacts,
-  });
-};
-
 /** A saved session of `role` on the task. */
 const session = (role: string, task: TaskCard) => ({
   externalSessionId: `${role}-1`,
@@ -106,7 +78,7 @@ const session = (role: string, task: TaskCard) => ({
 
 describe("the close of a merged task copied from the app", () => {
   test("the merged card leads with Close Task, which opens the close confirmation", () => {
-    const task = reviewTask();
+    const task = reviewTask(TASK_IDENTITY.id);
     const footer = getTaskFooter({
       task,
       taskSessions: [],
@@ -128,8 +100,7 @@ describe("the close of a merged task copied from the app", () => {
   test("the Merged badge and the dialog show the merge status of the target branch", () => {
     const targetBranch = { branch: "main", remote: "origin" };
     expect(canonicalTargetBranch(targetBranch)).toBe(TARGET);
-    expect(markup).toContain("Branch merged into {target}");
-    expect(MERGED_TIP).toBe(`Branch merged into ${TARGET}`);
+    expect(markup).toContain(MERGED_TIP.replace(TARGET, "{target}"));
     const status = describeTaskMergeStatus({
       taskId: TASK_IDENTITY.id,
       targetBranch,
@@ -154,9 +125,8 @@ describe("the close of a merged task copied from the app", () => {
 
   test("the close shows the success toast of the app", () => {
     expect(markup).toContain(`successTitle: "${CLOSED_FEEDBACK.title}"`);
-    expect(CLOSED_FEEDBACK.description).toBe(
-      `${TASK_IDENTITY.id}. Its worktree and local branch were removed.`,
+    expect(markup).toContain(
+      `\`${CLOSED_FEEDBACK.description.replace(TASK_IDENTITY.id, "${taskId}")}\``,
     );
-    expect(markup).toContain("`${taskId}. Its worktree and local branch were removed.`");
   });
 });

@@ -118,7 +118,7 @@ export const build: SceneBuilder = (scene) => {
     down += 0.3;
   }
   held.hold(keys.recorded, down);
-  shortcuts.recorded(RECORDED.id, down);
+  shortcuts.assign(RECORDED.id, down);
   scene.mark("recorded", down);
   held.release(down + 0.3);
 

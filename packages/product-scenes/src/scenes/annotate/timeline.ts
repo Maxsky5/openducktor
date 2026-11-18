@@ -43,7 +43,6 @@ export const build: SceneBuilder = (scene) => {
   browser.page.dataset.version = "before";
   browser.reset();
   badge.textContent = "";
-  for (const name of ["message", "answer"]) row(name).hidden = true;
   for (const part of all(track, '[data-annotation="2"]')) part.hidden = notes.length < 2;
   must(browser.page, '[data-fn="import-link"]').hidden = notes.length < 2;
   setActivity("idle");

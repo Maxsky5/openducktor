@@ -3,7 +3,7 @@ import type { SceneBuilder } from "../../motion/scene";
 import { boardOf, setActivity, swapIn } from "../../replicas/board/cards";
 import { commandPalette } from "../../replicas/palette/command-palette";
 import { pointer } from "../../replicas/shell/cursor";
-import { keystrokes } from "../../replicas/shell/keystrokes";
+import { keyPresses } from "../../replicas/ui/held-keys";
 import { sessionList } from "../../replicas/shell/nav-list";
 import { startupToast } from "../../replicas/shell/startup-toast";
 import { startDialog } from "../../replicas/studio/start-dialog";
@@ -25,7 +25,7 @@ export const build: SceneBuilder<PaletteTemplate> = (scene) => {
   const { modifier } = root.dataset;
   if (!modifier) throw new Error("The palette view has no modifier key.");
   const palette = commandPalette(scene, root);
-  const keys = keystrokes(scene);
+  const keys = keyPresses(scene);
   const cursor = pointer(scene, root);
   const sessions = sessionList(scene, root);
   const { card } = boardOf(scene);

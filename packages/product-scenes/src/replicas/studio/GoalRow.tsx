@@ -1,9 +1,9 @@
 // The goal row of agent-chat-goal-row.tsx and agent-chat-goal-row.css: the goal of the session on
 // the top edge of the composer. The label Goal, the status in its tone, and the objective share one
-// line. A click opens the whole objective. The actions follow agent-session-goal-row.ts in
+// line, which ends in an ellipsis. The actions follow agent-session-goal-row.ts in
 // packages/frontend-core: Pause goal while the goal is active, Resume goal while it waits, and Clear
 // goal always. A runtime without pause and resume shows only Clear goal. goal-row.ts raises the row
-// and changes its status. A view shows the open row with `expanded`.
+// and changes its status.
 import {
   ChevronDown,
   CircleAlert,
@@ -92,8 +92,6 @@ type GoalRowProps = {
   status: GoalStatus;
   /** The runtime can pause and resume a goal: supportsPauseResume of its descriptor. */
   pausable: boolean;
-  /** The row shows the whole objective. */
-  expanded?: boolean;
   /** The row waits for the scene, which raises it out of the composer. */
   hidden?: boolean;
 };
@@ -102,7 +100,6 @@ export function GoalRow({
   objective,
   status,
   pausable,
-  expanded = false,
   hidden = false,
 }: GoalRowProps): ReactElement {
   return (
@@ -117,13 +114,8 @@ export function GoalRow({
       hidden={hidden}
     >
       <div className="gr-card">
-        <span className="gr-toggle" data-goal-toggle="">
-          <span
-            className="gr-line"
-            data-expanded={String(expanded)}
-            data-clamped={String(!expanded)}
-            data-goal-line=""
-          >
+        <span className="gr-toggle">
+          <span className="gr-line">
             {Object.entries(ICONS).map(([name, Icon]) => (
               <Icon className="gr-icon" data-icon={name} key={name} />
             ))}
@@ -133,11 +125,7 @@ export function GoalRow({
             </span>{" "}
             <span className="gr-objective">{objective}</span>
           </span>
-          <ChevronDown
-            className="gr-chevron"
-            data-expanded={String(expanded)}
-            data-goal-chevron=""
-          />
+          <ChevronDown className="gr-chevron" />
         </span>
         <span className="gr-actions">
           {Object.entries(ACTION_ICONS).map(([action, Icon]) => (

@@ -11,7 +11,7 @@ import { type Pointer, pointer } from "../../replicas/shell/cursor";
 import { follow, transcript } from "../../replicas/transcript/rows";
 import { type Tip, tooltip } from "../../replicas/ui/tip";
 import { DEV_SERVER_SHORT, PAGE_TITLE } from "../../sample/browser";
-import { AGENT_BADGE_TIP, CALL_ORDER, type CallName, SEARCH_QUERY } from "./sample";
+import { AGENT_BADGE_TIP, type CallName, SEARCH_QUERY } from "./sample";
 
 /** The time from the end of a call to the start of the next one, so each step reads calmly. */
 const PAUSE = 0.9;
@@ -63,7 +63,6 @@ export const build: SceneBuilder = (scene) => {
   panel.show(panel.narrow ? "chat" : "panel");
   browser.reset();
   page.dataset.notebook = "inbox";
-  for (const name of ["plan", ...CALL_ORDER, "answer"]) row(name).hidden = true;
   setActivity("working");
 
   /** The tab icon shows the dot of an agent that acts on the page. */

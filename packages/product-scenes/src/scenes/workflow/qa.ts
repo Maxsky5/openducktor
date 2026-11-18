@@ -34,7 +34,6 @@ export function qa(scene: Scene<QaTemplate>): void {
   const studio = studioWindow(scene);
   const row = (id: RowId<"qa">): HTMLElement => studio.row("qa", id);
   const fix = (id: RowId<"fix">): HTMLElement => studio.row("fix", id);
-  studio.hideTurns("qa", "fix");
   studio.setSessionShown("build");
   studio.apply(FRAMES.build);
   studio.panels.setArtifact(ARTIFACTS.qa, false);

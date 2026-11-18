@@ -1,6 +1,7 @@
 // Tweens that the scenes add at the time of a change, with `scene.run`. Each one measures the
 // page when it starts, so it follows the layout of the frame at that time.
 import { gsap } from "./gsap";
+import { offsetIn } from "./offset";
 import { EASE } from "./tokens";
 
 /** The box properties that a growing element animates from zero, and clears at the end. */
@@ -61,6 +62,22 @@ export function scrollToEnd(element: Element, duration: number): gsap.core.Tween
     duration,
     ease: EASE.move,
   });
+}
+
+/**
+ * Scrolls `container` until `element` shows in full, with `margin` pixels under it. The container
+ * is the positioned root of the element. Returns undefined when the element shows already.
+ */
+export function revealTween(
+  container: HTMLElement,
+  element: HTMLElement,
+  margin: number,
+  duration: number,
+): gsap.core.Tween | undefined {
+  const bottom = offsetIn(element, container).y + element.offsetHeight + margin;
+  const scroll = bottom - container.clientHeight;
+  if (scroll <= container.scrollTop) return undefined;
+  return gsap.to(container, { scrollTop: scroll, duration, ease: EASE.move });
 }
 
 /** Fades elements in while they rise by `rise` CSS pixels, `stagger` seconds apart. */

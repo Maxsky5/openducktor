@@ -12,7 +12,7 @@ import {
   GitlabSetupCard,
 } from "../../replicas/settings/GitlabSetupCard";
 import { GitProviderSelector } from "../../replicas/settings/GitProviderSelector";
-import { RepositorySidebar } from "../../replicas/settings/RepositorySidebar";
+import { RepositoriesPane } from "../../replicas/settings/RepositoriesPane";
 import { SettingsPane } from "../../replicas/settings/SettingsPane";
 import { Pointer } from "../../replicas/shell/Pointer";
 import { WORKSPACE } from "../../sample/workspace";
@@ -27,23 +27,24 @@ export function GitlabView(props: SceneViewProps): ReactElement {
       alt={`The Git tab of the ${WORKSPACE} repository in Settings. The Git provider choice shows No provider, GitHub, GitLab, and Azure DevOps, with No provider selected. The visitor selects GitLab, and the GitLab setup card shows the status Link project and the instance URL ${INSTANCE_URL}. The empty Project path shows ${GITLAB_PROJECT_PATH_ERROR} The visitor selects Detect from origin, and the project path ${PROJECT_PATH} fills in. The status changes to Connect account. The visitor selects Sign in with GitLab. The card shows Approve the sign-in in GitLab with a one-time code while the browser asks for the approval. Then the card shows Connected as @${ACCOUNT.username} on ${INSTANCE_LABEL}, checks the connection, and the status changes to Ready.`}
     >
       <SettingsPane className="gl-pane">
-        <RepositorySidebar repository={WORKSPACE} section="Git" />
-        <div className="gl-content" data-tab="">
-          <div className="gl-sections">
-            <GitProviderSelector selected="gitlab" />
-            <GitlabSetupCard
-              readiness="ready"
-              instanceUrl={INSTANCE_URL}
-              projectPath={PROJECT_PATH}
-              account={{
-                step: "linked",
-                account: ACCOUNT,
-                instance: INSTANCE_LABEL,
-                code: SIGN_IN_CODE,
-              }}
-            />
+        <RepositoriesPane repository={WORKSPACE} section="Git">
+          <div className="gl-content" data-tab="">
+            <div className="gl-sections">
+              <GitProviderSelector selected="gitlab" />
+              <GitlabSetupCard
+                readiness="ready"
+                instanceUrl={INSTANCE_URL}
+                projectPath={PROJECT_PATH}
+                account={{
+                  step: "linked",
+                  account: ACCOUNT,
+                  instance: INSTANCE_LABEL,
+                  code: SIGN_IN_CODE,
+                }}
+              />
+            </div>
           </div>
-        </div>
+        </RepositoriesPane>
         <Pointer />
       </SettingsPane>
     </SceneFrame>

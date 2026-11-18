@@ -1,9 +1,7 @@
 // The Fork session dialog of ForkDialog.tsx: it opens over a window, the visitor selects the work
 // location, Fork session shows the startup progress, and the dialog closes when the fork is ready.
 import { all, must } from "../../motion/dom";
-import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
-import { EASE } from "../../motion/tokens";
 import type { ForkLocation } from "./ForkDialog";
 import { progressDialog } from "./progress-dialog";
 
@@ -35,25 +33,8 @@ export function forkDialog(scene: Scene, root: HTMLElement) {
     reset,
     open: dialog.open,
     close: dialog.close,
-    /**
-     * Selects the work location `value` at `at`. The box follows its new content over 300 ms, as
-     * observeDialogResize of dialog-resize.ts resizes it.
-     */
-    select: (value: ForkLocation, at: number): void =>
-      scene.at(at, () => {
-        const from = { width: box.offsetWidth, height: box.offsetHeight };
-        selectNow(value);
-        const to = { width: box.offsetWidth, height: box.offsetHeight };
-        if (from.width === to.width && from.height === to.height) return;
-        scene.run(
-          gsap.fromTo(box, from, {
-            ...to,
-            duration: 0.3,
-            ease: EASE.resize,
-            clearProps: "width,height",
-          }),
-        );
-      }),
+    /** Selects the work location `value` at `at`. The box follows its new content. */
+    select: (value: ForkLocation, at: number): void => dialog.resize(at, () => selectNow(value)),
     scrollToEnd: dialog.scrollToEnd,
     start: dialog.start,
     runSteps: dialog.runSteps,

@@ -1,15 +1,18 @@
 // The open and the close of a dialog over a window, as dialog.css of packages/frontend does: the
 // overlay fades in, and the box comes in from 0.96 of its size. The close takes the box back to
-// that size and fades the overlay out. The start dialogs, the session dialogs, the import dialog,
-// and the conflict dialog use it.
+// that size and fades the overlay out. A change of its content resizes the box. The start dialogs,
+// the session dialogs, the import dialog, the conflict dialog, and the Close task dialog use it.
 import { must } from "../../motion/dom";
 import { fadeHide } from "../../motion/effects";
 import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
 import { EASE } from "../../motion/tokens";
 
-/** Seconds of the open and the close: --modal-open-dur and --modal-close-dur of dialog.css. */
-const DURATION = { open: 0.25, close: 0.15 } as const;
+/**
+ * Seconds of the open, the close, and a resize: --modal-open-dur, --modal-close-dur, and
+ * --resize-dur of dialog.css.
+ */
+const DURATION = { open: 0.25, close: 0.15, resize: 0.3 } as const;
 /** --modal-scale of dialog.css. */
 const SCALE = 0.96;
 
@@ -95,5 +98,25 @@ export function modal(
       else overlay.hidden = true;
     });
 
-  return { box, open, close, unmount };
+  /**
+   * Runs `change` at `at`, and the box goes from its old size to the size of its new content, as
+   * observeDialogResize of dialog-resize.ts resizes it.
+   */
+  const resize = (at: number, change: () => void): void =>
+    scene.at(at, () => {
+      const from = { width: box.offsetWidth, height: box.offsetHeight };
+      change();
+      const to = { width: box.offsetWidth, height: box.offsetHeight };
+      if (from.width === to.width && from.height === to.height) return;
+      scene.run(
+        gsap.fromTo(box, from, {
+          ...to,
+          duration: DURATION.resize,
+          ease: EASE.resize,
+          clearProps: "width,height",
+        }),
+      );
+    });
+
+  return { box, open, close, unmount, resize };
 }

@@ -21,7 +21,6 @@ export function spec(scene: Scene<SpecTemplate>): void {
   const question = row("question");
   const answers = must(question, "[data-answers]");
 
-  studio.hideTurns("spec");
   // The question waits for its answers: each line shows No answer yet.
   answers.removeAttribute("data-answered");
   // The session starts with the context of the kickoff prompt. The task is in Backlog.

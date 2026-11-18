@@ -3,7 +3,7 @@ import { IDENTITY_TEXT, TILE_PALETTE } from "./replicas/settings/RepositoryConfi
 import { SETTINGS_SECTIONS, SETTINGS_TEXT } from "./replicas/settings/SettingsDialog";
 import { WORKSPACE, WORKSPACES } from "./sample/workspace";
 import { FIRST_REPOSITORY_SECTION, FIRST_SECTION } from "./scenes/keyboard-shortcuts/sample";
-import { importProduct, readProduct } from "./test-support/product-source";
+import { importProduct, readProductWords } from "./test-support/product-source";
 
 type Section = { id: string; label: string; icon: { displayName?: string } };
 
@@ -29,11 +29,6 @@ const { WORKSPACE_ABBREVIATION_MAX_LENGTH } = await importProduct<{
   WORKSPACE_ABBREVIATION_MAX_LENGTH: number;
 }>("packages/contracts/src/index.ts");
 
-/** The source of `paths`, with each run of white space as one space, for words in markup. */
-async function sourceOf(paths: readonly string[]): Promise<string> {
-  return (await Promise.all(paths.map(readProduct))).join("\n").replace(/\s+/g, " ");
-}
-
 describe("the Settings dialog copied from the app", () => {
   test("the menu lists the sections of the app with their icons", () => {
     expect(
@@ -53,7 +48,7 @@ describe("the Settings dialog copied from the app", () => {
   });
 
   test("the header and the footer have the words of the app", async () => {
-    const dialog = await sourceOf([
+    const dialog = await readProductWords([
       `${SETTINGS}/settings-modal.tsx`,
       `${SETTINGS}/settings-modal-footer.tsx`,
     ]);
@@ -64,7 +59,7 @@ describe("the Settings dialog copied from the app", () => {
   });
 
   test("the Configuration section shows the words and the swatches of the app", async () => {
-    const source = await sourceOf([
+    const source = await readProductWords([
       `${SETTINGS}/settings-repository-configuration-section.tsx`,
       `${IDENTITY}/workspace-identity-fields.tsx`,
       `${IDENTITY}/workspace-tile-color-picker.tsx`,

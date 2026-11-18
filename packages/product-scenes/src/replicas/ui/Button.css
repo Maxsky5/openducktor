@@ -54,10 +54,6 @@
       background: var(--destructive);
       color: var(--destructive-foreground);
     }
-    /* destructiveGhost: text-destructive-muted, with no border and no surface. */
-    .ui-button[data-variant="destructiveGhost"] {
-      color: var(--destructive-muted);
-    }
     /* warning: border border-warning-border bg-warning-surface text-warning-muted. */
     .ui-button[data-variant="warning"] {
       border: calc(1 * var(--u)) solid var(--warning-border);
@@ -74,6 +70,11 @@
     }
     .ui-button[data-disabled] {
       opacity: 0.5;
+    }
+    /* A busy button shows its spinner in the place of its icon. */
+    .ui-button:not([data-busy]) .ui-busy-icon,
+    .ui-button[data-busy] .ui-idle-icon {
+      display: none;
     }
   }
 }

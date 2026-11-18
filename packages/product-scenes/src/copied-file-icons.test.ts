@@ -14,7 +14,6 @@ import { GOAL_CALLS } from "./scenes/goal-command/sample";
 import { GOAL_TRANSCRIPT } from "./scenes/goal-mode/sample";
 import { RUNS as COMMENT_RUNS } from "./scenes/pr-comments/sample";
 import { SYNC_CALLS } from "./scenes/question/sample";
-import { BUILD_CALLS } from "./scenes/queue/sample";
 import { importProduct, importProductDependency } from "./test-support/product-source";
 
 // SAFETY: file-type-icons.ts exports this function, and a missing export fails the test.
@@ -45,7 +44,6 @@ const FILE_CALLS: readonly CallData[] = [
   ...GOAL_CALLS,
   ...COMMENT_RUNS.apply,
   ...SYNC_CALLS,
-  ...BUILD_CALLS,
 ].filter((call) => call.file);
 
 /** Each file that a line, a chip, or the Diffs tab of the samples shows with its icon. */

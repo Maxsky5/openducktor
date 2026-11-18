@@ -18,12 +18,14 @@ export const GOAL_CHIP_LABEL = "Goal";
 /** The kind of a file, which sets its icon. */
 export type FileKind = "code" | "default";
 
-type ReferenceChipProps = ComponentProps<"span"> & {
-  kind: "slash" | "file" | "skill" | "goal";
-  label: string;
-  /** The file of a file chip: its path picks the icon of its type, and its kind the other icon. */
-  file?: { path: string; kind: FileKind };
-};
+type ReferenceChipProps = ComponentProps<"span"> & { label: string } & (
+    | { kind: "slash" | "skill" | "goal"; file?: never }
+    | {
+        kind: "file";
+        /** The file of the chip: its path picks the icon of its type, and its kind the other icon. */
+        file: { path: string; kind: FileKind };
+      }
+  );
 
 /** The icon of a file: the icon of its type, or the icon of its kind. */
 function FileIcon({ path, kind }: { path: string; kind: FileKind }): ReactElement {
@@ -40,7 +42,7 @@ export function ReferenceChip({
 }: ReferenceChipProps): ReactElement {
   return (
     <span className={classes("ref-chip", className)} data-kind={kind} {...attributes}>
-      {kind === "file" && file && <FileIcon {...file} />}
+      {kind === "file" && <FileIcon {...file} />}
       {kind === "skill" && <ScrollText />}
       {kind === "goal" && <Target />}
       <span>{label}</span>

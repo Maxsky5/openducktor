@@ -12,14 +12,14 @@ import {
   runTitle,
   showEarlierLabel,
 } from "./replicas/transcript/tool-runs";
-import { storySessions } from "./sample/transcripts";
+import { BUILD_CALLS, storySessions } from "./sample/transcripts";
 import { RUNS as CI_RUNS } from "./scenes/ci-checks/sample";
 import { CALLS as CONFLICT_CALLS } from "./scenes/git-conflict/sample";
 import { GOAL_CALLS } from "./scenes/goal-command/sample";
 import { GOAL_TRANSCRIPT } from "./scenes/goal-mode/sample";
 import { RUNS as COMMENT_RUNS } from "./scenes/pr-comments/sample";
 import { NEXT_CALL, READ_CALLS, SYNC_CALLS } from "./scenes/question/sample";
-import { BUILD_CALLS, HELP_SEARCH, KEYMAP_TESTS } from "./scenes/queue/sample";
+import { HELP_SEARCH, KEYMAP_TESTS } from "./scenes/queue/sample";
 import { importProduct } from "./test-support/product-source";
 
 /** The counts of a run that the header of tool-runs.ts reads. */

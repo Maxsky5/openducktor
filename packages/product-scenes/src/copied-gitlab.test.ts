@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type ComponentType, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { GITLAB_ACCOUNT_TEXT } from "./replicas/settings/GitlabAccount";
+import { connectedAs, GITLAB_ACCOUNT_TEXT } from "./replicas/settings/GitlabAccount";
 import {
   GITLAB_CARD_TEXT,
   GITLAB_PROJECT_PATH_ERROR,
@@ -10,8 +10,8 @@ import {
 import { AzureDevOpsIcon, GithubIcon, GitlabIcon } from "./replicas/settings/GitProviderIcons";
 import { GIT_PROVIDER_OPTIONS, GIT_PROVIDER_TEXT } from "./replicas/settings/GitProviderSelector";
 import { REPOSITORY_SECTIONS } from "./replicas/settings/RepositorySidebar";
-import { INSTANCE_LABEL, INSTANCE_URL, PROJECT_PATH } from "./scenes/gitlab/sample";
-import { importProduct, readProduct } from "./test-support/product-source";
+import { ACCOUNT, INSTANCE_LABEL, INSTANCE_URL, PROJECT_PATH } from "./scenes/gitlab/sample";
+import { importProduct, importProductDependency, readProduct } from "./test-support/product-source";
 
 type GitlabDraft = {
   instanceUrl: string;
@@ -26,7 +26,6 @@ type ReadinessInput = {
   status: { status: "ready"; account: { tokenExpiresAt: string | null } } | null;
 };
 type Descriptor = { label: string };
-type IconNode = readonly [string, Record<string, string>][];
 
 const SETTINGS = "packages/frontend/src/components/features/settings";
 
@@ -60,9 +59,10 @@ const icons = await importProduct<{
   GitlabIcon: ComponentType;
   AzureDevOpsIcon: ComponentType;
 }>(`${SETTINGS}/git-provider-icons.tsx`);
-// SAFETY: lucide-react 0.577, which the app imports, exports the geometry of its GitHub icon.
-const { __iconNode: githubNode } = await importProduct<{ __iconNode: IconNode }>(
-  "packages/frontend/node_modules/lucide-react/dist/esm/icons/github.js",
+// SAFETY: the lucide-react of the app exports its GitHub icon, and a missing export fails the test.
+const { Github } = await importProductDependency<{ Github: ComponentType }>(
+  "lucide-react",
+  "packages/frontend",
 );
 // The card has its words in its markup, so the test reads the product source as text.
 const cardSource = (
@@ -105,7 +105,7 @@ describe("the GitLab settings copied from the app", () => {
   test("the provider marks have the geometry of the app", () => {
     expect(paths(GitlabIcon)).toEqual(paths(icons.GitlabIcon));
     expect(paths(AzureDevOpsIcon)).toEqual(paths(icons.AzureDevOpsIcon));
-    expect(paths(GithubIcon)).toEqual(githubNode.map(([, attributes]) => attributes.d ?? ""));
+    expect(paths(GithubIcon)).toEqual(paths(Github));
   });
 
   test("the repository menu lists the sections of the app", () => {
@@ -125,6 +125,15 @@ describe("the GitLab settings copied from the app", () => {
     } as const;
     expect(model.applyGitlabOrigin(draft("", null), origin).projectPath).toBe(PROJECT_PATH);
     expect(gitlabInstanceLabel(INSTANCE_URL)).toBe(INSTANCE_LABEL);
+  });
+
+  test("a linked account shows the title of the app", () => {
+    expect(cardSource).toContain(
+      "`Connected as @${account.username} on ${gitlabInstanceLabel(instanceUrl)}`",
+    );
+    expect(connectedAs(ACCOUNT.username, gitlabInstanceLabel(INSTANCE_URL))).toBe(
+      `Connected as @${ACCOUNT.username} on ${INSTANCE_LABEL}`,
+    );
   });
 
   test("the empty project path shows its error until Detect from origin fills it", () => {

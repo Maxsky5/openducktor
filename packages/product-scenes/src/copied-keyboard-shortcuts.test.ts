@@ -16,7 +16,7 @@ import {
   STEP_KEYS,
   THIRD,
 } from "./scenes/keyboard-shortcuts/sample";
-import { importProduct, readProduct } from "./test-support/product-source";
+import { importProduct, readProduct, readProductWords } from "./test-support/product-source";
 
 type AppPlatform = "darwin" | "win32";
 type Combination = {
@@ -139,11 +139,6 @@ const { builtinCompiledCatalogFixture } = await importProduct<{
 const { SettingsShortcutRow } = await importProduct<{
   SettingsShortcutRow: ComponentType<RowProps>;
 }>(`${SETTINGS}/settings-shortcut-row.tsx`);
-
-/** The source of `paths`, with each run of white space as one space, for words in markup. */
-async function sourceOf(paths: readonly string[]): Promise<string> {
-  return (await Promise.all(paths.map(readProduct))).join("\n").replace(/\s+/g, " ");
-}
 
 /** The commands of Settings, as useShortcutCatalogue of use-shortcut-catalogue.ts lists them. */
 const commands: readonly Command[] = [
@@ -280,7 +275,7 @@ describe("the keyboard shortcuts copied from the app", () => {
     expect(delays.length).toBeGreaterThan(0);
     expect(new Set(delays)).toEqual(new Set([HINT_DELAY * 1000]));
     expect(css.replace(/\s+/g, " ")).toContain("transition: visibility 0s;");
-    const hint = await sourceOf([`${SHORTCUTS}/position-hint.tsx`]);
+    const hint = await readProductWords([`${SHORTCUTS}/position-hint.tsx`]);
     expect(hint).toContain('const shift = platform === "darwin" ? "⇧" : "Shift";');
     expect(hint).toContain('hint = family === "workspace" ? `${shift} ${digit}` : digit;');
   });
@@ -364,16 +359,14 @@ describe("the keyboard shortcuts copied from the app", () => {
   });
 
   test("the section has the words of the app", async () => {
-    const section = await sourceOf([`${SETTINGS}/settings-keyboard-shortcuts-section.tsx`]);
+    const section = await readProductWords([`${SETTINGS}/settings-keyboard-shortcuts-section.tsx`]);
     for (const text of [SHORTCUT_TEXT.title, SHORTCUT_TEXT.description, SHORTCUT_TEXT.resetAll])
       expect(section).toContain(text);
     for (const label of SHORTCUT_TEXT.filters) expect(section).toContain(`label: "${label}"`);
+    const lead = "Search commands or keys, such as ";
     expect(section).toContain(
-      'placeholder={`Search commands or keys, such as ${platform === "darwin" ? "⌘K" : "Ctrl+K"}`}',
+      `placeholder={\`${lead}\${platform === "darwin" ? "⌘K" : "Ctrl+K"}\`}`,
     );
-    expect(SEARCH_PLACEHOLDER).toEqual({
-      mac: "Search commands or keys, such as ⌘K",
-      pc: "Search commands or keys, such as Ctrl+K",
-    });
+    expect(SEARCH_PLACEHOLDER).toEqual({ mac: `${lead}⌘K`, pc: `${lead}Ctrl+K` });
   });
 });

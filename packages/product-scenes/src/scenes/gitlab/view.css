@@ -2,14 +2,14 @@
   :where(.stage) {
     /*
      * GitLab: the body of the Settings dialog on the Repositories section, without the section
-     * list. The repository menu is 240 pixels wide from the lg breakpoint, and the Git tab is as
-     * wide as in a dialog of max-w-7xl. The pane shows the tab down to Sign in with GitLab, so a
-     * wide stage needs no scroll.
+     * list. The Git tab is as wide as in a dialog of max-w-7xl. The pane shows the tab down to Sign
+     * in with GitLab, so a wide stage needs no scroll. The one row of the grid gives the
+     * Repositories section the height of the pane, so the tab scrolls in it.
      */
     .gl-pane {
       --design-width: 1060;
       display: grid;
-      grid-template-columns: calc(240 * var(--u)) minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
       height: calc(730 * var(--u));
     }
     .gl-content {
@@ -28,10 +28,12 @@
     @container stage (width <= 500px) {
       .gl-pane {
         --design-width: 440;
-        grid-template-columns: minmax(0, 1fr);
         height: calc(760 * var(--u));
       }
-      .gl-pane > .repo-side {
+      .gl-pane .repos-pane {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .gl-pane .repo-side {
         display: none;
       }
     }

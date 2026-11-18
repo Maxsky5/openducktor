@@ -3,8 +3,8 @@
 // gitlab-provider-fields.tsx in packages/frontend/src/components/features/settings. The header has
 // the readiness badge and the Enabled switch, the Project part has Detect from origin and the two
 // fields, and GitlabAccount.tsx is the Account part. A scene changes the readiness with
-// `data-variant` and the text of `data-readiness`, shows the spinner of Detect from origin with
-// `data-detecting`, and fills the fields. An empty Project path shows its error under the field.
+// `data-variant` and the text of `data-readiness`, makes Detect from origin busy, and fills the
+// fields. An empty Project path shows its error under the field.
 import { LoaderCircle, Search } from "lucide-react";
 import type { ReactElement } from "react";
 import { Badge } from "../ui/Badge";
@@ -114,8 +114,8 @@ export function GitlabSetupCard({
               <p>{text.projectHint}</p>
             </div>
             <Button variant="outline" size="sm" className="glc-detect" data-detect>
-              <Search className="glc-idle-icon" />
-              <LoaderCircle className="spin glc-busy-icon" />
+              <Search className="ui-idle-icon" />
+              <LoaderCircle className="spin ui-busy-icon" />
               {text.detect}
             </Button>
           </div>

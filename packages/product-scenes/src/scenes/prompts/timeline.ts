@@ -125,7 +125,7 @@ export const build: SceneBuilder = (scene) => {
     editor.removeAttribute("data-focus");
     caret.hidden = true;
     saveLabel.textContent = "Saving…";
-    save.toggleAttribute("data-saving", true);
+    save.toggleAttribute("data-busy", true);
     save.toggleAttribute("data-disabled", true);
     cancel.toggleAttribute("data-disabled", true);
   });

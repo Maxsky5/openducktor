@@ -116,17 +116,6 @@
       font-size: calc(12 * var(--u));
       line-height: calc(16 * var(--u));
     }
-    /* Detect from origin shows the spinner and is disabled while it reads the origin remote. */
-    .glc-busy-icon,
-    .glc-detect[data-detecting] .glc-idle-icon {
-      display: none;
-    }
-    .glc-detect[data-detecting] .glc-busy-icon {
-      display: block;
-    }
-    .glc-detect[data-detecting] {
-      opacity: 0.5;
-    }
     /* The fields: two columns from the md breakpoint, gap-4. A field is grid gap-2, with its label
        in text-sm font-medium. */
     .glc-grid {

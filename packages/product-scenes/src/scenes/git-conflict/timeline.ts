@@ -46,7 +46,6 @@ export const build: SceneBuilder<GitConflictTemplate> = (scene) => {
 
   // Start: the Builder finished, and the target branch has new commits.
   setCounts(COUNTS.before);
-  for (const id of ["message", "final"]) step(id).hidden = true;
   setActivity("idle");
 
   // The visitor selects Rebase onto target. Its tooltip shows the target and the commits behind.
