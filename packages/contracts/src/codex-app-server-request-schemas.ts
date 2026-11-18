@@ -359,6 +359,11 @@ export const codexAppServerRequestParamsSchemas = {
       })
       .nullable(),
   }),
+  "config/read": z.strictObject({
+    includeLayers: z.boolean().optional(),
+    cwd: nullableString,
+  }),
+  "configRequirements/read": z.undefined(),
   "model/list": z.strictObject({
     cursor: nullableString,
     limit: nullableUint32,
@@ -519,6 +524,14 @@ export const codexAppServerClientRequestSchema = z.discriminatedUnion("method", 
     params: codexAppServerRequestParamsSchemas.initialize,
   }),
   z.strictObject({
+    method: z.literal("config/read"),
+    params: codexAppServerRequestParamsSchemas["config/read"],
+  }),
+  z.strictObject({
+    method: z.literal("configRequirements/read"),
+    params: codexAppServerRequestParamsSchemas["configRequirements/read"],
+  }),
+  z.strictObject({
     method: z.literal("model/list"),
     params: codexAppServerRequestParamsSchemas["model/list"],
   }),
@@ -659,6 +672,7 @@ export type CodexAppServerUserInput = z.output<typeof codexAppServerUserInputSch
 export type CodexAppServerTurnSteerParams = CodexAppServerRequestParamsMap["turn/steer"];
 export type CodexAppServerTurnInterruptParams = CodexAppServerRequestParamsMap["turn/interrupt"];
 export type CodexAppServerModelListParams = CodexAppServerRequestParamsMap["model/list"];
+export type CodexAppServerConfigReadParams = CodexAppServerRequestParamsMap["config/read"];
 export type CodexAppServerGitDiffToRemoteParams = CodexAppServerRequestParamsMap["gitDiffToRemote"];
 export type CodexAppServerFuzzyFileSearchParams = CodexAppServerRequestParamsMap["fuzzyFileSearch"];
 type CodexAppServerClientRequestSchemaMap = typeof codexAppServerRequestParamsSchemas;

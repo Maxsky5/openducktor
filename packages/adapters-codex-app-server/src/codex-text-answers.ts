@@ -45,10 +45,13 @@ export class CodexTextAnswers {
       return true;
     }
     const notification = event.message;
+    // An async message comes from the `send_message_to_user_async` tool, which a model catalog can
+    // give the model with no setting to turn it off. Only the turn's own answer is the text.
     if (
       notification.method === "item/completed" &&
       notification.params.item.type === "agentMessage" &&
-      notification.params.item.phase !== "commentary"
+      notification.params.item.phase !== "commentary" &&
+      notification.params.item.delivery !== "async"
     ) {
       answer.text = notification.params.item.text;
     } else if (notification.method === "turn/completed") {

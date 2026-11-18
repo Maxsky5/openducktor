@@ -177,7 +177,7 @@ export const createOpenCodeSessionControlAdapter = ({
     textGeneration: {
       generate: (input) =>
         Effect.tryPromise({
-          try: () => connection.generateText(input),
+          try: (signal) => connection.generateText(input, signal),
           catch: (cause) => toHostOperationError(cause, "opencode-live-session.generate-text"),
         }),
     },

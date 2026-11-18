@@ -10,7 +10,7 @@ export const createCodexTextGeneration = (
 ): AgentTextGenerationPort => ({
   generate: (input) =>
     Effect.tryPromise({
-      try: () => controller.generateText(runtimeId, input),
+      try: (signal) => controller.generateText(runtimeId, input, signal),
       catch: (cause) =>
         toHostOperationError(cause, "codex-live-session.generate-text", { runtimeId }),
     }),

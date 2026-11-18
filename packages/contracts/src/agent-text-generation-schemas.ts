@@ -4,7 +4,8 @@ import { runtimeKindSchema } from "./agent-runtime-schemas";
 /**
  * One text generation by a runtime model. The runtime keeps no session and changes no files.
  * Claude and OpenCode give the model no tools. Codex has no turn without tools, so its thread is
- * read-only, with no environment and no approvals.
+ * read-only, with no environment and no approvals, and it turns off the configured MCP servers,
+ * plugins, and apps.
  */
 export const agentTextGenerationInputSchema = z.strictObject({
   /** The repository whose runtime and folder the generation uses. */

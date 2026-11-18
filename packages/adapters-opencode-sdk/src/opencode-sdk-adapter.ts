@@ -721,19 +721,20 @@ export class OpencodeSdkAdapter {
 
   /**
    * One stateless model answer. OpenCode `generate.text` keeps no session and gives the model no
-   * tools. It takes no system prompt, so the instructions start the prompt.
+   * tools. It takes no system prompt, so the instructions start the prompt. `signal` cancels the
+   * HTTP request.
    */
-  async generateText(input: AgentTextGenerationInput): Promise<string> {
+  async generateText(input: AgentTextGenerationInput, signal: AbortSignal): Promise<string> {
     const model = nativeModelSelection(input.model);
     return nativeRequest(
       { repoPath: input.repoPath },
       "generate text",
       async () =>
         (
-          await this.client.generate.text({
-            prompt: `${input.instructions}\n\n${input.prompt}`,
-            model,
-          })
+          await this.client.generate.text(
+            { prompt: `${input.instructions}\n\n${input.prompt}`, model },
+            { signal },
+          )
         ).text,
     );
   }

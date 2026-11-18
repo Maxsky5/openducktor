@@ -185,15 +185,19 @@ The runtime owns the goal state. OpenDucktor stores no goal data and runs no goa
 
 The `agent_runtime_generate_text` host command asks one runtime model for one text. The input names the repository, the model, the instructions, and the prompt. The command returns the final text of the model. Each feature that needs generated text uses this command, with its own instructions.
 
-- The runtime keeps no session and changes no files. Claude and OpenCode give the model no tools. Codex has no turn without tools: its built-in tools stay, but the thread is read-only, with no environment and no approvals.
+- The runtime keeps no session and changes no files.
+- Turn off every hook, tool, child agent, MCP server, and web search that the runtime lets a client turn off.
+- Hooks and notification commands that managed runtime settings enforce can still run. The user approved this exception.
+- If managed settings undo a setting that the adapter uses to turn one of these off, fail before the prompt goes to the runtime. Name the setting in the error.
+- Stop the request when the host abort signal fires.
 - The caller sends all the material that the model needs in the prompt.
 - Each live session adapter provides `textGeneration`.
 
-| Runtime | Request | No tools and no session |
+| Runtime | Request | Isolation |
 | --- | --- | --- |
-| Claude | One `query()` with a string prompt | `tools: []`, `mcpServers: {}`, `strictMcpConfig`, `settings: { disableAllHooks: true }`, `persistSession: false`, `maxTurns: 1`. It loads the settings files like a session, so it uses the same provider and authentication setup. The instructions replace the system prompt. |
-| Codex | `thread/start`, then one `turn/start`, then `thread/unsubscribe` | An `ephemeral` thread with `sandbox: "read-only"`, `approvalPolicy: "never"`, and `environments: []`. Codex 0.166 still lists built-in tools such as `exec` and `spawn_agent`, and feature overrides do not remove them. The instructions are the developer instructions. The thread has no session, so its events go only to the wait for its answer. |
-| OpenCode | `generate.text` | OpenCode makes one stateless model call. It takes no system prompt, so the instructions start the prompt. |
+| Claude | One `query()` with a string prompt | No tools, no MCP servers, no hooks, no saved session, and one turn. The instructions replace the system prompt. |
+| Codex | `thread/start`, one `turn/start`, then `thread/unsubscribe` | An ephemeral read-only thread with no environment and no approvals. The thread configuration turns off the features and MCP servers that Codex turns off for its own title threads. Built-in tools that need no environment, such as the clock, can stay. The text is the final agent message of the turn. |
+| OpenCode | `generate.text` | One stateless model call. The instructions start the prompt. |
 
 ### History
 

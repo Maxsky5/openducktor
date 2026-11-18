@@ -61,6 +61,46 @@ const codexAppServerThreadResumeResultSchema = codexAppServerThreadLaunchResultS
   itemsBackwardsCursor: z.string().nullable().optional(),
 });
 
+/**
+ * The effective configuration of a folder. OpenDucktor reads only the configured MCP servers, so
+ * it can turn each one off for a thread.
+ */
+const codexAppServerConfigReadResponseSchema = z.object({
+  config: z.object({
+    mcp_servers: z.record(z.string(), z.unknown()).nullable().optional(),
+  }),
+  /** The configuration layers, with `includeLayers`. `name.type` names the source of a layer. */
+  layers: z
+    .array(
+      z.object({
+        name: z.object({ type: z.string() }),
+        config: z.unknown(),
+        disabledReason: z.string().nullable().optional(),
+      }),
+    )
+    .nullable()
+    .optional(),
+});
+export type CodexAppServerConfigReadResponse = z.output<
+  typeof codexAppServerConfigReadResponseSchema
+>;
+
+/**
+ * The managed requirements. OpenDucktor reads the features that the policy pins, and whether only
+ * managed hooks may run.
+ */
+const codexAppServerConfigRequirementsReadResponseSchema = z.object({
+  requirements: z
+    .object({
+      featureRequirements: z.record(z.string(), z.boolean()).nullable().optional(),
+      allowManagedHooksOnly: z.boolean().nullable().optional(),
+    })
+    .nullable(),
+});
+export type CodexAppServerConfigRequirementsReadResponse = z.output<
+  typeof codexAppServerConfigRequirementsReadResponseSchema
+>;
+
 const codexAppServerInitializeResponseSchema = z.object({
   codexHome: z.string(),
   platformFamily: z.string(),
@@ -154,6 +194,8 @@ export type CodexAppServerFuzzyFileSearchMatchType =
 
 export type CodexAppServerRequestResultMap = {
   initialize: CodexAppServerInitializeResponse;
+  "config/read": CodexAppServerConfigReadResponse;
+  "configRequirements/read": CodexAppServerConfigRequirementsReadResponse;
   "model/list": CodexAppServerModelListResponse;
   "thread/fork": CodexAppServerThreadForkResult;
   "thread/list": CodexAppServerThreadListResponse;
@@ -185,6 +227,8 @@ type CodexAppServerRequestResultSchemaMap = {
 
 const codexAppServerRequestResultSchemas: CodexAppServerRequestResultSchemaMap = {
   initialize: codexAppServerInitializeResponseSchema,
+  "config/read": codexAppServerConfigReadResponseSchema,
+  "configRequirements/read": codexAppServerConfigRequirementsReadResponseSchema,
   "model/list": codexAppServerModelListResponseSchema,
   "thread/fork": codexAppServerThreadLaunchResultSchema,
   "thread/list": codexAppServerThreadListResponseSchema,

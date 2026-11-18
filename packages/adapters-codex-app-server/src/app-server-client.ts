@@ -33,6 +33,12 @@ export const createCodexAppServerClient = (
     async initialize(params) {
       await requestCodex(transport, { method: "initialize", params });
     },
+    async configRead(params) {
+      return requestCodex(transport, { method: "config/read", params });
+    },
+    async configRequirementsRead() {
+      return requestCodex(transport, { method: "configRequirements/read", params: undefined });
+    },
     async modelList() {
       return requestCodex(transport, { method: "model/list", params: {} });
     },
