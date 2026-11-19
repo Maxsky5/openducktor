@@ -567,12 +567,22 @@ describe("demo QA fixes", () => {
     await demo.client.taskUpdate(FIELDNOTES, reviewed.id, {
       targetBranch: { branch: "odt/missing" },
     });
+    const filter = { kind: "task" as const, ...FIELDNOTES, taskId: reviewed.id };
+    const terminals = async () => (await demo.client.terminalList({ filter })).terminals.length;
+    const before = await terminals();
+    expect(before).toBeGreaterThan(0);
     await expect(
       demo.client.taskApplyEvent(FIELDNOTES, reviewed.id, "reset-implementation"),
     ).rejects.toThrow("has no branch odt/missing");
+    expect(await terminals()).toBe(before);
     const after = await taskOf(demo, reviewed.title);
     expect(after.status).toBe("human_review");
     expect(after.artifactSummary.qaReport?.present).toBe(true);
+
+    // A reset that passes its checks closes the task terminals.
+    await demo.client.taskUpdate(FIELDNOTES, reviewed.id, { targetBranch: { branch: "main" } });
+    await demo.client.taskApplyEvent(FIELDNOTES, reviewed.id, "reset-implementation");
+    expect(await terminals()).toBe(0);
   });
 
   test("runs /goal and /compact from the composer as local commands", async () => {

@@ -177,11 +177,14 @@ export const createDemoTaskStore = (
         "A session is starting in this task worktree. Wait until it starts, then try again.",
       );
     // The branch reset goes first: a missing base branch stops the action before any task change.
-    if (resetsWorktree && task.worktree)
+    if (resetsWorktree && task.worktree) {
       workspace.repository.resetBranch(
         workspace.repository.checkout(task.worktree.workingDirectory),
         (task.record.targetBranch ?? workspace.defaultTargetBranch).branch,
       );
+      // The reset passed its checks, so it closes the task terminals as the host does.
+      terminals.closeTaskTerminals(workspace.record.workspaceId, taskId);
+    }
     const statusChanges: TaskEventStatusChange[] = [];
     if (decision.kind === "transition") {
       touch(task, { status: decision.to });

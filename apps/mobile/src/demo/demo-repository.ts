@@ -191,7 +191,8 @@ const hunksOf = (base: string[], other: string[], side: Hunk["side"]): Hunk[] =>
 
 /**
  * A three-way line merge, as `git merge-file` does: changes that touch the same lines conflict.
- * With `union`, two insertions at the same line keep both, `theirs` first, as `merge=union` does.
+ * With `union`, two insertions at the same line keep both, `theirs` first, as `merge=union` does,
+ * and a line that both insert stays once.
  * Returns null on a conflict.
  */
 const mergeLines = (
@@ -218,8 +219,11 @@ const mergeLines = (
     const insertions =
       union && hunk.start === last.start && hunk.end === hunk.start && last.end === last.start;
     if (!insertions) return null;
-    last.lines =
-      hunk.side === "theirs" ? [...hunk.lines, ...last.lines] : [...last.lines, ...hunk.lines];
+    // A line that both sides inserted, such as an inherited changelog entry, stays once.
+    const [first, second] =
+      hunk.side === "theirs" ? [hunk.lines, last.lines] : [last.lines, hunk.lines];
+    const kept = new Set(first);
+    last.lines = [...first, ...second.filter((line) => !kept.has(line))];
   }
   const output: string[] = [];
   let position = 0;

@@ -217,4 +217,34 @@ describe("demo repository", () => {
     expect(() => repository.mergeInto(third, "main")).toThrow("src/a.ts changed on both branches");
     expect(root.revision).toBe(revision);
   });
+
+  test("keeps an inherited changelog entry once in a union merge", () => {
+    const repository = createDemoRepository({
+      repoPath: "/repo",
+      targetBranch: "main",
+      files: new Map([
+        [".gitattributes", text("CHANGELOG.md merge=union\n")],
+        ["CHANGELOG.md", text("# Changelog\n\n- Old\n")],
+      ]),
+    });
+    const first = repository.addWorktree({ workingDirectory: "/worktrees/a", branch: "odt/a" });
+    repository.commit(first, new Map([["CHANGELOG.md", text("# Changelog\n\n- A\n- Old\n")]]), "A");
+    repository.mergeInto(first, "main");
+    const follow = repository.addWorktree({
+      workingDirectory: "/worktrees/b",
+      branch: "odt/b",
+      base: "odt/a",
+    });
+    repository.commit(
+      follow,
+      new Map([["CHANGELOG.md", text("# Changelog\n\n- B\n- A\n- Old\n")]]),
+      "B",
+    );
+
+    repository.mergeInto(follow, "main");
+
+    expect(repository.readFile(repository.checkout("/repo"), "CHANGELOG.md")).toEqual(
+      text("# Changelog\n\n- B\n- A\n- Old\n"),
+    );
+  });
 });
