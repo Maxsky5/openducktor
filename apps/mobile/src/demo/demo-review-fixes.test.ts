@@ -780,6 +780,39 @@ describe("demo QA fixes", () => {
     await expect(resume()).rejects.toThrow("no stopped turn");
   });
 
+  test("keeps a rejected edit rejected when a stopped turn continues", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { ref, target, chat } = await chatOf(demo, "Why do tags drop on sync?");
+    const notes = async () => {
+      const file = await demo.client.filesystemReadTextFile({
+        rootPath: chat.executionTarget.workingDirectory,
+        relativePath: "docs/agent-notes.md",
+      });
+      return file.kind === "text" ? file.contents : "";
+    };
+    const before = await notes();
+    await demo.client.agentSessionMessageSubmit({
+      ...target,
+      submissionId: "11111111-1111-4111-8111-000000000051",
+      mode: "default",
+      parts: [{ kind: "text", text: "Add a note about focus" }],
+    });
+    await demo.advance(15_000);
+    const live = await demo.client.agentSessionLiveRead(ref);
+    const requestId =
+      live.type === "live" ? live.session.pendingApprovals[0]?.requestId : undefined;
+    if (!requestId) throw new Error("The run asked for no permission.");
+    await demo.client.agentSessionLiveReplyApproval({ ...ref, requestId, outcome: "reject" });
+    await demo.client.agentSessionControlStop(ref);
+    await demo.client.agentSessionControlResume({
+      ...target,
+      resumeMode: "continue_interrupted_turn",
+    });
+    await demo.advance(30_000);
+    expect(await notes()).toBe(before);
+  });
+
   test("never gives a deleted task ID to a new task", async () => {
     const demo = openDemo();
     const create = () =>

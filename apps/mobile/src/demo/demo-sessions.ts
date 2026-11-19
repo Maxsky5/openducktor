@@ -89,7 +89,7 @@ export type DemoSession = {
   /** The goal of Goal mode, which the runtime reports in the live state. */
   goal?: AgentSessionGoal;
   /** The run that Stop cut off, and its first step that did not finish, for a continuation. */
-  interrupted?: { script: DemoRunScript; index: number };
+  interrupted?: { script: DemoRunScript; index: number; rejected: boolean };
 };
 
 export const runtimeIdOf = (runtimeKind: RuntimeKind): string => `demo-${runtimeKind}-1`;
@@ -452,7 +452,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
   };
 
   /** Starts a scripted run. The session shows as working at once. */
-  const startRun = (session: DemoSession, script: DemoRunScript) => {
+  const startRun = (session: DemoSession, script: DemoRunScript, rejected = false) => {
     const run: Run = {
       messageId: `a-${messageNumber++}`,
       steps: script.steps,
@@ -461,7 +461,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
       startedAtMs: clock.now(),
       cancel: null,
       waiting: null,
-      rejected: false,
+      rejected,
       partNumber: 1,
     };
     session.history.push({
@@ -600,7 +600,12 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     const stopped = session.interrupted;
     if (!stopped)
       throw new Error("This session has no stopped turn to continue. Send a message instead.");
-    startRun(session, { ...stopped.script, steps: stopped.script.steps.slice(stopped.index) });
+    // A rejected edit stays rejected, so the continuation does not make it.
+    startRun(
+      session,
+      { ...stopped.script, steps: stopped.script.steps.slice(stopped.index) },
+      stopped.rejected,
+    );
   };
 
   /** Only a normal end sends the next queued message, as on a real host. */
@@ -634,7 +639,11 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     run.cancel?.();
     session.run = null;
     // The step that ran or waited when Stop came runs again on a continuation.
-    session.interrupted = { script: run.script, index: Math.max(run.index - 1, 0) };
+    session.interrupted = {
+      script: run.script,
+      index: Math.max(run.index - 1, 0),
+      rejected: run.rejected,
+    };
     session.pendingApprovals = [];
     session.pendingQuestions = [];
     session.activity = "idle";
