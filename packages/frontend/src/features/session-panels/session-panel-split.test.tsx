@@ -136,6 +136,30 @@ describe("SessionPanelSplit", () => {
     });
   }
 
+  for (const { direction, axis, length } of [
+    { direction: "horizontal", axis: "width", length: "height" },
+    { direction: "vertical", axis: "height", length: "width" },
+  ] as const) {
+    test(`keeps the full length of a closed ${direction} separator, so its grip stays on the axis`, () => {
+      render(
+        <SessionPanelSplit
+          ids={ids}
+          model={{ presence: "closed", onSettled: () => {}, onCollapsed: () => {} }}
+          direction={direction}
+          sizes={sizes}
+          className=""
+          mainClassName=""
+          main={<p>Chat</p>}
+          panel={<p>Panel content</p>}
+        />,
+      );
+
+      const separator = screen.getByRole("separator", { hidden: true });
+      expect(separator.style[axis]).toBe("0px");
+      expect(separator.style[length]).toBe("");
+    });
+  }
+
   test("ends a move at once when no size transition runs, as with reduced motion", () => {
     const onSettled = mock(() => {});
     const view = render(renderSplit("closed", onSettled));

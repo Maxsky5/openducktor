@@ -52,11 +52,16 @@ type SessionPanelSplitProps = {
 };
 
 /**
- * Hides the separator of a closed panel, and keeps it between the panels at zero size. When the
- * group registers, the library maps each separator to the panels next to it by their offsets. A
- * separator with `display: none` has no offset, so it maps to no panels and its arrow keys throw.
+ * Hides the separator of a closed panel, and keeps it between the panels at zero size along the
+ * split axis. When the group registers, the library maps each separator to the panels next to it
+ * by their offsets. A separator with `display: none` has no offset, so it maps to no panels and its
+ * arrow keys throw. The separator keeps its full length, so its grip stays on the axis when the
+ * separator grows back during an open.
  */
-const HIDDEN_SEPARATOR_STYLE: CSSProperties = { visibility: "hidden", width: 0, height: 0 };
+const HIDDEN_SEPARATOR_STYLES = {
+  horizontal: { visibility: "hidden", width: 0 },
+  vertical: { visibility: "hidden", height: 0 },
+} satisfies Record<SplitDirection, CSSProperties>;
 
 const axisSize = (element: HTMLElement, direction: SplitDirection): number =>
   direction === "horizontal" ? element.offsetWidth : element.offsetHeight;
@@ -232,7 +237,7 @@ export function SessionPanelSplit({
         aria-label={separatorLabel}
         withHandle
         disabled={presence !== "open" || fillsGroup}
-        style={showsSeparator ? undefined : HIDDEN_SEPARATOR_STYLE}
+        style={showsSeparator ? undefined : HIDDEN_SEPARATOR_STYLES[direction]}
       />
       <ResizablePanel
         id={panelId}
