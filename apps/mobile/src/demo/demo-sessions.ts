@@ -88,6 +88,8 @@ export type DemoSession = {
   quiet: boolean;
   /** The goal of Goal mode, which the runtime reports in the live state. */
   goal?: AgentSessionGoal;
+  /** The run that Stop cut off, and its first step that did not finish, for a continuation. */
+  interrupted?: { script: DemoRunScript; index: number };
 };
 
 export const runtimeIdOf = (runtimeKind: RuntimeKind): string => `demo-${runtimeKind}-1`;
@@ -472,6 +474,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     });
     session.run = run;
     session.activity = "running";
+    delete session.interrupted;
     if (session.goal?.status === "waiting_for_message") session.goal.status = "active";
     upsert(session);
     transcript(session, { type: "session_status", status: { type: "busy", message: null } });
@@ -591,6 +594,15 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     return accepted;
   };
 
+  /** Continues the turn that Stop cut off, as a runtime resumes an interrupted turn. */
+  const continueRun = (session: DemoSession) => {
+    if (session.run) throw new Error("This session is already working.");
+    const stopped = session.interrupted;
+    if (!stopped)
+      throw new Error("This session has no stopped turn to continue. Send a message instead.");
+    startRun(session, { ...stopped.script, steps: stopped.script.steps.slice(stopped.index) });
+  };
+
   /** Only a normal end sends the next queued message, as on a real host. */
   const drainQueue = (session: DemoSession) => {
     // A command that starts no turn lets the next message go at once.
@@ -621,6 +633,8 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     if (!run) return;
     run.cancel?.();
     session.run = null;
+    // The step that ran or waited when Stop came runs again on a continuation.
+    session.interrupted = { script: run.script, index: Math.max(run.index - 1, 0) };
     session.pendingApprovals = [];
     session.pendingQuestions = [];
     session.activity = "idle";
@@ -984,6 +998,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     upsert,
     startRun,
     stopRun,
+    continueRun,
     acceptUserMessage,
     deliver,
     copyHistory,

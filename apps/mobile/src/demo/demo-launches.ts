@@ -418,7 +418,11 @@ export const createDemoLaunches = ({
 
   const handlers = {
     agentSessionWorkflowLaunch: launch,
-    agentSessionControlResume: async (input) => engine.summaryOf(engine.find(input)),
+    agentSessionControlResume: async (input) => {
+      const session = engine.find(input);
+      if (input.resumeMode === "continue_interrupted_turn") engine.continueRun(session);
+      return engine.summaryOf(session);
+    },
     agentSessionWorkflowFork: async (input) => {
       const source = engine.find(input);
       if (source.owner.kind !== "task") throw new Error("Only a task session can fork here.");

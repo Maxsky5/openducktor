@@ -751,6 +751,35 @@ describe("demo QA fixes", () => {
     expect((await taskOf(demo, blocked.title)).status).toBe("blocked");
   });
 
+  test("continues a stopped turn when the user resumes it", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { ref, target } = await chatOf(demo, "Why do tags drop on sync?");
+    await demo.client.agentSessionMessageSubmit({
+      ...target,
+      submissionId: "11111111-1111-4111-8111-000000000050",
+      mode: "default",
+      parts: [{ kind: "text", text: "Explain the ranking" }],
+    });
+    await demo.advance(1_000);
+    await demo.client.agentSessionControlStop(ref);
+    const resume = () =>
+      demo.client.agentSessionControlResume({ ...target, resumeMode: "continue_interrupted_turn" });
+    const resumed = await resume();
+    expect(resumed.status).toBe("running");
+    await demo.advance(30_000);
+    const history = await demo.client.agentRuntimeLoadSessionHistory({
+      ...ref,
+      runtimeKind: "claude",
+      runtimePolicy: { kind: "claude" },
+      limit: 200,
+    });
+    expect(history.at(-1)?.role === "assistant" && history.at(-1)?.text).toContain(
+      'About "Explain the ranking"',
+    );
+    await expect(resume()).rejects.toThrow("no stopped turn");
+  });
+
   test("never gives a deleted task ID to a new task", async () => {
     const demo = openDemo();
     const create = () =>
