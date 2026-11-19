@@ -175,4 +175,46 @@ describe("demo repository", () => {
     expect(repository.readFile(root, "README.md")).toEqual(text("# Notes\n\nMain\n"));
     expect(repository.readFile(root, "src/a.ts")).toEqual(text("export {};\n"));
   });
+
+  test("merges both sides of a file, and refuses a conflict without a change", () => {
+    const repository = createDemoRepository({
+      repoPath: "/repo",
+      targetBranch: "main",
+      files: new Map([
+        [".gitattributes", text("CHANGELOG.md merge=union\n")],
+        ["CHANGELOG.md", text("# Changelog\n\n- Old\n")],
+        ["src/a.ts", text("one\ntwo\nthree\n")],
+      ]),
+    });
+    const root = repository.checkout("/repo");
+    const first = repository.addWorktree({ workingDirectory: "/worktrees/a", branch: "odt/a" });
+    const second = repository.addWorktree({ workingDirectory: "/worktrees/b", branch: "odt/b" });
+    repository.commit(
+      first,
+      new Map([["CHANGELOG.md", text("# Changelog\n\n- First\n- Old\n")]]),
+      "A",
+    );
+    repository.commit(first, new Map([["src/a.ts", text("1\ntwo\nthree\n")]]), "A2");
+    repository.commit(
+      second,
+      new Map([["CHANGELOG.md", text("# Changelog\n\n- Second\n- Old\n")]]),
+      "B",
+    );
+    repository.commit(second, new Map([["src/a.ts", text("one\ntwo\n3\n")]]), "B2");
+
+    repository.mergeInto(first, "main");
+    repository.mergeInto(second, "main");
+
+    expect(repository.readFile(root, "CHANGELOG.md")).toEqual(
+      text("# Changelog\n\n- Second\n- First\n- Old\n"),
+    );
+    expect(repository.readFile(root, "src/a.ts")).toEqual(text("1\ntwo\n3\n"));
+
+    const third = repository.addWorktree({ workingDirectory: "/worktrees/c", branch: "odt/c" });
+    repository.commit(root, new Map([["src/a.ts", text("1\nTWO\n3\n")]]), "Main");
+    repository.commit(third, new Map([["src/a.ts", text("one\n2\nthree\n")]]), "C");
+    const revision = root.revision;
+    expect(() => repository.mergeInto(third, "main")).toThrow("src/a.ts changed on both branches");
+    expect(root.revision).toBe(revision);
+  });
 });

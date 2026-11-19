@@ -168,6 +168,78 @@ export const fileDiff = (
 const sameFile = (left: DemoFile | null | undefined, right: DemoFile | null | undefined) =>
   JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
+type Hunk = { start: number; end: number; lines: string[]; side: "ours" | "theirs" };
+
+/** The changed line ranges of `other` against `base`: each replaces base lines `start` to `end`. */
+const hunksOf = (base: string[], other: string[], side: Hunk["side"]): Hunk[] => {
+  const hunks: Hunk[] = [];
+  let current: Hunk | null = null;
+  for (const edit of lineEdits(base, other)) {
+    if (edit.kind === "same") {
+      current = null;
+      continue;
+    }
+    if (!current) {
+      current = { start: edit.oldIndex, end: edit.oldIndex, lines: [], side };
+      hunks.push(current);
+    }
+    if (edit.kind === "remove") current.end = edit.oldIndex + 1;
+    else current.lines.push(edit.line);
+  }
+  return hunks;
+};
+
+/**
+ * A three-way line merge, as `git merge-file` does: changes that touch the same lines conflict.
+ * With `union`, two insertions at the same line keep both, `theirs` first, as `merge=union` does.
+ * Returns null on a conflict.
+ */
+const mergeLines = (
+  base: string[],
+  ours: string[],
+  theirs: string[],
+  union: boolean,
+): string[] | null => {
+  const hunks = [...hunksOf(base, ours, "ours"), ...hunksOf(base, theirs, "theirs")].sort(
+    (left, right) => left.start - right.start || left.end - right.end,
+  );
+  const merged: Hunk[] = [];
+  for (const hunk of hunks) {
+    const last = merged.at(-1);
+    if (!last || hunk.start > last.end) {
+      merged.push({ ...hunk, lines: [...hunk.lines] });
+      continue;
+    }
+    const same =
+      hunk.start === last.start &&
+      hunk.end === last.end &&
+      hunk.lines.join("\n") === last.lines.join("\n");
+    if (same) continue;
+    const insertions =
+      union && hunk.start === last.start && hunk.end === hunk.start && last.end === last.start;
+    if (!insertions) return null;
+    last.lines =
+      hunk.side === "theirs" ? [...hunk.lines, ...last.lines] : [...last.lines, ...hunk.lines];
+  }
+  const output: string[] = [];
+  let position = 0;
+  for (const hunk of merged) {
+    output.push(...base.slice(position, hunk.start), ...hunk.lines);
+    position = hunk.end;
+  }
+  output.push(...base.slice(position));
+  return output;
+};
+
+/** The paths that `.gitattributes` merges with the `union` driver. */
+const unionPaths = (attributes: DemoFile | null): Set<string> =>
+  new Set(
+    linesOf(attributes).flatMap((line) => {
+      const [pattern, ...rest] = line.trim().split(/\s+/);
+      return pattern && rest.includes("merge=union") ? [pattern] : [];
+    }),
+  );
+
 const statusLetter = (diff: GitFileDiff): string =>
   diff.type === "added" ? "A" : diff.type === "deleted" ? "D" : "M";
 
@@ -201,7 +273,8 @@ export type DemoRepository = {
   resetBranch(checkout: DemoCheckout, base: string): void;
   /**
    * Squashes the changes of a branch since its merge base into one commit on `targetRef`, as
-   * Direct Merge does. The target is the default branch or the branch of another checkout.
+   * Direct Merge does, with a three-way merge of each file. A conflict throws before any change.
+   * The target is the default branch or the branch of another checkout.
    */
   mergeInto(checkout: DemoCheckout, targetRef: string): void;
   /** The changes of a branch since the default target branch. */
@@ -373,12 +446,32 @@ export const createDemoRepository = (input: {
     mergeInto(checkout, targetRef) {
       const into = checkoutOfRef(targetRef);
       const mergeBase = checkout.log.slice(0, sharedCommits(checkout.log, into.log));
-      // Only paths whose final content differs from the merge base go into the squash.
-      const changes = new Map(
-        changedPaths(checkout.log.slice(mergeBase.length))
-          .filter((path) => !sameFile(fileAfter(mergeBase, path), headFile(checkout, path)))
-          .map((path) => [path, headFile(checkout, path)]),
-      );
+      const union = unionPaths(headFile(into, ".gitattributes"));
+      const changes = new Map<string, DemoFile | null>();
+      const conflicts: string[] = [];
+      for (const path of changedPaths(checkout.log.slice(mergeBase.length))) {
+        const base = fileAfter(mergeBase, path);
+        const theirs = headFile(checkout, path);
+        const ours = headFile(into, path);
+        // Only a real change of the branch goes in, and an unchanged target takes it as it is.
+        if (sameFile(base, theirs) || sameFile(ours, theirs)) continue;
+        if (sameFile(base, ours)) {
+          changes.set(path, theirs);
+          continue;
+        }
+        const lines =
+          base?.kind === "text" && ours?.kind === "text" && theirs?.kind === "text"
+            ? mergeLines(linesOf(base), linesOf(ours), linesOf(theirs), union.has(path))
+            : null;
+        if (lines)
+          changes.set(path, { kind: "text", text: lines.map((line) => `${line}\n`).join("") });
+        else conflicts.push(path);
+      }
+      // The merge checks every path first, so a conflict changes nothing.
+      if (conflicts.length > 0)
+        throw new Error(
+          `${conflicts.join(", ")} changed on both branches. The demo cannot resolve Git conflicts, so choose another target branch or use a pull request.`,
+        );
       if (changes.size === 0) return;
       // A squash merge adds one commit to the target branch. The source branch keeps its commits.
       into.revision = commitId(`${into.revision}:squash:${checkout.branch}`);

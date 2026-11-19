@@ -706,6 +706,41 @@ describe("demo QA fixes", () => {
     expect(await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id)).toEqual(worktree);
   });
 
+  test("keeps the changelog entries of two Direct Merges, and checks the target first", async () => {
+    const demo = openDemo();
+    const merge = async (title: string, branch = "main") => {
+      const task = await taskOf(demo, title);
+      return demo.client.taskDirectMerge(FIELDNOTES, task.id, {
+        expected: { taskStatus: task.status, sourceBranch: "odt/any", targetBranch: { branch } },
+        mergeMethod: "squash",
+        removeWorktree: false,
+      });
+    };
+    const changelog = async () => {
+      const file = await demo.client.filesystemReadTextFile({
+        rootPath: FIELDNOTES.repoPath,
+        relativePath: "CHANGELOG.md",
+      });
+      return file.kind === "text" ? file.contents : "";
+    };
+    await merge("Open search with a keyboard shortcut");
+    await merge("Show an error when sync fails offline");
+    expect(await changelog()).toContain("- Open search with a keyboard shortcut");
+    expect(await changelog()).toContain("- Show an error when sync fails offline");
+
+    const blocked = await taskOf(demo, "Keep search closed while typing in a note");
+    const tree = await demo.client.taskWorktreeGet(FIELDNOTES, blocked.id);
+    await demo.client.terminalCreate({
+      workingDir: tree?.workingDirectory ?? "",
+      context: { ...FIELDNOTES, taskId: blocked.id },
+    });
+    const filter = { kind: "task" as const, ...FIELDNOTES, taskId: blocked.id };
+    const before = (await demo.client.terminalList({ filter })).terminals.length;
+    await expect(merge(blocked.title, "odt/gone")).rejects.toThrow("has no branch odt/gone");
+    expect((await demo.client.terminalList({ filter })).terminals).toHaveLength(before);
+    expect((await taskOf(demo, blocked.title)).status).toBe("blocked");
+  });
+
   test("never gives a deleted task ID to a new task", async () => {
     const demo = openDemo();
     const create = () =>

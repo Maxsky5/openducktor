@@ -59,7 +59,7 @@ These parts of the app need a real OpenDucktor computer. The demo cannot show th
 - Connection recovery: reconnect after the background, network changes, and host restarts.
 - Real agent runtimes and model providers.
 - Real Git, files, and shell commands on the computer.
-- Git conflict resolution. The sample data has no conflict.
+- Git conflict resolution. The sample data has no conflict. If demo changes overlap, Direct Merge stops, names the files, and changes nothing.
 - Pull requests on the web and merged pull requests. The sample pull request stays open and has no web page.
 - Web links and web images in Markdown. The demo shows a notice instead.
 

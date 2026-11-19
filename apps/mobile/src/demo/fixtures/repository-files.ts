@@ -22,6 +22,8 @@ bun run dev
 The app runs on http://localhost:5173 and the API on http://localhost:8787. The logo is in \`assets/logo.png\`.
 `),
     ],
+    // Changelog entries of different branches merge side by side, as many repositories set up.
+    [".gitattributes", text("CHANGELOG.md merge=union\n")],
     [
       "CHANGELOG.md",
       text("# Changelog\n\n- Notebooks keep their sort order.\n- Tags show their note count.\n"),
@@ -138,6 +140,8 @@ export function copyTags(tags: readonly Tag[]): Tag[] {
 export const fableApiFiles = (): Map<string, DemoFile> =>
   new Map<string, DemoFile>([
     ["README.md", text("# Fable API\n\nThe HTTP API of Fable stories.\n")],
+    // Changelog entries of different branches merge side by side, as many repositories set up.
+    [".gitattributes", text("CHANGELOG.md merge=union\n")],
     ["CHANGELOG.md", text("# Changelog\n\n- Stories return their chapter count.\n")],
     [
       "src/server.ts",
@@ -161,6 +165,8 @@ Bun.serve({ port: 8787, fetch: routes });
 export const designSystemFiles = (): Map<string, DemoFile> =>
   new Map<string, DemoFile>([
     ["README.md", text("# Design system\n\nShared components and tokens.\n")],
+    // Changelog entries of different branches merge side by side, as many repositories set up.
+    [".gitattributes", text("CHANGELOG.md merge=union\n")],
     ["CHANGELOG.md", text("# Changelog\n\n- Buttons have a focus ring.\n")],
     [
       "src/button.tsx",

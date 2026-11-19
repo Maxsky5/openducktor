@@ -683,13 +683,14 @@ export const createDemoTaskStore = (
       const task = findTask(workspace, taskId);
       if (!task.worktree)
         throw new Error("This task has no worktree to merge. Refresh the task, then try again.");
-      // The merge closes the task, so it stops the task sessions and terminals as Close Task does.
-      world.sessions.stopTaskSessions(workspace, taskId);
-      terminals.closeTaskTerminals(scope.workspaceId, taskId);
+      // The merge goes first: a missing target branch or a conflict changes nothing.
       workspace.repository.mergeInto(
         workspace.repository.checkout(task.worktree.workingDirectory),
         input.expected.targetBranch.branch,
       );
+      // The merge closes the task, so it stops the task sessions and terminals as Close Task does.
+      world.sessions.stopTaskSessions(workspace, taskId);
+      terminals.closeTaskTerminals(scope.workspaceId, taskId);
       if (input.removeWorktree) {
         workspace.repository.removeWorktree(task.worktree.workingDirectory);
         task.worktree = null;
