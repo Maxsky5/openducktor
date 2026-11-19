@@ -54,6 +54,7 @@ export const createDemoSessionAdapter = (
       runningTaskSessionCount: () => 0,
       chatsInFolder: () => [],
     },
+    startingTasks: new Set(),
     nextPullRequestNumber: 128,
     nextNumber: () => nextNumber++,
   };

@@ -1,5 +1,6 @@
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
+  type GitTargetBranch,
   type RepositoryGitProviderContext,
   type TaskApprovalContext,
   type TaskCard,
@@ -170,6 +171,11 @@ export const createDemoTaskStore = (
       );
     }
     const resetsWorktree = workflow.eventEffects(eventId).includes("worktree.reset");
+    // A live role owns the worktree while its session starts, as on a host.
+    if (resetsWorktree && world.startingTasks.has(task))
+      throw new Error(
+        "A session is starting in this task worktree. Wait until it starts, then try again.",
+      );
     // The branch reset goes first: a missing base branch stops the action before any task change.
     if (resetsWorktree && task.worktree)
       workspace.repository.resetBranch(
@@ -583,6 +589,7 @@ export const createDemoTaskStore = (
     taskWorktreeRemove: async (scope, taskId) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
+      terminals.closeTaskTerminals(scope.workspaceId, taskId);
       if (task.worktree) workspace.repository.removeWorktree(task.worktree.workingDirectory);
       task.worktree = null;
     },
@@ -667,7 +674,9 @@ export const createDemoTaskStore = (
       const task = findTask(workspace, taskId);
       if (!task.worktree)
         throw new Error("This task has no worktree to merge. Refresh the task, then try again.");
+      // The merge closes the task, so it stops the task sessions and terminals as Close Task does.
       world.sessions.stopTaskSessions(workspace, taskId);
+      terminals.closeTaskTerminals(scope.workspaceId, taskId);
       workspace.repository.mergeInto(
         workspace.repository.checkout(task.worktree.workingDirectory),
         input.expected.targetBranch.branch,
@@ -800,7 +809,26 @@ export const createDemoTaskStore = (
     },
   } satisfies DemoHandlers;
 
-  return { handlers, publish, applyEvent, saveDocument, ensureWorktree, linkPullRequest, taskCard };
+  /** Saves the target branch that a workflow start chose, as the host does before the start. */
+  const setTargetBranch = (
+    workspace: DemoWorkspace,
+    taskId: string,
+    targetBranch: GitTargetBranch,
+  ) => {
+    touch(findTask(workspace, taskId), { targetBranch });
+    publish(workspace, { taskIds: [taskId] });
+  };
+
+  return {
+    handlers,
+    publish,
+    applyEvent,
+    saveDocument,
+    ensureWorktree,
+    linkPullRequest,
+    setTargetBranch,
+    taskCard,
+  };
 };
 
 const decodedSize = (base64: string): number =>

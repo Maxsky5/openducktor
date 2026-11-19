@@ -86,6 +86,8 @@ export type DemoWorld = {
   readonly customRoles: CustomAgentRole[];
   /** Set once the session engine exists. */
   sessions: DemoTaskSessionHooks;
+  /** The tasks whose session waits for its worktree setup. A worktree reset waits for them. */
+  readonly startingTasks: Set<DemoTask>;
   /** The PR numbers that the demo gives out. */
   nextPullRequestNumber: number;
   /** A number that the demo never gives out twice, for staged file IDs. */

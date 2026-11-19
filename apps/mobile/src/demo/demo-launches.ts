@@ -17,6 +17,7 @@ import type { DemoCheckout } from "./demo-repository";
 import { type DemoRoleOutcomes, kickoffText, promptRun, roleRun } from "./demo-runs";
 import type { DemoSession, DemoSessionEngine } from "./demo-sessions";
 import { runtimeIdOf } from "./demo-sessions";
+import type { DemoTaskStore } from "./demo-tasks";
 import type { DemoTerminals } from "./demo-terminals";
 import {
   DEMO_HOST_INSTANCE_ID,
@@ -38,12 +39,7 @@ type StartupSnapshotBody = Omit<
 /** The time that the scripted worktree setup takes. */
 const SETUP_MS = 1800;
 
-type TaskStore = DemoRoleOutcomes & {
-  ensureWorktree(
-    workspace: DemoWorkspace,
-    taskId: string,
-  ): { created: boolean; checkout: DemoCheckout };
-};
+type TaskStore = DemoRoleOutcomes & Pick<DemoTaskStore, "ensureWorktree" | "setTargetBranch">;
 
 /**
  * Session starts: workflow launches of tasks, and the creation, start, and fork of chats. A start
@@ -162,6 +158,9 @@ export const createDemoLaunches = ({
     const role = workflow.launchAction(request.policy.actionId, request.policy.role).role;
     if (request.beforeStartAction)
       tasks.applyEvent(workspace, task.record.id, request.beforeStartAction.eventId);
+    // The start form chooses the target branch, which also becomes the base of a new worktree.
+    if (request.targetBranch)
+      tasks.setTargetBranch(workspace, task.record.id, request.targetBranch);
     const startEvent = pullRequest ? undefined : workflow.roleStartEvent(role);
     if (startEvent && workflow.isEventAvailable(startEvent, task.record))
       tasks.applyEvent(workspace, task.record.id, startEvent);
@@ -174,18 +173,24 @@ export const createDemoLaunches = ({
       const worktree = tasks.ensureWorktree(workspace, task.record.id);
       checkout = worktree.checkout;
       workingDirectory = checkout.workingDirectory;
-      if (worktree.created)
-        steps = await setUpWorktree({
-          workspace,
-          checkout,
-          context: request.startup,
-          scope,
-          terminalContext: {
-            workspaceId: workspace.record.workspaceId,
-            repoPath: workspace.record.repoPath,
-            taskId: task.record.id,
-          },
-        });
+      if (worktree.created) {
+        world.startingTasks.add(task);
+        try {
+          steps = await setUpWorktree({
+            workspace,
+            checkout,
+            context: request.startup,
+            scope,
+            terminalContext: {
+              workspaceId: workspace.record.workspaceId,
+              repoPath: workspace.record.repoPath,
+              taskId: task.record.id,
+            },
+          });
+        } finally {
+          world.startingTasks.delete(task);
+        }
+      }
       // A reset, close, or delete during the setup removes the worktree, so the start ends here.
       if (workspace.tasks.get(task.record.id)?.worktree?.workingDirectory !== workingDirectory)
         throw new Error("The task changed during the worktree setup. Start the session again.");

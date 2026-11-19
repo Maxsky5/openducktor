@@ -200,8 +200,8 @@ export type DemoRepository = {
   /** Puts a branch back on the branch `base` and drops its working changes. */
   resetBranch(checkout: DemoCheckout, base: string): void;
   /**
-   * Merges the commits of a branch into `targetRef`, as Direct Merge does. The target is the
-   * default branch or the branch of another checkout.
+   * Squashes the changes of a branch since its merge base into one commit on `targetRef`, as
+   * Direct Merge does. The target is the default branch or the branch of another checkout.
    */
   mergeInto(checkout: DemoCheckout, targetRef: string): void;
   /** The changes of a branch since the default target branch. */
@@ -370,11 +370,14 @@ export const createDemoRepository = (input: {
     },
     mergeInto(checkout, targetRef) {
       const into = checkoutOfRef(targetRef);
-      // The target branch gets the commits since the merge base. Other branches keep their files.
-      into.log.push(...checkout.log.slice(sharedCommits(checkout.log, into.log)));
-      into.revision = into.log.at(-1)?.id ?? into.revision;
-      checkout.log = [...into.log];
-      checkout.revision = into.revision;
+      const mergeBase = sharedCommits(checkout.log, into.log);
+      const changes = new Map(
+        changedPaths(checkout.log.slice(mergeBase)).map((path) => [path, headFile(checkout, path)]),
+      );
+      if (changes.size === 0) return;
+      // A squash merge adds one commit to the target branch. The source branch keeps its commits.
+      into.revision = commitId(`${into.revision}:squash:${checkout.branch}`);
+      into.log.push({ id: into.revision, changes });
       treeRevision += 1;
     },
     branchDiffs,

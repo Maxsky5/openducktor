@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { AgentSessionLiveEnvelope } from "@openducktor/contracts";
 import { resolveRuntimeGoalAvailability } from "@openducktor/core";
-import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import {
+  goalCommandParts,
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+} from "@openducktor/contracts";
 import { createManualTimers } from "../test-support/manual-timers";
 import { createDemoSessionAdapter } from "./demo-session-adapter";
 
@@ -322,6 +326,89 @@ describe("demo QA fixes", () => {
     expect(records?.agentSessions).toEqual([]);
   });
 
+  test("refuses Reset Implementation while a Builder start waits for setup", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const ready = await taskOf(demo, "Restore focus after closing search");
+    const launch = buildLaunch(demo, ready.id);
+    await demo.advance(100);
+    await expect(
+      demo.client.taskApplyEvent(FIELDNOTES, ready.id, "reset-implementation"),
+    ).rejects.toThrow("A session is starting in this task worktree");
+    await demo.advance(5_000);
+    expect((await launch).status).toBe("completed");
+    await demo.advance(30_000);
+    expect((await taskOf(demo, ready.title)).status).toBe("ai_review");
+  });
+
+  test("saves the start form target branch and bases the new worktree on it", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const ready = await taskOf(demo, "Restore focus after closing search");
+    const launch = demo.client.agentSessionWorkflowLaunch({
+      ...FIELDNOTES,
+      taskId: ready.id,
+      policy: {
+        kind: "manual",
+        actionId: "build_implementation_start",
+        decision: {
+          startMode: "fresh",
+          selectedModel: { runtimeKind: "opencode", providerId: "vega", modelId: "vega-2-pro" },
+        },
+      },
+      instruction: { kind: "kickoff" },
+      targetBranch: { branch: "odt/tags-sync-fix" },
+    });
+    await demo.advance(1_000);
+    expect((await taskOf(demo, ready.title)).targetBranch).toEqual({ branch: "odt/tags-sync-fix" });
+    await demo.advance(5_000);
+    await launch;
+    const worktree = await demo.client.taskWorktreeGet(FIELDNOTES, ready.id);
+    const status = await demo.client.gitGetWorktreeStatus(
+      FIELDNOTES.repoPath,
+      "refs/heads/odt/tags-sync-fix",
+      "target",
+      worktree?.workingDirectory ?? "",
+    );
+    expect(status.targetAheadBehind.behind).toBe(0);
+  });
+
+  test("closes the task terminals on Direct Merge and on Remove Worktree", async () => {
+    const demo = openDemo();
+    const terminalsOf = async (taskId: string) =>
+      (
+        await demo.client.terminalList({
+          filter: { kind: "task", ...FIELDNOTES, taskId },
+        })
+      ).terminals;
+    const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
+    expect((await terminalsOf(reviewed.id)).length).toBeGreaterThan(0);
+    const worktree = await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id);
+    const branch = await demo.client.gitGetCurrentBranch(
+      FIELDNOTES.repoPath,
+      worktree?.workingDirectory ?? "",
+    );
+    await demo.client.taskDirectMerge(FIELDNOTES, reviewed.id, {
+      expected: {
+        taskStatus: "human_review",
+        sourceBranch: branch.name ?? "",
+        targetBranch: { remote: "origin", branch: "main" },
+      },
+      mergeMethod: "squash",
+      removeWorktree: false,
+    });
+    expect(await terminalsOf(reviewed.id)).toEqual([]);
+
+    const blocked = await taskOf(demo, "Keep search closed while typing in a note");
+    const blockedTree = await demo.client.taskWorktreeGet(FIELDNOTES, blocked.id);
+    await demo.client.terminalCreate({
+      workingDir: blockedTree?.workingDirectory ?? "",
+      context: { ...FIELDNOTES, taskId: blocked.id },
+    });
+    await demo.client.taskWorktreeRemove(FIELDNOTES, blocked.id);
+    expect(await terminalsOf(blocked.id)).toEqual([]);
+  });
+
   test("lets an issue be imported again after its task is deleted", async () => {
     const demo = openDemo();
     const [issue] = (await demo.client.issueItemsList({ ...FIELDNOTES, search: "" })).items;
@@ -447,14 +534,14 @@ describe("demo QA fixes", () => {
       return live.type === "live" ? live.session.goal?.status : undefined;
     };
     expect(await goalOf()).toBe("complete");
-    await demo.client.agentSessionGoalControl({ ...target, action: "resume" });
-    expect(await goalOf()).toBe("waiting_for_message");
-    await demo.client.agentSessionMessageSubmit({
+    const sent = await demo.client.agentSessionMessageSubmit({
       ...target,
       submissionId: "11111111-1111-4111-8111-000000000005",
       mode: "default",
-      parts: [{ kind: "text", text: "Add a note" }],
+      parts: goalCommandParts("Add a note about focus"),
     });
+    expect(sent.kind).toBe("accepted");
+    expect(await goalOf()).toBe("active");
     await demo.advance(15_000);
     const live = await demo.client.agentSessionLiveRead(ref);
     const requestId =
@@ -477,6 +564,38 @@ describe("demo QA fixes", () => {
     const after = await taskOf(demo, reviewed.title);
     expect(after.status).toBe("human_review");
     expect(after.artifactSummary.qaReport?.present).toBe(true);
+  });
+
+  test("runs /goal and /compact from the composer as local commands", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { ref, target } = await chatOf(demo, "Why do tags drop on sync?");
+    let submission = 10;
+    const send = (parts: Parameters<typeof demo.client.agentSessionMessageSubmit>[0]["parts"]) =>
+      demo.client.agentSessionMessageSubmit({
+        ...target,
+        submissionId: `11111111-1111-4111-8111-0000000000${submission++}`,
+        mode: "default",
+        parts,
+      });
+    const goalOf = async () => {
+      const live = await demo.client.agentSessionLiveRead(ref);
+      return live.type === "live" ? live.session.goal : undefined;
+    };
+    await send(goalCommandParts("Explain the tag sync"));
+    expect(await goalOf()).toEqual({ objective: "Explain the tag sync", status: "active" });
+    await demo.advance(30_000);
+    expect((await goalOf())?.status).toBe("complete");
+    const paused = await send(goalCommandParts("clear"));
+    expect(paused.kind === "accepted" && paused.acceptedMessage.type).toBe("command_accepted");
+    expect(await goalOf()).toBeUndefined();
+    await expect(send(goalCommandParts("pause"))).rejects.toThrow("This session has no goal");
+    const compacted = await send([
+      { kind: "slash_command", command: { ...MANUAL_SESSION_COMPACTION_SLASH_COMMAND, hints: [] } },
+    ]);
+    expect(compacted.kind === "accepted" && compacted.acceptedMessage.type).toBe(
+      "command_accepted",
+    );
   });
 
   test("starts a new chat worktree from the selected target branch", async () => {

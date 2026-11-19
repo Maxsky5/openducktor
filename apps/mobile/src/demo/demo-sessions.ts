@@ -1,28 +1,37 @@
-import type {
-  AgentMessageQueueSnapshot,
-  AgentQueuedMessage,
-  AgentSessionActivity,
-  AgentSessionControlSummary,
-  AgentSessionGoal,
-  AgentSessionHistoryMessage,
-  AgentSessionLivePendingApprovalRequest,
-  AgentSessionLivePendingQuestionRequest,
-  AgentSessionLiveEnvelope,
-  AgentSessionLiveRef,
-  AgentSessionLiveSnapshot,
-  AgentSessionLiveSnapshotEnvelope,
-  AgentSessionModelSelection,
-  AgentSessionRecord,
-  AgentSessionScope,
-  AgentSessionTranscriptEvent,
-  AgentTranscriptSessionTodoItem,
-  AgentToolPart,
-  AgentTranscriptStreamPart,
-  AgentTranscriptUserMessageDisplayPart,
-  AcceptedAgentUserMessage,
-  RuntimeKind,
-  WorkspaceSession,
+import {
+  type AcceptedAgentInput,
+  type AcceptedAgentUserMessage,
+  type AgentMessageQueueSnapshot,
+  type AgentQueuedMessage,
+  type AgentSessionActivity,
+  type AgentSessionControlSummary,
+  type AgentSessionGoal,
+  type AgentSessionHistoryMessage,
+  type AgentSessionLiveEnvelope,
+  type AgentSessionLivePendingApprovalRequest,
+  type AgentSessionLivePendingQuestionRequest,
+  type AgentSessionLiveRef,
+  type AgentSessionLiveSnapshot,
+  type AgentSessionLiveSnapshotEnvelope,
+  type AgentSessionModelSelection,
+  type AgentSessionRecord,
+  type AgentSessionScope,
+  type AgentSessionTranscriptEvent,
+  type AgentToolPart,
+  type AgentTranscriptSessionTodoItem,
+  type AgentTranscriptStreamPart,
+  type AgentTranscriptUserMessageDisplayPart,
+  GOAL_SLASH_COMMAND,
+  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+  type RuntimeKind,
+  type WorkspaceSession,
 } from "@openducktor/contracts";
+import {
+  type AgentSessionGoalCommand,
+  type AgentUserMessagePart,
+  classifySystemSlashCommandInvocation,
+  goalCommandStartsWork,
+} from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
 import type { DemoRunScript, DemoRunStep } from "./demo-script";
 import {
@@ -414,18 +423,29 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
       durationMs,
       model: { ...session.model },
     });
-    transcript(session, { type: "session_idle", turnOutcome: "completed" });
+    // The role outcome applies only when the run ends normally, inside the turn, as the workflow
+    // tool call of a real agent does. A refused outcome fails the turn and shows its reason.
+    let failure: string | null = null;
+    try {
+      run.script.onComplete?.();
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error);
+      transcript(session, { type: "session_error", message: failure });
+    }
+    transcript(session, { type: "session_idle", turnOutcome: failure ? "failed" : "completed" });
     session.run = null;
     session.activity = "idle";
-    // A rejected edit leaves the goal unmet. The demo runtime continues it with the next message.
+    // A rejected edit or a failed outcome leaves the goal unmet until the next message.
     if (session.goal?.status === "active")
-      session.goal.status = run.rejected ? "waiting_for_message" : "complete";
+      session.goal.status = run.rejected || failure ? "waiting_for_message" : "complete";
     session.contextTokens += 2_400 + entry.text.length * 3;
     session.lastActivityAt = clock.now();
+    if (failure && session.queue.entries.length > 0) {
+      session.queue.paused = true;
+      publishQueue(session);
+    }
     upsert(session);
     publishChat(session);
-    // The role outcome applies only when the run ends normally.
-    run.script.onComplete?.();
     drainQueue(session);
   };
 
@@ -506,11 +526,55 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     steps: [{ kind: "text", text: "Done." }],
   });
 
+  /**
+   * Applies a goal command, as the runtime does. `set` and `resume` start work when the session
+   * is idle; the goal drives that run.
+   */
+  const controlGoal = (session: DemoSession, command: AgentSessionGoalCommand) => {
+    if (command.kind === "set") session.goal = { objective: command.objective, status: "active" };
+    else {
+      const goal = session.goal;
+      if (!goal) throw new Error("This session has no goal. Send /goal with an objective first.");
+      if (command.kind === "clear") delete session.goal;
+      else
+        session.goal = {
+          objective: goal.objective,
+          status: command.kind === "pause" ? "paused" : "active",
+        };
+    }
+    upsert(session);
+  };
+
+  /** The system command of message parts, as the host classifies `/goal` and `/compact`. */
+  const systemCommandOf = (parts: readonly UserMessagePart[]) =>
+    // SAFETY: parsed contract parts differ from core parts only by optional fields that are absent.
+    classifySystemSlashCommandInvocation([...parts] as AgentUserMessagePart[]);
+
+  /** Sends a message that the session can take now: a system command or a prompt. */
   const deliver = (
     session: DemoSession,
     parts: readonly UserMessagePart[],
     submissionId?: string,
-  ) => {
+  ): AcceptedAgentInput => {
+    const invocation = systemCommandOf(parts);
+    if (invocation.kind === "manual_session_compaction") {
+      // Compaction summarizes the transcript, so the context gets small again.
+      session.contextTokens = 9_800;
+      upsert(session);
+      return {
+        type: "command_accepted",
+        commandName: MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger,
+      };
+    }
+    if (invocation.kind === "goal") {
+      const { command } = invocation;
+      controlGoal(session, command);
+      if (!goalCommandStartsWork(command))
+        return { type: "command_accepted", commandName: GOAL_SLASH_COMMAND.trigger };
+      const accepted = acceptUserMessage(session, parts, submissionId);
+      startRun(session, promptScript(session, session.goal?.objective ?? accepted.message));
+      return accepted;
+    }
     const accepted = acceptUserMessage(session, parts, submissionId);
     startRun(session, promptScript(session, accepted.message));
     return accepted;
@@ -707,6 +771,10 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     },
     agentSessionMessageSubmit: async (input) => {
       const session = find(input);
+      // A command that the host refuses fails at submit, before it waits in the queue.
+      const invocation = systemCommandOf(input.parts);
+      if (invocation.kind !== "not_system" && input.mode === "steer" && session.run)
+        throw new Error("A slash command cannot join running work.");
       // Steering adds the message to the running turn at once.
       if (input.mode === "steer" && session.run)
         return {
@@ -776,11 +844,16 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
           break;
         case "steer":
           if (entry?.state !== "queued") throw new Error("This message already left the queue.");
+          if (session.run && systemCommandOf(entry.parts).kind !== "not_system")
+            throw new Error("A slash command cannot join running work.");
           session.queue.entries = entries.filter((_, index) => index !== at);
           session.queue.paused = false;
-          steered = session.run
-            ? acceptUserMessage(session, entry.parts, entry.submissionId)
-            : deliver(session, entry.parts, entry.submissionId);
+          if (session.run) steered = acceptUserMessage(session, entry.parts, entry.submissionId);
+          else {
+            const delivered = deliver(session, entry.parts, entry.submissionId);
+            // A command that starts no work has no message to show.
+            if (delivered.type === "user_message") steered = delivered;
+          }
           break;
         case "resume":
           session.queue.paused = false;
@@ -813,18 +886,10 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     agentSessionControlStop: async (ref) => stopRun(find(ref)),
     agentSessionGoalControl: async (input) => {
       const session = find(input);
-      const goal = session.goal;
-      if (!goal) throw new Error("This session has no goal. Refresh the session.");
-      if (input.action === "clear") delete session.goal;
-      else if (input.action === "pause")
-        session.goal = { objective: goal.objective, status: "paused" };
-      // The demo runtime continues a goal only with the next message.
-      else
-        session.goal = {
-          objective: goal.objective,
-          status: session.run ? "active" : "waiting_for_message",
-        };
-      upsert(session);
+      const command: AgentSessionGoalCommand = { kind: input.action };
+      controlGoal(session, command);
+      if (goalCommandStartsWork(command) && !session.run && session.goal)
+        startRun(session, promptScript(session, session.goal.objective));
     },
     agentSessionControlRelease: async () => {},
     agentSessionUsageLimitAutoResumeCancel: async () => {},

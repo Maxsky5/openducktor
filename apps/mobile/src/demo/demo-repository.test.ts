@@ -36,7 +36,11 @@ describe("demo repository", () => {
     repository.mergeInto(checkout, "refs/heads/main");
     const root = repository.checkout("/repo");
     expect(repository.readFile(root, "src/new.ts")).toEqual(text("export {};\n"));
-    expect(repository.branchDiffs(checkout).map((diff) => diff.file)).toEqual(["README.md"]);
+    // The squash commit is new on the target, so the branch still shows its own commits.
+    expect(repository.branchDiffs(checkout).map((diff) => diff.file)).toEqual([
+      "README.md",
+      "src/new.ts",
+    ]);
   });
 
   test("compares a branch with the merge base of the selected target branch", () => {
@@ -88,11 +92,18 @@ describe("demo repository", () => {
     });
     repository.commit(task, new Map([["src/b.ts", text("export {};\n")]]), "Add b");
 
+    repository.commit(into, new Map([["README.md", text("# Notes\n\nA\n")]]), "Edit a");
+    const source = { revision: task.revision, readme: repository.readFile(task, "README.md") };
+
     repository.mergeInto(task, "odt/a");
 
     expect(repository.readFile(into, "src/b.ts")).toEqual(text("export {};\n"));
+    expect(repository.readFile(into, "README.md")).toEqual(text("# Notes\n\nA\n"));
     expect(repository.readFile(repository.checkout("/repo"), "src/b.ts")).toBeNull();
-    expect(repository.worktreeStatus(task, "odt/a", 0).fileDiffs).toEqual([]);
+    expect({ revision: task.revision, readme: repository.readFile(task, "README.md") }).toEqual(
+      source,
+    );
+    expect(into.revision).not.toBe(task.revision);
   });
 
   test("keeps other worktrees on their base when a branch merges into the target", () => {
