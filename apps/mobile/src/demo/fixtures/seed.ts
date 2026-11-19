@@ -425,7 +425,57 @@ export const seedDemo = ({ world, engine, outcomes, terminals }: DemoSeedModules
     documents: ["spec", "plan"],
     hoursAgo: 4,
   });
-  outcomesWithWorktree(fieldnotes, blocked);
+  // The Builder of the blocked task stopped on a decision that the user must make.
+  const blockedCheckout = outcomesWithWorktree(fieldnotes, blocked);
+  const blockedBuilder = engine.create({
+    externalSessionId: `opencode-seed-${sessionNumber++}`,
+    workspace: fieldnotes,
+    owner: { kind: "task", taskId: blocked.record.id, role: "build" },
+    runtimeKind: "opencode",
+    workingDirectory: blockedCheckout.workingDirectory,
+    title: `Builder: ${blocked.record.title}`,
+    model: MODELS.vega,
+    startedAtMs: now - 5 * HOUR,
+    quiet: true,
+  });
+  play(
+    blockedBuilder,
+    "Implement this task from its plan, then complete the build.",
+    {
+      steps: [
+        {
+          kind: "reasoning",
+          text: "Cmd+K must insert a link in the editor, but the search shortcut opens search for every Cmd+K, also inside the editor.",
+        },
+        {
+          kind: "tool",
+          tool: "read",
+          toolType: "read",
+          title: "Read src/search/open-search.ts",
+          input: { file_path: `${blockedCheckout.workingDirectory}/src/search/open-search.ts` },
+          output: "export function openSearch(dialog: { open(): void }) {",
+        },
+        {
+          kind: "tool",
+          tool: "odt_apply_workflow_event",
+          toolType: "workflow",
+          title: "Report blocker",
+          input: {
+            taskId: blocked.record.id,
+            eventId: "build-blocked",
+            note: "Cmd+K is the search shortcut and the link shortcut in the editor. Choose which one wins inside the editor.",
+          },
+          output: "Saved.",
+        },
+        {
+          kind: "text",
+          text: "I stopped before I changed the shortcut. Cmd+K opens search on the whole window, and the spec also asks it to insert a link in the editor. Tell me which one wins inside the editor, and I will continue.",
+        },
+      ],
+    },
+    4 * 60,
+  );
+  engine.goLive(blockedBuilder);
   addTask(fieldnotes, story(fieldnotes, "w1j5").id, {
     ...story(fieldnotes, "w1j5"),
     status: "open",

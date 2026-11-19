@@ -851,6 +851,14 @@ describe("demo QA fixes", () => {
     expect(await notes()).toBe(before);
   });
 
+  test("gives the blocked sample task a Builder session that its row opens", async () => {
+    const demo = openDemo();
+    const blocked = await taskOf(demo, "Keep search closed while typing in a note");
+    expect(blocked.status).toBe("blocked");
+    const [records] = await demo.client.agentSessionsListForTasks(FIELDNOTES, [blocked.id]);
+    expect(records?.agentSessions.map((session) => session.role)).toEqual(["build"]);
+  });
+
   test("never gives a deleted task ID to a new task", async () => {
     const demo = openDemo();
     const create = () =>
