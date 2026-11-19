@@ -34,6 +34,11 @@ type SplitDirection = "horizontal" | "vertical";
 
 type SplitPanelModel = Pick<SessionPanelModel, "presence" | "onSettled" | "onCollapsed">;
 
+type PanelPresence = SplitPanelModel["presence"];
+
+/** The move of a panel that opens or closes, or `undefined` while the panel does not move. */
+type PanelMove = Extract<PanelPresence, "opening" | "closing"> | undefined;
+
 type SessionPanelSplitProps = {
   ids: SessionPanelSplitIds;
   model: SplitPanelModel;
@@ -51,17 +56,36 @@ type SessionPanelSplitProps = {
   panel: ReactNode;
 };
 
+/** The separator of a closing panel shrinks to zero size along the split axis with the panel. */
+const COLLAPSED_SEPARATOR_STYLES = {
+  horizontal: { width: 0 },
+  vertical: { height: 0 },
+} satisfies Record<SplitDirection, CSSProperties>;
+
 /**
  * Hides the separator of a closed panel, and keeps it between the panels at zero size along the
  * split axis. When the group registers, the library maps each separator to the panels next to it
  * by their offsets. A separator with `display: none` has no offset, so it maps to no panels and its
- * arrow keys throw. The separator keeps its full length, so its grip stays on the axis when the
- * separator grows back during an open.
+ * arrow keys throw.
  */
 const HIDDEN_SEPARATOR_STYLES = {
   horizontal: { visibility: "hidden", width: 0 },
   vertical: { visibility: "hidden", height: 0 },
 } satisfies Record<SplitDirection, CSSProperties>;
+
+/**
+ * Sets only the size of the separator along the split axis. The separator keeps its full length, so
+ * its grip stays on the axis while the separator moves with the panel edge.
+ */
+const separatorStyle = (
+  presence: PanelPresence,
+  direction: SplitDirection,
+  fillsGroup: boolean,
+): CSSProperties | undefined => {
+  if (presence === "closed" || fillsGroup) return HIDDEN_SEPARATOR_STYLES[direction];
+  if (presence === "closing") return COLLAPSED_SEPARATOR_STYLES[direction];
+  return undefined;
+};
 
 const axisSize = (element: HTMLElement, direction: SplitDirection): number =>
   direction === "horizontal" ? element.offsetWidth : element.offsetHeight;
@@ -81,6 +105,7 @@ function usePanelMotion({
   mainId,
   panelId,
   model,
+  move,
   direction,
   openSize,
   groupRef,
@@ -90,6 +115,7 @@ function usePanelMotion({
   mainId: string;
   panelId: string;
   model: SplitPanelModel;
+  move: PanelMove;
   direction: SplitDirection;
   openSize: () => number;
   groupRef: RefObject<GroupImperativeHandle | null>;
@@ -98,56 +124,50 @@ function usePanelMotion({
 }): void {
   const { presence, onSettled } = model;
   const isOpen = presence === "opening" || presence === "open";
-  const isMoving = presence === "opening" || presence === "closing";
   useLayoutEffect(() => {
-    const size = isOpen ? openSize() : 0;
     const main = mainRef.current;
     const panel = panelRef.current;
-    // A panel resizes when it opens to a size, or when it shows before it closes. A panel that a
-    // drag made zero wide is hidden already, so no transition runs for its hide.
-    const isResize = size > 0 || (panel !== null && axisSize(panel, direction) > 0);
-    if (isMoving && main && panel) {
+    if (!main || !panel) return;
+    const size = isOpen ? openSize() : 0;
+    let hasMove = false;
+    if (move) {
+      // A split in a hidden ancestor has no size, and the browser runs no transition in it.
       const panelSpace = axisSize(main, direction) + axisSize(panel, direction);
+      // A panel moves when it opens to a size, or when it shows before it closes. A panel that a
+      // drag made zero wide is hidden already, so it does not move. Reduced motion has no
+      // transition, so the move ends at once.
+      hasMove =
+        panelSpace > 0 && (size > 0 || axisSize(panel, direction) > 0) && hasTransition(panel);
       // The content inherits the size from the panel, which stays mounted. Content that mounts
       // again on the next open lays out at its open size from its first layout.
-      panel.style.setProperty("--session-panel-size", `${(panelSpace * openSize()) / 100}px`);
+      if (hasMove) {
+        panel.style.setProperty("--session-panel-size", `${(panelSpace * openSize()) / 100}px`);
+      }
     }
     groupRef.current?.setLayout({ [mainId]: 100 - size, [panelId]: size });
-    if (!isMoving) return;
-    // Without a size transition, as with reduced motion, the move ends at once.
-    if (!isResize || !panel || !hasTransition(panel)) {
+    if (!move) return;
+    if (!hasMove) {
       onSettled();
       return;
     }
-    const onResizeEnd = (event: TransitionEvent): void => {
+    const onMoveEnd = (event: TransitionEvent): void => {
       // A reverse replaces the running transition with one that starts at the current size. Wait
       // for the transition that runs now.
       if (event.target !== panel || panel.getAnimations().length > 0) return;
       onSettled();
     };
-    panel.addEventListener("transitionend", onResizeEnd);
-    panel.addEventListener("transitioncancel", onResizeEnd);
+    panel.addEventListener("transitionend", onMoveEnd);
+    panel.addEventListener("transitioncancel", onMoveEnd);
     return () => {
-      panel.removeEventListener("transitionend", onResizeEnd);
-      panel.removeEventListener("transitioncancel", onResizeEnd);
+      panel.removeEventListener("transitionend", onMoveEnd);
+      panel.removeEventListener("transitioncancel", onMoveEnd);
     };
-  }, [
-    direction,
-    groupRef,
-    isMoving,
-    isOpen,
-    mainRef,
-    mainId,
-    onSettled,
-    openSize,
-    panelRef,
-    panelId,
-  ]);
+  }, [direction, groupRef, isOpen, mainRef, mainId, onSettled, openSize, move, panelRef, panelId]);
 }
 
 /**
- * Splits the main area of a session page and one session panel. The panel slides in and out, and
- * the main area resizes with it.
+ * Splits the main area of a session page and one session panel. When the panel opens or closes,
+ * the main area and the panel change size together.
  */
 export function SessionPanelSplit({
   ids,
@@ -177,10 +197,13 @@ export function SessionPanelSplit({
     (): number => (fillsGroup ? 100 : panelSizeRef.current),
     [fillsGroup],
   );
+  const { presence } = model;
+  const move: PanelMove = presence === "opening" || presence === "closing" ? presence : undefined;
   usePanelMotion({
     mainId,
     panelId,
     model,
+    move,
     direction,
     openSize,
     groupRef,
@@ -202,11 +225,9 @@ export function SessionPanelSplit({
     },
     [fillsGroup, panelId, onCollapsed],
   );
-  const { presence } = model;
   const isPresent = presence !== "closed";
-  const motion = presence === "opening" || presence === "closing" ? presence : undefined;
-  // The separator moves with the panel edge, and only an open panel resizes with it.
-  const showsSeparator = isPresent && !fillsGroup;
+  // The user can resize only an open panel. During a move, the separator moves with the panel edge.
+  const canResize = presence === "open" && !fillsGroup;
   return (
     <ResizablePanelGroup
       id={groupId}
@@ -217,7 +238,7 @@ export function SessionPanelSplit({
         [panelId]: isPresent ? sizes.panel : 0,
       }}
       onLayoutChanged={onLayoutChanged}
-      data-panel-motion={motion}
+      data-panel-motion={move}
       className={className}
       style={GROUP_STYLE}
     >
@@ -236,8 +257,8 @@ export function SessionPanelSplit({
       <ResizableHandle
         aria-label={separatorLabel}
         withHandle
-        disabled={presence !== "open" || fillsGroup}
-        style={showsSeparator ? undefined : HIDDEN_SEPARATOR_STYLES[direction]}
+        disabled={!canResize}
+        style={separatorStyle(presence, direction, fillsGroup)}
       />
       <ResizablePanel
         id={panelId}
@@ -249,7 +270,12 @@ export function SessionPanelSplit({
         maxSize={fillsGroup ? "100%" : sizes.panelMax}
       >
         {isPresent || keepPanelMounted ? (
-          <SessionPanelContent presence={presence} direction={direction} className={panelClassName}>
+          <SessionPanelContent
+            presence={presence}
+            move={move}
+            direction={direction}
+            className={panelClassName}
+          >
             {panel}
           </SessionPanelContent>
         ) : null}
@@ -270,16 +296,17 @@ const GROUP_STYLE: CSSProperties = { overflow: "clip" };
  */
 function SessionPanelContent({
   presence,
+  move,
   direction,
   className,
   children,
 }: {
-  presence: SplitPanelModel["presence"];
+  presence: PanelPresence;
+  move: PanelMove;
   direction: SplitDirection;
   className: string | undefined;
   children: ReactNode;
 }): ReactElement {
-  const isMoving = presence === "opening" || presence === "closing";
   return (
     // The box clips and does not scroll. A hidden overflow can scroll, and a focus or a tab that
     // scrolls into view would then move the content that sticks out while the panel moves.
@@ -290,7 +317,7 @@ function SessionPanelContent({
       <div
         data-slot="session-panel-content"
         data-side={direction === "horizontal" ? "right" : "bottom"}
-        data-moving={isMoving ? presence : undefined}
+        data-moving={move}
         inert={presence !== "opening" && presence !== "open"}
         className={cn("h-full min-h-0", className)}
       >

@@ -14,12 +14,17 @@ import type { PanelPresence } from "./use-session-panels";
 const ids: SessionPanelSplitIds = { group: "test-split", main: "test-main", panel: "test-panel" };
 const sizes = { main: 63, mainMin: "35%", panel: 37, panelMin: "30%" };
 
-const renderSplit = (presence: PanelPresence, onSettled: () => void, onCollapsed = () => {}) => (
+const renderSplit = (
+  presence: PanelPresence,
+  onSettled: () => void = () => {},
+  direction: "horizontal" | "vertical" = "horizontal",
+) => (
   <SessionPanelSplit
     ids={ids}
-    model={{ presence, onSettled, onCollapsed }}
-    direction="horizontal"
+    model={{ presence, onSettled, onCollapsed: () => {} }}
+    direction={direction}
     sizes={sizes}
+    separatorLabel="Resize panel"
     className=""
     mainClassName=""
     main={<p>Chat</p>}
@@ -33,10 +38,10 @@ const panelElement = (): HTMLElement => {
   return panel;
 };
 
-type Slide = { end: () => void };
+type Move = { end: () => void };
 
 /** Runs the size transition that the split CSS starts on a moving panel, until `end` stops it. */
-const withSlide = (run: (slide: Slide) => void): void => {
+const withMove = (run: (move: Move) => void): void => {
   let isRunning = true;
   const transition = new Animation();
   const motionStyle = document.createElement("style");
@@ -59,11 +64,11 @@ const withSlide = (run: (slide: Slide) => void): void => {
   }
 };
 
-/** Runs `run` with laid-out panels and a running slide. */
-const withLaidOutSlide = (run: (slide: Slide) => void): void => {
+/** Runs `run` with laid-out panels and a running move. */
+const withLaidOutMove = (run: (move: Move) => void): void => {
   const removePanelLayout = installPanelLayout();
   try {
-    withSlide(run);
+    withMove(run);
   } finally {
     removePanelLayout();
   }
@@ -75,7 +80,7 @@ const contentElement = (): HTMLElement => {
   return content;
 };
 
-const dispatchSlideEvent = (type: "transitionend" | "transitioncancel"): void => {
+const dispatchMoveEvent = (type: "transitionend" | "transitioncancel"): void => {
   act(() => {
     panelElement().dispatchEvent(new Event(type));
   });
@@ -83,13 +88,13 @@ const dispatchSlideEvent = (type: "transitionend" | "transitioncancel"): void =>
 
 describe("SessionPanelSplit", () => {
   test("shows its open size after its view hid during a close and the panel opened", () => {
-    withLaidOutSlide(() => {
+    withLaidOutMove(() => {
       const inView = (isHidden: boolean, presence: PanelPresence) => (
         <div hidden={isHidden}>{renderSplit(presence, () => {})}</div>
       );
       const view = render(inView(false, "open"));
       view.rerender(inView(false, "closing"));
-      // The view hides during the slide, so the panel ends its close while hidden.
+      // The view hides during the move, so the panel ends its close while hidden.
       view.rerender(inView(true, "closed"));
       // Another view opens the shared right panel.
       view.rerender(inView(true, "open"));
@@ -106,19 +111,7 @@ describe("SessionPanelSplit", () => {
     test(`resizes a ${direction} panel that opened after the split mounted with ${key}`, () => {
       const removePanelLayout = installPanelLayout();
       try {
-        const split = (presence: PanelPresence) => (
-          <SessionPanelSplit
-            ids={ids}
-            model={{ presence, onSettled: () => {}, onCollapsed: () => {} }}
-            direction={direction}
-            sizes={sizes}
-            separatorLabel="Resize panel"
-            className=""
-            mainClassName=""
-            main={<p>Chat</p>}
-            panel={<p>Panel content</p>}
-          />
-        );
+        const split = (presence: PanelPresence) => renderSplit(presence, () => {}, direction);
         const view = render(split("closed"));
         expect(screen.queryByRole("separator", { name: "Resize panel" })).toBeNull();
         view.rerender(split("open"));
@@ -140,25 +133,36 @@ describe("SessionPanelSplit", () => {
     { direction: "horizontal", axis: "width", length: "height" },
     { direction: "vertical", axis: "height", length: "width" },
   ] as const) {
-    test(`keeps the full length of a closed ${direction} separator, so its grip stays on the axis`, () => {
-      render(
-        <SessionPanelSplit
-          ids={ids}
-          model={{ presence: "closed", onSettled: () => {}, onCollapsed: () => {} }}
-          direction={direction}
-          sizes={sizes}
-          className=""
-          mainClassName=""
-          main={<p>Chat</p>}
-          panel={<p>Panel content</p>}
-        />,
-      );
-
+    test(`moves a ${direction} separator only along the split axis, so its grip stays on the axis`, () => {
+      const view = render(renderSplit("closed", () => {}, direction));
       const separator = screen.getByRole("separator", { hidden: true });
-      expect(separator.style[axis]).toBe("0px");
-      expect(separator.style[length]).toBe("");
+      const sizesFor = (presence: PanelPresence) => {
+        view.rerender(renderSplit(presence, () => {}, direction));
+        return { axis: separator.style[axis], length: separator.style[length] };
+      };
+
+      // The separator grows from zero size when the panel opens, and shrinks to it on a close.
+      expect(sizesFor("closed")).toEqual({ axis: "0px", length: "" });
+      expect(sizesFor("opening")).toEqual({ axis: "", length: "" });
+      expect(sizesFor("open")).toEqual({ axis: "", length: "" });
+      expect(sizesFor("closing")).toEqual({ axis: "0px", length: "" });
     });
   }
+
+  test("ends an open at once when the split is in a hidden view, as no transition runs there", () => {
+    withMove(() => {
+      const onSettled = mock(() => {});
+      // The test DOM has no layout, as a split in a hidden view has no size.
+      const inHiddenView = (presence: PanelPresence) => (
+        <div hidden>{renderSplit(presence, onSettled)}</div>
+      );
+      const view = render(inHiddenView("closed"));
+
+      view.rerender(inHiddenView("opening"));
+
+      expect(onSettled).toHaveBeenCalledTimes(1);
+    });
+  });
 
   test("ends a move at once when no size transition runs, as with reduced motion", () => {
     const onSettled = mock(() => {});
@@ -172,7 +176,7 @@ describe("SessionPanelSplit", () => {
   });
 
   test("resizes the main area and the panel together while the panel opens", () => {
-    withLaidOutSlide((slide) => {
+    withLaidOutMove((move) => {
       const onSettled = mock(() => {});
       const view = render(renderSplit("closed", onSettled));
 
@@ -185,15 +189,15 @@ describe("SessionPanelSplit", () => {
       expect(screen.getByRole("separator", { hidden: true }).style.visibility).toBe("");
       expect(onSettled).not.toHaveBeenCalled();
 
-      slide.end();
-      dispatchSlideEvent("transitionend");
+      move.end();
+      dispatchMoveEvent("transitionend");
 
       expect(onSettled).toHaveBeenCalledTimes(1);
     });
   });
 
   test("resizes the main area and the panel together while the panel closes", () => {
-    withLaidOutSlide((slide) => {
+    withLaidOutMove((move) => {
       const onSettled = mock(() => {});
       const view = render(renderSplit("open", onSettled));
 
@@ -209,34 +213,34 @@ describe("SessionPanelSplit", () => {
       expect(separator.getAttribute("aria-disabled")).toBe("true");
       expect(onSettled).not.toHaveBeenCalled();
 
-      slide.end();
-      dispatchSlideEvent("transitionend");
+      move.end();
+      dispatchMoveEvent("transitionend");
       expect(onSettled).toHaveBeenCalledTimes(1);
     });
   });
 
   test("waits for the reversed resize when the panel opens again during its close", () => {
-    withLaidOutSlide((slide) => {
+    withLaidOutMove((move) => {
       const onSettled = mock(() => {});
       const view = render(renderSplit("open", onSettled));
       view.rerender(renderSplit("closing", onSettled));
 
       view.rerender(renderSplit("opening", onSettled));
       // The open replaces the close transition, so the close transition reports a cancel.
-      dispatchSlideEvent("transitioncancel");
+      dispatchMoveEvent("transitioncancel");
 
       expect(contentElement().dataset.moving).toBe("opening");
       expect(panelElement().style.flexGrow).toBe(String(sizes.panel));
       expect(onSettled).not.toHaveBeenCalled();
 
-      slide.end();
-      dispatchSlideEvent("transitionend");
+      move.end();
+      dispatchMoveEvent("transitionend");
       expect(onSettled).toHaveBeenCalledTimes(1);
     });
   });
 
   test("ends a hide at once when a drag already made the panel zero wide", () => {
-    withSlide(() => {
+    withMove(() => {
       const onSettled = mock(() => {});
       // The test DOM has no layout, so the panel is zero wide.
       const view = render(renderSplit("open", onSettled));
@@ -248,7 +252,7 @@ describe("SessionPanelSplit", () => {
     });
   });
 
-  test("shows and hides a panel at once without the slide motion", () => {
+  test("shows and hides a panel at once without the move", () => {
     const onSettled = mock(() => {});
     const view = render(renderSplit("closed", onSettled));
     expect(screen.queryByText("Panel content")).toBeNull();

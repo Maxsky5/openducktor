@@ -1,38 +1,17 @@
-/* A session panel and the main area resize together while the user shows or hides the panel. */
-/* The size transition is on only during that move, so a drag on the separator stays direct. */
-[data-panel-motion] > [data-panel] {
-  transition: flex-grow var(--sheet-open-dur) var(--sheet-ease);
-}
+/* The panels and the separator change size together while the user shows or hides a panel. */
+/* The transition is on only during that move, so a drag on the separator stays direct. The */
+/* split sets the separator size, so the separator follows the panel edge. Reduced motion has no */
+/* transition, so a panel shows and hides at once. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-panel-motion] > :is([data-panel], [data-separator]) {
+    transition-property: flex-grow, width, height;
+    transition-duration: var(--sheet-open-dur);
+    transition-timing-function: var(--sheet-ease);
+  }
 
-[data-panel-motion="closing"] > [data-panel] {
-  transition-duration: var(--sheet-close-dur);
-}
-
-/* The separator grows and shrinks with the panel along the split axis only, so the main area does */
-/* not jump when the move ends and the grip stays on the axis. */
-[data-panel-motion] > [data-separator] {
-  transition-duration: var(--sheet-open-dur);
-  transition-timing-function: var(--sheet-ease);
-}
-
-[data-panel-motion] > [data-separator][aria-orientation="vertical"] {
-  transition-property: width;
-}
-
-[data-panel-motion] > [data-separator][aria-orientation="horizontal"] {
-  transition-property: height;
-}
-
-[data-panel-motion="closing"] > [data-separator] {
-  transition-duration: var(--sheet-close-dur);
-}
-
-[data-panel-motion="closing"] > [data-separator][aria-orientation="vertical"] {
-  width: 0;
-}
-
-[data-panel-motion="closing"] > [data-separator][aria-orientation="horizontal"] {
-  height: 0;
+  [data-panel-motion="closing"] > :is([data-panel], [data-separator]) {
+    transition-duration: var(--sheet-close-dur);
+  }
 }
 
 /* The panel content keeps its open size at the inner edge, so it moves with that edge instead of */
@@ -51,12 +30,4 @@
   inset-inline: 0;
   top: 0;
   height: var(--session-panel-size);
-}
-
-/* Reduced motion resizes at once. */
-@media (prefers-reduced-motion: reduce) {
-  [data-panel-motion] > [data-panel],
-  [data-panel-motion] > [data-separator] {
-    transition: none;
-  }
 }
