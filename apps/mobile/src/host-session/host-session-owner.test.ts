@@ -434,6 +434,49 @@ describe("host session owner", () => {
     expect(stored).toContain("Unsent message");
   });
 
+  test("opens the demo from a connected host and keeps its drafts and saved choice", async () => {
+    const { owner, hostStores, appStore } = setup({
+      [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),
+    });
+    owner.start();
+    seedChatDraft(activeSession(owner));
+    const record = appStore.getString(SAVED_HOSTS_KEY);
+
+    await owner.enterDemo();
+
+    const demo = owner.getState();
+    expect(demo.status === "active" && demo.session.kind).toBe("demo");
+    expect(
+      hostStores.stores.get("saved-1")?.getString(toAgentChatDraftStorageKey(CHAT_DRAFT)),
+    ).toContain("Unsent message");
+    // The next launch opens the same host, because the demo changes no saved record.
+    expect(appStore.getString(SAVED_HOSTS_KEY)).toBe(record);
+
+    await releaseDemoTree(owner, () => owner.exitDemo());
+    const selection = owner.getState();
+    expect(selection.status === "no_host" && selection.hosts.map((host) => host.id)).toEqual([
+      "saved-1",
+    ]);
+  });
+
+  test("keeps the connected host when its drafts cannot save, until the user consents", async () => {
+    const { owner } = setup({
+      [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),
+    });
+    owner.start();
+    const connected = owner.getState();
+    seedChatDraft(activeSession(owner), "notes.pdf");
+
+    const failure = await owner.enterDemo().catch((cause) => cause);
+    expect(failure).toBeInstanceOf(DraftSaveBeforeSwitchError);
+    expect(owner.getState()).toBe(connected);
+
+    await owner.enterDemo({ discardUnsavedDrafts: true });
+    const demo = owner.getState();
+    expect(demo.status === "active" && demo.session.kind).toBe("demo");
+    await releaseDemoTree(owner, () => owner.exitDemo());
+  });
+
   test("removing the active host uploads no attachment of its drafts", async () => {
     const { owner, staged } = setup({
       [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),

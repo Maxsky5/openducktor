@@ -186,8 +186,13 @@ export type HostSessionOwner = {
   removeDamagedHost(key: string): Promise<void>;
   /** Removes an unreadable record and the stores of the host IDs that it still names. */
   resetInvalidRecord(): Promise<void>;
-  /** Opens the demo with fresh sample data. Only host selection, with no active host, can open it. */
-  enterDemo(): Promise<void>;
+  /**
+   * Opens the demo with fresh sample data, from host selection or from a connected host. A
+   * connected host closes as a host switch does: its drafts save first, and a draft that cannot
+   * save fails with `DraftSaveBeforeSwitchError` unless `discardUnsavedDrafts` is set. The saved
+   * active host choice does not change, so the next launch opens that host again.
+   */
+  enterDemo(options?: { discardUnsavedDrafts?: boolean }): Promise<void>;
   /** Discards the demo changes and opens the demo again with fresh sample data. */
   resetDemo(): Promise<void>;
   /** Discards the demo and returns to host selection. */
@@ -749,14 +754,16 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
         deps.appStore.remove(state.invalid.key);
         owner.start();
       }),
-    enterDemo() {
+    enterDemo(options) {
       // A host connection from host selection runs, so the demo waits for its result.
       if (pendingAdmissions > 0)
         return Promise.reject(
           new Error("A host connection is in progress. Wait for it to end, then try the demo."),
         );
       return serialize(async () => {
-        if (state.status !== "no_host" || session)
+        if (session?.kind === "remote")
+          await closeSession({ discardUnsavedDrafts: options?.discardUnsavedDrafts ?? false });
+        else if (state.status !== "no_host" || session)
           throw new Error("Open host selection to try the demo.");
         const demo = openDemo();
         session = demo;

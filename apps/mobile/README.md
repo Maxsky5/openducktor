@@ -162,7 +162,7 @@ Hermes has no `Intl.ListFormat`, `Intl.PluralRules`, `Intl.RelativeTimeFormat`, 
 
 ### Demo mode
 
-Host selection offers Try demo. The demo opens the real screens on the fictional Fieldnotes sample data, with no host, account, or network. [The store review guide](../../docs/mobile-store-review.md) lists what the demo simulates and what needs a real host.
+Host selection offers Try demo, and so does the Host tab of a connected host. The demo opens the real screens on the fictional Fieldnotes sample data, with no host, account, or network. From a connected host, the owner closes the host as a host switch does: it saves the drafts first and keeps the saved active host, so Exit demo leads to host selection and the next launch opens that host. [The store review guide](../../docs/mobile-store-review.md) lists what the demo simulates and what needs a real host.
 
 This diagram shows how the demo replaces the remote host under the same client contracts.
 

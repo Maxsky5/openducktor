@@ -46,7 +46,7 @@ The table lists each area of the app and how the demo covers it.
 | Issue import | Sample GitHub issues | Real GitHub issues |
 | Changes and Files | Uncommitted and branch changes against any demo branch, added, changed, and deleted files, inline comments, file tree, code, Markdown, image | None |
 | Terminals | New terminal, repository actions, scripted commands, key bar, restart, close | Real shell commands |
-| Host tab | Demo host, Reset demo, Exit demo, diagnostics | Saved host list, pairing, remove host |
+| Host tab | Demo host, Reset demo, Exit demo, diagnostics; Try demo from a connected host | Saved host list, pairing, remove host |
 | Settings | Theme, display preferences | None |
 
 All demo actions run on the device. They send no network request, start no shell or runtime, call no model provider, and use no credential.

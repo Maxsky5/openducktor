@@ -10,6 +10,7 @@ import { StatusPill } from "@/ui/status-pill";
 import { useActiveSession, useCommandGate } from "@/host-session/active-session-context";
 import { SavedHostsList } from "@/hosts/saved-hosts-list";
 import { DemoHostSection } from "@/features/demo/demo-host-section";
+import { TryDemoSection } from "@/features/demo/try-demo-section";
 import { useDemoNotice } from "@/features/demo/use-demo-notice";
 import { routes } from "@/navigation/routes";
 import { useTabBarSpace } from "@/navigation/tab-bar/tab-bar-metrics";
@@ -82,6 +83,7 @@ export default function HostScreen(): ReactElement {
             onAddHost={addHost}
           />
         )}
+        {session.kind === "remote" ? <TryDemoSection hostLabel={session.host.label} /> : null}
         <SettingsSection title="Health" description="The checks of the connected host.">
           <DividedCard>
             <SettingsRow
