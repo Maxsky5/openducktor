@@ -637,6 +637,16 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     const run = session.run;
     if (!run) return;
     run.cancel?.();
+    // A tool that ran when Stop came ends there, so no part stays running after the turn.
+    for (const part of assistantEntry(session, run).parts) {
+      if (part.kind === "tool" && (part.status === "running" || part.status === "pending"))
+        addPart(session, run, {
+          ...part,
+          status: "error",
+          error: "Stopped by the user.",
+          endedAtMs: clock.now(),
+        });
+    }
     session.run = null;
     // The step that ran or waited when Stop came runs again on a continuation.
     session.interrupted = {

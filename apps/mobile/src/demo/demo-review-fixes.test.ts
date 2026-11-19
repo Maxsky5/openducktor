@@ -780,6 +780,44 @@ describe("demo QA fixes", () => {
     await expect(resume()).rejects.toThrow("no stopped turn");
   });
 
+  test("ends a running tool on Stop, so no tool stays running after Resume", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { ref, target } = await chatOf(demo, "Why do tags drop on sync?");
+    const history = () =>
+      demo.client.agentRuntimeLoadSessionHistory({
+        ...ref,
+        runtimeKind: "claude",
+        runtimePolicy: { kind: "claude" },
+        limit: 200,
+      });
+    const toolStates = async () =>
+      (await history()).flatMap((message) =>
+        message.role === "assistant"
+          ? message.parts.flatMap((part) => (part.kind === "tool" ? [part.status] : []))
+          : [],
+      );
+    await demo.client.agentSessionMessageSubmit({
+      ...target,
+      submissionId: "11111111-1111-4111-8111-000000000052",
+      mode: "default",
+      parts: [{ kind: "text", text: "Explain the notebook ranking" }],
+    });
+    for (let step = 0; step < 100 && !(await toolStates()).includes("running"); step += 1)
+      await demo.advance(50);
+    expect(await toolStates()).toContain("running");
+    await demo.client.agentSessionControlStop(ref);
+    expect(await toolStates()).not.toContain("running");
+    await demo.client.agentSessionControlResume({
+      ...target,
+      resumeMode: "continue_interrupted_turn",
+    });
+    await demo.advance(30_000);
+    expect(await toolStates()).not.toContain("running");
+    const live = await demo.client.agentSessionLiveRead(ref);
+    expect(live.type === "live" && live.session.activity).toBe("idle");
+  });
+
   test("keeps a rejected edit rejected when a stopped turn continues", async () => {
     const demo = openDemo();
     await observeLive(demo);
