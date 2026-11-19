@@ -33,7 +33,8 @@ export function forkDialog(scene: Scene, root: HTMLElement) {
     reset,
     open: dialog.open,
     close: dialog.close,
-    select: (value: ForkLocation, at: number): void => scene.at(at, () => selectNow(value)),
+    /** Selects the work location `value` at `at`. The box follows its new content. */
+    select: (value: ForkLocation, at: number): void => dialog.resize(at, () => selectNow(value)),
     scrollToEnd: dialog.scrollToEnd,
     start: dialog.start,
     runSteps: dialog.runSteps,

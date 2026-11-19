@@ -4,6 +4,7 @@
 // workspace-rail-activity-badges-model.ts for the badges of the workspace rail.
 import type { RuntimeKind } from "../../sample/models";
 import type { WorkspaceName } from "../../sample/workspace";
+import { type KeyLabels, type KeyPlatform, keyPlatform } from "../keys";
 import type { DotState, LaneId, RoleId } from "../vocabulary";
 
 /** The groups in the order of the list. */
@@ -104,7 +105,42 @@ export type NavData = {
    * moves sessions in and out of them.
    */
   omitted?: readonly NavGroupId[];
+  /**
+   * The session rows and the workspace tiles have their position hints, which show while the
+   * window has `data-hints`, as the visitor holds Mod.
+   */
+  hints?: boolean;
 };
+
+/**
+ * The position of each session that shows, in the order of the sidebar and without the collapsed
+ * groups, as numberedEntries of workspace-sidebar.tsx counts them. The first session is 1.
+ */
+export function navPositions(nav: NavData): ReadonlyMap<string, number> {
+  const collapsed = nav.collapsed ?? [];
+  const shown = navGroupViews(nav.entries)
+    .filter((view) => !collapsed.includes(view.group))
+    .flatMap((view) => view.entries.filter((entry) => !entry.later));
+  return new Map(shown.map((entry, index) => [entry.id, index + 1]));
+}
+
+/** The Shift key in a position hint of a workspace. */
+const SHIFT = { mac: "⇧", pc: "Shift" } as const satisfies Record<KeyPlatform, string>;
+
+/**
+ * The text of a position hint with the default keys, as PositionHint of position-hint.tsx writes
+ * it: the digit of a session, and Shift with the digit of a workspace. A position after 10 has no
+ * shortcut, so it shows its number.
+ */
+export function positionHint(
+  family: "session" | "workspace",
+  position: number,
+  keys: KeyLabels,
+): string {
+  if (position > 10) return String(position);
+  const digit = String(position % 10);
+  return family === "workspace" ? `${SHIFT[keyPlatform(keys)]} ${digit}` : digit;
+}
 
 /** The badges of a workspace tile: a session waits for input, or a session runs. */
 export type RailBadges = { input: boolean; running: boolean };

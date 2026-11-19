@@ -30,6 +30,10 @@
     .mob-rail-link[data-tone="rejected"] {
       background: var(--rejected-ring);
     }
+    /* The desktop theme has no destructive ring, so the destructive accent stands in. */
+    .mob-rail-link[data-tone="failed"] {
+      background: var(--destructive-accent);
+    }
     .mob-rail-link[data-tone="blocked"] {
       background: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
     }
@@ -53,6 +57,13 @@
     .mob-rail-ring[data-selected]:has(:is([data-tone="available"], [data-tone="optional"])) {
       border-color: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
     }
+    .mob-rail-ring[data-selected]:has([data-tone="rejected"]) {
+      border-color: var(--rejected-ring);
+    }
+    .mob-rail-ring[data-selected]:has([data-tone="failed"]) {
+      border-color: var(--destructive-accent);
+    }
+    /* A tile is 40 dp high at least. Its marks, its name, and its 4 dp padding make it 41 dp. */
     .mob-rail-step {
       --tone-text: var(--foreground);
       --tone-icon: var(--foreground);
@@ -61,8 +72,8 @@
       align-items: center;
       justify-content: center;
       gap: calc(2 * var(--u));
-      height: calc(40 * var(--u));
-      padding: 0 calc(4 * var(--u));
+      min-height: calc(40 * var(--u));
+      padding: calc(4 * var(--u));
       border: calc(1 * var(--u)) solid var(--input);
       border-radius: calc(10 * var(--u));
       background: var(--card);
@@ -94,6 +105,12 @@
       --tone-icon: var(--rejected-muted);
       border-color: var(--rejected-border);
       background: var(--rejected-surface);
+    }
+    .mob-rail-step[data-tone="failed"] {
+      --tone-text: var(--destructive-muted);
+      --tone-icon: var(--destructive-muted);
+      border-color: var(--destructive-border);
+      background: var(--destructive-surface);
     }
     .mob-rail-step[data-tone="blocked"] {
       --tone-text: var(--secondary-foreground);

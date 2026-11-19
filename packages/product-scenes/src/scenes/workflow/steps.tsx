@@ -2,6 +2,7 @@
 // holds the templates that its chapter clones. Each step starts where the step before it ends.
 import type { ReactElement, ReactNode } from "react";
 import { Stock } from "../../frame/Stock";
+import type { KeyLabels } from "../../replicas/keys";
 import { Toast } from "../../replicas/shell/Toast";
 import { ToastStack } from "../../replicas/shell/ToastStack";
 import { ChecksPanel } from "../../replicas/studio/ChecksPanel";
@@ -42,8 +43,11 @@ import type { ReviewTemplate } from "./review";
 import { type ChapterId, REVIEW_FILES } from "./sample";
 import type { SpecTemplate } from "./spec";
 
+/** The props of a stage: the keys of the platform, which the composer names. */
+type StageProps = { keys: KeyLabels };
+
 /** The stage and the stock of one step. */
-export type Step = { Stage: () => ReactElement; Stock: () => ReactElement };
+export type Step = { Stage: (props: StageProps) => ReactElement; Stock: () => ReactElement };
 
 /** The hidden stock of a step, next to its stage. */
 function StepStock({ children }: { children: ReactNode }): ReactElement {
@@ -58,9 +62,10 @@ function StepStock({ children }: { children: ReactNode }): ReactElement {
  * Spec: the Spec session saved the specification. The scene docks the question card and answers
  * it.
  */
-function SpecStage(): ReactElement {
+function SpecStage({ keys }: StageProps): ReactElement {
   return (
     <StudioWindow
+      keys={keys}
       frame={FRAMES.spec}
       panels={{
         document: (
@@ -89,9 +94,10 @@ function SpecStock(): ReactElement {
  * Plan: the Planner saved the implementation plan. The scene starts on the Spec session, where
  * the Spec chapter ends, opens the start dialog, and plays the Planner session.
  */
-function PlanStage(): ReactElement {
+function PlanStage({ keys }: StageProps): ReactElement {
   return (
     <StudioWindow
+      keys={keys}
       frame={FRAMES.plan}
       panels={{
         document: (
@@ -132,9 +138,10 @@ function PlanStock(): ReactElement {
  * starts on the Planner session, opens the start dialog, and asks for the commit approval. The
  * Builder role saves no artifact, so the session opens the Diffs tab.
  */
-function BuildStage(): ReactElement {
+function BuildStage({ keys }: StageProps): ReactElement {
   return (
     <StudioWindow
+      keys={keys}
       frame={FRAMES.build}
       panels={{
         document: (
@@ -177,9 +184,10 @@ function BuildStock(): ReactElement {
  * chapter ends. You start a fresh QA session, it saves the QA report, and the start dialog of the
  * fix opens in reuse mode.
  */
-function QaStage(): ReactElement {
+function QaStage({ keys }: StageProps): ReactElement {
   return (
     <StudioWindow
+      keys={keys}
       frame={FRAMES.qa}
       panels={{
         document: (
@@ -226,9 +234,10 @@ function QaStock(): ReactElement {
  * Builder session. You comment on a diff line and send the comment, the Builder fixes it, and the
  * same session publishes the pull request.
  */
-function ReviewStage(): ReactElement {
+function ReviewStage({ keys }: StageProps): ReactElement {
   return (
     <StudioWindow
+      keys={keys}
       frame={FRAMES.review}
       pr={<PullRequestLink number={42} merged />}
       panels={{

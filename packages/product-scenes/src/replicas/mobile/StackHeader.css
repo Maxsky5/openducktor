@@ -1,15 +1,23 @@
 @layer replica {
   :where(.stage) {
-    /* The toolbar of stack-header.tsx: the back control, the title at the start, and Refresh. */
+    /* The toolbar of stack-header.tsx: 56 points high, the 56 point navigation box, a 4 point
+       gap, the title with 16 points at its start, and 16 points after the last control. */
     .mob-stack-header {
       display: flex;
       flex: 0 0 auto;
       align-items: center;
       gap: calc(4 * var(--u));
       height: calc(56 * var(--u));
-      padding: 0 calc(12 * var(--u)) 0 calc(6 * var(--u));
+      padding-right: calc(16 * var(--u));
       color: var(--foreground);
     }
+    .mob-stack-nav {
+      display: flex;
+      flex: 0 0 auto;
+      justify-content: center;
+      width: calc(56 * var(--u));
+    }
+    /* The plain IconButton: a 44 point touch area, a 24 point arrow and a 22 point icon. */
     .mob-stack-back,
     .mob-stack-action {
       display: flex;
@@ -24,24 +32,29 @@
       height: calc(24 * var(--u));
     }
     .mob-stack-action .lucide {
-      width: calc(20 * var(--u));
-      height: calc(20 * var(--u));
+      width: calc(22 * var(--u));
+      height: calc(22 * var(--u));
     }
     .mob-stack-title {
       display: grid;
       flex: 1;
       min-width: 0;
-      padding-left: calc(12 * var(--u));
+      padding-left: calc(16 * var(--u));
     }
     .mob-stack-title > * {
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
     }
+    /* A plain title takes headerTitleStyle: 17 point semibold text. */
     .mob-stack-title strong {
       font-size: calc(17 * var(--u));
       font-weight: 600;
       line-height: calc(22 * var(--u));
+    }
+    /* WorkHeaderTitle on Android: the title3 type over the secondary caption1 line. */
+    .mob-stack-title:has(> span) strong {
+      letter-spacing: calc(-0.2 * var(--u));
     }
     .mob-stack-title span {
       color: var(--m-secondary);

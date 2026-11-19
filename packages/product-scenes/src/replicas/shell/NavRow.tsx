@@ -1,6 +1,7 @@
 // A session row of session-navigation-list.tsx. The first line shows the status dot, the
 // workspace, the task status, and the attention pill or the time. The second line shows the role
-// icon or the chat icon, the title, a terminal icon while a command runs, and the runtime.
+// icon or the chat icon, the title, a terminal icon while a command runs, and the runtime. A row
+// with a position hint shows the hint in the place of the icon while the window shows the hints.
 import { Check, MessagesSquare, SquareTerminal } from "lucide-react";
 import type { ReactElement } from "react";
 import { flag } from "../flag";
@@ -9,10 +10,17 @@ import { RuntimeIcon } from "../ui/RuntimeIcon";
 import { StatusDot } from "../ui/StatusDot";
 import { StatusPill } from "../ui/StatusPill";
 import { navDot, type NavEntry, navTime, navTone } from "./nav";
+import { PositionHint } from "./PositionHint";
 import "../ui/AttentionPill.css";
 import "./NavRow.css";
 
-export function NavRow({ entry }: { entry: NavEntry }): ReactElement {
+type NavRowProps = {
+  entry: NavEntry;
+  /** The text of the position hint of the row, from positionHint of nav.ts. */
+  hint?: string | undefined;
+};
+
+export function NavRow({ entry, hint }: NavRowProps): ReactElement {
   const time = navTime(entry);
   return (
     <li className="nav-item" hidden={entry.later} data-nav-entry={entry.id}>
@@ -31,6 +39,7 @@ export function NavRow({ entry }: { entry: NavEntry }): ReactElement {
         <span className="nav-line">
           <span className="nav-icon" data-tone={navTone(entry)} data-nav-icon="">
             {entry.role ? <RoleIcon role={entry.role} /> : <MessagesSquare />}
+            {hint !== undefined && <PositionHint text={hint} />}
           </span>
           <span className="nav-title">{entry.title}</span>
           <span className="nav-commands" hidden={!entry.commands} data-nav-commands="">

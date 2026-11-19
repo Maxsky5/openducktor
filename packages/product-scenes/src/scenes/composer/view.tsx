@@ -2,10 +2,9 @@
 // and skill menus open above the draft, and each pick becomes a chip. Sources:
 // packages/frontend/src/components/features/agents/agent-chat (agent-chat-composer-editor.tsx and
 // the agent-chat-composer-*-menu.tsx files). The markup holds the last frame.
-import { FileCodeCorner, FileText, ScrollText, Terminal } from "lucide-react";
+import { ScrollText, Terminal } from "lucide-react";
 import type { ReactElement } from "react";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
-import { steerKey } from "../../replicas/keys";
 import { AppWindow } from "../../replicas/shell/AppWindow";
 import { Pointer } from "../../replicas/shell/Pointer";
 import { ChatColumn } from "../../replicas/studio/ChatColumn";
@@ -15,8 +14,10 @@ import { ComposerMenuRow } from "../../replicas/studio/ComposerMenuRow";
 import { AgentText } from "../../replicas/transcript/AgentText";
 import { ReferenceChip } from "../../replicas/transcript/ReferenceChip";
 import { Thread } from "../../replicas/transcript/Thread";
-import { ToolRow } from "../../replicas/transcript/ToolRow";
+import { ToolRun } from "../../replicas/transcript/ToolRun";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
+import { FileTypeIcon } from "../../replicas/ui/FileTypeIcon";
+import { call } from "../../sample/calls";
 import { signature } from "../../sample/sessions";
 import {
   COMMAND,
@@ -53,7 +54,7 @@ function Menus(): ReactElement {
           <ComposerMenuRow
             key={result.path}
             name={result.name}
-            icon={result.kind === "code" ? <FileCodeCorner /> : <FileText />}
+            icon={<FileTypeIcon path={result.path} />}
             detail={result.path}
             active={index === 0}
           />
@@ -87,7 +88,7 @@ function Draft(): ReactElement {
       <ReferenceChip kind="slash" label={`/${COMMAND}`} hidden data-piece="slash" />
       <span className="typed" data-piece="after-command" />
       <span className="typed" data-piece="file-query" />
-      <ReferenceChip kind="file" label={FILE.name} fileKind={FILE.kind} hidden data-piece="file" />
+      <ReferenceChip kind="file" label={FILE.name} file={FILE} hidden data-piece="file" />
       <span className="typed" data-piece="after-file" />
       <span className="typed" data-piece="skill-query" />
       <ReferenceChip kind="skill" label={SKILL} hidden data-piece="skill" />
@@ -95,11 +96,14 @@ function Draft(): ReactElement {
   );
 }
 
-/** The end of the earlier turn, and the turn of the sent message. */
+/**
+ * The end of the earlier turn, and the turn of the sent message. The read of the file is a tool run
+ * of one call, which folds when the answer comes.
+ */
 function ComposerThread(): ReactElement {
   return (
     <Thread>
-      <AgentText signature={signature(COMPOSER_SESSION)} worked="2m 14s" row="earlier">
+      <AgentText signature={signature(COMPOSER_SESSION)} worked="2m14s" row="earlier">
         <p>
           The PDF export now starts each notebook section on a new page.{" "}
           <code>bun test src/export</code>: 9 tests pass.
@@ -108,17 +112,22 @@ function ComposerThread(): ReactElement {
       {/* The sent message shows the command as text, and the file and the skill as chips. */}
       <UserMessage time="10:42:08 AM" row="message">
         {`/${COMMAND} ${MESSAGE.afterCommand}`}
-        <ReferenceChip kind="file" label={FILE.name} fileKind={FILE.kind} />
+        <ReferenceChip kind="file" label={FILE.name} file={FILE} />
         {` ${MESSAGE.afterFile}`}
         <ReferenceChip kind="skill" label={SKILL} />
       </UserMessage>
-      <ToolRow
-        kind="read"
-        name="Read"
-        args={FILE.path}
-        duration="14ms"
-        time="10:42:10 AM"
-        row="read"
+      <ToolRun
+        calls={[
+          call("read", {
+            tool: "read",
+            name: "Read",
+            summary: FILE.path,
+            file: true,
+            duration: "14ms",
+            time: "10:42:10 AM",
+          }),
+        ]}
+        folded
       />
       <AgentText signature={signature(COMPOSER_SESSION)} worked="6s" row="answer">
         <p>
@@ -146,7 +155,7 @@ export function ComposerView(props: SceneViewProps): ReactElement {
       >
         <ChatColumn className="cv-column">
           <ComposerThread />
-          <Composer session={COMPOSER_SESSION} steerKey={steerKey(props.keys)} menu={<Menus />}>
+          <Composer session={COMPOSER_SESSION} keys={props.keys} menu={<Menus />}>
             <Draft />
           </Composer>
         </ChatColumn>

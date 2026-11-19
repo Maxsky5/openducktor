@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { KICKOFF, TASK_ID } from "./sample/studio";
+import { taskId } from "./sample/workspace";
+import { KICKOFF_MESSAGE, TASK as QUESTION_TASK } from "./scenes/mobile-question/sample";
 import { QA_KICKOFF } from "./scenes/prompts/sample";
 import { importProduct } from "./test-support/product-source";
 
@@ -22,11 +24,13 @@ function template(id: string): string {
   return prompt.template;
 }
 
-/** The built-in prompt with the placeholder values of the sample task. */
+/**
+ * The built-in prompt with the placeholder values of the sample task. The base branch of a pull
+ * request is the name of the target branch without its remote, as requirePullRequestTarget of
+ * task-prompts.ts gives it.
+ */
 function builtin(id: string): string {
-  return template(id)
-    .replaceAll("{{task.id}}", TASK_ID)
-    .replaceAll("{{git.targetBranch}}", "origin/main");
+  return template(id).replaceAll("{{task.id}}", TASK_ID).replaceAll("{{git.targetBranch}}", "main");
 }
 
 describe("prompts copied from the product", () => {
@@ -37,6 +41,12 @@ describe("prompts copied from the product", () => {
     expect(KICKOFF.qa).toBe(builtin("messages.qa_review"));
     expect(KICKOFF.fix).toBe(builtin("messages.build_after_qa_rejection"));
     expect(KICKOFF.pullRequest).toBe(builtin("messages.pull_request"));
+  });
+
+  test("the Spec session of the mobile question scene starts with the built-in kickoff", () => {
+    expect(KICKOFF_MESSAGE.text).toBe(
+      template("messages.spec_start").replaceAll("{{task.id}}", taskId(QUESTION_TASK)),
+    );
   });
 
   test("the prompts view shows the built-in QA Kickoff prompt", () => {

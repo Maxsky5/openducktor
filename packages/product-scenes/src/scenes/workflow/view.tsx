@@ -7,7 +7,7 @@ import { STEPS } from "./steps";
 
 const number = (index: number): string => String(index + 1).padStart(2, "0");
 
-export function WorkflowView({ theme, ref }: SceneViewProps): ReactElement {
+export function WorkflowView({ theme, keys, ref }: SceneViewProps): ReactElement {
   return (
     <div className="wrap-wide chapters" data-chapters="workflow" data-theme={theme} ref={ref}>
       <div className="chapter-tabs" role="tablist" aria-label="Workflow steps" hidden>
@@ -50,7 +50,7 @@ export function WorkflowView({ theme, ref }: SceneViewProps): ReactElement {
               {chapter.text}
             </p>
             <div className="stage" data-stage="" role="img" aria-label={chapter.alt}>
-              <Stage />
+              <Stage keys={keys} />
             </div>
             <Stock />
           </div>

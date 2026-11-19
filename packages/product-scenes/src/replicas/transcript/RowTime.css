@@ -1,5 +1,6 @@
 @layer replica {
   :where(.stage) {
+    /* ml-auto inline-flex shrink-0 items-center gap-2 text-[11px]. */
     .st-time {
       display: flex;
       flex-shrink: 0;
@@ -10,14 +11,14 @@
       font-size: calc(11 * var(--u));
       font-variant-numeric: tabular-nums;
     }
-    .st-time .spin {
+    .st-time > .st-time-bars {
       display: none;
     }
-    /* A running row shows a spinner in place of its duration. */
-    [data-running] > .st-time .spin {
-      display: block;
+    /* A running card shows moving bars in place of its duration. */
+    [data-running] .st-time > .st-time-bars {
+      display: inline-flex;
     }
-    [data-running] > .st-time .st-duration {
+    [data-running] .st-time > .st-duration {
       display: none;
     }
   }

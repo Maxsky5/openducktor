@@ -6,21 +6,32 @@
 // Needs you, with its first question.
 import type { ReactElement } from "react";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
+import type { KeyLabels } from "../../replicas/keys";
 import { AppWindow } from "../../replicas/shell/AppWindow";
 import { Pointer } from "../../replicas/shell/Pointer";
 import { AgentText } from "../../replicas/transcript/AgentText";
 import { Answers } from "../../replicas/transcript/Answers";
 import { QuestionCard } from "../../replicas/transcript/QuestionCard";
+import { QUESTION_TOOL_NAME } from "../../replicas/transcript/tool-runs";
 import { ToolRow } from "../../replicas/transcript/ToolRow";
+import { ToolRun } from "../../replicas/transcript/ToolRun";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
 import { SPEC_QUESTIONS } from "../../sample/question";
 import { SPEC_SESSION } from "../../sample/studio";
-import { ANSWERS, KICKOFF_ROW, OPENED_NAV, QUESTION_ROW, READ_ROWS, SYNC_SESSION } from "./sample";
+import {
+  KICKOFF_ROW,
+  NEXT_CALL,
+  OPENED_NAV,
+  QUESTION_ROW,
+  READ_CALLS,
+  SYNC_CALLS,
+  SYNC_SESSION,
+} from "./sample";
 import { SessionPage } from "./SessionPage";
 import "./view.css";
 
 /** The Builder of the offline sync task, which shows when the scene starts. */
-function SyncPage(): ReactElement {
+function SyncPage({ keys }: { keys: KeyLabels }): ReactElement {
   return (
     <SessionPage
       page="sync"
@@ -29,6 +40,7 @@ function SyncPage(): ReactElement {
       role="build"
       action="Start Implementation"
       session={SYNC_SESSION}
+      keys={keys}
       activity="working"
       hidden
     >
@@ -39,27 +51,13 @@ function SyncPage(): ReactElement {
           sync tests.
         </p>
       </AgentText>
-      <ToolRow
-        kind="read"
-        name="Read"
-        args="src/sync/sync-client.ts"
-        duration="11ms"
-        time="09:40:52 AM"
-      />
-      <ToolRow
-        kind="bash"
-        name="Bash"
-        args="bun test src/sync"
-        duration="3.2s"
-        time="09:40:55 AM"
-        running
-      />
+      <ToolRun calls={SYNC_CALLS} running={["test"]} />
     </SessionPage>
   );
 }
 
 /** The Spec session of the search shortcut task, which waits for the answers. */
-function SpecPage(): ReactElement {
+function SpecPage({ keys }: { keys: KeyLabels }): ReactElement {
   return (
     <SessionPage
       page="spec"
@@ -68,42 +66,24 @@ function SpecPage(): ReactElement {
       role="spec"
       action="Start Spec"
       session={SPEC_SESSION}
+      keys={keys}
       activity="waiting"
       stack={<QuestionCard questions={SPEC_QUESTIONS} />}
     >
       <UserMessage time={KICKOFF_ROW.time}>{KICKOFF_ROW.text}</UserMessage>
-      {READ_ROWS.map((row) => (
-        <ToolRow
-          key={row.id}
-          kind={row.tool}
-          name={row.name}
-          args={row.args}
-          duration={row.duration}
-          time={row.time}
-        />
-      ))}
+      <ToolRun calls={READ_CALLS} folded />
       <ToolRow
-        kind={QUESTION_ROW.tool}
-        name={QUESTION_ROW.name}
-        args={QUESTION_ROW.args}
+        tool="question"
+        name={QUESTION_TOOL_NAME}
+        summary={QUESTION_ROW.summary}
         duration={QUESTION_ROW.duration}
         time={QUESTION_ROW.time}
         row="question"
         running
       >
-        <div hidden data-row="answers">
-          <Answers items={ANSWERS} />
-        </div>
+        <Answers items={QUESTION_ROW.answers} answered={false} />
       </ToolRow>
-      <div hidden data-row="next">
-        <ToolRow
-          kind="read"
-          name="Read"
-          args="src/app/app-shell.tsx"
-          duration="9ms"
-          time="09:42:01 AM"
-        />
-      </div>
+      <ToolRun calls={[NEXT_CALL]} hidden />
     </SessionPage>
   );
 }
@@ -113,7 +93,7 @@ export function QuestionView(props: SceneViewProps): ReactElement {
     <SceneFrame
       {...props}
       name="question"
-      alt="The session sidebar shows a Spec session in the Needs you group, with a Question badge. The developer selects the session, and its page opens with a question card above the composer. The card has two questions. The developer selects Cmd+K / Ctrl+K for the first question, and the card moves to the second question. The developer selects No, ignore it in text fields, and the Summary tab shows both answers. The developer selects Confirm Answers. The card closes, the answers show in the transcript, the agent continues, and the session moves to the Running group."
+      alt="The session sidebar shows a Spec session in the Needs you group, with a Question badge. The developer selects the session, and its page opens with a question card above the composer. The card has two questions. The developer selects Cmd+K / Ctrl+K for the first question, and the card moves to the second question. The developer selects No, ignore it in text fields, and the Summary tab shows both answers. The developer selects Confirm Answers. The card closes, the answers show under the question in the transcript, the agent continues, and the session moves to the Running group."
     >
       <AppWindow
         chrome={{
@@ -127,8 +107,8 @@ export function QuestionView(props: SceneViewProps): ReactElement {
         pane="main"
         overlay={<Pointer />}
       >
-        <SyncPage />
-        <SpecPage />
+        <SyncPage keys={props.keys} />
+        <SpecPage keys={props.keys} />
       </AppWindow>
     </SceneFrame>
   );

@@ -1,9 +1,10 @@
 // The Changes view of a task in the mobile app, as changes-screen.tsx, branch-summary.tsx,
 // changes-header.tsx, changes-rows.tsx, and changes-state.tsx in apps/mobile/src/features/review:
-// the branch card, the pending comments with Send, the Uncommitted changes and Branch changes
-// tabs, and the changed files as a tree. A tap on a file shows its diff under its row, and its
-// menu control opens the file actions. A scene changes `data-scope` of the tabs, `data-expanded`
-// of a file row, and shows the pending comments.
+// the list header with the branch card, the notices, the pending comments with Send, the
+// Uncommitted changes and Branch changes tabs, and the file list header, then the changed files
+// as a tree. A tap on a file shows its diff under its row, and its menu control opens the file
+// actions. A scene changes `data-scope` of the tabs, `data-expanded` of a file row, and shows the
+// pending comments.
 import {
   ArrowUp,
   ChevronDown,
@@ -106,16 +107,22 @@ function PendingComments({ recipient }: { recipient: string }): ReactElement {
   );
 }
 
+/** The scope tabs, as CHANGES_SCOPE_OPTIONS of changes-model.ts names them. */
+export const SCOPE_TABS = [
+  { value: "uncommitted", label: "Uncommitted changes" },
+  { value: "target", label: "Branch changes" },
+] as const;
+
+/** The tabs with the file count of Branch changes. Uncommitted changes has no file to count. */
 function ScopeTabs({ count }: { count: number }): ReactElement {
   return (
     <div className="mob-scope-tabs" data-scope="uncommitted">
-      <span className="mob-scope-tab" data-scope-tab="uncommitted">
-        Uncommitted changes
-      </span>
-      <span className="mob-scope-tab" data-scope-tab="target">
-        Branch changes
-        <span className="mob-scope-count">{count}</span>
-      </span>
+      {SCOPE_TABS.map(({ value, label }) => (
+        <span key={value} className="mob-scope-tab" data-scope-tab={value} data-feedback="opacity">
+          {label}
+          {value === "target" && <span className="mob-scope-count">{count}</span>}
+        </span>
+      ))}
       <i className="mob-scope-indicator" />
     </div>
   );
@@ -134,31 +141,61 @@ function Row({ row, open }: { row: ChangesRow; open: boolean }): ReactElement {
     );
   }
   const Icon = row.change === "added" ? FilePlus : FileText;
+  // The box draws the line under the row, so the file menu anchors to the row alone.
   return (
-    <div
-      className="mob-change-row"
-      data-kind="file"
-      data-file={row.id}
-      data-expanded={open ? "false" : undefined}
-      style={indent}
-    >
-      <ChevronRight className="mob-change-closed" />
-      <ChevronDown className="mob-change-open" />
-      <Icon className="mob-change-status" data-change={row.change} />
-      <span className="mob-change-name" data-file-name="">
-        {row.name}
+    <div className="mob-change-box">
+      <div
+        className="mob-change-row"
+        data-kind="file"
+        data-file={row.id}
+        data-expanded={open ? "false" : undefined}
+        data-feedback="highlight"
+        style={indent}
+      >
+        <ChevronRight className="mob-change-closed" />
+        <ChevronDown className="mob-change-open" />
+        <Icon className="mob-change-status" data-change={row.change} />
+        <span className="mob-change-name" data-file-name="">
+          {row.name}
+        </span>
+        {open && (
+          <span className="mob-change-comments" data-comment-count="" hidden>
+            <MessageSquare />1
+          </span>
+        )}
+        <LineCounts add={row.add} del={row.del} />
+        {open && (
+          <span className="mob-change-more" data-file-menu="" data-feedback="opacity">
+            <Ellipsis />
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The changed file count, the line totals, and the tree and list toggle of FileListHeader. */
+function FileListHeader({
+  files,
+  add,
+  del,
+}: {
+  files: number;
+  add: number;
+  del: number;
+}): ReactElement {
+  return (
+    <div className="mob-changes-totals" data-scope-panel="target">
+      <span>{files} changed files</span>
+      <LineCounts add={add} del={del} />
+      <span className="mob-changes-toggle">
+        <span data-active="">
+          <ListTree />
+        </span>
+        <span>
+          <List />
+        </span>
       </span>
-      {open && (
-        <span className="mob-change-comments" data-comment-count="" hidden>
-          <MessageSquare />1
-        </span>
-      )}
-      <LineCounts add={row.add} del={row.del} />
-      {open && (
-        <span className="mob-change-more" data-file-menu="">
-          <Ellipsis />
-        </span>
-      )}
     </div>
   );
 }
@@ -181,9 +218,16 @@ export function ChangesScreen({
     <MobileScreen id={id} over hidden={hidden} className="mob-changes">
       <StackHeader title="Changes" />
       <div className="mob-changes-body">
-        <BranchCard branch={branch} target={target} ahead={ahead} />
-        <PendingComments recipient={recipient} />
-        <ScopeTabs count={files.length} />
+        <div className="mob-changes-header">
+          <BranchCard branch={branch} target={target} ahead={ahead} />
+          {/* The notices: none for this branch. The empty box keeps its gaps, as in the app. */}
+          <div />
+          <PendingComments recipient={recipient} />
+          <div>
+            <ScopeTabs count={files.length} />
+            <FileListHeader files={files.length} add={add} del={del} />
+          </div>
+        </div>
         <div className="mob-changes-empty" data-scope-panel="uncommitted">
           <span>
             <FolderGit2 />
@@ -191,18 +235,6 @@ export function ChangesScreen({
           {NO_CHANGES}
         </div>
         <div className="mob-changes-list" data-scope-panel="target">
-          <div className="mob-changes-totals">
-            <span>{files.length} changed files</span>
-            <LineCounts add={add} del={del} />
-            <span className="mob-changes-toggle">
-              <span data-active="">
-                <ListTree />
-              </span>
-              <span>
-                <List />
-              </span>
-            </span>
-          </div>
           {rows.map((row) => {
             const isOpen = row.kind === "file" && row.id === open;
             return (

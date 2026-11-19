@@ -1,0 +1,94 @@
+@layer replica {
+  :where(.stage) {
+    /* The collection fills the tab: flex h-full min-h-0 flex-col. */
+    .ar-collection {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    /* The body: min-h-0 flex-1 overflow-auto p-3, with the groups in flex-col gap-5. */
+    .ar-list {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: calc(20 * var(--u));
+      min-height: 0;
+      overflow: hidden;
+      padding: calc(12 * var(--u));
+    }
+    /* A group: flex-col gap-1, its name in px-2 pb-1 text-xs font-medium text-muted-foreground. */
+    .ar-group {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+    }
+    .ar-group-name {
+      padding: 0 calc(8 * var(--u)) calc(4 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    .ar-rows {
+      display: flex;
+      flex-direction: column;
+      gap: calc(2 * var(--u));
+      list-style: none;
+    }
+    /* A row: a ghost button with h-auto w-full min-w-0 justify-start gap-3 px-2 py-2.5 text-left.
+       The pointer on it gives it hover:bg-accent/60. */
+    .ar-row.ui-button {
+      justify-content: flex-start;
+      gap: calc(12 * var(--u));
+      width: 100%;
+      min-width: 0;
+      height: auto;
+      padding: calc(10 * var(--u)) calc(8 * var(--u));
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      text-align: left;
+    }
+    .ar-row[data-hover] {
+      background: color-mix(in oklab, var(--accent) 60%, transparent);
+    }
+    /* The icon of the media type: size-4 text-muted-foreground. */
+    .ar-row-icon.lucide {
+      flex-shrink: 0;
+      color: var(--muted-foreground);
+    }
+    /* The name and the metadata: flex min-w-0 flex-1 flex-col gap-1. */
+    .ar-row-text {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+    }
+    /* The name: truncate text-sm font-medium. */
+    .ar-row-name {
+      overflow: hidden;
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ar-row-chevron.lucide {
+      flex-shrink: 0;
+      color: var(--muted-foreground);
+    }
+    /* The metadata: flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal
+       text-muted-foreground. */
+    .ar-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(4 * var(--u)) calc(8 * var(--u));
+      min-width: 0;
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 400;
+      line-height: calc(16 * var(--u));
+    }
+  }
+}

@@ -22,6 +22,11 @@ export type CardData = {
   pr?: number;
   /** The last QA review rejected the build. */
   rejected?: boolean;
+  /**
+   * The target branch holds the work of the task branch. The card shows the Merged badge and
+   * proposes Close Task.
+   */
+  merged?: boolean;
   /** The roles of the saved sessions that the card links to, other than its main action. */
   links?: readonly Role[];
 };

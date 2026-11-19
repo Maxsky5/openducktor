@@ -57,6 +57,11 @@
     .st-file > .lucide:first-child {
       color: var(--muted-foreground);
     }
+    /* The icon of the type of a file: FileTypeIcon with text-muted-foreground. A file type with an
+       icon keeps the color of its type. */
+    .st-file-icon {
+      color: var(--muted-foreground);
+    }
     .st-file-name {
       display: flex;
       flex: 1;
@@ -93,6 +98,30 @@
       gap: calc(4 * var(--u));
       min-width: calc(76 * var(--u));
       margin-left: 0;
+    }
+    /* The letter of the change, then the counts: font-semibold in FILE_STATUS_COLOR, with
+       text-green-600 dark:text-green-400 and text-red-600 dark:text-red-400 for the counts. */
+    .st-file-letter {
+      font-weight: 600;
+    }
+    .st-file-letter[data-change="modified"] {
+      color: var(--blue-600);
+    }
+    .st-file-letter[data-change="added"],
+    .st-file-add {
+      color: var(--green-600);
+    }
+    .st-file-del {
+      color: var(--red-600);
+    }
+    :where([data-theme="dark"]) & .st-file-letter[data-change="modified"] {
+      color: var(--blue-400);
+    }
+    :where([data-theme="dark"]) & :is(.st-file-letter[data-change="added"], .st-file-add) {
+      color: var(--green-400);
+    }
+    :where([data-theme="dark"]) & .st-file-del {
+      color: var(--red-400);
     }
     .st-note-pill {
       display: inline-flex;

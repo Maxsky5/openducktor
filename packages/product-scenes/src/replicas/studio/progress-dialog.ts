@@ -4,9 +4,7 @@
 // step changes its state, and the dialog closes when the session is ready.
 import { all, must } from "../../motion/dom";
 import { scrollToEnd } from "../../motion/effects";
-import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
-import { EASE } from "../../motion/tokens";
 import { modal } from "./modal";
 import type { StepState } from "./StartupProgress";
 
@@ -20,7 +18,7 @@ export function progressDialog(
   overlay: HTMLElement,
   options: { attach?: boolean } = {},
 ) {
-  const { box, open, close } = modal(scene, root, overlay, options);
+  const { box, open, close, unmount, resize } = modal(scene, root, overlay, options);
   const count = must(box, "[data-step-count]");
   const step = (id: string): HTMLElement => must(box, `[data-step="${id}"]`);
 
@@ -38,21 +36,14 @@ export function progressDialog(
     return at + duration;
   };
 
-  /** The dialog narrows to the startup progress at `at`. */
+  /**
+   * The dialog narrows to the startup progress at `at`: the progress takes the place of the form at
+   * once, and the box goes from the size of the form to the size of the progress.
+   */
   const progress = (at: number): void =>
-    scene.at(at, () => {
-      const from = { width: box.offsetWidth, height: box.offsetHeight };
+    resize(at, () => {
       box.scrollTop = 0;
       box.toggleAttribute("data-progress", true);
-      const to = { width: box.offsetWidth, height: box.offsetHeight };
-      scene.run(
-        gsap.fromTo(box, from, {
-          ...to,
-          duration: 0.3,
-          ease: EASE.move,
-          clearProps: "width,height",
-        }),
-      );
     });
 
   /**
@@ -85,5 +76,17 @@ export function progressDialog(
     return at + 1.3 + sessionSeconds;
   };
 
-  return { box, reset, open, close, scrollToEnd: scrollBody, progress, start, setStep, runSteps };
+  return {
+    box,
+    reset,
+    open,
+    close,
+    unmount,
+    resize,
+    scrollToEnd: scrollBody,
+    progress,
+    start,
+    setStep,
+    runSteps,
+  };
 }

@@ -2,7 +2,8 @@
 // your answers in Needs you, and the Builder of the offline sync task runs. The sidebar groups the
 // sessions by task, so each task shows one entry.
 import type { NavEntry } from "../../replicas/shell/nav";
-import type { Answer, Row } from "../../replicas/transcript/model";
+import type { CallData, Row } from "../../replicas/transcript/model";
+import { bash, call, catFile } from "../../sample/calls";
 import { NAV_SESSIONS } from "../../sample/nav";
 import type { Session } from "../../sample/sessions";
 import { STORY_SESSIONS } from "../../sample/studio-nav";
@@ -51,7 +52,7 @@ function specRows(): readonly Row[] {
 }
 
 type UserRow = Extract<Row, { kind: "user" }>;
-type ToolRowData = Extract<Row, { kind: "tool" }>;
+type QuestionRow = Extract<Row, { kind: "question" }>;
 
 function userRow(id: string): UserRow {
   const row = specRows().find((item) => item.id === id);
@@ -59,25 +60,39 @@ function userRow(id: string): UserRow {
   return row;
 }
 
-function toolRow(id: string): ToolRowData {
+function callRow(id: string): CallData {
   const row = specRows().find((item) => item.id === id);
-  if (row?.kind !== "tool") throw new Error(`The Spec turn has no tool row ${id}.`);
+  if (row?.kind !== "call") throw new Error(`The Spec turn has no tool call ${id}.`);
+  return row;
+}
+
+function questionRow(id: string): QuestionRow {
+  const row = specRows().find((item) => item.id === id);
+  if (row?.kind !== "question") throw new Error(`The Spec turn has no question tool ${id}.`);
   return row;
 }
 
 /** The kickoff message of the Spec session. */
 export const KICKOFF_ROW = userRow("kickoff");
 
-/** The tools that the Spec agent runs before it asks. */
-export const READ_ROWS = ["read-task", "search", "read-dialog"].map(toolRow);
+/** The calls that the Spec agent runs before it asks. They show as one tool run. */
+export const READ_CALLS = ["read-task", "search", "read-dialog"].map(callRow);
 
-/** The request_user_input row. */
-export const QUESTION_ROW = toolRow("question");
+/** The request_user_input row. Its answers show under it when you confirm them. */
+export const QUESTION_ROW = questionRow("question");
 
-function answersOf(row: ToolRowData): readonly Answer[] {
-  if (!row.answers) throw new Error(`The tool row ${row.id} has no answers.`);
-  return row.answers;
-}
+/** The Builder of the offline sync task reads the client and runs the sync tests. */
+export const SYNC_CALLS: readonly CallData[] = [
+  call("read", {
+    tool: "read",
+    name: "Read",
+    summary: "src/sync/sync-client.ts",
+    file: true,
+    duration: "11ms",
+    time: "09:40:52 AM",
+  }),
+  bash("test", "bun test src/sync", "3.2s", "09:40:55 AM"),
+];
 
-/** The answers that the request_user_input row shows when you confirm them. */
-export const ANSWERS = answersOf(QUESTION_ROW);
+/** The call of the Spec agent after your answers: it reads the app shell. */
+export const NEXT_CALL = catFile("next", "src/app/app-shell.tsx", "9ms", "09:42:01 AM");

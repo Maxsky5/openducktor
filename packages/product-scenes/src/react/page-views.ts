@@ -6,18 +6,24 @@ import { ASTRO_VIEWS } from "../astro/views";
 import type { SceneViews } from "../frame/SceneFrame";
 import { AgentBrowserView } from "../scenes/agent-browser/view";
 import { AnnotateView } from "../scenes/annotate/view";
+import { ArtifactsView } from "../scenes/artifacts/view";
+import { ApproveMergedView } from "../scenes/approve-merged/view";
 import { BrowserView } from "../scenes/browser/view";
 import { CiChecksView } from "../scenes/ci-checks/view";
 import { ComposerView } from "../scenes/composer/view";
 import { ForkView } from "../scenes/fork/view";
 import { GitConflictView } from "../scenes/git-conflict/view";
+import { GitlabView } from "../scenes/gitlab/view";
 import { GoalCommandView } from "../scenes/goal-command/view";
 import { GoalModeView } from "../scenes/goal-mode/view";
 import { ImportSessionView } from "../scenes/import-session/view";
+import { KeyboardShortcutsView } from "../scenes/keyboard-shortcuts/view";
 import { MobileApproveView } from "../scenes/mobile-approve/view";
 import { MobileDiffCommentView } from "../scenes/mobile-diff-comment/view";
 import { MobileNeedsYouView } from "../scenes/mobile-needs-you/view";
 import { MobilePairView } from "../scenes/mobile-pair/view";
+import { MobilePullRequestView } from "../scenes/mobile-pull-request/view";
+import { MobileQuestionView } from "../scenes/mobile-question/view";
 import { MobileStartBuilderView } from "../scenes/mobile-start-builder/view";
 import { MobileSteerView } from "../scenes/mobile-steer/view";
 import { NewSessionView } from "../scenes/new-session/view";
@@ -43,10 +49,16 @@ export const PAGE_VIEWS = {
   "git-conflict": GitConflictView,
   "mobile-pair": MobilePairView,
   "mobile-needs-you": MobileNeedsYouView,
+  "mobile-question": MobileQuestionView,
   "mobile-steer": MobileSteerView,
   "mobile-diff-comment": MobileDiffCommentView,
   "mobile-start-builder": MobileStartBuilderView,
   "mobile-approve": MobileApproveView,
+  "mobile-pull-request": MobilePullRequestView,
   "goal-mode": GoalModeView,
   "goal-command": GoalCommandView,
+  artifacts: ArtifactsView,
+  gitlab: GitlabView,
+  "approve-merged": ApproveMergedView,
+  "keyboard-shortcuts": KeyboardShortcutsView,
 } as const satisfies SceneViews;

@@ -1,8 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { FORK_TEXT } from "./replicas/studio/ForkDialog";
 import { REPOSITORY_PATH } from "./sample/workspace";
-import { BRANCH_PREFIX, FORK_TITLE, ORIGIN, SOURCE, TITLE, WORKTREE } from "./scenes/fork/sample";
-import { importProduct } from "./test-support/product-source";
+import {
+  BRANCH_PREFIX,
+  FORK_BOUNDARY,
+  FORK_TIP,
+  FORK_TITLE,
+  ORIGIN,
+  SESSION,
+  SOURCE,
+  TITLE,
+  WORKTREE,
+} from "./scenes/fork/sample";
+import { importProduct, readProduct } from "./test-support/product-source";
 
 type ForkRecord = {
   executionTarget: { kind: "local_worktree"; workingDirectory: string; branchName: string };
@@ -39,6 +49,17 @@ const { startupOrigin } = await importProduct<{
     origin: { repoPath: string; scope: { kind: "workspace" } };
   }) => string;
 }>("packages/frontend/src/features/session-startup/startup-summary.ts");
+
+// SAFETY: codex-fork-boundary.ts exports this function, and a missing export fails the test.
+const { codexForkBoundaryHistoryMessage } = await importProduct<{
+  codexForkBoundaryHistoryMessage: (boundary: {
+    childThreadId: string;
+    parentThreadId: string;
+    beforeTurnId: string | null;
+    beforeTurnIndex: number;
+    timestamp: string;
+  }) => { notice: { title: string } };
+}>("packages/adapters-codex-app-server/src/codex-fork-boundary.ts");
 
 const record: ForkRecord = {
   executionTarget: {
@@ -83,5 +104,25 @@ describe("the fork copied from the app", () => {
       origin: { repoPath: REPOSITORY_PATH, scope: { kind: "workspace" } },
     } as const;
     expect(startupOrigin(attempt)).toBe(ORIGIN);
+  });
+
+  test("the Codex fork shows the separator of its history where its turns start", () => {
+    const boundary = codexForkBoundaryHistoryMessage({
+      childThreadId: "fork",
+      parentThreadId: "source",
+      beforeTurnId: null,
+      beforeTurnIndex: 1,
+      timestamp: "2026-11-16T10:35:40.000Z",
+    });
+    expect(SESSION.runtime).toBe("codex");
+    expect(boundary.notice.title).toBe(FORK_BOUNDARY);
+  });
+
+  test("the tooltip of the fork button uses the label of the app", async () => {
+    // The fork button has its label only in its markup, so the test reads it as text.
+    const markup = await readProduct(
+      "packages/frontend/src/components/features/agents/agent-chat/agent-chat-fork-actions.tsx",
+    );
+    expect(markup).toContain(`aria-label="${FORK_TIP}"`);
   });
 });

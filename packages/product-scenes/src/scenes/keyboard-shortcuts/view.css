@@ -1,0 +1,23 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * Keyboard shortcuts: the window is wider than the lg breakpoint, so the repository settings
+     * show their menu next to the section. It is tall enough for Settings to show the search and
+     * the first rows of the list.
+     */
+    .ks-window {
+      --design-width: 1040;
+      --window-height: 704;
+    }
+    /*
+     * The held keys show in the empty part of the chat, under its last reply. While Settings is
+     * open, the same place is under the rows of the Keyboard shortcuts section. So the keys cover
+     * no text, and they show right under the field that records them.
+     */
+    .ks-window .keystrokes {
+      top: calc(430 * var(--u));
+      bottom: auto;
+      left: calc(280 * var(--u));
+    }
+  }
+}

@@ -75,7 +75,8 @@ export type CardAction =
   | "Request QA Review"
   | "Approve Task"
   | "Request Changes"
-  | "Open Builder";
+  | "Open Builder"
+  | "Close Task";
 
 export const PRIMARY_ACTIONS: ReadonlySet<CardAction> = new Set([
   "Start Builder",

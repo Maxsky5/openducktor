@@ -29,5 +29,8 @@ export const MESSAGE_TIME = "10:48:21 AM";
 /** The file that the Builder changes for the annotations. */
 export const EMPTY_STATE_FILE = "src/notebooks/EmptyNotebook.tsx";
 
+/** The time of the edit of the empty notebook. */
+export const EDIT_TIME = "10:48:44 AM";
+
 /** The time that the Builder takes for the annotations. */
 export const FIX_WORKED = "41s";

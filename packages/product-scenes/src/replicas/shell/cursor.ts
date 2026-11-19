@@ -47,11 +47,9 @@ export function pointer(scene: Scene, root: HTMLElement) {
           { autoAlpha: 0, scale: 1.4, duration: 0.5, ease: EASE.enter },
         ),
       );
+      // The buttons of the app have no press scale, so only the pointer squashes.
       scene.run(
         gsap.fromTo(cursor, { scale: 1 }, { scale: 0.82, duration: 0.09, yoyo: true, repeat: 1 }),
-      );
-      scene.run(
-        gsap.fromTo(target, { scale: 1 }, { scale: 0.96, duration: 0.09, yoyo: true, repeat: 1 }),
       );
     });
     return clicked;

@@ -119,6 +119,7 @@
       background: var(--card);
       color: var(--foreground);
     }
+    /* The Pending badge and the line range in caption1 type. */
     .mob-diff-comment-meta {
       display: flex;
       align-items: center;
@@ -127,6 +128,7 @@
       font-size: calc(12 * var(--u));
       font-weight: 500;
       line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
     }
     .mob-diff-comment-text {
       font-size: calc(13 * var(--u));
@@ -183,6 +185,7 @@
     .mob-review-page,
     .mob-changes {
       --git-added: oklch(44.8% 0.119 151.328);
+      --git-deleted: oklch(50.5% 0.213 27.518);
       --git-modified: oklch(54.6% 0.245 262.881);
       --git-total-add: oklch(72.3% 0.219 149.579);
       --git-total-del: oklch(63.7% 0.237 25.331);
@@ -191,6 +194,7 @@
     }
     :where([data-theme="dark"]) & :is(.mob-review-page, .mob-changes) {
       --git-added: oklch(79.2% 0.209 151.711);
+      --git-deleted: oklch(70.4% 0.191 22.216);
       --git-modified: oklch(70.7% 0.165 254.624);
       --git-ahead: oklch(76.5% 0.177 163.223);
     }
@@ -207,9 +211,10 @@
       color: var(--git-added);
     }
     .mob-line-counts [data-sign="del"] {
-      color: var(--destructive);
+      color: var(--git-deleted);
     }
-    /* The filled Button at size sm: 32 points, a 10 point corner, and 13 point medium text. */
+    /* The filled Button at size sm: 32 points, a clear 1 point border, a 10 point corner, and the
+       headline tracking on 13 point medium text. */
     .mob-sm-button {
       display: flex;
       flex: 0 0 auto;
@@ -217,6 +222,7 @@
       gap: calc(6 * var(--u));
       min-height: calc(32 * var(--u));
       padding: 0 calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid transparent;
       border-radius: calc(10 * var(--u));
       background: var(--primary);
       color: var(--primary-foreground);
@@ -224,6 +230,7 @@
       font-size: calc(13 * var(--u));
       font-weight: 500;
       line-height: calc(18 * var(--u));
+      letter-spacing: calc(-0.1 * var(--u));
       white-space: nowrap;
     }
     .mob-sm-button .lucide {

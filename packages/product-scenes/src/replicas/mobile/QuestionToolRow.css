@@ -1,0 +1,82 @@
+@layer replica {
+  :where(.stage) {
+    /* ToolCallRow: the line and the answers, 4 points apart, with 2 points above and under. */
+    .mob-tool {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: calc(4 * var(--u));
+      padding: calc(2 * var(--u)) 0;
+    }
+    /* ToolLine: a 32 point line with the icon, the name, the summary, and the timing, 8 points
+       apart. The icon and the timing are the parts of a call of ToolRun.css. */
+    .mob-tool-line {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-height: calc(32 * var(--u));
+      padding: 0 calc(4 * var(--u));
+    }
+    .mob-tool-name {
+      flex: 0 0 auto;
+      max-width: 45%;
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* The summary in the foreground color at 75 percent, as the timing. */
+    .mob-tool-summary {
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      color: color-mix(in oklab, var(--foreground) 75%, transparent);
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* QuestionAnswers: under the tool name, past the line padding, the icon, and the gap. */
+    .mob-answers {
+      display: grid;
+      gap: calc(2 * var(--u));
+      padding: 0 calc(4 * var(--u)) 0 calc(26 * var(--u));
+    }
+    .mob-answer-line {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+    }
+    .mob-answer-line > .lucide {
+      flex: 0 0 auto;
+      width: calc(12 * var(--u));
+      height: calc(12 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .mob-answer,
+    .mob-answer-none {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--foreground);
+      font-size: calc(12.5 * var(--u));
+      line-height: calc(18 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* Space Grotesk has no italic face, so Android slants the regular face, as the browser does
+       when it may synthesize the style. */
+    .mob-answer-none {
+      color: var(--muted-foreground);
+      font-style: italic;
+      font-synthesis: style;
+    }
+    .mob-tool[data-answered] .mob-answer-none,
+    .mob-tool:not([data-answered]) .mob-answer {
+      display: none;
+    }
+  }
+}

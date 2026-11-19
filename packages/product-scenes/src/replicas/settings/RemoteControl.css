@@ -124,11 +124,11 @@
       font-family: var(--mono);
       font-size: calc(12 * var(--u));
     }
-    /* Button variant destructiveGhost. */
+    /* Button variant destructiveGhost: text-destructive-muted. */
     .rc-remove.ui-button {
       border: 0;
       background: transparent;
-      color: var(--destructive-surface-foreground);
+      color: var(--destructive-muted);
       box-shadow: none;
     }
     /* The Network section: rounded-xl border bg-card px-4 py-3 shadow-xs. */

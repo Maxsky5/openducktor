@@ -59,8 +59,11 @@ export const build: SceneBuilder = (scene) => {
   // On the computer, Add device opens the window, and Scan a QR code shows the code.
   const added = click(() => desktop.addDevice, 0.5);
   desktop.open(added);
+  scene.mark("add-device", added);
   const qr = click(() => desktop.trigger("qr"), added + 1.2, 0.7);
   desktop.select("qr", qr);
+  scene.mark("qr", qr);
+  scene.mark("qr-rest-end", qr + 0.6);
   cursor.hide(qr + 0.6);
   for (let second = 0; second < 9; second += 1) tick(OPENED_LEFT - second, added + second);
 
@@ -69,27 +72,35 @@ export const build: SceneBuilder = (scene) => {
   const tapped = tap(() => must(setup, "[data-scan]"), narrow ? 1 : qr + 0.9);
   phone.bar("light", tapped);
   const camera = phone.push("setup", "scan", tapped);
-  scene.at(camera, () => {
-    // The QR code is an SVG element in the center of the screen of the computer, so the scene
-    // measures the screen.
+  scene.mark("scan", tapped);
+  // The camera shows the computer off center while its screen slides in, and the visitor then
+  // centers the code in the viewfinder. The QR code is an SVG element in the center of the screen
+  // of the computer, so the scene measures the screen.
+  scene.at(tapped, () => {
     const code = must(view, "[data-camera-screen]");
     const finder = must(scan, "[data-viewfinder]");
     const from = offsetIn(code, scan);
     const to = offsetIn(finder, scan);
-    const x = to.x + finder.offsetWidth / 2 - (from.x + code.offsetWidth / 2);
-    const y = to.y + finder.offsetHeight / 2 - (from.y + code.offsetHeight / 2);
+    const aim = {
+      x: to.x + finder.offsetWidth / 2 - (from.x + code.offsetWidth / 2),
+      y: to.y + finder.offsetHeight / 2 - (from.y + code.offsetHeight / 2),
+    };
     scene.run(
-      gsap.fromTo(
-        view,
-        { x: x + 70, y: y + 110, rotation: -7, scale: 0.86 },
-        { x, y, rotation: 0, scale: 1.04, duration: CAMERA, ease: EASE.move },
-      ),
+      gsap
+        .timeline()
+        .fromTo(
+          view,
+          { x: aim.x + 70, y: aim.y + 110, rotation: -7, scale: 0.86 },
+          { ...aim, rotation: 0, scale: 1.04, duration: CAMERA, ease: EASE.move },
+          camera - tapped,
+        ),
     );
   });
 
   // The code stays in the viewfinder for a moment. The app reads it and closes the camera. The
   // form fills the address and the code and connects.
   const read = camera + CAMERA + 0.3;
+  scene.mark("read", read);
   phone.bar("dark", read);
   const closed = phone.pop("scan", "setup", read);
   scene.at(read + 0.1, () => {
@@ -98,8 +109,10 @@ export const build: SceneBuilder = (scene) => {
 
   // The host takes the code: the computer shows Device paired, and the phone opens its sessions
   // with the toast.
+  scene.mark("connect", closed);
   const connected = closed + CONNECT;
   desktop.paired(connected);
+  scene.mark("paired", connected);
   const opened = phone.replace("setup", "sessions", connected);
   scene.endAt(connectedToast.show(opened) + 1.6);
 };

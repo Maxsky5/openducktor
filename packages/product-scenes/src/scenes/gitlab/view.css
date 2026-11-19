@@ -1,0 +1,41 @@
+@layer views {
+  :where(.stage) {
+    /*
+     * GitLab: the body of the Settings dialog on the Repositories section, without the section
+     * list. The Git tab is as wide as in a dialog of max-w-7xl. The pane shows the tab down to Sign
+     * in with GitLab, so a wide stage needs no scroll. The one row of the grid gives the
+     * Repositories section the height of the pane, so the tab scrolls in it.
+     */
+    .gl-pane {
+      --design-width: 1060;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr);
+      height: calc(730 * var(--u));
+    }
+    .gl-content {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+    }
+    /* RepositoryGitSection: grid gap-4 p-4. */
+    .gl-sections {
+      display: grid;
+      gap: calc(16 * var(--u));
+      padding: calc(16 * var(--u));
+    }
+    /* A phone stage shows only the Git tab. The tab is longer than the pane, so the scene scrolls
+       it to Sign in with GitLab. */
+    @container stage (width <= 500px) {
+      .gl-pane {
+        --design-width: 440;
+        height: calc(760 * var(--u));
+      }
+      .gl-pane .repos-pane {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .gl-pane .repo-side {
+        display: none;
+      }
+    }
+  }
+}

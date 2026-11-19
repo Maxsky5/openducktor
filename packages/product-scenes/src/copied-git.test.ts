@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { CHECKS_TEXT } from "./replicas/studio/ChecksPanel";
 import { CONFLICT_TEXT } from "./replicas/studio/GitConflict";
 import { GIT_HEADER_TEXT, TARGET_BRANCH } from "./replicas/studio/GitHeader";
+import { FILE_STATUS_LETTERS } from "./replicas/studio/GitPanel";
 import { type CheckState, checksStatus, checksSummary } from "./replicas/studio/model";
 import {
   type CiComment,
@@ -95,10 +96,12 @@ const { parseGithubReviewCommentContent } = await importProduct<{
 const { PANEL_TAB_KIND_RULES } = await importProduct<{
   PANEL_TAB_KIND_RULES: Record<string, { label: string }>;
 }>("packages/frontend/src/features/session-panels/panel-tab-kinds.ts");
-// SAFETY: constants.ts exports the views of the Git panel, and a missing export fails the test.
-const { GIT_PANEL_TABS } = await importProduct<{ GIT_PANEL_TABS: readonly { label: string }[] }>(
-  "packages/frontend/src/components/features/agents/agent-studio-git-panel/constants.ts",
-);
+// SAFETY: constants.ts exports the views of the Git panel and the letters of the file changes, and
+// a missing export fails the test.
+const { GIT_PANEL_TABS, FILE_STATUS_LETTER } = await importProduct<{
+  GIT_PANEL_TABS: readonly { label: string }[];
+  FILE_STATUS_LETTER: ReadonlyMap<string, string>;
+}>("packages/frontend/src/components/features/agents/agent-studio-git-panel/constants.ts");
 // SAFETY: git-info-header-state.ts exports this function, and a missing export fails the test.
 const { getGitInfoHeaderState } = await importProduct<{
   getGitInfoHeaderState: (props: HeaderInput) => { rebaseTooltip: string };
@@ -144,6 +147,14 @@ describe("the CI Checks tab copied from the app", () => {
     expect(CI_TEXT.failure).toBe(ci.checkLabel(CHECKS.failure));
     expect(CI_TEXT.inProgress).toBe(ci.checkLabel(CHECKS.pending));
     expect(PANEL_TAB_KIND_RULES.ci_checks?.label).toBe("CI Checks");
+  });
+});
+
+describe("the changed files copied from the app", () => {
+  test("each changed file shows the letter of its change", () => {
+    for (const [change, letter] of Object.entries(FILE_STATUS_LETTERS)) {
+      expect(FILE_STATUS_LETTER.get(change)).toBe(letter);
+    }
   });
 });
 

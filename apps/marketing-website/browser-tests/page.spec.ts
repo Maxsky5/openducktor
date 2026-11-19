@@ -297,8 +297,8 @@ test("the page scripts keep the GSAP license notices", async ({ page }) => {
   const notices = sources
     .join("\n")
     .match(/Subject to the terms at https:\/\/gsap\.com\/standard-license/g);
-  // GSAP and CSSPlugin each have a notice.
-  expect(notices).toHaveLength(2);
+  // GSAP, CSSPlugin, CustomEase, and the paths utility of CustomEase each have a notice.
+  expect(notices).toHaveLength(4);
 });
 
 test("an unknown address shows the 404 page, which search engines do not index", async ({

@@ -4,6 +4,8 @@
 // packages/workflows/src/builtin/spec-plan-build/prompt-templates.ts, and
 // task-execution-ci-check-card.tsx, which shows the provider details and the times of a check.
 import type { CheckState, CiCheck } from "../../replicas/studio/model";
+import type { CallData } from "../../replicas/transcript/model";
+import { bash } from "../../sample/calls";
 import { CI_CHECKS } from "../../sample/studio";
 import { TASK_BRANCH } from "../../sample/worktree";
 
@@ -47,21 +49,32 @@ export const CHECKS: readonly CiCheck[] = CI_CHECKS.map((name) =>
     : { name, state: READS.passed.states[name] ?? "success" },
 );
 
-/** The Builder rows of the pull request turn, in order. */
-export const ROWS = {
-  checks: { args: "bun run lint && bun test", duration: "6.1s", time: "10:24:16 AM" },
-  publish: { args: `git push -u origin ${TASK_BRANCH}`, duration: "1.4s", time: "10:24:31 AM" },
-  create: {
-    args: 'gh pr create --base main --title "feat(search): open search from anywhere with Cmd+K"',
-    duration: "1.9s",
-    time: "10:24:40 AM",
-  },
-  watch: { args: `gh pr checks ${PR_NUMBER} --watch`, duration: "1m 58s", time: "10:24:47 AM" },
-  log: { args: "gh run view --log-failed", duration: "1.2s", time: "10:26:52 AM" },
-  test: { args: "bun test src/search", duration: "2.4s", time: "10:27:31 AM" },
-  push: { args: `git push origin ${TASK_BRANCH}`, duration: "1.1s", time: "10:27:40 AM" },
-  rewatch: { args: `gh pr checks ${PR_NUMBER} --watch`, duration: "1m 52s", time: "10:27:43 AM" },
-} as const;
+/**
+ * The shell commands of the pull request turn of the Builder, in the tool runs that the rows
+ * between them divide: before the Set Pull Request card, before the reply about the failed check,
+ * and before the final reply.
+ */
+export const RUNS = {
+  publish: [
+    bash("checks", "bun run lint && bun test", "6.1s", "10:24:16 AM"),
+    bash("publish", `git push -u origin ${TASK_BRANCH}`, "1.4s", "10:24:31 AM"),
+    bash(
+      "create",
+      'gh pr create --base main --title "feat(search): open search from anywhere with Cmd+K"',
+      "1.9s",
+      "10:24:40 AM",
+    ),
+  ],
+  watch: [
+    bash("watch", `gh pr checks ${PR_NUMBER} --watch`, "1m58s", "10:24:47 AM"),
+    bash("log", "gh run view --log-failed", "1.2s", "10:26:52 AM"),
+  ],
+  fix: [
+    bash("test", "bun test src/search", "2.4s", "10:27:31 AM"),
+    bash("push", `git push origin ${TASK_BRANCH}`, "1.1s", "10:27:40 AM"),
+    bash("rewatch", `gh pr checks ${PR_NUMBER} --watch`, "1m52s", "10:27:43 AM"),
+  ],
+} as const satisfies Record<string, readonly CallData[]>;
 
 /** The reply of the Builder after it reads the failed log. */
 export const CAUSE =

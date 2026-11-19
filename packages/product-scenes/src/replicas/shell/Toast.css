@@ -43,6 +43,35 @@
       font-size: calc(12 * var(--u));
       font-weight: 500;
     }
+    /* A success toast: border-l-4 border-l-success-accent, and the Sonner icon in the 16 pixel slot
+       with margins of -3 and 4 pixels, before the title and the description, gap 6px. */
+    .toast[data-kind="success"] {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      border-left: calc(4 * var(--u)) solid var(--success-accent);
+    }
+    .toast-icon {
+      display: flex;
+      flex: none;
+      align-items: center;
+      width: calc(16 * var(--u));
+      height: calc(16 * var(--u));
+      margin: 0 calc(4 * var(--u)) 0 calc(-3 * var(--u));
+      color: var(--success-accent);
+    }
+    .toast-icon > svg {
+      flex: none;
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+      margin-left: calc(-1 * var(--u));
+    }
+    .toast-text {
+      display: grid;
+      flex: 1;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+    }
     .toast-close {
       position: absolute;
       top: calc(12 * var(--u));

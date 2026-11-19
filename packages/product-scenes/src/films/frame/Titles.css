@@ -1,0 +1,181 @@
+@layer views {
+  :where(.stage) {
+    .film-intro,
+    .film-outro {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      visibility: hidden;
+    }
+
+    /* The brand mark keeps the violet of the app icon in both themes. */
+    .film-mark {
+      flex: 0 0 auto;
+      overflow: visible;
+    }
+    .film-mark-tile {
+      fill: #5100ff;
+    }
+    .film-mark-duck {
+      fill: #fff;
+      transform-box: view-box;
+      transform-origin: 32px 50px;
+    }
+    .film-mark-visor {
+      fill: none;
+      stroke: #5100ff;
+      stroke-width: 6;
+      stroke-linecap: round;
+    }
+    .film-mark-light {
+      fill: none;
+      stroke: #fff;
+      stroke-width: 2.4;
+      stroke-linecap: round;
+    }
+
+    /* The opening: the title sits in the caption column, and the wall of the sets shows on the
+       right. */
+    .film-intro {
+      align-items: flex-start;
+      padding-left: 104px;
+    }
+    .film-intro-content {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .film-intro-lockup {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .film-intro .film-mark {
+      width: 96px;
+      height: 96px;
+      filter: drop-shadow(0 22px 44px rgb(81 0 255 / 0.4));
+    }
+    .film-intro-word {
+      font-size: 80px;
+      font-weight: 650;
+      letter-spacing: -0.05em;
+      line-height: 1;
+    }
+    /* The version is the largest text of the opening. */
+    .film-intro-number {
+      display: block;
+      margin-top: 30px;
+      padding-bottom: 0.04em;
+      background-image: linear-gradient(100deg, #7c4dff 0%, #5100ff 45%, #2aa8ff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 200px;
+      font-weight: 500;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    :where([data-theme="dark"]) & .film-intro-number {
+      background-image: linear-gradient(100deg, #b9a6ff 0%, #8b6dff 45%, #5cc8ff 100%);
+    }
+    .film-intro-line {
+      max-width: 700px;
+      margin-top: 30px;
+      color: var(--film-muted);
+      font-size: 44px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+    }
+
+    /* The closing: the card sits in the caption column, and the world floats on the right. */
+    .film-outro {
+      align-items: flex-start;
+      padding-left: 104px;
+    }
+    .film-outro-lockup {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+    }
+    .film-outro .film-mark {
+      width: 112px;
+      height: 112px;
+      filter: drop-shadow(0 26px 50px rgb(81 0 255 / 0.45));
+    }
+    .film-outro-word {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 84px;
+      font-weight: 650;
+      letter-spacing: -0.05em;
+      line-height: 0.95;
+    }
+    .film-outro-word b {
+      align-self: flex-start;
+      padding: 2px 16px 6px;
+      border: 2px solid color-mix(in oklab, var(--film-brand) 45%, transparent);
+      border-radius: 999px;
+      background-color: color-mix(in oklab, var(--film-brand) 10%, transparent);
+      background-image: linear-gradient(100deg, #7c4dff 0%, #5100ff 45%, #2aa8ff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 46px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+    :where([data-theme="dark"]) & .film-outro-word b {
+      background-image: linear-gradient(100deg, #b9a6ff 0%, #8b6dff 45%, #5cc8ff 100%);
+    }
+    .film-outro-line {
+      max-width: 700px;
+      margin-top: 44px;
+      color: var(--film-muted);
+      font-size: 36px;
+      font-weight: 450;
+      line-height: 1.35;
+    }
+    .film-outro-links {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 16px;
+      margin-top: 44px;
+    }
+    .film-outro-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 30px 18px 24px;
+      border: 1px solid var(--film-card-line);
+      border-radius: 18px;
+      background: var(--film-card);
+      color: var(--film-ink);
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 34px;
+      font-weight: 500;
+      box-shadow: 0 18px 40px -24px rgb(20 20 60 / 0.45);
+    }
+    .film-outro-icon {
+      width: 34px;
+      height: 34px;
+      fill: none;
+      stroke: var(--film-brand);
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .film-outro-icon[data-fill] {
+      fill: var(--film-ink);
+      stroke: none;
+    }
+  }
+}

@@ -6,21 +6,27 @@
       inset: 0;
       z-index: 30;
     }
-    /* scrimSoft of theme/colors.ts. */
+    /* scrimSoft of theme/colors.ts. The scrim and the card take their motion from
+       `--menu-progress` of the layer, which menus.ts moves, as the animated styles of
+       anchored-popover.tsx take it from one progress. */
     .mob-menu-scrim {
       position: absolute;
       inset: 0;
       background: rgb(2 6 24 / 0.06);
+      opacity: var(--menu-progress, 1);
     }
     :where([data-theme="dark"]) & .mob-menu-scrim {
       background: rgb(0 0 0 / 0.25);
     }
     /* The card: a 12 point corner, the border, the surface, the overlay shadow, and 6 points of
-       padding. */
+       padding. It fades in and grows from 94 %. menus.ts places it. */
     .mob-menu {
       position: absolute;
       top: 0;
       left: 0;
+      opacity: var(--menu-progress, 1);
+      transform: translate(var(--menu-x), var(--menu-y))
+        scale(calc(0.94 + 0.06 * var(--menu-progress, 1)));
       display: flex;
       flex-direction: column;
       width: calc(248 * var(--u));

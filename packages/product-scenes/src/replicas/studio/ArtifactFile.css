@@ -1,0 +1,26 @@
+@layer replica {
+  :where(.stage) {
+    /* An open file fills the tab: flex min-h-0 flex-1 flex-col. */
+    .ar-file {
+      flex: 1;
+      min-height: 0;
+    }
+    /* The pointer on a ghost button of the header gives it hover:bg-accent/60. */
+    .ar-file .st-artifact-button[data-hover] {
+      background: color-mix(in oklab, var(--accent) 60%, transparent);
+    }
+    /* The footer of a file: justify-between gap-3, the file name in min-w-0 flex-1 truncate
+       text-xs text-muted-foreground, then the metadata. */
+    .st-artifact-foot.ar-file-foot {
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+    }
+    .ar-file-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}

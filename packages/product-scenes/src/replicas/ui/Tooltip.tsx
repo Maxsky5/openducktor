@@ -1,5 +1,5 @@
-// The tooltip of components/ui/tooltip.tsx on the bottom side of its trigger. A scene shows it
-// with tip.ts, which places it under the trigger and inside the window.
+// The tooltip of components/ui/tooltip.tsx on the bottom or the top side of its trigger. A scene
+// shows it with tip.ts, which places it next to the trigger and inside the window.
 import type { ReactElement } from "react";
 import "./Tooltip.css";
 

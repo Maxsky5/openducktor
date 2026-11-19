@@ -1,6 +1,8 @@
 // The sample data of the goal command scene: a Builder session of a bug on OpenCode, which can pause
 // and resume a goal. OpenCode writes the message of a new goal into the session, so the transcript
 // shows it as /goal with the objective. The model, the files, and the times are fictional.
+import type { CallData } from "../../replicas/transcript/model";
+import { bash, call, edit } from "../../sample/calls";
 import type { Session } from "../../sample/sessions";
 
 /** The Builder session on OpenCode with the build agent. */
@@ -35,7 +37,25 @@ export const PAUSE = "pause";
 
 /** The file of the fix and its test. */
 export const FIX_PATH = "src/notes/move-note.ts";
-export const TEST_PATH = "src/notes/move-note.test.ts";
+const TEST_PATH = "src/notes/move-note.test.ts";
 
-/** The times of the rows of the goal turn. */
-export const TIMES = { goal: "10:12:04 AM", read: "10:12:07 AM", run: "10:12:41 AM" };
+/** The time of the goal message. */
+export const GOAL_TIME = "10:12:04 AM";
+
+/**
+ * The calls of the goal turn, which show as one tool run. OpenCode names its read tool `read`. The
+ * run folds when the final message of the turn comes.
+ */
+export const GOAL_CALLS: readonly CallData[] = [
+  call("read", {
+    tool: "read",
+    name: "read",
+    summary: FIX_PATH,
+    file: true,
+    duration: "9ms",
+    time: "10:12:07 AM",
+  }),
+  edit("fix", FIX_PATH, { add: 4, del: 1 }, "28ms", "10:12:16 AM"),
+  edit("test", TEST_PATH, { add: 18, del: 0 }, "31ms", "10:12:29 AM"),
+  bash("run", "bun test src/notes", "2.1s", "10:12:41 AM"),
+];

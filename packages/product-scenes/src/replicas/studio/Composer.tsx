@@ -14,19 +14,44 @@ import {
   ZapOff,
 } from "lucide-react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
-import { modelName } from "../../sample/models";
+import { modelName, type RuntimeKind } from "../../sample/models";
 import { contextUse, type Session } from "../../sample/sessions";
 import { compactTokens } from "../format";
+import { type KeyLabels, steerKey } from "../keys";
 import type { Activity } from "../vocabulary";
 import { Ray } from "../ui/Ray";
 import { RuntimeIcon } from "../ui/RuntimeIcon";
 import "./Composer.css";
+
+/**
+ * The runtimes whose composer references subagents with @: supportsSubagentReferences of the
+ * prompt input capabilities in runtime-descriptors.ts. Each runtime also searches files and offers
+ * commands and skills.
+ */
+const SUBAGENT_REFERENCES = {
+  opencode: true,
+  codex: false,
+  claude: false,
+} as const satisfies Record<RuntimeKind, boolean>;
+
+/** The trigger hints of the placeholder on `runtime`, as agent-chat-composer-policy.ts writes them. */
+export function composerHints(runtime: RuntimeKind): string {
+  const reference = SUBAGENT_REFERENCES[runtime] ? "@ for files and subagents" : "@ for files";
+  return `${reference}; / for commands; $ for skills`;
+}
+
+/** The keys that queue and steer, which the placeholder adds while the agent works. */
+export function queueHints(keys: KeyLabels): string {
+  return `Enter to queue; ${steerKey(keys)} to steer`;
+}
 
 /** The pending items that the send button counts, as agent-chat-composer-pending-items.tsx does. */
 type SendBadge = { kind: "comments" | "annotations"; count: number };
 
 type ComposerProps = {
   session: Session;
+  /** The keys of the platform. The placeholder names the steer shortcut while the agent works. */
+  keys: KeyLabels;
   /**
    * The send button counts the review comments or the browser annotations that the next message
    * sends. A scene changes the count. The badge hides at 0.
@@ -42,11 +67,6 @@ type ComposerProps = {
   goal?: ReactNode;
   /** The agent of a runtime with agent profiles, such as build of OpenCode. */
   agent?: string;
-  /**
-   * The steer shortcut of the platform, such as ⌘ Enter. While the agent works, the placeholder
-   * adds the queue keys of agent-chat-composer-policy.ts. Without it, the placeholder shows none.
-   */
-  steerKey?: string;
   /** More draft content after the placeholder. */
   children?: ReactNode;
 };
@@ -91,13 +111,13 @@ function ModelControls({
 
 export function Composer({
   session,
+  keys,
   sendBadge,
   activity = "idle",
   menu,
   queue,
   goal,
   agent,
-  steerKey,
   children,
 }: ComposerProps): ReactElement {
   const context = contextUse(session);
@@ -112,10 +132,8 @@ export function Composer({
           {menu}
           <div className="st-editor" data-editor="">
             <span className="when-ready">
-              @ for files; / for commands; $ for skills
-              {steerKey && (
-                <span className="when-working">{`; Enter to queue; ${steerKey} to steer`}</span>
-              )}
+              {composerHints(session.runtime)}
+              <span className="when-working">{`; ${queueHints(keys)}`}</span>
             </span>
             {children}
           </div>

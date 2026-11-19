@@ -13,7 +13,8 @@ import { BuilderReply } from "../../replicas/browser/BuilderReply";
 import { EMPTY_SUBTITLE } from "../../replicas/browser/FieldnotesPage";
 import { Composer, ComposerDraft } from "../../replicas/studio/Composer";
 import { AgentText } from "../../replicas/transcript/AgentText";
-import { PatchCard } from "../../replicas/transcript/PatchCard";
+import { ToolRun } from "../../replicas/transcript/ToolRun";
+import { edit } from "../../sample/calls";
 import { Thread } from "../../replicas/transcript/Thread";
 import { PAGE_TITLE } from "../../sample/browser";
 import { signature } from "../../sample/sessions";
@@ -21,6 +22,7 @@ import { BUILDER_SESSION } from "../../sample/studio";
 import {
   ANNOTATION_MESSAGE,
   ANNOTATIONS,
+  EDIT_TIME,
   EMPTY_STATE_FILE,
   FIX_WORKED,
   MESSAGE_TIME,
@@ -63,7 +65,10 @@ export function AnnotateView(props: SceneViewProps): ReactElement {
             time={MESSAGE_TIME}
             row="message"
           />
-          <PatchCard path={EMPTY_STATE_FILE} kind="M" add={9} del={3} row="patch" />
+          <ToolRun
+            calls={[edit("patch", EMPTY_STATE_FILE, { add: 9, del: 3 }, "46ms", EDIT_TIME)]}
+            folded
+          />
           <AgentText signature={signature(BUILDER_SESSION)} worked={FIX_WORKED} row="answer">
             <p>
               Create a note is now the main violet button, with a plus icon.{" "}
@@ -71,7 +76,11 @@ export function AnnotateView(props: SceneViewProps): ReactElement {
             </p>
           </AgentText>
         </Thread>
-        <Composer session={BUILDER_SESSION} sendBadge={{ kind: "annotations", count: 0 }}>
+        <Composer
+          session={BUILDER_SESSION}
+          keys={props.keys}
+          sendBadge={{ kind: "annotations", count: 0 }}
+        >
           <ComposerDraft />
         </Composer>
       </BrowserSession>

@@ -58,6 +58,19 @@
     .studio[data-panel-size="wide"] .st-main {
       flex-basis: 54%;
     }
+    /* The window shows the session of the selected step. While that session does not work, its
+       in-progress step shows CircleDotDashed in place of the spinner. studio.ts sets
+       data-activity, and the markup holds an idle frame. */
+    .studio:not([data-activity="working"])
+      .st-step[data-tone="in_progress"][aria-pressed="true"]
+      .working {
+      display: none;
+    }
+    .studio:not([data-activity="working"])
+      .st-step[data-tone="in_progress"][aria-pressed="true"]
+      .idle {
+      display: block;
+    }
     /*
      * Narrow stages show one column at a time, as a phone-width window would. The scene
      * switches data-focus between the chat and the panel when the panel changes.

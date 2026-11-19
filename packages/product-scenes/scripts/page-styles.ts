@@ -15,6 +15,12 @@ const transpiler = new Bun.Transpiler({
   tsconfig: { compilerOptions: { jsx: "react" } },
 });
 
+/**
+ * A module that can import more modules: TypeScript, with or without JSX. A data module, such as
+ * package.json, imports nothing, and the transpiler cannot read it.
+ */
+const SCRIPT = /\.tsx?$/;
+
 /** The static imports of the package in `file`, resolved, in the order of the file. */
 function localImports(file: string): string[] {
   return transpiler
@@ -35,8 +41,11 @@ function importedStyles(entry: string): string[] {
     if (visited.has(file)) return;
     visited.add(file);
     for (const target of localImports(file)) {
-      if (!target.endsWith(".css")) visit(target);
-      else if (!styles.includes(target)) styles.push(target);
+      if (target.endsWith(".css")) {
+        if (!styles.includes(target)) styles.push(target);
+      } else if (SCRIPT.test(target)) {
+        visit(target);
+      }
     }
   };
   visit(entry);

@@ -3,7 +3,7 @@
 import type { ReactElement, ReactNode } from "react";
 
 /** The parts of `text`: the text between backticks shows as code. */
-function InlineCode({ text }: { text: string }): ReactNode {
+export function InlineCode({ text }: { text: string }): ReactNode {
   return text.split("`").map((part, index) =>
     // The parts of a split never change order, so the index is a stable key.
     index % 2 === 1 ? <code key={index}>{part}</code> : part,

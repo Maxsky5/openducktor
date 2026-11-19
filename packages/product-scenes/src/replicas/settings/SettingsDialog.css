@@ -1,0 +1,126 @@
+@layer replica {
+  :where(.stage) {
+    /*
+     * The Settings dialog of settings-modal.tsx. DialogContent has flex h-[90vh] max-w-7xl flex-col
+     * overflow-clip p-0, with rounded-xl border bg-popover shadow-xl, in a positioner with p-4. The
+     * window takes the place of the viewport.
+     */
+    .set-dialog {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: min(100% - 32 * var(--u), 1280 * var(--u));
+      height: 90%;
+      overflow: hidden;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: var(--popover);
+      color: var(--popover-foreground);
+      box-shadow: var(--shadow-xl);
+    }
+    /* DialogHeader: border-b px-6 pb-4 pt-6 pr-14 gap-1.5. The title is text-lg font-semibold
+       leading-6, and the description is text-sm leading-6 text-muted-foreground. */
+    .set-dialog-head {
+      display: flex;
+      flex: none;
+      flex-direction: column;
+      gap: calc(6 * var(--u));
+      padding: calc(24 * var(--u)) calc(56 * var(--u)) calc(16 * var(--u)) calc(24 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .set-dialog-head b {
+      font-size: calc(18 * var(--u));
+      font-weight: 600;
+      line-height: calc(24 * var(--u));
+    }
+    .set-dialog-head p {
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(24 * var(--u));
+    }
+    /* The close button of DialogContent: absolute right-3 top-3 size-9 text-muted-foreground. */
+    .set-close {
+      position: absolute;
+      top: calc(12 * var(--u));
+      right: calc(12 * var(--u));
+      display: grid;
+      place-items: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* DialogBody: the menu column is at least 13.75rem wide, and the pane takes the rest. */
+    .set-dialog-body {
+      display: grid;
+      flex: 1 1 0;
+      grid-template-columns: minmax(calc(220 * var(--u)), max-content) minmax(0, 1fr);
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* SettingsSidebar: bg-muted/50 p-3 md:border-r, with a column of buttons, flex-col gap-1. */
+    .set-menu {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+      min-height: 0;
+      padding: calc(12 * var(--u));
+      overflow: hidden;
+      border-right: calc(1 * var(--u)) solid var(--border);
+      background: color-mix(in oklab, var(--muted) 50%, transparent);
+    }
+    /* A section: Button with shrink-0 justify-between px-3 sm:w-full, accent when selected and
+       ghost with hover:bg-accent/60 when not. */
+    .set-menu-item {
+      flex: none;
+      justify-content: space-between;
+      width: 100%;
+    }
+    .set-menu .set-menu-item {
+      padding: 0 calc(12 * var(--u));
+    }
+    .set-menu-item[data-variant="ghost"][data-hover] {
+      background: color-mix(in oklab, var(--accent) 60%, transparent);
+    }
+    .set-menu-label {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .set-menu-label > svg {
+      flex: none;
+    }
+    .set-menu-label > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* The pane of the open section: min-h-0 min-w-0 overflow-y-auto. */
+    .set-dialog-pane {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* The wrapper of a section gives no box, so the content of the section fills the pane. */
+    .set-section {
+      display: contents;
+    }
+    /* The footer: border-t px-6 py-4 sm:flex-row sm:items-center sm:gap-3, with Cancel at the
+       start and Save settings at the end. The message part is empty, so it hides. */
+    .set-dialog-foot {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: calc(12 * var(--u));
+      padding: calc(16 * var(--u)) calc(24 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    /* A busy Save settings shows Saving… in the place of its label. */
+    .set-save:not([data-busy]) .set-saving-label,
+    .set-save[data-busy] .set-save-label {
+      display: none;
+    }
+  }
+}

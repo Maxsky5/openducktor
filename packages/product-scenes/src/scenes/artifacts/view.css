@@ -1,0 +1,16 @@
+@layer views {
+  :where(.stage) {
+    /* Task artifacts: the session window of StudioWindow.tsx at the size of the scene. A tablet
+       stage shows the chat next to the panel, and a narrow stage shows one column at a time. */
+    .af-window {
+      --design-width: 960;
+      height: calc(600 * var(--u));
+    }
+    @container stage (width <= 699px) {
+      .af-window {
+        --design-width: 440;
+        height: calc(640 * var(--u));
+      }
+    }
+  }
+}

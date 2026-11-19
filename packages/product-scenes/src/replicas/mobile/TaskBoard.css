@@ -1,14 +1,15 @@
 @layer replica {
   :where(.stage) {
-    /* The navigation bar of the Tasks tab: the workspace title on the left, the plain icon
-       buttons of the task actions and the search on the right. */
+    /* The Android navigation bar of the Tasks tab, 56 points high: the workspace title on the
+       left, then the plain 44 point icon button of the task actions and the native search button
+       on the right, 16 points from the edge. */
     .mob-board-head {
       display: flex;
       flex: 0 0 auto;
       align-items: center;
       gap: calc(4 * var(--u));
       height: calc(56 * var(--u));
-      padding: 0 calc(10 * var(--u)) 0 calc(16 * var(--u));
+      padding: 0 calc(16 * var(--u));
       color: var(--foreground);
     }
     .mob-board-workspace {
@@ -18,7 +19,7 @@
       gap: calc(8 * var(--u));
       min-width: 0;
     }
-    /* The active workspace tile: 28 points on the sidebar accent. */
+    /* The active workspace tile: 28 points on the sidebar accent, with the card shadow. */
     .mob-board-tile {
       display: flex;
       flex: 0 0 auto;
@@ -29,6 +30,7 @@
       border-radius: calc(8 * var(--u));
       background: var(--sidebar-accent);
       color: var(--sidebar-accent-foreground);
+      box-shadow: var(--m-shadow-card);
       font-size: calc(11 * var(--u));
       font-weight: 600;
       line-height: calc(14 * var(--u));
@@ -53,22 +55,34 @@
       flex: 0 0 auto;
       align-items: center;
       justify-content: center;
-      width: calc(40 * var(--u));
-      height: calc(40 * var(--u));
+      width: calc(44 * var(--u));
+      height: calc(44 * var(--u));
     }
+    /* IconButton draws a 22 point glyph. The native search button of the Android header draws
+       a 24 point icon. */
     .mob-board-icon .lucide {
       width: calc(22 * var(--u));
       height: calc(22 * var(--u));
     }
+    .mob-board-icon[data-native] .lucide {
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+    }
 
-    /* The pager: one page for each lane on the wash of the shown lane. */
+    /* The pager: one page for each lane on the wash of the shown lane. While a swipe moves the
+       pages, the wash mixes the wash of the lane that it leaves into the next one, as
+       interpolateColor of board-pager.tsx mixes them with the page progress. board-pager.ts sets
+       the wash that the board leaves and the mix. */
     .mob-board {
       position: relative;
       flex: 1;
       min-height: 0;
       overflow: hidden;
-      background: var(--lane-wash);
-      transition: background-color 0.3s;
+      background: color-mix(
+        in oklab,
+        var(--tone-from, var(--lane-wash)) calc((1 - var(--tone-mix, 1)) * 100%),
+        var(--lane-wash)
+      );
     }
     .mob-board-pages {
       display: flex;

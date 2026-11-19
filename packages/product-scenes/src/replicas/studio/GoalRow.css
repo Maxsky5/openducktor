@@ -6,8 +6,6 @@
      * bottom edge slides 6 pixels under the composer card. goal-row.ts raises it out of the composer.
      */
     .gr {
-      --gr-open: 350ms;
-      --gr-close: 250ms;
       --gr-fade: 150ms;
       --gr-ease: cubic-bezier(0.22, 1, 0.36, 1);
       --gr-tone: var(--muted-foreground);
@@ -68,28 +66,11 @@
       min-width: 0;
       border-radius: calc(8 * var(--u));
     }
-    /*
-     * The status and the objective share one line, with a hanging indent under the label. Open,
-     * the line grows to its whole height. It stays wrapped while it closes, and the scene gives it
-     * the ellipsis when the height transition ends.
-     */
+    /* The status and the objective share one line, which ends in an ellipsis. */
     .gr-line {
-      interpolate-size: allow-keywords;
       flex: 1;
       min-width: 0;
       height: calc(20 * var(--u));
-      padding-inline-start: calc(20 * var(--u));
-      overflow: clip;
-      overflow-wrap: anywhere;
-      text-indent: calc(-20 * var(--u));
-      white-space: pre-wrap;
-      transition: height var(--gr-close) var(--gr-ease);
-    }
-    .gr-line[data-expanded="true"] {
-      height: auto;
-      transition-duration: var(--gr-open);
-    }
-    .gr-line[data-clamped="true"] {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -130,10 +111,6 @@
       width: calc(14 * var(--u));
       height: calc(14 * var(--u));
       margin-top: calc(3 * var(--u));
-      transition: transform var(--gr-close) var(--gr-ease);
-    }
-    .gr-chevron[data-expanded="true"] {
-      transform: rotate(180deg);
     }
     /* CardIconButton: size-6 rounded-md ghost buttons with a 14 pixel icon. */
     .gr-actions {

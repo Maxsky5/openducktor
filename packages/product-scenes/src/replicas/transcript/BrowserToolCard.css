@@ -83,35 +83,14 @@
       font-variant-numeric: tabular-nums;
     }
     /* The three bars of a running call, in place of its duration. */
-    .st-action-running {
+    .st-action-time > .st-action-running {
       display: none;
-      flex-shrink: 0;
-      align-items: center;
-      justify-content: center;
-      gap: calc(2 * var(--u));
-      width: calc(12 * var(--u));
-      height: calc(12 * var(--u));
     }
-    [data-running] .st-action-running {
+    [data-running] .st-action-time > .st-action-running {
       display: inline-flex;
     }
     [data-running] .st-action-duration {
       display: none;
-    }
-    .st-action-running > span {
-      width: calc(2 * var(--u));
-      height: calc(10 * var(--u));
-      border-radius: calc(1 * var(--u));
-      background-color: currentColor;
-      opacity: 0.45;
-      transform: scaleY(0.4);
-      animation: st-action-running 1200ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
-    }
-    .st-action-running > span:nth-child(2) {
-      animation-delay: 120ms;
-    }
-    .st-action-running > span:nth-child(3) {
-      animation-delay: 240ms;
     }
     .st-action-chevron.lucide {
       flex-shrink: 0;
@@ -119,18 +98,6 @@
       width: calc(14 * var(--u));
       height: calc(14 * var(--u));
       color: var(--muted-foreground);
-    }
-  }
-  @keyframes st-action-running {
-    0%,
-    45%,
-    100% {
-      opacity: 0.45;
-      transform: scaleY(0.4);
-    }
-    15% {
-      opacity: 1;
-      transform: scaleY(1);
     }
   }
 }

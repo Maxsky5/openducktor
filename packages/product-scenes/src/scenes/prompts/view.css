@@ -310,14 +310,6 @@
     .pd-save {
       border: 0;
     }
-    /* The Save icon changes to a spinner while the settings save. */
-    .pd-saving-icon,
-    .pd-save[data-saving] .pd-save-icon {
-      display: none;
-    }
-    .pd-save[data-saving] .pd-saving-icon {
-      display: block;
-    }
     .pd-footer {
       display: flex;
       flex: 0 0 auto;
@@ -349,8 +341,10 @@
         --design-width: 820;
         min-height: calc(704 * var(--u));
       }
+      /* md:grid-cols-[minmax(13.75rem,max-content)_minmax(0,1fr)]: the sidebar is as wide as its
+         widest section label, and 220 pixels at least. */
       .pd-body {
-        grid-template-columns: calc(220 * var(--u)) minmax(0, 1fr);
+        grid-template-columns: minmax(calc(220 * var(--u)), max-content) minmax(0, 1fr);
       }
       .pd-nav {
         display: flex;

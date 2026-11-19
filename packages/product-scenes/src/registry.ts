@@ -89,11 +89,11 @@ export const SCENES = {
     timeline: async () => (await import("./scenes/agent-browser/timeline")).build,
   },
   "new-session": {
-    size: { width: 960, height: 540 },
+    size: { width: 960, height: 936 },
     timeline: async () => (await import("./scenes/new-session/timeline")).build,
   },
   fork: {
-    size: { width: 960, height: 540 },
+    size: { width: 960, height: 704 },
     timeline: async () => (await import("./scenes/fork/timeline")).build,
   },
   "import-session": {
@@ -143,6 +143,30 @@ export const SCENES = {
   "goal-command": {
     size: { width: 640, height: 500 },
     timeline: async () => (await import("./scenes/goal-command/timeline")).build,
+  },
+  "mobile-question": {
+    size: { width: 920, height: 860 },
+    timeline: async () => (await import("./scenes/mobile-question/timeline")).build,
+  },
+  "mobile-pull-request": {
+    size: { width: 920, height: 860 },
+    timeline: async () => (await import("./scenes/mobile-pull-request/timeline")).build,
+  },
+  artifacts: {
+    size: { width: 960, height: 600 },
+    timeline: async () => (await import("./scenes/artifacts/timeline")).build,
+  },
+  gitlab: {
+    size: { width: 1060, height: 730 },
+    timeline: async () => (await import("./scenes/gitlab/timeline")).build,
+  },
+  "approve-merged": {
+    size: { width: 1040, height: 640 },
+    timeline: async () => (await import("./scenes/approve-merged/timeline")).build,
+  },
+  "keyboard-shortcuts": {
+    size: { width: 1040, height: 704 },
+    timeline: async () => (await import("./scenes/keyboard-shortcuts/timeline")).build,
   },
 } as const satisfies Record<string, SceneEntry | ChapterEntry>;
 

@@ -1,0 +1,14 @@
+@layer replica {
+  :where(.stage) {
+    /* The frame: min-h-0 min-w-0 flex-1 overflow-hidden, and the iframe in block h-full w-full
+       border-0. The page of the artifact paints its own background over bg-white of the iframe, so
+       the replica draws only the page: a white frame under it would show on its edges. */
+    .ar-frame {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+  }
+}

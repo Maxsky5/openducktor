@@ -133,12 +133,20 @@
       left: calc(8 * var(--u));
       width: calc(96 * var(--u));
       height: calc(50 * var(--u));
-      border: calc(1 * var(--u)) solid var(--lane-border);
+      /* While a swipe moves the pages, the outline mixes the color of the lane that it leaves
+         into the color of the next lane, as interpolateColor of board-lane-switcher.tsx mixes
+         them with the page progress. board-pager.ts sets the color that the outline leaves and
+         the mix. Without them, the outline has the color of its lane. */
+      border: calc(1 * var(--u)) solid
+        color-mix(
+          in oklab,
+          var(--tone-from, var(--lane-border)) calc((1 - var(--tone-mix, 1)) * 100%),
+          var(--lane-border)
+        );
       border-radius: calc(10 * var(--u));
       background: var(--card);
       box-shadow: var(--m-shadow-raised);
       transform: translateX(calc(var(--lane-progress) * 96 * var(--u)));
-      transition: border-color 0.25s;
     }
     .mob-lane-cell {
       position: relative;
@@ -230,6 +238,7 @@
       display: flex;
       flex: 0 0 auto;
       align-items: center;
+      justify-content: center;
       min-width: calc(24 * var(--u));
       min-height: calc(24 * var(--u));
       padding: 0 calc(8 * var(--u));

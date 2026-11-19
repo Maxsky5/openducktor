@@ -1,12 +1,13 @@
 @layer replica {
   :where(.stage) {
-    /* SessionStartBackgroundButton: an outlined row at the touch target height. */
+    /* SessionStartBackgroundButton: an outlined row at the 48 dp touch target of Android, with
+       the 12 dp corner of a large button. */
     .mob-start-background {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: calc(8 * var(--u));
-      min-height: calc(44 * var(--u));
+      min-height: calc(48 * var(--u));
       padding: calc(8 * var(--u)) calc(12 * var(--u));
       border: calc(1 * var(--u)) solid var(--input);
       border-radius: calc(12 * var(--u));
@@ -19,6 +20,12 @@
     .mob-start-background .lucide {
       width: calc(16 * var(--u));
       height: calc(16 * var(--u));
+    }
+    /* Once the start runs, the button reads Continue in background and stays enabled. The model
+       hint of a reuse says that the start runs. */
+    .mob-fsheet:not([data-busy]) [data-when="busy"],
+    .mob-fsheet[data-busy] [data-when="idle"] {
+      display: none;
     }
   }
 }

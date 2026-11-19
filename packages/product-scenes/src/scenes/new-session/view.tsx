@@ -31,6 +31,7 @@ import {
   TARGET,
   WORKTREE,
 } from "./sample";
+import "./view.css";
 
 export function NewSessionView(props: SceneViewProps): ReactElement {
   return (
@@ -50,6 +51,7 @@ export function NewSessionView(props: SceneViewProps): ReactElement {
         keys={props.keys}
         session={SESSION}
         pane="sidebar"
+        className="ns-window"
         dialog={
           <SessionCreateDialog
             session={SESSION}
@@ -75,7 +77,7 @@ export function NewSessionView(props: SceneViewProps): ReactElement {
             </UserMessage>
           }
           composer={
-            <Composer session={SESSION}>
+            <Composer session={SESSION} keys={props.keys}>
               <ComposerDraft />
             </Composer>
           }

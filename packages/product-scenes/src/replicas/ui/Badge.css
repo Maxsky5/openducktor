@@ -21,6 +21,12 @@
       background: var(--success-surface);
       color: var(--success-surface-foreground);
     }
+    /* The warning variant: border-transparent bg-warning-surface text-warning-surface-foreground. */
+    .ui-badge[data-variant="warning"] {
+      border-color: transparent;
+      background: var(--warning-surface);
+      color: var(--warning-surface-foreground);
+    }
     .ui-badge[hidden] {
       display: none;
     }

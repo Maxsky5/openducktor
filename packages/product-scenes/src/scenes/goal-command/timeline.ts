@@ -4,14 +4,11 @@ import type { SceneBuilder } from "../../motion/scene";
 import { typeText } from "../../motion/text";
 import { composerActivity, composerDraft } from "../../replicas/shell/composer";
 import { pointer } from "../../replicas/shell/cursor";
-import { keystrokes } from "../../replicas/shell/keystrokes";
+import { keyPresses } from "../../replicas/ui/held-keys";
 import { composerMenu } from "../../replicas/studio/composer-menu";
 import { goalRow } from "../../replicas/studio/goal-row";
 import { follow, transcript } from "../../replicas/transcript/rows";
 import { OBJECTIVE, PAUSE, QUERY } from "./sample";
-
-/** The rows of the goal turn, which come after the goal message. */
-const LATER_ROWS = ["goal", "read", "fix", "test", "run", "final"];
 
 /**
  * The goal command: the visitor types /go, and the slash menu shows /goal with its hints. Enter
@@ -29,13 +26,12 @@ export const build: SceneBuilder = (scene) => {
   const setActivity = composerActivity(root);
   const rows = transcript(scene, root);
   const cursor = pointer(scene, root);
-  const keys = keystrokes(scene);
+  const keys = keyPresses(scene);
   const slash = composerMenu(root, "slash");
   const goal = goalRow(scene, root);
   follow(scene, track);
 
   // Start: the earlier turn ended, the session has no goal, and the draft is empty.
-  for (const name of LATER_ROWS) row(name).hidden = true;
   slash.close();
   goal.reset("active");
   setActivity("idle");
@@ -52,7 +48,7 @@ export const build: SceneBuilder = (scene) => {
       scene.run(riseIn(must(root, '[data-menu="slash"]'), 6 * designPixel(root), 0.25));
     });
     const picked = queried + 1.1;
-    keys.press(["Enter"], picked, picked + 0.6);
+    keys.tap(["Enter"], picked);
     scene.at(picked, () => {
       slash.close();
       composer.typed.textContent = "";
@@ -64,7 +60,7 @@ export const build: SceneBuilder = (scene) => {
 
   /** Enter sends the draft at `at`. The draft clears. */
   const sendDraft = (at: number): void => {
-    keys.press(["Enter"], at, at + 0.6);
+    keys.tap(["Enter"], at);
     composer.send(at);
     scene.at(at, () => {
       chip.hidden = true;
@@ -74,13 +70,16 @@ export const build: SceneBuilder = (scene) => {
   // The visitor clicks the composer and sets the goal.
   const focused = cursor.click(() => composer.editor, 0.3, 0.7);
   cursor.hide(focused + 0.3);
+  scene.mark("type", focused + 0.2);
   const written = goalDraft(focused + 0.2, OBJECTIVE);
   const sent = written + 0.4;
   sendDraft(sent);
 
-  // The message shows with the goal chip, the goal row rises, and the agent works on the goal.
+  // The message shows with the goal chip, the goal row rises, and the agent works on the goal. Its
+  // calls come in one tool run.
   rows.show(row("goal"), sent + 0.15);
   goal.show(sent + 0.5);
+  scene.mark("goal", sent);
   scene.at(sent + 0.3, () => setActivity("working"));
   const read = rows.tool(row("read"), sent + 0.9, 0.3);
   rows.show(row("fix"), read + 0.4);
@@ -92,8 +91,10 @@ export const build: SceneBuilder = (scene) => {
   const paused = goalDraft(testing + 0.3, PAUSE) + 0.35;
   sendDraft(paused);
   goal.status(paused + 0.3, "paused");
+  scene.mark("paused", paused + 0.3);
 
-  // The tests end, and the agent ends its turn. The paused goal starts no next turn.
+  // The tests end, and the agent ends its turn. Its final message folds the tool run. The paused
+  // goal starts no next turn.
   finishTests(paused + 0.9);
   const ended = rows.say(row("final"), paused + 1.2);
   scene.at(ended, () => setActivity("idle"));

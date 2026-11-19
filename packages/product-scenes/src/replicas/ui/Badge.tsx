@@ -4,7 +4,7 @@ import type { ComponentProps, ReactElement } from "react";
 import { classes } from "../classes";
 import "./Badge.css";
 
-type BadgeProps = ComponentProps<"span"> & { variant?: "outline" | "success" };
+type BadgeProps = ComponentProps<"span"> & { variant?: "outline" | "success" | "warning" };
 
 export function Badge({ variant = "outline", className, ...attributes }: BadgeProps): ReactElement {
   return <span className={classes("ui-badge", className)} data-variant={variant} {...attributes} />;

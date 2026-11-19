@@ -1,12 +1,16 @@
 @layer replica {
   :where(.stage) {
+    /* The list of changes-screen.tsx. Its header puts 12 points between its parts, also around
+       the empty box of the notices, and the rows follow the file list header. */
     .mob-changes-body {
-      display: flex;
       flex: 1;
-      flex-direction: column;
-      gap: calc(12 * var(--u));
       min-height: 0;
       overflow: hidden;
+    }
+    .mob-changes-header {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
       padding-top: calc(8 * var(--u));
     }
     /* The branch card: two 40 point lines in a 12 point card. */
@@ -44,26 +48,32 @@
       white-space: nowrap;
       text-overflow: ellipsis;
     }
-    .mob-branch-upstream,
-    .mob-branch-ahead {
+    /* The upstream state: a 13 point cloud and the tertiary caption1 text, 8 points apart. */
+    .mob-branch-upstream {
       display: flex;
       flex: 0 0 auto;
       align-items: center;
-      gap: calc(4 * var(--u));
+      gap: calc(8 * var(--u));
       font-size: calc(12 * var(--u));
       font-weight: 500;
       line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
     }
     .mob-branch-upstream .lucide {
       width: calc(13 * var(--u));
       height: calc(13 * var(--u));
     }
+    /* The commits ahead of the target: a 12 point arrow and monoSmall digits. */
     .mob-branch-ahead {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
       gap: calc(1 * var(--u));
       color: var(--git-ahead);
       font-family: var(--mono);
       font-size: calc(11.5 * var(--u));
-      font-weight: 400;
+      line-height: calc(16 * var(--u));
+      font-variant-numeric: tabular-nums;
     }
     .mob-branch-ahead .lucide {
       width: calc(12 * var(--u));
@@ -81,6 +91,7 @@
       border-radius: calc(12 * var(--u));
       background: var(--card);
     }
+    /* The semibold subhead count next to the Pending badge, over one footnote line. */
     .mob-pending-comments-text {
       display: grid;
       flex: 1;
@@ -88,6 +99,7 @@
       color: var(--muted-foreground);
       font-size: calc(12 * var(--u));
       line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
     }
     .mob-pending-comments-title {
       display: flex;
@@ -96,11 +108,14 @@
       color: var(--foreground);
       font-size: calc(13 * var(--u));
       line-height: calc(18 * var(--u));
+      letter-spacing: 0;
     }
     .mob-pending-comments-title strong {
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }
-    /* The scope tabs share the width, with the primary underline under the selected tab. */
+    /* The scope tabs share the width, with the primary underline under the selected tab. A tab
+       is as high as the 48 dp touch target of Android. */
     .mob-scope-tabs {
       position: relative;
       display: flex;
@@ -114,8 +129,8 @@
       justify-content: center;
       gap: calc(6 * var(--u));
       min-width: 0;
-      min-height: calc(44 * var(--u));
-      padding: 0 calc(8 * var(--u));
+      min-height: calc(48 * var(--u));
+      padding: calc(4 * var(--u)) calc(8 * var(--u));
       color: var(--muted-foreground);
       font-size: calc(13 * var(--u));
       font-weight: 500;
@@ -127,6 +142,7 @@
       color: var(--foreground);
       font-weight: 600;
     }
+    /* The file count: caption2 digits on a muted pill. */
     .mob-scope-count {
       min-width: calc(18 * var(--u));
       padding: 0 calc(6 * var(--u));
@@ -136,17 +152,21 @@
       font-size: calc(11 * var(--u));
       font-weight: 600;
       line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
       text-align: center;
+      font-variant-numeric: tabular-nums;
     }
+    /* The underline sits on the border of the tabs. It moves in 180 ms on the easeOut curve of
+       the motion tokens. */
     .mob-scope-indicator {
       position: absolute;
-      bottom: calc(-1 * var(--u));
+      bottom: 0;
       left: calc(6 * var(--u));
       width: calc(50% - 12 * var(--u));
       height: calc(2 * var(--u));
       border-radius: calc(1 * var(--u));
       background: var(--primary);
-      transition: transform 0.2s ease-out;
+      transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
     }
     .mob-scope-tabs[data-scope="target"] .mob-scope-indicator {
       transform: translateX(calc(100% + 12 * var(--u)));
@@ -180,9 +200,8 @@
       width: calc(20 * var(--u));
       height: calc(20 * var(--u));
     }
-    .mob-changes-list {
-      margin-top: calc(-12 * var(--u));
-    }
+    /* The file list header: the footnote count, the line totals 6 points apart, and the
+       toggle. */
     .mob-changes-totals {
       display: flex;
       align-items: center;
@@ -193,9 +212,14 @@
       color: var(--muted-foreground);
       font-size: calc(12 * var(--u));
       line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
     }
     .mob-changes-totals > span:first-child {
       flex: 1;
+    }
+    .mob-changes-totals .mob-line-counts {
+      gap: calc(6 * var(--u));
+      letter-spacing: 0;
     }
     .mob-changes-totals [data-sign="add"] {
       color: var(--git-total-add);
@@ -224,17 +248,22 @@
       width: calc(15 * var(--u));
       height: calc(15 * var(--u));
     }
-    /* A folder or file row of the tree: 44 points, indented 14 points for each level. */
+    /* A folder or file row of the tree: the 48 dp touch target of Android, indented 14 points
+       for each level. A folder row draws its own line, and the box of a file row draws the line
+       under the row. */
     .mob-change-row {
       display: flex;
       align-items: center;
       gap: calc(8 * var(--u));
-      min-height: calc(44 * var(--u));
+      min-height: calc(48 * var(--u));
       padding: 0 calc(12 * var(--u)) 0 calc((12 + 14 * var(--depth)) * var(--u));
-      border-bottom: calc(1 * var(--u)) solid var(--diff-divider);
       color: var(--foreground);
       font-size: calc(13 * var(--u));
       line-height: calc(18 * var(--u));
+    }
+    .mob-change-row[data-kind="directory"],
+    .mob-change-box {
+      border-bottom: calc(1 * var(--u)) solid var(--diff-divider);
     }
     .mob-change-row[data-kind="directory"] {
       padding-right: calc(16 * var(--u));
@@ -272,6 +301,7 @@
       font-size: calc(11 * var(--u));
       font-weight: 500;
       line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
       font-variant-numeric: tabular-nums;
     }
     .mob-change-row > .mob-change-status {
@@ -292,6 +322,7 @@
     .mob-change-row[data-expanded="true"] .mob-change-open {
       display: block;
     }
+    /* The pending comment count: a message icon and caption2 digits on a muted pill. */
     .mob-change-comments {
       display: flex;
       align-items: center;
@@ -303,17 +334,21 @@
       font-size: calc(11 * var(--u));
       font-weight: 600;
       line-height: calc(14 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
+      font-variant-numeric: tabular-nums;
     }
     .mob-change-comments .lucide {
       width: calc(11 * var(--u));
       height: calc(11 * var(--u));
     }
+    /* The menu control: a plain IconButton with a 44 point touch area. Its negative margins
+       keep the row 48 points high. */
     .mob-change-more {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: calc(36 * var(--u));
-      height: calc(36 * var(--u));
+      width: calc(44 * var(--u));
+      height: calc(44 * var(--u));
       margin: calc(-8 * var(--u)) calc(-8 * var(--u)) calc(-8 * var(--u)) 0;
       color: var(--m-secondary);
     }
@@ -327,12 +362,17 @@
       border-bottom: calc(1 * var(--u)) solid var(--diff-divider);
       background: var(--pierre-page, var(--card));
     }
+    /* The footnote under the list. It shows only while no comment is pending. */
     .mob-changes-hint {
       padding: calc(16 * var(--u)) calc(16 * var(--u)) 0;
       color: var(--muted-foreground);
       font-size: calc(12 * var(--u));
       line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
       text-align: center;
+    }
+    .mob-changes:has([data-pending-comments]:not([hidden])) .mob-changes-hint {
+      display: none;
     }
   }
 }

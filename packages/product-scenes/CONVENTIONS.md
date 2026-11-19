@@ -17,7 +17,8 @@ The package holds the animated copies of the product UI. The website, the app to
 | `src/react/Scene.tsx` | `<Scene name theme keys framed options />` and `preloadScene` for a React host that controls when a scene plays, such as the app tour |
 | `src/react/PageScene.tsx`, `src/react/ScenePlayer.tsx`, `src/react/page-views.ts` | `<PageScene name theme keys options failure stylesheet />` for a page that a React server renders, such as the documentation, its client player, and its static view map of every scene |
 | `styles/` | Layer order, reset of the host base styles, generated theme, Tailwind palette values, replica base, state rules, and the generated stylesheets of `PageScene` in `page/` |
-| `video/` | The development tool that renders a loop scene to an MP4 file. See [its README](video/README.md) |
+| `src/films/` | The films: long videos that put scenes of the package together. See [Films](#films) |
+| `video/` | The development tool that renders a loop scene or a film to an MP4 file. See [its README](video/README.md) |
 
 ## Rules
 
@@ -45,6 +46,11 @@ Build these parts from their replicas. Do not copy their markup, their styles, o
 | A dialog that opens over a window | `modal` of `replicas/studio/modal.ts`, and `progressDialog` for a dialog with the startup progress |
 | One pane of a window on a phone stage | `pane` of `AppWindow`, which a timeline switches with `data-pane`. `pinned` keeps the full sidebar on a tablet stage |
 | Inline code and highlighted code | `InlineCode` and `Paragraph` in `replicas/ui/InlineCode.tsx`, and `HighlightedCode` in `replicas/studio` |
+| A saved file and the Artifacts tab | `ArtifactCard` in `replicas/transcript`, `ArtifactCollection`, `ArtifactFile`, and `ArtifactPreviewDialog` in `replicas/studio`, and `artifactTab` of `replicas/studio/artifact-tab.ts` in the timeline |
+| The tool calls of a desktop transcript | `ToolRun` for the consecutive calls of a turn and `ToolRow` for a question or a task tool, in `replicas/transcript`. `tool`, `start`, `show`, and `running` of `replicas/transcript/rows.ts` add each call to its run, and a run folds when its calls ended and another row follows it. Each step of `rows.ts` hides the row that it shows later, so a scene does not hide it. The calls of `sample/calls.ts` name each tool as the app does |
+| The keys that the visitor holds or presses | `keystrokes` of `SessionWindow`, which shows `Keystrokes` of `replicas/ui`, or `KeyHud` of `replicas/shell` over the stage of a website scene. In the timeline, `heldKeys` or `keyPresses` of `replicas/ui/held-keys.ts`. The displays are not app UI, and a `captioned` scene hides them |
+| The position hints of the session rows and the workspace tiles | `hints` of `NavData`, and `positionHints` of `replicas/shell/position-hints.ts` in the timeline |
+| The Settings dialog over a window | `SettingsDialog` in `replicas/settings` with one pane for each section in `panes`, `RepositoriesPane` for the Repositories section, and `settingsDialog` of `replicas/settings/settings-dialog.ts` in the timeline |
 
 ## Add a scene
 
@@ -71,7 +77,27 @@ Build these parts from their replicas. Do not copy their markup, their styles, o
 - `PageScene` renders the static frame on the server and needs no Suspense boundary. It uses the static views of `PAGE_VIEWS`. Do not import `styles.css`. At build time, `pageStyles()` of `@openducktor/product-scenes/page-styles` gives the stylesheet files of the base styles and of each scene, from the stylesheet imports of the views. Bundle the files of each entry into one stylesheet, serve the results, and give their addresses to `stylesheet`. Each scene links the base stylesheet and its own stylesheet with a React `precedence`, so a page loads only the styles of the scenes that it shows, after the styles of the host. Two scene stylesheets can hold the same part stylesheet, so scope each rule of a scene stylesheet to `:where([data-page-scene="<name>"])`, the wrapper of the view, as `apps/docs-website/scripts/prepare-assets.ts` does. The views also import their own stylesheets. A bundler that links each imported stylesheet as one more file of the page, such as Turbopack, must ignore the stylesheet imports of the package, as `apps/docs-website/next.config.ts` does.
 - In the browser, `PageScene` plays as a scene of the website: in its play zone, with the pause control of the page, and with the reduced motion setting. It loads GSAP, its player, and its timeline when the view is one screen height or less from the screen. With reduced motion, a loop scene loads nothing and keeps its static frame, and a chapter player loads for its tabs. The unmount stops it and removes its listeners.
 - When the timeline of a `PageScene` does not load, the static frame stays, the `failure` node of the host shows under it, and the error goes to the error handler of the page. A later mount loads the timeline again.
+- To show its own captions next to a scene, a host sets `captioned` on the view. The scene then hides the step list of the documentation and the display of the held keys, and keeps its scale. The host shows the held keys in its captions, as the `KeyCast` of a film does.
 - To put a scene in a frame of the host, set `framed` on the React `Scene`. The scene then fills its container, and it shows no window border and no pointer. Do not style the internals of a scene from the host.
+
+## Films
+
+A film puts scenes of the package together in one long video, for social media and release notes. It plays each scene in a set of one world, moves a camera over the world, and shows captions, a chapter bar, and title cards over it. Only the video tool renders a film.
+
+| Path | Holds |
+|---|---|
+| `src/films/engine/` | The master timeline and its mount (`film.ts`), the camera, the captions, the chapter bar, the wall of the sets (`mosaic.ts`), and the motion of the title cards |
+| `src/films/frame/` | The views of every film: the frame, a set, a caption, the chapter bar, the mark, and the title cards |
+| `src/films/<name>/` | One film: `view.tsx` with its sets, `captions.ts` with its words, `timeline.ts`, and a module for each chapter |
+| `src/films/registry.ts`, `src/films/views.ts` | The film names, frame sizes, and lazy loaders |
+
+1. A set holds one loop scene of the registry at its design width, with `captioned` on. The film plays the scene with `film.play`. The scene keeps its story, and the film can only change its speed.
+2. A film reads only the marks of a scene to move its camera, to show its captions, and to change the speed of the scene. To frame a new step or to change the speed of a part, add a `scene.mark` to the scene. Do not copy a time of a scene into a film.
+3. A camera move finds its target when it starts, because the scenes change their layout while they play. Frame a part that shows at that time.
+4. Play each change of the UI at the speed of the app. A film can play a wait faster, with no speed badge: a rest with no change on the screen, a wait for the host or a model, such as the startup steps, a detection, or the model that writes a goal, a travel of the pointer to its target, and the work of an agent as a time lapse. A wait shows no new behavior of the product, and at the speed of the app it makes the film too long for social media. A film can also play a rest slower, so that a camera move ends before the next change. Put a mark at the start and at the end of each part that changes its speed in the scene, with a short margin to the changes of the screen. Hold the camera still between its moves: a slow drift makes small text shimmer.
+5. A film imports the views of its scenes. `mountFilm` loads the builders of its sets from the registry.
+6. Write the words of a film in `captions.ts`, in the language of its audience. Each sentence states only what the product does.
+7. `src/films.test.ts` builds each film from its view and plays it to its end: a missing mark, a missing part, or two captions that show together fail the test. The document of the test has no layout, so play the film in the video tool to check the motion and the framing.
 
 ## Public modules
 

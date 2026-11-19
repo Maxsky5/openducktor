@@ -1,0 +1,32 @@
+@layer replica {
+  :where(.stage) {
+    /* ToolCallIcon: inline-flex size-3.5 shrink-0 items-center justify-center, in the color of the
+       state of the call. A call that ended keeps the color of the other tool icons. The color
+       changes with transition-colors duration-200. */
+    .st-call-icon {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+      transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    :is(.st-call, .st-tool)[data-running] .st-call-icon {
+      color: var(--status-running-foreground);
+    }
+    /* Moving bars take the place of the icon while the call runs. */
+    .st-call-icon > .st-call-bars,
+    :is(.st-call, .st-tool)[data-running] .st-call-glyph {
+      display: none;
+    }
+    :is(.st-call, .st-tool)[data-running] .st-call-icon > .st-call-bars {
+      display: inline-flex;
+    }
+    /* A running call has no duration yet. */
+    :is(.st-call, .st-tool)[data-running] .st-call-duration {
+      display: none;
+    }
+  }
+}

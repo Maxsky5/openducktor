@@ -29,6 +29,27 @@ export type GitFile = {
   comments?: number;
 };
 
+/**
+ * One artifact in the collection of task-artifacts.tsx: a workflow document, or a file that an
+ * agent or a user saved. Its format and its icon come from its media type.
+ */
+export type ArtifactEntry = {
+  /** The scene hook of its row. */
+  id: string;
+  name: string;
+  mediaType: string;
+  /** The size of a file in bytes. A workflow artifact shows no size. */
+  bytes?: number;
+  /** The time since the last save, as formatElapsedAgo of relative-time.ts writes it. */
+  updated: string;
+};
+
+/** The groups of the collection: the workflow artifacts in workflow order, then the files. */
+export type ArtifactGroups = {
+  workflow: readonly ArtifactEntry[];
+  files: readonly ArtifactEntry[];
+};
+
 export type ArtifactLabels = {
   title: string;
   /** The status line of task-artifacts.tsx while the artifact is absent. */

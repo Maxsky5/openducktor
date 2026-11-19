@@ -39,7 +39,7 @@ export function DiffLines({ lines, comment }: DiffLinesProps): ReactElement {
         return (
           // The lines of a file never change order, so the number is a stable key.
           <Fragment key={number}>
-            <div className="mob-diff-line" data-diff-line={number}>
+            <div className="mob-diff-line" data-diff-line={number} data-feedback="highlight">
               <span className="mob-diff-number">{number}</span>
               <code className="mob-diff-code">
                 <HighlightedCode line={line} />

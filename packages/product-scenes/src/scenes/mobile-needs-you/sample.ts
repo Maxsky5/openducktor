@@ -7,10 +7,16 @@
 // times are fictional.
 import type { RailStep } from "../../replicas/mobile/MobileRail";
 import type { PermissionRequest } from "../../replicas/mobile/PermissionCard";
-import type { MobileTool } from "../../replicas/mobile/TranscriptRows";
+import type { MobileCall } from "../../replicas/mobile/ToolRun";
 import type { NavEntry } from "../../replicas/shell/nav";
 import type { RoleId } from "../../replicas/vocabulary";
-import { BUILDER_RAIL, BUILDER_TOOLS, PHONE_SESSIONS, WAITING_BUILD } from "../../sample/mobile";
+import {
+  BUILDER_RAIL,
+  BUILDER_TOOLS,
+  codexCommand,
+  PHONE_SESSIONS,
+  WAITING_BUILD,
+} from "../../sample/mobile";
 import { WORKTREE_PATH } from "../../sample/worktree";
 
 /** The steps of the step list, one for each part of the scene. */
@@ -45,37 +51,35 @@ export const REQUEST: PermissionRequest = {
 /** The tool calls of the turn, in order. */
 export const TOOLS = {
   guide: BUILDER_TOOLS.guide,
-  status: {
-    type: "bash",
-    name: "bash",
-    summary: "git status --short",
-    duration: "40ms",
-    time: "9:46:36 AM",
-  },
+  status: codexCommand("bash", "git status --short", "40ms", "9:46:36 AM"),
   keymap: BUILDER_TOOLS.keymap,
   search: BUILDER_TOOLS.search,
-  app: { type: "list", name: "list", summary: "src/app", duration: "1ms", time: "9:46:44 AM" },
+  app: codexCommand("list", "ls src/app", "14ms", "9:46:44 AM"),
   shell: BUILDER_TOOLS.shell,
   dialog: BUILDER_TOOLS.dialog,
-  dialogTest: {
-    type: "read",
-    name: "read",
-    summary: "src/search/search-dialog.test.tsx",
-    duration: "1ms",
-    time: "9:46:47 AM",
-  },
-  read: {
-    type: "read",
-    name: "read",
-    summary: "src/search/use-search-shortcut.ts",
-    duration: "1ms",
-    time: "9:48:12 AM",
-  },
+  dialogTest: codexCommand(
+    "read",
+    "sed -n '1,160p' src/search/search-dialog.test.tsx",
+    "20ms",
+    "9:46:47 AM",
+  ),
+  read: codexCommand("read", "cat src/search/use-search-shortcut.ts", "17ms", "9:48:12 AM"),
   list: { ...BUILDER_TOOLS.list, time: "9:48:14 AM" },
   lint: BUILDER_TOOLS.lint,
   test: BUILDER_TOOLS.test,
   typecheck: BUILDER_TOOLS.typecheck,
-} as const satisfies Record<string, MobileTool>;
+} as const satisfies Record<string, MobileCall>;
+
+/**
+ * The tool runs of the turn: consecutive calls make one run. The runs that another row follows
+ * are folded.
+ */
+export const RUNS = {
+  lookups: ["guide", "status", "keymap", "search", "app", "shell", "dialog", "dialogTest"],
+  checks: ["read", "list", "lint"],
+  tests: ["test"],
+  types: ["typecheck"],
+} as const satisfies Record<string, readonly (keyof typeof TOOLS)[]>;
 
 /** The reply of the Builder before the request. */
 export const READY =

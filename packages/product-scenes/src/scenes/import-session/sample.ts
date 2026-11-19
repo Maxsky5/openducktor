@@ -79,7 +79,7 @@ export const SESSION = {
 export const TURN = {
   message: "Find why search is slow in large notebooks.",
   time: "8:12:40 AM",
-  worked: "1m 06s",
+  worked: "1m6s",
   reply:
     "Search reads every note from disk for each query. An index of the words in each note lets a query read only the notes that match.",
 } as const;

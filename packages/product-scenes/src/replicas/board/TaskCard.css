@@ -10,6 +10,12 @@
       background: color-mix(in oklab, var(--card) 95%, transparent);
       box-shadow: var(--shadow-sm);
     }
+    /* The pointer over the card: hover:border-info-border hover:shadow-md, with no transition. A
+       scene sets `data-hover` in place of :hover. */
+    .card[data-hover] {
+      border-color: var(--info-border);
+      box-shadow: var(--shadow-md);
+    }
     .card-content {
       position: relative;
       z-index: 1;

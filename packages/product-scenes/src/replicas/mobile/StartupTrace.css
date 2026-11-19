@@ -1,0 +1,162 @@
+@layer replica {
+  :where(.stage) {
+    /* StartupTrace in the start sheet: 16 points of padding, and the header, the steps, and the
+       actions 8 points apart. The green of `theme.colors.green` is emerald 500, and emerald 400
+       in the dark theme. */
+    .mob-startup {
+      --m-green: var(--emerald-500);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      gap: calc(8 * var(--u));
+      padding: calc(16 * var(--u));
+    }
+    :where([data-theme="dark"]) & .mob-startup {
+      --m-green: var(--emerald-400);
+    }
+    /* The header: the icon of the phase in a 32 point circle and the heading, 12 points apart. */
+    .mob-startup-head {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(12 * var(--u));
+    }
+    /* SwapTransition keeps the old and the new content in one place while they swap. */
+    .mob-startup-phase,
+    .mob-startup-title,
+    .mob-startup-icon {
+      display: grid;
+      flex: 0 0 auto;
+    }
+    .mob-startup-phase > *,
+    .mob-startup-title > *,
+    .mob-startup-icon > * {
+      grid-area: 1 / 1;
+    }
+    /* The circle of the phase: the color of the phase at 12 percent, under its icon. */
+    .mob-startup-phase-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(32 * var(--u));
+      height: calc(32 * var(--u));
+      border-radius: 50%;
+      background: color-mix(in oklab, var(--m-tint) 12%, transparent);
+      color: var(--m-tint);
+    }
+    .mob-startup-phase-icon[data-phase-icon="ready"] {
+      background: color-mix(in oklab, var(--m-green) 12%, transparent);
+      color: var(--m-green);
+    }
+    .mob-startup-heading {
+      display: grid;
+      flex: 1;
+      gap: calc(2 * var(--u));
+      min-width: 0;
+    }
+    /* The phase in headline text: 15 point semibold on 20 point lines. */
+    .mob-startup-title b {
+      color: var(--foreground);
+      font-size: calc(15 * var(--u));
+      font-weight: 600;
+      line-height: calc(20 * var(--u));
+      letter-spacing: calc(-0.1 * var(--u));
+    }
+    /* The origin in caption1 text and the secondary label color. */
+    .mob-startup-origin {
+      overflow: hidden;
+      color: var(--m-secondary);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+      letter-spacing: calc(0.1 * var(--u));
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-startup:not([data-phase="running"]) [data-phase-icon="running"],
+    .mob-startup:not([data-phase="running"]) [data-phase-title="running"],
+    .mob-startup:not([data-phase="ready"]) [data-phase-icon="ready"],
+    .mob-startup:not([data-phase="ready"]) [data-phase-title="ready"] {
+      visibility: hidden;
+    }
+    .mob-startup-steps {
+      display: grid;
+      padding-bottom: calc(4 * var(--u));
+    }
+    /* StartupStepRow: a 48 point row with the 32 point icon column and the label, 12 points
+       apart. A line joins the icon of a step to the icon of the next step, 8 points from each. */
+    .mob-startup-step {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      min-height: calc(48 * var(--u));
+    }
+    .mob-startup-step:not(:last-child)::before {
+      position: absolute;
+      top: calc(32 * var(--u));
+      bottom: calc(-16 * var(--u));
+      left: calc(15.5 * var(--u));
+      width: calc(1 * var(--u));
+      background: var(--border);
+      content: "";
+    }
+    .mob-startup-icon {
+      justify-items: center;
+      width: calc(32 * var(--u));
+    }
+    .mob-startup-glyph {
+      display: flex;
+    }
+    .mob-startup-glyph[data-icon="pending"] {
+      color: var(--muted-foreground);
+    }
+    .mob-startup-glyph[data-icon="running"] {
+      color: var(--m-tint);
+    }
+    .mob-startup-glyph[data-icon="completed"] {
+      color: var(--m-green);
+    }
+    .mob-startup-step:not([data-state="pending"]) [data-icon="pending"],
+    .mob-startup-step:not([data-state="running"]) [data-icon="running"],
+    .mob-startup-step:not([data-state="completed"]) [data-icon="completed"] {
+      visibility: hidden;
+    }
+    /* The step in subhead text of the medium weight. */
+    .mob-startup-label {
+      flex: 1;
+      min-width: 0;
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    /* StartupAttemptActions: a hairline, then the outlined small buttons at the 48 point touch
+       target, 8 points apart. */
+    .mob-startup-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(8 * var(--u));
+      padding-top: calc(8 * var(--u));
+      border-top: calc(1 * var(--u)) solid var(--border);
+    }
+    .mob-startup-action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(6 * var(--u));
+      min-height: calc(48 * var(--u));
+      padding: calc(4 * var(--u)) calc(12 * var(--u));
+      border: calc(1 * var(--u)) solid var(--input);
+      border-radius: calc(10 * var(--u));
+      background: var(--card);
+      color: var(--foreground);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+      line-height: calc(18 * var(--u));
+    }
+    .mob-startup-action .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+    }
+  }
+}

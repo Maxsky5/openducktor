@@ -6,7 +6,6 @@
 import { Terminal } from "lucide-react";
 import type { ReactElement } from "react";
 import { SceneFrame, type SceneViewProps } from "../../frame/SceneFrame";
-import { steerKey } from "../../replicas/keys";
 import { Replica } from "../../replicas/Replica";
 import { KeyHud } from "../../replicas/shell/KeyHud";
 import { Pointer } from "../../replicas/shell/Pointer";
@@ -16,24 +15,23 @@ import { ComposerMenu } from "../../replicas/studio/ComposerMenu";
 import { ComposerMenuRow } from "../../replicas/studio/ComposerMenuRow";
 import { GoalRow } from "../../replicas/studio/GoalRow";
 import { AgentText } from "../../replicas/transcript/AgentText";
-import { PatchCard } from "../../replicas/transcript/PatchCard";
 import { GOAL_CHIP_LABEL, ReferenceChip } from "../../replicas/transcript/ReferenceChip";
 import { Thread } from "../../replicas/transcript/Thread";
-import { ToolRow } from "../../replicas/transcript/ToolRow";
+import { ToolRun } from "../../replicas/transcript/ToolRun";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
 import { signature } from "../../sample/sessions";
 import {
   AGENT,
   COMMAND_SESSION,
   FIX_PATH,
+  GOAL_CALLS,
   GOAL_COMMAND,
+  GOAL_TIME,
   OBJECTIVE,
-  TEST_PATH,
-  TIMES,
 } from "./sample";
 import "./view.css";
 
-/** The end of the earlier turn, then the goal message and the goal turn. */
+/** The end of the earlier turn, then the goal message and the goal turn, whose calls folded. */
 function GoalThread(): ReactElement {
   return (
     <Thread>
@@ -43,28 +41,11 @@ function GoalThread(): ReactElement {
           fix changes <code>{FIX_PATH}</code> and its test.
         </p>
       </AgentText>
-      <UserMessage time={TIMES.goal} row="goal">
+      <UserMessage time={GOAL_TIME} row="goal">
         <ReferenceChip kind="goal" label={GOAL_CHIP_LABEL} />
         {OBJECTIVE}
       </UserMessage>
-      <ToolRow
-        kind="read"
-        name="Read"
-        args={FIX_PATH}
-        duration="9ms"
-        time={TIMES.read}
-        row="read"
-      />
-      <PatchCard path={FIX_PATH} kind="M" add={4} del={1} row="fix" />
-      <PatchCard path={TEST_PATH} kind="M" add={18} row="test" />
-      <ToolRow
-        kind="bash"
-        name="Bash"
-        args="bun test src/notes"
-        duration="2.1s"
-        time={TIMES.run}
-        row="run"
-      />
+      <ToolRun calls={GOAL_CALLS} folded />
       <AgentText signature={signature(COMMAND_SESSION)} worked="44s" row="final">
         <p>
           A note keeps its tags when it moves to another notebook. <code>bun test src/notes</code>:
@@ -88,7 +69,7 @@ export function GoalCommandView(props: SceneViewProps): ReactElement {
           <Composer
             session={COMMAND_SESSION}
             agent={AGENT}
-            steerKey={steerKey(props.keys)}
+            keys={props.keys}
             menu={
               <ComposerMenu label="Slash commands" name="slash" count={1}>
                 <ComposerMenuRow

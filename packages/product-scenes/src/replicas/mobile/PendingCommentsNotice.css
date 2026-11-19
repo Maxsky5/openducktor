@@ -1,6 +1,8 @@
 @layer replica {
   :where(.stage) {
-    /* One muted 11 point line at the top of the composer card, with the underlined View link. */
+    /* One muted line at the top of the composer card, with the underlined View link. The text
+       takes caption2 at 11 points on 15 point lines, with the regular weight and the caption2
+       tracking. */
     .mob-comments-notice {
       display: flex;
       align-items: flex-start;
@@ -8,7 +10,9 @@
       padding: calc(10 * var(--u)) calc(12 * var(--u)) 0;
       color: var(--muted-foreground);
       font-size: calc(11 * var(--u));
+      font-weight: 400;
       line-height: calc(15 * var(--u));
+      letter-spacing: calc(0.2 * var(--u));
     }
     /* The notice shows while the composer card has pending comments. */
     .mob-composer-card:not([data-comments]) .mob-comments-notice {

@@ -1,0 +1,152 @@
+@layer replica {
+  :where(.stage) {
+    /* SettingsShortcutRow: flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3. */
+    .sr-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(8 * var(--u)) calc(16 * var(--u));
+      min-height: calc(64 * var(--u));
+      padding: calc(12 * var(--u)) calc(16 * var(--u));
+      list-style: none;
+    }
+    /* The name and the line under it: flex min-w-48 flex-1 flex-col gap-1. */
+    .sr-main {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      min-width: calc(192 * var(--u));
+    }
+    /* RowTitle: flex flex-wrap items-center gap-2 text-sm font-medium text-foreground. */
+    .sr-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      color: var(--foreground);
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    /* The Custom badge: an outline Badge with rounded-md px-1.5 py-0 text-[11px] font-normal
+       text-muted-foreground. It keeps the line height of the title. */
+    .sr-badge {
+      padding: 0 calc(6 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(11 * var(--u));
+      font-weight: 400;
+      line-height: 1.4286;
+    }
+    /* RowDetail: flex h-5 items-center gap-1.5 text-xs text-muted-foreground, with the value in
+       text-foreground/80. */
+    .sr-when {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      height: calc(20 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+    }
+    .sr-when-label {
+      color: color-mix(in oklab, var(--foreground) 80%, transparent);
+    }
+    /* The When picker of a command that runs anywhere: -mx-1 inline-flex h-5 items-center gap-1
+       rounded-md px-1, with a size-3.5 ChevronDown in text-muted-foreground. */
+    .sr-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      height: calc(20 * var(--u));
+      margin: 0 calc(-4 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: color-mix(in oklab, var(--foreground) 80%, transparent);
+    }
+    .sr-picker > svg {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* RecordingHint: text-xs leading-5 text-muted-foreground. */
+    .sr-hint {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    /* The keys and the buttons: ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2. */
+    .sr-side {
+      display: flex;
+      flex: none;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: calc(8 * var(--u));
+      margin-left: auto;
+    }
+    /* RowActions: Remove in a ghost Button of size sm, with text-muted-foreground. */
+    .sr-actions {
+      display: flex;
+      align-items: center;
+    }
+    .sr-remove {
+      color: var(--muted-foreground);
+    }
+    /* The key field: a ghost Button with h-8 min-w-16 justify-end gap-1 px-2 font-normal. While it
+       records, it has border border-input bg-card shadow-sm and border-ring. */
+    .sr-field {
+      justify-content: flex-end;
+      gap: calc(4 * var(--u));
+      min-width: calc(64 * var(--u));
+      height: calc(32 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      font-weight: 400;
+    }
+    .sr-field[data-hover] {
+      background: color-mix(in oklab, var(--accent) 60%, transparent);
+    }
+    .sr-row[data-recording] .sr-field {
+      border: calc(1 * var(--u)) solid var(--ring);
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+    }
+    /* Add keys: px-1 text-xs text-muted-foreground group-hover/row:text-foreground. The recorder
+       prompt: px-1 text-xs text-foreground. */
+    .sr-add,
+    .sr-press {
+      padding: 0 calc(4 * var(--u));
+      font-size: calc(12 * var(--u));
+    }
+    .sr-add {
+      color: var(--muted-foreground);
+    }
+    .sr-row[data-hover] .sr-add,
+    .sr-press {
+      color: var(--foreground);
+    }
+    /* ShortcutKeycaps: KbdGroup gap-1 of Kbd caps with h-6 min-w-6 rounded-md px-1.5 text-xs
+       text-foreground. */
+    .sr-keycaps {
+      gap: calc(4 * var(--u));
+    }
+    .sr-keycaps kbd {
+      min-width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
+      padding: 0 calc(6 * var(--u));
+      border-radius: calc(10 * var(--u));
+      color: var(--foreground);
+      font-size: calc(12 * var(--u));
+    }
+    /* CancelButton: a ghost Button of size sm with gap-1.5, and Esc in font-sans text-[10px]
+       text-muted-foreground. */
+    .sr-cancel {
+      gap: calc(6 * var(--u));
+    }
+    .sr-cancel kbd {
+      color: var(--muted-foreground);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: calc(10 * var(--u));
+    }
+  }
+}

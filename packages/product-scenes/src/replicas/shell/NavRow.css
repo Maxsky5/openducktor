@@ -102,6 +102,15 @@
     .nav-icon[data-tone="waiting_input"] {
       color: var(--warning-muted);
     }
+    /* The position hint shares the cell of the icon: col-start-1 row-start-1. While the window
+       shows the hints, the icon hides and the hint takes its place. */
+    .nav-icon > .position-hint,
+    .nav-icon:has(> .position-hint) > svg {
+      grid-area: 1 / 1;
+    }
+    [data-hints] .nav-icon:has(> .position-hint) > svg {
+      visibility: hidden;
+    }
     .nav-title {
       flex: 1;
       min-width: 0;

@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import * as lucide from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { COMPOSER_PLACEHOLDERS } from "./replicas/mobile/MobileComposer";
 import { ADDRESS_HINT, SCAN_CARD } from "./replicas/mobile/HostForm";
+import { CARD_LAYOUT } from "./replicas/mobile/pending-question";
+import { answeredStatus, QUESTION_ICONS, QUESTION_TEXT } from "./replicas/mobile/QuestionCard";
 import { REQUEST_LABELS } from "./replicas/mobile/RequestCard";
 import { SCAN_HINT } from "./replicas/mobile/ScanScreen";
-import { SETUP_TEXT } from "./replicas/mobile/SetupScreen";
+import { APP_VERSION_LABEL, SETUP_TEXT } from "./replicas/mobile/SetupScreen";
 import { TAB_BAR_EDGE } from "./replicas/mobile/TabBar";
 import { switchStatus } from "./replicas/settings/RemoteControl";
 import {
@@ -13,9 +17,13 @@ import {
 import { navGroupViews } from "./replicas/shell/nav";
 import { PHONE_SESSIONS } from "./sample/mobile";
 import { REQUEST } from "./scenes/mobile-needs-you/sample";
+import * as question from "./scenes/mobile-question/sample";
 import { importProduct, readProduct } from "./test-support/product-source";
 
 type Outcome = "approve_once" | "approve_turn" | "approve_session" | "approve_always" | "reject";
+type QuestionRequest = { requestId: string; questions: readonly (typeof question.QUESTION)[] };
+type DraftEntry = { selectedOptionValues: string[]; freeText: string; useFreeText: boolean };
+type FlowAction = { kind: string; label: string; enabled?: boolean };
 
 // SAFETY: session-navigation-entry-labels.ts exports these labels, and a missing export fails the
 // test.
@@ -24,22 +32,43 @@ const { SESSION_GROUP_LABELS, ATTENTION_REASON_LABELS } = await importProduct<{
   ATTENTION_REASON_LABELS: Record<string, string>;
 }>("packages/frontend-core/src/sessions/navigation/session-navigation-entry-labels.ts");
 // SAFETY: pending-input-labels.ts exports these labels.
-const { PENDING_INPUT_LABELS } = await importProduct<{
+const { PENDING_INPUT_LABELS, questionAnsweredStatus } = await importProduct<{
   PENDING_INPUT_LABELS: Record<string, string>;
+  questionAnsweredStatus: (answered: number, questions: number) => string;
 }>("packages/frontend-core/src/sessions/pending-input/pending-input-labels.ts");
+// SAFETY: agent-session-question-draft.ts exports these functions.
+const drafts = await importProduct<{
+  createAgentQuestionDraft: (request: QuestionRequest) => DraftEntry[];
+  toggleAgentQuestionOption: (
+    asked: typeof question.QUESTION,
+    entry: DraftEntry | undefined,
+    value: string,
+  ) => DraftEntry;
+  isAgentQuestionRequestComplete: (request: QuestionRequest, draft: DraftEntry[]) => boolean;
+  agentQuestionTitle: (asked: typeof question.QUESTION, index: number) => string;
+  agentQuestionCompletionText: (isComplete: boolean) => string;
+}>("packages/frontend-core/src/sessions/pending-input/agent-session-question-draft.ts");
+// SAFETY: these modules of the mobile app import no React Native code.
+const { buildQuestionFlowView } = await importProduct<{
+  buildQuestionFlowView: (input: {
+    request: QuestionRequest;
+    draft: DraftEntry[];
+    activeTabId: string;
+    isComplete: boolean;
+  }) => { steps: unknown[]; progressLabel: string | null; action: FlowAction };
+}>("apps/mobile/src/features/session/pending-input/question-flow.ts");
+const { optionIcon } = await importProduct<{
+  optionIcon: (multiple: boolean, selected: boolean) => string;
+}>("apps/mobile/src/features/session/pending-input/question-option-icon.ts");
+const { ICONS } = await importProduct<{ ICONS: Record<string, string> }>(
+  "apps/mobile/src/ui/icon-names.ts",
+);
 // SAFETY: agent-session-approval-card-model.ts exports these functions.
 const approvals = await importProduct<{
   approvalOutcomeLabel: (outcome: Outcome, request: { persistentGrant?: undefined }) => string;
   approvalOutcomeEmphasis: (outcome: Outcome) => "primary" | "secondary" | "destructive";
   approvalRequestDescription: (request: { title: string }) => string | undefined;
 }>("packages/frontend-core/src/sessions/pending-input/agent-session-approval-card-model.ts");
-// SAFETY: agent-session-waiting-input.ts exports this function.
-const { getAgentSessionWaitingInputPlaceholder } = await importProduct<{
-  getAgentSessionWaitingInputPlaceholder: (session: {
-    pendingApprovals: readonly unknown[];
-    pendingQuestions: readonly unknown[];
-  }) => string | null;
-}>("packages/frontend-core/src/lib/agent-session-waiting-input.ts");
 // SAFETY: the contracts export these values.
 const contracts = await importProduct<{
   REMOTE_HTTP_WARNING: string;
@@ -60,6 +89,14 @@ const { tabBarEdgePath } = await importProduct<{ tabBarEdgePath: (width: number)
 const { approvalMutationLabel } = await importProduct<{
   approvalMutationLabel: (mutation: "unknown") => string | null;
 }>("apps/mobile/src/features/session/pending-input/permission-reply-options.ts");
+// SAFETY: needs-you.ts exports this function.
+const { needsYouBadgeText } = await importProduct<{ needsYouBadgeText: (count: number) => string }>(
+  "apps/mobile/src/navigation/tab-bar/needs-you.ts",
+);
+// SAFETY: app.config.ts exports the Expo config of the app as its default export.
+const { default: appConfig } = await importProduct<{
+  default: { version: string; ios: { buildNumber: string } };
+}>("apps/mobile/app.config.ts");
 
 // The setup screens have their words in their markup, so the test reads the product source as
 // text.
@@ -75,12 +112,29 @@ const setupSource = (
 
 const VARIANTS = { primary: "default", secondary: "outline", destructive: "destructive" };
 
+/** The lucide-react name of the Lucide icon `name`, such as CircleCheck for circle-check. */
+const componentName = (name: string | undefined): string =>
+  (name ?? "")
+    .split("-")
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join("");
+
+/** The names that lucide-react exports `Icon` under, such as CircleHelp and CircleQuestionMark. */
+const exportNames = (Icon: LucideIcon): string[] =>
+  Object.entries(lucide).flatMap(([name, value]) => (value === Icon ? [name] : []));
+
 describe("the mobile app copied in the replicas", () => {
   test("the Sessions tab shows the group and attention labels of the app", () => {
-    for (const view of navGroupViews(PHONE_SESSIONS)) {
-      expect(view.label).toBe(SESSION_GROUP_LABELS[view.group] ?? "");
+    for (const sessions of [PHONE_SESSIONS, question.START_SESSIONS]) {
+      for (const view of navGroupViews(sessions)) {
+        expect(view.label).toBe(SESSION_GROUP_LABELS[view.group] ?? "");
+      }
+      const needsYou = navGroupViews(sessions).find((view) => view.group === "needs_you");
+      expect(needsYouBadgeText(needsYou?.count ?? 0)).toBe("1");
+      for (const entry of needsYou?.entries ?? []) {
+        expect(Object.values(ATTENTION_REASON_LABELS)).toContain(entry.attention ?? "");
+      }
     }
-    expect(Object.values(ATTENTION_REASON_LABELS)).toContain("Permission");
   });
 
   test("the tab bar has the cradle of the app at the width of the phone", () => {
@@ -104,10 +158,71 @@ describe("the mobile app copied in the replicas", () => {
     }
   });
 
-  test("the composer asks for the reply while the request waits", () => {
+  test("the question card follows the draft and the flow of one question in the app", () => {
+    const request: QuestionRequest = { requestId: "pin-order", questions: [question.QUESTION] };
+    const draft = drafts.createAgentQuestionDraft(request);
+    const open = buildQuestionFlowView({ request, draft, activeTabId: "0", isComplete: false });
+    // One question has one step, so the card shows no tabs, no progress, and no summary.
+    expect(open.steps).toHaveLength(1);
+    expect(open.progressLabel).toBeNull();
+    expect(open.action).toEqual({ kind: "submit", label: QUESTION_TEXT.submit, enabled: false });
+    const chosen = [
+      drafts.toggleAgentQuestionOption(question.QUESTION, draft[0], question.QUESTION.answer),
+    ];
+    expect(drafts.isAgentQuestionRequestComplete(request, chosen)).toBe(true);
     expect(
-      getAgentSessionWaitingInputPlaceholder({ pendingApprovals: [{}], pendingQuestions: [] }),
-    ).toBe(COMPOSER_PLACEHOLDERS.approval);
+      buildQuestionFlowView({ request, draft: chosen, activeTabId: "0", isComplete: true }).action,
+    ).toEqual({ kind: "submit", label: QUESTION_TEXT.submit, enabled: true });
+    expect(drafts.agentQuestionTitle(question.QUESTION, 0)).toBe(question.QUESTION.header);
+    expect(drafts.agentQuestionCompletionText(false)).toBe(QUESTION_TEXT.hint.open);
+    expect(drafts.agentQuestionCompletionText(true)).toBe(QUESTION_TEXT.hint.complete);
+    for (const answered of [0, 1]) {
+      expect(answeredStatus(answered, 1)).toBe(questionAnsweredStatus(answered, 1));
+    }
+  });
+
+  // The question card writes its button labels and its icons in its markup, so the test reads the
+  // product source as text.
+  test("the question card shows the words and the icons of the app", async () => {
+    const markup = await readProduct(
+      "apps/mobile/src/features/session/pending-input/structured-question-card.tsx",
+    );
+    for (const text of [
+      `label="${QUESTION_TEXT.reset}"`,
+      `"${QUESTION_TEXT.submitting}"`,
+      `label="${QUESTION_TEXT.other}"`,
+      'icon="sparkles"',
+      'icon="message-square-plus"',
+    ]) {
+      expect(markup).toContain(text);
+    }
+    expect([optionIcon(false, false), optionIcon(false, true)]).toEqual(["circle", "circle-check"]);
+    expect(await readProduct("apps/mobile/src/ui/loader-spinner.tsx")).toContain(
+      'name="loader-circle"',
+    );
+    for (const [name, Icon] of Object.entries(QUESTION_ICONS)) {
+      expect(exportNames(Icon)).toContain(componentName(ICONS[name]));
+    }
+  });
+
+  test("the question card takes its new height in the time of the app", async () => {
+    const card = await readProduct(
+      "apps/mobile/src/features/session/pending-input/request-card.tsx",
+    );
+    expect(card).toContain(
+      "LinearTransition.duration(motion.base)\n  .easing(motion.easeOutCurve)",
+    );
+    const tokens = await readProduct("apps/mobile/src/theme/tokens.ts");
+    expect(tokens).toContain(`base: ${CARD_LAYOUT * 1_000},`);
+    expect(tokens).toContain("easeOutCurve: Easing.bezier(0.23, 1, 0.32, 1)");
+  });
+
+  // The mobile composer writes its placeholder for a waiting session in its markup, so the test
+  // reads the product source as text.
+  test("the composer says Waiting while the request waits", async () => {
+    expect(await readProduct("apps/mobile/src/features/composer/session-composer.tsx")).toContain(
+      `isWaitingInput ? "${COMPOSER_PLACEHOLDERS.waiting}"`,
+    );
   });
 
   test("Remote control shows the text and the code lifetime of the app", () => {
@@ -118,6 +233,10 @@ describe("the mobile app copied in the replicas", () => {
         remoteControlSwitchDescription({ status: "available", connectedClients: connected }, false),
       );
     }
+  });
+
+  test("the setup screen shows the version label of the app", () => {
+    expect(APP_VERSION_LABEL).toBe(`${appConfig.version} (${appConfig.ios.buildNumber})`);
   });
 
   test("the setup, the host form, and the camera show the words of the app", () => {

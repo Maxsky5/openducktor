@@ -1,12 +1,14 @@
 @layer replica {
   :where(.stage) {
     /* The track: 32 points high under the 20 point space of the drag label. The thumb sits 2.4
-       points inside the edge, and the fill reaches past it to the edge of the shell. */
+       points inside the edge, and the fill reaches 2.4 points past it. The stops sit from 16
+       points after the start to 16 points before the end. */
     .mob-slider {
+      --slider-line: rgb(0 0 0 / 0.084);
       --slider-tick-color: rgb(0 0 0 / 0.176);
+      --slider-thumb-shadow: rgb(0 0 0 / 0.1);
       --slider-from: #006aff;
       --slider-to: #0059d4;
-      --slider-under: #66a6ff;
       --slider-room: calc(100% - 32 * var(--u));
       display: block;
       padding-top: calc(20 * var(--u));
@@ -14,22 +16,23 @@
     .mob-slider[data-fill="standard"] {
       --slider-from: var(--slate-400);
       --slider-to: var(--slate-500);
-      --slider-under: oklch(92.9% 0.013 255.508);
     }
     :where([data-theme="dark"]) & .mob-slider {
+      --slider-line: rgb(255 255 255 / 0.08);
       --slider-tick-color: rgb(255 255 255 / 0.256);
+      --slider-thumb-shadow: rgb(0 0 0 / 0.18);
     }
+    /* The shell: a vertical wash with a half point outline, which the fill covers. */
     .mob-slider-shell {
       position: relative;
       display: block;
       height: calc(32 * var(--u));
       overflow: hidden;
-      border: calc(1 * var(--u)) solid rgb(0 0 0 / 0.084);
       border-radius: calc(16 * var(--u));
       background: linear-gradient(180deg, rgb(230 230 232 / 0.504), rgb(232 232 233 / 0.357));
+      box-shadow: inset 0 0 0 calc(0.5 * var(--u)) var(--slider-line);
     }
     :where([data-theme="dark"]) & .mob-slider-shell {
-      border-color: rgb(255 255 255 / 0.08);
       background: linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.1));
     }
     .mob-slider-fill {
@@ -41,6 +44,25 @@
       border-radius: calc(16 * var(--u));
       background: linear-gradient(90deg, var(--slider-from), var(--slider-to));
     }
+    .mob-slider-thumb {
+      position: absolute;
+      top: calc(2.4 * var(--u));
+      left: calc(2.4 * var(--u) + var(--slider-at) * var(--slider-room));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: calc(27.2 * var(--u));
+      height: calc(27.2 * var(--u));
+      border-radius: 50%;
+      background: linear-gradient(180deg, #fff, #f5f5f5);
+      box-shadow: 0 calc(1 * var(--u)) calc(1 * var(--u)) var(--slider-thumb-shadow);
+    }
+    .mob-slider-thumb .lucide {
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      color: var(--slate-500);
+    }
+    /* The ticks draw over the thumb and grow from 4.8 to 9.6 points. */
     .mob-slider-tick {
       position: absolute;
       top: 50%;
@@ -51,26 +73,16 @@
       background: var(--slider-tick-color);
       transform: translate(-50%, -50%);
     }
-    .mob-slider-tick[data-under] {
-      background: var(--slider-under);
+    .mob-slider-tick[data-on-thumb] {
+      background: rgb(0 0 0 / 0.45);
     }
-    .mob-slider-thumb {
-      position: absolute;
-      top: calc(1.4 * var(--u));
-      left: calc(1.4 * var(--u) + var(--slider-at) * var(--slider-room));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: calc(27.2 * var(--u));
-      height: calc(27.2 * var(--u));
-      border-radius: 50%;
-      background: linear-gradient(180deg, #fff, #f5f5f5);
-      box-shadow: 0 calc(1 * var(--u)) calc(1 * var(--u)) rgb(0 0 0 / 0.1);
+    .mob-slider[data-marked] .mob-slider-tick[data-on-thumb] {
+      opacity: 0;
     }
-    .mob-slider-thumb .lucide {
-      width: calc(14 * var(--u));
-      height: calc(14 * var(--u));
-      color: var(--slate-500);
+    /* A disabled track, alone or in a busy form: the half opacity of a disabled StepTrack. */
+    [data-busy] .mob-slider,
+    .mob-slider[data-disabled] {
+      opacity: 0.5;
     }
   }
 }

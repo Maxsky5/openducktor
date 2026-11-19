@@ -1,5 +1,10 @@
 @layer replica {
   :where(.stage) {
+    /* The approval step renders its notice row of approval-views.tsx even without a notice, so
+       12 more points of space show above the fields. */
+    .mob-approve-form .mob-fsheet-body {
+      padding-top: calc(24 * var(--u));
+    }
     /* ChoiceSection: a section label over its choices, 12 points apart. */
     .mob-approve-section {
       display: grid;
@@ -37,11 +42,12 @@
       align-items: center;
       gap: calc(6 * var(--u));
       min-height: calc(32 * var(--u));
-      padding: 0 calc(12 * var(--u));
+      padding: calc(4 * var(--u)) calc(12 * var(--u));
       color: var(--m-tint);
       font-size: calc(13 * var(--u));
       font-weight: 500;
       line-height: calc(18 * var(--u));
+      letter-spacing: calc(-0.1 * var(--u));
     }
     .mob-approve-link .lucide {
       width: calc(14 * var(--u));
@@ -81,13 +87,11 @@
       min-width: 0;
       color: var(--info-surface-foreground);
     }
+    /* The title takes the panel color. The sentence under it keeps the label color. */
     .mob-approve-tone-text b {
       font-size: calc(13 * var(--u));
       font-weight: 600;
       line-height: calc(18 * var(--u));
-    }
-    .mob-approve-tone-text .mob-approve-code {
-      color: var(--info-surface-foreground);
     }
     .mob-approve-step {
       color: var(--foreground);

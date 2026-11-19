@@ -1,6 +1,7 @@
 // The workflow action group of a task card in kanban-task-card.tsx: the button of the next step of
 // the task, or its running session, and the menu of the other actions. The icons come from
-// TASK_ACTION_ICON in task-action-ui.tsx.
+// TASK_ACTION_ICON in task-action-ui.tsx. Close Task is the core action that leads on a merged task
+// branch, with the warning look of coreTaskActionPrimaryVariant.
 import {
   ChevronDown,
   CircleCheckBig,
@@ -30,7 +31,14 @@ const ICONS = {
   "Approve Task": { Icon: CircleCheckBig },
   "Request Changes": { Icon: Undo2 },
   "Open Builder": { Icon: SquareArrowOutUpRight },
+  "Close Task": { Icon: CircleCheckBig },
 } as const satisfies Record<CardAction, CardIcon>;
+
+/** The look of the button of an action: filled for the next step, warning for Close Task. */
+function variantOf(action: CardAction): "default" | "outline" | "warning" {
+  if (action === "Close Task") return "warning";
+  return PRIMARY_ACTIONS.has(action) ? "default" : "outline";
+}
 
 function ActionIcon({ action }: { action: CardAction }): ReactElement {
   const icon = ICONS[action];
@@ -55,12 +63,7 @@ function MainAction({ action, session }: CardActionsData): ReactNode {
   }
   if (!action) return null;
   return (
-    <Button
-      variant={PRIMARY_ACTIONS.has(action) ? "default" : "outline"}
-      size="sm"
-      className="card-action"
-      data-card-action
-    >
+    <Button variant={variantOf(action)} size="sm" className="card-action" data-card-action>
       <ActionIcon action={action} />
       {action}
     </Button>
@@ -71,7 +74,7 @@ export function CardActions(data: CardActionsData): ReactElement {
   return (
     <div className="card-actions" data-card-actions="">
       <MainAction {...data} />
-      <Button variant="outline" size="sm" className="card-menu">
+      <Button variant="outline" size="sm" className="card-menu" data-card-menu>
         <ChevronDown />
       </Button>
     </div>

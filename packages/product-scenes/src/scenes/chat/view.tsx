@@ -22,6 +22,8 @@ import { AgentText } from "../../replicas/transcript/AgentText";
 import { TaskResult } from "../../replicas/transcript/TaskResult";
 import { Thread } from "../../replicas/transcript/Thread";
 import { ToolRow } from "../../replicas/transcript/ToolRow";
+import { ToolRun } from "../../replicas/transcript/ToolRun";
+import { call } from "../../sample/calls";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
 import { COMMANDS } from "../../sample/commands";
 import { signature } from "../../sample/sessions";
@@ -114,20 +116,28 @@ function SlashMenu(): ReactElement {
   );
 }
 
-/** The turn: the message, the task search, and the tasks that the agent creates. */
+/**
+ * The turn: the message, the task search, and the tasks that the agent creates. The search is a
+ * tool run of one call, which folds when the answer comes. Each create_task call shows on its own
+ * line, with its task under it.
+ */
 function ChatThread(): ReactElement {
   return (
     <Thread>
       <UserMessage time="10:24:12 AM" row="message">
         {MESSAGE}
       </UserMessage>
-      <ToolRow
-        kind="tool"
-        name="search_tasks"
-        args={SEARCH.done}
-        duration="212ms"
-        time="10:24:15 AM"
-        row="search"
+      <ToolRun
+        calls={[
+          call("search", {
+            tool: "tool",
+            name: "search_tasks",
+            summary: SEARCH.done,
+            duration: "212ms",
+            time: "10:24:15 AM",
+          }),
+        ]}
+        folded
       />
       <AgentText row="plan">
         <p>
@@ -137,9 +147,9 @@ function ChatThread(): ReactElement {
       </AgentText>
       {CREATED_TASKS.map((task) => (
         <ToolRow
-          kind="tool"
+          tool="tool"
           name="create_task"
-          args={task.title}
+          summary={task.title}
           duration="64ms"
           time={task.time}
           row={`create-${task.id}`}
@@ -180,7 +190,7 @@ export function ChatView({
         <ChatHeader />
         <ChatColumn className="ch-column">
           <ChatThread />
-          <Composer session={CHAT_SESSION} menu={<SlashMenu />}>
+          <Composer session={CHAT_SESSION} keys={props.keys} menu={<SlashMenu />}>
             <ComposerDraft>
               <span className="ch-chip" hidden data-chip="">
                 {`/${COMMANDS[0]?.trigger}`}

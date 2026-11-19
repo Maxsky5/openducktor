@@ -61,6 +61,11 @@ export type SessionListHooks = {
   badges?: (entries: readonly NavEntry[], animate: boolean) => void;
   /** Shows more of the state of `entry` on its element. */
   render?: (item: HTMLElement, entry: NavEntry) => void;
+  /**
+   * The list moves an entry and changes a count at once, as the Sessions tab of the mobile app,
+   * which has no layout animation.
+   */
+  instant?: boolean;
 };
 
 /** Shows the badges of each workspace tile of the rail in `root`. A badge that turns on pops. */
@@ -149,15 +154,16 @@ export function sessionList(scene: Scene, root: HTMLElement, hooks: SessionListH
       const item = element(id);
       const group = list(navGroup(entry));
       const stays = !item.hidden && item.parentElement === group;
-      if (!item.hidden && !stays) closeCopy(item);
+      const animate = !hooks.instant;
+      if (animate && !item.hidden && !stays) closeCopy(item);
       item.hidden = false;
       show(item, entry);
       if (!stays) {
         group.prepend(item);
-        scene.run(growIn(item, 0.4));
+        if (animate) scene.run(growIn(item, 0.4));
       }
-      recount(true);
-      showBadges(true);
+      recount(animate);
+      showBadges(animate);
     });
 
   /**

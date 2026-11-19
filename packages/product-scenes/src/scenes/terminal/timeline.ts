@@ -6,7 +6,7 @@ import type { SceneBuilder } from "../../motion/scene";
 import { typeText } from "../../motion/text";
 import { EASE } from "../../motion/tokens";
 import { pointer } from "../../replicas/shell/cursor";
-import { keystrokes } from "../../replicas/shell/keystrokes";
+import { keyPresses } from "../../replicas/ui/held-keys";
 import {
   PANEL_OPEN,
   selectTab,
@@ -70,9 +70,9 @@ export const build: SceneBuilder = (scene) => {
   const lines = (id: string): HTMLElement[] => all(term(id), "[data-term-line]");
   const input = must(term("shell"), "[data-input]");
   const arrow = must(root, "[data-cursor]", SVGSVGElement);
-  const tip = tooltip(root);
+  const tip = tooltip(scene, root);
   const cursor = pointer(scene, root);
-  const keys = keystrokes(scene);
+  const keys = keyPresses(scene);
   // A phone stage hides the right panel, as a narrow window shows one panel at a time.
   const showsRight = getComputedStyle(right.panel).display !== "none";
 

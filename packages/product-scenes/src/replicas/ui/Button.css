@@ -1,11 +1,12 @@
 @layer product {
   :where(.stage) {
-    /* Button of components/ui/button.tsx, in the sizes and looks of the copied views. */
+    /* Button of components/ui/button.tsx, in the sizes and looks of the copied views: inline-flex
+       items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap. */
     .ui-button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: calc(6 * var(--u));
+      gap: calc(8 * var(--u));
       border-radius: calc(10 * var(--u));
       font-weight: 500;
       white-space: nowrap;
@@ -42,17 +43,22 @@
       color: var(--primary-foreground);
       box-shadow: var(--shadow-sm);
     }
+    /* Outline: border border-input bg-card, without a shadow. */
     .ui-button[data-variant="outline"] {
       border: calc(1 * var(--u)) solid var(--input);
       background: var(--card);
       color: var(--foreground);
-      box-shadow: var(--shadow-sm);
     }
     .ui-button[data-variant="destructive"] {
       border: calc(1 * var(--u)) solid transparent;
       background: var(--destructive);
       color: var(--destructive-foreground);
-      box-shadow: var(--shadow-sm);
+    }
+    /* warning: border border-warning-border bg-warning-surface text-warning-muted. */
+    .ui-button[data-variant="warning"] {
+      border: calc(1 * var(--u)) solid var(--warning-border);
+      background: var(--warning-surface);
+      color: var(--warning-muted);
     }
     .ui-button[data-variant="secondary"] {
       background: color-mix(in oklab, var(--secondary) 70%, transparent);
@@ -64,6 +70,11 @@
     }
     .ui-button[data-disabled] {
       opacity: 0.5;
+    }
+    /* A busy button shows its spinner in the place of its icon. */
+    .ui-button:not([data-busy]) .ui-busy-icon,
+    .ui-button[data-busy] .ui-idle-icon {
+      display: none;
     }
   }
 }

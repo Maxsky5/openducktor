@@ -86,6 +86,21 @@ describe("scene.run", () => {
     }
   });
 
+  test("calls the end callback of an animation that a long tick passes", () => {
+    const [{ gsap }] = modules;
+    const { scene } = motion();
+    const done: string[] = [];
+    scene.at(1, () => {
+      scene.run(gsap.to({ x: 0 }, { x: 1, duration: 0.15, onComplete: () => done.push("close") }));
+    });
+    scene.endAt(2);
+    // A slow frame moves the playhead from 0.9 s to 1.4 s, past the whole animation, in one tick.
+    scene.timeline.time(0.9);
+    scene.timeline.time(1.4);
+    scene.timeline.kill();
+    expect(done).toEqual(["close"]);
+  });
+
   test("fails outside a change of scene.at", () => {
     const [{ gsap }] = modules;
     const { scene } = motion();

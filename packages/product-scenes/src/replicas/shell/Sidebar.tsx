@@ -20,7 +20,7 @@ import { WORKSPACE } from "../../sample/workspace";
 import { flag } from "../flag";
 import type { KeyLabels } from "../keys";
 import { Kbd } from "../ui/Kbd";
-import { type NavData, type NavGroupId, navGroupViews } from "./nav";
+import { type NavData, type NavGroupId, navGroupViews, navPositions, positionHint } from "./nav";
 import { NavRow } from "./NavRow";
 import "./NavGroups.css";
 import "./Sidebar.css";
@@ -45,6 +45,11 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
   const groups = navGroupViews(nav.entries);
   const collapsed = nav.collapsed ?? [];
   const omitted = nav.omitted ?? [];
+  const positions = nav.hints ? navPositions(nav) : new Map<string, number>();
+  const hintOf = (id: string): string | undefined => {
+    const position = positions.get(id);
+    return position === undefined ? undefined : positionHint("session", position, keys);
+  };
   return (
     <div className="sidebar">
       <div className="sb-head">
@@ -80,7 +85,7 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
           </span>
         </div>
       </div>
-      <div className="sb-controls">
+      <div className="sb-controls" data-nav-controls="">
         <span className="sb-scope">
           <span data-checked={flag(nav.scope === "current")}>{WORKSPACE}</span>
           <span data-checked={flag(nav.scope === "all")}>All workspaces</span>
@@ -89,7 +94,7 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
           <ListTree />
         </span>
       </div>
-      <div className="sb-sessions">
+      <div className="sb-sessions" data-nav-sessions="">
         {groups.map(({ group, label, entries, count, hidden }) => {
           const Icon = ICONS[group];
           return (
@@ -111,14 +116,14 @@ export function Sidebar({ nav, kanban = false, keys, version }: SidebarProps): R
               </span>
               <ul className="sb-list" hidden={collapsed.includes(group)} data-nav-list={group}>
                 {entries.map((entry) => (
-                  <NavRow entry={entry} key={entry.id} />
+                  <NavRow entry={entry} hint={hintOf(entry.id)} key={entry.id} />
                 ))}
               </ul>
             </div>
           );
         })}
       </div>
-      <div className="sb-footer">
+      <div className="sb-footer" data-nav-footer="">
         <span className="sb-settings">
           <Settings />
           Settings

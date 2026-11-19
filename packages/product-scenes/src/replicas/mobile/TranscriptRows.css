@@ -1,97 +1,109 @@
 @layer replica {
   :where(.stage) {
-    /* A tool line of row-parts.tsx: a 32 point line, 2 points above and under it. */
-    .mob-tool-row {
-      padding: calc(2 * var(--u)) 0;
-    }
-    .mob-tool {
-      display: flex;
-      align-items: center;
-      gap: calc(8 * var(--u));
-      min-height: calc(32 * var(--u));
-      padding: 0 calc(4 * var(--u));
-      font-size: calc(13 * var(--u));
-      line-height: calc(18 * var(--u));
-    }
-    .mob-tool-icon.lucide {
-      width: calc(14 * var(--u));
-      height: calc(14 * var(--u));
-      color: var(--muted-foreground);
-    }
-    .mob-tool-name {
-      flex: 0 0 auto;
-      max-width: 45%;
-      overflow: hidden;
-      color: var(--foreground);
-      font-weight: 500;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-    .mob-tool-summary {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      color: var(--muted-foreground);
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-    /* ToolTiming: a spinner while the call runs, the run time, and the clock time. */
-    .mob-tool-timing {
-      display: flex;
-      flex: 0 0 auto;
-      align-items: center;
-      gap: calc(8 * var(--u));
-      margin-left: auto;
-      color: var(--muted-foreground);
-      font-size: calc(11.5 * var(--u));
-      line-height: calc(16 * var(--u));
-      font-variant-numeric: tabular-nums;
-    }
-    .mob-tool-spinner.lucide {
-      display: none;
-      width: calc(12 * var(--u));
-      height: calc(12 * var(--u));
-    }
-    .mob-tool[data-running] .mob-tool-spinner {
-      display: block;
-    }
-    .mob-tool[data-running] .mob-tool-duration {
-      display: none;
-    }
-    /* An assistant message: the article padding of assistant-message-row.tsx. */
+    /* AssistantMessageRow: the desktop article `px-1 pt-1 pb-3` and its `space-y-2`. */
     .mob-agent {
+      display: grid;
+      gap: calc(8 * var(--u));
       padding: calc(4 * var(--u)) calc(4 * var(--u)) calc(12 * var(--u));
     }
+    /* The `document` Markdown of the app: 15 point text on 24 point lines, and 8 points between
+       two paragraphs. */
     .mob-agent-text {
       display: grid;
       gap: calc(8 * var(--u));
-      padding: 0 calc(4 * var(--u));
       color: var(--foreground);
-      font-size: calc(15 * var(--u));
-      line-height: calc(22 * var(--u));
-    }
-    .mob-agent-text code {
-      padding: 0 calc(4 * var(--u));
-      border-radius: calc(4 * var(--u));
-      background: var(--muted);
-      font-family: var(--mono);
-      font-size: calc(13 * var(--u));
-    }
-    /* A user message: a chat surface bubble on the right, at most 80% wide. */
-    .mob-user {
-      display: flex;
-      justify-content: flex-end;
-      padding: calc(16 * var(--u)) 0;
-    }
-    .mob-user-bubble {
-      max-width: 80%;
-      padding: calc(8 * var(--u)) calc(14 * var(--u));
-      border-radius: calc(16 * var(--u)) calc(16 * var(--u)) calc(8 * var(--u));
-      background: var(--chat-surface);
-      color: var(--foreground);
-      box-shadow: var(--m-shadow-raised);
       font-size: calc(15 * var(--u));
       line-height: calc(24 * var(--u));
+    }
+    /* Inline code: medium IBM Plex Mono at 13 points in rose, with a thin space on each side. */
+    .mob-agent-text code {
+      color: var(--rose-600);
+      font-family: var(--mono);
+      font-size: calc(13 * var(--u));
+      font-weight: 500;
+    }
+    :where([data-theme="dark"]) & .mob-agent-text code {
+      color: var(--rose-400);
+    }
+    .mob-agent-text code::before,
+    .mob-agent-text code::after {
+      content: "\2009";
+    }
+    /* A link: medium text in the foreground color, underlined in the muted color. */
+    .mob-agent-link {
+      color: var(--foreground);
+      font-weight: 500;
+      text-decoration: underline;
+      text-decoration-color: var(--muted-foreground);
+    }
+    /* The footer of the last message of a turn: a dot in the runtime accent, the model that
+       answered, and the copy and fork actions. */
+    .mob-agent-footer {
+      display: flex;
+      align-items: center;
+      gap: calc(4 * var(--u));
+      min-height: calc(20 * var(--u));
+    }
+    .mob-agent-info {
+      display: flex;
+      flex: 0 1 auto;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+      margin-right: calc(2 * var(--u));
+      color: var(--muted-foreground);
+      font-size: calc(12.5 * var(--u));
+      line-height: calc(17 * var(--u));
+    }
+    .mob-agent-info > i {
+      flex: 0 0 auto;
+      width: calc(6 * var(--u));
+      height: calc(6 * var(--u));
+      border-radius: calc(3 * var(--u));
+      background: var(--odt-runtime-accent-opencode);
+    }
+    .mob-agent-info[data-runtime="codex"] > i {
+      background: var(--odt-runtime-accent-codex);
+    }
+    .mob-agent-info[data-runtime="claude"] > i {
+      background: var(--odt-runtime-accent-claude);
+    }
+    .mob-agent-info > span {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mob-agent-action.lucide {
+      flex: 0 0 auto;
+      box-sizing: content-box;
+      width: calc(13 * var(--u));
+      height: calc(13 * var(--u));
+      padding: 0 calc(4 * var(--u));
+      color: var(--muted-foreground);
+    }
+    /* SeparatorRow: the label between hairlines, 32 points above and 8 points under. */
+    .mob-separator {
+      display: flex;
+      align-items: center;
+      gap: calc(12 * var(--u));
+      padding: calc(32 * var(--u)) calc(4 * var(--u)) calc(8 * var(--u));
+    }
+    .mob-separator > i {
+      flex: 1;
+      height: calc(1 * var(--u));
+      background: var(--border);
+    }
+    .mob-separator > span {
+      flex: 0 1 auto;
+      overflow: hidden;
+      color: var(--muted-foreground);
+      font-size: calc(12.5 * var(--u));
+      font-weight: 500;
+      line-height: calc(17 * var(--u));
+      letter-spacing: calc(0.3 * var(--u));
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
   }
 }

@@ -14,10 +14,14 @@ export function composerActivity(root: HTMLElement) {
   };
 }
 
-/** The context ring of the composer, in the format of agent-context-usage-indicator.tsx. */
+/**
+ * The context ring of the composer, in the format of agent-context-usage-indicator.tsx. A session
+ * without token use shows no ring, as extractLatestSessionContextUsage gives no usage then.
+ */
 export function contextMeter(meter: HTMLElement) {
   const tokens = must(meter, "[data-tokens]");
   return (use: ContextUse): void => {
+    meter.hidden = use.tokens <= 0;
     meter.style.setProperty("--used", `${Math.min(use.percent, 100)}`);
     tokens.textContent = compactTokens(use.tokens);
   };

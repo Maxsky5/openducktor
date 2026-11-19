@@ -8,8 +8,19 @@ import { MOTION_QUERY } from "./preference";
 import type { SceneBuilder } from "./scene";
 import { motionState } from "./state";
 
-/** Seconds of one rendered frame, when `seek` plays a scene up to a time. */
+/** Seconds of one rendered frame, when a renderer plays a scene or a film up to a time. */
 const FRAME = 1 / 60;
+
+/**
+ * Calls `show` with each frame time after `from`, up to `to`, so a renderer that moves forward runs
+ * each change of a scene at its time: the steps of a scene measure the page when they run.
+ */
+export function stepForward(from: number, to: number, show: (time: number) => void): void {
+  for (let at = from; at < to;) {
+    at = Math.min(to, at + FRAME);
+    show(at);
+  }
+}
 
 /** The controls of a mounted scene. */
 export type SceneHandle = {
@@ -87,12 +98,8 @@ export function mountScene<Template extends string>(
         loop?.stop();
         loop = startLoop();
       }
-      // The steps of a scene measure the page when they run, so the scene plays frame by frame.
       const run = current();
-      for (let at = run.time(); at < time;) {
-        at = Math.min(time, at + FRAME);
-        run.time(at);
-      }
+      stepForward(run.time(), time, (at) => run.time(at));
     },
     duration: () => current().duration(),
     stop: () => media.revert(),

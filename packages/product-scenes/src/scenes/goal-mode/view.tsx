@@ -34,13 +34,14 @@ export function GoalModeView(props: SceneViewProps): ReactElement {
     <SceneFrame
       {...props}
       name="goal-mode"
-      alt={`The session page of the task Open search with a keyboard shortcut, in Ready for dev. The Planner session is open, and its plan shows in the Artifacts tab. The visitor clicks Start Implementation. The dialog Start Builder session opens with the target branch origin/main, the model GPT-6-Astra on Codex, and two switches: Goal mode and Customize first message. The visitor turns Goal mode on. The Goal field opens with the default goal: implement the task as its description, spec, and plan define, until each requirement works, every required check passes, and the build is reported as completed. Customize first message goes away. The visitor clicks Generate goal. The button shows Generating goal, and a sharper goal replaces the text: Cmd+K and Ctrl+K open the search dialog, the shortcut does nothing with Shift, in a text field, in the note editor, or while another dialog is open, and the search tests pass. The visitor clicks Start session. The dialog shows the startup steps, then the Builder session opens. A goal row shows above the composer: Goal, Active, and the first line of the goal, with Pause goal and Clear goal. The Builder works without a first message. It reads the task, writes the hook and the app shell, and ends its turn. Codex starts the next turn by itself: the Builder writes the tests and runs them. The visitor clicks the goal row, which opens to show the whole goal, then closes it. In a third turn, the Builder runs lint and the type check, commits the change, and reports the build as completed. The goal row shows Complete in green, with only Clear goal. The task moves to AI Review.`}
+      alt={`The session page of the task Open search with a keyboard shortcut, in Ready for dev. The Planner session is open, and its plan shows in the Artifacts tab. The visitor clicks Start Implementation. The dialog Start Builder session opens with the target branch origin/main, the model GPT-6-Astra on Codex, two switches, Goal mode and Customize first message, and the buttons Cancel, Run in background, and Start session. The visitor turns Goal mode on. The Goal field opens with the default goal: implement the task as its description, spec, and plan define, until each requirement works, every required check passes, and the build is reported as completed. Customize first message goes away. The visitor clicks Generate goal. The button shows Generating goal, and Run in background and Start session are disabled until the goal is ready. A sharper goal replaces the text: Cmd+K on macOS and Ctrl+K on Windows and Linux open the search dialog, the shortcut does nothing with Shift, in a text field, in the note editor, or while another dialog is open, and the search tests pass. The visitor clicks Start session. The fields are disabled, and the button shows Starting. The dialog shows the startup steps, then the Builder session opens. A goal row shows above the composer: Goal, Active, and the first line of the goal, with Pause goal and Clear goal. The Builder works without a first message. It reads the task, writes the hook and the app shell, and ends its turn. Codex starts the next turn by itself: the Builder writes the tests and runs them. In a third turn, the Builder runs lint and the type check, commits the change, and reports the build as completed. The goal row shows Complete in green, with only Clear goal. The task moves to AI Review.`}
       stock={
         <Stock name={"builder-dialog" satisfies GoalModeTemplate}>
           <StartDialog
             role="Builder"
             session={GOAL_SESSION}
             target="origin/main"
+            background
             goal
             goalText={DEFAULT_GOAL}
             progress={<StartupProgress origin={ORIGIN} steps={STEPS} />}
@@ -50,6 +51,7 @@ export function GoalModeView(props: SceneViewProps): ReactElement {
     >
       <StudioWindow
         frame={FRAMES.build}
+        keys={props.keys}
         className="gm-window"
         panels={{
           document: (

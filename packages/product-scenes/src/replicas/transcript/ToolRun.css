@@ -1,0 +1,202 @@
+@layer replica {
+  :where(.stage) {
+    /* A tool run of agent-chat-tool-run.tsx and agent-chat-tool-run.css: px-1 py-0.5. */
+    .st-run {
+      padding: calc(2 * var(--u)) calc(4 * var(--u));
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 / 12);
+    }
+    /* The header and each call share the classes of a tool row: flex min-h-6 w-full min-w-0
+       items-center gap-2 rounded-[7px] px-2 text-xs. The header has -mx-2, so its icon lines up
+       with the guide line of the calls. */
+    .st-run-head {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      width: 100%;
+      min-width: 0;
+      min-height: calc(24 * var(--u));
+      margin-left: calc(-8 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(7 * var(--u));
+    }
+    /* The icon of the kind of the run: size-3.5 shrink-0 text-muted-foreground. */
+    .st-run-icon {
+      display: none;
+      flex-shrink: 0;
+      color: var(--muted-foreground);
+    }
+    .st-run[data-title="Shell"] .st-run-icon[data-title-icon="Shell"],
+    .st-run[data-title="Files"] .st-run-icon[data-title-icon="Files"],
+    .st-run[data-title="Web"] .st-run-icon[data-title-icon="Web"],
+    .st-run[data-title="Tools"] .st-run-icon[data-title-icon="Tools"] {
+      display: block;
+    }
+    .st-run-title {
+      flex-shrink: 0;
+      font-weight: 500;
+    }
+    /* min-w-0 truncate text-foreground/75. */
+    .st-run-counts {
+      min-width: 0;
+      overflow: hidden;
+      color: color-mix(in oklab, var(--foreground) 75%, transparent);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* A folded run turns its chevron: transition-transform duration-150, then -rotate-90. */
+    .st-run-chevron {
+      flex-shrink: 0;
+      color: var(--muted-foreground);
+      transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .st-run[data-folded] .st-run-chevron {
+      transform: rotate(-90deg);
+    }
+    /* The calls open and fold like an accordion (css-presence with tool-run-reveal). The clip
+       keeps the hover background of the calls, which reaches past the guide line. The space above
+       the calls is pt-0.5, inside the box that folds. */
+    .st-run-body {
+      display: flow-root;
+      overflow: clip;
+      overflow-clip-margin: calc(8 * var(--u));
+    }
+    /* The guide line under the icon of the header: ml-[6.5px] border-l border-border
+       pl-[6.5px]. */
+    .st-run-calls {
+      margin: calc(2 * var(--u)) 0 0 calc(6.5 * var(--u));
+      padding-left: calc(6.5 * var(--u));
+      border-left: calc(1 * var(--u)) solid var(--border);
+    }
+    /* The bar of the earlier calls has the height of a call, so it takes the place of a call. Its
+       place is -mr-2 w-[calc(100%+0.5rem)], and its button is py-[3px]. */
+    .st-run-bar {
+      display: flex;
+      align-items: center;
+      width: calc(100% + 8 * var(--u));
+      min-width: 0;
+      margin-right: calc(-8 * var(--u));
+    }
+    .st-run-bar-button {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      min-height: calc(24 * var(--u));
+      padding: calc(3 * var(--u)) calc(8 * var(--u));
+      border-radius: calc(7 * var(--u));
+      color: var(--muted-foreground);
+    }
+    .st-run-bar-button > .lucide {
+      flex-shrink: 0;
+    }
+    .st-run-bar-button > span {
+      min-width: 0;
+      overflow: hidden;
+      line-height: calc(20 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* A long run shows its latest calls in a window of their height. */
+    .st-run[data-long] .st-run-window {
+      overflow-y: clip;
+    }
+    .st-run-list {
+      position: relative;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .st-call[data-earlier] {
+      display: none;
+    }
+    /* The call that goes out at the top of a long run when a new call comes. */
+    .st-call[data-leaving] {
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      transform: translateY(-100%);
+    }
+    /* The line of a call: flex min-h-[26px] min-w-0 items-center gap-2 inside px-2. */
+    .st-call-row {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      min-height: calc(26 * var(--u));
+      padding: 0 calc(8 * var(--u));
+      border-radius: calc(7 * var(--u));
+    }
+    /* flex min-w-0 flex-1 items-baseline gap-2 leading-5. */
+    .st-call-main {
+      display: flex;
+      flex: 1;
+      align-items: baseline;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+      line-height: calc(20 * var(--u));
+    }
+    .st-call-name {
+      flex-shrink: 0;
+      font-weight: 500;
+    }
+    /* The first line of a command: min-w-0 truncate font-mono leading-5 text-foreground. */
+    .st-call-text {
+      display: flex;
+      min-width: 0;
+    }
+    .st-call-text > code {
+      min-width: 0;
+      overflow: hidden;
+      font-family: var(--mono);
+      font-size: calc(12 * var(--u));
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The summary of another call, after the icon of the type of its file: flex min-w-0
+       items-center gap-1.5 self-center, then min-w-0 truncate text-foreground/75. */
+    .st-call-summary {
+      display: flex;
+      align-self: center;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
+    }
+    .st-call-summary > span {
+      min-width: 0;
+      overflow: hidden;
+      color: color-mix(in oklab, var(--foreground) 75%, transparent);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* The lines that an edit changes: flex shrink-0 items-center gap-1.5 font-mono text-[11px]
+       tabular-nums. */
+    .st-call-changes {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      font-family: var(--mono);
+      font-size: calc(11 * var(--u));
+      font-variant-numeric: tabular-nums;
+    }
+    .st-call-add {
+      color: var(--success-muted);
+    }
+    .st-call-del {
+      color: var(--destructive-muted);
+    }
+    /* ToolMessageTiming with ml-0 text-foreground/75: inline-flex shrink-0 items-center gap-2
+       text-[11px]. */
+    .st-call-time {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      color: color-mix(in oklab, var(--foreground) 75%, transparent);
+      font-size: calc(11 * var(--u));
+    }
+  }
+}

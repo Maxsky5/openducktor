@@ -7,6 +7,8 @@ import type { GitCounts } from "../../replicas/studio/GitHeader";
 import { TARGET_BRANCH } from "../../replicas/studio/GitHeader";
 import { TASK_ID } from "../../sample/studio";
 import { TASK_BRANCH } from "../../sample/worktree";
+import type { CallData } from "../../replicas/transcript/model";
+import { bash, catFile } from "../../sample/calls";
 
 /** The branch has no remote branch yet, so Push shows no count. */
 export const COUNTS = {
@@ -47,17 +49,21 @@ export const CONFLICT_MESSAGE = [
   `Use taskId ${TASK_ID} for any task-bound odt_* tool calls.`,
 ].join("\n\n");
 
-/** The Builder rows that resolve the conflict, in order. The ids differ from the rows of the build. */
-export const ROWS = {
-  "conflict-status": { args: "git status", duration: "0.2s", time: "10:14:09 AM" },
-  "conflict-read": { args: "src/app/keymap.ts", duration: "9ms", time: "10:14:12 AM" },
-  "conflict-test": { args: "bun test src/app src/search", duration: "2.6s", time: "10:14:40 AM" },
-  "conflict-rebase": {
-    args: "git add src/app/keymap.ts && GIT_EDITOR=true git rebase --continue",
-    duration: "0.4s",
-    time: "10:14:46 AM",
-  },
-} as const;
+/**
+ * The commands that resolve the conflict, in order, which show as one tool run. The ids differ
+ * from the rows of the build.
+ */
+export const CALLS: readonly CallData[] = [
+  bash("conflict-status", "git status", "214ms", "10:14:09 AM"),
+  catFile("conflict-read", "src/app/keymap.ts", "9ms", "10:14:12 AM"),
+  bash("conflict-test", "bun test src/app src/search", "2.6s", "10:14:40 AM"),
+  bash(
+    "conflict-rebase",
+    "git add src/app/keymap.ts && GIT_EDITOR=true git rebase --continue",
+    "412ms",
+    "10:14:46 AM",
+  ),
+];
 
 export const MESSAGE_TIME = "10:14:05 AM";
 

@@ -101,6 +101,10 @@
     .mob-step[data-state="current"] .mob-step-text {
       font-weight: 500;
     }
+    /* A host with its own captions, such as a film, shows the phone with no step list. */
+    :where([data-captioned]) & .mob-steps {
+      display: none;
+    }
     /* A phone stage shows only the phone. */
     @container stage (width <= 500px) {
       .mob-stage,

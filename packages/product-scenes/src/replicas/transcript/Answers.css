@@ -1,31 +1,49 @@
 @layer replica {
   :where(.stage) {
-    /* Questions and answers under an answered question tool. */
+    /* The answers under the line of a question tool: space-y-0.5 pl-[22px], after the space-y-1
+       of RegularToolMessage. The answers start under the name of the tool. */
     .st-answers {
-      margin: calc(4 * var(--u)) 0 calc(4 * var(--u)) calc(20 * var(--u));
-      border: calc(1 * var(--u)) solid var(--border);
-      border-radius: calc(4 * var(--u));
-      background: color-mix(in oklab, var(--muted) 90%, transparent);
-    }
-    .st-answers > span {
-      display: block;
-      padding: calc(4 * var(--u)) calc(8 * var(--u));
-      font-size: calc(11 * var(--u));
-      font-weight: 500;
-    }
-    .st-answers dl {
       display: grid;
-      gap: calc(8 * var(--u));
-      margin: 0;
-      padding: calc(8 * var(--u));
-      border-top: calc(1 * var(--u)) solid var(--border);
+      gap: calc(2 * var(--u));
+      margin: calc(4 * var(--u)) 0 0;
+      padding: 0 0 0 calc(22 * var(--u));
+      list-style: none;
+    }
+    /* flex min-w-0 items-center gap-1.5 text-xs leading-5. */
+    .st-answers > li {
+      display: flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      min-width: 0;
       font-size: calc(12 * var(--u));
+      line-height: calc(20 * var(--u));
     }
-    .st-answers dt {
-      font-weight: 500;
+    .st-answers .lucide {
+      flex-shrink: 0;
+      color: var(--muted-foreground);
     }
-    .st-answers dd {
-      margin: calc(2 * var(--u)) 0 0;
+    .st-answer-label,
+    .st-answer,
+    .st-answer-none {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* max-w-[40%] shrink-0 truncate text-muted-foreground. */
+    .st-answer-label {
+      flex-shrink: 0;
+      max-width: 40%;
+      color: var(--muted-foreground);
+    }
+    /* A question without an answer: italic text-muted-foreground. */
+    .st-answer-none {
+      color: var(--muted-foreground);
+      font-style: italic;
+    }
+    .st-answers[data-answered] .st-answer-none,
+    .st-answers:not([data-answered]) .st-answer {
+      display: none;
     }
   }
 }

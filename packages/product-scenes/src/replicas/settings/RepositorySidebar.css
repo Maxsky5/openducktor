@@ -1,0 +1,35 @@
+@layer replica {
+  :where(.stage) {
+    /* RepositorySidebar from the lg breakpoint: flex min-h-0 flex-col gap-3 bg-muted p-3
+       border-r. */
+    .repo-side {
+      display: flex;
+      flex-direction: column;
+      gap: calc(12 * var(--u));
+      min-height: 0;
+      padding: calc(12 * var(--u));
+      border-right: calc(1 * var(--u)) solid var(--border);
+      background: var(--muted);
+    }
+    /* The selector under its label: space-y-2, with the label in text-xs text-muted-foreground. */
+    .repo-pick {
+      display: grid;
+      gap: calc(8 * var(--u));
+    }
+    .repo-pick > span:first-child {
+      color: var(--muted-foreground);
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    /* The sections: flex-col gap-1 of full-width buttons, justify-between. */
+    .repo-sections {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+    }
+    .repo-section {
+      justify-content: space-between;
+    }
+  }
+}

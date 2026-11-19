@@ -1,0 +1,157 @@
+@layer replica {
+  :where(.stage) {
+    /* Card: rounded-xl border border-border shadow-sm, with bg-card/70 where the browser blurs the
+       backdrop. The light card is white, written in sRGB: while the card fades in, Chrome paints
+       the oklab white of the theme at 70% as a red block. */
+    .glc {
+      min-width: 0;
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(16 * var(--u));
+      background: rgb(255 255 255 / 0.7);
+      box-shadow: var(--shadow-sm);
+    }
+    :where([data-theme="dark"]) & .glc {
+      background: color-mix(in oklab, var(--card) 70%, transparent);
+    }
+    .glc .ui-button {
+      gap: calc(8 * var(--u));
+    }
+    /* CardHeader of ProviderSetupCard from the xl breakpoint: a row with items-start
+       justify-between gap-4, px-5 pt-5 pb-4, and border-b. */
+    .glc-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: calc(16 * var(--u));
+      padding: calc(20 * var(--u)) calc(20 * var(--u)) calc(16 * var(--u));
+      border-bottom: calc(1 * var(--u)) solid var(--border);
+    }
+    .glc-id {
+      display: flex;
+      align-items: flex-start;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    /* The icon: size-9 rounded-md border border-border bg-muted text-foreground. */
+    .glc-tile {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: calc(36 * var(--u));
+      height: calc(36 * var(--u));
+      border: calc(1 * var(--u)) solid var(--border);
+      border-radius: calc(10 * var(--u));
+      background: var(--muted);
+    }
+    /* CardTitle: text-base font-semibold tracking-tight. CardDescription: text-sm
+       text-muted-foreground. They have space-y-1. */
+    .glc-title {
+      display: grid;
+      gap: calc(4 * var(--u));
+      min-width: 0;
+    }
+    .glc-title > b {
+      font-size: calc(16 * var(--u));
+      font-weight: 600;
+      line-height: calc(24 * var(--u));
+      letter-spacing: -0.025em;
+    }
+    .glc-title > p {
+      color: var(--muted-foreground);
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+    }
+    /* The readiness and the switch: flex shrink-0 flex-wrap items-center gap-3. */
+    .glc-status {
+      display: flex;
+      flex: none;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(12 * var(--u));
+    }
+    /* Badge at its own size: px-2.5 py-0.5 text-xs font-medium. */
+    .glc-badge {
+      padding: calc(2 * var(--u)) calc(10 * var(--u));
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+      white-space: nowrap;
+    }
+    /* The switch label: flex items-center gap-2 text-xs font-medium. */
+    .glc-switch {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+      font-size: calc(12 * var(--u));
+      font-weight: 500;
+      line-height: calc(16 * var(--u));
+    }
+    /* CardContent: px-5 py-4. The fields have grid gap-5. */
+    .glc-body {
+      display: grid;
+      gap: calc(20 * var(--u));
+      min-width: 0;
+      padding: calc(16 * var(--u)) calc(20 * var(--u));
+    }
+    /* The Project part: grid gap-3. Its title is text-sm font-semibold, and its note text-xs. */
+    .glc-project {
+      display: grid;
+      gap: calc(12 * var(--u));
+      min-width: 0;
+    }
+    .glc-project-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .glc-section > b {
+      font-size: calc(14 * var(--u));
+      line-height: calc(20 * var(--u));
+      letter-spacing: 0;
+    }
+    .glc-section > p {
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    /* The fields: two columns from the md breakpoint, gap-4. A field is grid gap-2, with its label
+       in text-sm font-medium. */
+    .glc-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: calc(16 * var(--u));
+    }
+    .glc-field {
+      display: grid;
+      gap: calc(8 * var(--u));
+      min-width: 0;
+    }
+    .glc-field > b {
+      font-size: calc(14 * var(--u));
+      font-weight: 500;
+      line-height: calc(20 * var(--u));
+    }
+    /* The error of an empty field: text-xs text-destructive-surface-foreground. It goes when the
+       field has a value. */
+    .glc-error {
+      color: var(--destructive-surface-foreground);
+      font-size: calc(12 * var(--u));
+      line-height: calc(16 * var(--u));
+    }
+    .ui-input[data-filled] + .glc-error {
+      display: none;
+    }
+    /* A phone stage: below xl, the readiness and the switch go under the title, and below md the
+       fields make one column. */
+    @container stage (width <= 500px) {
+      .glc-head {
+        flex-direction: column;
+      }
+      .glc-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  }
+}

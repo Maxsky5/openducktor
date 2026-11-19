@@ -22,6 +22,10 @@
       left: auto;
       transform: none;
     }
+    /* A captioned scene: the host shows the keys in its captions, so the display stays out. */
+    :where([data-captioned]) & .key-hud {
+      display: none;
+    }
     .key-hud kbd {
       display: grid;
       place-items: center;

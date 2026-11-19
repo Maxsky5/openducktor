@@ -1,5 +1,6 @@
 // An assistant message. The final message of a turn comes after the separator with the time of the
-// turn, and it ends with the runtime, model, and effort. Sources: agent-chat-message-card.tsx and
+// turn, and it ends with the runtime, model, and effort. The separator shows only when the turn
+// ends: isFinal of agent-chat-transcript-model.ts. Sources: agent-chat-message-card.tsx and
 // agent-transcript-separator.tsx. A final reply can end with the copy and fork buttons of
 // agent-chat-assistant-message.tsx: a workspace session can fork from a completed reply.
 import { Copy, GitFork } from "lucide-react";
@@ -25,7 +26,7 @@ export function AgentText({
   return (
     <div className="st-agent" data-row={row}>
       {worked && (
-        <p className="st-worked">
+        <p className="st-worked" data-worked="">
           <span>Worked for {worked}</span>
         </p>
       )}

@@ -47,11 +47,12 @@
       gap: calc(24 * var(--u));
       padding: 0 calc(24 * var(--u));
     }
-    /* The viewfinder: four 34 point corners with a 4 point stroke and a 22 point radius. */
+    /* The viewfinder: four 34 point corners with a 4 point stroke and a 22 point radius. Its size
+       is the smallest of 280, the width less 96, and the height less 320. */
     .mob-viewfinder {
       position: relative;
-      width: calc(264 * var(--u));
-      height: calc(264 * var(--u));
+      width: calc(280 * var(--u));
+      height: calc(280 * var(--u));
     }
     .mob-viewfinder i {
       position: absolute;
@@ -93,19 +94,22 @@
       color: #fff;
       text-align: center;
     }
+    /* The headline text style. */
     .mob-scan-hint strong {
       font-size: calc(15 * var(--u));
       font-weight: 600;
       line-height: calc(20 * var(--u));
+      letter-spacing: calc(-0.1 * var(--u));
     }
     .mob-scan-hint span {
       font-size: calc(13 * var(--u));
       line-height: calc(18 * var(--u));
       opacity: 0.8;
     }
+    /* Close: 8 points under the top safe area and 16 points from the left edge. */
     .mob-scan-close {
       position: absolute;
-      top: calc(38 * var(--u));
+      top: calc((var(--m-status) + 8) * var(--u));
       left: calc(16 * var(--u));
       display: flex;
       align-items: center;

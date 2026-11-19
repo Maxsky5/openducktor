@@ -2,7 +2,7 @@ import { must } from "../../motion/dom";
 import type { SceneBuilder } from "../../motion/scene";
 import { composerActivity, composerDraft } from "../../replicas/shell/composer";
 import { pointer } from "../../replicas/shell/cursor";
-import { keystrokes } from "../../replicas/shell/keystrokes";
+import { keyPresses } from "../../replicas/ui/held-keys";
 import { queueStack } from "../../replicas/studio/queue";
 import { follow, transcript } from "../../replicas/transcript/rows";
 import { QUEUED } from "./sample";
@@ -25,13 +25,14 @@ export const build: SceneBuilder = (scene) => {
   const setActivity = composerActivity(root);
   const rows = transcript(scene, root);
   const cursor = pointer(scene, root);
-  const keys = keystrokes(scene);
+  const keys = keyPresses(scene);
   const steerButton = (): HTMLElement =>
     must(stack.card(QUEUED.steer.id), '[data-queue-action="steer"]');
   follow(scene, track);
 
   // Start: the agent runs the search tests, and the queue is empty.
   stack.clear();
+  const endTests = rows.running(row("test"));
 
   /** Types `text` in the composer, and Enter queues it as the card `id`. Returns the time of Enter. */
   const queue = (id: string, text: string, at: number): number => {
@@ -76,10 +77,9 @@ export const build: SceneBuilder = (scene) => {
   cursor.hide(delivered);
   rows.show(row("steer"), delivered + 0.05);
 
-  // The search tests end. The agent reads the message and adds the keymap tests to the run.
-  scene.at(delivered + 0.5, () =>
-    must(row("search-tests"), "[data-tool]").removeAttribute("data-running"),
-  );
+  // The search tests end, and their tool run folds under the steered message. The agent reads the
+  // message and adds the keymap tests to the run.
+  endTests(delivered + 0.5);
   const answered = rows.say(row("ack"), delivered + 0.7);
   const tested = rows.tool(row("keymap-tests"), answered + 0.2, 0.9);
 

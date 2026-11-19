@@ -1,13 +1,16 @@
-// The scenes that the video renderer accepts, and the handle that its page gives to the renderer.
-// The page and the renderer share this module. It loads no view and no React.
+// The scenes and the films that the video renderer accepts, and the handle that its page gives to
+// the renderer. The page and the renderer share this module. It loads no view and no React.
+import { FILM_NAMES, type FilmName } from "../src/films/registry";
 import { isChapterScene, type LoopSceneName, SCENE_NAMES } from "../src/registry";
 
-/** The handle of the video page. Only the renderer uses it. */
-type SceneVideo = {
+/** The handle of the video page. Only the renderer and the preview use it. */
+export type SceneVideo = {
   /** Resolves with the length of one run of the scene in seconds, after the scene mounts. */
   ready: Promise<number>;
   /** Shows the frame at `time` seconds. Call it with times that increase. */
   seek: (time: number) => void;
+  /** True when the camera of a film moves between the times `from` and `to`. A scene has no camera. */
+  moving: (from: number, to: number) => boolean;
 };
 
 declare global {
@@ -32,4 +35,11 @@ export function videoScene(value: string): LoopSceneName {
     );
   }
   throw new Error(`There is no scene ${value}. Use one of these scenes: ${known}.`);
+}
+
+/** Returns the film `value`, or fails with the list of the films. */
+export function filmName(value: string): FilmName {
+  const name = FILM_NAMES.find((film) => film === value);
+  if (name) return name;
+  throw new Error(`There is no film ${value}. Use one of these films: ${FILM_NAMES.join(", ")}.`);
 }

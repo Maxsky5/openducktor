@@ -77,7 +77,7 @@ export function ImportSessionView(props: SceneViewProps): ReactElement {
             </>
           }
           composer={
-            <Composer session={SESSION}>
+            <Composer session={SESSION} keys={props.keys}>
               <ComposerDraft />
             </Composer>
           }

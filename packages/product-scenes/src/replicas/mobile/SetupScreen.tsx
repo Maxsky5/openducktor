@@ -3,13 +3,19 @@
 // under the card, as AppVersionFooter of src/ui/settings-layout.tsx shows them.
 import { Monitor } from "lucide-react";
 import type { ReactElement } from "react";
+import scenesPackage from "../../../package.json";
 import { HostForm } from "./HostForm";
 import { MobileScreen } from "./MobileScreen";
 import "./MobileHeader.css";
 import "./SetupScreen.css";
 
-/** The version label of the app build in the screenshots, as appVersionLabel gives it. */
-const APP_VERSION = "1.1.0 (1)";
+/**
+ * The version label of the app, as appVersionLabel of src/platform/app-version.ts gives it: the
+ * version and the build number of app.config.ts. scripts/release-version.ts writes the release
+ * version to this package and its numeric base to the app, and a build from source has the build
+ * number 1.
+ */
+export const APP_VERSION_LABEL = `${scenesPackage.version.replace(/-.*$/, "")} (1)`;
 
 /** The text of the card. */
 export const SETUP_TEXT = {
@@ -44,7 +50,7 @@ export function SetupScreen({ step, endpoint, code, hidden }: SetupScreenProps):
             <HostForm step={step} endpoint={endpoint} code={code} />
           </div>
         </div>
-        <p className="mob-setup-version">OpenDucktor {APP_VERSION}</p>
+        <p className="mob-setup-version">OpenDucktor {APP_VERSION_LABEL}</p>
       </div>
     </MobileScreen>
   );

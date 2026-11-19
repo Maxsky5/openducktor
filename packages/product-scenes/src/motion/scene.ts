@@ -1,4 +1,5 @@
 import { cloneTemplate, must } from "./dom";
+import { registerAppEases } from "./gsap";
 
 /**
  * The tools of a scene builder for one run of a view. A builder prepares the first frame in the
@@ -30,6 +31,11 @@ export type Scene<Template extends string = never> = {
   templateOf: (name: Template) => HTMLElement;
   /** Keeps the last frame on screen until `time`, where the scene ends. */
   endAt: (time: number) => void;
+  /**
+   * Names a key moment of the run, such as the tap that approves a request. A film reads these
+   * names to move its camera and to show its captions at the same time as the scene.
+   */
+  mark: (name: string, time: number) => void;
 };
 
 /** The builder of a view. It gets a new scene for each run. */
@@ -44,6 +50,8 @@ export function createScene(
   stage: HTMLElement,
   timeline: gsap.core.Timeline,
 ): Scene<string> {
+  // The tweens of a builder name the curves of the apps, so they exist before it builds.
+  registerAppEases();
   const templateOf = (name: string): HTMLElement =>
     must(frame, `[data-stock] > [data-tpl="${name}"]`);
   // The time of the `at` change that runs now. The playhead can be later: a tick moves it to the
@@ -65,7 +73,11 @@ export function createScene(
     },
     run: (animation) => {
       if (changeTime === undefined) throw new Error("Call scene.run only in a change of scene.at.");
-      timeline.add(animation, changeTime);
+      // GSAP renders a child that starts behind the playhead with no callbacks, so a slow frame
+      // that passes the whole animation would skip its onComplete. A paused child gets no render
+      // when it is added, and the resume renders it at the playhead with its callbacks.
+      timeline.add(animation.pause(), changeTime);
+      animation.resume();
     },
     runNow: (animation) => {
       timeline.add(animation, timeline.time());
@@ -75,6 +87,10 @@ export function createScene(
     templateOf,
     endAt: (time) => {
       timeline.set({}, {}, time);
+    },
+    mark: (name, time) => {
+      if (Object.hasOwn(timeline.labels, name)) throw new Error(`The scene marks ${name} twice.`);
+      timeline.addLabel(name, time);
     },
   };
 }

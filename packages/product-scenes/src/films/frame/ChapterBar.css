@@ -1,0 +1,57 @@
+@layer views {
+  :where(.stage) {
+    /* The chapters under the captions. The current one fills while it plays. */
+    .film-chapters {
+      position: absolute;
+      bottom: 64px;
+      left: 104px;
+      display: flex;
+      gap: 14px;
+      width: 640px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      visibility: hidden;
+    }
+    .film-chapter {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: 10px;
+      color: var(--film-muted);
+      opacity: 0.55;
+    }
+    .film-chapter[data-current="true"] {
+      color: var(--film-ink);
+      opacity: 1;
+    }
+    .film-chapter-label {
+      display: flex;
+      gap: 8px;
+      font-size: 17px;
+      font-weight: 550;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    .film-chapter-label b {
+      color: var(--film-brand);
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-weight: 500;
+    }
+    .film-chapter-track {
+      position: relative;
+      height: 3px;
+      overflow: hidden;
+      border-radius: 3px;
+      background: color-mix(in oklab, var(--film-muted) 30%, transparent);
+    }
+    .film-chapter-track i {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: var(--film-brand);
+      transform: scaleX(0);
+      transform-origin: left center;
+    }
+  }
+}

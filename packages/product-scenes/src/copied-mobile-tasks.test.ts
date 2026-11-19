@@ -1,14 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { APPROVAL_MODES, APPROVAL_TEXT, MERGE_METHODS } from "./replicas/mobile/ApproveSheet";
+import { APPROVAL_MODES } from "./replicas/approval";
+import { APPROVAL_TEXT, MERGE_METHODS, publishButtonLabel } from "./replicas/mobile/ApproveSheet";
 import { PHONE_LANES } from "./replicas/mobile/LaneSwitcher";
 import { START_SHEET_TEXT } from "./replicas/mobile/StartSessionSheet";
-import {
-  BRANCH,
-  DONE,
-  QUICK_ACTIONS,
-  REMOTE_BRANCH,
-  SQUASH_HINT,
-} from "./scenes/mobile-approve/sample";
+import { SQUASH_HINT } from "./sample/mobile-review";
+import { BRANCH, DONE, REMOTE_BRANCH } from "./scenes/mobile-approve/sample";
 import { CARDS } from "./scenes/mobile-start-builder/sample";
 import { importProduct } from "./test-support/product-source";
 
@@ -29,24 +25,6 @@ type TaskOverrides = {
   artifactSummary: Record<string, ArtifactState>;
 };
 type TaskFixture = (overrides: TaskOverrides) => TaskCard;
-type GitProviderContext = { descriptor: { capabilities: { supportsPullRequests: boolean } } };
-type BuilderSession = {
-  externalSessionId: string;
-  runtimeKind: string;
-  taskId: string;
-  role: string;
-  status: string;
-  startedAt: string;
-  sessionAssociation: { kind: string; workspaceId: string; taskId: string; role: string };
-};
-type QuickActionParams = {
-  selectedTask: TaskCard;
-  sessionsForTask: readonly BuilderSession[];
-  roleEnabledByTask: Record<string, boolean>;
-  createSessionDisabled: boolean;
-  gitProviderContext: GitProviderContext;
-};
-type QuickAction = { id: string; label: string; disabled: boolean };
 type PublishTarget = { branch: string; remote: string };
 
 // SAFETY: the test support of the workflows exports these fixtures.
@@ -62,15 +40,6 @@ const workflows = await importProduct<{
 const { taskActionTone } = await importProduct<{
   taskActionTone: (action: string, task: TaskCard) => string;
 }>("packages/frontend-core/src/tasks/board/task-action-presentation.ts");
-// SAFETY: agent-studio-quick-actions.ts exports these functions.
-const quick = await importProduct<{
-  buildAgentStudioQuickActions: (params: QuickActionParams) => QuickAction[];
-  buildRoleEnabledMapForTask: (task: TaskCard) => Record<string, boolean>;
-}>("packages/frontend-core/src/sessions/start/agent-studio-quick-actions.ts");
-// SAFETY: the shared test fixtures export the Git provider context.
-const { createGitProviderContextFixture } = await importProduct<{
-  createGitProviderContextFixture: () => GitProviderContext;
-}>("packages/frontend-core/src/test-support/shared-test-fixtures.ts");
 // SAFETY: use-session-start-modal-coordinator.ts exports these functions.
 const start = await importProduct<{
   buildSessionStartModalTitle: (role: string, workflow: TaskCard["taskWorkflow"]) => string;
@@ -150,30 +119,6 @@ describe("the task screens of the mobile app copied in the replicas", () => {
     ).toBe(START_SHEET_TEXT.freshLead);
   });
 
-  test("Quick Actions lists the actions of a task in Human Review", () => {
-    const task = taskIn("human_review");
-    const builder: BuilderSession = {
-      externalSessionId: "builder-1",
-      runtimeKind: "codex",
-      taskId: task.id,
-      role: "build",
-      status: "idle",
-      startedAt: "2026-02-22T12:00:00.000Z",
-      sessionAssociation: { kind: "workflow", workspaceId: "w", taskId: task.id, role: "build" },
-    };
-    const options = quick.buildAgentStudioQuickActions({
-      selectedTask: task,
-      sessionsForTask: [builder],
-      roleEnabledByTask: quick.buildRoleEnabledMapForTask(task),
-      createSessionDisabled: false,
-      gitProviderContext: createGitProviderContextFixture(),
-    });
-    expect(QUICK_ACTIONS.map(({ id, title }) => ({ id, title }))).toEqual(
-      options.map(({ id, label }) => ({ id, title: label })),
-    );
-    expect(options.every((option) => !option.disabled)).toBe(true);
-  });
-
   test("the approval sheet shows the choices and the text of the app", () => {
     expect(approval.TASK_APPROVAL_MODE_OPTIONS).toEqual(APPROVAL_MODES);
     expect(approval.TASK_APPROVAL_MERGE_METHOD_OPTIONS).toEqual(MERGE_METHODS);
@@ -192,9 +137,11 @@ describe("the task screens of the mobile app copied in the replicas", () => {
 
   test("the publish step pushes the target branch and names it in the toast", () => {
     const publishTarget = { branch: BRANCH, remote: "origin" };
-    expect(approval.directMergeCompletionButtonLabel({ isSubmitting: false, publishTarget })).toBe(
-      `Push ${BRANCH} and mark done`,
-    );
+    for (const isSubmitting of [false, true]) {
+      expect(approval.directMergeCompletionButtonLabel({ isSubmitting, publishTarget })).toBe(
+        publishButtonLabel(BRANCH, isSubmitting),
+      );
+    }
     expect(canonicalTargetBranch(publishTarget)).toBe(REMOTE_BRANCH);
     expect(DONE.description).toBe(REMOTE_BRANCH);
   });

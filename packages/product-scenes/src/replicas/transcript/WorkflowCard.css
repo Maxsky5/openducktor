@@ -1,12 +1,8 @@
 @layer replica {
   :where(.stage) {
-    .st-card[data-running] .st-card-head .spin {
-      display: block;
-    }
-    .st-card[data-running] .st-card-head .st-duration {
-      display: none;
-    }
-    /* ODT tool card: Set Spec, Set Plan, Build Completed, Reject QA, Set Pull Request. */
+    /* ODT tool card: Set Spec, Set Plan, Set Artifact, Build Completed, Reject QA, and Set Pull
+       Request. A completed call: rounded-md border-success-border bg-success-surface px-3 py-2
+       my-2 text-success-surface-foreground. */
     .st-card {
       margin: calc(8 * var(--u)) 0;
       padding: calc(8 * var(--u)) calc(12 * var(--u));
@@ -16,6 +12,7 @@
       color: var(--success-surface-foreground);
       font-size: calc(14 * var(--u));
     }
+    /* A running call takes the info colors. */
     .st-card[data-running] {
       border-color: var(--info-border);
       background: var(--info-surface);
@@ -23,18 +20,26 @@
     }
     .st-card-head {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: calc(8 * var(--u));
     }
-    .st-card-head {
-      flex-wrap: wrap;
-    }
+    /* The title: min-w-0 break-words text-[11px] font-semibold. */
     .st-card-head b {
-      display: inline-flex;
-      align-items: center;
-      gap: calc(4 * var(--u));
+      min-width: 0;
       font-size: calc(11 * var(--u));
       font-weight: 600;
+      overflow-wrap: break-word;
+    }
+    /* An icon that only a running call shows takes the place of the icon after it. */
+    .st-card-run-icon {
+      display: none;
+    }
+    .st-card[data-running] .st-card-run-icon {
+      display: block;
+    }
+    .st-card[data-running] .st-card-run-icon + svg {
+      display: none;
     }
     /* The pull request shows once the call completes. */
     .st-card-pr {
@@ -43,10 +48,12 @@
     .st-card[data-running] .st-card-pr {
       display: none;
     }
+    /* The status of a running call: rounded-full border px-1.5 py-0.5 text-[10px] font-semibold
+       uppercase tracking-wide, with border-info-border. */
     .st-pill {
       display: none;
       padding: calc(2 * var(--u)) calc(6 * var(--u));
-      border: calc(1 * var(--u)) solid currentColor;
+      border: calc(1 * var(--u)) solid var(--info-border);
       border-radius: 999px;
       font-size: calc(10 * var(--u));
       font-weight: 600;
@@ -56,8 +63,22 @@
     .st-card[data-running] .st-pill {
       display: block;
     }
+    /* The timing: text-current/75. */
     .st-card-head .st-time {
       color: color-mix(in oklab, currentColor 75%, transparent);
+    }
+    /* The controls of a completed call: flex items-center gap-2. */
+    .st-card-action {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+    .st-card[data-running] .st-card-action {
+      display: none;
+    }
+    /* An outline button sets no text color, so it takes the color of the card. */
+    .st-card-action .ui-button {
+      color: inherit;
     }
   }
 }

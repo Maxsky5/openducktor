@@ -1,5 +1,4 @@
 import { must } from "../../motion/dom";
-import { growIn } from "../../motion/effects";
 import type { Scene } from "../../motion/scene";
 import { studioWindow } from "../../replicas/studio/studio";
 import { questionCard } from "../../replicas/transcript/question";
@@ -12,8 +11,9 @@ import { endTurn, runSession, saveArtifact, settleSession, waitSession } from ".
 export type SpecTemplate = "question";
 
 /**
- * Spec: the Spec agent reads the task, asks two questions, and saves the specification with
- * your answers. The chapter starts a new task, so it starts from an empty document.
+ * Spec: the Spec agent reads the task and the code in one tool run, asks two questions, and saves
+ * the specification with your answers. The chapter starts a new task, so it starts from an empty
+ * document.
  */
 export function spec(scene: Scene<SpecTemplate>): void {
   const studio = studioWindow(scene);
@@ -21,8 +21,8 @@ export function spec(scene: Scene<SpecTemplate>): void {
   const question = row("question");
   const answers = must(question, "[data-answers]");
 
-  studio.hideTurns("spec");
-  answers.hidden = true;
+  // The question waits for its answers: each line shows No answer yet.
+  answers.removeAttribute("data-answered");
   // The session starts with the context of the kickoff prompt. The task is in Backlog.
   const start = { ...SPEC_SESSION, used: 3.2 };
   studio.apply(
@@ -74,10 +74,7 @@ export function spec(scene: Scene<SpecTemplate>): void {
   });
   runSession(studio, resumed, "spec", "open");
   answered(resumed);
-  scene.at(resumed, () => {
-    answers.hidden = false;
-    scene.run(growIn(answers));
-  });
+  scene.at(resumed, () => answers.toggleAttribute("data-answered", true));
   studio.cursor.hide(resumed + 0.3);
 
   // The agent saves the specification. The Planner becomes available.

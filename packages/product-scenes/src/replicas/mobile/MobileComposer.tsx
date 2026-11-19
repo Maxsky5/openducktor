@@ -1,11 +1,12 @@
 // The composer of a mobile session, as session-composer.tsx and composer-controls.tsx in
 // apps/mobile/src/features/composer: the message field with the placeholder of the composer
-// policy, and the bar with attach, the model and effort, the context ring, Stop, and Send. While
-// the agent works, the runtime ray circles the card and Stop shows. While a request waits, the
-// card has the warning outline and the placeholder asks for the reply. A scene changes
-// `data-activity` with composerActivity of replicas/shell/composer.ts. A scene types a draft into
-// `data-typed` and sets `data-draft` on the card: the draft replaces the placeholder, Send opens,
-// and the second send control shows while the agent works.
+// policy, and the bar with attach and the model and effort at the start, and the context ring,
+// Stop, and Send at the end. While the agent works, the runtime ray circles the card. While a
+// request waits, the card has the warning outline and the placeholder says Waiting. Stop shows in
+// both states. A scene changes `data-activity` with composerActivity of
+// replicas/shell/composer.ts. A scene types a draft into `data-typed` and sets `data-draft` on the
+// card: the draft and its caret replace the placeholder, Send opens, and the second send control
+// shows while the agent works.
 import { ChevronsUpDown, ListPlus, Paperclip, SendHorizontal, Zap } from "lucide-react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { modelName } from "../../sample/models";
@@ -15,10 +16,13 @@ import { RuntimeIcon } from "../ui/RuntimeIcon";
 import type { Activity } from "../vocabulary";
 import "./MobileComposer.css";
 
-/** The placeholders of agent-chat-composer-policy.ts and agent-session-waiting-input.ts. */
+/**
+ * The placeholders of the field: the hints of agent-chat-composer-policy.ts for a runtime with
+ * file search, commands, and skills, and the word of session-composer.tsx while a request waits.
+ */
 export const COMPOSER_PLACEHOLDERS = {
   ready: "@ for files; / for commands; $ for skills",
-  approval: "Respond to the pending approval request above to continue",
+  waiting: "Waiting",
 } as const;
 
 type MobileComposerProps = {
@@ -54,49 +58,68 @@ export function MobileComposer({
         className="mob-composer-card"
         data-activity={activity}
         data-composer=""
+        data-feedback="none"
         data-comments={pendingCount > 0 ? "" : undefined}
       >
         <Ray className="mob-composer-ray" />
         {notice}
         <p className="mob-composer-field">
           <span className="mob-composer-typed" data-typed="" />
+          <span className="mob-caret" />
           <span className="mob-composer-hint" data-for="ready">
             {COMPOSER_PLACEHOLDERS.ready}
           </span>
           <span className="mob-composer-hint" data-for="waiting">
-            {COMPOSER_PLACEHOLDERS.approval}
+            {COMPOSER_PLACEHOLDERS.waiting}
           </span>
         </p>
         <div className="mob-composer-bar">
-          <span className="mob-composer-quiet">
-            <Paperclip />
-          </span>
-          <span className="mob-composer-model">
-            <RuntimeIcon kind={session.runtime} />
-            <span className="mob-composer-model-name">{modelName(session)}</span>
-            <span className="mob-composer-effort">· {session.effort}</span>
-            <ChevronsUpDown />
-          </span>
-          <svg className="mob-composer-ring" style={meter} viewBox="0 0 16 16" aria-hidden="true">
-            <circle cx="8" cy="8" r="6" />
-            <circle cx="8" cy="8" r="6" pathLength={100} />
-          </svg>
-          {secondary && (
-            <span className="mob-composer-secondary" data-secondary={secondary}>
-              {secondary === "steer" ? <Zap /> : <ListPlus />}
+          <span className="mob-composer-start">
+            <span className="mob-composer-quiet">
+              <Paperclip />
             </span>
-          )}
-          <span className="mob-composer-stop" data-stop="">
-            <i />
-          </span>
-          <span className="mob-composer-send" data-send="">
-            <SendHorizontal />
-          </span>
-          {pendingCount > 0 && (
-            <span className="mob-composer-count" data-send-count="">
-              {pendingCount}
+            <span className="mob-composer-model">
+              <RuntimeIcon kind={session.runtime} />
+              <span className="mob-composer-model-name">{modelName(session)}</span>
+              <span className="mob-composer-effort">· {session.effort}</span>
+              <ChevronsUpDown />
             </span>
-          )}
+          </span>
+          <span className="mob-composer-end">
+            <span className="mob-composer-usage">
+              <svg
+                className="mob-composer-ring"
+                style={meter}
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+              >
+                <circle cx="8" cy="8" r="6" />
+                <circle cx="8" cy="8" r="6" pathLength={100} />
+              </svg>
+            </span>
+            {secondary && (
+              <span
+                className="mob-composer-secondary"
+                data-secondary={secondary}
+                data-feedback="opacity"
+              >
+                {secondary === "steer" ? <Zap /> : <ListPlus />}
+              </span>
+            )}
+            <span className="mob-composer-stop" data-stop="" data-feedback="scale">
+              <i />
+            </span>
+            <span className="mob-composer-send-holder">
+              <span className="mob-composer-send" data-send="" data-feedback="scale">
+                <SendHorizontal />
+              </span>
+              {pendingCount > 0 && (
+                <span className="mob-composer-count" data-send-count="">
+                  {pendingCount}
+                </span>
+              )}
+            </span>
+          </span>
         </div>
       </div>
     </div>

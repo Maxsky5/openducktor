@@ -10,7 +10,6 @@ import {
   GOAL_SESSION,
   type GoalModeTemplate,
   type GoalRowId,
-  TURN_IDS,
   TURN_USE,
   type TurnId,
 } from "./sample";
@@ -18,13 +17,16 @@ import {
 /** The files of the change by path, in the order that the Builder writes them. */
 const SHELL_PATH = "src/app/app-shell.tsx";
 
+/** Seconds from the click on Start session to the first startup snapshot of the host. */
+const STARTING = 0.5;
+
 /**
  * Goal mode: the visitor starts the Builder from the Planner session of a task in Ready for dev.
  * In the start dialog, Goal mode replaces the first message with a goal, and Generate goal writes a
- * sharper one. The startup progress shows in the dialog, then the Builder session opens. The goal
- * row rises out of the composer, and Codex starts each next goal turn by itself. The visitor opens
- * the goal row to read the whole goal. When the Builder reports the build as completed and the goal
- * is met, the row shows Complete. The markup holds the last frame.
+ * sharper one. Start session disables the form, the startup progress shows in the dialog, then the
+ * dialog goes and the Builder session opens. The goal row rises out of the composer, and Codex
+ * starts each next goal turn by itself. When the Builder reports the build as completed and the
+ * goal is met, the row shows Complete. The markup holds the last frame.
  */
 export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   const studio = studioWindow(scene);
@@ -34,7 +36,6 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   const builder = STORY_SESSIONS.build.id;
 
   // Start: the Planner session of the task in Ready for dev, with its plan in the Artifacts tab.
-  studio.hideTurns(...TURN_IDS);
   studio.setSessionShown("planner");
   studio.apply(FRAMES.plan);
   studio.panels.clearFiles();
@@ -45,30 +46,51 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   const clicked = studio.quickAction(0.3);
   const dialog = goalDialog(scene, studio.root, studio.cursor, scene.template("builder-dialog"));
   dialog.open(clicked + 0.2);
+  scene.mark("dialog", clicked + 0.2);
 
   // Goal mode on: the default goal shows, and Customize first message closes.
   const on = dialog.turnOn(clicked + 0.9);
+  scene.mark("goal-on", on);
+  // The marks of each wait keep a short margin to the changes of the screen, so a film can play the
+  // wait faster: the rest after the switch, the travel of the pointer, and the wait for the model.
+  scene.mark("goal-on-rest", on + 0.35);
 
   // Generate goal: a model writes a goal from the task, its spec and plan, and the default goal.
+  // The start waits for the goal.
   const generated = on + 4;
   dialog.generateGoal(on + 2, generated, GENERATED_GOAL);
+  scene.mark("generate", on + 2);
+  scene.mark("to-generate", on + 2 - 0.05);
+  scene.mark("to-generate-end", on + 2 + 0.78);
+  scene.mark("model", on + 2 + 0.95);
+  scene.mark("generated", generated);
+  scene.mark("model-end", generated - 0.1);
+  scene.mark("generated-rest", generated + 0.4);
+  scene.mark("to-start", generated + 1.55);
 
-  // Start session: the dialog shows the startup steps of the new task worktree.
-  const started = dialog.start(generated + 1.6);
+  // Start session: the form is disabled while the start runs, then the dialog shows the startup
+  // steps of the new task worktree.
+  const started = dialog.start(generated + 1.6, STARTING);
+  scene.mark("start", started);
+  scene.mark("to-start-end", started - 0.02);
+  // The dialog resizes from Starting… to the startup steps, and the steps play.
+  scene.mark("resizing", started + 0.6);
+  scene.mark("startup", started + 0.9);
   studio.cursor.hide(started + 0.3);
-  dialog.progress(started + 0.3);
-  dialog.step("checkout", "running", started + 0.5);
-  dialog.step("checkout", "completed", started + 1.0);
-  dialog.step("upstream", "running", started + 1.0);
-  dialog.step("upstream", "completed", started + 1.3);
-  dialog.step("session", "running", started + 1.3);
-  dialog.step("session", "completed", started + 1.9);
-  const opened = started + 2.1;
-  dialog.close(opened);
+  const traced = started + STARTING;
+  dialog.step("checkout", "running", traced + 0.2);
+  dialog.step("checkout", "completed", traced + 0.7);
+  dialog.step("upstream", "running", traced + 0.7);
+  dialog.step("upstream", "completed", traced + 1.0);
+  dialog.step("session", "running", traced + 1.0);
+  dialog.step("session", "completed", traced + 1.6);
+  const opened = traced + 1.8;
+  dialog.unmount(opened);
 
-  // The Builder session opens on the Diffs tab. The goal row rises, and the Builder works with no
-  // first message.
+  // The Builder session opens on the Diffs tab. It has no token use yet, so the composer shows no
+  // context meter. The goal row rises, and the Builder works with no first message.
   studio.switchSession("goal", opened);
+  studio.clearContext(opened);
   studio.patch(opened, {
     activity: "working",
     selected: "build",
@@ -84,10 +106,14 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
     selected: true,
   });
   goal.show(opened + 0.35);
+  scene.mark("session", opened);
+  scene.mark("startup-end", opened - 0.05);
+  // The Builder works turn after turn by itself, up to the goal row that shows Complete.
+  scene.mark("turns", opened + 0.3);
 
-  /** A patch row lands its file in the Diffs tab. */
-  const land = (patch: HTMLElement, path: string, files: number, at: number): number => {
-    studio.rows.show(patch, at);
+  /** An edit call joins its run, and its file lands in the Diffs tab. */
+  const land = (edit: HTMLElement, path: string, files: number, at: number): number => {
+    studio.rows.show(edit, at);
     studio.panels.landFile(path, at + 0.2);
     studio.panels.totals(GOAL_FILES.slice(0, files), at + 0.2);
     return at + 0.4;
@@ -101,19 +127,15 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
   const wrote = studio.rows.say(row("write", "final"), at + 0.2);
   studio.context({ ...GOAL_SESSION, used: TURN_USE[0] }, 0, opened + 0.8, wrote);
 
-  // Turn 2: Codex starts the next goal turn by itself. The Builder writes and runs the tests. The
-  // visitor opens the goal row to read the whole goal.
+  // Turn 2: Codex starts the next goal turn by itself. The Builder writes and runs the tests.
   at = land(row("test", "test"), TEST_PATH, 3, wrote + 0.5);
-  const expanded = studio.cursor.click(() => goal.toggle, wrote + 0.3, 0.8);
-  goal.expand(expanded);
+  scene.mark("turn-2", wrote + 0.5);
   const tested = studio.rows.tool(row("test", "run"), at + 0.2, 1.2);
   const ran = studio.rows.say(row("test", "final"), tested + 0.3);
   studio.context({ ...GOAL_SESSION, used: TURN_USE[1] }, TURN_USE[0], wrote, ran);
-  const collapsed = studio.cursor.click(() => goal.toggle, expanded + 2.6, 0.1);
-  goal.collapse(collapsed);
-  studio.cursor.hide(collapsed + 0.4);
 
   // Turn 3: the checks pass, and the Builder commits the change and reports the build as completed.
+  scene.mark("turn-3", ran + 0.5);
   at = studio.rows.tool(row("submit", "checks"), ran + 0.5, 1);
   const committed = studio.rows.tool(row("submit", "commit"), at + 0.25, 0.3);
   studio.panels.ahead(1, committed);
@@ -128,6 +150,8 @@ export const build: SceneBuilder<GoalModeTemplate> = (scene) => {
 
   // The goal is met: the row shows Complete, and the session stops.
   goal.status(ended + 0.2, "complete");
+  scene.mark("complete", ended + 0.2);
+  scene.mark("turns-end", ended + 0.2 - 1.6);
   studio.patch(ended + 0.2, { activity: "idle", tones: FRAMES.build.tones });
   studio.sessions.update(builder, ended + 0.2, { tone: "done", running: false, time: "now" });
   scene.endAt(ended + 3);

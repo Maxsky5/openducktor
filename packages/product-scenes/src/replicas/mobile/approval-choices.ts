@@ -7,7 +7,8 @@ import { designPixel } from "../../motion/effects";
 import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
 import { EASE } from "../../motion/tokens";
-import { APPROVAL_MODES, type ApprovalMode, MERGE_METHODS, type MergeMethod } from "./ApproveSheet";
+import { APPROVAL_MODES, type ApprovalMode } from "../approval";
+import { MERGE_METHODS, type MergeMethod } from "./ApproveSheet";
 
 /** Seconds of a scroll of the form. */
 const SCROLL = 0.6;

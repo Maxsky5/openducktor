@@ -1,20 +1,25 @@
 // The workspace rail of components/layout/workspace-rail.tsx. The selected row takes the sidebar
 // surface, so it joins the sidebar next to it. The badges over a tile show sessions that wait for
-// input and running sessions, in the order of workspace-rail-activity-badges-model.ts.
+// input and running sessions, in the order of workspace-rail-activity-badges-model.ts. With
+// `hintKeys`, each tile has the position hint of its workspace under it.
 import { Plus } from "lucide-react";
 import type { ReactElement } from "react";
 import { WORKSPACES } from "../../sample/workspace";
 import { flag } from "../flag";
+import type { KeyLabels } from "../keys";
 import { StatusDot } from "../ui/StatusDot";
-import { type NavEntry, railBadges } from "./nav";
+import { type NavEntry, positionHint, railBadges } from "./nav";
+import { PositionHint } from "./PositionHint";
 import "./Rail.css";
 
 type RailProps = {
   /** The sessions of the sidebar, which give the badges of each tile. */
   entries: readonly NavEntry[];
+  /** The keys of the position hints of the tiles. Without them, the tiles have no hint. */
+  hintKeys?: KeyLabels | undefined;
 };
 
-export function Rail({ entries }: RailProps): ReactElement {
+export function Rail({ entries, hintKeys }: RailProps): ReactElement {
   return (
     <div className="rail">
       {WORKSPACES.map((workspace, index) => {
@@ -36,6 +41,12 @@ export function Rail({ entries }: RailProps): ReactElement {
                   data-rail-badge="running"
                 />
               </span>
+              {hintKeys && (
+                <PositionHint
+                  text={positionHint("workspace", index + 1, hintKeys)}
+                  className="tile-hint"
+                />
+              )}
             </span>
           </span>
         );

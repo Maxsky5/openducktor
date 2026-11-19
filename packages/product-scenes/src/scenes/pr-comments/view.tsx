@@ -16,21 +16,14 @@ import { Composer, ComposerDraft } from "../../replicas/studio/Composer";
 import { SessionPage } from "../../replicas/studio/SessionPage";
 import { Paragraph } from "../../replicas/ui/InlineCode";
 import { AgentText } from "../../replicas/transcript/AgentText";
-import { PatchCard } from "../../replicas/transcript/PatchCard";
-import { ToolRow } from "../../replicas/transcript/ToolRow";
+import { ToolRun } from "../../replicas/transcript/ToolRun";
 import { UserMessage } from "../../replicas/transcript/UserMessage";
 import { WorkflowCard } from "../../replicas/transcript/WorkflowCard";
 import { signature } from "../../sample/sessions";
-import { BUILDER_PR_SESSION, CI_CHECKS, HOOK_PATH, PR_TITLE } from "../../sample/studio";
-import { APPLIED, ASK, COMMENTS, NOW, PR_NUMBER, READY, ROWS, UPDATED } from "./sample";
+import { BUILDER_PR_SESSION, CI_CHECKS, PR_TITLE } from "../../sample/studio";
+import { APPLIED, ASK, COMMENTS, NOW, PR_NUMBER, READY, RUNS, UPDATED } from "./sample";
 import "../../replicas/studio/PanelTabs.css";
 import "./view.css";
-
-/** A Bash row of the chat, from ROWS. */
-function Bash({ id }: { id: keyof typeof ROWS }): ReactElement {
-  const { args, duration, time } = ROWS[id];
-  return <ToolRow kind="bash" name="Bash" args={args} duration={duration} time={time} row={id} />;
-}
 
 /**
  * The right panel on the CI Checks tab. The tab shows the status of the checks and the count of
@@ -67,7 +60,7 @@ export function PrCommentsView(props: SceneViewProps): ReactElement {
         actions={<PullRequestLink number={PR_NUMBER} />}
         chat={
           <>
-            <Bash id="create" />
+            <ToolRun calls={RUNS.create} folded />
             <WorkflowCard
               title="Set Pull Request"
               icon="pull_request"
@@ -75,23 +68,21 @@ export function PrCommentsView(props: SceneViewProps): ReactElement {
               duration="52ms"
               time="10:24:44 AM"
             />
-            <Bash id="watch" />
-            <AgentText signature={signature(BUILDER_PR_SESSION)} worked="5m 31s" row="ready">
+            <ToolRun calls={RUNS.watch} folded />
+            <AgentText signature={signature(BUILDER_PR_SESSION)} worked="5m31s" row="ready">
               <Paragraph text={READY} />
             </AgentText>
             <UserMessage time="10:43:20 AM" row="ask">
               {ASK}
             </UserMessage>
-            <PatchCard path={HOOK_PATH} kind="M" add={1} row="edit" />
-            <Bash id="commit" />
-            <Bash id="push" />
+            <ToolRun calls={RUNS.apply} folded />
             <AgentText signature={signature(BUILDER_PR_SESSION)} worked="29s" row="applied">
               <Paragraph text={APPLIED} />
             </AgentText>
           </>
         }
         composer={
-          <Composer session={BUILDER_PR_SESSION}>
+          <Composer session={BUILDER_PR_SESSION} keys={props.keys}>
             <ComposerDraft />
           </Composer>
         }

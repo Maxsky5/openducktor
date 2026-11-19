@@ -1,5 +1,6 @@
 // The menu of the arrow beside New task in CreateMenu.tsx: a click on the arrow opens the menu
-// under it, aligned to its end, and a click on an item closes the menu, as popover.css does.
+// under it, aligned to its end with the sideOffset of PopoverContent, and a click on an item closes
+// the menu, as popover.css does.
 import { must } from "../../motion/dom";
 import { designPixel } from "../../motion/effects";
 import { gsap } from "../../motion/gsap";
@@ -9,6 +10,9 @@ import { EASE } from "../../motion/tokens";
 import type { CreateAction } from "./CreateMenu";
 import type { Pointer } from "./cursor";
 
+/** The space between the arrow and the menu: sideOffset of popover-content.tsx. */
+const SIDE_OFFSET = 6;
+
 /** The menu template `menu` of the arrow `trigger` in the window `root`. */
 export function createMenu(
   scene: Scene,
@@ -17,7 +21,7 @@ export function createMenu(
   trigger: HTMLElement,
   menu: HTMLElement,
 ) {
-  /** The visitor clicks the arrow from `at`, and the menu opens. Returns the time of the click. */
+  /** The visitor clicks the arrow from `at`, and the menu opens. Returns the click time. */
   const open = (at: number): number => {
     const opened = cursor.click(() => trigger, at, 0.9);
     scene.at(opened + 0.05, () => {
@@ -27,7 +31,7 @@ export function createMenu(
       const left = anchor.x + trigger.offsetWidth - menu.offsetWidth;
       gsap.set(menu, {
         left: Math.max(8 * unit, left),
-        top: anchor.y + trigger.offsetHeight + 6 * unit,
+        top: anchor.y + trigger.offsetHeight + SIDE_OFFSET * unit,
       });
       scene.run(
         gsap.fromTo(

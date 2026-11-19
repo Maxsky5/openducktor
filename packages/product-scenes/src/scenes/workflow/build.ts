@@ -23,7 +23,6 @@ export type BuildTemplate = "builder-dialog" | "approval";
 export function build(scene: Scene<BuildTemplate>): void {
   const studio = studioWindow(scene);
   const row = (id: RowId<"build">): HTMLElement => studio.row("build", id);
-  studio.hideTurns("build");
   studio.setSessionShown("planner");
   studio.apply(FRAMES.plan);
   studio.panels.clearFiles();

@@ -1,4 +1,5 @@
-// The Kanban board of Lane.tsx and TaskCard.tsx: lane counts, board scroll, and card moves.
+// The Kanban board of Lane.tsx and TaskCard.tsx: lane counts, lane openings, and card moves. The
+// moves follow the card with the scroll of board-scroll.ts.
 import { all, cloneTemplate, must } from "../../motion/dom";
 import { offsetIn } from "../../motion/offset";
 import { settleIn } from "../../motion/effects";
@@ -6,6 +7,7 @@ import { gsap } from "../../motion/gsap";
 import type { Scene } from "../../motion/scene";
 import { EASE } from "../../motion/tokens";
 import { laneCountLabel } from "../format";
+import { scrollFor } from "./board-scroll";
 import type { Activity, LaneId } from "../vocabulary";
 
 function laneOf(element: Element): HTMLElement {
@@ -42,91 +44,32 @@ export function setLaneCount(lane: HTMLElement, count: number): void {
   must(lane, "[data-lane-dot]").textContent = String(count);
 }
 
-/** The board scroll that shows all of `element`, like the horizontal scroll of the board. */
-function scrollFor(track: HTMLElement, element: HTMLElement): number {
-  const viewport = track.parentElement;
-  if (!viewport) throw new Error("Board track needs a viewport.");
-  const pad = Number.parseFloat(getComputedStyle(track).paddingLeft);
-  const width = viewport.clientWidth;
-  const max = Math.max(0, track.scrollWidth - width);
-  const left = element.offsetLeft - pad;
-  const right = element.offsetLeft + element.offsetWidth + pad;
-  let next = -Number(gsap.getProperty(track, "x"));
-  if (right > next + width) next = right - width;
-  if (left < next) next = left;
-  next = Math.min(max, Math.max(0, next));
-  return track.hasAttribute("data-whole-lanes")
-    ? wholeLaneScroll(track, next, { left, right, width, max, pad })
-    : next;
+/**
+ * A min-height in CSS pixels. An open lane has no min-height, and GSAP gives a number no unit when
+ * the computed value has none, so each min-height tween gives its unit.
+ */
+function px(value: number): string {
+  return `${value}px`;
 }
-
-/** The scroll limits of the board, and the target edges with the track padding. */
-type ScrollView = { left: number; right: number; width: number; max: number; pad: number };
 
 /**
- * The scroll nearest `next` where no lane crosses an edge of the viewport, and the target still
- * shows. A board with `data-whole-lanes` uses it.
+ * Opens a collapsed lane. The lane widens, and it goes from the height of a collapsed lane to the
+ * height of its content. Returns the time when the lane is open.
  */
-function wholeLaneScroll(track: HTMLElement, next: number, view: ScrollView): number {
-  const lanes = all(track, "[data-lane]").map((lane) => ({
-    left: lane.offsetLeft,
-    right: lane.offsetLeft + lane.offsetWidth,
-  }));
-  const candidates = [0, view.max];
-  for (const lane of lanes) {
-    for (let gap = 0; gap <= view.pad; gap += 1) {
-      candidates.push(lane.left - gap, lane.right + gap - view.width);
-    }
-  }
-  const cutsNoLane = (start: number): boolean => {
-    const end = start + view.width;
-    return lanes.every(
-      (lane) =>
-        lane.right <= start || lane.left >= end || (lane.left >= start && lane.right <= end),
-    );
-  };
-  const clean = candidates.filter(
-    (start) =>
-      start >= 0 &&
-      start <= view.max &&
-      start <= view.left + view.pad &&
-      start + view.width >= view.right - view.pad &&
-      cutsNoLane(start),
-  );
-  return clean.reduce(
-    (best, start) => (Math.abs(start - next) < Math.abs(best - next) ? start : best),
-    clean[0] ?? next,
-  );
-}
-
-/** Scrolls the board so all of `element` shows. */
-export function scrollBoardTo(
-  scene: Scene,
-  track: HTMLElement,
-  element: HTMLElement,
-  at: number,
-  duration = 0.8,
-): void {
-  scene.at(at, () => {
-    const next = scrollFor(track, element);
-    if (Math.abs(next + Number(gsap.getProperty(track, "x"))) < 1) return;
-    scene.run(gsap.to(track, { x: -next, duration, ease: EASE.move }));
-  });
-}
-
-/** Opens a collapsed lane. Returns the time when the lane is open. */
 export function openLane(scene: Scene, lane: HTMLElement, at: number, duration = 0.45): number {
   scene.at(at, () => {
     if (!lane.hasAttribute("data-collapsed"))
       throw new Error(`Lane ${lane.dataset.lane} is already open at ${at} s.`);
-    const from = lane.offsetWidth;
+    const from = { width: lane.offsetWidth, minHeight: px(lane.offsetHeight) };
     lane.removeAttribute("data-collapsed");
     scene.run(
-      gsap.fromTo(
-        lane,
-        { width: from },
-        { width: lane.offsetWidth, duration, ease: EASE.move, clearProps: "width" },
-      ),
+      gsap.fromTo(lane, from, {
+        width: lane.offsetWidth,
+        minHeight: px(lane.offsetHeight),
+        duration,
+        ease: EASE.move,
+        clearProps: "width,minHeight",
+      }),
     );
   });
   return at + duration;
@@ -167,6 +110,8 @@ type Landing = {
   opens: boolean;
   closes: boolean;
   widths: { source: [number, number]; destination: [number, number] };
+  /** The heights of the two lanes before the move and in the final layout. */
+  heights: { source: [number, number]; destination: [number, number] };
   scroll: number | null;
 };
 
@@ -187,6 +132,7 @@ function measureLanding(card: HTMLElement, target: HTMLElement, options: MoveOpt
   const closes =
     options.collapseEmpty === true && source !== destination && laneCount(source) === 1;
   const start = { source: source.offsetWidth, destination: destination.offsetWidth };
+  const startHeights = { source: source.offsetHeight, destination: destination.offsetHeight };
   // A slot in the target lane holds the landing space of the card while its copy flies.
   const slot = document.createElement("div");
   slot.className = "card-slot";
@@ -197,6 +143,7 @@ function measureLanding(card: HTMLElement, target: HTMLElement, options: MoveOpt
   source.toggleAttribute("data-collapsed", closes);
   const to = offsetIn(slot, track);
   const end = { source: source.offsetWidth, destination: destination.offsetWidth };
+  const endHeights = { source: source.offsetHeight, destination: destination.offsetHeight };
   const scroll = options.follow === true ? scrollFor(track, destination) : null;
   source.removeAttribute("data-collapsed");
   gsap.set(slot, { height: 0, marginTop: -slotGap });
@@ -216,13 +163,21 @@ function measureLanding(card: HTMLElement, target: HTMLElement, options: MoveOpt
       source: [start.source, end.source],
       destination: [start.destination, end.destination],
     },
+    heights: {
+      source: [startHeights.source, endHeights.source],
+      destination: [startHeights.destination, endHeights.destination],
+    },
     scroll,
   };
 }
 
-/** Adds the width changes of the two lanes to `move`: a lane opens, and an emptied lane closes. */
+/**
+ * Adds the size changes of the two lanes to `move`: a lane opens, and an emptied lane closes. A
+ * collapsed lane is taller than an open lane with one card, so the height of a lane that opens or
+ * closes follows its width.
+ */
 function moveLanes(move: gsap.core.Timeline, landing: Landing, duration: number): void {
-  const { source, destination, widths } = landing;
+  const { source, destination, widths, heights } = landing;
   if (landing.opens) {
     // The title fades in while the lane widens, so the lane does not show a cut title.
     move
@@ -244,22 +199,43 @@ function moveLanes(move: gsap.core.Timeline, landing: Landing, duration: number)
         duration * 0.45,
       );
   }
+  // The target lane goes from its height to its final height while the slot grows. The slot takes
+  // the place of the empty state of an empty lane, and a collapsed lane is taller than its cards,
+  // so the content alone would change the height in one frame.
+  const grows = landing.opens ? 0 : duration * 0.3;
+  move.fromTo(
+    destination,
+    { minHeight: px(heights.destination[0]) },
+    {
+      minHeight: px(heights.destination[1]),
+      duration: duration * 0.85 - grows,
+      ease: EASE.move,
+      clearProps: "minHeight",
+    },
+    grows,
+  );
   if (landing.closes) {
-    // The title fades out, the lane narrows, and then the collapsed marker fades in.
+    // The title fades out, the lane narrows and takes the height of a collapsed lane, and then the
+    // collapsed marker fades in.
     const title = must(source, "[data-lane-title]");
     const narrowed = duration * 0.85;
     move
       .to(title, { autoAlpha: 0, duration: 0.2 }, duration * 0.15)
       .fromTo(
         source,
-        { width: widths.source[0] },
-        { width: widths.source[1], duration: duration * 0.6, ease: EASE.move },
+        { width: widths.source[0], minHeight: px(heights.source[0]) },
+        {
+          width: widths.source[1],
+          minHeight: px(heights.source[1]),
+          duration: duration * 0.6,
+          ease: EASE.move,
+        },
         duration * 0.25,
       )
       .call(
         () => {
           source.toggleAttribute("data-collapsed", true);
-          gsap.set([source, title], { clearProps: "width,opacity,visibility" });
+          gsap.set([source, title], { clearProps: "width,minHeight,opacity,visibility" });
         },
         [],
         narrowed,

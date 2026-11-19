@@ -19,3 +19,28 @@ export function compactTokens(tokens: number): string {
 export function filesLabel(count: number): string {
   return `${count} changed file${count === 1 ? "" : "s"}`;
 }
+
+/** The short formats of the media types: FORMAT_LABELS of artifact-presentation.ts. */
+const ARTIFACT_FORMATS = new Map([
+  ["text/markdown", "Markdown"],
+  ["text/plain", "Text"],
+  ["text/html", "HTML"],
+  ["image/png", "PNG"],
+  ["image/jpeg", "JPEG"],
+  ["image/webp", "WebP"],
+  ["image/gif", "GIF"],
+  ["image/svg+xml", "SVG"],
+  ["application/pdf", "PDF"],
+]);
+
+/** The format of an artifact, such as HTML: artifactFormatLabel of artifact-presentation.ts. */
+export function artifactFormat(mediaType: string): string {
+  return ARTIFACT_FORMATS.get(mediaType.toLowerCase()) ?? "File";
+}
+
+/** The size of a file, such as 6.2 KiB: formatFileSize of artifact-presentation.ts. */
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}

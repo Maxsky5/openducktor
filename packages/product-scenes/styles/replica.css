@@ -95,9 +95,6 @@
     .del-ink {
       color: var(--red-400);
     }
-    .mod-ink {
-      color: var(--blue-400);
-    }
     /* The caret of text that a scene types. The text has the class `typed`, and the scene sets
        `data-typing` on it. A component sets the height of its caret. */
     .replica .typed[data-typing]::after {

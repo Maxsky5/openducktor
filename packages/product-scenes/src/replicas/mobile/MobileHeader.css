@@ -23,23 +23,47 @@
       white-space: nowrap;
       text-overflow: ellipsis;
     }
-    /* A plain IconButton: a 40 point touch area around a 22 point icon. */
+    /* The actions of a tab end 16 dp from the right edge, as the title starts 16 dp from the left. */
+    .mob-header[data-kind="tab"] {
+      padding-right: calc(16 * var(--u));
+    }
+    /* The native title of Android includes the font padding, so its text sits 1 dp lower than a
+       centered line. */
+    .mob-header[data-kind="tab"] .mob-header-title {
+      padding-top: calc(2 * var(--u));
+    }
+    /* A plain IconButton: a 44 dp touch area around a 22 dp icon, the Android minimum less 4. The
+       search button of the native search bar has a 24 dp icon. */
     .mob-header-icon {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: calc(40 * var(--u));
-      height: calc(40 * var(--u));
+      width: calc(44 * var(--u));
+      height: calc(44 * var(--u));
     }
     .mob-header-icon .lucide {
       width: calc(22 * var(--u));
       height: calc(22 * var(--u));
     }
-    .mob-header[data-kind="session"] {
-      gap: calc(8 * var(--u));
-      padding: 0 calc(16 * var(--u)) 0 calc(8 * var(--u));
+    .mob-header-icon[data-search] .lucide {
+      width: calc(24 * var(--u));
+      height: calc(24 * var(--u));
     }
-    .mob-header-back {
+    /* The bar of stack-header.tsx: a 4 dp gap between its parts and 16 dp at the end. */
+    .mob-header[data-kind="session"] {
+      gap: calc(4 * var(--u));
+      padding: 0 calc(16 * var(--u)) 0 0;
+    }
+    /* The navigation column: 56 dp wide, with the 24 dp back arrow in a plain IconButton. */
+    .mob-header-nav {
+      display: flex;
+      flex: 0 0 auto;
+      justify-content: center;
+      width: calc(56 * var(--u));
+    }
+    /* A plain IconButton: its 44 dp touch area is the touch target less 4 dp. */
+    .mob-header-back,
+    .mob-header-action {
       display: flex;
       flex: 0 0 auto;
       align-items: center;
@@ -51,15 +75,20 @@
       width: calc(24 * var(--u));
       height: calc(24 * var(--u));
     }
-    /* Android starts the title 72 dp from the start edge, after the back control. */
+    .mob-header-action .lucide {
+      width: calc(22 * var(--u));
+      height: calc(22 * var(--u));
+    }
+    /* The title column starts 16 dp after the navigation column, 76 dp from the start edge. */
     .mob-header-center {
       display: flex;
       flex: 1;
       min-width: 0;
-      padding-left: calc(12 * var(--u));
+      padding-left: calc(16 * var(--u));
     }
     /* The title of session-header-title.tsx, at most as wide as titleMaxWidth gives on Android:
-       the width of the phone less 72 dp, 48 dp for each of the three actions, and 8 dp. */
+       the width of the phone less 72 dp, 48 dp for each of the three actions, and 8 dp. The title
+       column is narrower, so it sets the width. */
     .mob-header-task {
       display: flex;
       align-items: center;
@@ -84,6 +113,7 @@
     .mob-header-actions {
       display: flex;
       flex: 0 0 auto;
+      align-items: center;
       gap: calc(8 * var(--u));
     }
     /* The outline IconButton: a 36 point card square with an 18 point icon. */

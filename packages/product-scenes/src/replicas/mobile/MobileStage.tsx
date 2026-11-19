@@ -35,7 +35,11 @@ export function MobileStage({
   else if (steps) layout = "steps";
   return (
     <Replica className="mob-stage" data-layout={layout}>
-      {lead && <div className="mob-stage-lead">{lead}</div>}
+      {lead && (
+        <div className="mob-stage-lead" data-stage-lead="">
+          {lead}
+        </div>
+      )}
       <div className="mob-stage-phone">{phone}</div>
       {steps && (
         <ol className="mob-steps">

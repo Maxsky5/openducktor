@@ -43,11 +43,14 @@ function splitWords(root: HTMLElement): HTMLElement[] {
 /** The blocks of a streamed message: its paragraphs and its list items. */
 const BLOCKS = "p, li";
 
+/** A streamed message: its words, and the step that shows a group of them. */
+type Stream = { words: HTMLElement[]; show: (group: HTMLElement[], time: number) => void };
+
 /**
- * Streams the text of `root` in short bursts, like a model response. Block elements appear with
- * their first word. The text hides at build time. Returns the end time.
+ * Build time: the words and the blocks of `root` hide, and `root` shows at `at`. Each group of
+ * words then shows with the blocks that it opens, so block elements appear with their first word.
  */
-export function stream(scene: Scene, root: HTMLElement, at: number, wordsPerSecond = 26): number {
+function prepareStream(scene: Scene, root: HTMLElement, at: number): Stream {
   const words = splitWords(root);
   const blocks = all(root, BLOCKS);
   for (const piece of [...blocks, ...words]) piece.hidden = true;
@@ -55,17 +58,54 @@ export function stream(scene: Scene, root: HTMLElement, at: number, wordsPerSeco
   scene.at(at, () => {
     root.hidden = false;
   });
-  const random = seeded(words.length + 7);
-  let time = at + 0.05;
-  for (let index = 0; index < words.length;) {
-    const size = 1 + Math.floor(random() * 3);
-    const group = words.slice(index, index + size);
+  const show = (group: HTMLElement[], time: number): void => {
     const opened = blocks.filter((block) => group.some((word) => block.contains(word)));
     scene.at(time, () => {
       for (const piece of [...opened, ...group]) piece.hidden = false;
     });
+  };
+  return { words, show };
+}
+
+/**
+ * Streams the text of `root` in short bursts, like a model response. The text shows with its first
+ * words, so an empty message takes no frame, and block elements appear with their first word. The
+ * text hides at build time. Returns the end time.
+ */
+export function stream(scene: Scene, root: HTMLElement, at: number, wordsPerSecond = 26): number {
+  const { words, show } = prepareStream(scene, root, at);
+  const random = seeded(words.length + 7);
+  let time = at;
+  for (let index = 0; index < words.length;) {
+    const size = 1 + Math.floor(random() * 3);
+    show(words.slice(index, index + size), time);
     time += (size / wordsPerSecond) * (0.55 + random() * 0.9);
     index += size;
+  }
+  return time;
+}
+
+/**
+ * Streams the text of `root` as an app that shows the model output in updates `interval` seconds
+ * apart: each update shows every word that the model wrote since the last update, at
+ * `wordsPerSecond`. The first update shows the first word. Block elements appear with their first
+ * word, and the text hides at build time. Returns the time of the last update.
+ */
+export function streamUpdates(
+  scene: Scene,
+  root: HTMLElement,
+  at: number,
+  wordsPerSecond: number,
+  interval: number,
+): number {
+  const { words, show } = prepareStream(scene, root, at);
+  let time = at;
+  for (let shown = 0, update = 0; shown < words.length; update += 1) {
+    const written = Math.min(words.length, 1 + Math.floor(update * interval * wordsPerSecond));
+    if (written === shown) continue;
+    time = at + update * interval;
+    show(words.slice(shown, written), time);
+    shown = written;
   }
   return time;
 }

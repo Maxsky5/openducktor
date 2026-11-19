@@ -1,0 +1,194 @@
+@layer views {
+  :where(.stage) {
+    /* The wireframe page: grey boxes on a light paper, with red numbers on the parts and their notes
+       under the dialog. Its sizes use the design pixel, so the page scales with the replica, and the
+       sheet takes the width of a narrow frame. The page has no dark style: it stays light in both
+       themes. */
+    .wf {
+      --wf-paper: #f7f6f2;
+      --wf-dots: #dedbd2;
+      --wf-ink: #2b2b2b;
+      --wf-line: #8f8c84;
+      --wf-fill: #e6e3da;
+      --wf-soft: #efede6;
+      --wf-text: #6f6c64;
+      --wf-mark: #e5484d;
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: calc(16 * var(--u));
+      background-color: var(--wf-paper);
+      background-image: radial-gradient(var(--wf-dots) calc(1 * var(--u)), transparent 0);
+      background-size: calc(16 * var(--u)) calc(16 * var(--u));
+      color: var(--wf-ink);
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      font-size: calc(13 * var(--u));
+      line-height: calc(18 * var(--u));
+      letter-spacing: 0;
+    }
+    .wf-sheet {
+      display: flex;
+      flex-direction: column;
+      gap: calc(14 * var(--u));
+      width: min(calc(480 * var(--u)), 100%);
+    }
+    .wf-head {
+      display: flex;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      color: var(--wf-text);
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: calc(12 * var(--u));
+    }
+    .wf-tag {
+      padding: calc(2 * var(--u)) calc(8 * var(--u));
+      border: calc(1.5 * var(--u)) solid var(--wf-ink);
+      color: var(--wf-ink);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .wf-dialog {
+      border: calc(2 * var(--u)) solid var(--wf-ink);
+      border-radius: calc(6 * var(--u));
+      background: #fff;
+    }
+    .wf-field,
+    .wf-list,
+    .wf-foot {
+      position: relative;
+    }
+    .wf-field {
+      display: flex;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      height: calc(44 * var(--u));
+      padding: 0 calc(40 * var(--u)) 0 calc(14 * var(--u));
+      border-bottom: calc(1.5 * var(--u)) dashed var(--wf-line);
+    }
+    .wf-lens {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      border: calc(2 * var(--u)) solid var(--wf-line);
+      border-radius: 50%;
+    }
+    .wf-text {
+      flex: 1;
+      color: var(--wf-text);
+    }
+    .wf-key {
+      padding: 0 calc(6 * var(--u));
+      border: calc(1.5 * var(--u)) solid var(--wf-line);
+      border-radius: calc(4 * var(--u));
+      color: var(--wf-ink);
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: calc(11 * var(--u));
+      line-height: calc(18 * var(--u));
+    }
+    .wf-list {
+      display: flex;
+      flex-direction: column;
+      gap: calc(4 * var(--u));
+      padding: calc(8 * var(--u)) calc(40 * var(--u)) calc(10 * var(--u)) calc(10 * var(--u));
+    }
+    .wf-label {
+      padding: 0 calc(4 * var(--u)) calc(2 * var(--u));
+      color: var(--wf-text);
+      font-size: calc(10 * var(--u));
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .wf-row {
+      display: flex;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      height: calc(28 * var(--u));
+      padding: 0 calc(6 * var(--u));
+      border-radius: calc(4 * var(--u));
+    }
+    /* The selected note: a hatched fill. */
+    .wf-row[data-selected] {
+      background: repeating-linear-gradient(
+        -45deg,
+        var(--wf-soft) 0 calc(4 * var(--u)),
+        var(--wf-fill) calc(4 * var(--u)) calc(8 * var(--u))
+      );
+      outline: calc(1.5 * var(--u)) solid var(--wf-line);
+    }
+    .wf-icon {
+      flex: none;
+      width: calc(14 * var(--u));
+      height: calc(14 * var(--u));
+      border: calc(1.5 * var(--u)) solid var(--wf-line);
+    }
+    .wf-bar {
+      height: calc(8 * var(--u));
+      border-radius: calc(4 * var(--u));
+      background: var(--wf-fill);
+    }
+    .wf-row:nth-of-type(1) .wf-bar {
+      width: 62%;
+    }
+    .wf-row:nth-of-type(2) .wf-bar {
+      width: 48%;
+    }
+    .wf-row:nth-of-type(3) .wf-bar {
+      width: 70%;
+    }
+    .wf-row:nth-of-type(4) .wf-bar {
+      width: 54%;
+    }
+    .wf-foot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(6 * var(--u)) calc(16 * var(--u));
+      padding: calc(9 * var(--u)) calc(40 * var(--u)) calc(9 * var(--u)) calc(14 * var(--u));
+      border-top: calc(1.5 * var(--u)) dashed var(--wf-line);
+      color: var(--wf-text);
+      font-size: calc(12 * var(--u));
+    }
+    .wf-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+    }
+    /* The number of a part: a red circle at the right edge of the part, and before each note. */
+    .wf-mark {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: calc(20 * var(--u));
+      height: calc(20 * var(--u));
+      border-radius: 50%;
+      background: var(--wf-mark);
+      color: #fff;
+      font-size: calc(11 * var(--u));
+      font-weight: 700;
+      line-height: 1;
+    }
+    .wf-field > .wf-mark,
+    .wf-list > .wf-mark,
+    .wf-foot > .wf-mark {
+      position: absolute;
+      top: 50%;
+      right: calc(10 * var(--u));
+      transform: translateY(-50%);
+    }
+    .wf-notes {
+      display: flex;
+      flex-direction: column;
+      gap: calc(6 * var(--u));
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .wf-notes li {
+      display: flex;
+      align-items: center;
+      gap: calc(8 * var(--u));
+    }
+  }
+}

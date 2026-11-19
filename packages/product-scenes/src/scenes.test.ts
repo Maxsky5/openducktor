@@ -21,6 +21,7 @@ const NEEDS_BROWSER: ReadonlySet<SceneName> = new Set([
   "browser",
   "annotate",
   "agent-browser",
+  "approve-merged",
 ]);
 
 /** The scenes that take options from their host. */
