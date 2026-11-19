@@ -14,8 +14,15 @@ import type { StartupStepState } from "./StartupTrace";
 /** SWAP_DISTANCE, SWAP_LEAVE, and SWAP_ENTERING of swap-transition.tsx. */
 const SWAP = { distance: 6, leave: 0.11, enter: 0.24 };
 
+/** The steps that change the startup progress. */
+type StartProgressSteps = {
+  show: (at: number, states: Readonly<Record<string, StartupStepState>>) => void;
+  set: (id: string, state: StartupStepState, at: number) => void;
+  ready: (at: number) => void;
+};
+
 /** The startup progress in the start sheet `sheet`. */
-export function startProgress(scene: Scene, sheet: HTMLElement) {
+export function startProgress(scene: Scene, sheet: HTMLElement): StartProgressSteps {
   const trace = must(sheet, "[data-startup]");
   const step = (id: string): HTMLElement => must(trace, `[data-startup-step="${id}"]`);
 

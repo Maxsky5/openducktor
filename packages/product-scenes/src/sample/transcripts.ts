@@ -19,10 +19,10 @@ import {
 import { signature } from "./sessions";
 import { TASK_BRANCH } from "./worktree";
 import type { Row, SessionData } from "../replicas/transcript/model";
-import { bash, catFile, edit, readTask } from "./calls";
+import { bash, type CallRow, catFile, edit, readTask } from "./calls";
 
 /** A search of Codex with a shell command. */
-function search(pattern: string, duration: string, time: string) {
+function search(pattern: string, duration: string, time: string): CallRow & { id: "search" } {
   return bash("search", `rg -n "${pattern}" src`, duration, time, "search");
 }
 

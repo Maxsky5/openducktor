@@ -5,8 +5,17 @@ import { must } from "../../motion/dom";
 import type { Scene } from "../../motion/scene";
 import { modal } from "../studio/modal";
 
+/** The confirm button of the dialog, and the steps that change it. */
+type CloseTaskDialogSteps = {
+  confirm: () => HTMLElement;
+  reset: () => void;
+  open: (at: number, seconds: number) => number;
+  submit: (at: number) => void;
+  close: (at: number) => void;
+};
+
 /** The dialog in the window `root`. */
-export function closeTaskDialog(scene: Scene, root: HTMLElement) {
+export function closeTaskDialog(scene: Scene, root: HTMLElement): CloseTaskDialogSteps {
   const overlay = must(root, "[data-close-dialog]");
   const { box, open, close, resize } = modal(scene, root, overlay);
   const confirm = must(box, "[data-confirm]");

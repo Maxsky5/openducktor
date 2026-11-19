@@ -73,7 +73,11 @@ export function createScene(
     },
     run: (animation) => {
       if (changeTime === undefined) throw new Error("Call scene.run only in a change of scene.at.");
-      timeline.add(animation, changeTime);
+      // GSAP renders a child that starts behind the playhead with no callbacks, so a slow frame
+      // that passes the whole animation would skip its onComplete. A paused child gets no render
+      // when it is added, and the resume renders it at the playhead with its callbacks.
+      timeline.add(animation.pause(), changeTime);
+      animation.resume();
     },
     runNow: (animation) => {
       timeline.add(animation, timeline.time());

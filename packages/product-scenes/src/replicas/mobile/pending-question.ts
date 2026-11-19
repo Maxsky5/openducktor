@@ -23,6 +23,14 @@ export const CARD_LAYOUT = 0.24;
 /** A tap of finger.ts: it presses the target at a time and returns the release. */
 type Tap = ReturnType<typeof finger>["tap"];
 
+/** The steps that change the pending question. */
+type PendingQuestionSteps = {
+  wait: () => void;
+  choose: (label: string, at: number) => number;
+  confirm: (at: number) => number;
+  answer: (at: number) => void;
+};
+
 /**
  * Animates the card from the height `from` to its height now, as the layout animation of the app
  * moves the frame of the card: the content and the screen have the new layout at once, and the
@@ -45,7 +53,7 @@ function layoutTransition(card: HTMLElement, from: number): gsap.core.Tween | un
 }
 
 /** The pending question of the session screen `screen`. */
-export function pendingQuestion(scene: Scene, screen: HTMLElement, tap: Tap) {
+export function pendingQuestion(scene: Scene, screen: HTMLElement, tap: Tap): PendingQuestionSteps {
   const card = must(screen, '[data-request="question"]');
   const row = must(screen, "[data-question-row]");
   const option = (label: string): HTMLElement => must(card, `[data-option="${label}"]`);

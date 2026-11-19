@@ -16,6 +16,16 @@ type Footer = {
   actions: { primaryAction: string | null };
 };
 type TargetBranch = { branch: string; remote: string };
+/** A saved session of the task, with the fields that the footer reads. */
+type SavedSession = {
+  externalSessionId: string;
+  runtimeKind: string;
+  taskId: string;
+  role: string;
+  status: string;
+  startedAt: string;
+  sessionAssociation: { kind: string; workspaceId: string; taskId: string; role: string };
+};
 
 // SAFETY: kanban-task-footer.ts exports this function, and a missing export fails the test.
 const { getTaskFooter } = await importProduct<{
@@ -66,7 +76,7 @@ const markup = (
 ).join("\n");
 
 /** A saved session of `role` on the task. */
-const session = (role: string, task: TaskCard) => ({
+const session = (role: string, task: TaskCard): SavedSession => ({
   externalSessionId: `${role}-1`,
   runtimeKind: "codex",
   taskId: task.id,

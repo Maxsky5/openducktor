@@ -22,8 +22,17 @@ export const FOLD_MOTION = 0.28;
 /** LINE_ENTER of tool-run-rows.tsx: a call that comes fades and rises 4 points in 200 ms. */
 const LINE_ENTER = { rise: 4, duration: 0.2 };
 
+/** The steps that change the tool runs of a mobile session. */
+type ToolRunSteps = {
+  later: (...ids: string[]) => void;
+  running: (id: string) => (end: number) => void;
+  start: (id: string, at: number) => (end: number) => void;
+  call: (id: string, at: number, runs: number) => number;
+  fold: (row: string, at: number) => void;
+};
+
 /** The steps of the tool runs in the transcript of the session screen `screen`. */
-export function toolRuns(scene: Scene, screen: HTMLElement) {
+export function toolRuns(scene: Scene, screen: HTMLElement): ToolRunSteps {
   const track = must(screen, "[data-track]");
   /** The call `id`. Two runs of a screen can hold calls of one tool, so each call has its own id. */
   const callOf = (id: string): HTMLElement => {

@@ -7,8 +7,14 @@ import { must } from "../../motion/dom";
 import type { Scene } from "../../motion/scene";
 import type { WorkflowPhase } from "./WorkflowToolCard";
 
+/** The steps that change the workflow cards. */
+type WorkflowCardSteps = {
+  later: (row: string) => void;
+  call: (row: string, at: number, runs: number) => number;
+};
+
 /** The workflow cards in the transcript of the session screen `screen`. */
-export function workflowCards(scene: Scene, screen: HTMLElement) {
+export function workflowCards(scene: Scene, screen: HTMLElement): WorkflowCardSteps {
   const cardOf = (row: string): HTMLElement =>
     must(screen, `[data-workflow-tool][data-row="${row}"]`);
 

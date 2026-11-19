@@ -8,8 +8,20 @@ import type { GitlabAccountStep } from "./GitlabAccount";
 import { GITLAB_READINESS, type GitlabReadiness } from "./GitlabSetupCard";
 import type { GitProviderId } from "./GitProviderSelector";
 
+/** The parts of the Git settings, and the steps that change them. */
+type GitSettingsSteps = {
+  tile: (provider: GitProviderId) => HTMLElement;
+  detectButton: () => HTMLElement;
+  signInButton: () => HTMLElement;
+  reset: () => void;
+  select: (provider: GitProviderId, at: number) => void;
+  detect: (projectPath: string, at: number, seconds: number) => number;
+  startSignIn: (at: number, seconds: number) => number;
+  link: (at: number, seconds: number) => number;
+};
+
 /** The Git settings in `root`. */
-export function gitSettings(scene: Scene, root: HTMLElement) {
+export function gitSettings(scene: Scene, root: HTMLElement): GitSettingsSteps {
   const card = must(root, "[data-gitlab-card]");
   const badge = must(card, "[data-card-head] [data-readiness]");
   const detectButton = must(card, "[data-detect]");

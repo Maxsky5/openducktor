@@ -292,7 +292,8 @@ test("the chat opens a new task and starts its Builder in the background", async
   // The start dialog offers to run the Builder in the background.
   const background = stage.locator("[data-background]");
   await runUntil(page, async () => (await background.count()) > 0, 10);
-  await expect(background).toHaveText("Run in background");
+  // The button also holds Continue in background, which shows only while the start runs.
+  await expect(background).toHaveText("Run in background", { useInnerText: true });
   // The dialog closes, and the startup notification shows the steps until the Builder is ready.
   const toast = stage.locator("[data-toasts] [data-startup-toast]");
   await runUntil(page, async () => (await toast.count()) > 0, 10);

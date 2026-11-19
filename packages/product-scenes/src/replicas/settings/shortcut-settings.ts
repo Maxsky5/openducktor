@@ -9,8 +9,42 @@ import type { KeyPlatform } from "../keys";
 import { heldText, ROW_TEXT } from "./ShortcutRow";
 import type { SearchStep } from "./ShortcutSettings";
 
+/** The row of a command, with the parts of its recorder. */
+type Recorder = {
+  row: HTMLElement;
+  field: HTMLElement;
+  add: HTMLElement;
+  press: HTMLElement;
+  keycaps: HTMLElement;
+  badge: HTMLElement;
+  when: HTMLElement;
+  hint: HTMLElement;
+  cancel: HTMLElement;
+  actions: HTMLElement;
+};
+
+/** The parts of the section, and the steps that change it. */
+type ShortcutSettingsSteps = {
+  platform: () => KeyPlatform;
+  reset: (id: string) => void;
+  focusSearch: (at: number) => void;
+  type: (term: string, at: number, charsPerSecond: number) => number;
+  hover: (id: string, at: number) => void;
+  leave: (id: string, at: number) => void;
+  record: (id: string, at: number) => void;
+  hold: (id: string, modifiers: readonly string[], at: number) => void;
+  assign: (id: string, at: number) => void;
+  disable: (at: number) => void;
+  search: () => HTMLElement;
+  keyField: (id: string) => HTMLElement;
+};
+
 /** The section in `root`, the search steps of the scene, and the steps that change them. */
-export function shortcutSettings(scene: Scene, root: HTMLElement, steps: readonly SearchStep[]) {
+export function shortcutSettings(
+  scene: Scene,
+  root: HTMLElement,
+  steps: readonly SearchStep[],
+): ShortcutSettingsSteps {
   const section = must(root, "[data-shortcut-settings]");
   const search = must(section, "[data-shortcut-search]");
   const typed = must(search, "[data-typed]");
@@ -18,7 +52,7 @@ export function shortcutSettings(scene: Scene, root: HTMLElement, steps: readonl
   const resetAll = must(section, "[data-reset-all]");
 
   /** The row of the command `id` that the scene records, with the parts of its recorder. */
-  const recorderOf = (id: string) => {
+  const recorderOf = (id: string): Recorder => {
     const row = must(section, `[data-command="${id}"]`);
     return {
       row,

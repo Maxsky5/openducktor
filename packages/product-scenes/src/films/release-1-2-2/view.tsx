@@ -18,6 +18,7 @@ import { FilmFrame } from "../frame/FilmFrame";
 import { FilmSet } from "../frame/FilmSet";
 import { IntroCard, OutroCard } from "../frame/Titles";
 import type { FilmViewProps } from "../views";
+import { keyPlatform } from "../../replicas/keys";
 import { CAPTIONS, CHAPTERS, INTRO_LINE, KEY_CHORDS, OUTRO, RELEASE } from "./captions";
 
 export const FRAME = { width: 1920, height: 1080 } as const;
@@ -60,6 +61,10 @@ export const VIEWS_OF = {
 const GITLAB_MENU = 240;
 
 export function ReleaseFilmView({ keys, theme }: FilmViewProps): ReactElement {
+  // The captions and the held keys name the keys of macOS.
+  if (keyPlatform(keys) !== "mac") {
+    throw new Error("The release-1-2-2 film shows the keys of macOS. Render it with --keys mac.");
+  }
   const scene = { keys, captioned: true } as const;
   return (
     <FilmFrame

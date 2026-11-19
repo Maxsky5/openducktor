@@ -53,6 +53,13 @@ test.each([...FILM_NAMES])("the %s film plays from its view to its end", async (
   }
 });
 
+test("the release film rejects the keys of Windows and Linux, because its captions show macOS keys", async () => {
+  const View = await views.FILM_VIEWS["release-1-2-2"]();
+  expect(() => renderToStaticMarkup(createElement(View, { keys: keys.PC_KEYS }))).toThrow(
+    "--keys mac",
+  );
+});
+
 test("each caption title line of the release film fits the caption column", async () => {
   const { CAPTIONS } = await import("./films/release-1-2-2/captions");
   const long = Object.values(CAPTIONS)

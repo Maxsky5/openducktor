@@ -5,8 +5,19 @@ import { must } from "../../motion/dom";
 import type { Scene } from "../../motion/scene";
 import type { ArtifactGroups } from "./model";
 
+/** The parts of the Artifacts tab, and the steps that change it. */
+type ArtifactTabSteps = {
+  /** The row of the artifact `id` in the collection. */
+  row: (id: string) => HTMLElement;
+  /** The Expand button of the open file. */
+  expand: HTMLElement;
+  showCollection: () => void;
+  addFiles: (at: number) => void;
+  open: (at: number) => void;
+};
+
 /** The controller of the Artifacts tab in `root`. */
-export function artifactTab(scene: Scene, root: HTMLElement) {
+export function artifactTab(scene: Scene, root: HTMLElement): ArtifactTabSteps {
   const collection = must(root, '[data-artifact-view="collection"]');
   const file = must(root, '[data-artifact-view="file"]');
   const group = (id: keyof ArtifactGroups): HTMLElement =>
@@ -36,9 +47,7 @@ export function artifactTab(scene: Scene, root: HTMLElement) {
     });
 
   return {
-    /** The row of the artifact `id` in the collection. */
     row: (id: string): HTMLElement => must(collection, `[data-artifact-id="${id}"]`),
-    /** The Expand button of the open file. */
     expand: must(file, "[data-artifact-expand]"),
     showCollection,
     addFiles,

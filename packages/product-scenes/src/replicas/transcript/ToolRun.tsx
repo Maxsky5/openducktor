@@ -105,7 +105,7 @@ export function ToolRun({
   const title = runTitle(kinds);
   const earlier = earlierCallCount(calls.length);
   return (
-    <section
+    <div
       className="st-run"
       hidden={hidden}
       data-tool-run=""
@@ -148,6 +148,6 @@ export function ToolRun({
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }

@@ -41,8 +41,14 @@ function dip(caps: readonly HTMLElement[], depth: number, stagger = 0): gsap.cor
   );
 }
 
+/** The steps that hold and release keys on the Keystrokes display. */
+type HeldKeySteps = {
+  hold: (keys: readonly string[], at: number) => void;
+  release: (at: number) => void;
+};
+
 /** The held keys of the Keystrokes display in the window `root`, and the steps that change them. */
-export function heldKeys(scene: Scene, root: HTMLElement) {
+export function heldKeys(scene: Scene, root: HTMLElement): HeldKeySteps {
   const display = must(root, "[data-keystrokes]");
   const tray = must(display, "[data-keystrokes-tray]");
   /** The keys that are down after the last step, in the order of the steps. */
@@ -97,8 +103,16 @@ export function heldKeys(scene: Scene, root: HTMLElement) {
   return { hold, release };
 }
 
+/** The steps that show key presses on the KeyHud display. */
+type KeyPressSteps = {
+  /** Shows the keys of one press at `at`, and fades them out at `until`. */
+  press: (keys: readonly string[], at: number, until?: number) => void;
+  /** Shows the keys of one quick press at `at`. They are gone 0.3 s later. */
+  tap: (keys: readonly string[], at: number) => void;
+};
+
 /** The key presses of the KeyHud display on the stage of `scene`. */
-export function keyPresses(scene: Scene) {
+export function keyPresses(scene: Scene): KeyPressSteps {
   const hud = must(scene.stage, "[data-keys]");
 
   /** Shows the keys of one press at `at`. They fade in for `fade` seconds and dip once. */
@@ -124,12 +138,10 @@ export function keyPresses(scene: Scene) {
     });
 
   return {
-    /** Shows the keys of one press at `at`, and fades them out at `until`. */
     press: (keys: readonly string[], at: number, until = at + 0.8): void => {
       show(keys, at, PRESS.in);
       hide(until, PRESS.out);
     },
-    /** Shows the keys of one quick press at `at`. They are gone 0.3 s later. */
     tap: (keys: readonly string[], at: number): void => {
       show(keys, at, TAP.in);
       hide(at + TAP.in + TAP.hold, TAP.out);

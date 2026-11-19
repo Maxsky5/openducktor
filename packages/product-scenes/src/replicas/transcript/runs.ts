@@ -82,8 +82,18 @@ function rowsOf(track: Element): HTMLElement[] {
   });
 }
 
+/** The steps that change the tool runs. */
+type ToolRunSteps = {
+  isCall: (row: HTMLElement) => boolean;
+  comesLater: (row: HTMLElement) => void;
+  prepare: (call: HTMLElement) => void;
+  hold: (call: HTMLElement) => void;
+  add: (call: HTMLElement, running: boolean) => void;
+  settle: () => void;
+};
+
 /** The tool runs of the transcripts in `root`. */
-export function toolRuns(scene: Scene, root: HTMLElement) {
+export function toolRuns(scene: Scene, root: HTMLElement): ToolRunSteps {
   /** The rows that the scene shows later. At build time, they do not follow a run yet. */
   const later = new Set<HTMLElement>();
 

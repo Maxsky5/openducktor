@@ -7,8 +7,13 @@ import type { Scene } from "../../motion/scene";
 /** Seconds that Mod stays down before the hints show: the transition-delay of position-hints.css. */
 export const HINT_DELAY = 0.75;
 
+/** The steps that show the position hints. */
+type PositionHintSteps = {
+  hold: (down: number, up: number) => number;
+};
+
 /** The position hints of the window `root`. */
-export function positionHints(scene: Scene, root: HTMLElement) {
+export function positionHints(scene: Scene, root: HTMLElement): PositionHintSteps {
   /**
    * The visitor holds Mod from `down` to `up`. The hints show HINT_DELAY seconds after `down`, and
    * they hide at `up`. A shorter hold shows no hint, so a scene does not call this step for it.

@@ -7,8 +7,19 @@ import type { Scene } from "../../motion/scene";
 import { modal } from "../studio/modal";
 import type { SettingsSection } from "./SettingsDialog";
 
+/** The parts of the Settings dialog, and the steps that change it. */
+type SettingsDialogSteps = {
+  open: (at: number) => void;
+  reset: (section: SettingsSection) => void;
+  hover: (section: SettingsSection, at: number) => void;
+  select: (section: SettingsSection, at: number) => void;
+  saveAndClose: (at: number, end: number) => void;
+  menuItem: (section: SettingsSection) => HTMLElement;
+  saveButton: () => HTMLElement;
+};
+
 /** The Settings dialog in the window `root`, and the steps that change it. */
-export function settingsDialog(scene: Scene, root: HTMLElement) {
+export function settingsDialog(scene: Scene, root: HTMLElement): SettingsDialogSteps {
   const overlay = must(root, "[data-settings-dialog]");
   const { box, open, unmount } = modal(scene, root, overlay);
   const save = must(box, "[data-settings-save]");
