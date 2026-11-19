@@ -73,7 +73,29 @@ The demo adds no data collection and no new permission. The Android QR scanner d
 
 ## Store metadata updates
 
-- App Review notes (App Store Connect): add the reviewer steps, the coverage table, and the access gaps. State that the app needs no sign-in, and ask Apple to approve the demo mode in place of a demo account.
-- Google Play app access: select that all or some functionality is restricted, and give the reviewer steps as the instructions. No user name or password is necessary.
+- App Review notes (App Store Connect): paste the short notes below. The Notes field holds at most 4,000 bytes, so the notes link to this guide for the full steps, the coverage table, and the access gaps.
+- Google Play app access: select that all or some functionality is restricted, and give the short notes below as the instructions. No username or password is necessary.
 - Store descriptions and screenshots that say a computer is necessary for all use can add that a demo with sample data is available.
 - The App Privacy answers and the Google Play Data safety form need no change, because the demo collects and sends no data.
+
+### Short review notes
+
+Use this text in the App Review notes and the Google Play app access instructions. It is shorter than 4,000 bytes.
+
+```text
+OpenDucktor controls AI coding agents that run on the user's own computer. A reviewer has no such computer, so the app has a built-in demo mode with sample data on the device. No sign-in, account, network, or code is necessary. We ask Apple to approve this demo mode in place of a demo account.
+
+1. Open the app. On "Connect to a host", tap "Try demo". A "Demo mode" label shows on each screen.
+2. Sessions: open "Explain what to do in an empty notebook", select "Create a note", and tap "Confirm Answers".
+3. Sessions: open "Export a notebook as Markdown" and tap "Approve once".
+4. Sessions: open "Why do tags drop on sync?", send "Add a test for tag sync", and approve the edit. Tap "Subagent session" on the reviewer card. From the session menu (three dots), open Changes, Files, and Terminals (type help).
+5. Sessions: tap the plus button, then "New Session", and start a session in a new worktree.
+6. Tasks: tap "Start Spec" on "Pin notes to the top of a notebook", "Start Planner" on "Let people search notes by title", "Start Builder" on "Restore focus after closing search" (try "Goal mode" and "Generate goal"), and "Request QA Review" on "Show an error when sync fails offline". Each start opens a sheet; tap "Start session".
+7. Tasks: create, edit, and delete a task. Use Import in the plus menu to import a sample issue.
+8. Tasks: tap "Approve Task" on "Open search with a keyboard shortcut". Try "Pull request" with "Write manually", then open the task and tap "CI Checks". Approve again with "Direct merge".
+9. Host tab: "Reset demo" restores the sample data. "Exit demo" returns to host selection.
+
+All demo actions stay on the device. A real computer is necessary for pairing (address, code, or QR scan), connection recovery, real agents and model providers, real Git, files, and shell commands, Git conflict resolution, and pull requests on the web.
+
+Full guide: https://github.com/Maxsky5/openducktor/blob/main/docs/mobile-store-review.md
+```

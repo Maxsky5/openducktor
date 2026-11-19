@@ -149,4 +149,30 @@ describe("demo repository", () => {
       behind: 0,
     });
   });
+
+  test("refuses a second worktree on a branch, and squashes only changed paths", () => {
+    const repository = createDemoRepository({
+      repoPath: "/repo",
+      targetBranch: "main",
+      files: new Map([["README.md", text("# Notes\n")]]),
+    });
+    const task = repository.addWorktree({ workingDirectory: "/worktrees/a", branch: "odt/a" });
+    expect(() =>
+      repository.addWorktree({ workingDirectory: "/worktrees/b", branch: "odt/a" }),
+    ).toThrow("A worktree already uses the branch odt/a");
+    expect(() =>
+      repository.addWorktree({ workingDirectory: "/worktrees/c", branch: "main" }),
+    ).toThrow("A worktree already uses the branch main");
+
+    repository.commit(task, new Map([["README.md", text("# Draft\n")]]), "Draft");
+    repository.commit(task, new Map([["README.md", text("# Notes\n")]]), "Revert");
+    repository.commit(task, new Map([["src/a.ts", text("export {};\n")]]), "Add a");
+    const root = repository.checkout("/repo");
+    repository.commit(root, new Map([["README.md", text("# Notes\n\nMain\n")]]), "Edit main");
+
+    repository.mergeInto(task, "main");
+
+    expect(repository.readFile(root, "README.md")).toEqual(text("# Notes\n\nMain\n"));
+    expect(repository.readFile(root, "src/a.ts")).toEqual(text("export {};\n"));
+  });
 });

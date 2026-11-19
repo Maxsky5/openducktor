@@ -335,6 +335,8 @@ export const createDemoRepository = (input: {
     addWorktree({ workingDirectory, branch, from, base }) {
       if (checkouts.has(workingDirectory))
         throw new Error("A worktree already uses this folder. Enter another name.");
+      if ([...checkouts.values()].some((other) => other.branch === branch))
+        throw new Error(`A worktree already uses the branch ${branch}. Enter another branch name.`);
       const log = from ? from.log : checkoutOfRef(base ?? input.targetBranch).log;
       const created: DemoCheckout = {
         workingDirectory,
@@ -370,9 +372,12 @@ export const createDemoRepository = (input: {
     },
     mergeInto(checkout, targetRef) {
       const into = checkoutOfRef(targetRef);
-      const mergeBase = sharedCommits(checkout.log, into.log);
+      const mergeBase = checkout.log.slice(0, sharedCommits(checkout.log, into.log));
+      // Only paths whose final content differs from the merge base go into the squash.
       const changes = new Map(
-        changedPaths(checkout.log.slice(mergeBase)).map((path) => [path, headFile(checkout, path)]),
+        changedPaths(checkout.log.slice(mergeBase.length))
+          .filter((path) => !sameFile(fileAfter(mergeBase, path), headFile(checkout, path)))
+          .map((path) => [path, headFile(checkout, path)]),
       );
       if (changes.size === 0) return;
       // A squash merge adds one commit to the target branch. The source branch keeps its commits.

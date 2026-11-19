@@ -343,8 +343,9 @@ export const createDemoTaskStore = (
   ): TaskCard => {
     const workspace = workspaceOf(scope);
     const prefix = workspace.record.workspaceId.slice(0, 10);
-    let number = workspace.tasks.size + 1;
-    while (workspace.tasks.has(`${prefix}-d${number}`)) number += 1;
+    // A counter that never goes back, so a deleted task never gives its ID to a new task.
+    let number = world.nextNumber();
+    while (workspace.tasks.has(`${prefix}-d${number}`)) number = world.nextNumber();
     const id = `${prefix}-d${number}`;
     const now = clock.nowIso();
     const task: DemoTask = {
@@ -589,6 +590,14 @@ export const createDemoTaskStore = (
     taskWorktreeRemove: async (scope, taskId) => {
       const workspace = workspaceOf(scope);
       const task = findTask(workspace, taskId);
+      // Chats that work in the worktree block its removal, as the owners query reports.
+      if (
+        task.worktree &&
+        world.sessions.chatsInFolder(workspace, task.worktree.workingDirectory).length > 0
+      )
+        throw new Error(
+          "A session still works in this worktree. Archive it first, then remove the worktree.",
+        );
       terminals.closeTaskTerminals(scope.workspaceId, taskId);
       if (task.worktree) workspace.repository.removeWorktree(task.worktree.workingDirectory);
       task.worktree = null;

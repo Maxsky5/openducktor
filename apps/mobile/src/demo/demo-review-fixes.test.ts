@@ -215,6 +215,12 @@ describe("demo backend review fixes", () => {
       parts: [{ kind: "text", text: "Add a note" }],
     });
     await demo.advance(15_000);
+    const pendingId = async () => {
+      const live = await demo.client.agentSessionLiveRead(ref);
+      return live.type === "live" ? live.session.pendingApprovals[0]?.requestId : undefined;
+    };
+    const requestId = await pendingId();
+    if (!requestId) throw new Error("The run asked for no permission.");
     await expect(
       demo.client.agentSessionLiveReplyApproval({
         ...ref,
@@ -222,6 +228,9 @@ describe("demo backend review fixes", () => {
         outcome: "approve_once",
       }),
     ).rejects.toThrow("already answered");
+    expect(await pendingId()).toBe(requestId);
+    await demo.client.agentSessionLiveReplyApproval({ ...ref, requestId, outcome: "approve_once" });
+    expect(await pendingId()).toBeUndefined();
     await demo.client.agentSessionControlUpdateModel({
       ...ref,
       sessionScope: target.sessionScope,
@@ -596,6 +605,114 @@ describe("demo QA fixes", () => {
     expect(compacted.kind === "accepted" && compacted.acceptedMessage.type).toBe(
       "command_accepted",
     );
+  });
+
+  test("sends the next queued message after a command that starts no turn", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const { target } = await chatOf(demo, "How does search rank notes?");
+    let submission = 30;
+    const send = (parts: Parameters<typeof demo.client.agentSessionMessageSubmit>[0]["parts"]) =>
+      demo.client.agentSessionMessageSubmit({
+        ...target,
+        submissionId: `11111111-1111-4111-8111-0000000000${submission++}`,
+        mode: "default",
+        parts,
+      });
+    await send([{ kind: "text", text: "First run" }]);
+    await send([
+      { kind: "slash_command", command: { ...MANUAL_SESSION_COMPACTION_SLASH_COMMAND, hints: [] } },
+    ]);
+    await send(goalCommandParts("pause"));
+    await send([{ kind: "text", text: "After the commands" }]);
+    await demo.advance(30_000);
+    // `/goal pause` fails without a goal, so it stays first and holds the queue with its reason.
+    const held = await demo.client.agentSessionMessageQueueManage({
+      ...target,
+      action: { kind: "resume" },
+    });
+    expect(held.queue.entries).toHaveLength(2);
+    expect(held.queue.pause?.message).toContain("This session has no goal");
+    const pauseEntry = held.queue.entries[0];
+    if (!pauseEntry) throw new Error("The queue is empty.");
+    await demo.client.agentSessionMessageQueueManage({
+      ...target,
+      action: { kind: "remove", submissionId: pauseEntry.submissionId },
+    });
+    const resumed = await demo.client.agentSessionMessageQueueManage({
+      ...target,
+      action: { kind: "resume" },
+    });
+    expect(resumed.queue.entries).toEqual([]);
+    expect(
+      resumed.acceptedMessage?.type === "user_message" && resumed.acceptedMessage.message,
+    ).toBe("After the commands");
+  });
+
+  test("refuses a second start, a shared archive, and a worktree removal while others use it", async () => {
+    const demo = openDemo();
+    await observeLive(demo);
+    const ready = await taskOf(demo, "Restore focus after closing search");
+    const first = buildLaunch(demo, ready.id);
+    await demo.advance(100);
+    await expect(buildLaunch(demo, ready.id)).rejects.toThrow("A session is starting");
+    await demo.advance(5_000);
+    await first;
+
+    const { chat, ref } = await chatOf(demo, "Why do tags drop on sync?");
+    await demo.client.workspaceSessionCreate({
+      workspaceId: "fieldnotes",
+      location: "existing_worktree",
+      existingWorktree: { workingDirectory: chat.executionTarget.workingDirectory },
+      runtimeKind: "claude",
+      selectedModel: null,
+      customAgentRoleId: null,
+      manualTitle: "Shared",
+      targetBranch: { remote: "origin", branch: "main" },
+    });
+    await demo.client.agentSessionMessageSubmit({
+      ...ref,
+      sessionScope: { kind: "repository", workspaceId: "fieldnotes" },
+      submissionId: "11111111-1111-4111-8111-000000000040",
+      mode: "default",
+      parts: [{ kind: "text", text: "Explain the sync" }],
+    });
+    await expect(
+      demo.client.workspaceSessionArchive({
+        workspaceId: "fieldnotes",
+        sessionId: chat.id,
+        confirmStop: true,
+        removeWorktree: true,
+      }),
+    ).rejects.toThrow("Other chats or tasks still use this worktree");
+    const live = await demo.client.agentSessionLiveRead(ref);
+    expect(live.type === "live" && live.session.activity).toBe("running");
+
+    const reviewed = await taskOf(demo, "Open search with a keyboard shortcut");
+    const worktree = await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id);
+    await demo.client.workspaceSessionCreate({
+      workspaceId: "fieldnotes",
+      location: "existing_worktree",
+      existingWorktree: { workingDirectory: worktree?.workingDirectory ?? "" },
+      runtimeKind: "claude",
+      selectedModel: null,
+      customAgentRoleId: null,
+      manualTitle: "On the task",
+      targetBranch: { remote: "origin", branch: "main" },
+    });
+    await expect(demo.client.taskWorktreeRemove(FIELDNOTES, reviewed.id)).rejects.toThrow(
+      "A session still works in this worktree",
+    );
+    expect(await demo.client.taskWorktreeGet(FIELDNOTES, reviewed.id)).toEqual(worktree);
+  });
+
+  test("never gives a deleted task ID to a new task", async () => {
+    const demo = openDemo();
+    const create = () =>
+      demo.client.taskCreate(FIELDNOTES, { title: "Scratch", issueType: "task", priority: 2 });
+    const first = await create();
+    await demo.client.taskDelete(FIELDNOTES, first.id);
+    expect((await create()).id).not.toBe(first.id);
   });
 
   test("starts a new chat worktree from the selected target branch", async () => {

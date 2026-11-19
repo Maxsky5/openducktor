@@ -45,6 +45,7 @@ import {
 const DEMO_STEP_MS = 1300;
 const TOOL_RUN_MS = 700;
 const CONTEXT_WINDOW = 200_000;
+const QUEUE_STOPPED = "The run stopped. Resume the queue to send the next message.";
 
 type UserMessagePart = Parameters<HostClient["agentSessionMessageSubmit"]>[0]["parts"][number];
 
@@ -78,7 +79,8 @@ export type DemoSession = {
   todos: AgentTranscriptSessionTodoItem[];
   pendingApprovals: AgentSessionLivePendingApprovalRequest[];
   pendingQuestions: AgentSessionLivePendingQuestionRequest[];
-  queue: { revision: number; entries: AgentQueuedMessage[]; paused: boolean };
+  /** The queued messages. `pause` holds the reason while the queue waits for the user. */
+  queue: { revision: number; entries: AgentQueuedMessage[]; pause: string | null };
   run: Run | null;
   contextTokens: number;
   lastActivityAt: number;
@@ -193,9 +195,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     target: { ...session.ref, sessionScope: scopeOf(session) },
     revision: session.queue.revision,
     entries: session.queue.entries,
-    pause: session.queue.paused
-      ? { message: "The run stopped. Resume the queue to send the next message." }
-      : null,
+    pause: session.queue.pause === null ? null : { message: session.queue.pause },
   });
 
   const scopeOf = (session: DemoSession): AgentSessionScope => {
@@ -441,7 +441,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     session.contextTokens += 2_400 + entry.text.length * 3;
     session.lastActivityAt = clock.now();
     if (failure && session.queue.entries.length > 0) {
-      session.queue.paused = true;
+      session.queue.pause = QUEUE_STOPPED;
       publishQueue(session);
     }
     upsert(session);
@@ -526,6 +526,12 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     steps: [{ kind: "text", text: "Done." }],
   });
 
+  const requireGoal = (session: DemoSession): AgentSessionGoal => {
+    if (!session.goal)
+      throw new Error("This session has no goal. Send /goal with an objective first.");
+    return session.goal;
+  };
+
   /**
    * Applies a goal command, as the runtime does. `set` and `resume` start work when the session
    * is idle; the goal drives that run.
@@ -533,8 +539,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
   const controlGoal = (session: DemoSession, command: AgentSessionGoalCommand) => {
     if (command.kind === "set") session.goal = { objective: command.objective, status: "active" };
     else {
-      const goal = session.goal;
-      if (!goal) throw new Error("This session has no goal. Send /goal with an objective first.");
+      const goal = requireGoal(session);
       if (command.kind === "clear") delete session.goal;
       else
         session.goal = {
@@ -549,6 +554,12 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
   const systemCommandOf = (parts: readonly UserMessagePart[]) =>
     // SAFETY: parsed contract parts differ from core parts only by optional fields that are absent.
     classifySystemSlashCommandInvocation([...parts] as AgentUserMessagePart[]);
+
+  /** Throws the reason why `deliver` would refuse these parts now. */
+  const checkDeliverable = (session: DemoSession, parts: readonly UserMessagePart[]) => {
+    const invocation = systemCommandOf(parts);
+    if (invocation.kind === "goal" && invocation.command.kind !== "set") requireGoal(session);
+  };
 
   /** Sends a message that the session can take now: a system command or a prompt. */
   const deliver = (
@@ -582,15 +593,26 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
 
   /** Only a normal end sends the next queued message, as on a real host. */
   const drainQueue = (session: DemoSession) => {
-    if (session.run || session.queue.paused) return;
-    // The queue keeps its order: a first message that the user edits holds the others.
-    const next = session.queue.entries[0];
-    if (next?.state !== "queued") return;
-    session.queue.entries = session.queue.entries.filter(
-      (entry) => entry.submissionId !== next.submissionId,
-    );
-    publishQueue(session);
-    deliver(session, next.parts, next.submissionId);
+    // A command that starts no turn lets the next message go at once.
+    while (!session.run && session.queue.pause === null) {
+      // The queue keeps its order: a first message that the user edits holds the others.
+      const next = session.queue.entries[0];
+      if (next?.state !== "queued") return;
+      try {
+        checkDeliverable(session, next.parts);
+      } catch (error) {
+        // The message stays, so the user can edit or remove it.
+        const reason = error instanceof Error ? error.message : String(error);
+        session.queue.pause = `${reason} Edit or remove the first message, then resume the queue.`;
+        publishQueue(session);
+        return;
+      }
+      session.queue.entries = session.queue.entries.filter(
+        (entry) => entry.submissionId !== next.submissionId,
+      );
+      publishQueue(session);
+      deliver(session, next.parts, next.submissionId);
+    }
   };
 
   /** Stops the run at once and drops its pending requests. The outcome does not apply. */
@@ -608,7 +630,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
     if (!entry.text) entry.text = "Stopped.";
     transcript(session, { type: "session_idle", turnOutcome: "interrupted" });
     if (session.queue.entries.length > 0) {
-      session.queue.paused = true;
+      session.queue.pause = QUEUE_STOPPED;
       publishQueue(session);
     }
     upsert(session);
@@ -691,7 +713,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
       todos: [],
       pendingApprovals: [],
       pendingQuestions: [],
-      queue: { revision: 0, entries: [], paused: false },
+      queue: { revision: 0, entries: [], pause: null },
       run: null,
       contextTokens: 9_800,
       lastActivityAt: input.startedAtMs,
@@ -781,7 +803,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
           kind: "accepted",
           acceptedMessage: acceptUserMessage(session, input.parts, input.submissionId),
         };
-      if (session.run || session.queue.entries.length > 0 || session.queue.paused) {
+      if (session.run || session.queue.entries.length > 0 || session.queue.pause !== null) {
         session.queue.entries = [
           ...session.queue.entries,
           {
@@ -846,8 +868,9 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
           if (entry?.state !== "queued") throw new Error("This message already left the queue.");
           if (session.run && systemCommandOf(entry.parts).kind !== "not_system")
             throw new Error("A slash command cannot join running work.");
+          if (!session.run) checkDeliverable(session, entry.parts);
           session.queue.entries = entries.filter((_, index) => index !== at);
-          session.queue.paused = false;
+          session.queue.pause = null;
           if (session.run) steered = acceptUserMessage(session, entry.parts, entry.submissionId);
           else {
             const delivered = deliver(session, entry.parts, entry.submissionId);
@@ -856,7 +879,7 @@ export const createDemoSessionEngine = (world: DemoWorld) => {
           }
           break;
         case "resume":
-          session.queue.paused = false;
+          session.queue.pause = null;
           break;
       }
       if (steered) {

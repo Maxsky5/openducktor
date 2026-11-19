@@ -154,6 +154,8 @@ export const createDemoLaunches = ({
   const launch: HostClient["agentSessionWorkflowLaunch"] = async (request) => {
     const workspace = findWorkspace(world, request.workspaceId);
     const task = findTask(workspace, request.taskId);
+    if (world.startingTasks.has(task))
+      throw new Error("A session is starting in this task worktree. Wait until it starts.");
     const pullRequest = request.policy.actionId === "pull_request";
     const role = workflow.launchAction(request.policy.actionId, request.policy.role).role;
     if (request.beforeStartAction)
@@ -619,7 +621,6 @@ export const createDemoLaunches = ({
     },
     workspaceSessionArchive: async ({ workspaceId, sessionId, removeWorktree }) => {
       const chat = findChat(workspaceId, sessionId);
-      engine.stopRun(chat);
       const target = chat.owner.record.executionTarget;
       let executionTarget = target;
       if (removeWorktree && target.kind === "local_worktree") {
@@ -628,6 +629,10 @@ export const createDemoLaunches = ({
           throw new Error(
             "Other chats or tasks still use this worktree. Archive them first, or keep the worktree.",
           );
+      }
+      // A refused archive keeps the run; an accepted one stops it before any removal.
+      engine.stopRun(chat);
+      if (removeWorktree && target.kind === "local_worktree") {
         chat.workspace.repository.removeWorktree(target.workingDirectory);
         executionTarget = { ...target, worktreeState: "removed" };
       }
