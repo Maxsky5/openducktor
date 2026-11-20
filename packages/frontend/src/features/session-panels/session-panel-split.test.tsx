@@ -1,4 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
@@ -40,12 +41,23 @@ const panelElement = (): HTMLElement => {
 
 type Move = { end: () => void };
 
-/** Runs the size transition that the split CSS starts on a moving panel, until `end` stops it. */
+/** The sheet motion tokens, then the split CSS, as in the app styles. */
+const SPLIT_STYLES = [
+  new URL("../../components/ui/sheet.css", import.meta.url),
+  new URL("./session-panel-split.css", import.meta.url),
+]
+  .map((file) => readFileSync(file, "utf8"))
+  .join("\n");
+
+/**
+ * Applies the split CSS, which gives a moving panel its size transition. The test DOM runs no
+ * transition, so the panel reports a running one until `end` stops it.
+ */
 const withMove = (run: (move: Move) => void): void => {
   let isRunning = true;
   const transition = new Animation();
   const motionStyle = document.createElement("style");
-  motionStyle.textContent = "[data-panel-motion] > [data-panel] { transition-duration: 0.2s; }";
+  motionStyle.textContent = SPLIT_STYLES;
   document.head.append(motionStyle);
   const animations = spyOn(HTMLElement.prototype, "getAnimations").mockImplementation(function (
     this: HTMLElement,
@@ -175,7 +187,7 @@ describe("SessionPanelSplit", () => {
     expect(onSettled).toHaveBeenCalledTimes(1);
   });
 
-  test("resizes the main area and the panel together while the panel opens", () => {
+  test("moves the main area and the panel together while the panel opens", () => {
     withLaidOutMove((move) => {
       const onSettled = mock(() => {});
       const view = render(renderSplit("closed", onSettled));
@@ -196,7 +208,7 @@ describe("SessionPanelSplit", () => {
     });
   });
 
-  test("resizes the main area and the panel together while the panel closes", () => {
+  test("moves the main area and the panel together while the panel closes", () => {
     withLaidOutMove((move) => {
       const onSettled = mock(() => {});
       const view = render(renderSplit("open", onSettled));
@@ -219,7 +231,7 @@ describe("SessionPanelSplit", () => {
     });
   });
 
-  test("waits for the reversed resize when the panel opens again during its close", () => {
+  test("waits for the reversed move when the panel opens again during its close", () => {
     withLaidOutMove((move) => {
       const onSettled = mock(() => {});
       const view = render(renderSplit("open", onSettled));
