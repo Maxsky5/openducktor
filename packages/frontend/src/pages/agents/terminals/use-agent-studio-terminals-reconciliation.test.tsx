@@ -181,24 +181,21 @@ describe("useAgentStudioTerminals reconciliation", () => {
 
   test("keeps previous-host terminals visible as lost after the host instance changes", async () => {
     const baseDependencies = createTerminalTestDependencies();
-    let hostInstanceId = "host-1";
-    let terminals = [summaryForTask("task-a")];
+    let list = { hostInstanceId: "host-1", revision: 1, terminals: [summaryForTask("task-a")] };
     const dependencies: TerminalTestDependencies = {
       ...baseDependencies,
       hostClient: {
         ...baseDependencies.hostClient,
-        terminalList: async () => ({ hostInstanceId, revision: 1, terminals }),
+        terminalList: async () => list,
       },
     };
     const view = renderTaskTerminalPanels(dependencies);
     try {
       await waitFor(() => expect(view.terminals().tabs[0]?.terminalId).toBe("terminal-task-a"), {
-        timeout: 2_000,
+        timeout: 500,
       });
-      await waitFor(() => expect(view.terminals().isLoading).toBe(false));
 
-      hostInstanceId = "host-2";
-      terminals = [];
+      list = { hostInstanceId: "host-2", revision: 1, terminals: [] };
       act(() => view.terminals().onRetryDiscovery());
 
       await waitFor(
@@ -206,10 +203,25 @@ describe("useAgentStudioTerminals reconciliation", () => {
           expect(view.terminals().tabs).toMatchObject([
             { tabId: "tab:terminal-task-a", terminalId: null, requestState: "lost" },
           ]),
-        { timeout: 2_000 },
+        { timeout: 500 },
       );
       expect(view.terminals().tabs[0]?.error).toContain("host restarted");
       expect(view.panels().bottom.tabs).toHaveLength(1);
+
+      const replacement = { ...summaryForTask("task-a"), terminalId: "terminal-replacement" };
+      list = { ...list, revision: 2, terminals: [replacement] };
+      act(() => view.terminals().onRetryDiscovery());
+      await waitFor(
+        () =>
+          expect(
+            view.terminals().tabs.find((tab) => tab.terminalId === replacement.terminalId)
+              ?.requestState,
+          ).toBe("ready"),
+        { timeout: 500 },
+      );
+      const previousTab = view.terminals().tabs.find((tab) => tab.tabId === "tab:terminal-task-a");
+      expect(previousTab?.requestState).toBe("lost");
+      expect(previousTab?.error).toContain("host restarted");
     } finally {
       view.unmount();
     }
