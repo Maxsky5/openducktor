@@ -88,7 +88,7 @@ describe("useTerminals", () => {
       }));
       const view = renderModel(terminalList);
       try {
-        await waitFor(() => expect(view.result.current.isSynced).toBe(true));
+        await waitFor(() => expect(view.result.current.isSynced).toBe(true), { timeout: 500 });
         const { emit, subscriptionId } = await observeList(view);
         const freshTerminal = { ...terminal, terminalId: "new-shell" };
         act(() => {
@@ -108,7 +108,9 @@ describe("useTerminals", () => {
           emit({ version: TERMINAL_PROTOCOL_VERSION, type: "list_snapshot_end", subscriptionId });
         });
         const expectedLostTabs = hostInstanceId === "host-1" ? 0 : 1;
-        await waitFor(() => expect(view.result.current.tabs).toHaveLength(expectedLostTabs));
+        await waitFor(() => expect(view.result.current.tabs).toHaveLength(expectedLostTabs), {
+          timeout: 500,
+        });
         act(() => {
           emit(
             {
@@ -120,13 +122,18 @@ describe("useTerminals", () => {
             freshTerminal,
           );
         });
-        await waitFor(() => {
-          const { tabs } = view.result.current;
-          expect(tabs.filter((tab) => tab.requestState === "lost")).toHaveLength(expectedLostTabs);
-          expect(tabs.flatMap((tab) => (tab.terminalId === null ? [] : [tab.terminalId]))).toEqual([
-            "new-shell",
-          ]);
-        });
+        await waitFor(
+          () => {
+            const { tabs } = view.result.current;
+            expect(tabs.filter((tab) => tab.requestState === "lost")).toHaveLength(
+              expectedLostTabs,
+            );
+            expect(
+              tabs.flatMap((tab) => (tab.terminalId === null ? [] : [tab.terminalId])),
+            ).toEqual(["new-shell"]);
+          },
+          { timeout: 500 },
+        );
         expect(terminalList).toHaveBeenCalledTimes(1);
       } finally {
         view.unmount();

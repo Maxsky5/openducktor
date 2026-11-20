@@ -267,9 +267,6 @@ const reconcileHostTabs = (
     );
     return { ...scope, hostInstanceId, tabs, closingTabIds };
   }
-  const currentTabsByTerminalId = new Map(
-    scope.tabs.flatMap((tab) => (tab.terminalId ? [[tab.terminalId, tab] as const] : [])),
-  );
   const summariesByTerminalId = new Map(
     summaries.map((summary) => [summary.terminalId, summary] as const),
   );
@@ -295,7 +292,7 @@ const reconcileHostTabs = (
   }
   for (const summary of summaries) {
     if (!knownTerminalIds.has(summary.terminalId)) {
-      hostTabs.push(toHostTab(summary, currentTabsByTerminalId.get(summary.terminalId)));
+      hostTabs.push(toHostTab(summary));
     }
   }
   const tabs = [...hostTabs, ...transient];
