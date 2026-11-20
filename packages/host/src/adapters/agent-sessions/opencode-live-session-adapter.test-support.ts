@@ -146,6 +146,9 @@ export const createRuntimeHarness = (
       controlCalls.push({ operation: "generate", input });
       return `Generated: ${input.prompt}`;
     },
+    generateJson: async () => {
+      throw new Error("Unexpected JSON generation");
+    },
     readSessionSources: async (repoPath, roots) => {
       sessionSourceReadCalls += 1;
       sessionSourceReadRepos.push(repoPath);

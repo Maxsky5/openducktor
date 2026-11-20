@@ -493,7 +493,7 @@ export const createPersistenceHarness = async (
     lifecycle: createTaskSessionLifecycleCoordinator(),
     operationGate,
     sessionTitleGate,
-    facts: naming.facts,
+    chatNaming: { registerCreated: persistence.registerCreated },
     isTitleSyncPending: persistence.isTitleSyncPending,
     markTitleSyncPending: persistence.markTitleSyncPending,
     store: {

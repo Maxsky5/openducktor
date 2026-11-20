@@ -5,7 +5,7 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
 import type { NamingService } from "../../naming/naming-service";
-import { chooseTaskBranch, taskBranchNamingStep } from "./task-branch-naming";
+import { nameTaskBranch, taskBranchNamingStep } from "./task-branch-naming";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
@@ -224,8 +224,8 @@ export const createTaskSessionStartPreparationService = ({
                     worktreePath,
                     taskBranchNamingStep(repoConfig),
                   );
-                  const { branch, generated } = yield* chooseTaskBranch(
-                    { naming, gitPort: dependencies.gitPort },
+                  const branch = yield* nameTaskBranch(
+                    { naming, git: dependencies.gitPort },
                     { repoConfig, repoPath: canonicalRepoPath, task },
                   );
                   const newWorktree = yield* prepareNewTaskWorktree(
@@ -236,7 +236,6 @@ export const createTaskSessionStartPreparationService = ({
                     worktreeBase,
                     worktreePath,
                     branch,
-                    generated,
                     startPoint,
                   );
                   rollback = () =>

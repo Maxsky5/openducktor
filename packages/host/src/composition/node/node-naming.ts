@@ -1,3 +1,4 @@
+import type { AgentJsonGenerationInput } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createNamingService } from "../../application/naming/naming-service";
 import { createAgentTextGenerationService } from "../../application/runtimes/agent-text-generation-service";
@@ -15,12 +16,11 @@ export const createNodeNaming = (
   registries: () => TextGenerationRegistries,
 ) => {
   let resolved: AgentTextGenerationPort | undefined;
+  const service = () => (resolved ??= createAgentTextGenerationService(registries()));
   const textGeneration: AgentTextGenerationPort = {
-    generate: (input) =>
-      Effect.suspend(() => {
-        resolved ??= createAgentTextGenerationService(registries());
-        return resolved.generate(input);
-      }),
+    generate: (input) => Effect.suspend(() => service().generate(input)),
+    generateJson: <Answer>(input: AgentJsonGenerationInput<Answer>) =>
+      Effect.suspend(() => service().generateJson(input)),
   };
   return { textGeneration, naming: createNamingService({ settingsConfig, textGeneration }) };
 };

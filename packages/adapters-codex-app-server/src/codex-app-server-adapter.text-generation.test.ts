@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { agentJsonOutputSchema } from "@openducktor/contracts";
+import { z } from "zod";
 import type { CodexAppServerConfigReadResponse } from "@openducktor/contracts";
 import type { CodexConfiguredMcpServers } from "./codex-app-server-adapter.test-harness";
 
@@ -18,19 +20,22 @@ const input = {
   prompt: "Task: Add goals.",
 } as const;
 
+const answerSchema = z.strictObject({ title: z.string() });
+
 const startGeneration = async (
   configuredMcpServers: CodexConfiguredMcpServers = {},
   configLayers: RecordingTransportLayers = [],
+  answer: "text" | "json" = "text",
 ) => {
   const stream = createRuntimeStreamSubscription();
   const harness = createHarness({ subscribeEvents: stream.subscribeEvents });
   harness.transportFactory("runtime-live").configuredMcpServers = configuredMcpServers;
   harness.transportFactory("runtime-live").configLayers = configLayers;
-  const generation = harness.adapter.generateText(
-    "runtime-live",
-    input,
-    new AbortController().signal,
-  );
+  const signal = new AbortController().signal;
+  const generation: Promise<unknown> =
+    answer === "json"
+      ? harness.adapter.generateJson("runtime-live", { ...input, answerSchema }, signal)
+      : harness.adapter.generateText("runtime-live", input, signal);
   const transport = () => harness.transports.get("runtime-live");
   for (let attempt = 0; attempt < 20; attempt += 1) {
     if (transport()?.calls.some(({ method }) => method === "turn/start")) break;
@@ -343,4 +348,62 @@ test("answers with the turn's own message, not an async message to the user", as
   });
 
   expect(await generation).toBe("The goal.");
+});
+
+const finishTurn = (stream: ReturnType<typeof createRuntimeStreamSubscription>, text: string) => {
+  stream.emitNotification({
+    method: "item/completed",
+    params: {
+      threadId: THREAD_ID,
+      turnId: "turn-1",
+      completedAtMs: 1_777_766_419_650,
+      item: {
+        type: "agentMessage",
+        id: "message-1",
+        text,
+        phase: "final_answer",
+        memoryCitation: null,
+      },
+    },
+  });
+  stream.emitNotification({
+    method: "turn/completed",
+    params: {
+      threadId: THREAD_ID,
+      turn: codexTurnFixture({ id: "turn-1", status: "completed", items: [] }),
+    },
+  });
+};
+
+test("constrains a JSON answer to the output schema and reads its value", async () => {
+  const { stream, generation, calls } = await startGeneration({}, [], "json");
+  finishTurn(stream, '{"title":"Login fix"}');
+
+  expect(await generation).toEqual({ title: "Login fix" });
+  expect(calls().find(({ method }) => method === "turn/start")?.params).toMatchObject({
+    outputSchema: agentJsonOutputSchema(answerSchema),
+  });
+});
+
+test("sends no output schema for a text answer", async () => {
+  const { stream, generation, calls } = await startGeneration();
+  finishTurn(stream, "The goal.");
+  await generation;
+  expect(calls().find(({ method }) => method === "turn/start")?.params).toMatchObject({
+    outputSchema: null,
+  });
+});
+
+test("reports a JSON answer of another shape", async () => {
+  const { stream, generation } = await startGeneration({}, [], "json");
+  finishTurn(stream, '{"name":"Login fix"}');
+  await expect(generation).rejects.toThrow(
+    "Codex returned an answer that does not fit the output schema",
+  );
+});
+
+test("reports a JSON answer that is not JSON", async () => {
+  const { stream, generation } = await startGeneration({}, [], "json");
+  finishTurn(stream, "Login fix");
+  await expect(generation).rejects.toThrow("Codex returned an answer that is not JSON");
 });

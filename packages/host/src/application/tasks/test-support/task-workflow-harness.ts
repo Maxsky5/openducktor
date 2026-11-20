@@ -607,7 +607,8 @@ const createBuildStartGitPort = ({
       return Effect.die(new Error("unexpected ref tip list"));
     },
     listRefNames() {
-      return Effect.die(new Error("unexpected ref name list"));
+      // No branch exists, as listBranches reports.
+      return Effect.succeed([]);
     },
     resolveFetchRemotes() {
       return Effect.die(new Error("unexpected fetch remote resolution"));
@@ -794,8 +795,12 @@ const createDirectMergeGitPort = ({
     listRefTips() {
       return Effect.die(new Error("unexpected ref tip list"));
     },
-    listRefNames() {
-      return Effect.die(new Error("unexpected ref name list"));
+    listRefNames(workingDir) {
+      return Effect.sync(() =>
+        (branches[workingDir] ?? [])
+          .filter((branch) => !branch.isRemote)
+          .map((branch) => `refs/heads/${branch.name}`),
+      );
     },
     resolveFetchRemotes() {
       return Effect.die(new Error("unexpected fetch remote resolution"));

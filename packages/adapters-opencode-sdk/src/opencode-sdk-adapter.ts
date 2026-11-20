@@ -14,6 +14,7 @@ import {
   isManualSessionCompactionSlashCommand,
   type AgentSessionScope,
   type AgentSessionControlUpdateTitleInput,
+  type AgentJsonGenerationInput,
   type AgentTextGenerationInput,
 } from "@openducktor/contracts";
 import {
@@ -76,6 +77,7 @@ import {
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import { readCatalog } from "./opencode-catalog";
 import { createOpenCodeMessageId } from "./opencode-message-id";
+import { openCodeJsonInstructions, readOpenCodeJsonAnswer } from "./opencode-json-answer";
 import type {
   OpenCodeRuntimeConnection,
   OpencodeSdkAdapterOptions,
@@ -737,6 +739,21 @@ export class OpencodeSdkAdapter {
           )
         ).text,
     );
+  }
+
+  /**
+   * One model answer of `answerSchema`. OpenCode cannot constrain the answer, so the instructions
+   * hold its JSON Schema, and the answer is the JSON object of the answer text.
+   */
+  async generateJson<Answer>(
+    input: AgentJsonGenerationInput<Answer>,
+    signal: AbortSignal,
+  ): Promise<Answer> {
+    const text = await this.generateText(
+      { ...input, instructions: openCodeJsonInstructions(input) },
+      signal,
+    );
+    return readOpenCodeJsonAnswer(text, input.answerSchema);
   }
 
   /**

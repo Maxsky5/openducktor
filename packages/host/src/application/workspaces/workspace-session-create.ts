@@ -1,3 +1,4 @@
+import { automaticWorktreeName } from "@openducktor/contracts";
 import {
   type RepoConfig,
   type WorkspaceSession,
@@ -17,16 +18,13 @@ import {
   type WorkspaceSessionDestination,
   type WorkspaceSessionTargetCreationDependencies,
 } from "./workspace-session-target";
-import {
-  automaticWorktreeName,
-  temporaryWorkspaceBranch,
-  type WorkspaceSessionCreationFacts,
-} from "./workspace-session-naming";
+import { temporaryWorkspaceBranch } from "./workspace-session-branch-rename";
+import type { WorkspaceSessionNaming } from "./workspace-session-naming";
 
 export type WorkspaceSessionCreateDependencies = WorkspaceSessionTargetCreationDependencies & {
   store: Pick<WorkspaceSessionStorePort, "create">;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
-  facts: WorkspaceSessionCreationFacts;
+  chatNaming: Pick<WorkspaceSessionNaming, "registerCreated">;
 };
 
 /**
@@ -140,7 +138,7 @@ export const createWorkspaceSessionCreate =
                 ),
               ),
           );
-          dependencies.facts.created(
+          dependencies.chatNaming.registerCreated(
             { workspaceId: input.workspaceId, sessionId },
             temporaryBranch,
           );

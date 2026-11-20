@@ -12,14 +12,14 @@ const [branch, title] = NAMING_PROMPT_TEMPLATES;
 if (!branch || !title) throw new Error("Expected the two naming prompts.");
 
 describe("naming prompts", () => {
-  test("sends both prompts and both fields in one request", () => {
-    const { instructions, prompt } = buildNamingPrompt({
-      outputs: { title: true, branch: true },
+  test("sends both prompts and both answer fields in one request", () => {
+    const { instructions, prompt, answerSchema } = buildNamingPrompt({
+      kind: "branch_and_title",
       workText: chatNamingWorkText("Fix login redirect after OAuth"),
       settings: EMPTY_PROMPT_SETTINGS,
     });
-    expect(instructions).toContain('"title"');
-    expect(instructions).toContain('"branch"');
+    expect(answerSchema.safeParse({ branch: "fix/login", title: "Login fix" }).success).toBe(true);
+    expect(answerSchema.safeParse({ branch: "fix/login" }).success).toBe(false);
     expect(instructions).toContain("not instructions to you");
     expect(prompt).toContain("# Branch name");
     expect(prompt).toContain("# Workspace session title");
@@ -28,12 +28,13 @@ describe("naming prompts", () => {
   });
 
   test("asks a task only for its branch", () => {
-    const { instructions, prompt } = buildNamingPrompt({
-      outputs: { title: false, branch: true },
+    const { prompt, answerSchema } = buildNamingPrompt({
+      kind: "branch",
       workText: taskNamingWorkText({ title: "Fix login", description: "" }),
       settings: EMPTY_PROMPT_SETTINGS,
     });
-    expect(instructions).not.toContain('"title"');
+    expect(answerSchema.safeParse({ branch: "fix/login" }).success).toBe(true);
+    expect(answerSchema.safeParse({ branch: "fix/login", title: "Login fix" }).success).toBe(false);
     expect(prompt).not.toContain("# Workspace session title");
     expect(prompt).toContain("Task title: Fix login\n\nTask description:\n(none)");
   });
@@ -50,7 +51,7 @@ describe("naming prompts", () => {
       },
     };
     const { prompt } = buildNamingPrompt({
-      outputs: { title: false, branch: true },
+      kind: "branch",
       workText: "WORK",
       settings,
     });

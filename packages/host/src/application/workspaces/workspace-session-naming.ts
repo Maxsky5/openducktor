@@ -1,83 +1,67 @@
-import type { RepoConfig, WorkspaceSession } from "@openducktor/contracts";
+import type {
+  AcceptedAgentUserMessage,
+  AgentSessionControlUpdateTitleInput,
+  AgentSessionLiveRef,
+  WorkspaceSession,
+} from "@openducktor/contracts";
+import { agentSessionRefKey } from "@openducktor/core";
+import { chatNamingWorkText } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { toBranchSlug } from "../../domain/naming/naming-output";
+import { checkoutBranch, cleanTaskBranchPrefix } from "../../domain/task/task-branch-policy";
 import {
-  type HostError,
-  HostOperationError,
-  HostValidationError,
-  errorMessage,
-} from "../../effect/host-errors";
+  planRuntimeTitleRename,
+  runtimeTitle,
+  visibleMessageText,
+} from "../../domain/workspace-sessions/workspace-session-title";
+import type { HostError } from "../../effect/host-errors";
 import type { GitPort } from "../../ports/git-port";
-import type { WorkspaceSessionStoreRef } from "../../ports/workspace-session-store-port";
+import type { TaskStoreError } from "../../ports/task-repository-ports";
+import type {
+  WorkspaceSessionStorePort,
+  WorkspaceSessionStoreRef,
+} from "../../ports/workspace-session-store-port";
+import type {
+  AgentSessionSendContent,
+  ScopedAgentSessionRef,
+} from "../agent-sessions/agent-session-operation-policy";
+import { startupStep } from "../agent-sessions/session-startup-progress";
+import { branchNamingStep, nameBranch } from "../naming/branch-naming";
+import { namingFailureNotice, type NamingService } from "../naming/naming-service";
 import {
-  namingFailureNotice,
-  type NamingOutcome,
-  type NamingService,
-} from "../naming/naming-service";
-import { cleanTaskBranchPrefix } from "../../domain/task/task-branch-policy";
-import { freeBranchName, type TakenBranchNames } from "../naming/free-branch-name";
+  renameTemporaryBranch,
+  requireConfirmedAutomaticBranch,
+  type FinalizedBranch,
+} from "./workspace-session-branch-rename";
+import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
+import type {
+  WorkspaceSessionRenameFailureReporter,
+  WorkspaceSessionUpdatedPublisher,
+} from "./workspace-session-persistence-callbacks";
+import { titleSyncNeedsTurn, type TitleSyncState } from "./workspace-session-runtime-title-sync";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
-/** The hexadecimal digits of the folder and the temporary branch of an unnamed chat worktree. */
-const AUTOMATIC_NAME_LENGTH = 8;
-
-/** The folder name of an unnamed chat worktree: the first digits of the session ID. */
-export const automaticWorktreeName = (sessionId: string): string =>
-  sessionId.replace(/-/g, "").slice(0, AUTOMATIC_NAME_LENGTH).toLowerCase();
-
-/** The temporary branch of an unnamed chat worktree. */
-export const temporaryWorkspaceBranch = (branchPrefix: string, sessionId: string): string =>
-  `${cleanTaskBranchPrefix(branchPrefix)}/${automaticWorktreeName(sessionId)}`;
+/** The startup step that renames the temporary branch when the workspace has no naming model. */
+const FINALIZE_BRANCH_STEP = { id: "naming", label: "Finalize branch name" } as const;
 
 /**
- * What this host process knows about a chat that it created, until its first message. `created`
- * holds the temporary branch that this host created because the user left both names blank. It
- * tracks the target branch until the first message sets the upstream of its final name. `renamed` follows a Git rename whose record
- * save did not finish, so the next send saves the final branch without a second rename.
- * `branchNamed` follows the saved final branch. Both hold the title that the branch request gave,
- * or null.
+ * What this host process knows about a chat that it created, until its first accepted message.
+ * `created` holds the temporary branch that this host created because the user left both names
+ * blank. That branch tracks the target branch until the first message sets the upstream of its
+ * final name. `renamed` follows a Git rename whose record save did not finish, so the next send
+ * saves the final branch without a second rename. `branchNamed` follows the saved final branch.
+ * Both hold the title that the branch request gave, or null. Only a fact authorizes a branch
+ * rename, because a branch name gives no proof that OpenDucktor created the branch.
  */
-export type CreationFacts =
+type CreationFact =
   | { stage: "created"; temporaryBranch: string | null }
   | ({ stage: "renamed" } & FinalizedBranch)
   | { stage: "branchNamed"; title: string | null };
 
-const factKey = ({
-  workspaceId,
-  sessionId,
-}: Pick<WorkspaceSessionStoreRef, "workspaceId" | "sessionId">) =>
-  JSON.stringify([workspaceId, sessionId]);
-
-/**
- * The creation facts of the chats that this host process created. Only a fact authorizes a branch
- * rename, because a branch name gives no proof that OpenDucktor created the branch. A fact is also
- * the evidence that the first message of a chat can name it.
- */
-export const createWorkspaceSessionCreationFacts = () => {
-  const facts = new Map<string, CreationFacts>();
-  return {
-    created: (ref: Parameters<typeof factKey>[0], temporaryBranch: string | null) => {
-      facts.set(factKey(ref), { stage: "created", temporaryBranch });
-    },
-    get: (ref: Parameters<typeof factKey>[0]) => facts.get(factKey(ref)),
-    branchRenamed: (ref: Parameters<typeof factKey>[0], finalized: FinalizedBranch) => {
-      if (facts.has(factKey(ref))) facts.set(factKey(ref), { stage: "renamed", ...finalized });
-    },
-    branchFinalized: (ref: Parameters<typeof factKey>[0], title: string | null) => {
-      if (facts.has(factKey(ref))) facts.set(factKey(ref), { stage: "branchNamed", title });
-    },
-    /** Retires the facts of a chat at its first accepted message. */
-    take: (ref: Parameters<typeof factKey>[0]) => {
-      const fact = facts.get(factKey(ref));
-      facts.delete(factKey(ref));
-      return fact;
-    },
-  };
-};
-export type WorkspaceSessionCreationFacts = ReturnType<typeof createWorkspaceSessionCreationFacts>;
+type FactRef = Pick<WorkspaceSessionStoreRef, "workspaceId" | "sessionId">;
+type LocatedSession = { ref: WorkspaceSessionStoreRef; session: WorkspaceSession };
 
 export type WorkspaceSessionNamingDependencies = {
-  facts: WorkspaceSessionCreationFacts;
   service: NamingService;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig">;
   git: Pick<
@@ -86,128 +70,213 @@ export type WorkspaceSessionNamingDependencies = {
   >;
 };
 
-export type FinalizedBranch = {
-  branch: string;
-  /** The model title, or null when the model gave none. */
-  title: string | null;
-  /** A naming error that the session shows, or null. A time-out shows none. */
-  notice: string | null;
-};
-
 /**
- * Renames the temporary branch of an unnamed chat worktree and makes the final branch track the
- * branch of the same name on `upstreamRemote`. The model branch comes first. Without it, the
- * branch comes from the first message. Git renames the checked-out branch only when the worktree
- * still has the temporary branch, and it never replaces an existing branch. The upstream setup
- * fails when a remote branch of the final name appeared since the name was chosen; the branch then
- * gets its temporary name back, so the first-message branch can follow.
+ * The naming of the chats that this host creates: the final branch of an unnamed chat worktree
+ * before its first message reaches the agent, and the model title after that message. It owns the
+ * creation facts of the chats, from creation to the first accepted message.
  */
-export const renameTemporaryBranch = (
-  git: WorkspaceSessionNamingDependencies["git"],
-  input: {
-    repoConfig: Pick<RepoConfig, "branchPrefix">;
-    /** The names that the final branch must not take, with the target branch of the chat. */
-    taken: TakenBranchNames;
-    outcome: NamingOutcome;
-    workingDirectory: string;
-    temporaryBranch: string;
-    /** The remote of the chat target branch, or null for a local target. */
-    upstreamRemote: string | null;
-    messageText: string;
-  },
-): Effect.Effect<FinalizedBranch, HostError> =>
-  Effect.gen(function* () {
-    const { outcome } = input;
-    const slug = toBranchSlug(input.messageText) || "session";
-    const fallback = `${cleanTaskBranchPrefix(input.repoConfig.branchPrefix)}/${slug}`;
-    const rename = (branch: string) =>
+export const createWorkspaceSessionNaming = ({
+  naming,
+  store,
+  find,
+  publishUpdated,
+  reportRenameFailure,
+  sessionTitleGate,
+  titleSync,
+  renameRuntimeTitle,
+  storeEffect,
+}: {
+  naming: WorkspaceSessionNamingDependencies;
+  store: Pick<WorkspaceSessionStorePort, "setGeneratedTitle" | "setExecutionTarget">;
+  find: (ref: ScopedAgentSessionRef) => Effect.Effect<LocatedSession | null, HostError>;
+  publishUpdated: WorkspaceSessionUpdatedPublisher;
+  reportRenameFailure: WorkspaceSessionRenameFailureReporter;
+  sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
+  titleSync: TitleSyncState;
+  renameRuntimeTitle: (
+    input: AgentSessionControlUpdateTitleInput,
+  ) => Effect.Effect<void, HostError>;
+  storeEffect: <A>(effect: Effect.Effect<A, TaskStoreError>) => Effect.Effect<A, HostError>;
+}) => {
+  const facts = new Map<string, CreationFact>();
+  const factKey = ({ workspaceId, sessionId }: FactRef) => JSON.stringify([workspaceId, sessionId]);
+  /** Moves a fact to its next stage. A fact that the first message retired stays retired. */
+  const advance = (ref: FactRef, fact: CreationFact) => {
+    if (facts.has(factKey(ref))) facts.set(factKey(ref), fact);
+  };
+
+  /** Saves a model title and syncs the effective title, under the title gate. */
+  const applyGeneratedTitle = (
+    runtimeRef: AgentSessionLiveRef,
+    ref: WorkspaceSessionStoreRef,
+    title: string,
+  ) =>
+    sessionTitleGate.run(
+      ref,
       Effect.gen(function* () {
-        const free = yield* freeBranchName(input.taken, branch);
-        const { workingDirectory, temporaryBranch, upstreamRemote } = input;
-        yield* git.renameCheckedOutBranch(workingDirectory, temporaryBranch, free);
-        if (upstreamRemote === null) return free;
-        const tracked = yield* Effect.result(
-          git.configureBranchUpstream(
-            workingDirectory,
-            workingDirectory,
-            free,
-            upstreamRemote,
-            true,
-          ),
+        const current = yield* find(runtimeRef);
+        if (!current) return;
+        const saved = yield* storeEffect(
+          store.setGeneratedTitle({ ...current.ref, generatedTitle: title }),
         );
-        if (tracked._tag === "Success") return free;
-        yield* git.renameCheckedOutBranch(workingDirectory, free, temporaryBranch).pipe(
-          Effect.mapError(
-            (restoreFailure) =>
-              new HostOperationError({
-                operation: "git.branch.rename",
-                message: `Git renamed the branch ${temporaryBranch} to ${free}, but could not set its upstream ${upstreamRemote}/${free}: ${errorMessage(tracked.failure)} Git also could not restore ${temporaryBranch}: ${errorMessage(restoreFailure)} Rename the branch back with git branch -m ${free} ${temporaryBranch}, or set its upstream with git branch --set-upstream-to, then send the message again.`,
-                cause: { trackFailure: tracked.failure, restoreFailure },
-              }),
-          ),
-        );
-        return yield* tracked.failure;
-      });
-    if (outcome.kind === "generated" && outcome.branch) {
-      const renamed = yield* Effect.result(rename(outcome.branch));
-      if (renamed._tag === "Success")
-        return { branch: renamed.success, title: outcome.title ?? null, notice: null };
-      // The model rename leaves the temporary branch in place or says why it could not.
-      const branch = yield* rename(fallback).pipe(
-        Effect.mapError(
-          (fallbackFailure) =>
-            new HostOperationError({
-              operation: "workspaceSession.branch.rename",
-              message: `Git could not rename the branch of this chat to ${outcome.branch}: ${errorMessage(renamed.failure)} The first-message branch ${fallback} also failed: ${errorMessage(fallbackFailure)}`,
-              cause: { modelFailure: renamed.failure, fallbackFailure },
-            }),
-        ),
-      );
-      return {
-        branch,
-        title: null,
-        notice: `Git could not rename the branch of this chat to ${outcome.branch}, so OpenDucktor used ${branch}. ${errorMessage(renamed.failure)} Rename the branch in Git if you want another name.`,
-      };
-    }
-    const branch = yield* rename(fallback);
-    return {
-      branch,
-      title: null,
-      notice:
-        outcome.kind === "failed"
-          ? namingFailureNotice(
-              outcome.message,
-              `the branch ${branch} and the shortened message as the title`,
-            )
-          : null,
-    };
-  });
+        yield* publishUpdated(current.ref.workspaceId, saved);
+        // A sync that waits for the end of the turn reads the saved title then.
+        const sync = titleSync.get(agentSessionRefKey(runtimeRef));
+        if (titleSyncNeedsTurn(runtimeRef.runtimeKind) && (sync === "pending" || sync === "queued"))
+          return;
+        const rename = planRuntimeTitleRename(current.session, runtimeTitle(saved));
+        if (rename !== null)
+          yield* renameRuntimeTitle({
+            ...rename,
+            repoPath: current.ref.repoPath,
+            runtimeKind: current.session.runtimeKind,
+            workingDirectory: current.session.executionTarget.workingDirectory,
+          });
+      }),
+    );
 
-/**
- * Stops the first message of a chat with no creation facts, for example after a restart, when the
- * chat has no accepted message and both its folder and its branch end with the automatic digits of
- * its session ID. OpenDucktor cannot prove that it created that branch, so it does not rename it,
- * and the agent must not start on it. The check ignores the prefix, because the prefix setting can
- * change after creation.
- */
-export const requireConfirmedAutomaticBranch = (
-  session: Pick<WorkspaceSession, "id" | "executionTarget" | "lastActivityAt">,
-) => {
-  const target = session.executionTarget;
-  const digits = automaticWorktreeName(session.id);
-  if (
-    target.kind !== "local_worktree" ||
-    target.branchName === null ||
-    session.lastActivityAt !== undefined ||
-    target.workingDirectory.split(/[\\/]/).at(-1) !== digits ||
-    target.branchName.split("/").at(-1) !== digits
-  )
-    return Effect.void;
-  const branch = target.branchName;
-  return Effect.fail(
-    new HostValidationError({
-      field: "branchName",
-      message: `OpenDucktor cannot confirm that it created branch ${branch} for this chat, because the host restarted before the first message. Your message is kept. Rename the branch in Git, for example git branch -m ${branch} <name>, then start a new chat on Existing worktree with ${target.workingDirectory}.`,
-    }),
-  );
+  /**
+   * Names a chat from its first accepted message. A title from the request that named the branch
+   * needs no second request. A time-out keeps the shortened title.
+   */
+  const nameFromFirstMessage = (
+    runtimeRef: AgentSessionLiveRef,
+    ref: WorkspaceSessionStoreRef,
+    fact: CreationFact,
+    message: AcceptedAgentUserMessage,
+  ) =>
+    Effect.gen(function* () {
+      if (fact.stage !== "created") {
+        if (fact.title !== null) yield* applyGeneratedTitle(runtimeRef, ref, fact.title);
+        return;
+      }
+      const text = visibleMessageText(message.parts);
+      if (!text) return;
+      const repoConfig = yield* naming.settings.getRepoConfig(ref.workspaceId);
+      const outcome = yield* naming.service.generate({
+        repoConfig,
+        kind: "title",
+        workText: chatNamingWorkText(text),
+      });
+      if (outcome.status === "failed")
+        return yield* reportRenameFailure(
+          runtimeRef,
+          namingFailureNotice(outcome.message, "the shortened message as the title"),
+          "workspaceSession.naming",
+        );
+      if (outcome.status === "generated")
+        yield* applyGeneratedTitle(runtimeRef, ref, outcome.answer.title);
+    }).pipe(
+      Effect.catch((failure) =>
+        reportRenameFailure(
+          runtimeRef,
+          `Could not save the generated title of this Workspace Session. The shortened message stays as the title. ${failure.message}`,
+          "workspaceSession.naming",
+        ),
+      ),
+    );
+
+  /** Saves the final branch of a renamed chat worktree, publishes it, and reports its notice. */
+  const saveFinalBranch = (
+    input: AgentSessionSendContent,
+    known: LocatedSession,
+    target: Extract<WorkspaceSession["executionTarget"], { kind: "local_worktree" }>,
+    finalized: FinalizedBranch,
+  ) =>
+    Effect.gen(function* () {
+      const saved = yield* storeEffect(
+        store.setExecutionTarget({
+          ...known.ref,
+          executionTarget: { ...target, branchName: finalized.branch },
+        }),
+      );
+      advance(known.ref, { stage: "branchNamed", title: finalized.title });
+      yield* publishUpdated(known.ref.workspaceId, saved);
+      if (finalized.notice !== null)
+        yield* reportRenameFailure(input, finalized.notice, "workspaceSession.naming");
+    });
+
+  return {
+    /** Records a chat that this host created, with the temporary branch it created, or null. */
+    registerCreated: (ref: FactRef, temporaryBranch: string | null) => {
+      facts.set(factKey(ref), { stage: "created", temporaryBranch });
+    },
+
+    /**
+     * Gives an unnamed chat worktree its final branch before the agent gets the first message,
+     * and saves it. A chat that this host did not create gets no rename.
+     */
+    prepareDelivery: (input: AgentSessionSendContent) =>
+      Effect.gen(function* () {
+        if (input.sessionScope.kind !== "repository") return;
+        const known = yield* find(input);
+        if (!known) return;
+        const fact = facts.get(factKey(known.ref));
+        const target = known.session.executionTarget;
+        if (!fact) return yield* requireConfirmedAutomaticBranch(known.session);
+        // Git has the final branch already. Only the save of the record failed.
+        if (fact.stage === "renamed" && target.kind === "local_worktree")
+          return yield* Effect.uninterruptible(saveFinalBranch(input, known, target, fact));
+        if (
+          fact.stage !== "created" ||
+          fact.temporaryBranch === null ||
+          target.kind !== "local_worktree" ||
+          target.branchName !== fact.temporaryBranch
+        )
+          return;
+        const temporaryBranch = fact.temporaryBranch;
+        const messageText = visibleMessageText(input.parts);
+        const repoConfig = yield* naming.settings.getRepoConfig(known.ref.workspaceId);
+        // A manual title wins, so the request asks for the branch only.
+        const withTitle = known.session.manualTitle === null;
+        const chatTarget = known.session.targetBranch ?? repoConfig.defaultTargetBranch;
+        yield* startupStep(
+          branchNamingStep(repoConfig, withTitle) ?? FINALIZE_BRANCH_STEP,
+          Effect.gen(function* () {
+            const named = yield* nameBranch(
+              { naming: naming.service, git: naming.git },
+              {
+                repoConfig,
+                gitDirectory: target.workingDirectory,
+                workText: chatNamingWorkText(messageText),
+                reserved: [checkoutBranch(chatTarget)],
+                fallback: `${cleanTaskBranchPrefix(repoConfig.branchPrefix)}/${toBranchSlug(messageText) || "session"}`,
+                withTitle,
+              },
+            );
+            // A stop after the rename still saves the branch, so the record matches Git.
+            yield* Effect.uninterruptible(
+              Effect.gen(function* () {
+                const finalized = yield* renameTemporaryBranch(naming.git, {
+                  named,
+                  workingDirectory: target.workingDirectory,
+                  temporaryBranch,
+                  upstreamRemote: chatTarget.remote?.trim() || null,
+                });
+                advance(known.ref, { stage: "renamed", ...finalized });
+                yield* saveFinalBranch(input, known, target, finalized);
+              }),
+            );
+          }),
+        );
+      }),
+
+    /**
+     * Retires the creation fact of a chat at its first accepted message. Returns the job that
+     * names the chat from that message, or null when this host did not create the chat or the
+     * chat has a manual title, which wins.
+     */
+    takeFirstMessageNaming: (
+      runtimeRef: AgentSessionLiveRef,
+      located: LocatedSession,
+      message: AcceptedAgentUserMessage,
+    ): Effect.Effect<void> | null => {
+      const fact = facts.get(factKey(located.ref));
+      facts.delete(factKey(located.ref));
+      if (!fact || located.session.manualTitle !== null) return null;
+      return nameFromFirstMessage(runtimeRef, located.ref, fact, message);
+    },
+  };
 };
+
+export type WorkspaceSessionNaming = ReturnType<typeof createWorkspaceSessionNaming>;

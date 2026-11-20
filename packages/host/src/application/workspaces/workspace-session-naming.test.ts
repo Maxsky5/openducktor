@@ -6,12 +6,14 @@ import {
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { HostOperationError } from "../../effect/host-errors";
-import type { NamingOutcome, NamingRequest } from "../naming/naming-service";
+import type { JsonValue } from "@openducktor/contracts";
+import type { HostError } from "../../effect/host-errors";
+import { createModelNamingService } from "../../test-support/naming-test-doubles";
 import {
   createPersistenceHarness,
   waitFor,
 } from "./test-support/workspace-session-runtime-persistence-harness";
-import { automaticWorktreeName, requireConfirmedAutomaticBranch } from "./workspace-session-naming";
+import { requireConfirmedAutomaticBranch } from "./workspace-session-branch-rename";
 
 const NAMING_MODEL = { runtimeKind: "claude", providerId: "anthropic", modelId: "haiku" } as const;
 
@@ -24,24 +26,23 @@ describe("Workspace Session naming", () => {
     await database.cleanup();
   });
 
-  /** A harness whose chat this host created, with fakes for naming and Git. */
-  const setup = async (temporaryBranch: string | null, outcome: Effect.Effect<NamingOutcome>) => {
+  /** A harness whose chat this host created, with a naming model that gives `answer`, and Git fakes. */
+  const setup = async (
+    temporaryBranch: string | null,
+    answer: Effect.Effect<JsonValue, HostError>,
+  ) => {
     const h = await createPersistenceHarness(database);
     h.config.namingModel = NAMING_MODEL;
-    const requests: NamingRequest[] = [];
+    const model = createModelNamingService(() => answer);
+    const requests = model.requests;
     const existing = new Set<string>();
     const renames: Array<[string, string, string]> = [];
     let deliveredBeforeRename = 0;
-    h.naming.facts.created(h.storeRef, temporaryBranch);
+    h.persistence.registerCreated(h.storeRef, temporaryBranch);
     const renameFailures = new Map<string, string>();
     const upstreams: Array<[string, string]> = [];
     const upstreamFailures = new Map<string, string>();
-    h.naming.service = {
-      generate: (request) =>
-        Effect.sync(() => {
-          requests.push(request);
-        }).pipe(Effect.andThen(outcome)),
-    };
+    h.naming.service = model.service;
     h.naming.git = createGitPortTestDouble({
       listRefNames: () => Effect.succeed([...existing]),
       listRemoteNames: () => Effect.succeed(["team/origin"]),
@@ -80,16 +81,14 @@ describe("Workspace Session naming", () => {
   test("renames a temporary branch before the agent gets the first message", async () => {
     const { h, requests, renames, deliveredBeforeRename } = await setup(
       "feature/session",
-      Effect.succeed({
-        kind: "generated",
-        title: "OAuth login redirect",
-        branch: "fix/oauth-login-redirect",
-      }),
+      Effect.succeed({ title: "OAuth login redirect", branch: "fix/oauth-login-redirect" }),
     );
     await h.send("Fix login redirect after OAuth");
 
-    expect(requests.map(({ outputs }) => outputs)).toEqual([{ title: true, branch: true }]);
-    expect(requests[0]?.workText).toBe("First message:\nFix login redirect after OAuth");
+    expect(requests.map(({ outputSchema }) => outputSchema["required"])).toEqual([
+      ["branch", "title"],
+    ]);
+    expect(requests[0]?.prompt).toContain("First message:\nFix login redirect after OAuth");
     expect(renames).toEqual([
       [h.ref.workingDirectory, "feature/session", "fix/oauth-login-redirect"],
     ]);
@@ -106,7 +105,7 @@ describe("Workspace Session naming", () => {
   test("saves the renamed branch on the next send when the first save fails", async () => {
     const { h, renames } = await setup(
       "feature/session",
-      Effect.succeed({ kind: "generated", branch: "fix/login" }),
+      Effect.succeed({ branch: "fix/login", title: "Login fix" }),
     );
     h.state.failTargetSave = true;
     await expect(h.send("Fix login")).rejects.toThrow("target save failed");
@@ -123,7 +122,7 @@ describe("Workspace Session naming", () => {
   test("sets the upstream of the final branch on the remote of the target branch", async () => {
     const { h, upstreams } = await setup(
       "feature/session",
-      Effect.succeed({ kind: "generated", branch: "fix/login" }),
+      Effect.succeed({ branch: "fix/login", title: "Login fix" }),
     );
     h.config.defaultTargetBranch = { remote: "origin", branch: "main" };
     await h.send("Fix login");
@@ -134,7 +133,7 @@ describe("Workspace Session naming", () => {
   test("renames back and uses the first-message branch when the model branch cannot track", async () => {
     const { h, renames, upstreams, upstreamFailures } = await setup(
       "feature/session",
-      Effect.succeed({ kind: "generated", branch: "fix/login" }),
+      Effect.succeed({ branch: "fix/login", title: "Login fix" }),
     );
     h.config.defaultTargetBranch = { remote: "origin", branch: "main" };
     upstreamFailures.set("fix/login", "The remote branch origin/fix/login appeared.");
@@ -154,7 +153,7 @@ describe("Workspace Session naming", () => {
   test("adds a suffix when a local or remote branch has the model name", async () => {
     const { h, existing, renames } = await setup(
       "feature/session",
-      Effect.succeed({ kind: "generated", title: "Login fix", branch: "fix/login" }),
+      Effect.succeed({ title: "Login fix", branch: "fix/login" }),
     );
     existing.add("refs/heads/fix/login");
     existing.add("refs/remotes/team/origin/fix/login-2");
@@ -165,7 +164,7 @@ describe("Workspace Session naming", () => {
   test("uses the first-message branch when a branch folder blocks the model name", async () => {
     const { h, existing, renames } = await setup(
       "feature/session",
-      Effect.succeed({ kind: "generated", title: "Login fix", branch: "fix/login" }),
+      Effect.succeed({ title: "Login fix", branch: "fix/login" }),
     );
     existing.add("refs/remotes/team/origin/fix");
     existing.add("refs/heads/odt/fix-login/old");
@@ -177,7 +176,7 @@ describe("Workspace Session naming", () => {
   test("withholds the message and reports both Git errors when no rename works", async () => {
     const { h, renames, renameFailures } = await setup(
       "feature/session",
-      Effect.succeed({ kind: "generated", title: "Login fix", branch: "fix/login" }),
+      Effect.succeed({ title: "Login fix", branch: "fix/login" }),
     );
     renameFailures.set("fix/login", "upstream failed");
     renameFailures.set("odt/fix-login", "branch moved");
@@ -189,7 +188,7 @@ describe("Workspace Session naming", () => {
   });
 
   test("uses the shortened message after a time-out, with no notice", async () => {
-    const { h, renames } = await setup("feature/session", Effect.succeed({ kind: "timed_out" }));
+    const { h, renames } = await setup("feature/session", Effect.never);
     await h.send("Fix login redirect after OAuth, then run the tests");
     expect(renames.map(([, , branch]) => branch)).toEqual([
       "odt/fix-login-redirect-after-oauth-then",
@@ -201,7 +200,9 @@ describe("Workspace Session naming", () => {
   test("uses the shortened message after a naming error, with a notice", async () => {
     const { h, renames } = await setup(
       "feature/session",
-      Effect.succeed({ kind: "failed", message: "Claude is not signed in." }),
+      Effect.fail(
+        new HostOperationError({ operation: "test", message: "Claude is not signed in." }),
+      ),
     );
     await h.send("Fix login");
     expect(renames.map(([, , branch]) => branch)).toEqual(["odt/fix-login"]);
@@ -211,7 +212,7 @@ describe("Workspace Session naming", () => {
   });
 
   test("keeps a typed branch and names the title without delaying the message", async () => {
-    const pending = Effect.runSync(Deferred.make<NamingOutcome>());
+    const pending = Effect.runSync(Deferred.make<JsonValue, HostError>());
     const { h, requests, renames } = await setup(null, Deferred.await(pending));
     await h.send("Fix login redirect after OAuth");
 
@@ -219,40 +220,38 @@ describe("Workspace Session naming", () => {
     expect(h.inputs).toHaveLength(1);
     expect((await h.get()).generatedTitle).toBe("First accepted prompt");
     await waitFor(() => requests.length === 1);
-    expect(requests[0]?.outputs).toEqual({ title: true, branch: false });
-    Effect.runSync(Deferred.succeed(pending, { kind: "generated", title: "OAuth login redirect" }));
+    expect(requests[0]?.outputSchema["required"]).toEqual(["title"]);
+    Effect.runSync(Deferred.succeed(pending, { title: "OAuth login redirect" }));
     await waitFor(async () => (await h.get()).generatedTitle === "OAuth login redirect");
     expect((await h.get()).executionTarget).toMatchObject({ branchName: "feature/session" });
   });
 
   test("keeps a manual title that the user set before the model title arrives", async () => {
-    const pending = Effect.runSync(Deferred.make<NamingOutcome>());
+    const pending = Effect.runSync(Deferred.make<JsonValue, HostError>());
     const { h, requests } = await setup(null, Deferred.await(pending));
     await h.send("Fix login");
     await waitFor(() => requests.length === 1);
     await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "My title" }));
-    Effect.runSync(Deferred.succeed(pending, { kind: "generated", title: "Login fix" }));
+    Effect.runSync(Deferred.succeed(pending, { title: "Login fix" }));
     await waitFor(async () => (await h.get()).generatedTitle === "Login fix");
     expect((await h.get()).manualTitle).toBe("My title");
     expect(h.titleAttempts).not.toContain("Login fix");
   });
 
   test("asks only for the branch when the chat has a manual title", async () => {
-    const { h, requests } = await setup(
+    const { h, requests, renames } = await setup(
       "feature/session",
-      Effect.succeed({ kind: "generated", branch: "fix/login" }),
+      Effect.succeed({ branch: "fix/login" }),
     );
     await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "My title" }));
     await h.send("Fix login");
     await Bun.sleep(5);
-    expect(requests.map(({ outputs }) => outputs)).toEqual([{ title: false, branch: true }]);
+    expect(requests.map(({ outputSchema }) => outputSchema["required"])).toEqual([["branch"]]);
+    expect(renames.map(([, , branch]) => branch)).toEqual(["fix/login"]);
   });
 
   test("asks no title for a chat with a typed branch and a manual title", async () => {
-    const { h, requests } = await setup(
-      null,
-      Effect.succeed({ kind: "generated", title: "Login fix" }),
-    );
+    const { h, requests } = await setup(null, Effect.succeed({ title: "Login fix" }));
     await Effect.runPromise(h.store.rename({ ...h.storeRef, manualTitle: "My title" }));
     await h.send("Fix login");
     await Bun.sleep(5);
@@ -260,10 +259,7 @@ describe("Workspace Session naming", () => {
   });
 
   test("names only the first message of a chat", async () => {
-    const { h, requests } = await setup(
-      null,
-      Effect.succeed({ kind: "generated", title: "Login fix" }),
-    );
+    const { h, requests } = await setup(null, Effect.succeed({ title: "Login fix" }));
     await h.send("Fix login");
     await waitFor(() => requests.length === 1);
     await h.send("Also fix logout");
@@ -277,7 +273,7 @@ describe("Workspace Session naming", () => {
     let calls = 0;
     h.naming.service = {
       generate: () =>
-        Effect.sync(() => (calls += 1)).pipe(Effect.as({ kind: "disabled" as const })),
+        Effect.sync(() => (calls += 1)).pipe(Effect.as({ status: "disabled" as const })),
     };
     await h.send("Fix login");
     await Bun.sleep(5);
@@ -297,10 +293,6 @@ describe("automatic chat worktree names", () => {
     },
   });
   const id = "1a2b3c4d-0000-4000-8000-000000000000";
-
-  test("uses the first eight digits of the session ID", () => {
-    expect(automaticWorktreeName(id)).toBe("1a2b3c4d");
-  });
 
   test("stops an unproven temporary branch before the first message", async () => {
     const unproven = session(id, "/worktrees/workspace-sessions/1a2b3c4d", "odt/1a2b3c4d");

@@ -15,7 +15,12 @@ import {
   projectWorkspaceSessionChatState,
 } from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-chat-state";
 import { useSessionPromptInput } from "@openducktor/frontend-core/sessions/composer/prompt-input/use-session-prompt-input";
-import type { ChatSettings, ReusablePrompt, WorkspaceSession } from "@openducktor/contracts";
+import {
+  hasAutomaticWorktreeBranch,
+  type ChatSettings,
+  type ReusablePrompt,
+  type WorkspaceSession,
+} from "@openducktor/contracts";
 import { type ReactElement, useMemo } from "react";
 import { SessionViewShownActivity } from "@/features/session-navigation/session-view-visibility";
 import { AgentChatSurface } from "@/components/features/agents/agent-chat/agent-chat";
@@ -46,7 +51,6 @@ import {
 } from "./use-workspace-conflict-chat-actions";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { useWorkspaceSessionTranscript } from "./use-workspace-session-transcript";
-import { hasTemporaryWorktreeBranch } from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-branch-naming";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useWorkspaceSessionModelTarget } from "./use-workspace-session-model-target";
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
@@ -194,7 +198,7 @@ export function WorkspaceSessionChat({
     runtimeReadiness,
     readModel,
     loadHistory: operations.loadAgentSessionHistory,
-    namingBranch: actions.isSending && hasTemporaryWorktreeBranch(record),
+    namingBranch: actions.isSending && hasAutomaticWorktreeBranch(record),
   });
   const descriptor =
     runtime.allRuntimeDefinitions.find((entry) => entry.kind === record.runtimeKind) ?? null;

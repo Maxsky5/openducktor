@@ -1,80 +1,117 @@
 import { describe, expect, test } from "bun:test";
-import { createDefaultGlobalConfig } from "../../config/global-config";
+import { NAMING_PROMPT_TEMPLATES } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
-import type { AgentTextGenerationInput } from "@openducktor/contracts";
+import { createModelNamingService } from "../../test-support/naming-test-doubles";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
-import { createNamingService } from "./naming-service";
+import type { NamingKind } from "@openducktor/workflows";
+import type { JsonValue } from "@openducktor/contracts";
 
 const namingModel = { runtimeKind: "opencode", providerId: "openai", modelId: "mini" } as const;
 
-const service = (answer: Effect.Effect<string, HostOperationError>) => {
-  const inputs: AgentTextGenerationInput[] = [];
-  const naming = createNamingService({
-    timeout: "20 millis",
-    settingsConfig: { readGlobalConfig: () => Effect.succeed(createDefaultGlobalConfig()) },
-    textGeneration: {
-      generate: (input) => Effect.sync(() => inputs.push(input)).pipe(Effect.andThen(answer)),
-    },
-  });
-  return { naming, inputs };
-};
-
-const request = (overrides = {}) => ({
+const request = <K extends NamingKind>(kind: K, overrides = {}) => ({
   repoConfig: repoConfigFixture({ namingModel, ...overrides }),
-  outputs: { title: true, branch: false },
+  kind,
   workText: "First message:\nFix login",
 });
 
+const answering = (answer: JsonValue) => createModelNamingService(() => Effect.succeed(answer));
+
 describe("naming service", () => {
-  test("asks the naming model of the workspace and reads its answer", async () => {
-    const { naming, inputs } = service(Effect.succeed('{"title":"Login fix"}'));
-    expect(await Effect.runPromise(naming.generate(request()))).toEqual({
-      kind: "generated",
-      title: "Login fix",
+  test("asks the naming model of the workspace for a constrained answer", async () => {
+    const { service, requests } = answering({ title: "Login fix" });
+    expect(await Effect.runPromise(service.generate(request("title")))).toEqual({
+      status: "generated",
+      answer: { title: "Login fix" },
     });
-    expect(inputs).toHaveLength(1);
-    expect(inputs[0]?.model).toEqual(namingModel);
-    expect(inputs[0]?.instructions).toContain('"title"');
-    expect(inputs[0]?.instructions).not.toContain('"branch"');
-    expect(inputs[0]?.prompt).toContain("First message:\nFix login");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.model).toEqual(namingModel);
+    expect(requests[0]?.outputSchema).toMatchObject({
+      type: "object",
+      required: ["title"],
+      additionalProperties: false,
+    });
+    expect(requests[0]?.prompt).toContain("First message:\nFix login");
+    expect(requests[0]?.prompt).not.toContain("Name a Git branch");
+  });
+
+  test("names a branch and a title in one answer, as clean names", async () => {
+    const { service, requests } = answering({
+      title: '"OAuth login redirect"\nmore',
+      branch: "fix/OAuth Login_Redirect",
+    });
+    expect(await Effect.runPromise(service.generate(request("branch_and_title")))).toEqual({
+      status: "generated",
+      answer: { title: "OAuth login redirect", branch: "fix/oauth-login-redirect" },
+    });
+    expect(requests[0]?.outputSchema).toMatchObject({ required: ["branch", "title"] });
+  });
+
+  test.each([
+    ['"Title: Login redirect"', "Login redirect"],
+    ['Title: "Login redirect"', "Login redirect"],
+    ["Login redirect\r\nSecond line", "Login redirect"],
+    [`Title: ${"a".repeat(200)}`, "a".repeat(120)],
+  ])("keeps the first line of a title without quotes or label: %j", async (title, expected) => {
+    const { service } = answering({ title });
+    expect(await Effect.runPromise(service.generate(request("title")))).toEqual({
+      status: "generated",
+      answer: { title: expected },
+    });
   });
 
   test("makes no call without a naming model", async () => {
-    const { naming, inputs } = service(Effect.succeed("{}"));
+    const { service, requests } = answering({ title: "Login fix" });
     const outcome = await Effect.runPromise(
-      naming.generate({ ...request(), repoConfig: repoConfigFixture() }),
+      service.generate({ ...request("title"), repoConfig: repoConfigFixture() }),
     );
-    expect(outcome).toEqual({ kind: "disabled" });
-    expect(inputs).toEqual([]);
+    expect(outcome).toEqual({ status: "disabled" });
+    expect(requests).toEqual([]);
   });
 
   test("gives up after the deadline", async () => {
-    const { naming } = service(Effect.never);
-    expect(await Effect.runPromise(naming.generate(request()))).toEqual({ kind: "timed_out" });
+    const { service } = createModelNamingService(() => Effect.never);
+    expect(await Effect.runPromise(service.generate(request("title")))).toEqual({
+      status: "timed_out",
+    });
   });
 
-  test("reports a runtime error and an unusable answer", async () => {
-    const failed = service(
+  test.each([
+    ["a missing field", { title: "Login fix" }, "does not fit the output schema"],
+    ["a branch without a type", { branch: "login-fix" }, "login-fix"],
+    ["an invalid branch type", { branch: "bad..type/login" }, "bad..type/login"],
+  ])("reports %s as a failure", async (_case, answer, message) => {
+    const { service } = answering(answer);
+    const outcome = await Effect.runPromise(service.generate(request("branch")));
+    expect(outcome.status).toBe("failed");
+    expect(outcome.status === "failed" && outcome.message).toContain(message);
+  });
+
+  test("reports an empty title and a runtime error as failures", async () => {
+    const empty = await Effect.runPromise(
+      answering({ title: " " }).service.generate(request("title")),
+    );
+    expect(empty).toEqual({
+      status: "failed",
+      message: "The naming model returned an empty title.",
+    });
+    const stopped = createModelNamingService(() =>
       Effect.fail(new HostOperationError({ operation: "test", message: "Runtime stopped." })),
     );
-    expect(await Effect.runPromise(failed.naming.generate(request()))).toEqual({
-      kind: "failed",
+    expect(await Effect.runPromise(stopped.service.generate(request("title")))).toEqual({
+      status: "failed",
       message: "Runtime stopped.",
-    });
-    const unusable = service(Effect.succeed("I cannot help."));
-    expect(await Effect.runPromise(unusable.naming.generate(request()))).toMatchObject({
-      kind: "failed",
     });
   });
 
   test("uses a workspace prompt override", async () => {
-    const { naming, inputs } = service(Effect.succeed('{"title":"Login fix"}'));
+    const titlePrompt = NAMING_PROMPT_TEMPLATES.find((template) => template.output === "title");
+    const { service, requests } = answering({ title: "Login fix" });
     await Effect.runPromise(
-      naming.generate(
-        request({
+      service.generate(
+        request("title", {
           promptOverrides: {
-            '["workflow","odt.naming","workspace-session-title"]': {
+            [titlePrompt?.key ?? ""]: {
               template: "Team title rules.\n{{workText}}",
               baseVersion: 1,
             },
@@ -82,6 +119,6 @@ describe("naming service", () => {
         }),
       ),
     );
-    expect(inputs[0]?.prompt).toContain("Team title rules.\nFirst message:\nFix login");
+    expect(requests[0]?.prompt).toContain("Team title rules.\nFirst message:\nFix login");
   });
 });

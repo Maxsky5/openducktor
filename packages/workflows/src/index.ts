@@ -41,7 +41,8 @@ export {
   NAMING_PROMPT_TEMPLATES,
   namingPromptLayerProblem,
   taskNamingWorkText,
-  type NamingOutputs,
+  type NamingAnswer,
+  type NamingKind,
 } from "./naming/naming-prompts";
 export {
   appendAddsText,

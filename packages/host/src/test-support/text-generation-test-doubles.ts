@@ -3,4 +3,5 @@ import type { AgentTextGenerationPort } from "../ports/agent-text-generation-por
 
 export const unexpectedTextGeneration: AgentTextGenerationPort = {
   generate: () => Effect.die(new Error("Unexpected text generation")),
+  generateJson: () => Effect.die(new Error("Unexpected JSON generation")),
 };

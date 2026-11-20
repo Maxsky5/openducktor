@@ -1,82 +1,59 @@
 import type { RepoConfig } from "@openducktor/contracts";
 import { taskNamingWorkText } from "@openducktor/workflows";
-import { Effect, Fiber } from "effect";
+import { Effect } from "effect";
 import { buildBranchName, targetBranchName } from "../../../domain/task";
-import { freeBranchName, readTakenBranchNames } from "../../naming/free-branch-name";
-import type { GitPort } from "../../../ports/git-port";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 import { startupStep, updateStartup } from "../../agent-sessions/session-startup-progress";
-import { namingFailureNotice, type NamingService } from "../../naming/naming-service";
+import {
+  branchNamingStep,
+  nameBranch,
+  type BranchNamingDependencies,
+} from "../../naming/branch-naming";
 
-const NAMING_STEP = { id: "naming", label: "Generate branch name" } as const;
+type TaskBranchRepoConfig = Pick<
+  RepoConfig,
+  | "repoPath"
+  | "branchPrefix"
+  | "defaultTargetBranch"
+  | "namingModel"
+  | "promptOverrides"
+  | "promptAppends"
+>;
 
-/** The naming step of a new task worktree, or null when the repository has no naming model. */
+/** The startup step of the branch naming of a new task worktree, or null without a naming model. */
 export const taskBranchNamingStep = (repoConfig: Pick<RepoConfig, "namingModel">) =>
-  repoConfig.namingModel ? NAMING_STEP : null;
+  branchNamingStep(repoConfig, false);
 
 /**
- * The branch of a new task worktree. With a naming model, the model names it from the task title
- * and description, with `-2`, `-3`, and so on when a local or remote branch or the task target
- * branch has the name. Without a usable model name, the branch comes from the task title.
- * `generated` marks a model branch, which the worktree setup must create without an existing
- * upstream.
+ * The free branch of a new task worktree. The naming model names it from the task title and
+ * description. Without a usable model branch, it comes from the task ID and title. A naming
+ * failure shows on the naming step.
  */
-export const chooseTaskBranch = (
-  deps: {
-    naming: NamingService;
-    gitPort: Pick<GitPort, "listRefNames" | "listRemoteNames">;
-  },
+export const nameTaskBranch = (
+  deps: BranchNamingDependencies,
   input: {
-    repoConfig: Pick<
-      RepoConfig,
-      | "repoPath"
-      | "branchPrefix"
-      | "defaultTargetBranch"
-      | "namingModel"
-      | "promptOverrides"
-      | "promptAppends"
-    >;
+    repoConfig: TaskBranchRepoConfig;
     repoPath: string;
     task: Pick<TaskRecord, "id" | "title" | "description" | "targetBranch">;
   },
 ) =>
   Effect.gen(function* () {
     const { repoConfig, task } = input;
-    const fallback = buildBranchName(repoConfig.branchPrefix, task.id, task.title);
-    const fromTitle = { branch: fallback, generated: false };
-    // Without a naming model, the plan has no naming step.
-    if (!taskBranchNamingStep(repoConfig)) return fromTitle;
-    // The listing runs while the model writes the name.
-    const taken = yield* Effect.forkChild(
-      readTakenBranchNames(deps.gitPort, input.repoPath, [
-        targetBranchName(task, repoConfig.defaultTargetBranch),
-      ]),
-    );
-    const outcome = yield* startupStep(
-      NAMING_STEP,
-      deps.naming.generate({
-        repoConfig,
-        outputs: { title: false, branch: true },
-        workText: taskNamingWorkText(task),
-      }),
-    );
-    const failure = (message: string) =>
-      updateStartup((progress) =>
-        progress.step({
-          ...NAMING_STEP,
-          state: "completed",
-          details: [namingFailureNotice(message, `the branch ${fallback}`)],
-        }),
+    const naming = nameBranch(deps, {
+      repoConfig,
+      gitDirectory: input.repoPath,
+      workText: taskNamingWorkText(task),
+      reserved: [targetBranchName(task, repoConfig.defaultTargetBranch)],
+      fallback: buildBranchName(repoConfig.branchPrefix, task.id, task.title),
+      withTitle: false,
+    });
+    const step = taskBranchNamingStep(repoConfig);
+    if (step === null) return (yield* naming).branch;
+    const named = yield* startupStep(step, naming);
+    const notice = named.notice;
+    if (notice !== null)
+      yield* updateStartup((progress) =>
+        progress.step({ ...step, state: "completed", details: [notice] }),
       );
-    if (outcome.kind === "generated" && outcome.branch) {
-      const branch = outcome.branch;
-      const free = yield* Effect.result(
-        Fiber.join(taken).pipe(Effect.flatMap((names) => freeBranchName(names, branch))),
-      );
-      if (free._tag === "Success") return { branch: free.success, generated: true };
-      yield* failure(free.failure.message);
-      return fromTitle;
-    }
-    if (outcome.kind === "failed") yield* failure(outcome.message);
-    return fromTitle;
+    return named.branch;
   });

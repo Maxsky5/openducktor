@@ -88,9 +88,8 @@ export const prepareNewTaskWorktree = (
   canonicalRepoPath: string,
   worktreeBase: string,
   worktreePath: string,
+  /** A free branch, as `nameTaskBranch` chose it. An existing remote branch of it is a collision. */
   branch: string,
-  /** The naming model chose the branch as free, so an existing remote branch of it is a collision. */
-  branchIsGenerated: boolean,
   /** The start point that `planNewTaskWorktree` resolved. */
   startPoint: TaskWorktreeStartPoint,
 ) =>
@@ -170,7 +169,7 @@ export const prepareNewTaskWorktree = (
               worktreePath,
               branch,
               startPoint.upstreamRemote,
-              branchIsGenerated,
+              true,
             ),
           ).pipe(
             Effect.tap((owned) =>

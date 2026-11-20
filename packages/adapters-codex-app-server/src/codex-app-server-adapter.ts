@@ -30,6 +30,10 @@ import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
 import { CodexGeneratedImageResolver } from "./codex-generated-image-resolver";
 import {
+  agentJsonAnswerMismatch,
+  agentJsonOutputSchema,
+  type AgentJsonGenerationInput,
+  type AgentJsonOutputSchema,
   type AgentTextGenerationInput,
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
@@ -1067,6 +1071,47 @@ export class CodexAppServerAdapter
     input: AgentTextGenerationInput,
     signal: AbortSignal,
   ): Promise<string> {
+    return this.answerInIsolatedThread(runtimeId, input, null, signal);
+  }
+
+  /**
+   * One model answer of `answerSchema`, in the same isolated thread as `generateText`. Codex
+   * constrains the final message of the turn to the JSON Schema of `answerSchema`, so the message
+   * is JSON text.
+   */
+  async generateJson<Answer>(
+    runtimeId: string,
+    input: AgentJsonGenerationInput<Answer>,
+    signal: AbortSignal,
+  ): Promise<Answer> {
+    const text = await this.answerInIsolatedThread(
+      runtimeId,
+      input,
+      agentJsonOutputSchema(input.answerSchema),
+      signal,
+    );
+    let value: unknown;
+    try {
+      value = JSON.parse(text);
+    } catch (cause) {
+      throw new Error(
+        `Codex returned an answer that is not JSON, against its output schema: ${text}`,
+        {
+          cause,
+        },
+      );
+    }
+    const answer = input.answerSchema.safeParse(value);
+    if (!answer.success) throw agentJsonAnswerMismatch("Codex", answer.error);
+    return answer.data;
+  }
+
+  private async answerInIsolatedThread(
+    runtimeId: string,
+    input: AgentTextGenerationInput,
+    outputSchema: AgentJsonOutputSchema | null,
+    signal: AbortSignal,
+  ): Promise<string> {
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const client = this.runtimeClients.clientForRuntime(runtimeId);
     const [, { config, layers }, { requirements }] = await Promise.all([
@@ -1104,6 +1149,7 @@ export class CodexAppServerAdapter
       threadId: thread.id,
       input: [{ type: "text", text: input.prompt, text_elements: [] }],
       ...transport,
+      outputSchema,
     });
     // The host gives up at its deadline, so the turn must stop too, or it keeps using the model.
     let onAbort: () => void = () => undefined;

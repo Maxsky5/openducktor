@@ -18,7 +18,6 @@ import {
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import { createWorkspaceSessionOperationGate } from "../../application/workspaces/workspace-session-operation-gate";
 import { createLiveSessionPublisher } from "./runtime-lifecycle-publisher";
-import { createWorkspaceSessionCreationFacts } from "../../application/workspaces/workspace-session-naming";
 import type { NamingService } from "../../application/naming/naming-service";
 
 // Resolve live state in the title callback at call time. Composition creates persistence first.
@@ -44,7 +43,6 @@ export const createNodeWorkspaceSessionPersistence = ({
     settings: dependencies.settings,
   });
   const operationGate = createWorkspaceSessionOperationGate();
-  const facts = createWorkspaceSessionCreationFacts();
   // Title transitions serialize on their own gate, because an observed message
   // renames the runtime session without an operation. Always acquire the
   // operation gate before the title gate, never the reverse.
@@ -97,7 +95,6 @@ export const createNodeWorkspaceSessionPersistence = ({
     sessionTitleGate,
     reportRenameFailure,
     naming: {
-      facts,
       service: naming,
       settings: dependencies.settings,
       git: dependencies.git,
@@ -137,7 +134,7 @@ export const createNodeWorkspaceSessionPersistence = ({
     publishUpdated,
     operationGate,
     sessionTitleGate,
-    facts,
+    chatNaming: { registerCreated: workspacePersistence.registerCreated },
     isTitleSyncPending: persistence.isTitleSyncPending,
     markTitleSyncPending: persistence.markTitleSyncPending,
   };

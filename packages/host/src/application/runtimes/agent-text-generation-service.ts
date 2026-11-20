@@ -1,3 +1,4 @@
+import type { AgentJsonGenerationInput, AgentTextGenerationInput } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { AgentSessionLiveAdapterRegistryPort } from "../../ports/agent-session-live-adapter-port";
 import type { AgentTextGenerationPort } from "../../ports/agent-text-generation-port";
@@ -10,15 +11,19 @@ export const createAgentTextGenerationService = ({
 }: {
   runtimeRegistry: Pick<RuntimeRegistryPort, "requireReady">;
   adapterRegistry: Pick<AgentSessionLiveAdapterRegistryPort, "resolveForScope">;
-}): AgentTextGenerationPort => ({
-  generate: (input) =>
+}): AgentTextGenerationPort => {
+  const adapterFor = (input: AgentTextGenerationInput) =>
     Effect.gen(function* () {
       const { runtimeKind } = input.model;
       yield* runtimeRegistry.requireReady(runtimeKind);
-      const adapter = yield* adapterRegistry.resolveForScope({
-        repoPath: input.repoPath,
-        runtimeKind,
-      });
-      return yield* adapter.textGeneration.generate(input);
-    }),
-});
+      return yield* adapterRegistry.resolveForScope({ repoPath: input.repoPath, runtimeKind });
+    });
+  return {
+    generate: (input) =>
+      adapterFor(input).pipe(Effect.flatMap((adapter) => adapter.textGeneration.generate(input))),
+    generateJson: <Answer>(input: AgentJsonGenerationInput<Answer>) =>
+      adapterFor(input).pipe(
+        Effect.flatMap((adapter) => adapter.textGeneration.generateJson(input)),
+      ),
+  };
+};

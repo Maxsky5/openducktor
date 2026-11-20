@@ -40,6 +40,7 @@ import {
   createClaudeLiveSessionAdapterPreparer,
 } from "./claude-live-session-adapter";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
+import { unexpectedTextGeneration } from "../../test-support/text-generation-test-doubles";
 
 const runtime = {
   kind: "claude" as const,
@@ -337,7 +338,7 @@ const createHarness = async (
     liveSessionLifecycle,
     service,
     sessionStore,
-    textGeneration: { generate: () => Effect.die("Unexpected text generation") },
+    textGeneration: unexpectedTextGeneration,
     workingDirectoryDependencies: workingDirectoryDependenciesOverride,
   };
   const prepare = createClaudeLiveSessionAdapterPreparer(prepareInput);

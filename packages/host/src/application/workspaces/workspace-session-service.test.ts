@@ -1,5 +1,4 @@
 import { workspaces } from "../../adapters/sqlite/sqlite-host-settings-schema";
-import { createNamingTestDependencies } from "../../test-support/naming-test-doubles";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import {
   workspaceSessionCatalog,
@@ -218,13 +217,23 @@ describe("host-owned Workspace Session lifecycle", () => {
       createdTrackingRef: null as string | null,
       // SAFETY: The fake records each deleted reference.
       deletedReferences: [] as string[],
+      // SAFETY: The fake records each chat that the creation registers for naming.
+      registeredChats: [] as {
+        workspaceId: string;
+        sessionId: string;
+        temporaryBranch: string | null;
+      }[],
     };
     const store = createSqliteWorkspaceSessionStore(database);
     const pendingTitles = new Set<string>();
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
-      facts: createNamingTestDependencies().facts,
+      chatNaming: {
+        registerCreated: (ref, temporaryBranch) => {
+          state.registeredChats.push({ ...ref, temporaryBranch });
+        },
+      },
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
       runForkSourceOperation: (_target, work) => work,
@@ -1925,9 +1934,13 @@ describe("host-owned Workspace Session lifecycle", () => {
         path.join(database.configDir, "worktrees", "workspace-sessions", digits),
       );
       expect(h.state.branch).toBe(branchName ?? `odt/${digits}`);
-      expect(
-        h.dependencies.facts.get({ workspaceId: h.config.workspaceId, sessionId: session.id }),
-      ).toEqual({ stage: "created", temporaryBranch: temporary ? `odt/${digits}` : null });
+      expect(h.state.registeredChats).toEqual([
+        {
+          workspaceId: h.config.workspaceId,
+          sessionId: session.id,
+          temporaryBranch: temporary ? `odt/${digits}` : null,
+        },
+      ]);
       // The first message sets the upstream of a temporary branch, under its final name.
       expect(h.state.upstreamRemote).toBe(temporary ? null : "origin");
     },

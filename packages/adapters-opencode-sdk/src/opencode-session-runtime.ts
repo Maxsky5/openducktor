@@ -99,6 +99,7 @@ export type OpencodeSessionRuntimeConnection = Pick<
   | "updateSessionTitle"
   | "stopSession"
   | "generateText"
+  | "generateJson"
 > & {
   releaseSession: (ref: SessionRef) => Promise<void>;
   /** Runs one native goal action. */
@@ -944,6 +945,7 @@ export const createPrepareOpencodeSessionRuntime =
     }
     const connection: OpencodeSessionRuntimeConnection = {
       generateText: controller.generateText.bind(controller),
+      generateJson: controller.generateJson.bind(controller),
       startSession: async (ref) => {
         const summary = await controller.startSession(ref);
         admittedRoots.set(summary.externalSessionId, {

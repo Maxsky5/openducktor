@@ -24,3 +24,28 @@ export const agentTextGenerationInputSchema = z.strictObject({
 export type AgentTextGenerationInput = z.infer<typeof agentTextGenerationInputSchema>;
 
 export const agentTextGenerationResultSchema = z.strictObject({ text: z.string().trim().min(1) });
+
+/** A JSON Schema of an object, as `z.toJSONSchema` writes it for a strict object schema. */
+export const agentJsonOutputSchemaSchema = z
+  .object({ type: z.literal("object") })
+  .catchall(z.json());
+export type AgentJsonOutputSchema = z.infer<typeof agentJsonOutputSchemaSchema>;
+
+/**
+ * One JSON generation: a text generation whose answer is one JSON object of `answerSchema`. The
+ * runtime adapter constrains the answer to the JSON Schema of `answerSchema` when the runtime can,
+ * and checks the answer with `answerSchema` before it returns it.
+ */
+export type AgentJsonGenerationInput<Answer> = AgentTextGenerationInput & {
+  answerSchema: z.ZodType<Answer>;
+};
+
+/** The JSON Schema that constrains the answer of a JSON generation. */
+export const agentJsonOutputSchema = (answerSchema: z.ZodType): AgentJsonOutputSchema =>
+  agentJsonOutputSchemaSchema.parse(z.toJSONSchema(answerSchema));
+
+/** The error of a runtime answer that does not fit the answer schema of its JSON generation. */
+export const agentJsonAnswerMismatch = (runtime: string, error: z.ZodError): Error =>
+  new Error(
+    `${runtime} returned an answer that does not fit the output schema: ${z.prettifyError(error)}`,
+  );
