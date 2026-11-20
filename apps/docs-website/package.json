@@ -20,18 +20,18 @@
     "@openducktor/product-scenes": "workspace:*",
     "@openducktor/theme": "workspace:*",
     "@xyflow/react": "12.12.0",
-    "fumadocs-core": "16.17.8",
-    "fumadocs-mdx": "15.4.10",
-    "fumadocs-ui": "16.17.8",
+    "fumadocs-core": "16.19.4",
+    "fumadocs-mdx": "15.6.3",
+    "fumadocs-ui": "16.19.4",
     "gsap": "^3.15.0",
-    "lucide-react": "^1.72.0",
+    "lucide-react": "^1.74.0",
     "next": "16.4.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@expo-google-fonts/space-grotesk": "0.4.1",
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/bun": "^1.4.3",
     "@types/mdx": "^2.0.13",
@@ -41,7 +41,7 @@
     "lightningcss": "1.33.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.0",
-    "wrangler": "4.151.1",
+    "wrangler": "4.164.0",
     "zod": "^4.6.7"
   }
 }
