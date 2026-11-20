@@ -236,6 +236,17 @@ test("accepts managed hooks and notify commands when only managed hooks may run"
   void generation.catch(() => undefined);
 });
 
+test("accepts a managed layer that keeps a tool feature and child agents off", async () => {
+  const { generation, calls } = await startGeneration({}, [
+    {
+      name: { type: "legacyManagedConfigTomlFromFile" },
+      config: { features: { shell_tool: false }, agents: { enabled: false } },
+    },
+  ]);
+  expect(calls().some(({ method }) => method === "thread/start")).toBe(true);
+  void generation.catch(() => undefined);
+});
+
 test("lets the thread overrides win over user and project layers", async () => {
   const { generation, calls } = await startGeneration({}, [
     { name: { type: "user" }, config: { features: { hooks: true }, notify: ["say"] } },

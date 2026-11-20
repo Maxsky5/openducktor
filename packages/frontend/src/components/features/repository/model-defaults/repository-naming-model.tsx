@@ -1,10 +1,7 @@
 import type { ReactElement } from "react";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
-import {
-  RepositoryModelBlock,
-  type RepositoryModelBlockProps,
-  selectPickedModel,
-} from "./repository-model-block";
+import { selectPickedModel } from "./repository-agent-selection";
+import { RepositoryModelBlock, type RepositoryModelBlockProps } from "./repository-model-block";
 
 type RepositoryNamingModelBlockProps = Pick<
   RepositoryModelBlockProps,

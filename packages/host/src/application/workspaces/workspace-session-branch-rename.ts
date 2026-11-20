@@ -74,14 +74,15 @@ export const renameTemporaryBranch = (
     const renamed = yield* Effect.result(rename(named.branch));
     if (renamed._tag === "Success")
       return { branch: renamed.success, title: named.title, notice: named.notice };
-    if (!named.generated) return yield* renamed.failure;
+    const fallback = named.fallback;
+    if (!named.generated || fallback === null) return yield* renamed.failure;
     // The model branch leaves the temporary branch in place, or the error says why it could not.
-    const branch = yield* rename(named.fallback).pipe(
+    const branch = yield* rename(fallback).pipe(
       Effect.mapError(
         (fallbackFailure) =>
           new HostOperationError({
             operation: "workspaceSession.branch.rename",
-            message: `Git could not rename the branch of this chat to ${named.branch}: ${errorMessage(renamed.failure)} The branch ${named.fallback} also failed: ${errorMessage(fallbackFailure)}`,
+            message: `Git could not rename the branch of this chat to ${named.branch}: ${errorMessage(renamed.failure)} The branch ${fallback} also failed: ${errorMessage(fallbackFailure)}`,
             cause: { modelFailure: renamed.failure, fallbackFailure },
           }),
       ),

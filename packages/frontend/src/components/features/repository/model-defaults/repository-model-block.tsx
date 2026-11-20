@@ -15,7 +15,6 @@ import type { RepoAgentDefaultDraft } from "@openducktor/frontend-core/lib/repo-
 import type { ModelPickerValue } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { ensureDraftAgentDefault } from "./model-defaults-model";
 import { buildRepositoryAgentControls } from "./repository-agent-controls";
-import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-selection";
 import { RepositoryModelPickerField } from "./repository-model-picker-field";
 
 export type RepositoryModelBlockProps = {
@@ -36,19 +35,6 @@ export type RepositoryModelBlockProps = {
   onUpdateField: (field: "variant" | "profileId", value: string) => void;
   onClear: () => void;
 };
-
-/** The model that a picker choice selects, from the current draft, or null for no change. */
-export const selectPickedModel = (
-  current: RepoAgentDefaultDraft | null | undefined,
-  value: ModelPickerValue,
-  targetCatalog: AgentModelCatalog,
-) =>
-  resolveRepoAgentDefaultModelPickerSelection({
-    currentValue: current ? ensureDraftAgentDefault(current) : null,
-    currentRuntimeKind: current?.runtimeKind ?? null,
-    targetCatalog,
-    value,
-  });
 
 /** A card that selects one model of a runtime, its effort, and optionally an agent profile. */
 export function RepositoryModelBlock({

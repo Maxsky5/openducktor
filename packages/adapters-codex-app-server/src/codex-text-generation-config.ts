@@ -6,7 +6,7 @@ import { z } from "zod";
  * `codex-rs/tools/src/tool_config.rs`, and the extensions in `codex-rs/ext`), plus the features
  * that the temporary structured threads of Codex turn off.
  */
-export const DISABLED_FEATURES = [
+const DISABLED_FEATURES = [
   "apps",
   "code_mode",
   "code_mode_only",
@@ -112,9 +112,12 @@ const settingThatUndoesIsolation = ({
   web_search: webSearch,
   tools = {},
 }: z.infer<typeof isolationSettingsSchema>): string | null => {
-  const feature = ISOLATION_FEATURE_NAMES.find((name) => features[name] !== undefined);
+  // A layer that sets one of these to false keeps it off, as the thread overrides do.
+  const feature = ISOLATION_FEATURE_NAMES.find(
+    (name) => features[name] !== undefined && features[name] !== false,
+  );
   if (feature !== undefined) return `features.${feature}`;
-  if (agents?.enabled !== undefined) return "agents.enabled";
+  if (agents?.enabled !== undefined && agents.enabled !== false) return "agents.enabled";
   if (Object.keys(servers).length > 0) return "mcp_servers";
   if (webSearch !== undefined && webSearch !== "disabled") return "web_search";
   // Every `tools` entry turns a model tool on or tunes it, such as `update_plan` or `web_search`.

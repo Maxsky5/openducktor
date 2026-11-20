@@ -87,6 +87,12 @@ describe("branch naming", () => {
     expect((await name(Effect.succeed({ branch }), { refs, remotes }).named).branch).toBe(free);
   });
 
+  test("keeps a free model branch when a branch blocks the unused fallback", async () => {
+    expect(
+      await name(Effect.succeed({ branch: "fix/login" }), { refs: ["refs/heads/odt"] }).named,
+    ).toEqual({ branch: "fix/login", generated: true, fallback: null, title: null, notice: null });
+  });
+
   test("uses the free fallback when a branch is a folder of the model branch", async () => {
     const named = await name(Effect.succeed({ branch: "fix/login" }), {
       refs: ["refs/heads/fix", "refs/heads/odt/task-1-fix-login-redirect"],

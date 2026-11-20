@@ -30,10 +30,10 @@ export type NamedBranch = {
   /** `branch` comes from the naming model. */
   generated: boolean;
   /**
-   * The fallback, free of the existing branches and of `branch`. A caller whose Git change of a
-   * generated `branch` fails uses it.
+   * The fallback, free of the existing branches and of `branch`, or null when a branch blocks it as
+   * a folder. A caller whose Git change of a generated `branch` fails uses it.
    */
-  fallback: string;
+  fallback: string | null;
   /** The model title, or null when the request asked for none or the model gave none. */
   title: string | null;
   /** Why the branch is not the model branch, for the user, or null. A time-out shows none. */
@@ -56,8 +56,8 @@ export const branchNamingStep = (
  * Names a new branch from the work text with the naming model of the workspace, and makes it free:
  * `-2`, `-3`, and so on when a local or remote branch or a reserved name has it. Git lists the
  * branches while the model writes the name. Without a usable model branch, the branch is the free
- * fallback, and `notice` says why. Fails only when Git cannot list the branches or a branch blocks
- * the fallback as a folder.
+ * fallback, and `notice` says why. Fails only when Git cannot list the branches, or when the branch
+ * is the fallback and a branch blocks it as a folder.
  */
 export const nameBranch = (
   { naming, git }: BranchNamingDependencies,
@@ -100,10 +100,13 @@ export const nameBranch = (
         const generated = yield* Effect.result(freeBranchName(taken, outcome.answer.branch));
         if (generated._tag === "Failure") return yield* fallback(generated.failure.message);
         const branch = generated.success;
+        const freeFallback = yield* Effect.result(
+          freeBranchName(new Set([...taken, branch]), request.fallback),
+        );
         return {
           branch,
           generated: true,
-          fallback: yield* freeBranchName(new Set([...taken, branch]), request.fallback),
+          fallback: freeFallback._tag === "Success" ? freeFallback.success : null,
           title: "title" in outcome.answer ? outcome.answer.title : null,
           notice: null,
         };

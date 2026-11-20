@@ -6,7 +6,8 @@ import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessio
 import { filterRuntimeDefinitionsForDefaultSelection } from "@openducktor/frontend-core/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
-import { RepositoryModelBlock, selectPickedModel } from "./repository-model-block";
+import { RepositoryModelBlock } from "./repository-model-block";
+import { selectPickedModel } from "./repository-agent-selection";
 
 type RepositoryDefaultModelBlockProps = {
   presentation?: "settings" | "creation";

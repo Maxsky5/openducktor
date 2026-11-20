@@ -59,7 +59,7 @@ export const visibleMessageText = (parts: readonly VisiblePart[]): string =>
 const normalizeTitleText = (text: string): string => text.trim().replace(/\s+/g, " ");
 
 /** The message text cut at `WORKSPACE_SESSION_GENERATED_TITLE_LIMIT` characters, or null. */
-export const shortenWorkspaceSessionTitle = (rawText: string): string | null => {
+const shortenWorkspaceSessionTitle = (rawText: string): string | null => {
   const text = normalizeTitleText(rawText);
   if (!text) return null;
   if (text.length <= WORKSPACE_SESSION_GENERATED_TITLE_LIMIT) return text;
