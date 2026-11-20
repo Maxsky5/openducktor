@@ -1,10 +1,11 @@
 import { PROMPT_OWNER_KINDS } from "@openducktor/contracts";
 import { sql } from "drizzle-orm";
 import { check, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { booleanCheck, column, enumCheck } from "./sqlite-schema-sql";
+import { booleanCheck, column } from "./sqlite-schema-sql";
 
 // The global prompt tables live here so that the settings schema stays under the line limit. The
 // workspace prompt tables stay in the settings schema, because they reference its workspaces table.
+// The owner kind is an open list, so `packages/contracts` validates it and no CHECK holds it.
 
 export const globalPromptOverrides = sqliteTable(
   "global_prompt_overrides",
@@ -18,7 +19,6 @@ export const globalPromptOverrides = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.ownerKind, table.ownerId, table.promptId] }),
-    check("chk_global_prompt_overrides_owner_kind", enumCheck(table.ownerKind, PROMPT_OWNER_KINDS)),
     check("chk_global_prompt_overrides_base_version", sql`${column(table.baseVersion)} >= 1`),
     check("chk_global_prompt_overrides_enabled", booleanCheck(table.enabled)),
   ],
@@ -35,7 +35,6 @@ export const globalPromptAppends = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.ownerKind, table.ownerId, table.promptId] }),
-    check("chk_global_prompt_appends_owner_kind", enumCheck(table.ownerKind, PROMPT_OWNER_KINDS)),
     check("chk_global_prompt_appends_enabled", booleanCheck(table.enabled)),
   ],
 );

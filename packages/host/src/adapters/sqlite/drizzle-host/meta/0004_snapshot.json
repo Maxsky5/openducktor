@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d23015da-aa61-4139-a418-0a6a8a2e3e2c",
+  "id": "93d06c19-9159-4eb4-8b10-a56643f0ac5a",
   "prevId": "78b9d224-b096-432f-b2a5-d8e25329758a",
   "tables": {
     "host_metadata": {
@@ -2235,10 +2235,6 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {
-        "chk_workspace_prompt_appends_owner_kind": {
-          "name": "chk_workspace_prompt_appends_owner_kind",
-          "value": "\"owner_kind\" in ('role', 'workflow', 'naming')"
-        },
         "chk_workspace_prompt_appends_enabled": {
           "name": "chk_workspace_prompt_appends_enabled",
           "value": "\"enabled\" in (0, 1)"
@@ -2318,10 +2314,6 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {
-        "chk_workspace_prompt_overrides_owner_kind": {
-          "name": "chk_workspace_prompt_overrides_owner_kind",
-          "value": "\"owner_kind\" in ('role', 'workflow', 'naming')"
-        },
         "chk_workspace_prompt_overrides_base_version": {
           "name": "chk_workspace_prompt_overrides_base_version",
           "value": "\"base_version\" >= 1"
@@ -2727,10 +2719,6 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {
-        "chk_global_prompt_appends_owner_kind": {
-          "name": "chk_global_prompt_appends_owner_kind",
-          "value": "\"owner_kind\" in ('role', 'workflow', 'naming')"
-        },
         "chk_global_prompt_appends_enabled": {
           "name": "chk_global_prompt_appends_enabled",
           "value": "\"enabled\" in (0, 1)"
@@ -2793,10 +2781,6 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {
-        "chk_global_prompt_overrides_owner_kind": {
-          "name": "chk_global_prompt_overrides_owner_kind",
-          "value": "\"owner_kind\" in ('role', 'workflow', 'naming')"
-        },
         "chk_global_prompt_overrides_base_version": {
           "name": "chk_global_prompt_overrides_base_version",
           "value": "\"base_version\" >= 1"

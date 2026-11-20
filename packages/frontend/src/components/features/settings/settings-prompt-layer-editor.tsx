@@ -1,4 +1,3 @@
-import type { PromptOwnerKind } from "@openducktor/contracts";
 import type { SettingsPromptTemplate } from "@openducktor/frontend-core/queries/workflow-prompt-settings";
 import {
   composePromptLayers,
@@ -219,7 +218,7 @@ function AppendSection({
         id={id}
         value={append?.text ?? ""}
         rows={4}
-        placeholder={APPEND_EXAMPLES[template.ownerKind]}
+        placeholder={template.appendExample}
         disabled={disabled}
         placeholders={template.placeholders}
         error={error}
@@ -313,28 +312,13 @@ function ReplaceRow({
   );
 }
 
-/** An example of append instructions, by the owner of the prompt. */
-const APPEND_EXAMPLES = {
-  role: "For example: Run the linter before you finish.",
-  workflow: "For example: Run the linter before you finish.",
-  naming: "For example: Use at most four words.",
-} as const satisfies Record<PromptOwnerKind, string>;
-
-/**
- * What a change of the prompt affects: its role, the tasks of its workflow, or the names of the
- * naming model, in one or every repository.
- */
+/** What a change of the prompt affects, in one or every repository. */
 const changeScope = (template: SettingsPromptTemplate, scope: PromptScope): string => {
   const repositories =
     scope.kind === "repository" ? "in this repository only" : "in every repository";
-  switch (template.ownerKind) {
-    case "role":
-      return `Your changes apply ${repositories}.`;
-    case "workflow":
-      return `Your changes apply to every task of ${template.ownerTitle}, ${repositories}.`;
-    case "naming":
-      return `Your changes apply to every name that the naming model writes, ${repositories}.`;
-  }
+  return template.appliesTo === null
+    ? `Your changes apply ${repositories}.`
+    : `Your changes apply to ${template.appliesTo}, ${repositories}.`;
 };
 
 /** The editor of one prompt: append, override, and the final text preview. */

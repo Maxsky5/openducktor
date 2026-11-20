@@ -97,10 +97,10 @@ export const agentPromptOverrideSchema = z.object({
 export type AgentPromptOverride = z.infer<typeof agentPromptOverrideSchema>;
 
 /**
- * A prompt belongs to one role, one workflow, or the naming model. Its ID is unique only within its
- * owner.
+ * A prompt belongs to one role, one workflow, or one built-in feature of OpenDucktor, such as
+ * naming. Its ID is unique only within its owner.
  */
-export const PROMPT_OWNER_KINDS = ["role", "workflow", "naming"] as const;
+export const PROMPT_OWNER_KINDS = ["role", "workflow", "feature"] as const;
 export type PromptOwnerKind = (typeof PROMPT_OWNER_KINDS)[number];
 export type PromptOverrideTarget = {
   ownerKind: PromptOwnerKind;
@@ -127,10 +127,10 @@ export const WORKFLOW_PROMPT_IDS = {
 } as const;
 
 /**
- * The prompts that tell the naming model how to name a branch or a workspace session. OpenDucktor
- * owns them, under the `naming` owner kind.
+ * The prompts that tell the naming model how to name a branch or a workspace session. They belong
+ * to the naming feature, so their owner kind is `feature`.
  */
-export const NAMING_PROMPT_OWNER_ID = "openducktor";
+export const NAMING_PROMPT_OWNER_ID = "naming";
 export const NAMING_PROMPT_IDS = {
   branchName: "branch-name",
   workspaceSessionTitle: "workspace-session-title",
@@ -170,12 +170,12 @@ const promptOverrideKeySchema = z
   .string()
   .refine(
     (key) => parsePromptOverrideKey(key) !== null,
-    'Use a prompt override key of the form ["role" | "workflow" | "naming", ownerId, promptId].',
+    'Use a prompt override key of the form ["role" | "workflow" | "feature", ownerId, promptId].',
   );
 
 /**
  * Keyed by prompt owner and prompt ID. The host checks the keys against its roles, its workflows,
- * and the naming prompts.
+ * and the prompts of its features.
  */
 export const repoPromptOverridesSchema = z
   .record(promptOverrideKeySchema, agentPromptOverrideSchema)

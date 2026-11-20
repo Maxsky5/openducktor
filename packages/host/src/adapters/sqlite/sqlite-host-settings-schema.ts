@@ -170,10 +170,6 @@ export const workspacePromptOverrides = sqliteTable(
     primaryKey({
       columns: [table.workspaceId, table.ownerKind, table.ownerId, table.promptId],
     }),
-    check(
-      "chk_workspace_prompt_overrides_owner_kind",
-      enumCheck(table.ownerKind, PROMPT_OWNER_KINDS),
-    ),
     check("chk_workspace_prompt_overrides_base_version", sql`${column(table.baseVersion)} >= 1`),
     check("chk_workspace_prompt_overrides_enabled", booleanCheck(table.enabled)),
   ],
@@ -195,10 +191,6 @@ export const workspacePromptAppends = sqliteTable(
     primaryKey({
       columns: [table.workspaceId, table.ownerKind, table.ownerId, table.promptId],
     }),
-    check(
-      "chk_workspace_prompt_appends_owner_kind",
-      enumCheck(table.ownerKind, PROMPT_OWNER_KINDS),
-    ),
     check("chk_workspace_prompt_appends_enabled", booleanCheck(table.enabled)),
   ],
 );

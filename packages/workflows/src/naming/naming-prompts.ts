@@ -18,7 +18,7 @@ import {
 } from "../task-workflow/prompt-layers";
 import { fillPromptPlaceholders } from "../task-workflow/task-prompts";
 
-/** A built-in naming prompt. Its settings key has the `naming` owner kind. */
+/** A built-in naming prompt. Its settings key has the `feature` owner kind. */
 type NamingPromptTemplate = {
   readonly id: (typeof NAMING_PROMPT_IDS)[keyof typeof NAMING_PROMPT_IDS];
   readonly key: string;
@@ -43,7 +43,7 @@ const NAMING_RULES: PromptPlaceholderRules = {
 };
 
 const namingKey = (promptId: string) =>
-  promptOverrideKey({ ownerKind: "naming", ownerId: NAMING_PROMPT_OWNER_ID, promptId });
+  promptOverrideKey({ ownerKind: "feature", ownerId: NAMING_PROMPT_OWNER_ID, promptId });
 
 const BRANCH_NAME_TEMPLATE = `Name a Git branch for the work in the work text.
 - Return a complete branch name in the form \`type/slug\`.

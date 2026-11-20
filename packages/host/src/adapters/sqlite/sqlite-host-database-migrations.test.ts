@@ -217,7 +217,7 @@ test("0002 moves prompt overrides to their owners, Autopilot rules to the built-
   expect(result.foreignKeyViolations).toEqual([]);
 });
 
-test("0004 moves the naming model to its table and the naming prompt layers to the naming owner", async () => {
+test("0004 keeps the prompt layers, accepts a new owner kind, and stores naming models", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "odt-host-migration-"));
   cleanups.add(() => rm(directory, { recursive: true, force: true }));
   const databasePath = path.join(directory, "database.sqlite");
@@ -241,66 +241,47 @@ test("0004 moves the naming model to its table and the naming prompt layers to t
            VALUES ('ws', 'Workspace', '/repo', 'odt', 'main', 0)`,
         );
         yield* run(
-          `INSERT INTO workspace_role_defaults (workspace_id, role_id, runtime_kind, provider_id, model_id, variant, profile_id) VALUES
-           ('ws', 'odt.naming-model', 'claude', 'anthropic', 'haiku', 'low', NULL),
-           ('ws', 'build', 'codex', 'openai', 'gpt', 'high', NULL)`,
+          `INSERT INTO global_prompt_overrides (owner_kind, owner_id, prompt_id, template, base_version, enabled)
+           VALUES ('workflow', 'custom', 'workflow.rules', 'global rules', 2, 1)`,
         );
         yield* run(
-          `INSERT INTO global_prompt_overrides (owner_kind, owner_id, prompt_id, template, base_version, enabled) VALUES
-           ('workflow', 'odt.naming', 'branch-name', 'global branch', 1, 1),
-           ('workflow', 'custom', 'workflow.rules', 'global rules', 2, 1)`,
-        );
-        yield* run(
-          `INSERT INTO global_prompt_appends (owner_kind, owner_id, prompt_id, text, enabled) VALUES
-           ('workflow', 'odt.naming', 'workspace-session-title', 'global title', 1)`,
-        );
-        yield* run(
-          `INSERT INTO workspace_prompt_overrides (workspace_id, owner_kind, owner_id, prompt_id, template, base_version, enabled) VALUES
-           ('ws', 'workflow', 'odt.naming', 'workspace-session-title', 'workspace title', 1, NULL),
-           ('ws', 'role', 'qa', 'instructions', 'workspace qa', 1, 1)`,
-        );
-        yield* run(
-          `INSERT INTO workspace_prompt_appends (workspace_id, owner_kind, owner_id, prompt_id, text, enabled) VALUES
-           ('ws', 'workflow', 'odt.naming', 'branch-name', 'workspace branch', 0)`,
+          `INSERT INTO workspace_prompt_appends (workspace_id, owner_kind, owner_id, prompt_id, text, enabled)
+           VALUES ('ws', 'role', 'qa', 'instructions', 'workspace qa', 0)`,
         );
         yield* ensureSchema(session, databasePath);
+        yield* run(
+          `INSERT INTO global_prompt_appends (owner_kind, owner_id, prompt_id, text, enabled)
+           VALUES ('feature', 'naming', 'branch-name', 'Use Jira keys.', 1)`,
+        );
+        yield* run(
+          `INSERT INTO workspace_naming_models (workspace_id, runtime_kind, provider_id, model_id, variant)
+           VALUES ('ws', 'claude', 'anthropic', 'haiku', NULL)`,
+        );
         return {
-          namingModels: yield* read(
-            "SELECT workspace_id, runtime_kind, provider_id, model_id, variant FROM workspace_naming_models",
-          ),
-          roleDefaults: yield* read("SELECT workspace_id, role_id FROM workspace_role_defaults"),
           globalOverrides: yield* read(
-            "SELECT owner_kind, owner_id, prompt_id FROM global_prompt_overrides ORDER BY owner_kind",
+            "SELECT owner_kind, owner_id, prompt_id, template FROM global_prompt_overrides",
           ),
           globalAppends: yield* read(
             "SELECT owner_kind, owner_id, prompt_id FROM global_prompt_appends",
           ),
-          workspaceOverrides: yield* read(
-            "SELECT owner_kind, owner_id, prompt_id FROM workspace_prompt_overrides ORDER BY owner_kind",
-          ),
           workspaceAppends: yield* read(
-            "SELECT owner_kind, owner_id, prompt_id, text, enabled FROM workspace_prompt_appends",
+            "SELECT workspace_id, owner_kind, owner_id, prompt_id, text, enabled FROM workspace_prompt_appends",
           ),
+          namingModels: yield* read("SELECT workspace_id, model_id FROM workspace_naming_models"),
           foreignKeyViolations: yield* read("PRAGMA foreign_key_check"),
         };
       }),
     ),
   );
 
-  expect(result.namingModels).toEqual([["ws", "claude", "anthropic", "haiku", "low"]]);
-  expect(result.roleDefaults).toEqual([["ws", "build"]]);
   expect(result.globalOverrides).toEqual([
-    ["naming", "openducktor", "branch-name"],
-    ["workflow", "custom", "workflow.rules"],
+    ["workflow", "custom", "workflow.rules", "global rules"],
   ]);
-  expect(result.globalAppends).toEqual([["naming", "openducktor", "workspace-session-title"]]);
-  expect(result.workspaceOverrides).toEqual([
-    ["naming", "openducktor", "workspace-session-title"],
-    ["role", "qa", "instructions"],
-  ]);
+  expect(result.globalAppends).toEqual([["feature", "naming", "branch-name"]]);
   expect(result.workspaceAppends).toEqual([
-    ["naming", "openducktor", "branch-name", "workspace branch", 0],
+    ["ws", "role", "qa", "instructions", "workspace qa", 0],
   ]);
+  expect(result.namingModels).toEqual([["ws", "haiku"]]);
   expect(result.foreignKeyViolations).toEqual([]);
 });
 

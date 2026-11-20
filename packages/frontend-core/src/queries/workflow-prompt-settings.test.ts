@@ -38,16 +38,16 @@ describe("workflowPromptSettings", () => {
     expect(goalGroup?.title).toBe("Goal mode");
   });
 
-  test("keeps the naming prompts apart from the workflows, under the naming owner", () => {
+  test("keeps the naming prompts apart from the workflows, under the naming feature", () => {
     expect(prompts.workflows.map(({ title }) => title)).not.toContain("Naming");
     expect(
       prompts.namingTemplates.map(({ label, ownerKind, key }) => ({ label, ownerKind, key })),
     ).toEqual([
-      { label: "Branch name", ownerKind: "naming", key: '["naming","openducktor","branch-name"]' },
+      { label: "Branch name", ownerKind: "feature", key: '["feature","naming","branch-name"]' },
       {
         label: "Workspace session title",
-        ownerKind: "naming",
-        key: '["naming","openducktor","workspace-session-title"]',
+        ownerKind: "feature",
+        key: '["feature","naming","workspace-session-title"]',
       },
     ]);
   });

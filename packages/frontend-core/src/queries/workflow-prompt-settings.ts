@@ -28,6 +28,10 @@ export type SettingsPromptTemplate = Omit<WorkflowDescriptor["templates"][number
   /** When the agent gets the prompt, in plain words, for example "First message to the Builder". */
   usage: string;
   ownerKind: PromptOwnerKind;
+  /** What a change of the prompt applies to, such as "every task of Spec, Plan, Build". Null for a role. */
+  appliesTo: string | null;
+  /** An example of append instructions for the prompt. */
+  appendExample: string;
   /** The placeholders that OpenDucktor supplies when it builds this prompt. */
   placeholders: readonly AgentPromptPlaceholder[];
 };
@@ -49,6 +53,9 @@ export type SettingsWorkflowPrompts = {
   title: string;
   groups: SettingsPromptGroup[];
 };
+
+/** An example of append instructions for a prompt that an agent gets. */
+const AGENT_APPEND_EXAMPLE = "For example: Run the linter before you finish.";
 
 /** A role of the catalog, for the role chips of workflow prompts. */
 export type SettingsPromptRole = { id: string; label: string; icon: WorkflowIcon | undefined };
@@ -81,7 +88,9 @@ const namingPromptTemplates = (): SettingsPromptTemplate[] =>
     requiredPlaceholders: [...requiredPlaceholders],
     roleIds: [],
     ownerTitle: "Naming",
-    ownerKind: "naming",
+    ownerKind: "feature",
+    appliesTo: "every name that the naming model writes",
+    appendExample: "For example: Use at most four words.",
     usage: "Instructions to the naming model of the workspace",
     placeholders: NAMING_PROMPT_PLACEHOLDERS,
   }));
@@ -136,6 +145,8 @@ export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
       ...systemPrompt,
       ownerTitle: label,
       ownerKind: "role",
+      appliesTo: null,
+      appendExample: AGENT_APPEND_EXAMPLE,
       usage: `Start of every ${label} session, in every workflow`,
       roleIcon: icon,
       id: ROLE_INSTRUCTIONS_PROMPT_ID,
@@ -160,6 +171,8 @@ export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
           ...template,
           ownerTitle: workflow.definition.label,
           ownerKind: "workflow",
+          appliesTo: `every task of ${workflow.definition.label}`,
+          appendExample: AGENT_APPEND_EXAMPLE,
           usage: workflowPromptUsage(
             purpose,
             template.roleIds.map((role) => roleLabels.get(role) ?? role),
