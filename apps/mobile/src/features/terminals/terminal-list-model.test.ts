@@ -50,6 +50,7 @@ const lost: TerminalTab = {
   error: "The terminal host restarted. It cannot be recovered or recreated automatically.",
   requestState: "lost",
   sourceTerminalId: "old",
+  sourceHostInstanceId: "host-1",
 };
 const model = (tabs: TerminalTab[], closing: string[] = [], running: string[] = []) => ({
   tabs,

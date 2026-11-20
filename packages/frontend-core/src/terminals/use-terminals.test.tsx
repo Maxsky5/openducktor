@@ -77,6 +77,70 @@ describe("useTerminals", () => {
     }
   });
 
+  test.each(["host-1", "host-2"])(
+    "reconciles a forgotten terminal when the list resumes on %s",
+    async (hostInstanceId) => {
+      const terminal = existingTerminal();
+      const terminalList = mock(async () => ({
+        hostInstanceId: "host-1",
+        revision: 1,
+        terminals: [terminal],
+      }));
+      const view = renderModel(terminalList);
+      try {
+        await waitFor(() => expect(view.result.current.isSynced).toBe(true), { timeout: 500 });
+        const { emit, subscriptionId } = await observeList(view);
+        const freshTerminal = { ...terminal, terminalId: "new-shell" };
+        act(() => {
+          // The viewport can learn about the close before the list observer resumes.
+          view.result.current.onForgotten(
+            "/repo:task-1",
+            terminal.terminalId,
+            "The terminal is no longer available.",
+          );
+          emit({
+            version: TERMINAL_PROTOCOL_VERSION,
+            type: "list_snapshot_start",
+            subscriptionId,
+            hostInstanceId,
+            revision: 2,
+          });
+          emit({ version: TERMINAL_PROTOCOL_VERSION, type: "list_snapshot_end", subscriptionId });
+        });
+        const expectedLostTabs = hostInstanceId === "host-1" ? 0 : 1;
+        await waitFor(() => expect(view.result.current.tabs).toHaveLength(expectedLostTabs), {
+          timeout: 500,
+        });
+        act(() => {
+          emit(
+            {
+              version: TERMINAL_PROTOCOL_VERSION,
+              type: "list_updated",
+              subscriptionId,
+              revision: 3,
+            },
+            freshTerminal,
+          );
+        });
+        await waitFor(
+          () => {
+            const { tabs } = view.result.current;
+            expect(tabs.filter((tab) => tab.requestState === "lost")).toHaveLength(
+              expectedLostTabs,
+            );
+            expect(
+              tabs.flatMap((tab) => (tab.terminalId === null ? [] : [tab.terminalId])),
+            ).toEqual(["new-shell"]);
+          },
+          { timeout: 500 },
+        );
+        expect(terminalList).toHaveBeenCalledTimes(1);
+      } finally {
+        view.unmount();
+      }
+    },
+  );
+
   test("applies live list changes without refetching and keeps one tab when an event beats the create reply", async () => {
     const initial: TerminalListResponse = { hostInstanceId: "host-1", revision: 1, terminals: [] };
     const terminalList = mock(async () => initial);
