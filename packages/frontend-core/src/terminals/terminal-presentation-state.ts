@@ -33,6 +33,7 @@ type LostTerminalTab = {
   error: string;
   requestState: "lost";
   sourceTerminalId: string;
+  sourceHostInstanceId: string | null;
 };
 
 export type TerminalTab = ReadyTerminalTab | PendingTerminalTab | LostTerminalTab;
@@ -206,7 +207,11 @@ const toHostTab = (summary: TerminalSummary, previous?: TerminalTab): ReadyTermi
   };
 };
 
-const toLostTab = (tab: ReadyTerminalTab, message: string): LostTerminalTab => ({
+const toLostTab = (
+  tab: ReadyTerminalTab,
+  sourceHostInstanceId: string | null,
+  message: string,
+): LostTerminalTab => ({
   tabId: tab.tabId,
   terminalId: null,
   summary: null,
@@ -214,6 +219,7 @@ const toLostTab = (tab: ReadyTerminalTab, message: string): LostTerminalTab => (
   error: `${message} It cannot be recovered or recreated automatically.`,
   requestState: "lost",
   sourceTerminalId: tab.terminalId,
+  sourceHostInstanceId,
 });
 
 const updateScope = (
@@ -239,8 +245,11 @@ const reconcileHostTabs = (
   summaries: TerminalSummary[],
 ): TerminalScopePresentation => {
   if (scope.hostInstanceId !== null && scope.hostInstanceId !== hostInstanceId) {
+    const previousHostInstanceId = scope.hostInstanceId;
     const previousHostTabs = scope.tabs.map((tab) =>
-      tab.requestState === "ready" ? toLostTab(tab, "The terminal host restarted.") : tab,
+      tab.requestState === "ready"
+        ? toLostTab(tab, previousHostInstanceId, "The terminal host restarted.")
+        : tab,
     );
     const previousTerminalIds = new Set(
       previousHostTabs.flatMap((tab) =>
@@ -258,13 +267,21 @@ const reconcileHostTabs = (
     );
     return { ...scope, hostInstanceId, tabs, closingTabIds };
   }
-  const transient = scope.tabs.filter((tab) => tab.terminalId === null);
   const currentTabsByTerminalId = new Map(
     scope.tabs.flatMap((tab) => (tab.terminalId ? [[tab.terminalId, tab] as const] : [])),
   );
   const summariesByTerminalId = new Map(
     summaries.map((summary) => [summary.terminalId, summary] as const),
   );
+  // A same-host list confirms a close even when the viewport saw it before the list observer.
+  const transient = scope.tabs.filter((tab) => {
+    if (tab.requestState === "ready") return false;
+    return (
+      tab.requestState !== "lost" ||
+      tab.sourceHostInstanceId !== hostInstanceId ||
+      summariesByTerminalId.has(tab.sourceTerminalId)
+    );
+  });
   const hostTabs = scope.tabs.flatMap((tab) => {
     if (!tab.terminalId) return [];
     const summary = summariesByTerminalId.get(tab.terminalId);
@@ -401,7 +418,7 @@ export const terminalPresentationReducer = (
       ...scope,
       tabs: scope.tabs.map((tab) =>
         tab.terminalId === event.terminalId && tab.requestState === "ready"
-          ? toLostTab(tab, event.message)
+          ? toLostTab(tab, scope.hostInstanceId, event.message)
           : tab,
       ),
     };

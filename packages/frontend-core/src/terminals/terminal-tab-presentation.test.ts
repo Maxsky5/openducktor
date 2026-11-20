@@ -38,6 +38,7 @@ describe("terminalCloseNeedsConfirmation", () => {
       error: "The host restarted.",
       requestState: "lost",
       sourceTerminalId: "terminal-1",
+      sourceHostInstanceId: "host-1",
     };
     expect(terminalCloseNeedsConfirmation(lostTab, new Set(["terminal-1"]))).toBe(false);
   });
