@@ -5,7 +5,7 @@ import type {
   SettingsWorkflowPrompts,
   WorkflowPromptSettings,
 } from "@openducktor/frontend-core/queries/workflow-prompt-settings";
-import type { LucideIcon } from "lucide-react";
+import { Tag, type LucideIcon } from "lucide-react";
 import { roleIconForHint } from "@/lib/agent-role-presentation";
 import {
   type PromptScope,
@@ -46,7 +46,7 @@ export type PromptRowData = {
   template: SettingsPromptTemplate;
   /** A role prompt shows the name of its role, under the Agent roles heading. */
   label: string;
-  /** The icon of the role of a role prompt. A workflow prompt shows its roles in chips. */
+  /** The icon of a role prompt or a naming prompt. A workflow prompt shows its roles in chips. */
   icon: LucideIcon | undefined;
   status: PromptStatus;
   /** The roles that get a workflow prompt. */
@@ -165,7 +165,10 @@ export const promptHomeView = (
 ): PromptHomeView => {
   const roleRows = prompts.roleTemplates.map((template) => roleRow(template, context));
   const workflows = prompts.workflows.map((workflow) => promptWorkflow(workflow, context));
-  const namingRows = prompts.namingTemplates.map((template) => ownedPromptRow(template, context));
+  const namingRows = prompts.namingTemplates.map((template) => ({
+    ...ownedPromptRow(template, context),
+    icon: Tag,
+  }));
   const workflowRows = (workflow: PromptWorkflow) => workflow.groups.flatMap(({ rows }) => rows);
   const changedCount = [...roleRows, ...workflows.flatMap(workflowRows), ...namingRows].filter(
     isChanged,
