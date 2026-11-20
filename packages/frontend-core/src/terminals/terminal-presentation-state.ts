@@ -215,7 +215,7 @@ const toLostTab = (
   tabId: tab.tabId,
   terminalId: null,
   summary: null,
-  label: terminalTabLabel(tab),
+  label: tab.summary.label,
   error: `${message} It cannot be recovered or recreated automatically.`,
   requestState: "lost",
   sourceTerminalId: tab.terminalId,
@@ -244,8 +244,8 @@ const reconcileHostTabs = (
   hostInstanceId: string,
   summaries: TerminalSummary[],
 ): TerminalScopePresentation => {
-  if (scope.hostInstanceId !== null && scope.hostInstanceId !== hostInstanceId) {
-    const previousHostInstanceId = scope.hostInstanceId;
+  const previousHostInstanceId = scope.hostInstanceId;
+  if (previousHostInstanceId !== null && previousHostInstanceId !== hostInstanceId) {
     const previousHostTabs = scope.tabs.map((tab) =>
       tab.requestState === "ready"
         ? toLostTab(tab, previousHostInstanceId, "The terminal host restarted.")
@@ -270,13 +270,11 @@ const reconcileHostTabs = (
   const summariesByTerminalId = new Map(
     summaries.map((summary) => [summary.terminalId, summary] as const),
   );
-  // A same-host list confirms a close even when the viewport saw it before the list observer.
-  const transient = scope.tabs.filter((tab) => {
-    if (tab.requestState === "ready") return false;
+  const localTabs = scope.tabs.filter((tab) => {
+    if (tab.requestState !== "lost") return tab.requestState !== "ready";
+    // A same-host list confirms a close even when the viewport saw it before the list observer.
     return (
-      tab.requestState !== "lost" ||
-      tab.sourceHostInstanceId !== hostInstanceId ||
-      summariesByTerminalId.has(tab.sourceTerminalId)
+      tab.sourceHostInstanceId !== hostInstanceId || summariesByTerminalId.has(tab.sourceTerminalId)
     );
   });
   const hostTabs = scope.tabs.flatMap((tab) => {
@@ -285,7 +283,7 @@ const reconcileHostTabs = (
     return summary ? [toHostTab(summary, tab)] : [];
   });
   const knownTerminalIds = new Set(hostTabs.map((tab) => tab.terminalId));
-  for (const tab of transient) {
+  for (const tab of localTabs) {
     if (tab.requestState === "lost") {
       knownTerminalIds.add(tab.sourceTerminalId);
     }
@@ -295,12 +293,12 @@ const reconcileHostTabs = (
       hostTabs.push(toHostTab(summary));
     }
   }
-  const tabs = [...hostTabs, ...transient];
+  const tabs = [...hostTabs, ...localTabs];
   const closingTabIds = scope.closingTabIds.filter((tabId) =>
     tabs.some((tab) => tab.tabId === tabId),
   );
   if (
-    scope.hostInstanceId === hostInstanceId &&
+    previousHostInstanceId === hostInstanceId &&
     arraysEqualByIdentity(scope.tabs, tabs) &&
     arraysEqualByIdentity(scope.closingTabIds, closingTabIds)
   ) {
