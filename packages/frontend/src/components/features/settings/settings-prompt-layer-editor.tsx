@@ -218,7 +218,11 @@ function AppendSection({
         id={id}
         value={append?.text ?? ""}
         rows={4}
-        placeholder="For example: Run the linter before you finish."
+        placeholder={
+          template.purpose === "naming"
+            ? "For example: Use at most four words."
+            : "For example: Run the linter before you finish."
+        }
         disabled={disabled}
         placeholders={template.placeholders}
         error={error}
@@ -312,10 +316,15 @@ function ReplaceRow({
   );
 }
 
-/** What a change of the prompt affects: its workflow or its role, in one or every repository. */
+/**
+ * What a change of the prompt affects: the names of the naming model, its workflow, or its role,
+ * in one or every repository.
+ */
 const changeScope = (template: SettingsPromptTemplate, scope: PromptScope): string => {
   const repositories =
     scope.kind === "repository" ? "in this repository only" : "in every repository";
+  if (template.purpose === "naming")
+    return `Your changes apply to every name that the naming model writes, ${repositories}.`;
   return template.ownerKind === "workflow"
     ? `Your changes apply to every task of ${template.ownerTitle}, ${repositories}.`
     : `Your changes apply ${repositories}.`;

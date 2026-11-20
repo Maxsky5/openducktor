@@ -42,7 +42,8 @@ export type AgentChatTranscriptNotice = {
     | "session_failed"
     | "session_history_warning"
     | "runtime_blocked"
-    | "catalog_warning";
+    | "catalog_warning"
+    | "branch_naming";
   severity: "loading" | "error";
   title: string;
   description: string;

@@ -45,6 +45,7 @@ export function startupTraceRows(attempt: StartupAttempt): { id: string; step: S
 
 function isSetupStep(step: StartupStep): boolean {
   return (
+    step.id === "naming" ||
     step.id === "checkout" ||
     step.id === "upstream" ||
     (step.id === "copies" && step.details.length > 0) ||
@@ -102,7 +103,8 @@ export function startupFailureRows(attempt: StartupAttempt): { id: string; step:
 
 function setsUpWorktree(operation: StartupOperationSnapshot): boolean {
   const checkout = operation.steps.find((step) => step.id === "checkout");
-  if (!checkout) return false;
+  // The naming model names the branch of a new worktree before Git creates the worktree.
+  if (!checkout) return operation.steps.some((step) => step.id === "naming");
   const created =
     checkout.resources?.some(
       (resource) => resource.kind === "worktree" && resource.state === "created",

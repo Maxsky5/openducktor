@@ -46,6 +46,7 @@ import {
 } from "./use-workspace-conflict-chat-actions";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { useWorkspaceSessionTranscript } from "./use-workspace-session-transcript";
+import { hasTemporaryWorktreeBranch } from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-branch-naming";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useWorkspaceSessionModelTarget } from "./use-workspace-session-model-target";
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
@@ -193,6 +194,7 @@ export function WorkspaceSessionChat({
     runtimeReadiness,
     readModel,
     loadHistory: operations.loadAgentSessionHistory,
+    namingBranch: actions.isSending && hasTemporaryWorktreeBranch(record),
   });
   const descriptor =
     runtime.allRuntimeDefinitions.find((entry) => entry.kind === record.runtimeKind) ?? null;

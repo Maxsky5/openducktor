@@ -32,7 +32,7 @@ export const temporaryWorkspaceBranch = (branchPrefix: string, sessionId: string
 /**
  * What this host process knows about a chat that it created, until its first message. `created`
  * holds the temporary branch that this host created because the user left both names blank. It
- * has no upstream, so a push before the first message cannot publish it. `renamed` follows a Git rename whose record
+ * tracks the target branch until the first message sets the upstream of its final name. `renamed` follows a Git rename whose record
  * save did not finish, so the next send saves the final branch without a second rename.
  * `branchNamed` follows the saved final branch. Both hold the title that the branch request gave,
  * or null.

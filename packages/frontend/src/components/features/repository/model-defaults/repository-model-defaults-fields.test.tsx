@@ -105,7 +105,7 @@ test("settings show a naming model with no agent profile, and creation hides it"
   const card = namingCard();
   expect(
     within(card).getByText(
-      "Writes short session titles and branch names. Leave empty to keep the current names.",
+      "Writes short session titles and branch names. When empty, task branches use the task title, and new chat worktrees need a name.",
     ),
   ).toBeTruthy();
   expect(within(card).queryByText("Agent profile")).toBeNull();

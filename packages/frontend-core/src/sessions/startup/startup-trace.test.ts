@@ -489,3 +489,25 @@ test("the active step is the last step that runs or failed", () => {
     ]),
   ).toBe("copies");
 });
+
+test("the branch naming of a new worktree shows before Git creates the worktree", () => {
+  const rows = startupTraceRows({
+    ...attempt([operation("create", [step("request"), step("naming", { state: "running" })])]),
+    status: running,
+  });
+
+  expect(rows.map(({ id, step }) => [id, step.state])).toEqual([
+    ["create:naming", "running"],
+    ["attempt:session", "pending"],
+  ]);
+});
+
+test("the branch naming row stays above the created worktree", () => {
+  const startup = attempt([operation("create", [step("naming"), createdWorktree()])]);
+
+  expect(startupTraceRows(startup).map((row) => row.id)).toEqual([
+    "create:naming",
+    "create:checkout",
+    "attempt:session",
+  ]);
+});

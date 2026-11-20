@@ -27,14 +27,14 @@ type PromptSettings = {
   roleTemplates: PromptTemplate[];
   workflows: {
     title: string;
+    description: string;
     groups: { title: string; description: string; templates: PromptTemplate[] }[];
   }[];
 };
 
-// SAFETY: settings-modal-constants.ts exports these values, and a missing export fails the test.
-const { SETTINGS_SECTIONS, WORKFLOW_PROMPTS_DESCRIPTION } = await importProduct<{
+// SAFETY: settings-modal-constants.ts exports this value, and a missing export fails the test.
+const { SETTINGS_SECTIONS } = await importProduct<{
   SETTINGS_SECTIONS: readonly { label: string }[];
-  WORKFLOW_PROMPTS_DESCRIPTION: string;
 }>("packages/frontend/src/components/features/settings/settings-modal-constants.ts");
 // SAFETY: settings-prompt-layers.ts exports these labels, and a missing export fails the test.
 const { PROMPT_STATUS_LABELS } = await importProduct<{
@@ -73,7 +73,7 @@ describe("settings copied from the app", () => {
     const [workflow] = prompts.workflows;
     expect({
       title: workflow?.title,
-      description: WORKFLOW_PROMPTS_DESCRIPTION,
+      description: workflow?.description,
       groups: workflow?.groups.map((group) => ({
         title: group.title,
         description: group.description,

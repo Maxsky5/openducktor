@@ -1281,6 +1281,22 @@ describe("host-owned Workspace Session lifecycle", () => {
     ]);
   });
 
+  test("an unnamed worktree plans no upstream step, because the first message sets it", async () => {
+    const h = setup();
+    h.config.namingModel = { runtimeKind: "claude", providerId: "anthropic", modelId: "haiku" };
+    const { snapshots, progress } = recordStartup();
+    await Effect.runPromise(
+      h.service
+        .create({ ...worktreeInput(), worktree: { mode: "from_name", name: "", branchName: null } })
+        .pipe(Effect.provideService(CurrentStartupProgress, progress)),
+    );
+
+    const planned = snapshots.find((snapshot) =>
+      snapshot.steps.some((step) => step.id === "checkout"),
+    );
+    expect(planned?.steps.map((step) => step.id)).toEqual(["checkout", "copies", "action:setup"]);
+  });
+
   test("a rejected worktree directory publishes no setup steps", async () => {
     const h = setup();
     h.paths.add(path.join(database.configDir, "worktrees", "workspace-sessions", "my-feature"));

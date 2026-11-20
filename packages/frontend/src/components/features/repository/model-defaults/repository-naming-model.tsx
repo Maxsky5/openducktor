@@ -32,7 +32,7 @@ export function RepositoryNamingModelBlock({
     <RepositoryModelBlock
       {...block}
       title="Naming model"
-      description="Writes short session titles and branch names. Leave empty to keep the current names."
+      description="Writes short session titles and branch names. When empty, task branches use the task title, and new chat worktrees need a name."
       presentation="settings"
       showProfile={false}
       value={selectedRepoConfig.namingModel ?? null}

@@ -48,6 +48,8 @@ export type SettingsPromptGroup = {
 export type SettingsWorkflowPrompts = {
   id: string;
   title: string;
+  /** The text under the title of its page. */
+  description: string;
   groups: SettingsPromptGroup[];
 };
 
@@ -84,6 +86,8 @@ const workflowPromptUsage = (purpose: PromptPurpose, roles: readonly string[]): 
 const namingPrompts = (): SettingsWorkflowPrompts => ({
   id: NAMING_PROMPT_OWNER_ID,
   title: "Naming",
+  description:
+    "The prompts that the naming model gets. A change applies to the next name that the model writes.",
   groups: [
     {
       id: "naming",
@@ -193,6 +197,8 @@ export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
       return {
         id: workflow.reference.id,
         title: workflow.definition.label,
+        description:
+          "The prompts that this workflow uses in its steps. A change applies to every task of this workflow.",
         groups: WORKFLOW_GROUPS.map(({ purposes, ...group }) => ({
           ...group,
           templates: templates.filter(({ purpose }) => purposes.includes(purpose)),

@@ -148,7 +148,10 @@ export const withWorkspaceSessionTarget = <A, E>(
     targetBranch: GitTargetBranch;
     startPoint?: string;
     rollbackMode?: "all_owned";
-    /** The new branch gets no upstream yet, because the first message renames it. */
+    /**
+     * The upstream setup waits for the first message, which renames the new branch. Until then the
+     * branch keeps what `git worktree add` gives it: it tracks the target branch.
+     */
     deferUpstream?: boolean;
   },
   use: (target: WorkspaceSessionExecutionTarget, retainTarget: () => void) => Effect.Effect<A, E>,
@@ -251,11 +254,13 @@ export const withWorkspaceSessionTarget = <A, E>(
         );
       }
       yield* worktreeFiles.ensureDirectory(namespace);
+      // A deferred upstream is set later, so the startup plan does not list its step.
+      const upstreamRemote = input.deferUpstream ? undefined : newBranch?.upstreamRemote;
       yield* planWorktreeSetup({
         label: "Create workspace worktree",
         worktreePath: workingDirectory,
         branch,
-        upstreamRemote: newBranch?.upstreamRemote,
+        upstreamRemote,
         repoConfig,
       });
       let acquired = false;
@@ -310,14 +315,14 @@ export const withWorkspaceSessionTarget = <A, E>(
                     ],
                   }),
                 );
-                if (newBranch?.upstreamRemote && !input.deferUpstream) {
+                if (upstreamRemote) {
                   const upstream = yield* startupStep(
                     { id: "upstream", label: "Set branch upstream" },
                     git.configureBranchUpstream(
                       repoPath,
                       workingDirectory,
                       branch,
-                      newBranch.upstreamRemote,
+                      upstreamRemote,
                       false,
                     ),
                   );

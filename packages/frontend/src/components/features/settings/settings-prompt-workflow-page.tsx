@@ -1,5 +1,4 @@
 import { type ReactElement, useLayoutEffect, useRef } from "react";
-import { WORKFLOW_PROMPTS_DESCRIPTION } from "./settings-modal-constants";
 import { ListHeading, PromptPageHeader } from "./settings-prompt-page-header";
 import { PromptRows, useRestoreRowFocus, WorkflowErrors } from "./settings-prompt-rows";
 import type { PromptWorkflow } from "./settings-prompt-owners";
@@ -41,7 +40,7 @@ export function PromptWorkflowPage({
         aside={<WorkflowErrors workflow={workflow} />}
         onBack={onBack}
       >
-        <p className="text-xs text-muted-foreground">{WORKFLOW_PROMPTS_DESCRIPTION}</p>
+        <p className="text-xs text-muted-foreground">{workflow.description}</p>
       </PromptPageHeader>
       <div
         ref={listRef}
