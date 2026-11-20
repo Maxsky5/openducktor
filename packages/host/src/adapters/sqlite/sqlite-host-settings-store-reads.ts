@@ -197,6 +197,7 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
     .select({
       workspace: schema.workspaces,
       model: schema.workspaceDefaultModels,
+      namingModel: schema.workspaceNamingModels,
       provider: schema.workspaceGitConfig,
       githubConfig: schema.workspaceRepositoryIdentity,
       azureConfig: schema.workspaceAzureConfig,
@@ -242,6 +243,10 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
       eq(schema.workspaceDefaultModels.workspaceId, schema.workspaces.workspaceId),
     )
     .leftJoin(
+      schema.workspaceNamingModels,
+      eq(schema.workspaceNamingModels.workspaceId, schema.workspaces.workspaceId),
+    )
+    .leftJoin(
       schema.workspaceGitConfig,
       eq(schema.workspaceGitConfig.workspaceId, schema.workspaces.workspaceId),
     )
@@ -265,22 +270,10 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
 
 type WorkspaceRow = Awaited<ReturnType<typeof workspaceQuery>>[number];
 
-/**
- * The `workspace_role_defaults` key of the naming model. Workflow roles cannot use it, because the
- * store reads that row as `namingModel`.
- */
-export const NAMING_MODEL_SETTINGS_KEY = "odt.naming-model";
-
-/** The naming model shares the role default rows under a reserved key. It has no profile. */
-const splitNamingModel = (rows: Record<string, { profileId?: unknown }>) => {
-  const { [NAMING_MODEL_SETTINGS_KEY]: naming, ...agentDefaults } = rows;
-  if (!naming) return { agentDefaults };
-  const { profileId: _profileId, ...namingModel } = naming;
-  return { agentDefaults, namingModel };
-};
 const mapWorkspace = ({
   workspace: row,
   model,
+  namingModel,
   provider,
   githubConfig,
   azureConfig,
@@ -358,7 +351,8 @@ const mapWorkspace = ({
             remote: row.defaultTargetRemote ?? undefined,
           },
           defaultModel: model ?? undefined,
-          ...splitNamingModel(collections.agentDefaults),
+          namingModel: namingModel ?? undefined,
+          agentDefaults: collections.agentDefaults,
           hooks: { beforeWorktreeRemoval: collections.commands },
           actions: { items: collections.actions, defaultActionId: row.defaultActionId },
           worktreeCopyPaths: collections.paths,

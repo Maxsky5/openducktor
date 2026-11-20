@@ -192,12 +192,14 @@ The `agent_runtime_generate_text` host command asks one runtime model for one te
 - Stop the request when the host abort signal fires.
 - The caller sends all the material that the model needs in the prompt.
 - Each live session adapter provides `textGeneration`.
+- A JSON generation returns one JSON object of the answer schema of the caller. Constrain the answer to the JSON Schema of that answer schema when the runtime can. Otherwise, put the JSON Schema in the instructions.
+- Check a JSON answer with the answer schema before you return it. An answer that does not fit fails, and the error names the fields that do not fit.
 
-| Runtime | Request | Isolation |
-| --- | --- | --- |
-| Claude | One `query()` with a string prompt | No tools, no MCP servers, no hooks, no saved session, and one turn. The instructions replace the system prompt. |
-| Codex | `thread/start`, one `turn/start`, then `thread/unsubscribe` | An ephemeral read-only thread with no environment and no approvals. The thread configuration turns off the features and MCP servers that Codex turns off for its own title threads. Built-in tools that need no environment, such as the clock, can stay. The text is the final agent message of the turn. |
-| OpenCode | `generate.text` | One stateless model call. The instructions start the prompt. |
+| Runtime | Request | Isolation | JSON answer |
+| --- | --- | --- | --- |
+| Claude | One `query()` with a string prompt | No tools, no MCP servers, no hooks, no saved session, and one turn. The instructions replace the system prompt. | `outputFormat` with the JSON Schema. The answer is `structured_output`. |
+| Codex | `thread/start`, one `turn/start`, then `thread/unsubscribe` | An ephemeral read-only thread with no environment and no approvals. The thread configuration turns off the features and MCP servers that Codex turns off for its own title threads. Built-in tools that need no environment, such as the clock, can stay. The text is the final agent message of the turn. | `outputSchema` of `turn/start`. The final agent message is the JSON text. |
+| OpenCode | `generate.text` | One stateless model call. The instructions start the prompt. | `generate.text` has no schema option. The JSON Schema goes into the instructions, and the answer is the JSON object of the text. |
 
 ### History
 

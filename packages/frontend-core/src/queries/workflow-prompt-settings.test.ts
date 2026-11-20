@@ -23,12 +23,13 @@ describe("workflowPromptSettings", () => {
     }
   });
 
-  test("shows each prompt once: role instructions, or one group of a workflow", () => {
+  test("shows each prompt once: role instructions, one group of a workflow, or naming", () => {
     const shownKeys = [
       ...prompts.roleTemplates.map(({ key }) => key),
       ...prompts.workflows.flatMap(({ groups }) =>
         groups.flatMap(({ templates }) => templates.map(({ key }) => key)),
       ),
+      ...prompts.namingTemplates.map(({ key }) => key),
     ];
     expect(shownKeys.toSorted()).toEqual(prompts.templates.map(({ key }) => key).toSorted());
     const goalGroup = prompts.workflows
@@ -37,12 +38,17 @@ describe("workflowPromptSettings", () => {
     expect(goalGroup?.title).toBe("Goal mode");
   });
 
-  test("shows the naming prompts as their own section after the workflows", () => {
-    const naming = prompts.workflows.at(-1);
-    expect(naming?.title).toBe("Naming");
-    expect(naming?.groups.flatMap(({ templates }) => templates.map(({ label }) => label))).toEqual([
-      "Branch name",
-      "Workspace session title",
+  test("keeps the naming prompts apart from the workflows, under the naming owner", () => {
+    expect(prompts.workflows.map(({ title }) => title)).not.toContain("Naming");
+    expect(
+      prompts.namingTemplates.map(({ label, ownerKind, key }) => ({ label, ownerKind, key })),
+    ).toEqual([
+      { label: "Branch name", ownerKind: "naming", key: '["naming","openducktor","branch-name"]' },
+      {
+        label: "Workspace session title",
+        ownerKind: "naming",
+        key: '["naming","openducktor","workspace-session-title"]',
+      },
     ]);
   });
 });

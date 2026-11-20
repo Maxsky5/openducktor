@@ -36,6 +36,10 @@ export const SYSTEM_PROMPTS_TITLE = "System prompts";
 /** The title of Repository prompts, in the repository menu and on its screen. */
 export const REPOSITORY_PROMPTS_TITLE = "Repository prompts";
 
+/** The text under the title of the page of a workflow. */
+export const WORKFLOW_PROMPTS_DESCRIPTION =
+  "The prompts that this workflow uses in its steps. A change applies to every task of this workflow.";
+
 export const SETTINGS_SECTIONS: ReadonlyArray<{
   id: SettingsSectionId;
   label: string;

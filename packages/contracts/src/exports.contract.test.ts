@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import * as contracts from "./index";
 
 const EXPECTED_RUNTIME_EXPORTS = [
+  "automaticWorktreeName",
+  "hasAutomaticWorktreeBranch",
   "BUILTIN_SHORTCUT_ACTION_IDS",
   "SHORTCUT_POSITIONS",
   "SHORTCUT_DIGITS",
@@ -9,6 +11,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "NAMED_SHORTCUT_KEYS",
   "NAMING_PROMPT_IDS",
   "NAMING_PROMPT_OWNER_ID",
+  "PROMPT_OWNER_KINDS",
   "isShortcutKey",
   "resolveShortcutModifiers",
   "shortcutSignature",
@@ -198,6 +201,9 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "claudeToolCatalogInputSchema",
   "claudeToolCatalogSchema",
   "agentTextGenerationInputSchema",
+  "agentJsonAnswerMismatch",
+  "agentJsonOutputSchema",
+  "agentJsonOutputSchemaSchema",
   "goalCommandParts",
   "agentTextGenerationResultSchema",
   "claudePermissionModeSchema",

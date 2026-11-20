@@ -181,7 +181,7 @@ describe("applyTaskWorkflowSettings", () => {
 });
 
 describe("naming prompt settings", () => {
-  const branchKey = '["workflow","odt.naming","branch-name"]';
+  const branchKey = '["naming","openducktor","branch-name"]';
 
   test("accepts naming prompt layers with the work text", () => {
     expect(() =>

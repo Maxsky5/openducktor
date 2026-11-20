@@ -1,7 +1,7 @@
 import {
-  NAMING_PROMPT_OWNER_ID,
   promptOverrideKey,
   ROLE_INSTRUCTIONS_PROMPT_ID,
+  type PromptOwnerKind,
   type AgentPromptPlaceholder,
   type WorkflowDescriptor,
   type WorkflowIcon,
@@ -17,18 +17,17 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { workflowCatalogQueryOptions } from "./workflows";
 
-/** When the agent gets a prompt. A naming prompt goes to the naming model of the workspace. */
-type PromptPurpose = WorkflowDescriptor["templates"][number]["purpose"] | "naming";
+/** When an agent of a workflow gets a workflow prompt. */
+type WorkflowPromptPurpose = WorkflowDescriptor["templates"][number]["purpose"];
 
 /** A prompt in Settings, with the override key of its owner. */
 export type SettingsPromptTemplate = Omit<WorkflowDescriptor["templates"][number], "purpose"> & {
-  purpose: PromptPurpose;
   key: string;
-  /** The role or the workflow that owns the prompt, for example "Builder" or "Spec, Plan, Build". */
+  /** The owner of the prompt, for example "Builder", "Spec, Plan, Build", or "Naming". */
   ownerTitle: string;
   /** When the agent gets the prompt, in plain words, for example "First message to the Builder". */
   usage: string;
-  ownerKind: "role" | "workflow";
+  ownerKind: PromptOwnerKind;
   /** The placeholders that OpenDucktor supplies when it builds this prompt. */
   placeholders: readonly AgentPromptPlaceholder[];
 };
@@ -48,8 +47,6 @@ export type SettingsPromptGroup = {
 export type SettingsWorkflowPrompts = {
   id: string;
   title: string;
-  /** The text under the title of its page. */
-  description: string;
   groups: SettingsPromptGroup[];
 };
 
@@ -60,7 +57,7 @@ export type SettingsPromptRole = { id: string; label: string; icon: WorkflowIcon
 const roleNames = (labels: readonly string[]): string => `the ${labels.join(" or ")} agent`;
 
 /** When the agent gets a workflow prompt, from its purpose and its roles. */
-const workflowPromptUsage = (purpose: PromptPurpose, roles: readonly string[]): string => {
+const workflowPromptUsage = (purpose: WorkflowPromptPurpose, roles: readonly string[]): string => {
   switch (purpose) {
     case "system":
       return "Part of every session in this workflow";
@@ -74,48 +71,27 @@ const workflowPromptUsage = (purpose: PromptPurpose, roles: readonly string[]): 
       return "Reply when a read-only agent tries to change files";
     case "goal":
       return "Instructions to write the goal of a step in Goal mode";
-    case "naming":
-      return "Instructions to the naming model of the workspace";
   }
 };
 
-/**
- * The naming prompts, shown as one more owner after the workflows. They use the reserved
- * `odt.naming` workflow owner, so their overrides keep the prompt settings key format.
- */
-const namingPrompts = (): SettingsWorkflowPrompts => ({
-  id: NAMING_PROMPT_OWNER_ID,
-  title: "Naming",
-  description:
-    "The prompts that the naming model gets. A change applies to the next name that the model writes.",
-  groups: [
-    {
-      id: "naming",
-      title: "Names of work",
-      description:
-        "Tell the naming model how to name branches and workspace sessions. Each prompt gets the work as {{workText}}.",
-      templates: NAMING_PROMPT_TEMPLATES.map(
-        ({ output: _output, requiredPlaceholders, purpose, ...template }) => ({
-          ...template,
-          purpose,
-          requiredPlaceholders: [...requiredPlaceholders],
-          roleIds: [],
-          ownerTitle: "Naming",
-          ownerKind: "workflow",
-          usage: workflowPromptUsage(purpose, []),
-          placeholders: NAMING_PROMPT_PLACEHOLDERS,
-        }),
-      ),
-    },
-  ],
-});
+/** The naming prompts, which OpenDucktor owns. The naming model of a workspace gets them. */
+const namingPromptTemplates = (): SettingsPromptTemplate[] =>
+  NAMING_PROMPT_TEMPLATES.map(({ output: _output, requiredPlaceholders, ...template }) => ({
+    ...template,
+    requiredPlaceholders: [...requiredPlaceholders],
+    roleIds: [],
+    ownerTitle: "Naming",
+    ownerKind: "naming",
+    usage: "Instructions to the naming model of the workspace",
+    placeholders: NAMING_PROMPT_PLACEHOLDERS,
+  }));
 
 /** The groups of a workflow section, in the order of a session. */
 const WORKFLOW_GROUPS: readonly {
   id: string;
   title: string;
   description: string;
-  purposes: readonly PromptPurpose[];
+  purposes: readonly WorkflowPromptPurpose[];
 }[] = [
   {
     id: "rules",
@@ -144,8 +120,9 @@ const WORKFLOW_GROUPS: readonly {
 ];
 
 /**
- * The prompts of Settings: the instructions of each catalog role, then the prompts of the latest
- * revision of each workflow. An override applies to its owner role or workflow in every revision.
+ * The prompts of Settings: the instructions of each catalog role, the prompts of the latest
+ * revision of each workflow, and the naming prompts. An override applies to its owner role or
+ * workflow in every revision.
  */
 export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
   const roles = catalog.roles.map(({ id, label, icon }): SettingsPromptRole => ({
@@ -167,51 +144,50 @@ export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
         ownerId: id,
         promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
       }),
-      purpose: "system",
       roleIds: [id],
       placeholders: BASE_PROMPT_PLACEHOLDERS,
     }),
   );
   const workflowSections = latestWorkflowRevisions([...catalog.workflows.values()]).map(
     (workflow): SettingsWorkflowPrompts => {
-      const templates = workflowPromptTemplates(workflow).map(
-        (template): SettingsPromptTemplate => {
-          const key = promptOverrideKey({
-            ownerKind: "workflow",
-            ownerId: workflow.reference.id,
-            promptId: template.id,
-          });
-          return {
-            ...template,
-            ownerTitle: workflow.definition.label,
-            ownerKind: "workflow",
-            usage: workflowPromptUsage(
-              template.purpose,
-              template.roleIds.map((role) => roleLabels.get(role) ?? role),
-            ),
-            key,
-            placeholders: workflow.prompts.placeholdersOf(key),
-          };
-        },
-      );
+      const templates = workflowPromptTemplates(workflow).map(({ purpose, ...template }) => {
+        const key = promptOverrideKey({
+          ownerKind: "workflow",
+          ownerId: workflow.reference.id,
+          promptId: template.id,
+        });
+        const setting: SettingsPromptTemplate = {
+          ...template,
+          ownerTitle: workflow.definition.label,
+          ownerKind: "workflow",
+          usage: workflowPromptUsage(
+            purpose,
+            template.roleIds.map((role) => roleLabels.get(role) ?? role),
+          ),
+          key,
+          placeholders: workflow.prompts.placeholdersOf(key),
+        };
+        return { purpose, setting };
+      });
       return {
         id: workflow.reference.id,
         title: workflow.definition.label,
-        description:
-          "The prompts that this workflow uses in its steps. A change applies to every task of this workflow.",
         groups: WORKFLOW_GROUPS.map(({ purposes, ...group }) => ({
           ...group,
-          templates: templates.filter(({ purpose }) => purposes.includes(purpose)),
+          templates: templates
+            .filter(({ purpose }) => purposes.includes(purpose))
+            .map(({ setting }) => setting),
         })).filter(({ templates: groupTemplates }) => groupTemplates.length > 0),
       };
     },
   );
-  const workflows = [...workflowSections, namingPrompts()];
+  const namingTemplates = namingPromptTemplates();
   const templates: SettingsPromptTemplate[] = [
     ...roleTemplates,
-    ...workflows.flatMap(({ groups }) => groups.flatMap((group) => group.templates)),
+    ...workflowSections.flatMap(({ groups }) => groups.flatMap((group) => group.templates)),
+    ...namingTemplates,
   ];
-  return { roles, roleTemplates, workflows, templates };
+  return { roles, roleTemplates, workflows: workflowSections, namingTemplates, templates };
 };
 export type WorkflowPromptSettings = ReturnType<typeof workflowPromptSettings>;
 export const useWorkflowPromptSettings = () =>

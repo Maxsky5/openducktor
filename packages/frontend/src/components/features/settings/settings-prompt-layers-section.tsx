@@ -58,10 +58,10 @@ export function PromptLayersSection({
   if (!prompts.data)
     return (
       <p role="status" className="p-4 text-sm text-muted-foreground">
-        Loading workflow prompts...
+        Loading prompts...
       </p>
     );
-  const { roles, roleTemplates, workflows, templates } = prompts.data;
+  const { roles, roleTemplates, workflows, namingTemplates, templates } = prompts.data;
   const show = (next: PromptView, focus: string | null = null): void => {
     setFocusKey(focus);
     onViewChange(next);
@@ -109,7 +109,7 @@ export function PromptLayersSection({
       title={title}
       description={description}
       view={promptHomeView(
-        { roleTemplates, workflows },
+        { roleTemplates, workflows, namingTemplates },
         { query: query.trim().toLowerCase(), changedOnly },
         context,
       )}

@@ -92,9 +92,9 @@ export const useSettingsModalPromptValidation = ({
       const [key] = Object.keys(errors);
       const template = prompts.data.templates.find((entry) => entry.key === key);
       if (!template) return null;
-      return template.ownerKind === "workflow"
-        ? `${template.label} (${template.ownerTitle}, ${screen})`
-        : `${template.label} (${screen})`;
+      return template.ownerKind === "role"
+        ? `${template.label} (${screen})`
+        : `${template.label} (${template.ownerTitle}, ${screen})`;
     };
     // The open repository comes first, so the place matches the screen that the user sees.
     const repoIds = Object.keys(repoErrorsByWorkspaceId).toSorted(

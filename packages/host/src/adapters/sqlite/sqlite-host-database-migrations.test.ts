@@ -217,6 +217,93 @@ test("0002 moves prompt overrides to their owners, Autopilot rules to the built-
   expect(result.foreignKeyViolations).toEqual([]);
 });
 
+test("0004 moves the naming model to its table and the naming prompt layers to the naming owner", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "odt-host-migration-"));
+  cleanups.add(() => rm(directory, { recursive: true, force: true }));
+  const databasePath = path.join(directory, "database.sqlite");
+  const initialFolder = await copyMigrationsUpTo(directory, 3);
+
+  const result = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { session } = yield* openSqliteDrizzleConnection({
+          databasePath,
+          configureWal: false,
+          configureHostDatabase: true,
+          config: { schema: hostDatabaseSchema },
+        });
+        const run = (query: string) => session.execute((db) => db.run(sql.raw(query)), "test.run");
+        const read = (query: string) =>
+          session.execute((db) => db.values(sql.raw(query)), "test.read");
+        yield* applyMigrations(session, initialFolder, databasePath, "exact");
+        yield* run(
+          `INSERT INTO workspaces (workspace_id, workspace_name, repo_path, branch_prefix, default_target_branch, closed)
+           VALUES ('ws', 'Workspace', '/repo', 'odt', 'main', 0)`,
+        );
+        yield* run(
+          `INSERT INTO workspace_role_defaults (workspace_id, role_id, runtime_kind, provider_id, model_id, variant, profile_id) VALUES
+           ('ws', 'odt.naming-model', 'claude', 'anthropic', 'haiku', 'low', NULL),
+           ('ws', 'build', 'codex', 'openai', 'gpt', 'high', NULL)`,
+        );
+        yield* run(
+          `INSERT INTO global_prompt_overrides (owner_kind, owner_id, prompt_id, template, base_version, enabled) VALUES
+           ('workflow', 'odt.naming', 'branch-name', 'global branch', 1, 1),
+           ('workflow', 'custom', 'workflow.rules', 'global rules', 2, 1)`,
+        );
+        yield* run(
+          `INSERT INTO global_prompt_appends (owner_kind, owner_id, prompt_id, text, enabled) VALUES
+           ('workflow', 'odt.naming', 'workspace-session-title', 'global title', 1)`,
+        );
+        yield* run(
+          `INSERT INTO workspace_prompt_overrides (workspace_id, owner_kind, owner_id, prompt_id, template, base_version, enabled) VALUES
+           ('ws', 'workflow', 'odt.naming', 'workspace-session-title', 'workspace title', 1, NULL),
+           ('ws', 'role', 'qa', 'instructions', 'workspace qa', 1, 1)`,
+        );
+        yield* run(
+          `INSERT INTO workspace_prompt_appends (workspace_id, owner_kind, owner_id, prompt_id, text, enabled) VALUES
+           ('ws', 'workflow', 'odt.naming', 'branch-name', 'workspace branch', 0)`,
+        );
+        yield* ensureSchema(session, databasePath);
+        return {
+          namingModels: yield* read(
+            "SELECT workspace_id, runtime_kind, provider_id, model_id, variant FROM workspace_naming_models",
+          ),
+          roleDefaults: yield* read("SELECT workspace_id, role_id FROM workspace_role_defaults"),
+          globalOverrides: yield* read(
+            "SELECT owner_kind, owner_id, prompt_id FROM global_prompt_overrides ORDER BY owner_kind",
+          ),
+          globalAppends: yield* read(
+            "SELECT owner_kind, owner_id, prompt_id FROM global_prompt_appends",
+          ),
+          workspaceOverrides: yield* read(
+            "SELECT owner_kind, owner_id, prompt_id FROM workspace_prompt_overrides ORDER BY owner_kind",
+          ),
+          workspaceAppends: yield* read(
+            "SELECT owner_kind, owner_id, prompt_id, text, enabled FROM workspace_prompt_appends",
+          ),
+          foreignKeyViolations: yield* read("PRAGMA foreign_key_check"),
+        };
+      }),
+    ),
+  );
+
+  expect(result.namingModels).toEqual([["ws", "claude", "anthropic", "haiku", "low"]]);
+  expect(result.roleDefaults).toEqual([["ws", "build"]]);
+  expect(result.globalOverrides).toEqual([
+    ["naming", "openducktor", "branch-name"],
+    ["workflow", "custom", "workflow.rules"],
+  ]);
+  expect(result.globalAppends).toEqual([["naming", "openducktor", "workspace-session-title"]]);
+  expect(result.workspaceOverrides).toEqual([
+    ["naming", "openducktor", "workspace-session-title"],
+    ["role", "qa", "instructions"],
+  ]);
+  expect(result.workspaceAppends).toEqual([
+    ["naming", "openducktor", "branch-name", "workspace branch", 0],
+  ]);
+  expect(result.foreignKeyViolations).toEqual([]);
+});
+
 test("rejects a database whose applied migration differs from the migration files", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "odt-host-migration-"));
   cleanups.add(() => rm(directory, { recursive: true, force: true }));

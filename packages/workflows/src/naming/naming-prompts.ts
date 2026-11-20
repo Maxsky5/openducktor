@@ -18,13 +18,12 @@ import {
 } from "../task-workflow/prompt-layers";
 import { fillPromptPlaceholders } from "../task-workflow/task-prompts";
 
-/** A built-in naming prompt. Its settings key uses the reserved `odt.naming` workflow owner. */
+/** A built-in naming prompt. Its settings key has the `naming` owner kind. */
 type NamingPromptTemplate = {
   readonly id: (typeof NAMING_PROMPT_IDS)[keyof typeof NAMING_PROMPT_IDS];
   readonly key: string;
   readonly label: string;
   readonly description: string;
-  readonly purpose: "naming";
   readonly builtinVersion: number;
   readonly template: string;
   readonly requiredPlaceholders: readonly AgentPromptPlaceholder[];
@@ -44,7 +43,7 @@ const NAMING_RULES: PromptPlaceholderRules = {
 };
 
 const namingKey = (promptId: string) =>
-  promptOverrideKey({ ownerKind: "workflow", ownerId: NAMING_PROMPT_OWNER_ID, promptId });
+  promptOverrideKey({ ownerKind: "naming", ownerId: NAMING_PROMPT_OWNER_ID, promptId });
 
 const BRANCH_NAME_TEMPLATE = `Name a Git branch for the work in the work text.
 - Return a complete branch name in the form \`type/slug\`.
@@ -73,7 +72,6 @@ export const NAMING_PROMPT_TEMPLATES: readonly NamingPromptTemplate[] = [
     label: "Branch name",
     description:
       "Names the branch of a new task worktree, and of a new chat worktree without a name.",
-    purpose: "naming",
     builtinVersion: 1,
     template: BRANCH_NAME_TEMPLATE,
     requiredPlaceholders: NAMING_PROMPT_PLACEHOLDERS,
@@ -84,7 +82,6 @@ export const NAMING_PROMPT_TEMPLATES: readonly NamingPromptTemplate[] = [
     key: namingKey(NAMING_PROMPT_IDS.workspaceSessionTitle),
     label: "Workspace session title",
     description: "Names a new workspace session from its first message.",
-    purpose: "naming",
     builtinVersion: 1,
     template: WORKSPACE_SESSION_TITLE_TEMPLATE,
     requiredPlaceholders: NAMING_PROMPT_PLACEHOLDERS,

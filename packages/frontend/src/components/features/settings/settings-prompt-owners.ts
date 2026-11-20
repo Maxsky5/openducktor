@@ -27,6 +27,9 @@ export type PromptView =
 
 export const PROMPT_HOME_VIEW: PromptView = { screen: "home" };
 
+/** The title of the naming prompts, on the first screen and in search results. */
+export const NAMING_PROMPTS_TITLE = "Naming";
+
 /** The label and the icon of a role, for the role chips of workflow prompts. */
 type PromptRoleChip = { label: string; icon: LucideIcon };
 
@@ -64,14 +67,15 @@ export type PromptWorkflow = Omit<SettingsWorkflowPrompts, "groups"> & {
 type PromptResults = { id: string; title: string; rows: PromptRowData[] };
 
 /**
- * What the first screen shows: every role and workflow without a filter, or the results of a
- * search or of the Changed only filter.
+ * What the first screen shows: every role, workflow, and naming prompt without a filter, or the
+ * results of a search or of the Changed only filter.
  */
 export type PromptHomeView =
   | {
       mode: "browse";
       roleRows: PromptRowData[];
       workflows: PromptWorkflow[];
+      namingRows: PromptRowData[];
       /** The changed prompts of all owners. */
       changedCount: number;
     }
@@ -119,7 +123,8 @@ const roleRow = (template: SettingsRolePrompt, context: PromptRowContext): Promp
   roles: [],
 });
 
-const workflowRow = (
+/** The row of a prompt of a workflow or of the naming model. */
+const ownedPromptRow = (
   template: SettingsPromptTemplate,
   context: PromptRowContext,
 ): PromptRowData => ({
@@ -137,7 +142,7 @@ export const promptWorkflow = (
 ): PromptWorkflow => {
   const groups = workflow.groups.map((group) => ({
     ...group,
-    rows: group.templates.map((template) => workflowRow(template, context)),
+    rows: group.templates.map((template) => ownedPromptRow(template, context)),
   }));
   const rows = groups.flatMap((group) => group.rows);
   return {
@@ -154,16 +159,19 @@ export const promptWorkflow = (
  * user can open its page. With Changed only, it shows the changed prompts of the workflow.
  */
 export const promptHomeView = (
-  prompts: Pick<WorkflowPromptSettings, "roleTemplates" | "workflows">,
+  prompts: Pick<WorkflowPromptSettings, "roleTemplates" | "workflows" | "namingTemplates">,
   filter: PromptFilter,
   context: PromptRowContext,
 ): PromptHomeView => {
   const roleRows = prompts.roleTemplates.map((template) => roleRow(template, context));
   const workflows = prompts.workflows.map((workflow) => promptWorkflow(workflow, context));
+  const namingRows = prompts.namingTemplates.map((template) => ownedPromptRow(template, context));
   const workflowRows = (workflow: PromptWorkflow) => workflow.groups.flatMap(({ rows }) => rows);
-  const changedCount = [...roleRows, ...workflows.flatMap(workflowRows)].filter(isChanged).length;
+  const changedCount = [...roleRows, ...workflows.flatMap(workflowRows), ...namingRows].filter(
+    isChanged,
+  ).length;
   if (!filter.query && !filter.changedOnly)
-    return { mode: "browse", roleRows, workflows, changedCount };
+    return { mode: "browse", roleRows, workflows, namingRows, changedCount };
 
   const nameMatches = (workflow: PromptWorkflow): boolean =>
     Boolean(filter.query) && workflow.title.toLowerCase().includes(filter.query);
@@ -178,6 +186,11 @@ export const promptHomeView = (
         rows: workflowRows(workflow).filter((row) => keeps(row, workflowFilter)),
       };
     }),
+    {
+      id: "naming",
+      title: NAMING_PROMPTS_TITLE,
+      rows: namingRows.filter((row) => keeps(row, filter)),
+    },
   ].filter(({ rows }) => rows.length > 0);
   return {
     mode: "results",

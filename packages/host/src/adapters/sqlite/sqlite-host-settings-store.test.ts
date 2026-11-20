@@ -188,7 +188,7 @@ describe("shared host settings", () => {
     });
   });
 
-  test("stores the naming model beside the role defaults and reads it back apart", async () => {
+  test("stores the naming model apart from the role defaults, in one row", async () => {
     await withDatabase(async ({ session }) => {
       const config = createDefaultGlobalConfig();
       const build = { runtimeKind: "codex" as const, providerId: "openai", modelId: "gpt-5" };

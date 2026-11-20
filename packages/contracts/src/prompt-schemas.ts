@@ -96,8 +96,12 @@ export const agentPromptOverrideSchema = z.object({
 });
 export type AgentPromptOverride = z.infer<typeof agentPromptOverrideSchema>;
 
-/** A prompt belongs to one role or one workflow. Its ID is unique only within its owner. */
-export type PromptOwnerKind = "role" | "workflow";
+/**
+ * A prompt belongs to one role, one workflow, or the naming model. Its ID is unique only within its
+ * owner.
+ */
+export const PROMPT_OWNER_KINDS = ["role", "workflow", "naming"] as const;
+export type PromptOwnerKind = (typeof PROMPT_OWNER_KINDS)[number];
 export type PromptOverrideTarget = {
   ownerKind: PromptOwnerKind;
   ownerId: string;
@@ -123,10 +127,10 @@ export const WORKFLOW_PROMPT_IDS = {
 } as const;
 
 /**
- * The prompts that tell a naming model how to name a branch or a workspace session. They use the
- * `workflow` owner kind with a reserved owner ID, so they keep the prompt settings key format.
+ * The prompts that tell the naming model how to name a branch or a workspace session. OpenDucktor
+ * owns them, under the `naming` owner kind.
  */
-export const NAMING_PROMPT_OWNER_ID = "odt.naming";
+export const NAMING_PROMPT_OWNER_ID = "openducktor";
 export const NAMING_PROMPT_IDS = {
   branchName: "branch-name",
   workspaceSessionTitle: "workspace-session-title",
@@ -150,11 +154,7 @@ const promptOverrideKeyTupleSchema = z
     }
   })
   .pipe(
-    z.tuple([
-      z.enum(["role", "workflow"]),
-      agentPromptTemplateIdSchema,
-      agentPromptTemplateIdSchema,
-    ]),
+    z.tuple([z.enum(PROMPT_OWNER_KINDS), agentPromptTemplateIdSchema, agentPromptTemplateIdSchema]),
   );
 
 /** The owner and prompt ID of a settings key, or null when the key has another form. */
@@ -170,10 +170,13 @@ const promptOverrideKeySchema = z
   .string()
   .refine(
     (key) => parsePromptOverrideKey(key) !== null,
-    'Use a prompt override key of the form ["role" | "workflow", ownerId, promptId].',
+    'Use a prompt override key of the form ["role" | "workflow" | "naming", ownerId, promptId].',
   );
 
-/** Keyed by prompt owner and prompt ID. The host checks the keys against its roles and workflows. */
+/**
+ * Keyed by prompt owner and prompt ID. The host checks the keys against its roles, its workflows,
+ * and the naming prompts.
+ */
 export const repoPromptOverridesSchema = z
   .record(promptOverrideKeySchema, agentPromptOverrideSchema)
   .default({});

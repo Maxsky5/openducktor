@@ -1,5 +1,4 @@
 import { jsonValuesEqual, type RepoConfig } from "@openducktor/contracts";
-import { NAMING_MODEL_SETTINGS_KEY } from "./sqlite-host-settings-store-reads";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { canonicalGitlabInstanceUrl } from "@openducktor/core";
 import { Effect } from "effect";
@@ -15,12 +14,6 @@ import {
 
 const operation = "hostSettings.workspace";
 
-/** The role defaults and the naming model, which shares their rows under a reserved key. */
-const modelDefaultRows = ({
-  agentDefaults,
-  namingModel,
-}: RepoConfig): RepoConfig["agentDefaults"] =>
-  namingModel ? { ...agentDefaults, [NAMING_MODEL_SETTINGS_KEY]: namingModel } : agentDefaults;
 export const saveWorkspace = (
   session: HostDatabaseSession,
   config: RepoConfig,
@@ -58,10 +51,28 @@ export const saveWorkspace = (
           operation,
         );
     }
-    const models = settingsKeyChanges(
-      previous && modelDefaultRows(previous),
-      modelDefaultRows(config),
-    );
+    const namingModel = config.namingModel;
+    if (!jsonValuesEqual(previous?.namingModel, namingModel)) {
+      if (namingModel) {
+        const row = { ...namingModel, variant: namingModel.variant ?? null };
+        yield* session.execute(
+          (db) =>
+            db
+              .insert(schema.workspaceNamingModels)
+              .values({ workspaceId, ...row })
+              .onConflictDoUpdate({ target: schema.workspaceNamingModels.workspaceId, set: row }),
+          operation,
+        );
+      } else
+        yield* session.execute(
+          (db) =>
+            db
+              .delete(schema.workspaceNamingModels)
+              .where(eq(schema.workspaceNamingModels.workspaceId, workspaceId)),
+          operation,
+        );
+    }
+    const models = settingsKeyChanges(previous?.agentDefaults, config.agentDefaults);
     for (const keys of settingsRowBatches(models.removed))
       yield* session.execute(
         (db) =>

@@ -1,12 +1,10 @@
+import { PROMPT_OWNER_KINDS } from "@openducktor/contracts";
 import { sql } from "drizzle-orm";
 import { check, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { booleanCheck, column, enumCheck } from "./sqlite-schema-sql";
 
 // The global prompt tables live here so that the settings schema stays under the line limit. The
 // workspace prompt tables stay in the settings schema, because they reference its workspaces table.
-
-/** A prompt override or append belongs to the prompt of one role or one workflow. */
-export const PROMPT_OWNER_KINDS = ["role", "workflow"] as const;
 
 export const globalPromptOverrides = sqliteTable(
   "global_prompt_overrides",

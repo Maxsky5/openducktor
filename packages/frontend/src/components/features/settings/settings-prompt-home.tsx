@@ -13,7 +13,12 @@ import {
   useRestoreRowFocus,
   WorkflowErrors,
 } from "./settings-prompt-rows";
-import type { PromptHomeView, PromptRowData, PromptWorkflow } from "./settings-prompt-owners";
+import {
+  NAMING_PROMPTS_TITLE,
+  type PromptHomeView,
+  type PromptRowData,
+  type PromptWorkflow,
+} from "./settings-prompt-owners";
 
 type PromptHomeProps = {
   title: string;
@@ -329,6 +334,13 @@ export function PromptHome({
                 disabled={disabled}
                 onOpen={onOpenWorkflow}
               />
+            </section>
+            <section aria-label={NAMING_PROMPTS_TITLE} className="flex flex-col gap-2">
+              <ListHeading
+                title={NAMING_PROMPTS_TITLE}
+                description="The naming model names new branches and Workspace Sessions with these prompts. Each prompt gets the work as {{workText}}."
+              />
+              <PromptRows rows={view.namingRows} disabled={disabled} onOpen={onOpenPrompt} />
             </section>
           </>
         )}
