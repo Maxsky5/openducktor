@@ -5,6 +5,7 @@ import {
   type ReactElement,
   use,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -15,18 +16,37 @@ import {
 
 const ResourceFilesContext = createContext<ResourceFiles | null>(null);
 
-/** Owns the resource cache folder of one connection and deletes it with the connection. */
+/**
+ * Owns the resource cache folder of one connection and deletes it with the connection. When
+ * `onRelease` is set, it receives the result of that deletion instead of a thrown error.
+ */
 export function ResourceFilesProvider({
   connectionKey,
+  onRelease,
   children,
-}: PropsWithChildren<{ connectionKey: number }>): ReactElement {
+}: PropsWithChildren<{
+  connectionKey: number;
+  onRelease?: ((failure: Error | undefined) => void) | undefined;
+}>): ReactElement {
   const queryClient = useQueryClient();
   const [files] = useState(() => createResourceFiles(connectionKey));
+  const releaseRef = useRef(onRelease);
   useEffect(() => {
     const stop = watchResourceFileRemoval(queryClient, files);
+    const report = releaseRef.current;
     return () => {
       stop();
-      files.dispose();
+      if (!report) {
+        files.dispose();
+        return;
+      }
+      try {
+        files.dispose();
+      } catch (cause) {
+        report(cause instanceof Error ? cause : new Error(String(cause)));
+        return;
+      }
+      report(undefined);
     };
   }, [files, queryClient]);
   return <ResourceFilesContext value={files}>{children}</ResourceFilesContext>;

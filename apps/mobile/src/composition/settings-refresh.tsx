@@ -1,7 +1,7 @@
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { useActiveSession } from "@/host-session/active-session-context";
+import { useRemoteSession } from "@/host-session/active-session-context";
 import { appActivitySource } from "@/host-session/device-sources";
 
 /**
@@ -14,7 +14,7 @@ import { appActivitySource } from "@/host-session/device-sources";
  */
 export function SettingsRefreshOwner(): null {
   const queryClient = useQueryClient();
-  const { remote } = useActiveSession().remote;
+  const { remote } = useRemoteSession().remote;
   useEffect(() => {
     let previous = appActivitySource.current();
     return appActivitySource.subscribe((next) => {

@@ -1,14 +1,16 @@
 import type { AttachmentStager } from "@openducktor/frontend-core/platform/device-file";
 import type { HostClient } from "@openducktor/host-client";
-import type { RemoteHostConnection } from "@openducktor/frontend-core/recovery/remote-host-connection";
 import { File } from "expo-file-system";
 import { pickedFileUri } from "./device-files";
 
 type StageLocalAttachmentInput = Parameters<HostClient["workspaceStageLocalAttachment"]>[0];
 
-/** Copies a picked device file to the host and returns the host path of the copy. */
+/**
+ * Copies a picked device file to the host and returns the host path of the copy. The demo client
+ * keeps the bytes in memory on the device.
+ */
 export const createAttachmentStager =
-  (remote: RemoteHostConnection): AttachmentStager =>
+  (client: Pick<HostClient, "workspaceStageLocalAttachment">): AttachmentStager =>
   async (file) => {
     const uri = pickedFileUri(file);
     if (!uri) {
@@ -20,7 +22,7 @@ export const createAttachmentStager =
       base64Data,
     };
     if (file.type) input.mime = file.type;
-    const staged = await remote.client.workspaceStageLocalAttachment(input);
+    const staged = await client.workspaceStageLocalAttachment(input);
     return staged.path;
   };
 

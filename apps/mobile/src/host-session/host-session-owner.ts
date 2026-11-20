@@ -4,6 +4,8 @@ import {
   createClientConnection,
 } from "@openducktor/frontend-core/connection/client-connection";
 import { createClientQueryClient } from "@openducktor/frontend-core/connection/client-query-client";
+import type { HostConnection } from "@openducktor/frontend-core/connection/host-connection";
+import { createMemoryClientStorage } from "@openducktor/frontend-core/platform/client-storage";
 import type { ClientFeedback } from "@openducktor/frontend-core/platform/client-feedback";
 import type { AttachmentStager } from "@openducktor/frontend-core/platform/device-file";
 import {
@@ -12,6 +14,9 @@ import {
 } from "@openducktor/frontend-core/recovery/remote-host-connection";
 import { parseRemoteHostEndpoint } from "@openducktor/frontend-core/recovery/remote-host-endpoint";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { createRemoteTerminalBridge } from "@openducktor/frontend-core/terminals/remote-terminal-bridge";
+import type { TerminalBridge } from "@openducktor/frontend-core/terminals/terminal-bridge";
+import type { HostClient } from "@openducktor/host-client";
 import type {
   RemoteConnectionState,
   RemoteTransport,
@@ -23,31 +28,73 @@ import {
   type DamagedSavedHost,
   type InvalidDeviceRecord,
   readSavedHosts,
+  SELECTED_WORKSPACE_KEY,
   type SavedHost,
   type SavedHostsRecord,
   writeSavedHosts,
 } from "../device-data/device-records";
 import { createDeviceClientStorage, type DeviceKeyValueStore } from "../device-data/device-store";
 import type { LifecycleController } from "./lifecycle-controller";
+import type { SessionResourceReader } from "./session-resources";
 
-/** One connection to a saved host, before or after the app shows it. */
-type OpenedHostSession = {
-  readonly host: SavedHost;
+/** The parts of a session that the views use, for a saved host and for the demo alike. */
+type SessionParts = {
   readonly connection: ClientConnection;
-  readonly remote: RemoteHostConnection;
+  /** The terminal frame transport of this session. */
+  readonly terminalBridge: TerminalBridge;
+  /** Reads task images and attachment previews of this session. */
+  readonly resources: SessionResourceReader;
   /** Changes for each new connection, so React can remount the connection tree. */
   readonly sessionKey: number;
 };
 
+/** One connection to a saved host, before or after the app shows it. */
+type OpenedHostSession = SessionParts & {
+  readonly kind: "remote";
+  readonly host: SavedHost;
+  readonly remote: RemoteHostConnection;
+};
+
 /** The connection to the active saved host. A new session replaces all live state of the old one. */
-export type ActiveHostSession = OpenedHostSession & { readonly lifecycle: LifecycleController };
+export type RemoteHostSession = OpenedHostSession & { readonly lifecycle: LifecycleController };
+
+/** The name that the demo shows for its host. */
+const DEMO_HOST_LABEL = "Demo host";
+
+/**
+ * The demo: fictional sample data in memory on this device. It has no saved host, no address, no
+ * credentials, and no connection lifecycle.
+ */
+export type DemoHostSession = SessionParts & {
+  readonly kind: "demo";
+  readonly host: { readonly label: typeof DEMO_HOST_LABEL };
+};
+
+/** The session that the app shows: a saved host or the demo. */
+export type ActiveHostSession = RemoteHostSession | DemoHostSession;
+
+/** The local data source of one demo session. It must not reach a host, a shell, or a model. */
+export type DemoSessionAdapter = {
+  readonly host: HostConnection;
+  readonly terminalBridge: TerminalBridge;
+  readonly resources: SessionResourceReader;
+  /** The workspace that the demo selects at entry. */
+  readonly initialWorkspaceId: string;
+  /** Ends the backend for good. The connection calls it last, through `releaseHost`. */
+  dispose(): Promise<void>;
+};
 
 /** The saved hosts of the device, and the stored entries that the app cannot use. */
 type SavedHostLists = { hosts: SavedHost[]; damagedHosts: DamagedSavedHost[] };
 
 export type HostSessionState =
   | ({ status: "no_host" } & SavedHostLists)
-  | ({ status: "switching"; host: SavedHost } & SavedHostLists)
+  | ({
+      status: "switching";
+      host: Pick<SavedHost, "label">;
+      /** True while the demo closes. It has no drafts to save. */
+      demo: boolean;
+    } & SavedHostLists)
   | ({ status: "active"; session: ActiveHostSession } & SavedHostLists)
   | {
       status: "invalid_record";
@@ -69,9 +116,16 @@ export type HostSessionDependencies = {
   /** The app version that the host shows in compatibility failures. */
   appVersion: string;
   feedback: ClientFeedback;
-  createAttachmentStager: (remote: RemoteHostConnection) => AttachmentStager;
+  createAttachmentStager: (
+    client: Pick<HostClient, "workspaceStageLocalAttachment">,
+  ) => AttachmentStager;
   /** Connects app state and network state to the session that the app shows. */
   startLifecycle: (session: OpenedHostSession) => LifecycleController;
+  /**
+   * Creates the local backend of one demo session. An abort of `lifetime` stops its scripts,
+   * terminals, and events, and fails its open requests.
+   */
+  createDemoSession: (lifetime: AbortSignal) => DemoSessionAdapter;
 };
 
 /** The result of the add host flow. */
@@ -132,6 +186,22 @@ export type HostSessionOwner = {
   removeDamagedHost(key: string): Promise<void>;
   /** Removes an unreadable record and the stores of the host IDs that it still names. */
   resetInvalidRecord(): Promise<void>;
+  /**
+   * Opens the demo with fresh sample data, from host selection or from a connected host. A
+   * connected host closes as a host switch does: its drafts save first, and a draft that cannot
+   * save fails with `DraftSaveBeforeSwitchError` unless `discardUnsavedDrafts` is set. The saved
+   * active host choice does not change, so the next launch opens that host again.
+   */
+  enterDemo(options?: { discardUnsavedDrafts?: boolean }): Promise<void>;
+  /** Discards the demo changes and opens the demo again with fresh sample data. */
+  resetDemo(): Promise<void>;
+  /** Discards the demo and returns to host selection. */
+  exitDemo(): Promise<void>;
+  /**
+   * The connection tree of demo session `sessionKey` has unmounted and released its resources.
+   * `failure` reports a cleanup that failed.
+   */
+  acknowledgeDemoTreeRelease(sessionKey: number, failure?: Error): void;
 };
 
 const failureText = (failure: RemoteFailure): string => `${failure.message} ${failure.nextAction}`;
@@ -155,6 +225,12 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
   let session: ActiveHostSession | null = null;
   let nextSessionKey = 1;
   let transition: Promise<void> = Promise.resolve();
+  /** Add host attempts that have not settled. The demo cannot open during one. */
+  let pendingAdmissions = 0;
+  /** The lifetime of the active demo session. Its abort stops all scripted activity. */
+  let demoLifetime: AbortController | null = null;
+  /** The demo session whose connection tree the owner waits to unmount. */
+  let demoRelease: { sessionKey: number; done: (failure: Error | undefined) => void } | null = null;
 
   const publish = (next: HostSessionState) => {
     state = next;
@@ -166,10 +242,11 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     record = next;
   };
 
-  const lists = (): SavedHostLists => ({
-    hosts: record.hosts,
-    damagedHosts: record.damagedHosts,
-  });
+  /** The demo shows no saved host. The owner keeps the saved lists for host selection. */
+  const lists = (): SavedHostLists =>
+    session?.kind === "demo"
+      ? { hosts: [], damagedHosts: [] }
+      : { hosts: record.hosts, damagedHosts: record.damagedHosts };
 
   const publishIdle = () => {
     publish({ status: "no_host", ...lists() });
@@ -204,10 +281,89 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
       // a removed host or discarded drafts upload no attachment.
       saveDraftsOnDispose: false,
       feedback: deps.feedback,
-      stageAttachment: deps.createAttachmentStager(remote),
+      stageAttachment: deps.createAttachmentStager(remote.client),
       releaseHost: () => remote.remote.disconnect(),
     });
-    return { host, connection, remote, sessionKey: nextSessionKey++ };
+    return {
+      kind: "remote",
+      host,
+      connection,
+      remote,
+      terminalBridge: createRemoteTerminalBridge(remote),
+      resources: {
+        readTaskAsset: (context, signal) => remote.remote.readTaskAsset(context, signal),
+        readStagedPreview: (path, signal) => remote.remote.readStagedPreview(path, signal),
+      },
+      sessionKey: nextSessionKey++,
+    };
+  };
+
+  /** Opens a demo session with fresh sample data in memory. */
+  const openDemo = (): DemoHostSession => {
+    const lifetime = new AbortController();
+    const adapter = deps.createDemoSession(lifetime.signal);
+    const storage = createMemoryClientStorage();
+    storage.setItem(SELECTED_WORKSPACE_KEY, adapter.initialWorkspaceId);
+    const connection = createClientConnection({
+      host: adapter.host,
+      queryClient: createClientQueryClient(),
+      storage,
+      // Demo drafts live in memory and end with the demo.
+      saveDraftsOnDispose: false,
+      feedback: deps.feedback,
+      stageAttachment: deps.createAttachmentStager(adapter.host.client),
+      releaseHost: () => adapter.dispose(),
+    });
+    demoLifetime = lifetime;
+    return {
+      kind: "demo",
+      host: { label: DEMO_HOST_LABEL },
+      connection,
+      terminalBridge: adapter.terminalBridge,
+      resources: adapter.resources,
+      sessionKey: nextSessionKey++,
+    };
+  };
+
+  /**
+   * Stops the demo, waits until its connection tree has unmounted and released its preview
+   * files, then disposes its connection. Demo drafts are discarded. Resolves with the first
+   * failure of these steps.
+   */
+  const releaseDemo = async (current: DemoHostSession): Promise<Error | undefined> => {
+    session = null;
+    demoLifetime?.abort(new Error("The demo ended."));
+    demoLifetime = null;
+    const treeReleased = new Promise<Error | undefined>((done) => {
+      demoRelease = { sessionKey: current.sessionKey, done };
+    });
+    publish({ status: "switching", ...lists(), host: current.host, demo: true });
+    let failure = await treeReleased;
+    try {
+      await current.connection.dispose();
+    } catch (cause) {
+      failure ??= cause instanceof Error ? cause : new Error(errorMessage(cause));
+    }
+    return failure;
+  };
+
+  /** The demo could not release all its resources, so the app shows host selection and the cause. */
+  const reportDemoReleaseFailure = (failure: Error) => {
+    publishIdle();
+    deps.feedback.show("error", "The demo did not close cleanly", {
+      description: `${errorMessage(failure)} Restart the app to clear the remaining temporary files.`,
+      duration: Infinity,
+    });
+  };
+
+  const activeDemo = (): DemoHostSession => {
+    if (session?.kind !== "demo") throw new Error("The demo is not open.");
+    return session;
+  };
+
+  /** Real host data stays closed while the demo is open. */
+  const assertNoDemo = () => {
+    if (session?.kind === "demo") throw new Error("Exit the demo to use a saved host.");
   };
 
   /** Stops the watch that saves the host ID of the active host. */
@@ -228,7 +384,7 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
   };
 
   const activate = (opened: OpenedHostSession) => {
-    const active: ActiveHostSession = { ...opened, lifecycle: deps.startLifecycle(opened) };
+    const active: RemoteHostSession = { ...opened, lifecycle: deps.startLifecycle(opened) };
     session = active;
     watchHostId(opened);
     publish({ status: "active", ...lists(), session: active });
@@ -247,7 +403,8 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     signal?: AbortSignal | undefined;
     confirmDraftLoss?: DraftLossConfirmation | undefined;
   }) => {
-    const current = session;
+    assertNoDemo();
+    const current = session?.kind === "remote" ? session : null;
     let discard = discardUnsavedDrafts;
     if (current && !discard) {
       try {
@@ -270,7 +427,7 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     stopHostIdWatch?.();
     stopHostIdWatch = null;
     current.lifecycle.stop();
-    publish({ status: "switching", ...lists(), host: current.host });
+    publish({ status: "switching", ...lists(), host: current.host, demo: false });
     if (!discard) {
       // The tree stayed open during the first save, so this save writes the edits made meanwhile.
       await current.connection.saveDrafts().catch((cause: unknown) =>
@@ -405,6 +562,90 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     }
   };
 
+  /** Connects to a new host or a saved host at that address. See `HostSessionOwner.addHost`. */
+  const addHost: HostSessionOwner["addHost"] = async (address, options) => {
+    assertNoDemo();
+    const switchOptions = {
+      discardUnsavedDrafts: options?.discardUnsavedDrafts ?? false,
+      signal: options?.signal,
+      confirmDraftLoss: options?.confirmDraftLoss,
+    };
+    // The first connection of the opened host takes only the code and the cancel signal.
+    const connectInput: RemoteConnectInput = {};
+    if (options?.signal) connectInput.signal = options.signal;
+    if (options?.pairingCode !== undefined) connectInput.pairingCode = options.pairingCode;
+    let endpoint: string;
+    try {
+      endpoint = parseRemoteHostEndpoint(address, { requireHttps: false });
+    } catch (cause) {
+      throw new AddHostError(errorMessage(cause), null);
+    }
+    const existing = record.hosts.find((host) => host.endpoint === endpoint);
+    if (existing) {
+      if (session?.kind === "remote" && session.host.id === existing.id) {
+        throw new AddHostError(
+          "OpenDucktor is already connected to this host. Enter the address of another host.",
+          null,
+        );
+      }
+      const opened = openSession(existing, deps.openHostStore(existing.id), connectInput);
+      try {
+        const current = await waitForConnected(opened.remote, options?.signal);
+        await closeSession(switchOptions);
+        options?.signal?.throwIfAborted();
+        const refreshed = { ...existing };
+        if (current.host?.hostId) refreshed.hostId = current.host.hostId;
+        saveRecord({
+          ...record,
+          activeHostId: existing.id,
+          hosts: record.hosts.map((host) => (host.id === existing.id ? refreshed : host)),
+        });
+        activate({ ...opened, host: refreshed });
+        return { kind: "selected", host: refreshed };
+      } catch (cause) {
+        await release(opened.connection);
+        if (!session) publishIdle();
+        throw cause;
+      }
+    }
+    const id = deps.createHostId();
+    const candidateHost: SavedHost = {
+      id,
+      endpoint,
+      label: options?.label?.trim() || defaultLabel(endpoint),
+      shell: "web",
+    };
+    const candidate = openSession(candidateHost, deps.openHostStore(id), connectInput);
+    // A failed candidate leaves no saved host and no store behind.
+    const discardCandidate = async (cause: unknown): Promise<never> => {
+      await release(candidate.connection);
+      await deps.deleteHostStore(id);
+      if (!session) publishIdle();
+      throw cause;
+    };
+    let connected: RemoteConnectionState;
+    try {
+      connected = await waitForConnected(candidate.remote, options?.signal);
+    } catch (cause) {
+      return discardCandidate(cause);
+    }
+    const shell = connected.host?.shell ?? "web";
+    const hostId = connected.host?.hostId;
+    const known = hostId ? record.hosts.find((saved) => saved.hostId === hostId) : undefined;
+    if (known) return moveHost(known, { endpoint, shell }, candidate, switchOptions);
+    const host: SavedHost = { ...candidateHost, shell };
+    if (hostId) host.hostId = hostId;
+    try {
+      await closeSession(switchOptions);
+      options?.signal?.throwIfAborted();
+    } catch (cause) {
+      return discardCandidate(cause);
+    }
+    saveRecord({ ...record, activeHostId: id, hosts: [...record.hosts, host] });
+    activate({ ...candidate, host });
+    return { kind: "added", host };
+  };
+
   const owner: HostSessionOwner = {
     getState: () => state,
     subscribe(listener) {
@@ -427,92 +668,20 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
       }
       activate(openSession(host, deps.openHostStore(host.id)));
     },
-    addHost: (address, options) =>
-      serialize(async () => {
-        const switchOptions = {
-          discardUnsavedDrafts: options?.discardUnsavedDrafts ?? false,
-          signal: options?.signal,
-          confirmDraftLoss: options?.confirmDraftLoss,
-        };
-        // The first connection of the opened host takes only the code and the cancel signal.
-        const connectInput: RemoteConnectInput = {};
-        if (options?.signal) connectInput.signal = options.signal;
-        if (options?.pairingCode !== undefined) connectInput.pairingCode = options.pairingCode;
-        let endpoint: string;
-        try {
-          endpoint = parseRemoteHostEndpoint(address, { requireHttps: false });
-        } catch (cause) {
-          throw new AddHostError(errorMessage(cause), null);
-        }
-        const existing = record.hosts.find((host) => host.endpoint === endpoint);
-        if (existing) {
-          if (session?.host.id === existing.id) {
-            throw new AddHostError(
-              "OpenDucktor is already connected to this host. Enter the address of another host.",
-              null,
-            );
-          }
-          const opened = openSession(existing, deps.openHostStore(existing.id), connectInput);
-          try {
-            const current = await waitForConnected(opened.remote, options?.signal);
-            await closeSession(switchOptions);
-            options?.signal?.throwIfAborted();
-            const refreshed = { ...existing };
-            if (current.host?.hostId) refreshed.hostId = current.host.hostId;
-            saveRecord({
-              ...record,
-              activeHostId: existing.id,
-              hosts: record.hosts.map((host) => (host.id === existing.id ? refreshed : host)),
-            });
-            activate({ ...opened, host: refreshed });
-            return { kind: "selected", host: refreshed };
-          } catch (cause) {
-            await release(opened.connection);
-            if (!session) publishIdle();
-            throw cause;
-          }
-        }
-        const id = deps.createHostId();
-        const candidateHost: SavedHost = {
-          id,
-          endpoint,
-          label: options?.label?.trim() || defaultLabel(endpoint),
-          shell: "web",
-        };
-        const candidate = openSession(candidateHost, deps.openHostStore(id), connectInput);
-        // A failed candidate leaves no saved host and no store behind.
-        const discardCandidate = async (cause: unknown): Promise<never> => {
-          await release(candidate.connection);
-          await deps.deleteHostStore(id);
-          if (!session) publishIdle();
-          throw cause;
-        };
-        let connected: RemoteConnectionState;
-        try {
-          connected = await waitForConnected(candidate.remote, options?.signal);
-        } catch (cause) {
-          return discardCandidate(cause);
-        }
-        const shell = connected.host?.shell ?? "web";
-        const hostId = connected.host?.hostId;
-        const known = hostId ? record.hosts.find((saved) => saved.hostId === hostId) : undefined;
-        if (known) return moveHost(known, { endpoint, shell }, candidate, switchOptions);
-        const host: SavedHost = { ...candidateHost, shell };
-        if (hostId) host.hostId = hostId;
-        try {
-          await closeSession(switchOptions);
-          options?.signal?.throwIfAborted();
-        } catch (cause) {
-          return discardCandidate(cause);
-        }
-        saveRecord({ ...record, activeHostId: id, hosts: [...record.hosts, host] });
-        activate({ ...candidate, host });
-        return { kind: "added", host };
-      }),
+    addHost: (address, options) => {
+      pendingAdmissions += 1;
+      const attempt = serialize(() => addHost(address, options));
+      void attempt.then(
+        () => (pendingAdmissions -= 1),
+        () => (pendingAdmissions -= 1),
+      );
+      return attempt;
+    },
     selectHost: (hostId, options) =>
       serialize(async () => {
         const host = findHost(hostId);
-        if (session?.host.id === hostId) return;
+        assertNoDemo();
+        if (session?.kind === "remote" && session.host.id === hostId) return;
         await closeSession({ discardUnsavedDrafts: options?.discardUnsavedDrafts ?? false });
         saveRecord({ ...record, activeHostId: hostId });
         activate(openSession(host, deps.openHostStore(host.id)));
@@ -527,7 +696,7 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
           host.id === hostId ? { ...host, label: trimmed } : host,
         ),
       });
-      if (session?.host.id === hostId) {
+      if (session?.kind === "remote" && session.host.id === hostId) {
         session = { ...session, host: { ...session.host, label: trimmed } };
       }
       publishLists();
@@ -535,7 +704,8 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
     removeHost: (hostId) =>
       serialize(async () => {
         const host = findHost(hostId);
-        const wasActive = session?.host.id === hostId;
+        assertNoDemo();
+        const wasActive = session?.kind === "remote" && session.host.id === hostId;
         // The user confirmed that unsent drafts of this host are deleted.
         if (wasActive) await closeSession({ discardUnsavedDrafts: true });
         try {
@@ -584,6 +754,46 @@ export const createHostSessionOwner = (deps: HostSessionDependencies): HostSessi
         deps.appStore.remove(state.invalid.key);
         owner.start();
       }),
+    enterDemo(options) {
+      // A host connection from host selection runs, so the demo waits for its result.
+      if (pendingAdmissions > 0)
+        return Promise.reject(
+          new Error("A host connection is in progress. Wait for it to end, then try the demo."),
+        );
+      return serialize(async () => {
+        if (session?.kind === "remote")
+          await closeSession({ discardUnsavedDrafts: options?.discardUnsavedDrafts ?? false });
+        else if (state.status !== "no_host" || session)
+          throw new Error("Open host selection to try the demo.");
+        const demo = openDemo();
+        session = demo;
+        publish({ status: "active", ...lists(), session: demo });
+      });
+    },
+    resetDemo: () =>
+      serialize(async () => {
+        const failure = await releaseDemo(activeDemo());
+        if (failure) {
+          reportDemoReleaseFailure(failure);
+          return;
+        }
+        const demo = openDemo();
+        session = demo;
+        publish({ status: "active", ...lists(), session: demo });
+        deps.feedback.show("success", "Demo reset");
+      }),
+    exitDemo: () =>
+      serialize(async () => {
+        const failure = await releaseDemo(activeDemo());
+        if (failure) reportDemoReleaseFailure(failure);
+        else publishIdle();
+      }),
+    acknowledgeDemoTreeRelease(sessionKey, failure) {
+      if (demoRelease?.sessionKey !== sessionKey) return;
+      const { done } = demoRelease;
+      demoRelease = null;
+      done(failure);
+    },
   };
   return owner;
 };

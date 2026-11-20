@@ -12,6 +12,7 @@ import { AgentChatTranscriptCacheProvider } from "@openducktor/frontend-core/ses
 import { useQueryClient } from "@tanstack/react-query";
 import { type PropsWithChildren, type ReactElement, useMemo } from "react";
 import { useDevicePreferences } from "@/app-shell/app-services";
+import { useIsDemo } from "@/host-session/active-session-context";
 import { appStateVisibility } from "./app-visibility";
 import { SettingsRefreshOwner } from "./settings-refresh";
 import { TaskStreamOwner } from "./task-stream";
@@ -30,6 +31,8 @@ import { WorkspaceSelectionProvider } from "./workspace-selection";
 export function MobileAppStateProvider({ children }: PropsWithChildren): ReactElement {
   const queryClient = useQueryClient();
   const hostClient = useHostClient();
+  // The demo settings change only on this device, so it reads them again on no return.
+  const demo = useIsDemo();
   const showReasoning = useDevicePreferences((state) => state.preferences.showReasoning);
   const prepareActiveSessions = useMemo(
     () => ({ showThinkingMessages: showReasoning }),
@@ -51,7 +54,7 @@ export function MobileAppStateProvider({ children }: PropsWithChildren): ReactEl
               <WorkspaceActivityProvider>
                 <AgentStudioStateProvider agentEngine={agentEngine} keepActiveTranscriptsCurrent>
                   <TaskStreamOwner />
-                  <SettingsRefreshOwner />
+                  {demo ? null : <SettingsRefreshOwner />}
                   <VisibleSessionTargetProvider>
                     <SessionReadStateProvider visibility={appStateVisibility}>
                       <AgentChatTranscriptCacheProvider

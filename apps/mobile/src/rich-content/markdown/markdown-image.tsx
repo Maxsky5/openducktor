@@ -1,5 +1,6 @@
 import { type ReactElement, useCallback, useMemo } from "react";
 import { View } from "react-native";
+import { useOptionalIsDemo } from "@/host-session/active-session-context";
 import { Callout } from "@/ui/callout";
 import { FittedImage } from "../images/fitted-image";
 import { HostImage, type HostImageFile, ImagePlaceholder } from "../images/host-image";
@@ -36,7 +37,7 @@ function MarkdownImageContent({
   alt: string;
   inView: boolean;
 }): ReactElement {
-  const { imageContext, stagedImages, openLink } = useMarkdownContext();
+  const { imageContext, stagedImages } = useMarkdownContext();
   const { action, share } = useImageActions();
   const source = useMemo(() => classifyImageSource(url, imageContext), [imageContext, url]);
   const title = alt.length > 0 ? `Image: ${alt}` : "Image";
@@ -50,10 +51,6 @@ function MarkdownImageContent({
   const shareStaged = useCallback(() => {
     if (stagedUri !== undefined && action === null) void share(stagedUri, alt);
   }, [action, alt, share, stagedUri]);
-  const remoteUrl = source.kind === "remote" ? source.url : null;
-  const openRemote = useCallback(() => {
-    if (remoteUrl !== null) openLink(remoteUrl);
-  }, [openLink, remoteUrl]);
   switch (source.kind) {
     case "task_asset": {
       // A staged image shows from its picked device file until the host saves it.
@@ -99,19 +96,45 @@ function MarkdownImageContent({
         <Callout tone="info" title={title} message="This issue image shows only in its task." />
       );
     case "remote":
-      return inView ? (
-        <FittedImage
-          uri={source.url}
-          recyclingKey={source.url}
-          alt={alt}
-          cachePolicy="disk"
-          onPress={openRemote}
-          accessibilityHint={BROWSER_HINT}
-        />
-      ) : (
-        <ImagePlaceholder alt={alt} loading={false} recyclingKey={source.url} />
-      );
+      return <RemoteMarkdownImage url={source.url} alt={alt} title={title} inView={inView} />;
     case "unsupported":
       return <Callout tone="warning" title={title} message={source.reason} />;
   }
+}
+
+/** A web image. A tap opens it in the browser. The demo sends no network request, so it shows none. */
+function RemoteMarkdownImage({
+  url,
+  alt,
+  title,
+  inView,
+}: {
+  url: string;
+  alt: string;
+  title: string;
+  inView: boolean;
+}): ReactElement {
+  const { openLink } = useMarkdownContext();
+  const demo = useOptionalIsDemo();
+  const open = useCallback(() => openLink(url), [openLink, url]);
+  if (demo)
+    return (
+      <Callout
+        tone="info"
+        title={title}
+        message="Web images do not load in the demo. Connect to a host to see them."
+      />
+    );
+  return inView ? (
+    <FittedImage
+      uri={url}
+      recyclingKey={url}
+      alt={alt}
+      cachePolicy="disk"
+      onPress={open}
+      accessibilityHint={BROWSER_HINT}
+    />
+  ) : (
+    <ImagePlaceholder alt={alt} loading={false} recyclingKey={url} />
+  );
 }

@@ -13,7 +13,8 @@ import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/
 import { type PropsWithChildren, type ReactElement, useEffect, useSyncExternalStore } from "react";
 import { MobileAppStateProvider } from "@/composition/mobile-app-state-provider";
 import { ActiveSessionProvider, CommandGateProvider } from "@/host-session/active-session-context";
-import type { ActiveHostSession } from "@/host-session/host-session-owner";
+import type { ActiveHostSession, RemoteHostSession } from "@/host-session/host-session-owner";
+import { useHostSessionOwner } from "./app-services";
 import { ResourceFilesProvider } from "@/platform/resource-files-context";
 import { clearHostContentCaches } from "@/rich-content/lru-cache";
 import { StartupPresentationProvider } from "@/features/session-startup/startup-presentation";
@@ -29,12 +30,13 @@ export function ConnectionTree({
   children,
 }: PropsWithChildren<{ session: ActiveHostSession }>): ReactElement {
   useEffect(() => clearHostContentCaches, []);
+  const onDemoRelease = useDemoRelease(session);
   return (
     <ActiveSessionProvider session={session}>
       <ClientConnectionProvider connection={session.connection}>
         <CommandGateProvider>
-          <PairingModal remote={session.remote.remote} />
-          <ResourceFilesProvider connectionKey={session.sessionKey}>
+          {session.kind === "remote" ? <PairingModal remote={session.remote.remote} /> : null}
+          <ResourceFilesProvider connectionKey={session.sessionKey} onRelease={onDemoRelease}>
             <MobileAppStateProvider>
               <StartupPresentationProvider>
                 {children}
@@ -49,10 +51,25 @@ export function ConnectionTree({
 }
 
 /**
+ * Tells the owner when the tree of a demo session has released its resources, so it can dispose
+ * the demo connection after the views stopped. React runs every cleanup of a removed tree in one
+ * pass, so the report waits for the next task, after the last cleanup.
+ */
+const useDemoRelease = (
+  session: ActiveHostSession,
+): ((failure: Error | undefined) => void) | undefined => {
+  const owner = useHostSessionOwner();
+  if (session.kind !== "demo") return undefined;
+  return (failure) => {
+    setTimeout(() => owner.acknowledgeDemoTreeRelease(session.sessionKey, failure), 0);
+  };
+};
+
+/**
  * The pairing page over the host content while the host asks for a code. Its route and state reads
  * stay here, so a navigation or status change does not render the whole connection tree.
  */
-function PairingModal({ remote }: { remote: ActiveHostSession["remote"]["remote"] }): ReactElement {
+function PairingModal({ remote }: { remote: RemoteHostSession["remote"]["remote"] }): ReactElement {
   const theme = useAppTheme();
   const pathname = usePathname();
   const state = useSyncExternalStore(remote.subscribeState, remote.readState, remote.readState);

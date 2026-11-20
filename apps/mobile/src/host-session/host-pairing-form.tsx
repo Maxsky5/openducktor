@@ -19,13 +19,13 @@ import { RemoteNetworkNotice } from "@/hosts/remote-network-notice";
 import { useFeedbackStore } from "@/app-shell/app-services";
 import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
-import { useActiveSession } from "./active-session-context";
+import { useRemoteSession } from "./active-session-context";
 
 export function HostPairingForm() {
   const {
     host,
     remote: { remote },
-  } = useActiveSession();
+  } = useRemoteSession();
   const router = useRouter();
   const { feedback } = useFeedbackStore();
   const state = useSyncExternalStore(remote.subscribeState, remote.readState, remote.readState);

@@ -12,18 +12,18 @@ import { FlashList } from "@/ui/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { type NativeStackNavigationOptions, Stack, useRouter } from "expo-router";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
-import { Platform, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useMobileWorkspaces } from "@/composition/workspace-selection";
 import { useOpenWorkspaceChat } from "@/features/new-chat/use-open-workspace-chat";
 import { useTerminalBridge } from "@/features/terminals/use-terminal-bridge";
 import { NoOpenWorkspaceState } from "@/features/workspaces/no-open-workspace";
-import { useCommandGate } from "@/host-session/active-session-context";
+import { useCommandGate, useIsDemo } from "@/host-session/active-session-context";
 import { ConnectionBanner } from "@/host-session/connection-banner";
 import { HostConnectionState, useHostUnavailable } from "@/host-session/host-connection-state";
 import { routes } from "@/navigation/routes";
 import { useTabBarSpace } from "@/navigation/tab-bar/tab-bar-metrics";
-import { useHeaderSearchOptions } from "@/navigation/stack-theme";
+import { rootScreenOptions, useHeaderSearchOptions } from "@/navigation/stack-theme";
 import { useAppTheme } from "@/theme/app-theme-context";
 import { Button } from "@/ui/button";
 import { SegmentedControl } from "@/ui/fields";
@@ -268,11 +268,11 @@ export function SessionsScreen(): ReactElement {
   const grouped = grouping.grouping === "task";
   const { changeGrouping, disabled: groupingDisabled } = grouping;
   const searchOptions = useHeaderSearchOptions();
+  const demo = useIsDemo();
   const options = useMemo(
     (): NativeStackNavigationOptions => ({
       title: "Sessions",
-      headerLargeTitleEnabled: Platform.OS === "ios",
-      headerTransparent: Platform.OS === "ios",
+      ...rootScreenOptions(demo),
       headerRight: () => (
         <SessionsHeaderActions
           workspace={selectedWorkspace}
@@ -289,7 +289,7 @@ export function SessionsScreen(): ReactElement {
         onCancelButtonPress: () => setQuery(""),
       },
     }),
-    [changeGrouping, grouped, groupingDisabled, searchOptions, selectedWorkspace],
+    [changeGrouping, demo, grouped, groupingDisabled, searchOptions, selectedWorkspace],
   );
 
   const scopeOptions = useMemo(

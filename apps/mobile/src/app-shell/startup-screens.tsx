@@ -42,6 +42,26 @@ export function SwitchingHostScreen({ label }: { label: string }): ReactElement 
   );
 }
 
+/** Shows while the demo discards its sample data, before it opens again or host selection shows. */
+export function ClosingDemoScreen(): ReactElement {
+  const theme = useAppTheme();
+  return (
+    <View style={styles.screen}>
+      <Animated.View
+        style={[styles.center, DELAYED_FADE_IN]}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel="Closing the demo."
+      >
+        <ActivityIndicator color={theme.colors.secondaryLabel} />
+        <Text variant="headline" style={styles.centered}>
+          Closing the Demo
+        </Text>
+      </Animated.View>
+    </View>
+  );
+}
+
 /**
  * A saved host record that the app cannot read at all. The reset removes that record and every
  * saved host. A damaged host entry shows in the host list instead.

@@ -13,6 +13,7 @@ import {
   createRecordingFeedback,
 } from "../test-support/memory-device-store";
 import { createSimulatedRemoteHost } from "../test-support/simulated-remote-host";
+import { createDemoSessionAdapter } from "../demo/demo-session-adapter";
 import {
   type ActiveHostSession,
   AddHostError,
@@ -20,6 +21,7 @@ import {
   DraftSaveBeforeSwitchError,
   type HostSessionDependencies,
   type HostSessionOwner,
+  type RemoteHostSession,
 } from "./host-session-owner";
 import {
   type AppActivity,
@@ -33,7 +35,9 @@ const owners: HostSessionOwner[] = [];
 afterEach(async () => {
   for (const owner of owners.splice(0)) {
     const state = owner.getState();
-    if (state.status === "active") await owner.removeHost(state.session.host.id);
+    if (state.status !== "active") continue;
+    if (state.session.kind === "remote") await owner.removeHost(state.session.host.id);
+    else await releaseDemoTree(owner, () => owner.exitDemo());
   }
 });
 
@@ -89,16 +93,44 @@ const setup = (
       return stageAttachment(file);
     },
     startLifecycle,
+    createDemoSession: (lifetime) => {
+      demoLifetimes.push(lifetime);
+      return createDemoSessionAdapter(lifetime);
+    },
   };
+  const demoLifetimes: AbortSignal[] = [];
   const owner = createHostSessionOwner(dependencies);
   owners.push(owner);
-  return { host, appStore, hostStores, owner, staged, dependencies };
+  return { host, appStore, hostStores, owner, staged, dependencies, demoLifetimes };
 };
 
-const activeSession = (owner: HostSessionOwner): ActiveHostSession => {
+const activeSession = (owner: HostSessionOwner): RemoteHostSession => {
   const state = owner.getState();
   if (state.status !== "active") throw new Error(`The owner is ${state.status}, not active.`);
+  if (state.session.kind !== "remote") throw new Error("The owner shows the demo.");
   return state.session;
+};
+
+/**
+ * Runs a demo reset or exit, and acknowledges the unmount of the demo tree as the connection tree
+ * does, with `failure` as its cleanup result.
+ */
+const releaseDemoTree = async (
+  owner: HostSessionOwner,
+  run: () => Promise<void>,
+  failure?: Error,
+): Promise<void> => {
+  const state = owner.getState();
+  if (state.status !== "active" || state.session.kind !== "demo")
+    throw new Error("The owner shows no demo.");
+  const { sessionKey } = state.session;
+  const stop = owner.subscribe(() => {
+    if (owner.getState().status === "switching") {
+      stop();
+      queueMicrotask(() => owner.acknowledgeDemoTreeRelease(sessionKey, failure));
+    }
+  });
+  await run();
 };
 
 const CHAT_DRAFT = { workspaceId: "workspace-1", workspaceSessionId: "chat-1" };
@@ -143,7 +175,7 @@ const waitForStatus = (
   });
 
 /** Resolves when the remote client is connected again after `generation`. */
-const waitForReconnect = (session: ActiveHostSession, generation: number) =>
+const waitForReconnect = (session: RemoteHostSession, generation: number) =>
   new Promise<void>((resolve) => {
     const stop = session.remote.remote.subscribeState((state) => {
       if (state.status !== "connected" || state.generation <= generation) return;
@@ -241,7 +273,7 @@ describe("host session owner", () => {
     });
     const state = owner.getState();
     expect(state.status).toBe("active");
-    if (state.status === "active") {
+    if (state.status === "active" && state.session.kind === "remote") {
       expect(state.session.remote.remote.readState().status).toBe("connected");
     }
     expect(JSON.parse(appStore.getString(SAVED_HOSTS_KEY) ?? "null")).toEqual({
@@ -402,6 +434,49 @@ describe("host session owner", () => {
     expect(stored).toContain("Unsent message");
   });
 
+  test("opens the demo from a connected host and keeps its drafts and saved choice", async () => {
+    const { owner, hostStores, appStore } = setup({
+      [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),
+    });
+    owner.start();
+    seedChatDraft(activeSession(owner));
+    const record = appStore.getString(SAVED_HOSTS_KEY);
+
+    await owner.enterDemo();
+
+    const demo = owner.getState();
+    expect(demo.status === "active" && demo.session.kind).toBe("demo");
+    expect(
+      hostStores.stores.get("saved-1")?.getString(toAgentChatDraftStorageKey(CHAT_DRAFT)),
+    ).toContain("Unsent message");
+    // The next launch opens the same host, because the demo changes no saved record.
+    expect(appStore.getString(SAVED_HOSTS_KEY)).toBe(record);
+
+    await releaseDemoTree(owner, () => owner.exitDemo());
+    const selection = owner.getState();
+    expect(selection.status === "no_host" && selection.hosts.map((host) => host.id)).toEqual([
+      "saved-1",
+    ]);
+  });
+
+  test("keeps the connected host when its drafts cannot save, until the user consents", async () => {
+    const { owner } = setup({
+      [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),
+    });
+    owner.start();
+    const connected = owner.getState();
+    seedChatDraft(activeSession(owner), "notes.pdf");
+
+    const failure = await owner.enterDemo().catch((cause) => cause);
+    expect(failure).toBeInstanceOf(DraftSaveBeforeSwitchError);
+    expect(owner.getState()).toBe(connected);
+
+    await owner.enterDemo({ discardUnsavedDrafts: true });
+    const demo = owner.getState();
+    expect(demo.status === "active" && demo.session.kind).toBe("demo");
+    await releaseDemoTree(owner, () => owner.exitDemo());
+  });
+
   test("removing the active host uploads no attachment of its drafts", async () => {
     const { owner, staged } = setup({
       [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),
@@ -539,18 +614,16 @@ describe("host session owner", () => {
       ]),
     });
     owner.start();
-    const first = owner.getState();
-    if (first.status !== "active") throw new Error("The first host did not start.");
-    expect(first.session.host.id).toBe("saved-1");
-    await waitForStatus(first.session, "connected");
+    const first = activeSession(owner);
+    expect(first.host.id).toBe("saved-1");
+    await waitForStatus(first, "connected");
 
     await owner.selectHost("saved-2");
 
-    const second = owner.getState();
-    if (second.status !== "active") throw new Error("The second host did not start.");
+    const second = { session: activeSession(owner) };
     expect(second.session.host.id).toBe("saved-2");
-    expect(second.session.sessionKey).not.toBe(first.session.sessionKey);
-    expect(first.session.remote.remote.readState().status).toBe("idle");
+    expect(second.session.sessionKey).not.toBe(first.sessionKey);
+    expect(first.remote.remote.readState().status).toBe("idle");
     expect(host.released.length).toBeGreaterThan(0);
   });
 

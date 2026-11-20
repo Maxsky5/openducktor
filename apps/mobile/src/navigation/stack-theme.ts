@@ -32,11 +32,14 @@ export const useNativeStackTheme = (
   };
 };
 
-/** A root screen of a tab: a large title on iOS that collapses on scroll. */
-export const rootScreenOptions: NativeStackNavigationOptions = {
-  headerLargeTitleEnabled: Platform.OS === "ios",
-  headerTransparent: Platform.OS === "ios",
-};
+/**
+ * A root screen of a tab: a large title on iOS that collapses on scroll. The demo keeps an opaque
+ * header, so its Demo mode label shows below the header and not under it.
+ */
+export const rootScreenOptions = (demo: boolean): NativeStackNavigationOptions => ({
+  headerLargeTitleEnabled: Platform.OS === "ios" && !demo,
+  headerTransparent: Platform.OS === "ios" && !demo,
+});
 
 /**
  * A stable iOS header search button keeps enlarged text clear of fixed workspace controls.

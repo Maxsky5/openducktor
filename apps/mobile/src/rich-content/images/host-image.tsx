@@ -88,15 +88,15 @@ function LoadedHostImage({
   onPress: ((file: HostImageFile) => void) | undefined;
   accessibilityHint: string | undefined;
 }): ReactElement {
-  const { remote } = useActiveSession().remote;
+  const { resources } = useActiveSession();
   const files = useResourceFiles();
   const { workspaceId, taskId, assetId } = renderContext;
   const options = useMemo(
     () =>
       resourceFileQueryOptions(files, ["task-asset", workspaceId, taskId, assetId], (signal) =>
-        remote.readTaskAsset(renderContext, signal),
+        resources.readTaskAsset(renderContext, signal),
       ),
-    [assetId, files, remote, renderContext, taskId, workspaceId],
+    [assetId, files, resources, renderContext, taskId, workspaceId],
   );
   const query = useQuery(options);
   const file = query.data;

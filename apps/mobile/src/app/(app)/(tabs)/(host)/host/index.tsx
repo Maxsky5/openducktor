@@ -9,6 +9,9 @@ import { DividedCard, SettingsIconTile, SettingsRow, SettingsSection } from "@/u
 import { StatusPill } from "@/ui/status-pill";
 import { useActiveSession, useCommandGate } from "@/host-session/active-session-context";
 import { SavedHostsList } from "@/hosts/saved-hosts-list";
+import { DemoHostSection } from "@/features/demo/demo-host-section";
+import { TryDemoSection } from "@/features/demo/try-demo-section";
+import { useDemoNotice } from "@/features/demo/use-demo-notice";
 import { routes } from "@/navigation/routes";
 import { useTabBarSpace } from "@/navigation/tab-bar/tab-bar-metrics";
 import { IconButton } from "@/ui/icon-button";
@@ -42,11 +45,16 @@ export default function HostScreen(): ReactElement {
   const router = useRouter();
   const tabBarSpace = useTabBarSpace({ automaticInsets: true });
   const state = useHostSessionState();
-  const { host } = useActiveSession();
+  const session = useActiveSession();
   const { phase } = useCommandGate();
+  const notice = useDemoNotice();
   const hosts = state.status === "active" ? state.hosts : [];
   const damagedHosts = state.status === "active" ? state.damagedHosts : [];
-  const addHost = useCallback(() => router.push(routes.addHost()), [router]);
+  const demo = session.kind === "demo";
+  const addHost = useCallback(() => {
+    if (demo) notice("Exit the demo to add a host.");
+    else router.push(routes.addHost());
+  }, [demo, notice, router]);
   const headerRight = useCallback(
     () => (
       // A plain control, so it does not compete with the create button of the tab bar.
@@ -64,13 +72,18 @@ export default function HostScreen(): ReactElement {
         bottomOffset={RENAME_ACTIONS_SPACE}
         contentContainerStyle={[styles.content, { paddingBottom: tabBarSpace }]}
       >
-        <SavedHostsList
-          hosts={hosts}
-          damagedHosts={damagedHosts}
-          activeHostId={host.id}
-          activePhase={phase}
-          onAddHost={addHost}
-        />
+        {session.kind === "demo" ? (
+          <DemoHostSection />
+        ) : (
+          <SavedHostsList
+            hosts={hosts}
+            damagedHosts={damagedHosts}
+            activeHostId={session.host.id}
+            activePhase={phase}
+            onAddHost={addHost}
+          />
+        )}
+        {session.kind === "remote" ? <TryDemoSection hostLabel={session.host.label} /> : null}
         <SettingsSection title="Health" description="The checks of the connected host.">
           <DividedCard>
             <SettingsRow

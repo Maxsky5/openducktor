@@ -3,6 +3,8 @@ import { type PropsWithChildren, type ReactElement, use, useMemo, useState } fro
 import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
+import { DemoModeLabel } from "@/features/demo/demo-mode-label";
+import { useIsDemo } from "@/host-session/active-session-context";
 import { ConnectionBanner } from "@/host-session/connection-banner";
 import { ConnectionStatusSlot } from "@/host-session/connection-status-slot";
 import { NavigationRailContext } from "@/navigation/tab-bar/navigation-rail-context";
@@ -40,7 +42,8 @@ function TintedHeader({ background }: { background: Exclude<Background, "plain">
 /**
  * A screen in the connection tree. It shows the connection banner above its content, except while
  * the screen shows the full-screen connection state, so the status shows once. A screen that
- * shows the connection status itself, such as Hosts, passes `banner={false}`.
+ * shows the connection status itself, such as Hosts, passes `banner={false}`. In the demo, the
+ * Demo mode label takes the top row of every screen.
  */
 export function Screen({
   children,
@@ -49,6 +52,7 @@ export function Screen({
 }: PropsWithChildren<{ background?: Background; banner?: boolean }>): ReactElement {
   styles.useVariants({ background });
   const besideRail = use(NavigationRailContext);
+  const demo = useIsDemo();
   const [fullStates, setFullStates] = useState(0);
   const slot = useMemo(
     () => ({
@@ -62,6 +66,7 @@ export function Screen({
   return (
     <View style={[styles.screen, besideRail && styles.besideRail]}>
       {background === "plain" ? null : <TintedHeader background={background} />}
+      {demo ? <DemoModeLabel /> : null}
       {banner && fullStates === 0 ? <ConnectionBanner /> : null}
       <ConnectionStatusSlot value={slot}>
         <View style={styles.content}>{children}</View>

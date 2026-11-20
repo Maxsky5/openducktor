@@ -12,7 +12,11 @@ import {
 } from "@/app-shell/app-services";
 import { ConnectionTree } from "@/app-shell/connection-tree";
 import { createAppServices } from "@/app-shell/create-app-services";
-import { InvalidRecordScreen, SwitchingHostScreen } from "@/app-shell/startup-screens";
+import {
+  ClosingDemoScreen,
+  InvalidRecordScreen,
+  SwitchingHostScreen,
+} from "@/app-shell/startup-screens";
 import { FeedbackHost } from "@/feedback/feedback-host";
 import { SwipeBackProvider } from "@/navigation/swipe-back-detector";
 import { AppThemeProvider, useAppTheme } from "@/theme/app-theme-context";
@@ -26,7 +30,8 @@ function RootNavigator(): ReactElement {
     void SplashScreen.hideAsync();
   }, []);
   if (state.status === "invalid_record") return <InvalidRecordScreen invalid={state.invalid} />;
-  if (state.status === "switching") return <SwitchingHostScreen label={state.host.label} />;
+  if (state.status === "switching")
+    return state.demo ? <ClosingDemoScreen /> : <SwitchingHostScreen label={state.host.label} />;
   const active = state.status === "active" ? state.session : null;
   const navigator = (
     <Stack screenOptions={{ headerShown: false }}>

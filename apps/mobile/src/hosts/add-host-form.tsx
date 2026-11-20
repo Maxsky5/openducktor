@@ -91,7 +91,14 @@ function OrDivider({ label }: { label: string }): ReactElement {
  * after discovery and negotiation succeed. A failure keeps the input, shakes the fields, and
  * shows the host reason with its next action.
  */
-export function AddHostForm({ onScan }: { onScan: () => void }): ReactElement {
+export function AddHostForm({
+  onScan,
+  onTryDemo,
+}: {
+  onScan: () => void;
+  /** Opens the demo. Only host selection, with no active host, offers it. */
+  onTryDemo?: (() => Promise<void>) | undefined;
+}): ReactElement {
   const owner = useHostSessionOwner();
   const confirmDraftLoss = useConfirmDraftLoss();
   const { feedback } = useFeedbackStore();
@@ -263,9 +270,52 @@ export function AddHostForm({ onScan }: { onScan: () => void }): ReactElement {
         />
       </Animated.View>
       <RemoteNetworkNotice endpoint={address} />
+      {onTryDemo && !typing && !pairingRequested ? (
+        <TryDemo onTryDemo={onTryDemo} disabled={connecting} />
+      ) : null}
     </View>
   );
 }
+
+/** The way in without a host: the demo with sample data on this device. */
+function TryDemo({
+  onTryDemo,
+  disabled,
+}: {
+  onTryDemo: () => Promise<void>;
+  disabled: boolean;
+}): ReactElement {
+  const { feedback } = useFeedbackStore();
+  const [opening, setOpening] = useState(false);
+  const open = () => {
+    setOpening(true);
+    onTryDemo().catch((cause: unknown) => {
+      setOpening(false);
+      feedback.show("error", "The demo did not open", { description: errorMessage(cause) });
+    });
+  };
+  return (
+    <Animated.View entering={FOLD_IN} exiting={FOLD_OUT} style={styles.demo}>
+      <OrDivider label="or explore first" />
+      <Button
+        label="Try demo"
+        icon="play"
+        variant="outline"
+        size="lg"
+        loading={opening}
+        disabled={disabled || opening}
+        onPress={open}
+        accessibilityHint={TRY_DEMO_HINT}
+        fill
+      />
+      <Text variant="footnote" tone="tertiary" style={styles.demoHint}>
+        {TRY_DEMO_HINT}
+      </Text>
+    </Animated.View>
+  );
+}
+
+const TRY_DEMO_HINT = "Explore OpenDucktor with sample data. No computer or account needed.";
 
 function PairingStep({
   address,
@@ -399,5 +449,7 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.space.md,
   },
   actions: { flexDirection: "row", gap: theme.space.sm, paddingTop: theme.space.xs },
+  demo: { gap: theme.space.md, paddingTop: theme.space.sm },
+  demoHint: { textAlign: "center" },
   action: { flex: 1, flexBasis: 0, minWidth: 0 },
 }));

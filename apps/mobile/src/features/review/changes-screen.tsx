@@ -10,7 +10,8 @@ import { StyleSheet } from "react-native-unistyles";
 import type { WorkOwner } from "@/features/work-owner/work-owner-context";
 import { toWorkOwnerParams } from "@/features/work-owner/work-owner-params";
 import { WorkOwnerScreen } from "@/features/work-owner/work-owner-screen";
-import { useCommandGate } from "@/host-session/active-session-context";
+import { useActiveSession, useCommandGate } from "@/host-session/active-session-context";
+import type { ActiveHostSession } from "@/host-session/host-session-owner";
 import { routes, sessionParams } from "@/navigation/routes";
 import { useClipboardCopy } from "@/platform/use-clipboard-copy";
 import { useAppTheme } from "@/theme/app-theme-context";
@@ -65,8 +66,20 @@ import { useOwnerDiffComments, usePendingCommentCount } from "./use-diff-comment
 import { useGitConflictActions } from "./use-git-conflict-actions";
 import { useWarmDiffSyntax } from "./use-warm-diff-syntax";
 
-/** The list view that the last Changes view used, so the next one opens the same way. */
-let preferredViewMode: FileListViewMode = "tree";
+/**
+ * The list view that the last Changes view used, so the next one opens the same way. The demo
+ * keeps its own choice for each demo session, so it never changes the choice for real hosts.
+ */
+let hostViewMode: FileListViewMode = "tree";
+const demoViewModes = new WeakMap<ActiveHostSession, FileListViewMode>();
+
+const preferredViewMode = (session: ActiveHostSession): FileListViewMode =>
+  session.kind === "demo" ? (demoViewModes.get(session) ?? "tree") : hostViewMode;
+
+const savePreferredViewMode = (session: ActiveHostSession, viewMode: FileListViewMode) => {
+  if (session.kind === "demo") demoViewModes.set(session, viewMode);
+  else hostViewMode = viewMode;
+};
 
 /**
  * The Changes view of a task worktree or a chat directory, as the desktop Git panel: the branch
@@ -128,11 +141,12 @@ function ChangesContent({
 }): ReactElement {
   const router = useRouter();
   const gate = useCommandGate();
+  const session = useActiveSession();
   const { copyText } = useClipboardCopy();
   const theme = useAppTheme();
   const endSpace = useScreenEndSpace(theme.space.xxxl);
   const [view, dispatch] = useReducer(changesViewReducer, focus, (initial) =>
-    createChangesViewState(preferredViewMode, initial),
+    createChangesViewState(preferredViewMode(session), initial),
   );
   const {
     diffData,
@@ -226,10 +240,13 @@ function ChangesContent({
     (directoryKey: string) => dispatch({ type: "directory_toggled", directoryKey }),
     [],
   );
-  const selectViewMode = useCallback((viewMode: FileListViewMode) => {
-    preferredViewMode = viewMode;
-    dispatch({ type: "view_mode_selected", viewMode });
-  }, []);
+  const selectViewMode = useCallback(
+    (viewMode: FileListViewMode) => {
+      savePreferredViewMode(session, viewMode);
+      dispatch({ type: "view_mode_selected", viewMode });
+    },
+    [session],
+  );
   const fileAction = useCallback(
     (file: ChangedFileItem, action: ChangedFileAction) => {
       switch (action) {
