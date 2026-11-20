@@ -10,6 +10,10 @@ import { namingFailureNotice, type NamingService } from "../../naming/naming-ser
 
 const NAMING_STEP = { id: "naming", label: "Generate branch name" } as const;
 
+/** The naming step of a new task worktree, or null when the repository has no naming model. */
+export const taskBranchNamingStep = (repoConfig: Pick<RepoConfig, "namingModel">) =>
+  repoConfig.namingModel ? NAMING_STEP : null;
+
 /**
  * The branch of a new task worktree. With a naming model, the model names it from the task title
  * and description, with `-2`, `-3`, and so on when a local or remote branch or the task target
@@ -40,8 +44,8 @@ export const chooseTaskBranch = (
     const { repoConfig, task } = input;
     const fallback = buildBranchName(repoConfig.branchPrefix, task.id, task.title);
     const fromTitle = { branch: fallback, generated: false };
-    // Without a naming model, no naming step shows.
-    if (!repoConfig.namingModel) return fromTitle;
+    // Without a naming model, the plan has no naming step.
+    if (!taskBranchNamingStep(repoConfig)) return fromTitle;
     // The listing runs while the model writes the name.
     const taken = yield* Effect.forkChild(
       readTakenBranchNames(deps.gitPort, input.repoPath, [

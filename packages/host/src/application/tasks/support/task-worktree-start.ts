@@ -15,6 +15,7 @@ import type { OwnedTrackingRef } from "../../../ports/git-port";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 
 type BuildStartDependencies = ReturnType<typeof requireBuildStartDependencies>;
+type TaskWorktreeStartPoint = Effect.Success<ReturnType<typeof resolveTaskWorktreeStartPoint>>;
 
 export type PreparedTaskWorktree = {
   rollback: () => Effect.Effect<void, TaskStartRollbackError>;
@@ -51,6 +52,35 @@ export const validateExistingGitTaskWorktree = (
     );
   });
 
+/**
+ * Publishes every setup step of a new task worktree, with the naming step first, before the
+ * naming model writes the branch. Returns the start point of the worktree.
+ */
+export const planNewTaskWorktree = (
+  dependencies: Pick<BuildStartDependencies, "gitPort" | "workspaceSettingsService">,
+  repoConfig: RepoConfig,
+  task: TaskRecord,
+  canonicalRepoPath: string,
+  worktreePath: string,
+  namingStep: { id: string; label: string } | null,
+) =>
+  Effect.gen(function* () {
+    const startPoint = yield* resolveTaskWorktreeStartPoint(dependencies, {
+      workspaceId: repoConfig.workspaceId,
+      repoPath: canonicalRepoPath,
+      task,
+    });
+    yield* planWorktreeSetup({
+      label: "Create task worktree",
+      worktreePath,
+      branch: null,
+      namingStep,
+      upstreamRemote: startPoint.upstreamRemote,
+      repoConfig,
+    });
+    return startPoint;
+  });
+
 export const prepareNewTaskWorktree = (
   dependencies: BuildStartDependencies,
   repoConfig: RepoConfig,
@@ -61,6 +91,8 @@ export const prepareNewTaskWorktree = (
   branch: string,
   /** The naming model chose the branch as free, so an existing remote branch of it is a collision. */
   branchIsGenerated: boolean,
+  /** The start point that `planNewTaskWorktree` resolved. */
+  startPoint: TaskWorktreeStartPoint,
 ) =>
   Effect.gen(function* () {
     yield* dependencies.worktreeFiles.ensureDirectory(worktreeBase);
@@ -105,18 +137,6 @@ export const prepareNewTaskWorktree = (
       );
     const setupResult = yield* Effect.result(
       Effect.gen(function* () {
-        const startPoint = yield* resolveTaskWorktreeStartPoint(dependencies, {
-          workspaceId: repoConfig.workspaceId,
-          repoPath: canonicalRepoPath,
-          task,
-        });
-        yield* planWorktreeSetup({
-          label: "Create task worktree",
-          worktreePath,
-          branch,
-          upstreamRemote: startPoint.upstreamRemote,
-          repoConfig,
-        });
         yield* startupStep(
           { id: "checkout", label: "Create task worktree", details: [worktreePath, branch] },
           dependencies.gitPort.createWorktree(
