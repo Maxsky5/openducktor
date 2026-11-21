@@ -1,5 +1,11 @@
 import type { AgentQueuedMessage, AgentSessionUserMessagePart } from "@openducktor/contracts";
-import { userMessagePartsToComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import type { AgentModelAttachmentSupport } from "@openducktor/core";
+import { validateComposerAttachments } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
+import {
+  type AgentChatComposerDraft,
+  draftHasMeaningfulContent,
+  userMessagePartsToComposerDraft,
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
   type QueuedMessageSteerContext,
   queuedMessageSteerBlockedReason,
@@ -39,6 +45,34 @@ const STATUS_LABELS = {
 
 export const DELIVERY_UNKNOWN_NOTE =
   "The runtime did not confirm this message. It cannot be sent again or removed until the runtime shows it.";
+
+export const resolveQueuedMessageEditState = (
+  draft: AgentChatComposerDraft,
+  {
+    attachmentSupport,
+    attachmentUnavailableReason,
+    commandsOpen,
+    isPending,
+  }: {
+    attachmentSupport: AgentModelAttachmentSupport | undefined;
+    attachmentUnavailableReason: string | null;
+    commandsOpen: boolean;
+    isPending: boolean;
+  },
+) => {
+  const attachments = draft.attachments ?? [];
+  const attachmentErrors = attachmentUnavailableReason
+    ? Object.fromEntries(attachments.map(({ id }) => [id, attachmentUnavailableReason] as const))
+    : validateComposerAttachments(attachments, attachmentSupport);
+  return {
+    attachmentErrors,
+    canSave:
+      commandsOpen &&
+      !isPending &&
+      draftHasMeaningfulContent(draft) &&
+      Object.keys(attachmentErrors).length === 0,
+  };
+};
 
 /**
  * Builds a queue card. Only a queued message takes Steer now, Edit, and Remove. A message on its

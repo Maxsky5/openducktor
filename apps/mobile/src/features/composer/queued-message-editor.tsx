@@ -1,8 +1,8 @@
 import type { AgentMessageTarget, AgentQueuedMessage } from "@openducktor/contracts";
+import type { AgentModelAttachmentSupport } from "@openducktor/core";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import {
   type AgentChatComposerDraft,
-  draftHasMeaningfulContent,
   userMessagePartsToComposerDraft,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { ComposerFailure } from "@openducktor/frontend-core/sessions/composer/composer-failure";
@@ -21,17 +21,17 @@ import type { AttachmentPickers } from "./composer-attachments";
 import { ComposerTextButton, GhostIconButton } from "./composer-controls";
 import { ComposerTextField } from "./composer-text-field";
 import { FailureNotice } from "./composer-failure-notice";
+import { resolveQueuedMessageEditState } from "./queue-item-state";
 import { useAttachmentPickers } from "./use-attachment-pickers";
 import { useComposerDraftEditor } from "./use-composer-draft-editor";
 
 export type EditingEntry = Extract<AgentQueuedMessage, { state: "editing" }>;
 
-const NO_ERRORS: Readonly<Record<string, string>> = Object.freeze({});
-
 type EditorProps = {
   target: AgentMessageTarget;
   entry: EditingEntry;
   pickers: AttachmentPickers;
+  attachmentSupport: AgentModelAttachmentSupport | undefined;
   commandsOpen: boolean;
   /** An action on this message runs, so the editor waits. */
   isPending: boolean;
@@ -81,6 +81,7 @@ function QueuedMessageEditor({
   target,
   entry,
   pickers,
+  attachmentSupport,
   commandsOpen,
   isPending,
   isSaving,
@@ -108,7 +109,12 @@ function QueuedMessageEditor({
     enabled: commandsOpen && !isPending,
     onAdd: editor.addAttachments,
   });
-  const canSave = commandsOpen && !isPending && draftHasMeaningfulContent(draft);
+  const { canSave, attachmentErrors } = resolveQueuedMessageEditState(draft, {
+    attachmentSupport,
+    attachmentUnavailableReason: pickers.unavailableReason,
+    commandsOpen,
+    isPending,
+  });
   const supportsAttachments = pickers.unavailableReason === null;
 
   return (
@@ -120,7 +126,7 @@ function QueuedMessageEditor({
       <View style={styles.card} accessibilityLabel="Edit queued message">
         <ComposerAttachmentStrip
           attachments={draft.attachments ?? []}
-          errors={NO_ERRORS}
+          errors={attachmentErrors}
           editable={!isPending}
           onRemove={editor.removeAttachment}
         />

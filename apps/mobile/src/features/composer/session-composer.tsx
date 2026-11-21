@@ -217,6 +217,7 @@ function SessionComposerView({
             steerContext={steerContext}
             commandsOpen={gateOpen && composer.canInteract}
             pickers={pickers}
+            attachmentSupport={composer.selectedModelDescriptor?.attachmentSupport}
           />
         ) : null}
         {composer.goalRow ? (

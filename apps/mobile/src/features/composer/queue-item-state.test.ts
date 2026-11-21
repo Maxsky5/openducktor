@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentQueuedMessage } from "@openducktor/contracts";
-import { BLOCKED_ON_INPUT_REASON } from "@openducktor/core";
-import { DELIVERY_UNKNOWN_NOTE, buildQueueItemView, queueCardLabel } from "./queue-item-state";
+import { BLOCKED_ON_INPUT_REASON, type AgentModelAttachmentSupport } from "@openducktor/core";
+import { userMessagePartsToComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import { resolveAttachmentPickers } from "./composer-attachments";
+import {
+  DELIVERY_UNKNOWN_NOTE,
+  buildQueueItemView,
+  queueCardLabel,
+  resolveQueuedMessageEditState,
+} from "./queue-item-state";
 
 const base = {
   submissionId: "submission-1",
@@ -114,5 +121,44 @@ describe("queueCardLabel", () => {
     expect(queueCardLabel(view(entry("acceptance_unknown")), { spread: true, count: 1 })).toBe(
       `Delivery unknown: Also update the docs. ${DELIVERY_UNKNOWN_NOTE}`,
     );
+  });
+});
+
+describe("resolveQueuedMessageEditState", () => {
+  test("blocks attachment saves until model support is available and allows text edits", () => {
+    const textDraft = userMessagePartsToComposerDraft(base.parts);
+    const attachmentDraft = userMessagePartsToComposerDraft([
+      ...base.parts,
+      {
+        kind: "attachment",
+        attachment: { id: "brief", kind: "pdf", name: "brief.pdf", path: "/staged/brief.pdf" },
+      },
+    ]);
+    const state = (draft: typeof textDraft, attachmentSupport?: AgentModelAttachmentSupport) =>
+      resolveQueuedMessageEditState(draft, {
+        attachmentSupport,
+        attachmentUnavailableReason: resolveAttachmentPickers({
+          runtimeSupportsAttachments: true,
+          support: attachmentSupport,
+        }).unavailableReason,
+        commandsOpen: true,
+        isPending: false,
+      });
+
+    expect(state(attachmentDraft)).toEqual({
+      attachmentErrors: { brief: "The selected model does not say which attachments it takes." },
+      canSave: false,
+    });
+    expect(state(textDraft)).toEqual({ attachmentErrors: {}, canSave: true });
+    expect(state(attachmentDraft, { image: true, audio: false, video: false, pdf: false })).toEqual(
+      {
+        attachmentErrors: { brief: "The selected model does not support pdf attachments." },
+        canSave: false,
+      },
+    );
+    expect(state(attachmentDraft, { image: true, audio: false, video: false, pdf: true })).toEqual({
+      attachmentErrors: {},
+      canSave: true,
+    });
   });
 });
