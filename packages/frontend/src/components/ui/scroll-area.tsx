@@ -36,7 +36,8 @@ function ScrollBar({
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
-        "flex touch-none p-px transition-colors select-none",
+        // Above the content that it scrolls, such as sticky headers, so the thumb stays whole.
+        "z-20 flex touch-none p-px transition-colors select-none",
         orientation === "vertical" && "h-full w-2.5 border-l border-l-transparent",
         orientation === "horizontal" && "h-2.5 flex-col border-t border-t-transparent",
         className,

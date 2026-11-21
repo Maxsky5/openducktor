@@ -11,6 +11,7 @@ import {
   Archive,
   Columns3,
   Compass,
+  Cpu,
   Download,
   FolderOpen,
   FolderPlus,
@@ -29,6 +30,7 @@ import {
 } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { useDiagnosticsPanel } from "@/components/features/diagnostics";
+import { useProcessesActions } from "@/components/features/processes/processes-context";
 import { useFeatureTour } from "@/features/feature-tour/feature-tour-context";
 import { TASK_CARD_VIEW_OPTIONS } from "@openducktor/frontend-core/tasks/board/task-card-view-options";
 import { TASK_CARD_VIEW_ICONS } from "@/components/features/kanban/task-card-view-options";
@@ -141,6 +143,7 @@ export function useCommandPaletteActions({
   const { taskCardView, changeTaskCardView } = useKanbanTaskCardView();
   const { openSettings } = useSettingsModal();
   const { openDiagnostics } = useDiagnosticsPanel();
+  const processes = useProcessesActions();
   const { openFeatureTour } = useFeatureTour();
   const { openWorkspaceDialog } = useWorkspaceDialogs();
   const repoPath = target?.repoPath ?? null;
@@ -364,6 +367,16 @@ export function useCommandPaletteActions({
       }),
       ...settingsActions,
       appAction("diagnostics", icon(ShieldCheck), ["health", "checks"], openDiagnostics),
+      ...(processes
+        ? [
+            appAction(
+              "processes",
+              icon(Cpu),
+              ["ports", "servers", "dev server", "kill", "stop process", "localhost"],
+              processes.toggleProcesses,
+            ),
+          ]
+        : []),
       appAction(
         "feature-tour",
         icon(Compass),
@@ -420,6 +433,7 @@ export function useCommandPaletteActions({
     changeTaskCardView,
     openSettings,
     openDiagnostics,
+    processes,
     openFeatureTour,
     openWorkspaceDialog,
     repoPath,

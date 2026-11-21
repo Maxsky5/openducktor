@@ -1,3 +1,4 @@
+import { WorkspaceScopeContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { CommandPaletteRegistryProvider } from "@/features/command-palette/command-palette-registry";
 import { describe, expect, spyOn, test } from "bun:test";
 import { knownRuntimeKindValues, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
@@ -124,38 +125,44 @@ const renderOnboardingOverlays = () => {
             value={{ activeWorkspace: null, setActiveWorkspace: () => {} }}
           >
             <WorkspaceStateContext.Provider value={workspaceState}>
-              <ChecksStateContext.Provider value={createChecksStateFixture()}>
-                <RuntimeDefinitionsContext.Provider
-                  value={{
-                    runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-                    availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
-                    agentRuntimes: snapshot.agentRuntimes,
-                    isLoadingRuntimeDefinitions: false,
-                    runtimeDefinitionsError: null,
-                    isLoadingRuntimeSettings: false,
-                    runtimeSettingsError: null,
-                    hasRuntimeSettingsSnapshot: true,
-                    refreshRuntimeSettings: async () => {},
-                    refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
-                    loadRepoRuntimeCatalog: async () => {
-                      throw new Error("Not used in this test");
-                    },
-                    loadRepoRuntimeFileSearch: async () => [],
-                  }}
-                >
-                  <HostRuntimeStatusContext.Provider value={createHostRuntimeStatusContextValue()}>
-                    <NotificationContext.Provider value={notificationContextValue}>
-                      <DiagnosticsAutoOpenProvider>
-                        <WorkspacePreviewTransitionGuardProvider>
-                          <ApplicationOverlays>
-                            <OpenSettingsButton />
-                          </ApplicationOverlays>
-                        </WorkspacePreviewTransitionGuardProvider>
-                      </DiagnosticsAutoOpenProvider>
-                    </NotificationContext.Provider>
-                  </HostRuntimeStatusContext.Provider>
-                </RuntimeDefinitionsContext.Provider>
-              </ChecksStateContext.Provider>
+              <WorkspaceScopeContext.Provider
+                value={{ workspaces: workspaceState.workspaces, activeWorkspace: null }}
+              >
+                <ChecksStateContext.Provider value={createChecksStateFixture()}>
+                  <RuntimeDefinitionsContext.Provider
+                    value={{
+                      runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                      availableRuntimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR],
+                      agentRuntimes: snapshot.agentRuntimes,
+                      isLoadingRuntimeDefinitions: false,
+                      runtimeDefinitionsError: null,
+                      isLoadingRuntimeSettings: false,
+                      runtimeSettingsError: null,
+                      hasRuntimeSettingsSnapshot: true,
+                      refreshRuntimeSettings: async () => {},
+                      refreshRuntimeDefinitions: async () => [OPENCODE_RUNTIME_DESCRIPTOR],
+                      loadRepoRuntimeCatalog: async () => {
+                        throw new Error("Not used in this test");
+                      },
+                      loadRepoRuntimeFileSearch: async () => [],
+                    }}
+                  >
+                    <HostRuntimeStatusContext.Provider
+                      value={createHostRuntimeStatusContextValue()}
+                    >
+                      <NotificationContext.Provider value={notificationContextValue}>
+                        <DiagnosticsAutoOpenProvider>
+                          <WorkspacePreviewTransitionGuardProvider>
+                            <ApplicationOverlays>
+                              <OpenSettingsButton />
+                            </ApplicationOverlays>
+                          </WorkspacePreviewTransitionGuardProvider>
+                        </DiagnosticsAutoOpenProvider>
+                      </NotificationContext.Provider>
+                    </HostRuntimeStatusContext.Provider>
+                  </RuntimeDefinitionsContext.Provider>
+                </ChecksStateContext.Provider>
+              </WorkspaceScopeContext.Provider>
             </WorkspaceStateContext.Provider>
           </ActiveWorkspaceContext.Provider>
         </ThemeProvider>

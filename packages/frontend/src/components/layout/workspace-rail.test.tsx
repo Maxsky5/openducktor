@@ -1,8 +1,10 @@
+import { WorkspaceScopeContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { WorkspaceRecord } from "@openducktor/contracts";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router";
 import type { WorkspaceActivityState } from "@openducktor/frontend-core/workspace-activity/workspace-activity-state";
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
@@ -13,6 +15,8 @@ import { WorkspacePreviewTransitionGuardProvider } from "./workspace-preview-tra
 import type { TaskExecutionSelectedFile } from "@/components/features/agents/task-execution-file-explorer-model";
 import { useWorkspaceSessionPreview } from "@/pages/workspace-sessions/use-workspace-session-preview";
 import { SettingsModalProvider } from "@/components/features/settings/settings-modal";
+import { ProcessesProvider } from "@/components/features/processes/processes-context";
+import { QueryProvider } from "@/test-utils/query-provider";
 
 const selectWorkspaceMock = mock(async (_workspaceId: string): Promise<void> => {});
 const reorderWorkspacesMock = mock(async (_workspaceIds: string[]): Promise<void> => {});
@@ -40,11 +44,25 @@ let workspaceActivity: Record<string, WorkspaceActivityState>;
 const withProviders = (children: ReactElement): ReactElement => (
   <WorkspacePreviewTransitionGuardProvider>
     <WorkspaceStateContext.Provider value={workspaceState}>
-      <WorkspaceActivityContext.Provider
-        value={createWorkspaceActivityObserverStub(workspaceActivity)}
+      <WorkspaceScopeContext.Provider
+        value={{
+          workspaces: workspaceState.workspaces,
+          activeWorkspace: workspaceState.activeWorkspace,
+        }}
       >
-        <SettingsModalProvider>{children}</SettingsModalProvider>
-      </WorkspaceActivityContext.Provider>
+        <WorkspaceActivityContext.Provider
+          value={createWorkspaceActivityObserverStub(workspaceActivity)}
+        >
+          <SettingsModalProvider>
+            <QueryProvider>
+              {/* The processes view reads the task of Agent Studio from the address. */}
+              <MemoryRouter>
+                <ProcessesProvider>{children}</ProcessesProvider>
+              </MemoryRouter>
+            </QueryProvider>
+          </SettingsModalProvider>
+        </WorkspaceActivityContext.Provider>
+      </WorkspaceScopeContext.Provider>
     </WorkspaceStateContext.Provider>
   </WorkspacePreviewTransitionGuardProvider>
 );

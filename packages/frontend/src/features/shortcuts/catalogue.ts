@@ -120,6 +120,7 @@ const BUILTIN_COMMANDS = {
     defaultKeys: chord("b", CTRL),
   },
   diagnostics: { label: "Open diagnostics", group: "App", scope: APP },
+  processes: { label: "Running processes and ports", group: "App", scope: APP },
   "feature-tour": { label: "Show tour", group: "App", scope: APP },
   "open-repository": { label: "Open repository", group: "App", scope: APP },
   "reopen-workspace": { label: "Reopen a workspace", group: "App", scope: APP },

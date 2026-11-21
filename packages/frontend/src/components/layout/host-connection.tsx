@@ -128,6 +128,13 @@ export function HostConnectionProvider({
   );
 }
 
+/** The local shell that runs the host, or null when the app shows a remote host. */
+export function useLocalHost(): HostSelection["localHost"] | null {
+  const host = useContext(HostContext);
+  if (!host || host.selection.target.kind !== "local") return null;
+  return host.selection.localHost;
+}
+
 export function HostSwitcher({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const host = useContext(HostContext);
   const { state, error } = useRemoteAccess();

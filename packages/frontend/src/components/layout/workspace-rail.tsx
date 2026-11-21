@@ -44,6 +44,7 @@ import { WorkspaceRailActivityBadges } from "./workspace-rail-activity-badges";
 import { useWorkspaceRailOrder } from "./workspace-rail-order";
 import { WorkspaceTile } from "./workspace-tile";
 import { HostSwitcher } from "./host-connection";
+import { ProcessesRailButton } from "@/components/features/processes/processes-surfaces";
 import { useWorkspacePreviewTransitionGuard } from "./workspace-preview-transition-guard";
 import { workspaceActivityBadges } from "@openducktor/frontend-core/workspace-activity/workspace-activity-badges";
 import { MOTION_EASE_OUT } from "@/components/ui/motion";
@@ -465,7 +466,8 @@ export function WorkspaceRail({
             </ShortcutButton>
           </div>
         </div>
-        <div className="flex shrink-0 justify-center px-2 py-2">
+        <div className="flex shrink-0 flex-col items-center gap-1 px-2 py-2">
+          <ProcessesRailButton />
           <HostSwitcher
             onOpenSettings={() =>
               openSettings({ deepLink: { kind: "global", section: "remote-access" } })

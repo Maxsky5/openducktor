@@ -1,0 +1,42 @@
+/* A floating window fades in where it opens. */
+/* The window has an edge and a shadow on every side, so it stands apart from any page under it.
+   The dark theme needs a lighter edge and a deeper shadow, because a dark shadow barely shows on a
+   dark page. */
+.floating-window {
+  animation: floating-window-in 180ms var(--motion-ease-out) both;
+  box-shadow:
+    0 0 0 1px oklch(from var(--foreground) l c h / 6%),
+    0 2px 6px oklch(0 0 0 / 8%),
+    0 18px 48px -10px oklch(0 0 0 / 28%);
+}
+
+.dark .floating-window {
+  box-shadow:
+    0 0 0 1px oklch(from var(--foreground) l c h / 10%),
+    0 2px 8px oklch(0 0 0 / 30%),
+    0 24px 64px -12px oklch(0 0 0 / 70%);
+}
+
+@keyframes floating-window-in {
+  from {
+    opacity: 0;
+    scale: 0.98;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-window {
+    animation: none;
+  }
+}
+
+/* The resize corner: two diagonal strokes in the text color of the grip. */
+.floating-window-grip {
+  background:
+    linear-gradient(135deg, transparent 42%, currentColor 42% 52%, transparent 52%),
+    linear-gradient(135deg, transparent 72%, currentColor 72% 82%, transparent 82%);
+}

@@ -45,6 +45,7 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 - Put the dismissal button first in `DialogFooter` and the main action last. Add `justify-end` when a footer has one action and no dismissal. Do not repeat `justify-between`; the shared footer sets it.
 - Give each modal confirmation button an action icon and a pending spinner. Use the same icon and variant for repeated actions. Close task uses `CircleCheckBig` and `warning`; reset uses `RotateCcw` and `destructive`; delete uses `Trash2` and `destructive`; save uses `Save` and the primary variant.
 - Give `motion="instant"` to `DialogContent` and `useDialogPresence(open, "instant")` for a dialog that users open from a key many times a day. The dialog then shows, hides, and resizes at once.
+- Give `instant` to a `CssPresenceList` whose children change with each key, such as filter results. Its children, and the lists and reveals inside them, then appear and leave with no motion. A leaving child is hidden in the same render.
 - Use `CssPresenceReveal` for form content that a switch shows. Put the space above the content in its `className` as padding. The reveal clips that space with its height, and an animated dialog follows the reveal height in each frame without a second resize animation. Do not put a margin on the content: the margin stays outside the height, and it goes away in one step when the reveal closes. `motionClassName` gives a feature its own durations and clip margin.
 - Show the icon of a file with `FileTypeIcon`. It takes the icon and the color of the file type from `@pierre/trees`, as the file tree shows them, and shows the base file icon for a type without one. Where an icon shows the type of a file, show the change of the file with a letter, such as `M`, `A`, or `D`. The mobile app uses its own icon font, because `@pierre/trees` defines web components when it loads.
 
@@ -62,6 +63,19 @@ The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `p
 | Chat transcript          | `bg-chat-background`                                             |
 | Chat input, user message | `bg-chat-surface`, `shadow-chat`                                 |
 | Sidebar                  | `bg-sidebar`, `text-sidebar-foreground`, `border-sidebar-border` |
+
+## Floating windows
+
+A floating window stays over the app while the user works on something else, such as the detached Processes list. `FloatingWindow` is in `packages/frontend/src/components/ui/floating-window.tsx`.
+
+- `FloatingWindowLayer` in `ApplicationOverlays` holds every window, so a window stays across navigation. The layer is `z-40`: above pages, and below sheets, dialogs, tooltips, and popovers.
+- The app shell is `isolate`, so the layers of a page, such as the chat composer, stay inside the page and never cover a window. Do not give page content a `z-index` to place it above the overlays.
+- The window owns its title bar: the icon, the `title`, the `actions` of the owner, and Close. A drag on the title bar moves the window, and its buttons keep their clicks. The content never moves the window, so its fields and lists work as usual.
+- Each edge and each corner resize the window down to `minSize`. A resize moves only the edges that the user holds, and keeps them inside the viewport. The title bar always stays inside the viewport.
+- The owner keeps the place and size in memory and passes them as `rect` and `onRectChange`. Saving them across reloads is persisted data and needs approval.
+- A window is non-modal. It does not trap focus, and a click outside it or Escape does not close it. For a window that comes from an anchored view, give an action that attaches it back.
+- A click on a window brings it to the front of the other windows.
+- Popovers of a window open in the document body, above the layer.
 
 ## Tool calls in the transcript
 

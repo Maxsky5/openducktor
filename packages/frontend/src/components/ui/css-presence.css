@@ -20,6 +20,11 @@
   transition-duration: var(--presence-exit-dur);
 }
 
+/* An instant list, such as filter results, shows the change at once: nothing that leaves stays. */
+.css-presence[data-presence="exiting"][data-presence-instant] {
+  display: none;
+}
+
 @starting-style {
   .css-presence[data-animate-entry="true"] {
     height: 0;

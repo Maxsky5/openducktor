@@ -1,0 +1,51 @@
+/* A process row or a checkout grows in when a refresh finds it, and folds away when it stops. */
+.process-presence {
+  --presence-enter-dur: 240ms;
+  --presence-exit-dur: 220ms;
+  --presence-ease: var(--motion-ease-out);
+  /* Keep the focus ring of a port button or of the stop button visible. */
+  --presence-clip-margin: 4px;
+}
+
+/* An empty state waits for the last group to fold away, then fades in. It does not move, so it
+   never overflows the list. */
+.process-empty-enter {
+  animation: process-empty-fade 260ms var(--motion-ease-out) 180ms both;
+}
+
+@keyframes process-empty-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-empty-enter {
+    animation: none;
+  }
+}
+
+/* The badge of the rail pops in when the first command starts. */
+.process-badge-enter {
+  animation: process-badge-in 200ms var(--motion-ease-out) both;
+}
+
+@keyframes process-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-badge-enter {
+    animation: none;
+  }
+}
