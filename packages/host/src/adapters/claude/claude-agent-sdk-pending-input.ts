@@ -61,20 +61,23 @@ export const prepareClaudeApprovalReply = ({
     complete: () => {
       session.pendingApprovals.delete(input.requestId);
       const message = input.message ?? "Denied by user.";
-      if (denialSource && pending.toolUseId) {
-        recordClaudeToolDenial(session, pending.toolUseId, {
-          denial: claudeReadOnlyRoleDenial(message),
-        });
+      if (input.outcome === "approve_once") {
+        pending.resolve({ behavior: "allow" });
+        return;
       }
-      pending.resolve(
-        input.outcome === "approve_once"
-          ? { behavior: "allow" }
-          : {
-              behavior: "deny",
-              message,
-              interrupt: true,
-            },
-      );
+      if (denialSource) {
+        // The agent reads why the read-only role refused the call and goes on, as it does after
+        // the role denies a call without a prompt.
+        if (pending.toolUseId) {
+          recordClaudeToolDenial(session, pending.toolUseId, {
+            denial: claudeReadOnlyRoleDenial(message),
+          });
+        }
+        pending.resolve({ behavior: "deny", message });
+        return;
+      }
+      session.userRejectStopsTurn = true;
+      pending.resolve({ behavior: "deny", message, interrupt: true });
     },
   };
 };

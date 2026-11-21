@@ -208,6 +208,8 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     pendingUserMessageAdmissions: Map<string, ClaudePendingUserMessageAdmission>;
     /** Steered messages that no turn has read yet, by message UUID. */
     unreadSteeredUserMessages: Map<string, ClaudeAcceptedUserMessage>;
+    /** The user rejected an approval prompt, so the next `aborted_tools` result is interrupted. */
+    userRejectStopsTurn?: true;
     /** The goal state that the adapter read. It exists after a restore or a goal command. */
     goalTracking?: ClaudeGoalTracking;
     /** The environment of the Claude process, which locates its transcript. */

@@ -58,6 +58,11 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     streamAssistantMessageIdsByBlockIndex: Map<number, string>;
     todoProjection?: ClaudeTodoProjection;
     todosById: ClaudeTodoState;
+    /**
+     * The user rejected an approval prompt, and the CLI ends the turn as `aborted_tools`. That
+     * turn stopped on purpose, so it does not fail.
+     */
+    userRejectStopsTurn?: true;
     /** The denied calls of the root session and its subagents. Child sessions share the map. */
     toolDenialsByCallId: Map<string, ClaudeToolDenialRecord>;
     toolEndedAtMsByCallId?: Map<string, number>;

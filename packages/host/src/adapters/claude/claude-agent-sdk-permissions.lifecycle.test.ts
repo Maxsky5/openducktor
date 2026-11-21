@@ -338,10 +338,17 @@ describe("Claude permission request lifecycle", () => {
 
     const roleRejected = ask("tool-use-1");
     reject("request-1", "read_only_role");
+    expect(await roleRejected).toEqual({
+      behavior: "deny",
+      message: "Read-only roles cannot run this command.",
+    });
+    expect(session.userRejectStopsTurn).toBeUndefined();
     const userRejected = ask("tool-use-2");
     reject("request-2");
-    await Promise.all([roleRejected, userRejected]);
+    expect(await userRejected).toMatchObject({ behavior: "deny", interrupt: true });
 
+    // The agent goes on after a role reject; only the user's reject stops the turn.
+    expect(session.userRejectStopsTurn).toBe(true);
     expect(session.toolDenialsByCallId.get("tool-use-1")).toEqual({
       denial: { source: "read_only_role", reason: "Read-only roles cannot run this command." },
     });

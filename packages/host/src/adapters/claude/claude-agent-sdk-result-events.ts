@@ -1,3 +1,4 @@
+import type { AgentTurnOutcome } from "@openducktor/contracts";
 import { type AgentEvent, type AgentModelSelection, type AgentStreamPart } from "@openducktor/core";
 import type { ErrorState } from "./claude-agent-sdk-errors";
 import {
@@ -14,6 +15,7 @@ import { isClaudeForegroundTurnActive } from "./claude-agent-sdk-activity";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import {
   isClaudeResultStoppedBySteer,
+  isClaudeResultStoppedByUserReject,
   isFailedClaudeResult,
   lifecycleOutcomeForClaudeResult,
 } from "./claude-agent-sdk-result-lifecycle";
@@ -62,6 +64,7 @@ type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
     | "toolNamesByCallId"
     | "toolStartedAtMsByCallId"
     | "unreadSteeredUserMessages"
+    | "userRejectStopsTurn"
   >;
 
 type ClaudeResultEventInput = {
@@ -93,8 +96,14 @@ export const handleClaudeResultMessage = ({
   session.completedNativeResultIds ??= new Set();
   if (session.completedNativeResultIds.has(message.uuid)) return;
   const completedUserTurnIndex = userTurnIndex(session);
-  const failed = isFailedClaudeResult(message);
-  const lifecycleOutcome = lifecycleOutcomeForClaudeResult(message);
+  // A user reject stops the turn on purpose, so the turn is interrupted, not failed.
+  const stoppedByUserReject =
+    session.userRejectStopsTurn === true && isClaudeResultStoppedByUserReject(message);
+  delete session.userRejectStopsTurn;
+  const failed = !stoppedByUserReject && isFailedClaudeResult(message);
+  const lifecycleOutcome = stoppedByUserReject
+    ? "completed"
+    : lifecycleOutcomeForClaudeResult(message);
   const resultText = message.subtype === "success" ? message.result.trim() : "";
   const handledManualCompaction =
     !failed && settleClaudeManualCompactionResult({ emit, result: resultText, session, timestamp });
@@ -166,13 +175,15 @@ export const handleClaudeResultMessage = ({
     if (lastError) lastError.message = turnError.message;
     emit(turnError);
   }
+  let turnOutcome: AgentTurnOutcome = failed ? "failed" : "completed";
+  if (stoppedByUserReject) turnOutcome = "interrupted";
   emit({
     type: "session_turn_finished",
     externalSessionId: session.externalSessionId,
     timestamp,
     completionId: message.uuid,
     messageIds,
-    turnOutcome: failed ? "failed" : "completed",
+    turnOutcome,
   });
   applyClaudeLifecycleEvent({
     emit,
