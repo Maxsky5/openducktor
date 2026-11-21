@@ -19,8 +19,8 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     /* An outline button: grid grid-cols-[auto_minmax(0,1fr)_auto] content-start gap-x-3 gap-y-1
-       p-3 text-left, with border-input, or dark:border-muted-foreground/60. The selected card has
-       border-primary bg-accent, or dark:border-selected-accent dark:bg-selected-surface. */
+       p-3 text-left, with border-input, or dark:border-muted-foreground/60. The selected card keeps
+       its surface and has border-primary in both themes. */
     .wl-option {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;
@@ -39,13 +39,9 @@
     :where([data-theme="dark"]) & .wl-option {
       border-color: color-mix(in oklab, var(--muted-foreground) 60%, transparent);
     }
-    .wl-option[data-selected] {
-      border-color: var(--primary);
-      background: var(--accent);
-    }
+    .wl-option[data-selected],
     :where([data-theme="dark"]) & .wl-option[data-selected] {
-      border-color: var(--selected-accent);
-      background: var(--selected-surface);
+      border-color: var(--primary);
     }
     .wl-option > svg {
       margin-top: calc(2 * var(--u));

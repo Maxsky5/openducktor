@@ -61,8 +61,7 @@ export function WorkspaceSessionWorkLocationField<Value extends string>({
                 variant="outline"
                 className={cn(
                   "grid h-auto min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] content-start gap-x-3 gap-y-1 whitespace-normal p-3 text-left text-foreground dark:border-muted-foreground/60",
-                  selected &&
-                    "border-primary bg-accent dark:border-selected-accent dark:bg-selected-surface",
+                  selected && "border-primary hover:bg-card dark:border-primary",
                 )}
               >
                 <option.icon aria-hidden="true" />

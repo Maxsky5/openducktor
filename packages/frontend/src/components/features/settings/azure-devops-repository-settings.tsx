@@ -277,7 +277,7 @@ function ManualRepositoryForm({
               htmlFor={`repo-azure-deployment-${deployment}`}
               className={cn(
                 "flex cursor-pointer items-start gap-3 rounded-lg border border-input bg-card p-3 transition-colors hover:bg-accent/50",
-                draft.deployment === deployment && "border-selected-accent bg-selected-surface",
+                draft.deployment === deployment && "border-primary hover:bg-card",
               )}
             >
               <RadioGroupItem

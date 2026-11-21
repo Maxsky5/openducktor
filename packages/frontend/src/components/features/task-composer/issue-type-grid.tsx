@@ -26,7 +26,8 @@ export function IssueTypeGrid({
             type="button"
             className={cn(
               "group grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-36 sm:grid-cols-[1fr_auto]",
-              selected && option.accentClass,
+              // A selected card keeps its surface and takes the selected border.
+              selected && "border-primary hover:bg-card",
             )}
             onClick={() => onSelectIssueType(option.value)}
           >
@@ -45,7 +46,9 @@ export function IssueTypeGrid({
             <span
               className={cn(
                 "inline-flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors sm:col-start-2 sm:row-start-1",
-                selected ? option.indicatorClass : "border-input bg-card text-transparent",
+                selected
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-input bg-card text-transparent",
               )}
             >
               <Check className="size-3.5" aria-hidden="true" />

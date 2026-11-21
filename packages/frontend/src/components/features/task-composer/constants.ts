@@ -11,27 +11,21 @@ const ISSUE_TYPE_PRESENTATION = new Map<WorkflowIcon, IssueTypePaint>([
     "feature",
     {
       icon: Sparkles,
-      accentClass: "border-info-border bg-info-surface",
       iconClass: "bg-info-surface text-info-muted",
-      indicatorClass: "border-info-border bg-info-surface text-info-muted",
     },
   ],
   [
     "bug",
     {
       icon: Bug,
-      accentClass: "border-destructive-border bg-destructive-surface",
       iconClass: "bg-destructive-surface text-destructive-muted",
-      indicatorClass: "border-destructive-border bg-destructive-surface text-destructive-muted",
     },
   ],
   [
     "task",
     {
       icon: ListTodo,
-      accentClass: "border-input bg-muted/80",
       iconClass: "bg-secondary text-foreground",
-      indicatorClass: "border-input bg-secondary text-foreground",
     },
   ],
 ]);

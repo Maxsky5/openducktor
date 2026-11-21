@@ -21,9 +21,14 @@
   /* primary = brand indigo */
   --primary: oklch(0.5 0.31 277.49); /* #5100FF */
   --primary-foreground: oklch(1 0 0); /* white */
+  /* Brand text and marks on a page surface, such as a selected option. */
+  --primary-emphasis: oklch(0.5 0.31 277.49); /* #5100FF */
   --status-running: oklch(0.685 0.169 237.323); /* ~sky-500 */
   --status-running-foreground: var(--info-muted);
-  --selected-surface: oklch(0.588 0.158 241.966 / 0.16); /* ~sky-600/16 */
+  /* A selected row never tints: a neutral fill a step darker than the hover fill. */
+  --selected-surface: oklch(0.554 0.046 257.417 / 0.14); /* ~slate-500/14 */
+  /* Selected text and search matches keep a colour, so they read in any surface. */
+  --text-highlight: oklch(0.588 0.158 241.966 / 0.2); /* ~sky-600/20 */
   --selected-accent: oklch(0.588 0.158 241.966); /* ~sky-600 */
   --selected-control: oklch(0.55 0.158 241.966); /* vivid selected blue */
   --selected-control-foreground: oklch(1 0 0); /* white */
@@ -198,9 +203,12 @@
   /* primary = brand indigo */
   --primary: oklch(0.5 0.31 277.49); /* #5100FF */
   --primary-foreground: oklch(1 0 0); /* white */
+  /* Lighter, so brand text and marks read on a dark surface. */
+  --primary-emphasis: oklch(0.68 0.31 277.49);
   --status-running: oklch(0.746 0.16 232.661); /* ~sky-400 */
   --status-running-foreground: var(--status-running);
-  --selected-surface: oklch(0.631 0.158 241.966 / 0.22); /* ~sky-500/22 */
+  --selected-surface: oklch(0.704 0.04 256.788 / 0.18); /* ~slate-400/18 */
+  --text-highlight: oklch(0.631 0.158 241.966 / 0.3); /* ~sky-500/30 */
   --selected-accent: oklch(0.631 0.158 241.966); /* ~sky-500 */
   --selected-control: oklch(0.54 0.17 245); /* deep vivid blue */
   --selected-control-foreground: oklch(1 0 0); /* white */

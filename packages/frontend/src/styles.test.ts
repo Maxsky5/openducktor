@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 const readStyles = (): string => readFileSync(resolve(import.meta.dir, "styles.css"), "utf8");
 
 describe("global styles", () => {
-  test("uses the selected surface token for native text selection", () => {
+  test("uses the text highlight token for native text selection", () => {
     const styles = readStyles().replace(/\/\*[\s\S]*?\*\//g, "");
     const selectionRuleMatch = styles.match(/::selection\s*\{([^}]*)\}/);
 
@@ -14,7 +14,7 @@ describe("global styles", () => {
     }
 
     const selectionRule = selectionRuleMatch[1];
-    expect(selectionRule).toContain("var(--selected-surface)");
+    expect(selectionRule).toContain("var(--text-highlight)");
     expect(selectionRule).not.toContain("var(--primary)");
   });
 
