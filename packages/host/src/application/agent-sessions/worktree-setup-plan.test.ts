@@ -32,7 +32,7 @@ test("a named branch plans the naming step and every setup step in one snapshot"
 
   expect(snapshots).toHaveLength(1);
   expect(snapshots[0]?.steps.map(({ id, state, details }) => [id, state, details])).toEqual([
-    ["naming", "pending", []],
+    ["naming", "running", []],
     ["checkout", "pending", ["/worktrees/task-1"]],
     ["upstream", "pending", ["origin"]],
     ["copies", "pending", [".env"]],

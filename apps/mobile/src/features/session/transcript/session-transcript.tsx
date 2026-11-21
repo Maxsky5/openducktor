@@ -63,7 +63,8 @@ export const SessionTranscript = memo(function SessionTranscript({
       ) : rows.length === 0 ? (
         <View style={styles.fill}>
           {notice ? <TranscriptNotice notice={notice} /> : null}
-          <EmptyTranscript />
+          {/* Work that the notice shows, such as branch naming, brings the first message. */}
+          {notice?.severity === "loading" ? null : <EmptyTranscript />}
         </View>
       ) : (
         <TranscriptList
@@ -83,6 +84,12 @@ export const SessionTranscript = memo(function SessionTranscript({
   );
 });
 
+/** The notices that load the transcript itself. They show its skeleton. */
+const TRANSCRIPT_LOAD_NOTICES: ReadonlySet<AgentChatTranscriptNotice["kind"]> = new Set([
+  "runtime_waiting",
+  "session_loading",
+]);
+
 /** The state of a transcript that has no rows to show yet. */
 function TranscriptStatus({
   notice,
@@ -91,7 +98,8 @@ function TranscriptStatus({
   notice: AgentChatTranscriptNotice | null;
   isLoading: boolean;
 }): ReactElement {
-  if (notice?.severity === "loading") return <TranscriptSkeleton label={notice.title} />;
+  if (notice && TRANSCRIPT_LOAD_NOTICES.has(notice.kind))
+    return <TranscriptSkeleton label={notice.title} />;
   if (notice) return <TranscriptNotice notice={notice} />;
   if (isLoading) return <TranscriptSkeleton label="Loading session" />;
   return <EmptyTranscript />;
