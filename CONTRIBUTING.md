@@ -45,6 +45,7 @@ Core tooling:
 - Bun at the version in the `packageManager` field. [Root package manifest](package.json)
 - Node.js `24.14` or later
 - Xcode Command Line Tools
+- The stable Rust toolchain from [rustup](https://rustup.rs). It builds the native process module of `packages/process-native`.
 - `git`
 - `opencode`, `codex`, or `claude`
 
@@ -129,7 +130,7 @@ bun run test
 bun run build
 ```
 
-Use `bun run format` to apply Oxfmt formatting across the repository. The `format:check` command is intentionally repo-wide and runs before linting in both CI and the local pre-commit hook. Oxfmt honors Git ignore files, so generated outputs such as `dist`, `build`, `coverage`, and `.vite` are excluded from this gate. Oxlint checks JavaScript and TypeScript files in one repo-wide process; Oxfmt checks supported data and style files such as JSON and CSS. Neither tool checks SVG files.
+Use `bun run format` to apply Oxfmt formatting across the repository. The `format:check` command is intentionally repo-wide and runs before linting in both CI and the local pre-commit hook. Oxfmt honors Git ignore files, so generated outputs such as `dist`, `build`, `coverage`, and `.vite` are excluded from this gate. Oxlint checks JavaScript and TypeScript files in one repo-wide process; Oxfmt checks supported data and style files such as JSON and CSS. Neither tool checks SVG files. `bun run lint` also runs `cargo fmt --check`, `cargo clippy`, and `cargo test` for the Rust code of `packages/process-native`, so the CI check jobs check it on Linux, macOS, and Windows.
 
 `bun run typecheck` runs `bun check -p tsconfig.json` in each standalone TypeScript workspace and both configurations in MCP. The marketing website keeps `astro check --minimumFailingSeverity warning` and its local TypeScript 6 dependency. TypeScript `7.0.2` remains available for declaration builds and editors. See [Type checking](docs/typechecking.md) for configuration coverage, Bun compiler limits, cache behavior, and upgrade checks.
 

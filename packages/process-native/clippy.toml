@@ -1,0 +1,4 @@
+# A failed test may panic, so tests can unwrap and index.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true

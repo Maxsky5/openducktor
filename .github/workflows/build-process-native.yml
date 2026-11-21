@@ -1,0 +1,91 @@
+name: Build Native Process Module
+
+# Builds the native module of the Processes view for each released platform. The release
+# workflows download the artifacts into `packages/process-native/native` before they build a shell.
+# `scripts/prepare-web-publish-packages.ts` lists the same targets.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to build"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    # Debian 11 has glibc 2.31, so the Linux modules load on older distributions too.
+    container: ${{ matrix.container }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux
+            arch: x64
+            runner: ubuntu-latest
+            container: rust:1-bullseye
+            rust_target: x86_64-unknown-linux-gnu
+            library: libopenducktor_process_native.so
+          - platform: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            container: rust:1-bullseye
+            rust_target: aarch64-unknown-linux-gnu
+            library: libopenducktor_process_native.so
+          - platform: darwin
+            arch: arm64
+            runner: macos-15
+            container: ""
+            rust_target: aarch64-apple-darwin
+            library: libopenducktor_process_native.dylib
+          - platform: darwin
+            arch: x64
+            runner: macos-15-intel
+            container: ""
+            rust_target: x86_64-apple-darwin
+            library: libopenducktor_process_native.dylib
+          - platform: win32
+            arch: x64
+            runner: windows-latest
+            container: ""
+            rust_target: x86_64-pc-windows-msvc
+            library: openducktor_process_native.dll
+          - platform: win32
+            arch: arm64
+            runner: windows-latest
+            container: ""
+            rust_target: aarch64-pc-windows-msvc
+            library: openducktor_process_native.dll
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Build the module
+        shell: bash
+        working-directory: packages/process-native
+        # The desktop app supports macOS 12 and later.
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "12.0"
+        run: |
+          set -euo pipefail
+          rustup target add "${{ matrix.rust_target }}"
+          cargo build --release --locked --target "${{ matrix.rust_target }}"
+          mkdir -p out
+          cp "target/${{ matrix.rust_target }}/release/${{ matrix.library }}" \
+            "out/process-native.${{ matrix.platform }}-${{ matrix.arch }}.node"
+
+      - name: Upload the module
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: process-native-${{ matrix.platform }}-${{ matrix.arch }}
+          path: packages/process-native/out/*.node
+          if-no-files-found: error

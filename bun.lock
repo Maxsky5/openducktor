@@ -71,6 +71,7 @@
         "@openducktor/frontend-core": "workspace:*",
         "@openducktor/host": "workspace:*",
         "@openducktor/host-client": "workspace:*",
+        "@openducktor/process-native": "workspace:*",
         "@openducktor/remote-host": "workspace:*",
         "@tailwindcss/vite": "^4.3.4",
         "@types/mime-types": "^3.0.1",
@@ -381,6 +382,7 @@
         "@openducktor/contracts": "workspace:*",
         "@openducktor/core": "workspace:*",
         "@openducktor/path-support": "workspace:*",
+        "@openducktor/process-native": "workspace:*",
         "@openducktor/runtime-orchestration": "workspace:*",
         "@openducktor/workflows": "workspace:*",
         "@xterm/addon-serialize": "0.14.0",
@@ -454,6 +456,7 @@
         "@openducktor/frontend-core": "workspace:*",
         "@openducktor/host": "workspace:*",
         "@openducktor/host-client": "workspace:*",
+        "@openducktor/process-native": "workspace:*",
         "@openducktor/remote-host": "workspace:*",
         "@openducktor/workflows": "workspace:*",
         "@tailwindcss/vite": "^4.3.4",
@@ -480,6 +483,14 @@
       "version": "1.2.2",
       "devDependencies": {
         "bun-types": "^1.4.5",
+      },
+    },
+    "packages/process-native": {
+      "name": "@openducktor/process-native",
+      "version": "1.2.2",
+      "devDependencies": {
+        "@types/node": "^26.6.6",
+        "bun-types": "^1.4.2",
       },
     },
     "packages/product-scenes": {
@@ -1328,6 +1339,8 @@
     "@openducktor/mobile": ["@openducktor/mobile@workspace:apps/mobile"],
 
     "@openducktor/path-support": ["@openducktor/path-support@workspace:packages/path-support"],
+
+    "@openducktor/process-native": ["@openducktor/process-native@workspace:packages/process-native"],
 
     "@openducktor/product-scenes": ["@openducktor/product-scenes@workspace:packages/product-scenes"],
 

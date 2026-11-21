@@ -39,7 +39,7 @@
     "test:parallel": "bun run --workspaces test && bun run test:scripts",
     "format": "oxfmt . && bun run --filter @openducktor/marketing-website format",
     "format:check": "oxfmt --check . && bun run --filter @openducktor/marketing-website format:check",
-    "lint": "oxlint .",
+    "lint": "oxlint . && bun run --filter @openducktor/process-native lint:rust",
     "deps:unused:deps": "knip --workspace='@openducktor/*' --include dependencies",
     "deps:unused:exports": "knip --workspace='@openducktor/*' --include exports",
     "deps:unused:exports:report": "knip --workspace='@openducktor/*' --include exports --no-exit-code",

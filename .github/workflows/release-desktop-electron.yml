@@ -94,12 +94,21 @@ jobs:
       - name: Test Electron workspace
         run: bun run --filter @openducktor/electron test
 
+  process-native:
+    name: Build native process modules
+    needs:
+      - preflight
+    uses: ./.github/workflows/build-process-native.yml
+    with:
+      ref: ${{ needs.preflight.outputs.tag }}
+
   build-electron:
     name: Build ${{ matrix.label }} Electron assets
     permissions:
       contents: read
     needs:
       - preflight
+      - process-native
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -109,21 +118,25 @@ jobs:
           - label: Linux x64
             runner: ubuntu-latest
             platform: linux
+            native_platform: linux
             arch: x64
             signed_args: ""
           - label: macOS Apple Silicon
             runner: macos-15
             platform: macos
+            native_platform: darwin
             arch: arm64
             signed_args: "--signed"
           - label: macOS Intel
             runner: macos-15-intel
             platform: macos
+            native_platform: darwin
             arch: x64
             signed_args: "--signed"
           - label: Windows x64
             runner: windows-latest
             platform: windows
+            native_platform: win32
             arch: x64
             signed_args: ""
 
@@ -138,6 +151,12 @@ jobs:
 
       - name: Install JS dependencies
         run: bun install --frozen-lockfile
+
+      - name: Download the native process module
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: process-native-${{ matrix.native_platform }}-${{ matrix.arch }}
+          path: packages/process-native/native
 
       - name: Select Xcode 26.2 SDK
         if: matrix.platform == 'macos'
@@ -185,6 +204,8 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_TEAM_ID || '' }}
           SIGNED_ARGS: ${{ matrix.signed_args }}
+          # The job downloaded the native process module, so the build does not compile it.
+          OPENDUCKTOR_PROCESS_NATIVE: prebuilt
         shell: bash
         run: |
           set -euo pipefail
