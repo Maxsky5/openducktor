@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { Effect, Exit } from "effect";
-import { z } from "zod";
 import { TaskAssetError } from "../../application/task-assets/task-asset-error";
 import type { OpenDucktorConfigDirScope } from "../../config/openducktor-config-dir";
 import type { TaskAssetFilePort, TaskAssetQuarantine } from "../../ports/task-asset-file-port";
@@ -14,6 +13,7 @@ import {
   validateTaskAssetTaskContext as validateTaskContext,
 } from "./filesystem-task-asset-errors";
 import { createTaskAssetFileSafety } from "./filesystem-task-asset-file-safety";
+import { existingStat } from "./filesystem-task-asset-fs";
 import {
   createTaskAssetFileOwnership,
   type TaskAssetFileOwnershipDependencies,
@@ -26,20 +26,6 @@ import {
 import { removeWorkspaceTaskAssetData } from "./filesystem-task-asset-workspace-cleanup";
 
 type QuarantineMove = { from: string; to: string };
-
-const missingErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
-const isMissing = (cause: unknown): boolean => missingErrorSchema.safeParse(cause).success;
-
-const existingStat = async (target: string) => {
-  try {
-    return await lstat(target);
-  } catch (cause) {
-    if (isMissing(cause)) {
-      return null;
-    }
-    throw cause;
-  }
-};
 
 export const createNodeTaskAssetFilePort = (
   {

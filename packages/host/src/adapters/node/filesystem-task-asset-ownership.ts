@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { taskAssetIdSchema } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
 import { processIsAlive } from "../../infrastructure/process/process-tree";
 import type { TaskAssetFileChanges } from "./filesystem-task-asset-file-safety";
+import { existingStat, hasErrorCode } from "./filesystem-task-asset-fs";
 import { readNodeProcessStartedAtMs } from "./filesystem-task-asset-process-start";
 
 const taskAssetFileOwnerSchema = z
@@ -35,24 +36,6 @@ export type TaskAssetFileOwnershipDependencies = {
   owner: TaskAssetFileOwner;
   processIsAlive(processId: number): boolean;
   processStartedAtMs(processId: number): Promise<number>;
-};
-
-const nodeErrorSchema = z.object({ code: z.string() }).passthrough();
-const hasErrorCode = (cause: unknown, code: string): boolean => {
-  const parsed = nodeErrorSchema.safeParse(cause);
-  return parsed.success && parsed.data.code === code;
-};
-const isMissing = (cause: unknown): boolean => hasErrorCode(cause, "ENOENT");
-
-const existingStat = async (target: string) => {
-  try {
-    return await lstat(target);
-  } catch (cause) {
-    if (isMissing(cause)) {
-      return null;
-    }
-    throw cause;
-  }
 };
 
 const validateOwner = (value: TaskAssetFileOwnerInput): TaskAssetFileOwner => {
