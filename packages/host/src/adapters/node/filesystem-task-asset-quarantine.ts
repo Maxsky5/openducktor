@@ -1,30 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { taskAssetIdSchema, taskAssetRenderContextSchema } from "@openducktor/contracts";
 import { z, type JSONType } from "zod";
 import { parseJson } from "../../effect/json";
 import type { TaskAssetQuarantine } from "../../ports/task-asset-file-port";
 import type { TaskAssetFileChanges } from "./filesystem-task-asset-file-safety";
+import { existingStat, isMissing } from "./filesystem-task-asset-fs";
 
 export type QuarantineManifest = TaskAssetQuarantine & { version: 1 };
 
 const ACTIVE_PUBLICATIONS = new Set<string>();
 const PUBLICATION_PREFIX = ".publishing-";
-
-const missingErrorSchema = z.object({ code: z.literal("ENOENT") }).passthrough();
-const isMissing = (cause: unknown): boolean => missingErrorSchema.safeParse(cause).success;
-
-const existingStat = async (target: string) => {
-  try {
-    return await lstat(target);
-  } catch (cause) {
-    if (isMissing(cause)) {
-      return null;
-    }
-    throw cause;
-  }
-};
 
 const quarantineManifestSchema = z
   .object({
