@@ -65,6 +65,8 @@ Run the five full repository checks from [Contributing](../CONTRIBUTING.md#verif
 
 The full test suite builds the image and Claude transcript worker bundles and runs them under Node, Bun, and Electron. Run it with `bun run test`. The tests use the Electron runtime from `apps/electron` and download it on first use when it is missing.
 
+After `bun run build`, run `bun run test:post-build`. This command checks that the SQLite import workers from the Electron and web builds can each import a legacy task under Node and Bun.
+
 Before a web release, build the package and check its required files:
 
 ```sh

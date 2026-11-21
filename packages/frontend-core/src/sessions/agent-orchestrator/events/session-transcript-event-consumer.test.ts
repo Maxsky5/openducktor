@@ -13,6 +13,7 @@ import { historyToChatMessages } from "../support/session-history-chat-messages"
 import type { UpdateSession } from "./session-event-types";
 import {
   buildSession,
+  createRecordingSessionTodosUpdater,
   createSessionsRef,
   createSessionUpdater,
   getSession,
@@ -36,6 +37,7 @@ const createConsumerHarness = (
   const updateSession = createSessionUpdater(sessionsRef);
   const guardedUpdateSession: UpdateSession = (identity, updater) =>
     updateSession(identity, updater);
+  const { updateSessionTodos, getTodos } = createRecordingSessionTodosUpdater();
   const sessionTurnState = createSessionTurnState();
   const consumer = createAgentSessionTranscriptEventConsumer(
     {
@@ -46,12 +48,13 @@ const createConsumerHarness = (
         return current ?? createSession();
       },
       updateSession: guardedUpdateSession,
-      updateSessionTodos: () => undefined,
+      updateSessionTodos,
       sessionTurnState,
     },
     { batchWindowMs },
   );
   return {
+    getTodos,
     consumer: {
       ...consumer,
       handle: (event: AgentSessionTranscriptEvent, provenance?: "baseline" | "live") => {
@@ -73,6 +76,94 @@ const createConsumerHarness = (
 };
 
 describe("agent session transcript event consumer", () => {
+  test.each(["starting", "running", "idle", "stopped", "error"] as const)(
+    "sets status to running from %s on session_started without adding a message",
+    (status) => {
+      const { consumer, sessionsRef } = createConsumerHarness(
+        60_000,
+        buildSession({
+          runtimeKind: sessionRef.runtimeKind,
+          status,
+          runtimeStatusMessage: "Waiting for runtime",
+          pendingUserMessageStartedAt: 123,
+        }),
+      );
+      try {
+        consumer.handle({
+          type: "session_started",
+          sessionRef,
+          externalSessionId: sessionRef.externalSessionId,
+          timestamp: "2026-07-10T10:00:01.000Z",
+          message: "Session started",
+        });
+        const session = getSession(sessionsRef);
+        expect(session.status).toBe("running");
+        expect(session.runtimeStatusMessage).toBeNull();
+        expect(session.pendingUserMessageStartedAt).toBeUndefined();
+      } finally {
+        consumer.close();
+      }
+      expect(getSessionMessages(sessionsRef)).toEqual([]);
+    },
+  );
+
+  test("delivers the todo list to the session that sent it", () => {
+    const { consumer, getTodos } = createConsumerHarness(60_000);
+    const todo = {
+      id: "todo-1",
+      content: "Investigate live performance",
+      status: "in_progress",
+      priority: "high",
+    } as const;
+    try {
+      consumer.handle({
+        type: "session_todos_updated",
+        sessionRef,
+        externalSessionId: sessionRef.externalSessionId,
+        timestamp: "2026-02-22T08:00:01.000Z",
+        todos: [todo],
+      });
+    } finally {
+      consumer.close();
+    }
+    expect(getTodos(sessionRef)).toEqual([todo]);
+  });
+
+  test("combines queued assistant text before the next user message", () => {
+    const { consumer, sessionsRef } = createConsumerHarness(60_000);
+    try {
+      for (const delta of ["Hello", " world"]) {
+        consumer.handle({
+          type: "assistant_delta",
+          sessionRef,
+          externalSessionId: sessionRef.externalSessionId,
+          timestamp: "2026-02-22T08:00:01.000Z",
+          messageId: "assistant-1",
+          channel: "text",
+          delta,
+        });
+      }
+      expect(getSessionMessages(sessionsRef)).toEqual([]);
+
+      consumer.handle({
+        type: "user_message",
+        sessionRef,
+        externalSessionId: sessionRef.externalSessionId,
+        timestamp: "2026-02-22T08:00:02.000Z",
+        messageId: "user-1",
+        message: "Continue",
+        parts: [{ kind: "text", text: "Continue" }],
+        state: "read",
+      });
+      expect(getSessionMessages(sessionsRef)).toEqual([
+        expect.objectContaining({ role: "assistant", content: "Hello world" }),
+        expect.objectContaining({ role: "user", content: "Continue" }),
+      ]);
+    } finally {
+      consumer.close();
+    }
+  });
+
   test.each([
     ["baseline", "read", "active-submission"],
     ["live", "queued", "active-submission"],

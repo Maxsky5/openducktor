@@ -31,6 +31,7 @@
     "release:homebrew:cask": "bun run scripts/release-homebrew-cask.ts",
     "test:release:homebrew:cask": "bun test scripts/release-homebrew-cask.test.ts",
     "test:anti-slop": "bun run --filter @openducktor/anti-slop-oxlint test",
+    "test:post-build": "bun test scripts/host-database-import-worker.post-build.test.ts",
     "test:scripts": "bun test scripts/release-version.test.ts scripts/release-homebrew-cask.test.ts scripts/audit-check.test.ts scripts/bun-test-preload.test.ts scripts/install-script.test.ts scripts/install-powershell.test.ts scripts/test-shard.test.ts",
     "build": "bun run --workspaces build",
     "typecheck": "bun run --workspaces typecheck",
