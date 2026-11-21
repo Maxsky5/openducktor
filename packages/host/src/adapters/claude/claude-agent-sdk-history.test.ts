@@ -184,6 +184,45 @@ describe("claude-agent-sdk-history", () => {
     ]);
   });
 
+  test("starts the turn clock at a hidden Allow consent", () => {
+    const consent = claudeDeniedActionConsent({ toolName: "Bash", input: { command: "make" } });
+    const assistant = (uuid: string, timestamp: string, text: string) =>
+      toSessionMessage({
+        type: "assistant",
+        uuid,
+        timestamp,
+        message: {
+          id: uuid,
+          role: "assistant",
+          content: [{ type: "text", text }],
+          stop_reason: "end_turn",
+        },
+      });
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "prompt",
+          timestamp: "2026-06-26T10:00:00.000Z",
+          message: { role: "user", content: "Run make." },
+        }),
+        assistant("blocked-reply", "2026-06-26T10:00:05.000Z", "Auto mode blocked make."),
+        // The user allows the call an hour later. The consent starts a new, hidden turn.
+        toSessionMessage({
+          type: "user",
+          uuid: "consent",
+          timestamp: "2026-06-26T11:00:00.000Z",
+          origin: { kind: "human" },
+          message: { role: "user", content: consent ?? "" },
+        }),
+        assistant("retry-reply", "2026-06-26T11:00:07.000Z", "make ran."),
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    expect(history.at(-1)).toMatchObject({ messageId: "retry-reply", durationMs: 7_000 });
+  });
+
   test("hydrates failed Claude results as session errors and starts the next human clock", () => {
     const history = toClaudeHistoryMessages(
       [

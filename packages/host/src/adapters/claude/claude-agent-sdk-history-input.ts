@@ -40,6 +40,8 @@ type ClaudeHistoryInputProjection =
       handled: true;
       manualCompaction?: ManualCompactionInput;
       message?: ClaudeVisibleHistoryMessage;
+      /** A human prompt that history hides, such as an Allow consent. It still starts a turn. */
+      hiddenPrompt?: true;
     };
 
 const commandName = (text: string): string | undefined => text.trim().split(/\s/, 1)[0];
@@ -196,7 +198,7 @@ export const createClaudeHistoryInputProjector = (options: {
     const text = queued?.text ?? command ?? rawText;
     if (isClaudeDeniedActionConsent(text)) {
       pendingQueueEntry = null;
-      return handledWithoutMessage;
+      return { handled: true, hiddenPrompt: true };
     }
     if (text.trim().toLowerCase() === "/compact") {
       const commandTimestamp = queued?.timestamp ?? timestamp;
