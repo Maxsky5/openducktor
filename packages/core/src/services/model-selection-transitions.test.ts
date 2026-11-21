@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "../types/agent-orchestrator";
 import {
   resolveInitialModelSelection,
   resolveModelSelectionForModelChange,
+  resolveModelSelectionForPair,
   resolveModelSelectionForProfileChange,
   resolveModelSelectionForRuntimeChange,
   resolveModelSelectionForVariantChange,
@@ -197,6 +198,65 @@ describe("model-selection-state", () => {
       variant: "low",
       profileId: "reviewer",
     });
+  });
+
+  test("keeps the effort when the new model supports it", () => {
+    const catalog: AgentModelCatalog = {
+      ...CATALOG,
+      models: [...CATALOG.models, { ...CATALOG.models[0]!, id: "openai/o3", modelId: "o3" }],
+    };
+    const high = { ...EXPLICIT_SELECTION, providerId: "openai", modelId: "gpt-5", variant: "high" };
+
+    expect(
+      resolveModelSelectionForModelChange({
+        catalog,
+        currentSelection: high,
+        modelKey: "openai/o3",
+        runtimeKind: "opencode",
+      })?.variant,
+    ).toBe("high");
+    expect(
+      resolveModelSelectionForPair({
+        catalog,
+        currentSelection: high,
+        defaultSelection: null,
+        selectedModel: null,
+        value: { runtimeKind: "opencode", providerId: "openai", modelId: "o3" },
+      })?.selection.variant,
+    ).toBe("high");
+  });
+
+  test("keeps the effort when the runtime changes and the new model supports it", () => {
+    const codexCatalog: AgentModelCatalog = {
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5.5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5.5",
+          modelName: "GPT-5.5",
+          variants: ["low", "medium", "high"],
+        },
+      ],
+      defaultModelsByProvider: { openai: "gpt-5.5" },
+    };
+    const resolveVariant = (variant: string): string | undefined =>
+      resolveModelSelectionForPair({
+        catalog: codexCatalog,
+        currentSelection: { ...EXPLICIT_SELECTION, variant },
+        defaultSelection: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5.5",
+          variant: "medium",
+        },
+        selectedModel: null,
+        value: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5.5" },
+      })?.selection.variant;
+
+    expect(resolveVariant("high")).toBe("high");
+    expect(resolveVariant("max")).toBe("low");
   });
 
   test("keeps a speed only on models that support it", () => {

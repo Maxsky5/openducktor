@@ -848,7 +848,7 @@ describe("useSessionStartModalState", () => {
       runtimeKind: "claude",
       providerId: "claude",
       modelId: "default",
-      variant: "low",
+      variant: "high",
     });
     expect(harness.getLatest().variantOptions.map((option) => option.value)).toEqual([
       "low",

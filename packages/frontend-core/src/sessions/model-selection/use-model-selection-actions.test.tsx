@@ -397,7 +397,7 @@ describe("useModelSelectionActions", () => {
           ...claudeSelection,
           ...(change.setting === "effort"
             ? { variant: "xhigh" }
-            : { modelId: "claude-sonnet-4-6", variant: "medium" }),
+            : { modelId: "claude-sonnet-4-6" }),
           speed: "fast",
         });
       } finally {
