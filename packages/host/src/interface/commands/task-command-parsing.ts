@@ -9,11 +9,7 @@ import {
 } from "@openducktor/contracts";
 import { z } from "zod";
 import { HostValidationError } from "../../effect/host-errors";
-import {
-  commandInputStringSchema,
-  type CommandInputRecord,
-  requireParsedRecord,
-} from "./command-inputs";
+import { commandInputStringSchema, type CommandInputRecord, requireRecord } from "./command-inputs";
 
 const invalidInput = (message: string, field?: string): HostValidationError =>
   new HostValidationError({
@@ -150,7 +146,7 @@ export const parsePullRequest = (result: z.ZodSafeParseResult<PullRequest>): Pul
 export const parsePullRequestContent = (
   result: z.ZodSafeParseResult<CommandInputRecord>,
 ): PullRequestContent => {
-  const record = requireParsedRecord(result, "task_pull_request_upsert input.input");
+  const record = requireRecord(result, "task_pull_request_upsert input.input");
   const title = requireString(commandInputStringSchema.safeParse(record.title), "input.title");
   const body = commandInputStringSchema.safeParse(record.body);
   if (!body.success) {

@@ -12,7 +12,7 @@ const createHostCommandRouter = (input: CreateHostCommandRouterInput) =>
   toPromiseHostCommandRouter(createEffectHostCommandRouter(input));
 
 describe("createRuntimeDefinitionsCommandHandlers", () => {
-  test("routes runtime_definitions_list through the runtime definitions service", async () => {
+  test.each([undefined, {}])("lists runtime definitions with args %p", async (args) => {
     const service: RuntimeDefinitionsService = {
       listRuntimeDefinitions() {
         return [RUNTIME_DESCRIPTORS_BY_KIND.opencode];
@@ -21,21 +21,38 @@ describe("createRuntimeDefinitionsCommandHandlers", () => {
     const router = createHostCommandRouter({
       handlers: createRuntimeDefinitionsCommandHandlers(service),
     });
-    await expect(router.invoke("runtime_definitions_list", {})).resolves.toMatchObject([
+    await expect(router.invoke("runtime_definitions_list", args)).resolves.toMatchObject([
       { kind: "opencode" },
     ]);
   });
-  test("rejects malformed runtime definitions args", async () => {
-    const service: RuntimeDefinitionsService = {
-      listRuntimeDefinitions() {
-        throw new Error("should not call runtime definitions service");
-      },
-    };
+  describe("invalid arguments", () => {
     const router = createHostCommandRouter({
-      handlers: createRuntimeDefinitionsCommandHandlers(service),
+      handlers: createRuntimeDefinitionsCommandHandlers({
+        listRuntimeDefinitions() {
+          throw new Error("should not call runtime definitions service");
+        },
+      }),
     });
-    await expect(router.invoke("runtime_definitions_list", { force: true })).rejects.toThrow(
-      "runtime_definitions_list does not accept arguments.",
-    );
+
+    test("rejects a record with arguments", async () => {
+      await expect(
+        router.invoke("runtime_definitions_list", { force: true }),
+      ).rejects.toMatchObject({
+        _tag: "HostValidationError",
+        message: "runtime_definitions_list does not accept arguments.",
+        field: "args",
+        details: { command: "runtime_definitions_list" },
+      });
+    });
+
+    test("rejects an empty array", async () => {
+      // @ts-expect-error Verify validation for an untyped caller.
+      const result = router.invoke("runtime_definitions_list", []);
+      await expect(result).rejects.toMatchObject({
+        _tag: "HostValidationError",
+        message: "runtime_definitions_list input must be an object.",
+        field: "runtime_definitions_list input",
+      });
+    });
   });
 });

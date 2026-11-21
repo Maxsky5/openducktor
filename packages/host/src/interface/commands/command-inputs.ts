@@ -31,17 +31,6 @@ export const requireRecord = (
   return result.data;
 };
 
-export const requireParsedRecord = (
-  result: z.ZodSafeParseResult<CommandInputRecord>,
-  label: string,
-): CommandInputRecord => {
-  if (!result.success) {
-    throw invalidInput(`${label} must be an object.`, label);
-  }
-
-  return result.data;
-};
-
 export const requireString = (result: z.ZodSafeParseResult<string>, label: string): string => {
   if (!result.success || result.data.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
