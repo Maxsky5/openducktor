@@ -1,3 +1,4 @@
+import type { AgentToolDenialSource } from "@openducktor/contracts";
 import type { AgentSessionScope } from "@openducktor/contracts";
 import {
   AgentSessionMessageAcceptanceUnknownError,
@@ -78,6 +79,8 @@ export type PrepareOpencodeSessionRuntimeInput = {
 };
 export type OpencodeNativeApprovalReply = {
   onIssued?: (() => void) | undefined;
+  /** The host rejects the prompt for the read-only role, not for the user. */
+  denialSource?: Extract<AgentToolDenialSource, "read_only_role"> | undefined;
   ref: SessionRef;
   nativeRequestId: string;
   outcome: import("@openducktor/contracts").RuntimeApprovalReplyOutcome;
@@ -435,6 +438,10 @@ export const createPrepareOpencodeSessionRuntime =
         const projector = projectors.get(binding.detail.id)!;
         // Delivery events contain only IDs, so retained payloads must survive snapshot reads.
         const retractedIds = new Set(projector.seed(messages));
+        // A prompt raised before this read has no live ask event.
+        for (const request of approvals)
+          if (request.source?.type === "tool")
+            projector.recordApprovalAsk(request.id, request.source.id);
         for (const item of inbox) {
           if (item.sessionID !== binding.detail.id)
             throw operationError(
@@ -800,6 +807,8 @@ export const createPrepareOpencodeSessionRuntime =
         return;
       }
       if (event.type === "permission.asked") {
+        if (event.data.source?.type === "tool")
+          projectors.get(externalSessionId)?.recordApprovalAsk(event.data.id, event.data.source.id);
         let projectDirectory: string;
         try {
           projectDirectory = await nativeRequest(
@@ -1211,6 +1220,10 @@ export const createPrepareOpencodeSessionRuntime =
               decision: permissionDecision(request.outcome),
             };
           if (request.message) reply.message = request.message;
+          if (request.denialSource === "read_only_role")
+            projectors
+              .get(request.ref.externalSessionId)
+              ?.recordRoleReject(request.nativeRequestId);
           request.onIssued?.();
           await client.permission.reply(reply);
         });
