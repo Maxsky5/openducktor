@@ -1,3 +1,4 @@
+import { pathKey } from "./process-path-keys";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
@@ -172,6 +173,9 @@ const chat = (): WorktreeOwnershipChat => ({
   archivedAt: 1_793_000_000_000,
 });
 
+/** The fixtures use real temporary folders, so their paths follow the platform of the host. */
+const testPathPlatform = globalThis.process.platform === "win32" ? "windows" : "posix";
+
 const createService = (
   inspector: ProcessInspectorPort,
   options: {
@@ -199,8 +203,10 @@ const createService = (
         }),
       resolveConfiguredPath: (path: string) => path,
       join: (...paths: string[]) => join(...paths),
+      // Git prints Windows paths with `/`, so the fake compares paths as the host does.
       pathExists: (path: string) =>
-        path === options.unreadablePath
+        options.unreadablePath !== undefined &&
+        pathKey(path, testPathPlatform) === pathKey(options.unreadablePath, testPathPlatform)
           ? Effect.fail(
               new HostPathAccessError({
                 path,
@@ -234,8 +240,7 @@ const createService = (
         }),
     }),
     inspector,
-    // The fixtures use real temporary folders, so their paths follow the platform of the host.
-    pathPlatform: globalThis.process.platform === "win32" ? "windows" : "posix",
+    pathPlatform: testPathPlatform,
     hostProcessIds: () => [104],
     managedProcesses: () => options.managed ?? new Map(),
     hostLaunchPaths:

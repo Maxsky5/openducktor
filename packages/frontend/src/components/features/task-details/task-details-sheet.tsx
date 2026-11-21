@@ -39,7 +39,7 @@ import {
 } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { useTaskDetailsHistoricalSessions } from "@/features/task-workflow/use-task-details-historical-sessions";
 import { canDetectTaskPullRequest } from "@openducktor/frontend-core/tasks/presentation/task-display";
-import { useProcessesActions } from "@/components/features/processes/processes-context";
+import { useOpenTaskProcesses } from "@/components/features/processes/use-open-task-processes";
 
 const EMPTY_TASK_SESSIONS: KanbanTaskSession[] = [];
 
@@ -81,16 +81,10 @@ export function TaskDetailsSheetContent(
   } = props;
   const open = useDialogOpen("TaskDetailsSheetContent", "TaskDetailsSheetFrame");
   const claimDialog = useTaskDetailsSheetClaimDialog();
-  const processes = useProcessesActions();
-  const processWorkspaceId = activeWorkspace?.workspaceId ?? null;
   // The sheet closes, so the flyout beside the rail shows the processes of the task first.
-  const openProcesses =
-    processes && processWorkspaceId
-      ? () => {
-          onOpenChange(false);
-          processes.openProcesses({ workspaceId: processWorkspaceId, taskId: task.id });
-        }
-      : undefined;
+  const openProcesses = useOpenTaskProcesses(activeWorkspace?.workspaceId ?? null, task.id, () =>
+    onOpenChange(false),
+  );
   const taskId = task.id;
   const contextTaskSessions = getContextTaskSessions(workflowActions, taskId);
   const activeSessionContext = getActiveTaskSessionContext(workflowActions, taskId);
