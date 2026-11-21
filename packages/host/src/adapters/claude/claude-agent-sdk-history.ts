@@ -239,12 +239,13 @@ export const toClaudeHistoryMessages = (
       }
       if (projectedMessage.role === "user") {
         // Native history can omit a notification's result and assistant output.
-        const previous = history.findLast((message) => message.role !== "system");
-        history.push(projectedMessage);
+        // The CLI writes this marker when the user stops a turn. The user did not type it.
         if (isClaudeUserStopMessage(entry)) {
           endCurrentTurn();
           continue;
         }
+        const previous = history.findLast((message) => message.role !== "system");
+        history.push(projectedMessage);
         // Steering keeps the first prompt's start, even before assistant output.
         if (!lastAssistantMessage || hasFinalStopStep(lastAssistantMessage)) {
           if (

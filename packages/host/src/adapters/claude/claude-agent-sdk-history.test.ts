@@ -381,6 +381,8 @@ describe("claude-agent-sdk-history", () => {
       );
 
       expect(history.at(-1)).toMatchObject({ messageId: "next-response", durationMs: 672 });
+      // The CLI wrote the marker. The user did not type it, so it is not a user message.
+      expect(history.some((message) => message.text === stopMarker)).toBe(false);
     },
   );
 
