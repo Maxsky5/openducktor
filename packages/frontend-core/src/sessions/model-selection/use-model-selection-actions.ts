@@ -113,6 +113,7 @@ export const useModelSelectionActions = ({
       void applySelection((currentSelection) => {
         const resolvedPair = resolveModelSelectionForPair({
           catalog: targetCatalog,
+          currentCatalog: selectionCatalog,
           currentSelection,
           defaultSelection: null,
           selectedModel: null,
@@ -131,7 +132,7 @@ export const useModelSelectionActions = ({
         return nextSelection;
       }).catch(reportError);
     },
-    [applySelection, feedback, loadedSessionIdentity, reportError],
+    [applySelection, feedback, loadedSessionIdentity, reportError, selectionCatalog],
   );
 
   // The speed control reports its own failure, so this handler returns the update.

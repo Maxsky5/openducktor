@@ -131,7 +131,7 @@ describe("RepositoryAgentsSection", () => {
       runtimeKind: "codex",
       providerId: "openai",
       modelId: "o3",
-      variant: "low",
+      variant: "high",
       profileId: "",
     });
   });

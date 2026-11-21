@@ -265,6 +265,51 @@ describe("useModelSelectionActions", () => {
     await harness.unmount();
   });
 
+  test("keeps the supported effort and speed in a cross-runtime draft change", async () => {
+    const applyDraftSelection = mock(() => {});
+    const feedback = createFeedbackFake();
+    const harness = createHarness(
+      createBaseProps({
+        loadedSessionIdentity: null,
+        applyDraftSelection,
+        selectedModelSelection: { ...claudeSelection, speed: "fast" },
+      }),
+      feedback,
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSelectModelPair(
+        { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+        {
+          models: [
+            {
+              id: "openai/gpt-5",
+              providerId: "openai",
+              providerName: "OpenAI",
+              modelId: "gpt-5",
+              modelName: "GPT-5",
+              variants: ["medium", "high"],
+              // Codex calls the "Fast" level `priority`.
+              speedLevels: [{ id: "priority", label: "Fast" }],
+            },
+          ],
+          defaultModelsByProvider: { openai: "gpt-5" },
+        },
+      );
+    });
+
+    expect(applyDraftSelection).toHaveBeenCalledWith({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5",
+      variant: "high",
+      speed: "priority",
+    });
+    expect(feedback.shownOf("info")).toEqual([]);
+    await harness.unmount();
+  });
+
   test.each([
     { live: true, speed: "fast", expected: { ...claudeSelection, speed: "fast" } },
     { live: false, speed: "standard", expected: claudeSelection },
@@ -397,7 +442,7 @@ describe("useModelSelectionActions", () => {
           ...claudeSelection,
           ...(change.setting === "effort"
             ? { variant: "xhigh" }
-            : { modelId: "claude-sonnet-4-6", variant: "medium" }),
+            : { modelId: "claude-sonnet-4-6" }),
           speed: "fast",
         });
       } finally {

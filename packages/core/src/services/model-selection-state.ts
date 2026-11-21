@@ -2,12 +2,15 @@ import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "../types/agent-orchestrator";
 import {
   findCatalogModel,
+  findMatchingCatalogSpeed,
   normalizeCatalogSpeed,
   normalizeCatalogVariant,
   normalizeVisibleCatalogProfileId,
   pickCatalogDefaultModel,
   pickVisibleCatalogDefaultProfileId,
   resolveSavedModelAlias,
+  selectionSpeedPreference,
+  type SpeedPreference,
 } from "./model-catalog-selection";
 
 export type ResolvedModelPair = {
@@ -202,12 +205,15 @@ export const resolveModelSelectionForRuntimeChange = ({
 
 export const resolveModelSelectionForPair = ({
   catalog,
+  currentCatalog,
   currentSelection,
   defaultSelection,
   selectedModel,
   value,
 }: {
   catalog: AgentModelCatalog | null;
+  /** The catalog of `currentSelection`. It gives the speed label to match in another runtime. */
+  currentCatalog: AgentModelCatalog | null;
   currentSelection: AgentModelSelection | null;
   defaultSelection: AgentModelSelection | null;
   selectedModel: AgentModelSelection | null;
@@ -234,6 +240,9 @@ export const resolveModelSelectionForPair = ({
     currentSelection: runtimeSelection,
     modelKey: `${model.providerId}/${model.modelId}`,
     runtimeKind: value.runtimeKind,
+    // Keep only the effort and speed of the replaced selection, never a runtime default.
+    preferredVariant: currentSelection?.variant,
+    preferredSpeed: selectionSpeedPreference(currentCatalog, currentSelection),
   });
   if (
     !selection ||
@@ -272,16 +281,24 @@ export const resolveModelSelectionForProfileChange = ({
   return { ...currentSelection, profileId: normalizedProfileId };
 };
 
+/**
+ * Keeps `preferredVariant` and `preferredSpeed` when the new model supports them.
+ * Otherwise the selection uses the first variant of the model and standard speed.
+ */
 export const resolveModelSelectionForModelChange = ({
   catalog,
   currentSelection,
   modelKey,
   runtimeKind,
+  preferredVariant,
+  preferredSpeed,
 }: {
   catalog: AgentModelCatalog | null;
   currentSelection: AgentModelSelection | null;
   modelKey: string;
   runtimeKind: RuntimeKind;
+  preferredVariant: string | undefined;
+  preferredSpeed: SpeedPreference | undefined;
 }): AgentModelSelection | null => {
   if (!catalog || (catalog.runtime?.kind && catalog.runtime.kind !== runtimeKind)) {
     return currentSelection;
@@ -294,7 +311,7 @@ export const resolveModelSelectionForModelChange = ({
     return currentSelection;
   }
 
-  const variant = normalizeCatalogVariant(model, undefined);
+  const variant = normalizeCatalogVariant(model, preferredVariant);
   const profileId = normalizeVisibleCatalogProfileId(
     catalog,
     currentSelection?.profileId ?? pickVisibleCatalogDefaultProfileId(catalog),
@@ -310,7 +327,7 @@ export const resolveModelSelectionForModelChange = ({
   if (profileId) {
     selection.profileId = profileId;
   }
-  const speed = normalizeCatalogSpeed(model, currentSelection?.speed);
+  const speed = findMatchingCatalogSpeed(model, preferredSpeed)?.id;
   if (speed) {
     selection.speed = speed;
   }
