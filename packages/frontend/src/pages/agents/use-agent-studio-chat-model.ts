@@ -160,7 +160,6 @@ export function useAgentStudioChatModel({
       : null,
   });
   const goalRowScope = useSessionGoalRowScope(selectedSessionIdentity);
-  const selectedSessionModel = selectedSessionState.selectedModel;
   const selectedSessionRuntimeData = selectedSessionState.runtimeData;
   const rawTranscriptSession = useMemo(
     () =>
@@ -367,13 +366,7 @@ export function useAgentStudioChatModel({
       goalRow,
       goalRowScope,
       displayedSessionKey: selectedSessionKey,
-      selectedSession: selectedSessionIdentity
-        ? {
-            ...selectedSessionIdentity,
-            selectedModel: selectedSessionModel,
-          }
-        : null,
-      isSessionModelCatalogLoading: selectedSessionRuntimeData.isLoadingModelCatalog,
+      selectedSession: selectedSessionIdentity,
       isSessionWorking: sessionActions.isSessionWorking,
       foregroundTurnActive: selectedSessionState.loadedSession?.foregroundTurnActive,
       isWaitingInput: sessionActions.isWaitingInput,
@@ -475,9 +468,7 @@ export function useAgentStudioChatModel({
     pendingSendItems,
     selectedSession.pendingInput.waitingInputPlaceholder,
     selectedSessionIdentity,
-    selectedSessionModel,
     selectedSessionKey,
-    selectedSessionRuntimeData.isLoadingModelCatalog,
     surfaceState.composerReadOnly,
     surfaceState.composerReadOnlyReason,
     sessionActions.canStopSession,

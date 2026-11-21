@@ -5,6 +5,7 @@ import { toInlineCommentDraftStorageKey } from "@openducktor/frontend-core/draft
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { draftToSerializedText } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import { CLAUDE_SESSION_ACCENT_COLOR, CODEX_SESSION_ACCENT_COLOR } from "../agent-accent-color";
 import { buildModelSelection, createComposerDraft } from "./agent-chat-test-fixtures";
 import {
   type AgentChatComposerConfig,
@@ -16,7 +17,6 @@ const buildComposerConfig = (
 ): AgentChatComposerConfig => ({
   displayedSessionKey: null,
   selectedSession: null,
-  isSessionModelCatalogLoading: false,
   isSessionWorking: false,
   isWaitingInput: false,
   waitingInputPlaceholder: null,
@@ -90,6 +90,35 @@ const buildComposerConfig = (
 });
 
 describe("useAgentChatComposerModel", () => {
+  test.each([
+    ["opencode", "var(--odt-runtime-accent-opencode)"],
+    ["codex", CODEX_SESSION_ACCENT_COLOR],
+    ["claude", CLAUDE_SESSION_ACCENT_COLOR],
+  ] as const)(
+    "uses the %s draft model accent before a session is selected",
+    (runtimeKind, accentColor) => {
+      const composer: AgentChatComposerConfig = {
+        ...buildComposerConfig(async () => true),
+        selectedModelSelection: { ...buildModelSelection(), runtimeKind },
+      };
+      const composerFormRef = createRef<HTMLFormElement>();
+      const composerEditorRef = createRef<HTMLDivElement>();
+      const scrollToBottomOnSendRef = createRef<() => void>();
+      const { result } = renderHook(() =>
+        useAgentChatComposerModel({
+          composer,
+          interactionEnabled: true,
+          composerFormRef,
+          composerEditorRef,
+          resizeComposerEditor: () => {},
+          scrollToBottomOnSendRef,
+        }),
+      );
+
+      expect(result.current?.accentColor).toBe(accentColor);
+    },
+  );
+
   test("forwards only the caller draft when stale task review comments exist without an adapter", async () => {
     const ownerKey = toInlineCommentDraftStorageKey({
       workspaceId: "workspace-1",

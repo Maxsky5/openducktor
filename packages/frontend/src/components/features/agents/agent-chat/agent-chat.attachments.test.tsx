@@ -61,7 +61,6 @@ const buildModel = () => ({
     isSessionWorking: false,
     isWaitingInput: false,
     waitingInputPlaceholder: null,
-    isModelSelectionPending: false,
     selectedModelSelection: buildModelSelection(),
     speed: null,
     selectedModelDescriptor: {

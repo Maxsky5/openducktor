@@ -241,10 +241,10 @@ export function WorkspaceSessionChat({
   const target = useMemo(
     () =>
       sendTarget({
-        canSend: canInteract && actions.isPrepared && !picker.isLoading,
+        canSend: canInteract,
         assertCanSubmit,
       }),
-    [assertCanSubmit, canInteract, actions.isPrepared, picker.isLoading, sendTarget],
+    [assertCanSubmit, canInteract, sendTarget],
   );
   const messageDelivery = useAgentChatSend({
     identity,
