@@ -304,7 +304,10 @@ export function TaskEditorSheet({
             ) : (
               <EditIntro controller={controller} taskId={task?.id ?? null} />
             )}
-            <View style={[styles.body, isFormDisabled && styles.disabled]}>
+            {/* Keep this native view, so the dimmed opacity of a save does not move the fields. A task
+                save then closes the sheet. See react-native-screens#5202 under Design system in the
+                mobile README. */}
+            <View collapsable={false} style={[styles.body, isFormDisabled && styles.disabled]}>
               <EditorContent controller={controller} imageContext={imageContext} images={images} />
             </View>
             {controller.footerError ? (
