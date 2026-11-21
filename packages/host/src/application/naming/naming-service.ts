@@ -32,7 +32,7 @@ export type NamingRequest<K extends NamingKind> = {
  * no model call happened. A time-out is not an error: the caller uses its current names and shows
  * no notice. A failure has a message that says what failed.
  */
-export type NamingOutcome<K extends NamingKind> =
+type NamingOutcome<K extends NamingKind> =
   | { status: "disabled" }
   | { status: "generated"; answer: NamingAnswer<K> }
   | { status: "timed_out" }
