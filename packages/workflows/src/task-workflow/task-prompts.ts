@@ -27,7 +27,7 @@ import {
 import { formatOdtToolArgs } from "./prompt-tool-args";
 import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
 
-type PromptPurpose = "system" | "kickoff" | "message" | "permission" | "goal";
+export type PromptPurpose = "system" | "kickoff" | "message" | "permission" | "goal";
 
 /** A prompt that a workflow declares. Its ID is unique within the workflow. */
 export type PromptTemplate = {

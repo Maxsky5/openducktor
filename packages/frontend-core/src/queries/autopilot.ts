@@ -4,6 +4,7 @@ import { connectionHost } from "../connection/client-connection";
 export const autopilotQueryKeys = {
   all: ["autopilot"] as const,
   state: (workspaceId: string) => [...autopilotQueryKeys.all, "state", workspaceId] as const,
+  settings: () => [...autopilotQueryKeys.all, "settings"] as const,
 };
 
 /** Live run events change the held outcomes, so each read asks the host again. */

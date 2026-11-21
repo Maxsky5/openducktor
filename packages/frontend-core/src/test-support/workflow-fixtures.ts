@@ -14,7 +14,7 @@ import type {
 } from "@openducktor/contracts";
 import { workspaceWorkflows } from "../queries/workflows";
 
-const builtinWorkflowDescriptor = taskWorkflowDescriptor(specPlanBuildWorkflow);
+export const builtinWorkflowDescriptor = taskWorkflowDescriptor(specPlanBuildWorkflow);
 /** The wire catalog of a host with the built-in workflow. */
 export const builtinWorkflowCatalogFixture: WorkflowCatalog = {
   hostInstanceId: "test-host",

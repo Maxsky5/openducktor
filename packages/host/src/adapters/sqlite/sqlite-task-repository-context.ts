@@ -67,7 +67,7 @@ export const readWorkspaceSet = <A>(
         ({ session }) =>
           use({ session, workspaceIds: workspaces.map(({ workspaceId }) => workspaceId) }),
       );
-type SqliteHostDatabaseProvider = <A, E>(
+export type SqliteHostDatabaseProvider = <A, E>(
   operation: string,
   use: (session: HostDatabaseSession) => Effect.Effect<A, E>,
 ) => Effect.Effect<A, E | TaskStoreError>;

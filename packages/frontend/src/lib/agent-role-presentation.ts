@@ -36,14 +36,16 @@ const PlannerRoleIcon = createLucideIcon("role-planner", [
   ["path", { d: "M8 18.5h5a3 3 0 0 0 2.6-1.5", key: "route" }],
 ]);
 
-const BuilderRoleIcon = createLucideIcon("role-builder", [
+/** @public The workflow editor uses this icon for events sent by the builder. */
+export const BuilderRoleIcon = createLucideIcon("role-builder", [
   ["path", { d: "M4 14.5a8 8.5 0 0 1 16 0", key: "dome" }],
   ["path", { d: "M10 6.3V11", key: "ridge-left" }],
   ["path", { d: "M14 6.3V11", key: "ridge-right" }],
   ["rect", { x: "2", y: "14.5", width: "20", height: "5", rx: "2.5", key: "brim" }],
 ]);
 
-const QaRoleIcon = createLucideIcon("role-qa", [
+/** @public The workflow editor uses this icon for events sent by QA. */
+export const QaRoleIcon = createLucideIcon("role-qa", [
   ["circle", { cx: "10.5", cy: "10.5", r: "7.5", key: "lens" }],
   ["path", { d: "m21 21-5.2-5.2", key: "handle" }],
   ["path", { d: "m7.5 10.5 2 2 4-4", key: "check" }],

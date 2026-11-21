@@ -2,6 +2,7 @@ import { workflowPromptSettings } from "@openducktor/frontend-core/queries/workf
 import {
   builtinCompiledCatalogFixture,
   builtinWorkflowCatalogFixture,
+  builtinWorkflowDescriptor as descriptor,
 } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 import { compileWorkflowCatalog, type PromptSettingsLayers } from "@openducktor/workflows";
 import { specPlanBuildPromptKey } from "@openducktor/workflows/test-support";
@@ -100,14 +101,13 @@ test("a workflow page lists the prompts of the workflow by when the agent gets t
 });
 
 test("each workflow has its own page and its own prompts", () => {
-  const [descriptor] = builtinWorkflowCatalogFixture.workflows;
   const catalog = compileWorkflowCatalog({
     ...builtinWorkflowCatalogFixture,
     workflows: [
-      descriptor!,
+      descriptor,
       {
-        ...descriptor!,
-        definition: { ...descriptor!.definition, id: "bug-triage", label: "Bug Triage" },
+        ...descriptor,
+        definition: { ...descriptor.definition, id: "bug-triage", label: "Bug Triage" },
       },
     ],
   });

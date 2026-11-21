@@ -9,7 +9,7 @@ import type {
 import { Effect, Result } from "effect";
 import { TaskPolicyError } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
-import type { TaskWorkflowResolver } from "../../../ports/task-workflow-port";
+import type { StoredTask, TaskWorkflowResolver } from "../../../ports/task-workflow-port";
 
 export type AdmittedTaskEvent = Exclude<TaskEventDecision, { kind: "denied" }>;
 
@@ -66,7 +66,7 @@ export const decideCoreTaskAction = (
 /** The store decision of a core task action, made again for each locked task row. */
 export const coreTaskTransition =
   (taskWorkflows: Pick<TaskWorkflowResolver, "forTask">, action: CoreTaskAction) =>
-  (task: TaskFacts) =>
+  (task: TaskFacts & StoredTask) =>
     Result.map(decideCoreTaskAction(action, task), (decision) => ({
       ...decisionTransition(decision),
       workflowId: taskWorkflows.forTask(task).definition.id,

@@ -7,7 +7,7 @@ import type {
 import type { TaskWorkflow } from "@openducktor/workflows";
 
 /** A task that the task store holds. Pass the task record when the code has read it. */
-type StoredTask = { readonly id: string };
+export type StoredTask = { readonly id: string };
 
 /** The validated host workflow inventory and its task and workspace resolution. */
 export type TaskWorkflowResolver = {

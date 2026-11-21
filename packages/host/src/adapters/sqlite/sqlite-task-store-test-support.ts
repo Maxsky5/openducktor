@@ -15,7 +15,7 @@ import type { TaskOwnershipReader, TaskStorePort } from "../../ports/task-reposi
 import { createSqliteTaskRepository } from "./sqlite-task-repository";
 import {
   createSqliteHostDatabaseManager,
-  type SqliteHostDatabaseManager,
+  type SqliteHostDatabaseProvider,
   type SqliteWorkspacesReadProvider,
   type SqliteTaskRepositoryContextProvider,
 } from "./sqlite-task-repository-context";
@@ -102,7 +102,7 @@ export type SqliteTaskStoreTestHarness = {
   readonly workspaceId: string;
   readonly scope: { workspaceId: string; repoPath: string };
   readonly contextProvider: SqliteTaskRepositoryContextProvider;
-  readonly withHostDatabase: SqliteHostDatabaseManager["withHostDatabase"];
+  readonly withHostDatabase: SqliteHostDatabaseProvider;
   readonly workspacesProvider: SqliteWorkspacesReadProvider;
   readonly taskOwnership: TaskOwnershipReader;
   readonly databasePath: string;
