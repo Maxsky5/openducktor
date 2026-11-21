@@ -90,11 +90,10 @@ export const parseCommandInput = <Schema extends z.ZodType>(
 };
 
 export const requireNoArgs = (command: string, args: HostCommandArgs): void => {
-  const record =
-    args === undefined
-      ? undefined
-      : requireRecord(commandInputRecordSchema.safeParse(args), `${command} input`);
-  if (record !== undefined && Object.keys(record).length > 0) {
+  if (args === undefined) return;
+
+  requireRecord(commandInputRecordSchema.safeParse(args), `${command} input`);
+  if (Object.keys(args).length > 0) {
     throw new HostValidationError({
       message: `${command} does not accept arguments.`,
       field: "args",

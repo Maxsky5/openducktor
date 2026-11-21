@@ -34,10 +34,11 @@ describe("createRuntimeDefinitionsCommandHandlers", () => {
       }),
     });
 
-    test("rejects a record with arguments", async () => {
-      await expect(
-        router.invoke("runtime_definitions_list", { force: true }),
-      ).rejects.toMatchObject({
+    test.each([
+      { key: "force", args: { force: true } },
+      { key: "__proto__", args: { ["__proto__"]: true } },
+    ])("rejects an argument named $key", async ({ args }) => {
+      await expect(router.invoke("runtime_definitions_list", args)).rejects.toMatchObject({
         _tag: "HostValidationError",
         message: "runtime_definitions_list does not accept arguments.",
         field: "args",
