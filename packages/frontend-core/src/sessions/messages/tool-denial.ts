@@ -68,4 +68,5 @@ export const findDeniedAction = (
 export const TOOL_DENIAL_ALLOW_LABEL = "Allow this call";
 export const TOOL_DENIAL_ALLOWING_LABEL = "Allowing";
 export const TOOL_DENIAL_ALLOW_HINT = "The agent can try it again.";
-export const TOOL_DENIAL_ALLOWED_MESSAGE = "You allowed this call. The agent can try it again.";
+export const TOOL_DENIAL_ALLOWED_LABEL = "You allowed this call.";
+export const TOOL_DENIAL_ALLOWED_DETAIL = "The agent can try it again.";

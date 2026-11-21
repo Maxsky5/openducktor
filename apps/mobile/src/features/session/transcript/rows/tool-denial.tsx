@@ -3,7 +3,8 @@ import {
   readToolDenialPresentation,
   TOOL_DENIAL_ALLOW_HINT,
   TOOL_DENIAL_ALLOW_LABEL,
-  TOOL_DENIAL_ALLOWED_MESSAGE,
+  TOOL_DENIAL_ALLOWED_DETAIL,
+  TOOL_DENIAL_ALLOWED_LABEL,
   TOOL_DENIAL_ALLOWING_LABEL,
   type ToolDenialRiskTone,
 } from "@openducktor/frontend-core/sessions/messages/tool-denial";
@@ -93,8 +94,14 @@ function DeniedToolActionRow({ action }: { action: DeniedToolAction }): ReactEle
     return (
       <View style={styles.actionBlock}>
         <View style={styles.allowed}>
-          <Icon name="check" size={14} colorValue={desktop.successMuted} />
-          <Text style={styles.allowedText}>{TOOL_DENIAL_ALLOWED_MESSAGE}</Text>
+          <View style={styles.allowedIcon}>
+            <Icon name="check" size={14} colorValue={desktop.successMuted} />
+          </View>
+          {/* One line for each sentence: a narrow screen would break the second one. */}
+          <View style={styles.allowedLines}>
+            <Text style={styles.allowedLabel}>{TOOL_DENIAL_ALLOWED_LABEL}</Text>
+            <Text style={styles.allowedText}>{TOOL_DENIAL_ALLOWED_DETAIL}</Text>
+          </View>
         </View>
         {failure}
       </View>
@@ -124,7 +131,7 @@ const LABEL_TEXT = { fontSize: 13, lineHeight: 18 } as const;
 const SMALL_TEXT = { fontSize: 13, lineHeight: 19 } as const;
 
 const styles = StyleSheet.create((theme) => ({
-  // The desktop `ml-[22px] rounded-lg border border-warning-border/50 bg-card px-3 py-2.5`. The
+  // The desktop `ml-[22px] rounded-lg border border-warning-border/50 bg-card px-3.5 py-3`. The
   // card starts under the tool name: the row inset, the 14 point icon, and the 8 point gap.
   card: {
     marginLeft: theme.space.xs + 14 + 8,
@@ -133,8 +140,8 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.sm,
     borderColor: withAlpha(theme.desktop.warningBorder, 0.5),
     backgroundColor: theme.desktop.card,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   heading: { flexDirection: "row", alignItems: "center", gap: 8 },
   label: { ...sansWeight("medium"), ...LABEL_TEXT, flexShrink: 1, color: theme.desktop.foreground },
@@ -146,16 +153,26 @@ const styles = StyleSheet.create((theme) => ({
   riskWarningText: { color: theme.desktop.warningMuted },
   riskDanger: { borderColor: theme.desktop.destructiveBorder },
   riskDangerText: { color: theme.desktop.destructiveMuted },
-  body: { paddingLeft: 22, gap: 10 },
-  detail: { ...sansWeight("regular"), ...SMALL_TEXT, color: theme.desktop.mutedForeground },
-  actionBlock: { gap: 6 },
+  body: { paddingLeft: 22 },
+  detail: {
+    ...sansWeight("regular"),
+    ...SMALL_TEXT,
+    marginTop: 4,
+    color: theme.desktop.mutedForeground,
+  },
+  actionBlock: { marginTop: 12, gap: 6 },
   actionRow: { flexDirection: "row" },
   failure: { ...sansWeight("regular"), ...SMALL_TEXT, color: theme.desktop.destructiveMuted },
-  allowed: { flexDirection: "row", alignItems: "center", gap: 6 },
+  // The check sits in the shield column, so the text starts under the label.
+  allowed: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginLeft: -22 },
+  // Centers the icon on the first line when the text wraps.
+  allowedIcon: { height: SMALL_TEXT.lineHeight, justifyContent: "center" },
   allowedText: {
-    ...sansWeight("medium"),
+    ...sansWeight("regular"),
     ...SMALL_TEXT,
     flexShrink: 1,
-    color: theme.desktop.successMuted,
+    color: theme.desktop.mutedForeground,
   },
+  allowedLines: { flexShrink: 1 },
+  allowedLabel: { ...sansWeight("regular"), ...SMALL_TEXT, color: theme.desktop.successMuted },
 }));

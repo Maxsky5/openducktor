@@ -1,9 +1,9 @@
 import type { AgentToolDenial } from "@openducktor/contracts";
 import {
   readToolDenialPresentation,
-  TOOL_DENIAL_ALLOW_HINT,
   TOOL_DENIAL_ALLOW_LABEL,
-  TOOL_DENIAL_ALLOWED_MESSAGE,
+  TOOL_DENIAL_ALLOWED_DETAIL,
+  TOOL_DENIAL_ALLOWED_LABEL,
   TOOL_DENIAL_ALLOWING_LABEL,
   type ToolDenialRiskTone,
 } from "@openducktor/frontend-core/sessions/messages/tool-denial";
@@ -41,7 +41,7 @@ export const ToolDenialNotice = ({
       role="note"
       aria-label={label}
       data-slot="tool-denial"
-      className="ml-[22px] min-w-0 rounded-lg border border-warning-border/50 bg-card px-3 pt-2.5 pb-3 text-xs"
+      className="ml-[22px] min-w-0 rounded-lg border border-warning-border/50 bg-card px-3.5 py-3 text-xs"
     >
       <div className="flex min-w-0 items-center gap-2">
         <ShieldAlert aria-hidden="true" className="size-3.5 shrink-0 text-warning-accent" />
@@ -58,9 +58,9 @@ export const ToolDenialNotice = ({
         ) : null}
       </div>
       {/* The text and the action start under the label: the 14 px icon and the 8 px gap. */}
-      <div className="space-y-2 pl-[22px]">
+      <div className="pl-[22px]">
         {detail ? (
-          <p className="max-w-[72ch] whitespace-pre-wrap leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">
+          <p className="mt-1 whitespace-pre-wrap leading-[18px] text-muted-foreground [overflow-wrap:anywhere]">
             {detail}
           </p>
         ) : null}
@@ -70,7 +70,7 @@ export const ToolDenialNotice = ({
   );
 };
 
-/** The Allow button and what it does, its progress, or the note that the user allowed the call. */
+/** The Allow button and its progress, or the note that the user allowed the call. */
 const DeniedToolActionRow = ({ action }: { action: DeniedToolAction }): ReactElement => {
   const failure = action.failure ? (
     <p role="alert" className="leading-5 text-destructive-muted [overflow-wrap:anywhere]">
@@ -79,37 +79,39 @@ const DeniedToolActionRow = ({ action }: { action: DeniedToolAction }): ReactEle
   ) : null;
   if (action.state === "allowed") {
     return (
-      <div className="space-y-1">
-        <p className="flex items-center gap-1.5 font-medium leading-5 text-success-muted">
-          <Check aria-hidden="true" className="size-3.5 shrink-0" />
-          {TOOL_DENIAL_ALLOWED_MESSAGE}
+      // The check sits in the shield column, so the text starts under the label.
+      <div className="mt-3 -ml-[22px] space-y-1">
+        <p className="flex items-start gap-2 leading-5">
+          {/* Centered on the first line: the 20 px line and the 14 px icon. */}
+          <Check aria-hidden="true" className="mt-[3px] size-3.5 shrink-0 text-success-muted" />
+          <span>
+            <span className="text-success-muted">{TOOL_DENIAL_ALLOWED_LABEL}</span>{" "}
+            <span className="text-muted-foreground">{TOOL_DENIAL_ALLOWED_DETAIL}</span>
+          </span>
         </p>
-        {failure}
+        <div className="pl-[22px]">{failure}</div>
       </div>
     );
   }
   return (
-    <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <Button
-          type="button"
-          variant="warning"
-          size="sm"
-          className="h-7 gap-1.5 px-3"
-          disabled={action.isSending}
-          aria-busy={action.isSending}
-          onClick={action.allow}
-        >
-          {action.isSending ? (
-            <LoaderCircle
-              aria-hidden="true"
-              className="size-3.5 animate-spin motion-reduce:animate-none"
-            />
-          ) : null}
-          {action.isSending ? TOOL_DENIAL_ALLOWING_LABEL : TOOL_DENIAL_ALLOW_LABEL}
-        </Button>
-        <p className="leading-5 text-muted-foreground">{TOOL_DENIAL_ALLOW_HINT}</p>
-      </div>
+    <div className="mt-3 space-y-1.5">
+      <Button
+        type="button"
+        variant="warning"
+        size="sm"
+        className="h-7 gap-1.5 px-3"
+        disabled={action.isSending}
+        aria-busy={action.isSending}
+        onClick={action.allow}
+      >
+        {action.isSending ? (
+          <LoaderCircle
+            aria-hidden="true"
+            className="size-3.5 animate-spin motion-reduce:animate-none"
+          />
+        ) : null}
+        {action.isSending ? TOOL_DENIAL_ALLOWING_LABEL : TOOL_DENIAL_ALLOW_LABEL}
+      </Button>
       {failure}
     </div>
   );
