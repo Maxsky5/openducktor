@@ -5,13 +5,25 @@ describe("readToolDenialPresentation", () => {
   test("shows the source label and the reason of the policy", () => {
     expect(
       readToolDenialPresentation({ source: "auto_mode", reason: "  Pushes to main.  " }),
-    ).toEqual({ label: "Blocked by auto mode", reason: "Pushes to main.", riskLabel: null });
+    ).toEqual({ label: "Blocked by auto mode", reason: "Pushes to main.", risk: null });
   });
 
-  test("shows the risk level of an auto-review denial", () => {
+  test("shows the category of a Claude classifier reason without its brackets", () => {
     expect(
-      readToolDenialPresentation({ source: "auto_review", reason: "Risky.", riskLevel: "high" }),
-    ).toEqual({ label: "Blocked by auto-review", reason: "Risky.", riskLabel: "Risk: High" });
+      readToolDenialPresentation({ source: "auto_mode", reason: "[Undermining Oversight]" }).reason,
+    ).toBe("Undermining Oversight");
+    expect(readToolDenialPresentation({ source: "auto_mode", reason: "[a] and [b]" }).reason).toBe(
+      "[a] and [b]",
+    );
+  });
+
+  test("shows the risk level of an auto-review denial with its tone", () => {
+    const risk = (riskLevel: "low" | "medium" | "high" | "critical") =>
+      readToolDenialPresentation({ source: "auto_review", reason: "Risky.", riskLevel }).risk;
+    expect(risk("low")).toEqual({ label: "Low risk", tone: "neutral" });
+    expect(risk("medium")).toEqual({ label: "Medium risk", tone: "warning" });
+    expect(risk("high")).toEqual({ label: "High risk", tone: "danger" });
+    expect(risk("critical")).toEqual({ label: "Critical risk", tone: "danger" });
   });
 
   test("says why an auto-review row has no reason", () => {
@@ -21,7 +33,7 @@ describe("readToolDenialPresentation", () => {
     expect(readToolDenialPresentation({ source: "auto_review_timeout" })).toEqual({
       label: "Auto-review timed out",
       reason: "The review timed out.",
-      riskLabel: null,
+      risk: null,
     });
   });
 
@@ -29,7 +41,7 @@ describe("readToolDenialPresentation", () => {
     expect(readToolDenialPresentation({ source: "read_only_role" })).toEqual({
       label: "Blocked by read-only role",
       reason: null,
-      riskLabel: null,
+      risk: null,
     });
   });
 });

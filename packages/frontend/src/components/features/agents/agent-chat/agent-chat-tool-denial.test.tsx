@@ -60,7 +60,7 @@ describe("ToolDenialNotice", () => {
     );
 
     expect(view.getByText("Blocked by auto-review")).toBeTruthy();
-    expect(view.getByText("Risk: High")).toBeTruthy();
+    expect(view.getByText("High risk")).toBeTruthy();
     expect(view.getByText("Sends the token to an unknown host.")).toBeTruthy();
     expect(view.queryByRole("button", { name: "Allow" })).toBeNull();
   });

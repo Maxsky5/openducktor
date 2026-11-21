@@ -1,17 +1,25 @@
 import type { AgentToolDenial } from "@openducktor/contracts";
 import {
   readToolDenialPresentation,
+  TOOL_DENIAL_ALLOW_HINT,
   TOOL_DENIAL_ALLOWED_MESSAGE,
+  type ToolDenialRiskTone,
 } from "@openducktor/frontend-core/sessions/messages/tool-denial";
 import { useDeniedToolAction } from "@openducktor/frontend-core/sessions/messages/use-denied-tool-action";
 import { Check, LoaderCircle, ShieldAlert } from "lucide-react";
 import type { ReactElement } from "react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+const RISK_TONE_CLASS_NAMES = {
+  neutral: "border-border bg-muted text-muted-foreground",
+  warning: "border-warning-border bg-warning-surface text-warning-muted",
+  danger: "border-destructive-border bg-destructive-surface text-destructive-muted",
+} as const satisfies Record<ToolDenialRiskTone, string>;
 
 /**
  * Why a policy blocked a call, under its tool line. A call that the user can allow has an Allow
- * button until the user allows it. The reason wraps, so the reader always sees all of it.
+ * footer until the user allows it. The reason wraps, so the reader always sees all of it.
  */
 export const ToolDenialNotice = ({
   callId,
@@ -20,74 +28,81 @@ export const ToolDenialNotice = ({
   callId: string;
   denial: AgentToolDenial;
 }): ReactElement => {
-  const { label, reason, riskLabel } = readToolDenialPresentation(denial);
+  const { label, reason, risk } = readToolDenialPresentation(denial);
   return (
-    <Alert
-      variant="warning"
+    <section
       role="note"
+      aria-label={label}
       data-slot="tool-denial"
-      className="ml-[22px] min-w-0 flex-col gap-1.5 rounded-md px-2.5 py-2 text-xs"
+      className="ml-[22px] min-w-0 overflow-hidden rounded-lg border border-border bg-card text-xs"
     >
-      <AlertTitle className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 leading-normal text-warning-muted">
-        <ShieldAlert aria-hidden="true" className="size-3.5 shrink-0 text-warning-accent" />
-        <span>{label}</span>
-        {riskLabel ? (
-          <span className="rounded border border-warning-border px-1 py-px text-[11px] leading-4">
-            {riskLabel}
-          </span>
-        ) : null}
-      </AlertTitle>
-      {reason ? (
-        <AlertDescription className="whitespace-pre-wrap text-xs [overflow-wrap:anywhere]">
-          {reason}
-        </AlertDescription>
-      ) : null}
-      <DeniedToolActionControl callId={callId} />
-    </Alert>
+      <div className="flex min-w-0 items-start gap-2.5 px-3 py-2.5">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-warning-border bg-warning-surface text-warning-accent">
+          <ShieldAlert aria-hidden="true" className="size-3.5" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-[13px] font-medium leading-6 text-foreground">{label}</p>
+            {risk ? (
+              <span
+                className={cn(
+                  "rounded-full border px-2 text-[11px] font-medium leading-[18px]",
+                  RISK_TONE_CLASS_NAMES[risk.tone],
+                )}
+              >
+                {risk.label}
+              </span>
+            ) : null}
+          </div>
+          {reason ? (
+            <p className="whitespace-pre-wrap leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+              {reason}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <DeniedToolActionFooter callId={callId} />
+    </section>
   );
 };
 
-/** The Allow button, its progress, or the note that the user allowed the call. */
-const DeniedToolActionControl = ({ callId }: { callId: string }): ReactElement | null => {
+/** The Allow button and its note, its progress, or the note that the user allowed the call. */
+const DeniedToolActionFooter = ({ callId }: { callId: string }): ReactElement | null => {
   const action = useDeniedToolAction(callId);
   if (!action) return null;
   const failure = action.failure ? (
-    <p role="alert" className="leading-5 text-destructive-muted [overflow-wrap:anywhere]">
+    <p role="alert" className="w-full leading-5 text-destructive-muted [overflow-wrap:anywhere]">
       {action.failure}
     </p>
   ) : null;
   if (action.state === "allowed") {
     return (
-      <>
-        <p className="flex items-center gap-1.5 leading-5 text-success-muted">
-          <Check aria-hidden="true" className="size-3.5 shrink-0" />
-          {TOOL_DENIAL_ALLOWED_MESSAGE}
-        </p>
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-success-border bg-success-surface px-3 py-2 text-success-muted">
+        <Check aria-hidden="true" className="size-3.5 shrink-0" />
+        <p className="leading-5">{TOOL_DENIAL_ALLOWED_MESSAGE}</p>
         {failure}
-      </>
+      </div>
     );
   }
   return (
-    <>
-      <div>
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          disabled={action.isSending}
-          aria-busy={action.isSending}
-          onClick={action.allow}
-        >
-          {action.isSending ? (
-            <LoaderCircle
-              aria-hidden="true"
-              className="size-3 animate-spin motion-reduce:animate-none"
-            />
-          ) : null}
-          {action.isSending ? "Allowing" : "Allow"}
-        </Button>
-      </div>
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-border bg-muted/40 px-3 py-2">
+      <p className="leading-5 text-muted-foreground">{TOOL_DENIAL_ALLOW_HINT}</p>
+      <Button
+        type="button"
+        size="xs"
+        disabled={action.isSending}
+        aria-busy={action.isSending}
+        onClick={action.allow}
+      >
+        {action.isSending ? (
+          <LoaderCircle
+            aria-hidden="true"
+            className="size-3 animate-spin motion-reduce:animate-none"
+          />
+        ) : null}
+        {action.isSending ? "Allowing" : "Allow"}
+      </Button>
       {failure}
-    </>
+    </div>
   );
 };

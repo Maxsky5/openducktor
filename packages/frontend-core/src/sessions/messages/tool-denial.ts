@@ -14,12 +14,15 @@ export const TOOL_DENIAL_LABELS = {
   read_only_role: "Blocked by read-only role",
 } as const satisfies Record<AgentToolDenialSource, string>;
 
-const RISK_LEVEL_LABELS = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  critical: "Critical",
-} as const satisfies Record<AgentToolDenialRiskLevel, string>;
+/** How strongly a row shows the risk level of an auto-review denial. */
+export type ToolDenialRiskTone = "neutral" | "warning" | "danger";
+
+const RISKS = {
+  low: { label: "Low risk", tone: "neutral" },
+  medium: { label: "Medium risk", tone: "warning" },
+  high: { label: "High risk", tone: "danger" },
+  critical: { label: "Critical risk", tone: "danger" },
+} as const satisfies Record<AgentToolDenialRiskLevel, { label: string; tone: ToolDenialRiskTone }>;
 
 /** What a row says when the policy gave no reason. Other sources show no text. */
 const MISSING_REASONS = {
@@ -35,17 +38,23 @@ export type ToolDenialPresentation = {
   label: string;
   /** The reason of the policy, or a note when the policy gave none. Null for no text. */
   reason: string | null;
-  /** `Risk: High` for an auto-review denial with a risk level, else null. */
-  riskLabel: string | null;
+  /** The risk level of an auto-review denial, else null. */
+  risk: { label: string; tone: ToolDenialRiskTone } | null;
+};
+
+/** The Claude auto mode classifier gives a category in brackets, such as `[Git Destructive]`. */
+const BRACKETED_CATEGORY = /^\[([^[\]]+)\]$/u;
+
+const readReason = (denial: AgentToolDenial): string | null => {
+  const reason = denial.reason?.trim();
+  if (!reason) return MISSING_REASONS[denial.source];
+  return BRACKETED_CATEGORY.exec(reason)?.[1]?.trim() ?? reason;
 };
 
 export const readToolDenialPresentation = (denial: AgentToolDenial): ToolDenialPresentation => ({
   label: TOOL_DENIAL_LABELS[denial.source],
-  reason: denial.reason?.trim() || MISSING_REASONS[denial.source],
-  riskLabel:
-    denial.source === "auto_review" && denial.riskLevel
-      ? `Risk: ${RISK_LEVEL_LABELS[denial.riskLevel]}`
-      : null,
+  reason: readReason(denial),
+  risk: denial.source === "auto_review" && denial.riskLevel ? RISKS[denial.riskLevel] : null,
 });
 
 /** The Allow state of one denied call of a session, or null when the user cannot allow it. */
@@ -55,4 +64,5 @@ export const findDeniedAction = (
 ): AgentSessionDeniedAction | null =>
   deniedActions?.find((action) => action.callId === callId) ?? null;
 
+export const TOOL_DENIAL_ALLOW_HINT = "Allow lets the agent try this exact call again.";
 export const TOOL_DENIAL_ALLOWED_MESSAGE = "You allowed this call. The agent can try it again.";
