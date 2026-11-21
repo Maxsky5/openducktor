@@ -7,7 +7,8 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
-import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
+import { createRuntimeLaunch } from "../../infrastructure/process/runtime-launch";
+import { resolveCodexNpmShim } from "./codex-npm-shim";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
@@ -27,6 +28,7 @@ import {
   createRuntimeSummary,
 } from "../runtimes/runtime-live-session-attachment";
 import { type CodexChildProcess, cleanupCodexRuntime } from "./codex-runtime-cleanup";
+import { trackManagedProcess } from "../../infrastructure/process/managed-processes";
 
 export type CreateCodexRuntimeStarterInput = {
   toolDiscovery: ToolDiscoveryPort;
@@ -79,12 +81,13 @@ export const createCodexRuntimeStarter = ({
       );
       const command = yield* Effect.try({
         try: () =>
-          createProcessCommandLaunch(
+          createRuntimeLaunch(
             binary,
             ["app-server"],
             // Each thread receives its workspace MCP binding through per-thread config.
             withoutOpenDucktorMcpEnvironment(readEnv()),
             platform,
+            resolveCodexNpmShim,
           ),
         catch: (cause) =>
           new HostValidationError({
@@ -169,6 +172,7 @@ export const createCodexRuntimeStarter = ({
             launchDirectory,
           }),
       });
+      trackManagedProcess(child, command.managed);
       child.once("close", (exitCode, signal) => {
         closed = true;
         closeDescription =

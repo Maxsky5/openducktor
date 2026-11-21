@@ -115,7 +115,13 @@ const HOST_CAPABILITIES: readonly string[] = [
 ];
 
 const WORK_COMMANDS = new Set<string>(HOST_COMMAND_NAMES);
-const SHELL_COMMANDS = new Set(["open_external_url", "system_open_directory_in_tool"]);
+/** Commands that act on the machine of the host. Only the local shell may send them. */
+const SHELL_COMMANDS = new Set([
+  "open_external_url",
+  "system_open_directory_in_tool",
+  "workspace_process_stop",
+  "workspace_processes_list",
+]);
 /** Network resources observe the supplied host. They never create or dispose it. */
 export const createRemoteWorkInterface = (
   services: RemoteHostServices,

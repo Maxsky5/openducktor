@@ -337,6 +337,9 @@ const createElectronHostCommandRouter = (runtimeDistribution: HostRuntimeDistrib
     },
     runtimeDistribution,
     terminalPty: createNodePtyPort(),
+    // The build copies the native process module into `dist/native`. Electron Builder unpacks it.
+    processNativeDirectory: path.join(distDirectory, "native"),
+    shellProcessIds: () => app.getAppMetrics().map((metric) => metric.pid),
     browserEngine: () => Effect.succeed(browserRuntime.engine),
   });
 

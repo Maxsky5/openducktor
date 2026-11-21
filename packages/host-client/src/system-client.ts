@@ -7,8 +7,14 @@ import {
   systemListOpenInToolsRequestSchema,
   systemOpenDirectoryInToolRequestSchema,
   systemOpenInToolInfoSchema,
+  type WorkspaceProcessList,
+  workspaceProcessListSchema,
+  type WorkspaceProcessStopRequest,
+  workspaceProcessStopRequestSchema,
+  type WorkspaceProcessStopResponse,
+  workspaceProcessStopResponseSchema,
 } from "@openducktor/contracts";
-import type { InvokeFn } from "./invoke-utils";
+import type { InvokeFn, InvokeOptions } from "./invoke-utils";
 import { arrayResultSchema, okResultSchema } from "./invoke-utils";
 
 const systemListOpenInTools = async (
@@ -59,5 +65,26 @@ export class HostSystemClient {
     toolId: SystemOpenInToolId,
   ): Promise<void> {
     return systemOpenDirectoryInTool(this.invokeFn, directoryPath, toolId);
+  }
+
+  /** Opens a URL in the system browser of the host machine. Only a local shell may send it. */
+  async openExternalUrl(url: string): Promise<void> {
+    await this.invokeFn("open_external_url", { url }, okResultSchema("open_external_url"));
+  }
+
+  /** Lists the processes of the open workspaces. Only a local shell may send it. */
+  async workspaceProcessesList(options?: InvokeOptions): Promise<WorkspaceProcessList> {
+    return this.invokeFn("workspace_processes_list", {}, workspaceProcessListSchema, options);
+  }
+
+  /** Stops processes after the host checks them again. Only a local shell may send it. */
+  async workspaceProcessStop(
+    request: WorkspaceProcessStopRequest,
+  ): Promise<WorkspaceProcessStopResponse> {
+    return this.invokeFn(
+      "workspace_process_stop",
+      workspaceProcessStopRequestSchema.parse(request),
+      workspaceProcessStopResponseSchema,
+    );
   }
 }

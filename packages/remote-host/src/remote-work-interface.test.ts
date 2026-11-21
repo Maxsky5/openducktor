@@ -369,10 +369,14 @@ test("negotiates across app releases and refuses bypass, origins, missing capabi
       });
       expect(work.header.type).toBe("result");
       expect(f.mutations).toEqual(["dark"]);
-      expect(
-        (await channel.request({ method: "invoke", command: "open_external_url", args: {} }))
-          .header,
-      ).toMatchObject({ error: { kind: "refused", failure: { code: "function_unavailable" } } });
+      for (const command of [
+        "open_external_url",
+        "workspace_processes_list",
+        "workspace_process_stop",
+      ])
+        expect(
+          (await channel.request({ method: "invoke", command, args: {} })).header,
+        ).toMatchObject({ error: { kind: "refused", failure: { code: "function_unavailable" } } });
     } finally {
       await channel.close();
     }

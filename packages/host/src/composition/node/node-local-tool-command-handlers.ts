@@ -8,34 +8,50 @@ import { createGitCommandHandlers } from "../../interface/commands/git-command-h
 import { createOpenInToolsCommandHandlers } from "../../interface/commands/open-in-tools-command-handlers";
 import { createSystemDiagnosticsCommandHandlers } from "../../interface/commands/system-diagnostics-command-handlers";
 import { createSystemPlatformCommandHandlers } from "../../interface/commands/system-platform-command-handlers";
+import { createWorkspaceProcessService } from "../../application/processes/workspace-process-service";
+import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
+import { readManagedProcesses } from "../../infrastructure/process/managed-processes";
+import { createWorkspaceProcessCommandHandlers } from "../../interface/commands/workspace-process-command-handlers";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { RepoStoreDiagnostics } from "../../ports/task-repository-ports";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
+import type { NodeTaskAssetServices } from "./node-task-asset-services";
+import { createOpenDucktorMcpLaunchPaths } from "../../adapters/mcp/openducktor-mcp-command";
 
-/** The commands of the local tools: the file system, Git, Open in, and the system checks. */
+/**
+ * The commands of the local tools: the file system, Git, Open in, the system checks, and the
+ * Processes view.
+ */
 export const createNodeLocalToolCommandHandlers = ({
   filesystem,
   git,
   openInTools,
+  processInspector,
+  runtimeDistribution,
+  shellProcessIds,
   systemCommands,
   toolDiscovery,
   userEnvironment,
   worktreeFiles,
   settingsConfig,
-  repoStoreDiagnostics,
+  assets,
+  workspaceSettings,
   remoteFetch,
 }: Pick<
   NodeHostDefaultPorts,
   | "filesystem"
   | "git"
   | "openInTools"
+  | "processInspector"
+  | "runtimeDistribution"
+  | "shellProcessIds"
   | "systemCommands"
   | "toolDiscovery"
   | "userEnvironment"
   | "worktreeFiles"
 > & {
   settingsConfig: SettingsConfigPort;
-  repoStoreDiagnostics: RepoStoreDiagnostics;
+  assets: Pick<NodeTaskAssetServices, "taskStore" | "taskOwnership" | "workspaceSessionStore">;
+  workspaceSettings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
   /** The fetch that merge detection also uses. */
   remoteFetch: RemoteFetchService;
 }) => ({
@@ -48,9 +64,25 @@ export const createNodeLocalToolCommandHandlers = ({
     createSystemDiagnosticsService({
       systemCommands,
       toolDiscovery,
-      repoStoreDiagnostics,
+      repoStoreDiagnostics: assets.taskStore,
       userEnvironment,
     }),
   ),
   ...createSystemPlatformCommandHandlers(),
+  ...createWorkspaceProcessCommandHandlers(
+    createWorkspaceProcessService({
+      git,
+      settingsConfig,
+      taskOwnership: assets.taskOwnership,
+      workspaceSessions: assets.workspaceSessionStore,
+      workspaceSettings,
+      inspector: processInspector,
+      pathPlatform: process.platform === "win32" ? "windows" : "posix",
+      stopForcesExit: process.platform === "win32",
+      // The host process and its shell never show in the view.
+      hostProcessIds: () => [process.pid, ...shellProcessIds()],
+      managedProcesses: readManagedProcesses,
+      hostLaunchPaths: createOpenDucktorMcpLaunchPaths({ runtimeDistribution, toolDiscovery }),
+    }),
+  ),
 });

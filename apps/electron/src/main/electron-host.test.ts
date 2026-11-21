@@ -31,6 +31,7 @@ import {
   type RuntimeStarterPort,
   type SystemCommandPort,
   type TaskStorePort,
+  type ProcessInspectorPort,
   type TerminalPtyPort,
   type WorktreeFilePort,
 } from "@openducktor/host";
@@ -148,6 +149,8 @@ const createElectronHostCommandRouter = async ({
     runtimeDistribution: testRuntimeDistribution,
     browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
     terminalPty: unexpectedTerminalPty,
+    processInspector: unexpectedProcessInspector,
+    processNativeDirectory: "/missing-process-native",
     taskEventPublicationReporter: { report: () => Effect.void },
     ...input,
   });
@@ -158,6 +161,14 @@ const createElectronHostCommandRouter = async ({
 /** These router tests open no terminal. */
 const unexpectedTerminalPty: TerminalPtyPort = {
   start: () => Effect.die(new Error("A terminal PTY is not expected in this test.")),
+};
+
+const unexpectedProcessInspector: ProcessInspectorPort = {
+  listProcesses: () => Effect.die(new Error("Process reads are not expected in this test.")),
+  inspectProcesses: () => Effect.die(new Error("Process reads are not expected in this test.")),
+  stopMode: () => Effect.die(new Error("Process reads are not expected in this test.")),
+  stopProcess: () => Effect.die(new Error("Process stops are not expected in this test.")),
+  readStandardInputs: () => Effect.die(new Error("Process reads are not expected in this test.")),
 };
 
 /** Reads one task from the listed tasks, as the real store does. */
@@ -1409,6 +1420,8 @@ describe("createElectronHostCommandRouter", () => {
           isPackaged: false,
           onBackgroundFailure: () => Effect.void,
           terminalPty: unexpectedTerminalPty,
+          processInspector: unexpectedProcessInspector,
+          processNativeDirectory: "/missing-process-native",
           taskEventPublicationReporter: { report: () => Effect.void },
           browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
           processEnv: {

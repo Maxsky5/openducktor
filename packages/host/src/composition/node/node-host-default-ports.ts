@@ -42,6 +42,7 @@ import { type OpenInToolsPort } from "../../ports/open-in-tools-port";
 import type { RuntimeExecutableProbesByKind } from "../../ports/runtime-executable-probe-port";
 import { type RuntimeHealthPort } from "../../ports/runtime-health-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
+import type { ProcessInspectorPort } from "../../ports/process-inspector-port";
 import { type SystemCommandPort } from "../../ports/system-command-port";
 import { type TerminalPtyPort } from "../../ports/terminal-pty-port";
 import { type ToolDiscoveryId, type ToolDiscoveryPort } from "../../ports/tool-discovery-port";
@@ -50,6 +51,11 @@ import type {
   UserEnvironmentResolution,
 } from "../../ports/user-environment-port";
 import { type WorktreeFilePort } from "../../ports/worktree-file-port";
+import {
+  createNativeProcessInspector,
+  createProcessNativeLoader,
+  createWindowsUrlOpener,
+} from "../../adapters/node/native-process-inspector";
 
 export type NodeHostDefaultPorts = {
   imageWorkers: GeneratedImageWorkers;
@@ -68,6 +74,9 @@ export type NodeHostDefaultPorts = {
   systemCommands: SystemCommandPort;
   toolDiscovery: ToolDiscoveryPort;
   terminalPty: TerminalPtyPort;
+  processInspector: ProcessInspectorPort;
+  /** The processes of the shell around the host, such as the Electron helpers. */
+  shellProcessIds: () => readonly number[];
   browserEngine: BrowserEnginePort;
   browserAutomation: BrowserAutomationPort;
   userEnvironment: UserEnvironmentPort;
@@ -103,6 +112,8 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
   configDirScope: OpenDucktorConfigDirScope;
   runtimeDistribution: HostRuntimeDistribution;
   terminalPty: TerminalPtyPort;
+  /** The directory that holds the native process module of this platform. */
+  processNativeDirectory: string;
   /** Creates the browser engine of the shell. It gets the config root for its browser data. */
   browserEngine: BrowserEngineFactory;
 } & Partial<{
@@ -113,6 +124,9 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
     localAttachments: LocalAttachmentPort;
     openInTools: OpenInToolsPort;
     processEnv: NodeJS.ProcessEnv;
+    processInspector: ProcessInspectorPort;
+    /** The processes of the shell around the host. The Processes view never shows them. */
+    shellProcessIds: () => readonly number[];
     processEnvironmentInput: CreateProcessEnvironmentInput;
     runtimeExecutableProbes: RuntimeExecutableProbesByKind;
     runtimeHealth: RuntimeHealthPort;
@@ -151,6 +165,7 @@ export const createNodeHostDefaultPorts = (
         const readEnv = () => userEnvironment.current().environment;
         const startupEnv = readEnv();
         const systemCommands = input.systemCommands ?? createSystemCommandRunner({ readEnv });
+        const processNative = createProcessNativeLoader(input.processNativeDirectory);
         const bundledToolBinDirs =
           input.runtimeDistribution.mode === "artifact" &&
           input.runtimeDistribution.bundledToolBinDirs
@@ -208,7 +223,12 @@ export const createNodeHostDefaultPorts = (
           generatedImageFiles:
             input.generatedImageFiles ?? createGeneratedImageFileAdapter(imageWorkers),
           localAttachments: input.localAttachments ?? createLocalAttachmentAdapter(),
-          openInTools: input.openInTools ?? createOpenInToolsAdapter({ systemCommands }),
+          openInTools:
+            input.openInTools ??
+            createOpenInToolsAdapter({
+              systemCommands,
+              openUrlOnWindows: createWindowsUrlOpener(processNative),
+            }),
           configDir,
           runtimeDistribution: input.runtimeDistribution,
           runtimeExecutableProbes,
@@ -216,6 +236,8 @@ export const createNodeHostDefaultPorts = (
           systemCommands,
           toolDiscovery,
           terminalPty: input.terminalPty,
+          processInspector: input.processInspector ?? createNativeProcessInspector(processNative),
+          shellProcessIds: input.shellProcessIds ?? (() => []),
           browserAutomation: createPlaywrightBrowserAutomation(),
           userEnvironment,
           readEnv,

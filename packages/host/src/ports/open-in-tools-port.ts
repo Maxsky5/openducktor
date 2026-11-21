@@ -1,6 +1,7 @@
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import type { Effect } from "effect";
 import type {
+  HostDependencyErrorAggregate,
   HostOperationErrorAggregate,
   HostPathAccessErrorAggregate,
   HostPathNotFoundErrorAggregate,
@@ -8,6 +9,7 @@ import type {
 } from "../effect/host-errors";
 
 export type OpenInToolsPortError =
+  | HostDependencyErrorAggregate
   | HostOperationErrorAggregate
   | HostPathAccessErrorAggregate
   | HostPathNotFoundErrorAggregate

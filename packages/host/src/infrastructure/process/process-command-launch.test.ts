@@ -34,6 +34,7 @@ describe("createProcessCommandLaunch", () => {
       },
       windowsHide: true,
       windowsVerbatimArguments: true,
+      usesCommandShell: true,
       args: [
         "/d",
         "/v:off",
@@ -60,6 +61,7 @@ describe("createProcessCommandLaunch", () => {
       },
       windowsHide: true,
       windowsVerbatimArguments: true,
+      usesCommandShell: true,
       args: [
         "/d",
         "/v:off",
@@ -92,6 +94,7 @@ describe("createProcessCommandLaunch", () => {
       },
       windowsHide: true,
       windowsVerbatimArguments: true,
+      usesCommandShell: true,
       args: [
         "/d",
         "/v:off",
@@ -192,6 +195,7 @@ describe("createProcessCommandLaunch", () => {
       env: {},
       windowsHide: false,
       windowsVerbatimArguments: false,
+      usesCommandShell: false,
     });
     expect(createProcessCommandLaunch("tool.exe", ["one"], {}, "win32")).toEqual({
       command: "tool.exe",
@@ -199,6 +203,7 @@ describe("createProcessCommandLaunch", () => {
       env: {},
       windowsHide: true,
       windowsVerbatimArguments: false,
+      usesCommandShell: false,
     });
   });
 });

@@ -249,23 +249,19 @@ describe("createOpenInToolsAdapter", () => {
     await Effect.runPromise(port.openExternalUrl("https://example.com"));
     expect(launches).toEqual([{ command: "open", args: ["https://example.com"] }]);
   });
-  test("opens Windows external URLs without routing them through cmd", async () => {
-    const { launches, systemCommands } = createSystemCommands({
-      resolvedCommands: {},
-    });
+  test("opens Windows external URLs with the shell API that reports failures", async () => {
+    const { launches, systemCommands } = createSystemCommands({ resolvedCommands: {} });
+    const opened: string[] = [];
     const port = createOpenInToolsAdapter({
       platform: "win32",
       systemCommands,
+      openUrlOnWindows: (url) => Effect.sync(() => void opened.push(url)),
     });
 
     await Effect.runPromise(port.openExternalUrl("https://example.com"));
 
-    expect(launches).toEqual([
-      {
-        command: "explorer.exe",
-        args: ["https://example.com"],
-      },
-    ]);
+    expect(opened).toEqual(["https://example.com"]);
+    expect(launches).toEqual([]);
   });
   test("rejects external URL opening on unsupported platforms", async () => {
     const port = createOpenInToolsAdapter({ platform: "aix" });

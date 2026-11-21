@@ -73,6 +73,7 @@ export const HOST_READ_COMMAND_NAMES = [
   "workspace_get_settings_snapshot",
   "workspace_get_keyboard_shortcuts",
   "workspace_list",
+  "workspace_processes_list",
   "workspace_provider_setup_target_branches",
   "workspace_resolve_path",
   "workspace_session_archive_preview",

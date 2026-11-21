@@ -465,7 +465,8 @@ export const assembleNodeEffectHostCommandRouter = (
     ...createNodeLocalToolCommandHandlers({
       ...defaultPorts,
       settingsConfig,
-      repoStoreDiagnostics: taskStore,
+      assets,
+      workspaceSettings: workspaceSettingsService,
       remoteFetch,
     }),
     ...createTerminalCommandHandlers(terminalService),
