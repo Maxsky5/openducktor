@@ -47,6 +47,7 @@ import {
   type AgentSessionLiveReadResult,
   type AgentSessionLiveAttachInput,
   type AgentSessionLiveRefreshInput,
+  type AgentSessionLiveAllowDeniedActionInput,
   type AgentSessionLiveReplyApprovalInput,
   type AgentSessionLiveReplyQuestionInput,
   type AgentSessionLiveSnapshot,
@@ -73,6 +74,7 @@ import {
   agentSessionLiveReadResultSchema,
   agentSessionLiveAttachInputSchema,
   agentSessionLiveRefreshInputSchema,
+  agentSessionLiveAllowDeniedActionInputSchema,
   agentSessionLiveReplyApprovalInputSchema,
   agentSessionLiveReplyQuestionInputSchema,
   agentSessionLiveSnapshotEnvelopeSchema,
@@ -303,6 +305,16 @@ export class HostAgentSessionLiveClient {
     await this.invokeFn(
       "agent_session_live_reply_approval",
       agentSessionLiveReplyApprovalInputSchema.parse(input),
+      voidResultSchema,
+    );
+  }
+
+  async agentSessionLiveAllowDeniedAction(
+    input: AgentSessionLiveAllowDeniedActionInput,
+  ): Promise<void> {
+    await this.invokeFn(
+      "agent_session_live_allow_denied_action",
+      agentSessionLiveAllowDeniedActionInputSchema.parse(input),
       voidResultSchema,
     );
   }

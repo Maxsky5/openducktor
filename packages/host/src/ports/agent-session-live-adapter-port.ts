@@ -24,6 +24,7 @@ import type {
   AgentSessionLiveReadResult,
   AgentSessionLiveRef,
   AgentSessionAuthorizedRoot,
+  AgentSessionLiveAllowDeniedActionInput,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
   AgentSessionLiveSnapshot,
@@ -54,7 +55,11 @@ export type AgentSessionControlGoalInput = AgentSessionLiveRef & {
   readonly systemPrompt?: string | undefined;
   readonly submissionId?: string | undefined;
 };
-export type ApprovalReplyOptions = { onIssued?: (() => void) | undefined };
+export type ApprovalReplyOptions = {
+  onIssued?: (() => void) | undefined;
+  /** The host rejects the request for the read-only role, not for the user. */
+  denialSource?: "read_only_role" | undefined;
+};
 
 type AgentSessionCatalogInvalidation = {
   readonly repoPath: string;
@@ -240,6 +245,14 @@ export type AgentSessionControlAdapterPort = {
   readonly stopSession: (input: AgentSessionControlStopInput) => Effect.Effect<void, HostError>;
   readonly releaseSession: (
     input: AgentSessionControlReleaseInput,
+  ) => Effect.Effect<void, HostError>;
+  /**
+   * Tells the agent that the user allows one call that a policy denied, and lets the agent go on.
+   * It accepts only an `available` entry of the snapshot `deniedActions`. A runtime without it
+   * cannot allow denied calls.
+   */
+  readonly allowDeniedAction?: (
+    input: AgentSessionLiveAllowDeniedActionInput,
   ) => Effect.Effect<void, HostError>;
 };
 

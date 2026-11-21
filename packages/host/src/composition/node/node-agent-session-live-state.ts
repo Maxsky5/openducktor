@@ -1,4 +1,5 @@
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
+import { createDeniedToolPartRecords } from "../../application/agent-sessions/denied-tool-part-records";
 import { createLiveSessionAdapterRegistry } from "../../adapters/agent-sessions/live-session-adapter-registry";
 import type { HostEventBusPort } from "../../events/host-event-bus";
 import type { HostLifecycleLogger } from "../host-lifecycle";
@@ -26,14 +27,18 @@ export const createNodeAgentSessionLiveState = ({
   const liveSessionAdapterRegistry = createLiveSessionAdapterRegistry();
   const publishLive = createLiveSessionPublisher(eventBus);
   const signalImpact = eventBus ? createRuntimeImpactSignal(eventBus) : () => {};
+  const deniedToolParts = createDeniedToolPartRecords();
   return {
     liveSessionAdapterRegistry,
-    liveState: createAgentSessionLiveStateService({
+    /** The live sources of runtime history reads. */
+    runtimeQueryInputs: { adapterRegistry: liveSessionAdapterRegistry, deniedToolParts },
+    agentSessionLiveStateService: createAgentSessionLiveStateService({
       ...dependencies,
       adapterRegistry: liveSessionAdapterRegistry,
       readSessionRootRefs: createLiveSessionRootRefsReader(dependencies),
       faultLog: createLiveSessionFaultLogger(lifecycleLogger),
       publish: (envelope) => {
+        deniedToolParts.observe(envelope);
         publishLive(envelope);
         signalImpact(envelope);
       },

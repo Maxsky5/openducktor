@@ -167,7 +167,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const runtimeAdmissionGate = createRuntimeAdmissionGate();
   const runtimeAdmission = createRuntimeAdmissionPort(runtimeAdmissionGate);
-  const { liveSessionAdapterRegistry, liveState: agentSessionLiveStateService } =
+  const { liveSessionAdapterRegistry, agentSessionLiveStateService, runtimeQueryInputs } =
     createNodeAgentSessionLiveState({
       runtimeAdmission,
       observeNotificationInput: notificationComposition.acceptLive,
@@ -302,7 +302,7 @@ export const assembleNodeEffectHostCommandRouter = (
     workflowLaunch: {
       messageDelivery,
       resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
-      adapterRegistry: liveSessionAdapterRegistry,
+      ...runtimeQueryInputs,
     },
   });
   const observeWorkflowWorkspace = createWorkflowWorkspaceObservation(

@@ -30,6 +30,7 @@ import { HostOperationError, HostResourceError } from "../../effect/host-errors"
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createAgentRuntimeQueryService } from "./agent-runtime-query-service";
+import { createDeniedToolPartRecords } from "../agent-sessions/denied-tool-part-records";
 import { createSessionCreationPreparation } from "../agent-sessions/session-creation-preparation";
 import { createSessionTurnPreparation } from "../agent-sessions/session-turn-preparation";
 import { taskCardFixture } from "../../test-support/task-card-fixture";
@@ -62,6 +63,7 @@ const harness = async (
   let snapshots: AgentSessionLiveSnapshot[] = [];
   const adapterRegistry = createLiveSessionAdapterRegistry();
   const worktreeReads = createTaskSessionLifecycleCoordinator();
+  const deniedToolParts = createDeniedToolPartRecords();
   const adapter = createAgentSessionRuntimeAdapterTestDouble(
     { runtimeKind, runtimeId: "runtime-1" },
     {
@@ -105,6 +107,7 @@ const harness = async (
   await Effect.runPromise(adapterRegistry.register(adapter));
   const service = createAgentRuntimeQueryService({
     adapterRegistry,
+    deniedToolParts,
     runtimeRegistry: {
       requireReady: (kind) =>
         Effect.suspend(() =>
@@ -182,6 +185,7 @@ const harness = async (
     service,
     adapter,
     adapterRegistry,
+    deniedToolParts,
     worktreeReads,
     calls,
     setBeforeModels: (read: () => Promise<void>) => {
@@ -653,6 +657,39 @@ test.each(["history", "child ancestry", "diff", "import inspection"] as const)(
     }
   },
 );
+
+test("adds a live denial that the native history does not keep", async () => {
+  const h = await harness();
+  const { runtimePolicy: _policy, ...sessionRef } = historyRef;
+  h.deniedToolParts.observe({
+    type: "transcript_event",
+    event: {
+      type: "assistant_part",
+      externalSessionId: sessionRef.externalSessionId,
+      sessionRef,
+      timestamp: "2026-09-10T10:01:00.000Z",
+      part: {
+        kind: "tool",
+        messageId: "review:1",
+        partId: "review:1",
+        callId: "review:1",
+        tool: "network",
+        toolType: "generic",
+        status: "error",
+        denial: { source: "auto_review", reason: "Unknown host", riskLevel: "high" },
+      },
+    },
+  });
+
+  const history = await Effect.runPromise(h.service.loadSessionHistory(historyRef));
+
+  expect(history).toEqual([
+    expect.objectContaining({
+      role: "assistant",
+      parts: [expect.objectContaining({ callId: "review:1", denial: expect.anything() })],
+    }),
+  ]);
+});
 
 test("reads cold history without a live snapshot and requires task ownership when scope is supplied", async () => {
   const h = await harness();

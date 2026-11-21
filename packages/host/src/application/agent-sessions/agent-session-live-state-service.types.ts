@@ -21,6 +21,7 @@ import type {
   AgentSessionLiveRef,
   AgentSessionAuthorizedRoot,
   AgentSessionLiveRefreshInput,
+  AgentSessionLiveAllowDeniedActionInput,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
   AgentSessionLiveSnapshot,
@@ -132,6 +133,9 @@ export type AgentSessionLiveStateService = {
   ) => Effect.Effect<void, HostError>;
   readonly replyQuestion: (
     input: AgentSessionLiveReplyQuestionInput,
+  ) => Effect.Effect<void, HostError>;
+  readonly allowDeniedAction: (
+    input: AgentSessionLiveAllowDeniedActionInput,
   ) => Effect.Effect<void, HostError>;
   readonly startSession: (
     input: AgentSessionControlStartInput & AgentWorkStartOptions,

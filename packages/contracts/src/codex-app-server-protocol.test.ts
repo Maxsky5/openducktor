@@ -782,6 +782,40 @@ describe("Codex app-server protocol", () => {
     ).toBe(false);
   });
 
+  test("parses an auto-review result and keeps its action and unread fields", () => {
+    const params = {
+      threadId: "thread-1",
+      turnId: "turn-1",
+      reviewId: "review-1",
+      startedAtMs: 1,
+      completedAtMs: 2,
+      targetItemId: null,
+      decisionSource: "agent",
+      review: {
+        status: "denied",
+        riskLevel: "high",
+        userAuthorization: "low",
+        rationale: "Sends data to an unknown host.",
+      },
+      action: {
+        type: "networkAccess",
+        target: "https://example.test",
+        host: "example.test",
+        protocol: "https",
+        port: 443,
+      },
+    };
+    const notification = { method: "item/autoApprovalReview/completed", params };
+
+    expect(codexAppServerRuntimeNotificationSchema.parse(notification)).toEqual(notification);
+    expect(
+      codexAppServerRuntimeNotificationSchema.safeParse({
+        method: "item/autoApprovalReview/completed",
+        params: { ...params, review: { ...params.review, riskLevel: "extreme" } },
+      }).success,
+    ).toBe(false);
+  });
+
   test("accepts known unconsumed notifications without weakening consumed payloads", () => {
     expect(
       codexAppServerRuntimeNotificationSchema.safeParse({

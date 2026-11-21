@@ -38,6 +38,7 @@ import { createAgentSessionExecutionEpisodes } from "./agent-session-execution-e
 import { createStartupPreparationFinalizer } from "./startup-preparation-receipt";
 import { updateStartup } from "./session-startup-progress";
 import { createLiveSessionStartAdmission } from "./live-session-start-admission";
+import { allowRuntimeDeniedAction } from "./live-denied-action";
 
 export type { AgentSessionLiveFaultLogger } from "./agent-session-live-envelope";
 
@@ -429,6 +430,10 @@ export const createAgentSessionLiveStateService = ({
             ),
           ),
       )(input),
+    // Allow can start a turn, so it uses the start admission of a message send.
+    allowDeniedAction: withStartAdmission((input) =>
+      runControl(input, (adapter) => allowRuntimeDeniedAction(adapter, input)),
+    ),
     replyQuestion: withStartAdmission((input) =>
       adapterRegistry
         .resolveForScope(input)

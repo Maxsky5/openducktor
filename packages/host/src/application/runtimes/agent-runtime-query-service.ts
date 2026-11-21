@@ -28,6 +28,7 @@ import {
   type RuntimeHistoryWorkingDirectoryDependencies,
 } from "./runtime-history-working-directory";
 import { runtimeQueryError, type RuntimeQueryError } from "../../ports/runtime-query-error";
+import type { DeniedToolPartRecords } from "../agent-sessions/denied-tool-part-records";
 
 export type AgentRuntimeQueryDependencies = RuntimeHistoryWorkingDirectoryDependencies & {
   adapterRegistry: AgentSessionLiveAdapterRegistryPort;
@@ -35,6 +36,8 @@ export type AgentRuntimeQueryDependencies = RuntimeHistoryWorkingDirectoryDepend
   gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository"> & WorkspaceCheckoutGitPort;
   taskReader: Pick<TaskReader, "getTaskMetadata">;
   worktreeReads: Pick<TaskSessionLifecycleCoordinator, "runWorktreeRead">;
+  /** The live denials that runtime history does not keep. */
+  deniedToolParts: Pick<DeniedToolPartRecords, "apply">;
 };
 
 type QueryMethod = keyof NativeAgentRuntimeQueries;
@@ -137,7 +140,15 @@ export const createAgentRuntimeQueryService = (
     searchFiles: (input) =>
       read("searchFiles", input, (queries, request) => queries.searchFiles(request)),
     loadSessionHistory: (input) =>
-      read("loadSessionHistory", input, (queries, request) => queries.loadSessionHistory(request)),
+      read("loadSessionHistory", input, (queries, request) =>
+        queries
+          .loadSessionHistory(request)
+          .pipe(
+            Effect.map((history) =>
+              dependencies.deniedToolParts.apply(request, history, request.limit !== undefined),
+            ),
+          ),
+      ),
     loadSessionTodos: (input) =>
       read("loadSessionTodos", input, (queries, request) => queries.loadSessionTodos(request)),
     loadSessionDiff: (input) =>

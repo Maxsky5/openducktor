@@ -112,6 +112,20 @@ const agentSessionLiveNoticeSchema = z
   })
   .strict();
 
+/**
+ * The Allow state of one tool call that a policy denied. Only a denial that the user can allow
+ * has an entry. `available` is the only state that offers Allow.
+ */
+export const agentSessionDeniedActionSchema = z
+  .object({
+    callId: nonEmptyStringSchema,
+    state: z.enum(["available", "sending", "allowed"]),
+    /** Why the last Allow request or its follow-up turn failed. */
+    failure: z.string().min(1).optional(),
+  })
+  .strict();
+export type AgentSessionDeniedAction = z.infer<typeof agentSessionDeniedActionSchema>;
+
 export const agentSessionLiveSnapshotSchema = z
   .object({
     ref: agentSessionLiveRefSchema,
@@ -133,6 +147,11 @@ export const agentSessionLiveSnapshotSchema = z
      * runs, so a new attachment shows it. The next accepted message clears it.
      */
     launchFailure: agentSessionLiveNoticeSchema.optional(),
+    /**
+     * The denied tool calls that the user can allow while the session runs. The host keeps them in
+     * memory only.
+     */
+    deniedActions: z.array(agentSessionDeniedActionSchema).optional(),
     /** The goal that the runtime reports. No field: the session has no goal. */
     goal: agentSessionGoalSchema.optional(),
     /**
@@ -384,4 +403,11 @@ export const agentSessionLiveReplyQuestionInputSchema = agentSessionLiveRefSchem
 });
 export type AgentSessionLiveReplyQuestionInput = z.infer<
   typeof agentSessionLiveReplyQuestionInputSchema
+>;
+
+export const agentSessionLiveAllowDeniedActionInputSchema = agentSessionLiveRefSchema
+  .extend({ callId: nonEmptyStringSchema })
+  .strict();
+export type AgentSessionLiveAllowDeniedActionInput = z.infer<
+  typeof agentSessionLiveAllowDeniedActionInputSchema
 >;

@@ -352,6 +352,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentSessionLiveClient.agentSessionLiveReplyApproval.bind(agentSessionLiveClient),
     agentSessionLiveReplyQuestion:
       agentSessionLiveClient.agentSessionLiveReplyQuestion.bind(agentSessionLiveClient),
+    agentSessionLiveAllowDeniedAction:
+      agentSessionLiveClient.agentSessionLiveAllowDeniedAction.bind(agentSessionLiveClient),
     agentRuntimeFileStatus:
       agentRuntimeQueryClient.agentRuntimeFileStatus.bind(agentRuntimeQueryClient),
     agentRuntimeLoadCatalog:

@@ -176,6 +176,31 @@ export type AgentComputerUse = z.infer<typeof agentComputerUseSchema>;
  */
 export const RUNNING_TOOL_UPDATE_INTERVAL_MS = 400;
 
+/** The policies that can deny a tool call without asking the user. */
+export const agentToolDenialSourceSchema = z.enum([
+  "auto_mode",
+  "permission_settings",
+  "auto_review",
+  "auto_review_timeout",
+  "read_only_role",
+]);
+export type AgentToolDenialSource = z.infer<typeof agentToolDenialSourceSchema>;
+
+export const agentToolDenialRiskLevelSchema = z.enum(["low", "medium", "high", "critical"]);
+export type AgentToolDenialRiskLevel = z.infer<typeof agentToolDenialRiskLevelSchema>;
+
+/**
+ * A policy denied the call without asking the user. The part keeps `status: "error"`. The live
+ * snapshot `deniedActions` tells whether the user can allow the call.
+ */
+export const agentToolDenialSchema = z.strictObject({
+  source: agentToolDenialSourceSchema,
+  /** The text of the deciding component. */
+  reason: z.string().min(1).optional(),
+  riskLevel: agentToolDenialRiskLevelSchema.optional(),
+});
+export type AgentToolDenial = z.infer<typeof agentToolDenialSchema>;
+
 export const agentToolPartSchema = z
   .object({
     kind: z.literal("tool"),
@@ -199,6 +224,7 @@ export const agentToolPartSchema = z
     fileChanges: z.array(fileDiffSchema.strict()).optional(),
     computerUse: agentComputerUseSchema.optional(),
     metadata: agentToolDataSchema.optional(),
+    denial: agentToolDenialSchema.optional(),
     startedAtMs: finiteNonNegativeNumberSchema.optional(),
     endedAtMs: finiteNonNegativeNumberSchema.optional(),
     /**

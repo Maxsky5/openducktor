@@ -137,6 +137,7 @@ const setup = (
       loadSessionDiff: unexpected,
       replyApproval: unexpected,
       replyQuestion: unexpected,
+      allowDeniedAction: unexpected,
       updateSessionModel: unexpected,
     },
     tasks: {

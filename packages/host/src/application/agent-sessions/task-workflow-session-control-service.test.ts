@@ -59,6 +59,7 @@ type TestControlServiceInput = Omit<
     | "loadSessionDiff"
     | "replyApproval"
     | "replyQuestion"
+    | "allowDeniedAction"
     | "read"
     | "list"
     | "publishOperation"
@@ -136,6 +137,7 @@ const createAgentSessionCommandService = ({
       loadSessionDiff: () => Effect.die(new Error("unexpected diff read")),
       replyApproval: () => Effect.die(new Error("unexpected approval reply")),
       replyQuestion: () => Effect.die(new Error("unexpected question reply")),
+      allowDeniedAction: () => Effect.die(new Error("unexpected allow")),
       ...input.runtime,
     },
     repositoryPolicy: {
