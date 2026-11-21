@@ -295,7 +295,9 @@ export function TaskEditorSheet({
             ) : (
               <EditIntro controller={controller} taskId={task?.id ?? null} />
             )}
-            <View style={[styles.body, isFormDisabled && styles.disabled]}>
+            {/* The dimmed opacity of a save must not move the fields into a new view, because the
+                save closes the sheet next. See the route sheet rules in the README. */}
+            <View collapsable={false} style={[styles.body, isFormDisabled && styles.disabled]}>
               <EditorContent controller={controller} imageContext={imageContext} images={images} />
             </View>
             {controller.footerError ? (
