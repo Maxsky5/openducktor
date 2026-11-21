@@ -90,17 +90,18 @@ export function useAgentStudioSendTarget({
       activity,
       activityKey,
       capture: () => isCurrentContext,
-      canSend: () =>
-        !isStarting &&
-        agentStudioReady &&
-        taskId.length > 0 &&
-        (selectedSessionIdentity !== null ||
-          (canStartSession &&
-            selectionForNewSession?.runtimeKind !== undefined &&
-            completedContext.current !== isCurrentContext &&
-            !unknownStarts.current.has(activityKey) &&
-            !activity.hasInFlight(activityKey))) &&
-        !isCatalogLoading,
+      canSend: () => {
+        if (isStarting || !agentStudioReady || taskId.length === 0) return false;
+        if (selectedSessionIdentity !== null) return true;
+        return (
+          canStartSession &&
+          selectionForNewSession?.runtimeKind !== undefined &&
+          completedContext.current !== isCurrentContext &&
+          !unknownStarts.current.has(activityKey) &&
+          !activity.hasInFlight(activityKey) &&
+          !isCatalogLoading
+        );
+      },
       resolve: async (parts) => {
         if (!isCurrentContext()) return null;
         requireSystemCommandTarget(parts, selectedSessionIdentity);

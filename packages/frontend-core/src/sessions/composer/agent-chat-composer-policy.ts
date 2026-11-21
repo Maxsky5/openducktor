@@ -29,7 +29,6 @@ export type ComposerPolicyModel = {
   foregroundTurnActive?: boolean | undefined;
   isSending: boolean;
   isStarting: boolean;
-  isModelSelectionPending: boolean;
   isSavingModel?: boolean | undefined;
   isInteractionEnabled: boolean;
   isReadOnly: boolean;
@@ -252,20 +251,11 @@ const hasComposerSendContent = (
 const composerInputDisabledFor = ({
   isInteractionEnabled,
   isReadOnly,
-  isModelSelectionPending,
   isWaitingInput,
   isResumingSession,
 }: ComposerPolicyModel): boolean => {
-  return (
-    !isInteractionEnabled ||
-    isReadOnly ||
-    isModelSelectionPending ||
-    isWaitingInput ||
-    isResumingSession
-  );
+  return !isInteractionEnabled || isReadOnly || isWaitingInput || isResumingSession;
 };
 
 const composerIsSubmitting = (model: ComposerPolicyModel): boolean =>
-  (model.isSending && !hasForegroundTurn(model)) ||
-  model.isStarting ||
-  model.isModelSelectionPending;
+  (model.isSending && !hasForegroundTurn(model)) || model.isStarting;

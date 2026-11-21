@@ -468,9 +468,9 @@ Rules:
 - Core model-selection services own pure runtime, profile, variant, speed, and saved-choice rules. Client presentation and host enforcement use these rules.
 - Task and workspace composers present accepted session settings. The selected chat creates or reattaches its session before enabling Send. Model, effort, speed, and profile changes use the explicit settings operation. Send never chooses or repairs them.
 - The composer keeps the accepted session model, effort, speed, and profile even when a later catalog omits them. Catalog defaults apply to new sessions. An explicit settings change validates the new choice.
-- The shared sender tracks Send activity and checks the captured recipient before transport. The host validates ownership and delivers the content to a prepared session.
-- An existing chat waits for its first usable model catalog before Send. A background refresh with a usable catalog does not block Send. A loading session and an unavailable model have separate error reasons.
-- Task and workspace targets check the loaded session before attachment staging and before transport. The host checks current blocking input before work-starting preparation and again before dispatch.
+- The shared sender tracks Send activity and checks the captured recipient before attachment staging, after staging, and before transport. Task and workspace targets check the loaded session before transport.
+- A prepared chat can send with its accepted settings while the model catalog loads or refreshes. The first send that launches a task session needs a model selection from its catalog. The composer uses available model capabilities to check attachments and requires the running turn's model to steer with attachments.
+- The host validates ownership and delivers the content to a prepared session. It checks current blocking input before it prepares work and again before dispatch.
 - A retained workspace pane owns its lifetime above React Activity. Each reveal prepares the selected session again before enabling its composer. Removing the pane or changing its recipient, workspace, or catalog target cancels a pending send.
 
 Build-tool worktree reads belong to `frontend-core/src/git/task/use-task-git-panel.ts`, which `features/agent-studio-build-tools/use-agent-studio-build-tools-worktree-snapshot.ts` uses. Their key is repository, task ID, and task version. Git refresh belongs to `use-agent-studio-build-worktree-refresh.ts`. Transcript display state does not control either read.

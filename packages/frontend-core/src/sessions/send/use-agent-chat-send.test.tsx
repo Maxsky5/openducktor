@@ -93,15 +93,19 @@ const userMessageWithModel = (modelId: string): AgentChatMessage => ({
 
 type TargetProps = Pick<AgentChatSendTarget, "resolve" | "onFailure"> & {
   canSend: boolean;
+  capture?: AgentChatSendTarget["capture"];
 };
 
 type HookProps = Parameters<typeof useAgentChatSendForTarget>[1] & { target: TargetProps };
 
 /** A chat whose target is the test session, so the shared send rules run alone. */
-const useTestChatSend = ({ target: { canSend, ...target }, ...props }: HookProps) => {
+const useTestChatSend = ({
+  target: { canSend, capture = () => () => true, ...target },
+  ...props
+}: HookProps) => {
   const activity = useAsyncActivityTracker();
   return useAgentChatSendForTarget(
-    { ...target, capture: () => () => true, activity, activityKey: "chat", canSend: () => canSend },
+    { ...target, capture, activity, activityKey: "chat", canSend: () => canSend },
     props,
   );
 };
@@ -257,6 +261,23 @@ describe("useAgentChatSend", () => {
   });
 
   describe("sends", () => {
+    test("rejects a stale recipient before staging its attachment", async () => {
+      const stageAttachment = mock(stageBriefOnHost);
+      const { view, sendAgentMessage } = renderChatSend(
+        { target: { canSend: true, capture: () => () => false, resolve: existingSession } },
+        { stageAttachment },
+      );
+      try {
+        await act(async () => {
+          expect(await view.result.current.onSend(attachmentDraft(), "default")).toBe(false);
+        });
+        expect(stageAttachment).not.toHaveBeenCalled();
+        expect(sendAgentMessage).not.toHaveBeenCalled();
+      } finally {
+        view.unmount();
+      }
+    });
+
     test("refuses a send while the chat or the input cannot take it", async () => {
       const blocked = [
         renderChatSend({

@@ -68,14 +68,26 @@ import {
   buildQuestionRequest,
 } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { createWorkspaceSessionChatDraftPersistence } from "@openducktor/frontend-core/sessions/composer/workspace-session-chat-draft";
-import { createTextSegment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import {
+  createComposerAttachment,
+  createSkillReferenceSegment,
+  createTextSegment,
+} from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import { typeIntoComposer } from "@/components/features/agents/agent-chat/agent-chat-composer-test-helpers";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { useAgentMessageSendPolicy } from "@openducktor/frontend-core/sessions/send/use-agent-message-send-policy";
 import { useAgentChatSendForTarget } from "@openducktor/frontend-core/test-support/agent-chat-send-fixture";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
-import { createComposerAttachment } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
+import { createStartupLiveSourceFake } from "@openducktor/frontend-core/test-support/startup-live-source-fake";
+import {
+  adoptStartupPreparedHandoff,
+  observeStartupPreparation,
+} from "@openducktor/frontend-core/sessions/startup/startup-prepared-handoff";
+import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
+import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { runtimeCatalogQueryKeys } from "@openducktor/frontend-core/queries/runtime-catalog";
+import { agentSessionTodosQueryKeys } from "@openducktor/frontend-core/queries/agent-session-todos";
 
 function preparedChatClient(entry: WorkspaceSession, session: AgentSessionState) {
   return {
@@ -1461,42 +1473,137 @@ function createPreparationScenario(
   return h;
 }
 
-// Full chat renders and catalog reads need more than the suite's one-second timeout.
-test("workspace Send waits for its first catalog with a saved model", async () => {
-  const h = createPreparationScenario();
-  const catalog =
-    Promise.withResolvers<Awaited<ReturnType<typeof h.definitions.loadRepoRuntimeCatalog>>>();
-  h.definitions.loadRepoRuntimeCatalog = () => catalog.promise;
-  const send = mock(async () => null);
-  h.operations.sendAgentMessage = send;
-  const persistence = createWorkspaceSessionChatDraftPersistence(
-    h.connection.drafts.chat,
-    h.workspace.workspaceId,
-    h.entry.id,
-  );
-  persistence.set({ segments: [createTextSegment("Wait for the catalog")] });
-  const view = render(<h.Harness />);
-  try {
-    await view.findByLabelText("Message composer");
-    expect(view.getByRole("button", { name: "Preparing message" }).hasAttribute("disabled")).toBe(
-      true,
+const reviewSkill = {
+  id: "/skills/review/SKILL.md",
+  name: "review",
+  path: "/skills/review/SKILL.md",
+};
+
+test.each([CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR])(
+  "sends a skill-only workspace draft while the $kind model catalog is loading",
+  async (descriptor) => {
+    const h = createPresentationScenario(descriptor.kind);
+    h.definitions.runtimeDefinitions = [descriptor];
+    h.definitions.availableRuntimeDefinitions = [descriptor];
+    const catalog =
+      Promise.withResolvers<Awaited<ReturnType<typeof h.definitions.loadRepoRuntimeCatalog>>>();
+    const loadCatalog = mock(() => catalog.promise);
+    h.definitions.loadRepoRuntimeCatalog = loadCatalog;
+    const send = mock<AgentOperationsContextValue["sendAgentMessage"]>(async () => null);
+    h.operations.sendAgentMessage = send;
+    const persistence = createWorkspaceSessionChatDraftPersistence(
+      h.connection.drafts.chat,
+      h.workspace.workspaceId,
+      h.entry.id,
     );
-    expect(send).not.toHaveBeenCalled();
-    await act(async () =>
-      catalog.resolve({ models: { status: "available", catalog: preparationCatalog() } }),
+    persistence.set({ segments: [createSkillReferenceSegment(reviewSkill)] });
+    const view = render(<h.Harness />);
+    try {
+      await waitFor(() => expect(loadCatalog).toHaveBeenCalled());
+      const button = await waitFor(() => {
+        const sendButton = view.getByRole("button", { name: "Send message" });
+        expect(sendButton.hasAttribute("disabled")).toBe(false);
+        return sendButton;
+      });
+      await act(async () => fireEvent.click(button));
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0]?.[0]).toEqual(toAgentSessionIdentity(h.session));
+      expect(send.mock.calls[0]?.[1]).toEqual([{ kind: "skill_mention", skill: reviewSkill }]);
+    } finally {
+      view.unmount();
+      catalog.resolve({ models: { status: "available", catalog: preparationCatalog() } });
+    }
+  },
+  // The full chat render prepares a session and loads its draft.
+  5000,
+);
+
+test.each([CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR])(
+  "sends a skill-only draft on the first visit to a prepared $kind workspace session",
+  async (descriptor) => {
+    const h = createPresentationScenario(descriptor.kind);
+    h.definitions.runtimeDefinitions = [descriptor];
+    h.definitions.availableRuntimeDefinitions = [descriptor];
+    const { queryClient } = h.connection;
+    const identity = toAgentSessionIdentity(h.session);
+    const runtime = {
+      ...identity,
+      startedAt: h.session.startedAt,
+      status: h.session.status,
+    };
+    const ref = { repoPath: h.workspace.repoPath, ...identity };
+    queryClient.setQueryData(
+      settingsSnapshotQueryOptions().queryKey,
+      createSettingsSnapshotFixture(),
     );
-    await waitFor(() =>
-      expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
-        false,
-      ),
+    queryClient.setQueryData(runtimeCatalogQueryKeys.catalog(ref), {
+      models: { status: "available", catalog: preparationCatalog() },
+    });
+    queryClient.setQueryData(
+      agentSessionTodosQueryKeys.todos({
+        ...ref,
+        sessionScope: { kind: "repository", workspaceId: h.workspace.workspaceId },
+      }),
+      [],
     );
-    fireEvent.click(view.getByRole("button", { name: "Send message" }));
-    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
-  } finally {
-    catalog.resolve({ models: { status: "available", catalog: preparationCatalog() } });
-    view.unmount();
-  }
-}, 5000);
+    const source = createStartupLiveSourceFake(queryClient);
+    const send = mock<AgentOperationsContextValue["sendAgentMessage"]>(async () => null);
+    h.operations.sendAgentMessage = send;
+    const start = mock(h.connection.host.client.workspaceSessionStart);
+    h.connection.host.client.workspaceSessionStart = start;
+    createWorkspaceSessionChatDraftPersistence(
+      h.connection.drafts.chat,
+      h.workspace.workspaceId,
+      h.entry.id,
+    ).set({ segments: [createSkillReferenceSegment(reviewSkill)] });
+    try {
+      const context = { startupAttemptId: "attempt", operationId: "operation" };
+      await observeStartupPreparation(queryClient, ref.repoPath, context.startupAttemptId);
+      await adoptStartupPreparedHandoff(
+        queryClient,
+        source.prepared({
+          context,
+          workspaceId: h.workspace.workspaceId,
+          repoPath: ref.repoPath,
+          scope: { kind: "workspace", sessionId: h.entry.id },
+          ownership: {
+            state: "saved",
+            target: { kind: "workspace", record: h.entry, runtimeSession: runtime },
+          },
+        }),
+      );
+      const view = render(
+        <h.Harness>
+          <WorkspaceSessionChatPane
+            workspace={h.workspace}
+            record={h.entry}
+            isActive
+            workingDirectory={ref.workingDirectory}
+            branchKey="main"
+            onToolRefresh={() => {}}
+            onSelectFile={() => {}}
+          />
+        </h.Harness>,
+      );
+      try {
+        await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
+        const button = view.getByRole("button", { name: "Send message" });
+        expect(button.hasAttribute("disabled")).toBe(false);
+        await act(async () => fireEvent.click(button));
+        expect(start).not.toHaveBeenCalled();
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(send.mock.calls[0]?.[0]).toEqual(identity);
+        expect(send.mock.calls[0]?.[1]).toEqual([{ kind: "skill_mention", skill: reviewSkill }]);
+      } finally {
+        view.unmount();
+      }
+    } finally {
+      source.dispose();
+    }
+  },
+  // The full pane loads the persisted draft and mounts its chat.
+  5000,
+);
 
 test("workspace checks a new blocking question before submitting a staged attachment", async () => {
   const staging = Promise.withResolvers<{ path: string; mime: string }>();

@@ -165,8 +165,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
 
   const [failure, setFailure] = useState<ComposerFailure | null>(null);
   const activity = useAsyncActivityTracker();
-  const canInteract =
-    interaction.canInteract && !runtimeInfo.isLoadingModelCatalog && !target.readOnly;
+  const { canInteract } = interaction;
   const draftKey = draftScope.key;
   const sendTarget = useMemo(
     (): AgentChatSendTarget => ({
@@ -242,8 +241,6 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     foregroundTurnActive: facts.foregroundTurnActive,
     isSending: delivery.isSending,
     isStarting: interaction.isPreparing,
-    // The catalog read closes send, not typing, so a draft stays editable while it loads.
-    isModelSelectionPending: false,
     isInteractionEnabled: !readOnly,
     isReadOnly: readOnly,
     canSend: delivery.canSend,

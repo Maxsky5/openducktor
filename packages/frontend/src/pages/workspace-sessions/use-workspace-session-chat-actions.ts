@@ -249,8 +249,7 @@ export function useWorkspaceSessionChatActions(
         const version = recipientVersion.current;
         return () => isMounted() && isCurrentWorkspace() && recipientVersion.current === version;
       },
-      canSend: () =>
-        canSend && preparation.ready && !savingModel.current && !resuming.current && isMounted(),
+      canSend: () => canSend && preparation.ready && !savingModel.current && !resuming.current,
       resolve: async () => {
         setError(null);
         const version = recipientVersion.current;
@@ -348,7 +347,6 @@ export function useWorkspaceSessionChatActions(
     isStarting,
     isSavingModel,
     error: error ?? preparation.error,
-    isPrepared: preparation.ready,
     updateDraftModel,
     updateSessionModel,
     updateSpeed,

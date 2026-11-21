@@ -168,6 +168,7 @@ export function useAgentChatSend({
         return false;
       }
       const isCurrentRecipient = target.capture();
+      if (!isCurrentRecipient()) return false;
       const activity = target.activity.begin(target.activityKey);
       try {
         const parts = await resolveAgentChatSendDraftParts({

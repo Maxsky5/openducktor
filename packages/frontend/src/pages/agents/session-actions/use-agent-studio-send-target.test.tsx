@@ -174,31 +174,36 @@ const createBaseArgs = (): HookArgs => ({
 
 describe("useAgentStudioSendTarget", () => {
   test.each([null, "session-existing"])(
-    "blocks task Send until the catalog read completes for %s",
+    "waits for the model catalog only when Send starts a new task session (%s)",
     async (externalSessionId) => {
       const sendAgentMessage = mock(async () => null);
-      const runSessionStartWorkflow = mock(createBaseArgs().startPreparedSession);
+      const startPreparedSession = mock(createBaseArgs().startPreparedSession);
       const args = {
         ...createBaseArgs(),
         selectedSessionIdentity: createSelectedSessionIdentity(externalSessionId),
         isCatalogLoading: true,
         sendAgentMessage,
-        startPreparedSession: runSessionStartWorkflow,
+        startPreparedSession,
       };
       const harness = createTaskHarness(args);
       try {
         await harness.mount();
         await harness.run(async (state) => {
-          expect(await state.onSend(createDraft("hello"), "default")).toBe(false);
+          expect(await state.onSend(createDraft("hello"), "default")).toBe(
+            externalSessionId !== null,
+          );
         });
-        expect(sendAgentMessage).not.toHaveBeenCalled();
-        expect(runSessionStartWorkflow).not.toHaveBeenCalled();
-        await harness.update({ ...args, isCatalogLoading: false });
-        await harness.run(async (state) => {
-          expect(await state.onSend(createDraft("hello"), "default")).toBe(true);
-        });
-        expect(sendAgentMessage).toHaveBeenCalledTimes(externalSessionId ? 1 : 0);
-        expect(runSessionStartWorkflow).toHaveBeenCalledTimes(externalSessionId ? 0 : 1);
+        expect(startPreparedSession).not.toHaveBeenCalled();
+        if (externalSessionId) {
+          expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+        } else {
+          expect(sendAgentMessage).not.toHaveBeenCalled();
+          await harness.update({ ...args, isCatalogLoading: false });
+          await harness.run(async (state) => {
+            expect(await state.onSend(createDraft("hello"), "default")).toBe(true);
+          });
+          expect(startPreparedSession).toHaveBeenCalledTimes(1);
+        }
       } finally {
         await harness.unmount();
       }

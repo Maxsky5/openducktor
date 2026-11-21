@@ -60,7 +60,6 @@ const buildModel = () => ({
     isStarting: false,
     isSessionWorking: false,
     isWaitingInput: false,
-    isModelSelectionPending: false,
     selectedModelSelection: buildModelSelection(),
     speed: null,
     isSelectionCatalogLoading: false,

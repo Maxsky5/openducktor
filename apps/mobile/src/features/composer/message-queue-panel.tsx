@@ -4,6 +4,7 @@ import {
   type AgentSessionUserMessagePart,
   isGoalSlashCommand,
 } from "@openducktor/contracts";
+import type { AgentModelAttachmentSupport } from "@openducktor/core";
 import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import {
@@ -77,12 +78,14 @@ export function MessageQueuePanel({
   steerContext,
   commandsOpen,
   pickers,
+  attachmentSupport,
 }: {
   model: AgentChatMessageQueueModel;
   steerContext: QueuedMessageSteerContext;
   commandsOpen: boolean;
   /** The attachment pickers that an edit of a queued message offers. */
   pickers: AttachmentPickers;
+  attachmentSupport: AgentModelAttachmentSupport | undefined;
 }): ReactElement | null {
   const { queue, onAction, onSaveEdit } = model;
   const { running, failures, run } = useQueueActions();
@@ -157,6 +160,7 @@ export function MessageQueuePanel({
         target={queue.target}
         entry={openEntry}
         pickers={pickers}
+        attachmentSupport={attachmentSupport}
         commandsOpen={commandsOpen}
         isPending={openAction !== undefined && openAction !== "begin_edit"}
         isSaving={openAction === "save_edit"}

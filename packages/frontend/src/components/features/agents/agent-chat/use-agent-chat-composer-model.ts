@@ -10,13 +10,10 @@ import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agen
 import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import type { AgentChatComposerDraft } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
-import { deriveAgentChatComposerModelState } from "./agent-chat-composer-model-state";
+import { resolveAgentSessionAccentColor } from "../agent-accent-color";
 import type { AgentChatDraftScope } from "@openducktor/frontend-core/sessions/send/agent-chat-draft-scope";
 
 type StopAgentSession = (session: AgentSessionIdentity) => Promise<void>;
-type AgentChatComposerSelectedSession = AgentSessionIdentity & {
-  selectedModel: AgentModelSelection | null;
-};
 
 export const invokeStopAgentSession = (
   session: AgentSessionIdentity | null,
@@ -30,8 +27,7 @@ export const invokeStopAgentSession = (
 
 export type AgentChatComposerConfig = {
   displayedSessionKey: string | null;
-  selectedSession: AgentChatComposerSelectedSession | null;
-  isSessionModelCatalogLoading: boolean;
+  selectedSession: AgentSessionIdentity | null;
   isSessionWorking: boolean;
   foregroundTurnActive?: boolean | undefined;
   isWaitingInput: boolean;
@@ -111,19 +107,6 @@ export function useAgentChatComposerModel({
   resizeComposerEditor,
   scrollToBottomOnSendRef,
 }: UseAgentChatComposerModelArgs): AgentChatComposerModel | undefined {
-  const composerState = useMemo(
-    () =>
-      composer
-        ? deriveAgentChatComposerModelState({
-            selectedSession: composer.selectedSession,
-            selectedModelSelection: composer.selectedModelSelection,
-            isSessionModelCatalogLoading: composer.isSessionModelCatalogLoading,
-            isInteractionEnabled: interactionEnabled,
-          })
-        : null,
-    [composer, interactionEnabled],
-  );
-
   return useMemo(() => {
     if (!composer) {
       return undefined;
@@ -131,7 +114,7 @@ export function useAgentChatComposerModel({
 
     const model: AgentChatComposerModel = {
       displayedSessionKey: composer.displayedSessionKey,
-      isInteractionEnabled: composerState?.isInteractionEnabled ?? false,
+      isInteractionEnabled: interactionEnabled,
       isReadOnly: composer.isReadOnly,
       canSend: composer.canSend ?? true,
       readOnlyReason: composer.readOnlyReason,
@@ -155,7 +138,6 @@ export function useAgentChatComposerModel({
       foregroundTurnActive: composer.foregroundTurnActive,
       isWaitingInput: composer.isWaitingInput,
       waitingInputPlaceholder: composer.waitingInputPlaceholder,
-      isModelSelectionPending: composerState?.isModelSelectionPending ?? false,
       selectedModelSelection: composer.selectedModelSelection,
       speed: composer.speed,
       isSelectionCatalogLoading: composer.isSelectionCatalogLoading,
@@ -188,7 +170,12 @@ export function useAgentChatComposerModel({
       variantOptions: composer.variantOptions,
       onSelectAgent: composer.onSelectAgent,
       onSelectVariant: composer.onSelectVariant,
-      accentColor: composerState?.accentColor,
+      accentColor: resolveAgentSessionAccentColor({
+        runtimeKind:
+          composer.selectedSession?.runtimeKind ??
+          composer.selectedModelSelection?.runtimeKind ??
+          null,
+      }),
       contextUsage: composer.contextUsage,
       canStopSession: composer.canStopSession,
       onStopSession: () =>
@@ -211,7 +198,7 @@ export function useAgentChatComposerModel({
     return model;
   }, [
     composer,
-    composerState,
+    interactionEnabled,
     composerEditorRef,
     composerFormRef,
     resizeComposerEditor,
