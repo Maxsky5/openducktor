@@ -15,22 +15,22 @@ import { HostValidationError } from "../effect/host-errors";
 const TASK_EVENT_STREAM_CAPACITY = 256;
 const TASK_EVENT_STREAM_BYTE_CAPACITY = 8 * 1024 * 1024;
 
-export type TaskEventStreamDeliveryFailure = {
+type TaskEventStreamDeliveryFailure = {
   subscriptionId: string;
   frame: TaskEventStreamFrame;
   cause: unknown;
 };
 
-export type TaskEventStreamDeliveryReporter = {
+type TaskEventStreamDeliveryReporter = {
   report(failure: TaskEventStreamDeliveryFailure): void;
 };
 
 // False pauses delivery until the transport resumes it. Void accepts the frame.
-export type TaskEventStreamSink =
+type TaskEventStreamSink =
   | ((frame: TaskEventStreamFrame) => void)
   | ((frame: TaskEventStreamFrame) => boolean);
 
-export type TaskEventStreamSubscription = {
+type TaskEventStreamSubscription = {
   subscriptionId: string;
   resume(): void;
   replay(): void;

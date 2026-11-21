@@ -74,18 +74,18 @@ type SpecPlanBuildEvent = {
   agent?: WorkflowAgentEvent & { roles: BuiltinRoleId[] };
 };
 
-export type SpecPlanBuildArtifactId = "spec" | "plan" | "qaReport";
-export type SpecPlanBuildRole = WorkflowRoleDefinition & {
+type SpecPlanBuildArtifactId = "spec" | "plan" | "qaReport";
+type SpecPlanBuildRole = WorkflowRoleDefinition & {
   id: BuiltinRoleId;
   writes: SpecPlanBuildArtifactId[];
 };
-export type SpecPlanBuildLaunchAction = WorkflowLaunchActionDefinition & {
+type SpecPlanBuildLaunchAction = WorkflowLaunchActionDefinition & {
   id: SpecPlanBuildLaunchActionId;
   template:
     | { kind: "kickoff"; id: AgentKickoffTemplateId }
     | { kind: "message"; id: AgentMessageTemplateId };
 };
-export type SpecPlanBuildState = WorkflowStateDefinition & {
+type SpecPlanBuildState = WorkflowStateDefinition & {
   id: SpecPlanBuildStateId;
   notification?: WorkflowStateDefinition["notification"] & {
     kind: SpecPlanBuildNotificationKind;
@@ -93,11 +93,11 @@ export type SpecPlanBuildState = WorkflowStateDefinition & {
   };
   studioRole?: BuiltinRoleId;
 };
-export type SpecPlanBuildSignal = Omit<WorkflowSignalDefinition, "id" | "automations"> & {
+type SpecPlanBuildSignal = Omit<WorkflowSignalDefinition, "id" | "automations"> & {
   id: SpecPlanBuildSignalId;
   automations: SpecPlanBuildAutomationId[];
 };
-export type SpecPlanBuildAutomation = WorkflowAutomationDefinition & {
+type SpecPlanBuildAutomation = WorkflowAutomationDefinition & {
   id: SpecPlanBuildAutomationId;
   launchActionId: SpecPlanBuildLaunchActionId | typeof PULL_REQUEST_LAUNCH_ID;
 };
@@ -212,7 +212,7 @@ const specPlanBuildEvents = {
   },
 } satisfies Record<string, SpecPlanBuildEvent>;
 
-export type SpecPlanBuildTaskEventId = keyof typeof specPlanBuildEvents;
+type SpecPlanBuildTaskEventId = keyof typeof specPlanBuildEvents;
 
 const specPlanBuildArtifacts = [
   {

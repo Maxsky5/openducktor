@@ -1,6 +1,11 @@
 export default {
-  entry: ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
-  project: ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
+  entry: [
+    "src/{cli,*-worker}.ts",
+    "src/**/*.test.{ts,tsx}",
+    "src/**/*-fixture.{ts,tsx}",
+    "scripts/*.ts",
+  ],
+  project: ["src/**/*.{ts,tsx,css}", "scripts/**/*.ts"],
   ignoreDependencies: [
     "@ff-labs/fff-node",
     // The host bundle externalizes MSAL's native persistence package.

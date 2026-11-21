@@ -10,14 +10,12 @@ import type {
 import { CodeBlock } from "@tiptap/extension-code-block";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
-import { getListMarker, ListItem, OrderedList } from "@tiptap/extension-list";
+import { getListMarker, ListItem, OrderedList, TaskItem, TaskList } from "@tiptap/extension-list";
 import { Mathematics } from "@tiptap/extension-mathematics";
 import { TableKit } from "@tiptap/extension-table";
-import TaskItem from "@tiptap/extension-task-item";
-import { z } from "zod";
-import TaskList from "@tiptap/extension-task-list";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
+import { z } from "zod";
 
 const requireMarkdownHook = <Hook>(
   extensionName: string,
@@ -370,7 +368,7 @@ const listItemPrefix = (context: RenderContext): string => {
   return getListMarker(type, start - 1 + context.index, ". ");
 };
 
-export const TaskDescriptionListItem = ListItem.extend({
+const TaskDescriptionListItem = ListItem.extend({
   parseMarkdown(token, helpers) {
     const parsed = defaultListItemParseMarkdown.call(
       this,
@@ -393,7 +391,7 @@ export const TaskDescriptionListItem = ListItem.extend({
   },
 });
 
-export const TaskDescriptionOrderedList = OrderedList.extend({
+const TaskDescriptionOrderedList = OrderedList.extend({
   markdownTokenizer: taskDescriptionOrderedListTokenizer,
 
   parseMarkdown(token, helpers) {
@@ -408,7 +406,7 @@ export const TaskDescriptionOrderedList = OrderedList.extend({
   },
 });
 
-export const TaskDescriptionTaskItem = TaskItem.extend({
+const TaskDescriptionTaskItem = TaskItem.extend({
   parseMarkdown(token, helpers) {
     return (
       parseLeadingTaskItemMath(token, helpers) ??

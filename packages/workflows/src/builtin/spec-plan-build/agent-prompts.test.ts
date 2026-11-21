@@ -1,15 +1,6 @@
 import { agentPromptPlaceholderValues, ODT_BROWSER_TOOL_NAMES } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
-import {
-  buildAgentKickoffPrompt,
-  buildAgentKickoffPromptBundle,
-  buildAgentMessagePrompt,
-  buildAgentMessagePromptBundle,
-  buildAgentSystemPrompt,
-  buildAgentSystemPromptBundle,
-  buildReadOnlyPermissionRejectionMessage,
-  listSpecPlanBuildPromptTemplates,
-} from "./agent-prompts";
+import { buildReadOnlyPermissionRejectionMessage } from "./agent-prompts";
 import { EMPTY_PROMPT_SETTINGS, type PromptSettings } from "../../task-workflow/prompt-layers";
 import {
   BASE_PROMPT_PLACEHOLDERS,
@@ -40,6 +31,13 @@ const taskContext = {
   latestQaReportMarkdown: "## QA",
 };
 
+const systemPromptForRole = (role: string): string =>
+  specPlanBuildWorkflow.prompts.systemPrompt({
+    role,
+    task: taskContext,
+    settings: EMPTY_PROMPT_SETTINGS,
+  }).prompt;
+
 const expectPromptToContainAll = (prompt: string, fragments: string[]) => {
   for (const fragment of fragments) {
     expect(prompt).toContain(fragment);
@@ -59,11 +57,7 @@ describe("buildAgentSystemPrompt", () => {
     ["build", "spec, plan"],
     ["qa", "qaReport"],
   ] as const)("shows %s workflow code access beside the shared artifact setter", (role, codes) => {
-    const prompt = buildAgentSystemPrompt({
-      role,
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    const prompt = systemPromptForRole(role);
 
     expect(prompt).toContain("- odt_set_task_artifact(");
     expect(prompt).toContain(
@@ -77,11 +71,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("includes structured workflow guards, tool protocol, and task lock", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "planner",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    const prompt = systemPromptForRole("planner");
 
     expectPromptToContainAll(prompt, [
       "Workflow constraints you must obey:",
@@ -144,11 +134,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("spec defines outcomes and leaves delivery methods to Builder and QA", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    const prompt = systemPromptForRole("spec");
 
     expectPromptToContainAll(prompt, [
       "Planner owns the technical design",
@@ -161,11 +147,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("spec asks users for product decisions and follows their dependencies", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    const prompt = systemPromptForRole("spec");
 
     expectPromptToContainAll(prompt, [
       "The user owns product decisions",
@@ -185,11 +167,7 @@ describe("buildAgentSystemPrompt", () => {
   test.each(["spec", "planner"] as const)(
     "%s saves ready artifacts without an extra approval round",
     (role) => {
-      const prompt = buildAgentSystemPrompt({
-        role,
-        task: taskContext,
-        settings: EMPTY_PROMPT_SETTINGS,
-      });
+      const prompt = systemPromptForRole(role);
 
       expectPromptToContainAll(prompt, [
         "Saving the artifact is part of your assignment",
@@ -206,11 +184,7 @@ describe("buildAgentSystemPrompt", () => {
   );
 
   test("spec keeps observable outcomes in the requirements without a second checklist", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    const prompt = systemPromptForRole("spec");
 
     expectPromptToContainAll(prompt, [
       "When the user delegates a choice, make it and record the assumption",
@@ -229,11 +203,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("spec separates product behavior from design while preserving fixed scope and external contracts", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    const prompt = systemPromptForRole("spec");
 
     expectPromptToContainAll(prompt, [
       "Describe behavior as users or external systems experience it",
@@ -251,11 +221,7 @@ describe("buildAgentSystemPrompt", () => {
   test.each(["spec", "planner", "build", "qa"] as const)(
     "%s receives shared Markdown rules for persisted artifacts",
     (role) => {
-      const prompt = buildAgentSystemPrompt({
-        role,
-        task: taskContext,
-        settings: EMPTY_PROMPT_SETTINGS,
-      });
+      const prompt = systemPromptForRole(role);
 
       expectPromptToContainAll(prompt, [
         "Artifact format:",
@@ -277,7 +243,7 @@ describe("buildAgentSystemPrompt", () => {
   );
 
   test("shared artifact rules stay general while Builder owns execution choices", () => {
-    const result = buildAgentSystemPromptBundle({
+    const result = specPlanBuildWorkflow.prompts.systemPrompt({
       role: "build",
       task: taskContext,
       settings: EMPTY_PROMPT_SETTINGS,
@@ -295,11 +261,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("planner defines design contracts and gives Builder control of implementation", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "planner",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    const prompt = systemPromptForRole("planner");
 
     expectPromptToContainAll(prompt, [
       "required design decisions separate from suggestions",
@@ -335,7 +297,7 @@ describe("buildAgentSystemPrompt", () => {
   test.each(["task", "bug"] as const)(
     "planner traces %s requirements when no spec exists",
     (issueType) => {
-      const prompt = buildAgentSystemPrompt({
+      const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
         role: "planner",
         task: {
           taskId: `${issueType}-no-spec`,
@@ -345,7 +307,7 @@ describe("buildAgentSystemPrompt", () => {
           description: "If an export fails, retain the selection and show the reason.",
         },
         settings: EMPTY_PROMPT_SETTINGS,
-      });
+      }).prompt;
 
       expectPromptToContainAll(prompt, [
         "For a task or bug without a spec, use the task requirements",
@@ -362,11 +324,7 @@ describe("buildAgentSystemPrompt", () => {
   );
 
   test("builder owns execution and verification within the approved design", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "build",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    const prompt = systemPromptForRole("build");
 
     expectPromptToContainAll(prompt, [
       "Choose implementation details, work order, and verification methods",
@@ -407,11 +365,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("QA reviews outcomes and contracts without enforcing implementation recipes", () => {
-    const prompt = buildAgentSystemPrompt({
-      role: "qa",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    const prompt = systemPromptForRole("qa");
 
     expectPromptToContainAll(prompt, [
       "Inspect the implementation and its wiring directly",
@@ -431,7 +385,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("override template always wins even with stale baseVersion", () => {
-    const result = buildAgentSystemPromptBundle({
+    const result = specPlanBuildWorkflow.prompts.systemPrompt({
       role: "spec",
       task: taskContext,
       settings: withOverrides({
@@ -454,23 +408,23 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test.each([
-    ["workflow.rules", 10, 11, "build"],
-    ["workflow.tool_rules", 11, 12, "build"],
-    ["workflow.task_context", 5, 6, "build"],
-    ["role spec", 7, 8, "spec"],
-    ["role planner", 8, 9, "planner"],
-    ["role build", 7, 8, "build"],
-    ["role qa", 6, 7, "qa"],
-    ["messages.spec_start", 5, 6, "spec"],
-    ["messages.plan_start", 5, 6, "planner"],
-    ["messages.build_start", 5, 6, "build"],
-    ["messages.build_after_qa_rejection", 5, 6, "build"],
-    ["messages.build_requested_changes", 6, 7, "build"],
-    ["messages.pull_request", 8, 9, "build"],
-    ["messages.qa_review", 4, 5, "qa"],
+    ["workflow.rules", 10, 11, "build", null],
+    ["workflow.tool_rules", 11, 12, "build", null],
+    ["workflow.task_context", 5, 6, "build", null],
+    ["role spec", 7, 8, "spec", null],
+    ["role planner", 8, 9, "planner", null],
+    ["role build", 7, 8, "build", null],
+    ["role qa", 6, 7, "qa", null],
+    ["messages.spec_start", 5, 6, "spec", "spec_initial"],
+    ["messages.plan_start", 5, 6, "planner", "planner_initial"],
+    ["messages.build_start", 5, 6, "build", "build_implementation_start"],
+    ["messages.build_after_qa_rejection", 5, 6, "build", "build_after_qa_rejected"],
+    ["messages.build_requested_changes", 6, 7, "build", "build_after_human_request_changes"],
+    ["messages.pull_request", 8, 9, "build", "pull_request"],
+    ["messages.qa_review", 4, 5, "qa", "qa_review"],
   ] as const)(
     "keeps prior overrides and reports the new version for %s",
-    (id, previous, current, role) => {
+    (id, previous, current, role, launchActionId) => {
       let custom = "Custom {{task.id}}";
       if (id === "messages.pull_request") {
         custom += " {{git.targetBranch}}";
@@ -480,17 +434,16 @@ describe("buildAgentSystemPrompt", () => {
       }
       const key = id.startsWith("role ") ? rolePromptKey(role) : specPlanBuildPromptKey(id);
       const overrides = { [key]: { template: custom, baseVersion: previous, enabled: true } };
-      const result = id.startsWith("messages.")
-        ? buildAgentKickoffPromptBundle({
+      const result = launchActionId
+        ? specPlanBuildWorkflow.prompts.kickoffPrompt({
             role,
-            // SAFETY: The startsWith check narrows this closed table to its kickoff message IDs.
-            templateId: id as Parameters<typeof buildAgentKickoffPromptBundle>[0]["templateId"],
+            launchActionId,
             task: taskContext,
-            extraPlaceholders: { humanFeedback: "feedback" },
-            git: { targetBranch: { branch: "main" } },
+            humanFeedback: "feedback",
+            targetBranch: { branch: "main" },
             settings: withOverrides(overrides),
           })
-        : buildAgentSystemPromptBundle({
+        : specPlanBuildWorkflow.prompts.systemPrompt({
             role,
             task: taskContext,
             settings: withOverrides(overrides),
@@ -510,24 +463,25 @@ describe("buildAgentSystemPrompt", () => {
   );
 
   test("throws actionable error for unsupported override placeholders", () => {
-    expect(() =>
-      buildAgentSystemPrompt({
-        role: "spec",
-        task: taskContext,
-        settings: withOverrides({
-          [rolePromptKey("spec")]: {
-            template: "Custom {{unknown.placeholder}}",
-            baseVersion: 1,
-          },
-        }),
-      }),
+    expect(
+      () =>
+        specPlanBuildWorkflow.prompts.systemPrompt({
+          role: "spec",
+          task: taskContext,
+          settings: withOverrides({
+            [rolePromptKey("spec")]: {
+              template: "Custom {{unknown.placeholder}}",
+              baseVersion: 1,
+            },
+          }),
+        }).prompt,
     ).toThrow(
       'The global override of prompt "spec.instructions" has a placeholder problem. Unsupported placeholder: {{unknown.placeholder}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}. Edit or turn off this override in Settings.',
     );
   });
 
   test("allows enabled empty override templates without runtime failure", () => {
-    const result = buildAgentSystemPromptBundle({
+    const result = specPlanBuildWorkflow.prompts.systemPrompt({
       role: "spec",
       task: taskContext,
       settings: withOverrides({
@@ -550,12 +504,12 @@ describe("buildAgentSystemPrompt", () => {
 
 describe("kickoff and permission prompts", () => {
   test("build kickoff requests implementation without naming a worktree", () => {
-    const prompt = buildAgentKickoffPrompt({
+    const prompt = specPlanBuildWorkflow.prompts.kickoffPrompt({
       role: "build",
-      templateId: "messages.build_start",
+      launchActionId: "build_implementation_start",
       task: { taskId: "task-1" },
       settings: EMPTY_PROMPT_SETTINGS,
-    });
+    }).prompt;
 
     expectPromptToContainAll(prompt, [
       "Implement this task",
@@ -567,12 +521,12 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("QA rework kickoff directs finding triage and resubmission", () => {
-    const prompt = buildAgentKickoffPrompt({
+    const prompt = specPlanBuildWorkflow.prompts.kickoffPrompt({
       role: "build",
-      templateId: "messages.build_after_qa_rejection",
+      launchActionId: "build_after_qa_rejected",
       task: { taskId: "task-1" },
       settings: EMPTY_PROMPT_SETTINGS,
-    });
+    }).prompt;
 
     expectPromptToContainAll(prompt, [
       "latest QA rejection",
@@ -584,17 +538,15 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("human-review kickoff embeds the requested feedback into the kickoff instructions", () => {
-    const prompt = buildAgentKickoffPrompt({
+    const prompt = specPlanBuildWorkflow.prompts.kickoffPrompt({
       role: "build",
-      templateId: "messages.build_requested_changes",
+      launchActionId: "build_after_human_request_changes",
       task: {
         taskId: "task-1",
       },
-      extraPlaceholders: {
-        humanFeedback: "Update the task summary and rerun the desktop tests.",
-      },
+      humanFeedback: "Update the task summary and rerun the desktop tests.",
       settings: EMPTY_PROMPT_SETTINGS,
-    });
+    }).prompt;
 
     expectPromptToContainAll(prompt, [
       "Address the requested changes for this task.",
@@ -606,17 +558,17 @@ describe("kickoff and permission prompts", () => {
   });
 
   test.each([
-    ["spec", "messages.spec_start", "specification", "spec"],
-    ["planner", "messages.plan_start", "implementation plan", "plan"],
+    ["spec", "spec_initial", "specification", "spec"],
+    ["planner", "planner_initial", "implementation plan", "plan"],
   ] as const)(
     "%s kickoff requests the artifact and leaves policy to the system prompt",
-    (role, templateId, artifact, code) => {
-      const prompt = buildAgentKickoffPrompt({
+    (role, launchActionId, artifact, code) => {
+      const prompt = specPlanBuildWorkflow.prompts.kickoffPrompt({
         role,
-        templateId,
+        launchActionId,
         task: { taskId: "task-1" },
         settings: EMPTY_PROMPT_SETTINGS,
-      });
+      }).prompt;
 
       expectPromptToContainAll(prompt, [
         `Write the ${artifact}`,
@@ -631,14 +583,14 @@ describe("kickoff and permission prompts", () => {
   );
 
   test("qa kickoff requests a review and verdict", () => {
-    const qaPrompt = buildAgentKickoffPrompt({
+    const qaPrompt = specPlanBuildWorkflow.prompts.kickoffPrompt({
       role: "qa",
-      templateId: "messages.qa_review",
+      launchActionId: "qa_review",
       task: {
         taskId: "task-1",
       },
       settings: EMPTY_PROMPT_SETTINGS,
-    });
+    }).prompt;
 
     expectPromptToContainAll(qaPrompt, [
       "Review this task's implementation",
@@ -648,9 +600,9 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("supports kickoff override", () => {
-    const result = buildAgentKickoffPromptBundle({
+    const result = specPlanBuildWorkflow.prompts.kickoffPrompt({
       role: "planner",
-      templateId: "messages.plan_start",
+      launchActionId: "planner_initial",
       task: {
         taskId: "task-2",
         description: "desc",
@@ -669,57 +621,53 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("rejects human-review kickoff overrides that omit the feedback placeholder", () => {
-    expect(() =>
-      buildAgentKickoffPrompt({
-        role: "build",
-        templateId: "messages.build_requested_changes",
-        task: {
-          taskId: "task-2",
-        },
-        extraPlaceholders: {
-          humanFeedback: "Tighten the validation copy.",
-        },
-        settings: withOverrides({
-          [specPlanBuildPromptKey("messages.build_requested_changes")]: {
-            template: "Review {{task.id}} before editing.",
-            baseVersion: 3,
-            enabled: true,
+    expect(
+      () =>
+        specPlanBuildWorkflow.prompts.kickoffPrompt({
+          role: "build",
+          launchActionId: "build_after_human_request_changes",
+          task: {
+            taskId: "task-2",
           },
-        }),
-      }),
+          humanFeedback: "Tighten the validation copy.",
+          settings: withOverrides({
+            [specPlanBuildPromptKey("messages.build_requested_changes")]: {
+              template: "Review {{task.id}} before editing.",
+              baseVersion: 3,
+              enabled: true,
+            },
+          }),
+        }).prompt,
     ).toThrow(
       'The global override of prompt "messages.build_requested_changes" has a placeholder problem. Missing required placeholder: {{humanFeedback}}. This prompt can fill: {{role}}, {{role.allowedTools}}, {{task.id}}, {{task.title}}, {{task.issueType}}, {{task.status}}, {{task.description}}, {{humanFeedback}}. Edit or turn off this override in Settings.',
     );
   });
 
   test("rejects empty human-feedback placeholder values", () => {
-    expect(() =>
-      buildAgentKickoffPrompt({
-        role: "build",
-        templateId: "messages.build_requested_changes",
-        task: {
-          taskId: "task-3",
-        },
-        extraPlaceholders: {
+    expect(
+      () =>
+        specPlanBuildWorkflow.prompts.kickoffPrompt({
+          role: "build",
+          launchActionId: "build_after_human_request_changes",
+          task: {
+            taskId: "task-3",
+          },
           humanFeedback: "   ",
-        },
-        settings: EMPTY_PROMPT_SETTINGS,
-      }),
+          settings: EMPTY_PROMPT_SETTINGS,
+        }).prompt,
     ).toThrow('Prompt placeholder "humanFeedback" must not be empty.');
   });
 
   test("pull request generation kickoff drives repo-aware publication for reused sessions and forks", () => {
-    const result = buildAgentKickoffPromptBundle({
+    const result = specPlanBuildWorkflow.prompts.kickoffPrompt({
       role: "build",
-      templateId: "messages.pull_request",
+      launchActionId: "pull_request",
       task: {
         taskId: "task-1",
       },
-      git: {
-        targetBranch: {
-          remote: "origin",
-          branch: "release/2026.04",
-        },
+      targetBranch: {
+        remote: "origin",
+        branch: "release/2026.04",
       },
       settings: EMPTY_PROMPT_SETTINGS,
     });
@@ -750,42 +698,40 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("rejects pull request generation kickoff when target branch context is missing", () => {
-    expect(() =>
-      buildAgentKickoffPrompt({
-        role: "build",
-        templateId: "messages.pull_request",
-        task: {
-          taskId: "task-1",
-        },
-        settings: EMPTY_PROMPT_SETTINGS,
-      }),
+    expect(
+      () =>
+        specPlanBuildWorkflow.prompts.kickoffPrompt({
+          role: "build",
+          launchActionId: "pull_request",
+          task: {
+            taskId: "task-1",
+          },
+          settings: EMPTY_PROMPT_SETTINGS,
+        }).prompt,
     ).toThrow('Missing required git context for "messages.pull_request": targetBranch.');
   });
 
   test("rejects an upstream-relative pull request target", () => {
-    expect(() =>
-      buildAgentKickoffPrompt({
-        role: "build",
-        templateId: "messages.pull_request",
-        task: {
-          taskId: "task-1",
-        },
-        git: {
-          targetBranch: {
-            branch: "@{upstream}",
+    expect(
+      () =>
+        specPlanBuildWorkflow.prompts.kickoffPrompt({
+          role: "build",
+          launchActionId: "pull_request",
+          task: {
+            taskId: "task-1",
           },
-        },
-        settings: EMPTY_PROMPT_SETTINGS,
-      }),
+          targetBranch: { branch: "@{upstream}" },
+          settings: EMPTY_PROMPT_SETTINGS,
+        }).prompt,
     ).toThrow(
       "Pull request generation requires an explicit target branch; '@{upstream}' cannot identify a pull request base branch.",
     );
   });
 
   test("allows enabled empty kickoff override templates", () => {
-    const result = buildAgentKickoffPromptBundle({
+    const result = specPlanBuildWorkflow.prompts.kickoffPrompt({
       role: "planner",
-      templateId: "messages.plan_start",
+      launchActionId: "planner_initial",
       task: {
         taskId: "task-2",
       },
@@ -804,9 +750,9 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("ignores disabled overrides when building prompts", () => {
-    const prompt = buildAgentKickoffPrompt({
+    const prompt = specPlanBuildWorkflow.prompts.kickoffPrompt({
       role: "planner",
-      templateId: "messages.plan_start",
+      launchActionId: "planner_initial",
       task: {
         taskId: "task-2",
       },
@@ -817,31 +763,17 @@ describe("kickoff and permission prompts", () => {
           enabled: false,
         },
       }),
-    });
+    }).prompt;
 
     expect(prompt).toBe(
-      buildAgentKickoffPrompt({
+      specPlanBuildWorkflow.prompts.kickoffPrompt({
         role: "planner",
-        templateId: "messages.plan_start",
+        launchActionId: "planner_initial",
         task: { taskId: "task-2" },
         settings: EMPTY_PROMPT_SETTINGS,
-      }),
+      }).prompt,
     );
     expect(prompt).not.toContain("Disabled custom kickoff");
-  });
-
-  test("rejects unknown kickoff prompt templates", () => {
-    expect(() =>
-      buildAgentKickoffPrompt({
-        role: "build",
-        // @ts-expect-error This negative test verifies rejection of an unknown template ID.
-        templateId: "kickoff.build_rebase_conflict_resolution",
-        task: {
-          taskId: "task-2",
-        },
-        settings: EMPTY_PROMPT_SETTINGS,
-      }),
-    ).toThrow('Unknown prompt template id "kickoff.build_rebase_conflict_resolution".');
   });
 
   test("builds read-only permission rejection message", () => {
@@ -856,9 +788,9 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("builds a concise git conflict resolution message with useful conflict context", () => {
-    const prompt = buildAgentMessagePrompt({
+    const prompt = specPlanBuildWorkflow.prompts.messagePrompt({
       role: "build",
-      templateId: "messages.build_git_conflict",
+      launchActionId: "build_rebase_conflict_resolution",
       task: {
         taskId: "task-1",
       },
@@ -870,7 +802,7 @@ describe("kickoff and permission prompts", () => {
         conflictOutput: "CONFLICT (content): Merge conflict in src/main.ts",
       },
       settings: EMPTY_PROMPT_SETTINGS,
-    });
+    }).prompt;
 
     expectPromptToContainAll(prompt, [
       "Resolve the conflicts below and finish the interrupted git operation.",
@@ -896,9 +828,9 @@ describe("kickoff and permission prompts", () => {
 
   test("omits raw git output while retaining conflict metadata", () => {
     const buildPrompt = (conflictOutput: string) =>
-      buildAgentMessagePrompt({
+      specPlanBuildWorkflow.prompts.messagePrompt({
         role: "build",
-        templateId: "messages.build_git_conflict",
+        launchActionId: "build_rebase_conflict_resolution",
         task: {
           taskId: "task-bounded",
         },
@@ -910,7 +842,7 @@ describe("kickoff and permission prompts", () => {
           conflictOutput,
         },
         settings: EMPTY_PROMPT_SETTINGS,
-      });
+      }).prompt;
     const smallPrompt = buildPrompt("SMALL_OUTPUT_SENTINEL");
     const largePrompt = buildPrompt(`LARGE_OUTPUT_SENTINEL_${"x".repeat(10_000)}`);
 
@@ -932,9 +864,9 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("keeps git placeholders available to a stale enabled override", () => {
-    const result = buildAgentMessagePromptBundle({
+    const result = specPlanBuildWorkflow.prompts.messagePrompt({
       role: "build",
-      templateId: "messages.build_git_conflict",
+      launchActionId: "build_rebase_conflict_resolution",
       task: {
         taskId: "OVERRIDE_TASK_SENTINEL",
       },
@@ -975,49 +907,51 @@ describe("kickoff and permission prompts", () => {
   });
 
   test("rejects git conflict resolution message when required git context is missing", () => {
-    expect(() =>
-      buildAgentMessagePrompt({
-        role: "build",
-        templateId: "messages.build_git_conflict",
-        task: {
-          taskId: "task-1",
-        },
-        git: {
-          targetBranch: "origin/main",
-          conflictedFiles: ["src/main.ts"],
-        },
-        settings: EMPTY_PROMPT_SETTINGS,
-      }),
+    expect(
+      () =>
+        specPlanBuildWorkflow.prompts.messagePrompt({
+          role: "build",
+          launchActionId: "build_rebase_conflict_resolution",
+          task: {
+            taskId: "task-1",
+          },
+          git: {
+            targetBranch: "origin/main",
+            conflictedFiles: ["src/main.ts"],
+          },
+          settings: EMPTY_PROMPT_SETTINGS,
+        }).prompt,
     ).toThrow(
       'Missing required git conflict context for "messages.build_git_conflict": operationLabel.',
     );
   });
 
   test("rejects git placeholders when the selected template does not receive git context", () => {
-    expect(() =>
-      buildAgentKickoffPrompt({
-        role: "planner",
-        templateId: "messages.plan_start",
-        task: {
-          taskId: "task-2",
-        },
-        settings: withOverrides({
-          [specPlanBuildPromptKey("messages.plan_start")]: {
-            template: "Planner kickoff {{git.conflictOutput}}",
-            baseVersion: 2,
-            enabled: true,
+    expect(
+      () =>
+        specPlanBuildWorkflow.prompts.kickoffPrompt({
+          role: "planner",
+          launchActionId: "planner_initial",
+          task: {
+            taskId: "task-2",
           },
-        }),
-      }),
+          settings: withOverrides({
+            [specPlanBuildPromptKey("messages.plan_start")]: {
+              template: "Planner kickoff {{git.conflictOutput}}",
+              baseVersion: 2,
+              enabled: true,
+            },
+          }),
+        }).prompt,
     ).toThrow(
       'The global override of prompt "messages.plan_start" has a placeholder problem. This prompt cannot fill {{git.conflictOutput}}.',
     );
   });
 });
 
-describe("listSpecPlanBuildPromptTemplates", () => {
+describe("workflow prompt templates", () => {
   test("returns definitions for role, kickoff, message, and permission prompts", () => {
-    const definitions = listSpecPlanBuildPromptTemplates();
+    const definitions = specPlanBuildWorkflow.prompts.templates;
     const keys = definitions.map((entry) => entry.key);
 
     expect(keys).toContain(rolePromptKey("spec"));
@@ -1031,12 +965,12 @@ describe("listSpecPlanBuildPromptTemplates", () => {
 describe("prompt layers", () => {
   const specStart = specPlanBuildPromptKey("messages.spec_start");
   const kickoff = (settings: PromptSettings) =>
-    buildAgentKickoffPrompt({
+    specPlanBuildWorkflow.prompts.kickoffPrompt({
       role: "spec",
-      templateId: "messages.spec_start",
+      launchActionId: "spec_initial",
       task: { taskId: "task-7" },
       settings,
-    });
+    }).prompt;
 
   test("uses the repository override over the global override", () => {
     expect(
@@ -1094,7 +1028,7 @@ describe("prompt layers", () => {
   });
 
   test("puts the role append after the role instructions and before the workflow rules", () => {
-    const prompt = buildAgentSystemPrompt({
+    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
       role: "spec",
       task: taskContext,
       settings: {
@@ -1103,12 +1037,8 @@ describe("prompt layers", () => {
           appends: { [rolePromptKey("spec")]: { text: "ROLE_APPEND_SENTINEL", enabled: true } },
         },
       },
-    });
-    const builtin = buildAgentSystemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    });
+    }).prompt;
+    const builtin = systemPromptForRole("spec");
     const rulesStart = builtin.indexOf("Workflow constraints you must obey:");
 
     expect(prompt).toBe(

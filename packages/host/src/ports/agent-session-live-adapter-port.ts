@@ -56,7 +56,7 @@ export type AgentSessionControlGoalInput = AgentSessionLiveRef & {
 };
 export type ApprovalReplyOptions = { onIssued?: (() => void) | undefined };
 
-export type AgentSessionCatalogInvalidation = {
+type AgentSessionCatalogInvalidation = {
   readonly repoPath: string;
   readonly runtimeKind: RuntimeKind;
   readonly workingDirectory?: string;

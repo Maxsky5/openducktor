@@ -17,7 +17,7 @@ import { openRemoteSocket } from "@openducktor/host-client/remote/socket";
 
 const encoder = new TextEncoder();
 
-export const testJsonResponse = <Value>(value: Value, status = 200): RemoteHttpResponse => ({
+const testJsonResponse = <Value>(value: Value, status = 200): RemoteHttpResponse => ({
   status,
   headers: {},
   body: (async function* () {

@@ -7,9 +7,9 @@ import {
   splitHostChannelFrame,
   type HostChannelMessage,
   type HostChannelRequest,
+  type JsonValue,
 } from "@openducktor/contracts";
 import { WebSocket } from "ws";
-import type { JSONType } from "zod";
 import {
   createHostChannelSocketData,
   hostChannelWebSocketHandler,
@@ -79,14 +79,14 @@ export const createFakeChannelSocket = (options: HostChannelOptions) => {
       );
     },
     /** The parsed result body of request `id`, with the bodies of its result parts first. */
-    result(id: number): JSONType {
+    result(id: number): JsonValue {
       const reply = sent.find(({ header }) => header.type === "result" && header.id === id);
       if (!reply) throw new Error(`Request ${id} has no result.`);
       if (reply.body === null) return null;
       const parts = sent.flatMap(({ header, body }) =>
         header.type === "result_part" && header.id === id ? [body] : [],
       );
-      const value: JSONType = JSON.parse([...parts, reply.body].join(""));
+      const value: JsonValue = JSON.parse([...parts, reply.body].join(""));
       return value;
     },
     ofType<Type extends HostChannelMessage["type"]>(type: Type) {

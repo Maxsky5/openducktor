@@ -6,7 +6,7 @@ import {
 } from "@openducktor/workflows";
 import type { AgentChatMessage } from "../../../types/agent-orchestrator";
 
-export type SessionPromptTask = Pick<
+type SessionPromptTask = Pick<
   TaskCard,
   "id" | "title" | "issueType" | "status" | "description" | "taskWorkflow"
 >;
@@ -19,13 +19,6 @@ type SessionPromptInput = {
 
 type SessionPromptContext = {
   systemPrompt: string;
-};
-
-type SessionHeaderInput = {
-  externalSessionId: string;
-  systemPrompt: string;
-  startedAt: string;
-  includeSystemPrompt?: boolean;
 };
 
 export type LoadSessionPromptContextInput = Pick<SessionPromptInput, "role" | "task"> & {
@@ -69,24 +62,4 @@ export const loadSessionPromptContext = async ({
       promptSettings,
     }),
   };
-};
-
-export const buildSessionHeaderMessages = ({
-  externalSessionId,
-  systemPrompt,
-  startedAt,
-  includeSystemPrompt = true,
-}: SessionHeaderInput): AgentChatMessage[] => {
-  if (!includeSystemPrompt || systemPrompt.trim().length === 0) {
-    return [];
-  }
-
-  return [
-    {
-      id: `history:system-prompt:${externalSessionId}`,
-      role: "system",
-      content: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
-      timestamp: startedAt,
-    },
-  ];
 };

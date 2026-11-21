@@ -2,7 +2,7 @@ import type { AgentSessionModelSelection, WorkspaceSessionExternal } from "@open
 import type { RuntimeSessionImportRequest } from "@openducktor/core";
 import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
-export type HostSessionImportSource = {
+type HostSessionImportSource = {
   metadata: WorkspaceSessionExternal;
   selectedModel: AgentSessionModelSelection | null;
   attach: Effect.Effect<void, HostError>;

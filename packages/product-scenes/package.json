@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./react": "./src/react/Scene.tsx",
+    "./react/tour": "./src/react/tour.ts",
     "./react/page": "./src/react/PageScene.tsx",
     "./astro": "./src/astro/Scene.astro",
     "./styles.css": "./styles/index.css",
@@ -24,7 +25,7 @@
     "./vocabulary": "./src/replicas/vocabulary.ts"
   },
   "scripts": {
-    "build": "bunx tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "build:theme": "bun scripts/build-theme.ts",
     "typecheck": "bun check -p tsconfig.json && bun check -p video/tsconfig.json",
     "test": "bun test --preload ../../tools/bun-test-preload.ts --preload ./src/test-support/gsap-window.ts --timeout 1000",
@@ -43,7 +44,7 @@
     "@happy-dom/global-registrator": "^21.0.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "bun-types": "^1.4.2",
+    "bun-types": "^1.4.5",
     "playwright-core": "1.65.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

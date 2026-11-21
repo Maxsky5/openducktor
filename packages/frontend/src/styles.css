@@ -269,10 +269,6 @@ body {
   user-select: none;
 }
 
-.electron-shell .agent-studio-titlebar-safe-area > div {
-  -webkit-app-region: no-drag;
-}
-
 .electron-shell .electron-titlebar-safe-area :is(button, input) {
   -webkit-app-region: no-drag;
 }
@@ -310,21 +306,6 @@ pre {
 
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
-}
-
-@keyframes rise-in {
-  from {
-    transform: translateY(6px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.animate-rise-in {
-  animation: rise-in 0.3s ease-out;
 }
 
 /* A commit that a new History read added. */
@@ -528,7 +509,6 @@ body:has([data-separator="active"]) [data-browser-surface] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .onboarding-stage-enter,
   .running-status-dot::before,
   .running-status-dot::after {
     animation: none;

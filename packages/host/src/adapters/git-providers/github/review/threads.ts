@@ -9,7 +9,7 @@ import { runGithubApi, type GithubCli } from "../cli";
 import { parseGithubJson } from "./payload";
 import { type GithubReviewCommentLineRange, parseGithubReviewCommentContent } from "./suggestions";
 
-export type ReviewThreadCommentsCursor = {
+type ReviewThreadCommentsCursor = {
   threadId: string;
   cursor: string;
 };

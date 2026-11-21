@@ -1,4 +1,9 @@
-import type { SessionRef } from "@openducktor/core";
+import {
+  type AgentEvent,
+  agentSessionRefKey,
+  agentSessionRefsShareRuntimeStream,
+  type SessionRef,
+} from "@openducktor/core";
 import { agentSessionIdentityKey } from "../../../lib/agent-session-identity";
 import type { AgentSessionState } from "../../../types/agent-orchestrator";
 import {
@@ -6,7 +11,6 @@ import {
   type QueuedSessionEvent,
   type SessionEventBatcher,
 } from "./session-event-batching";
-import { routeStreamEventSession } from "./session-event-identity";
 import {
   createSessionEventContext,
   type ObserveAgentSessionParams,
@@ -34,14 +38,48 @@ type FlushOptions = {
   force?: boolean;
 };
 
+const validateEventSessionRef = (
+  streamSessionRef: SessionRef,
+  event: AgentEvent,
+  eventSessionRef: SessionRef,
+): SessionRef => {
+  if (eventSessionRef.externalSessionId !== event.externalSessionId) {
+    throw new Error(
+      `Session event '${event.type}' has externalSessionId '${event.externalSessionId}' but carries a sessionRef with externalSessionId '${eventSessionRef.externalSessionId}'.`,
+    );
+  }
+
+  if (!agentSessionRefsShareRuntimeStream(eventSessionRef, streamSessionRef)) {
+    throw new Error(
+      `Session event '${event.type}' for '${event.externalSessionId}' belongs to repo '${eventSessionRef.repoPath}' runtime '${eventSessionRef.runtimeKind}' but arrived on repo '${streamSessionRef.repoPath}' runtime '${streamSessionRef.runtimeKind}'.`,
+    );
+  }
+
+  return eventSessionRef;
+};
+
+const sessionRefForStreamEvent = (streamSessionRef: SessionRef, event: AgentEvent): SessionRef => {
+  if (event.sessionRef) {
+    return validateEventSessionRef(streamSessionRef, event, event.sessionRef);
+  }
+
+  if (event.externalSessionId === streamSessionRef.externalSessionId) {
+    return streamSessionRef;
+  }
+
+  throw new Error(
+    `Session event '${event.type}' for '${event.externalSessionId}' cannot be routed from stream '${streamSessionRef.externalSessionId}' without a full session ref.`,
+  );
+};
+
 const routeSessionEvent = <Event extends SessionEvent>(
   context: ObserveAgentSessionParams,
   event: Event,
 ): RoutedSessionEvent<Event> => {
-  const { sessionRef, sessionKey } = routeStreamEventSession(context.sessionRef, event);
+  const sessionRef = sessionRefForStreamEvent(context.sessionRef, event);
   return {
     event,
-    routeKey: sessionKey,
+    routeKey: agentSessionRefKey(sessionRef),
     sessionRef,
     storeKey: agentSessionIdentityKey(sessionRef),
   };

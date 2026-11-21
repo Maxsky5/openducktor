@@ -3,19 +3,16 @@ import {
   type AgentRuntimes,
   type AgentSessionStartMode,
   formatRuntimeDescriptorSchemaIssue,
-  mandatoryRuntimeCapabilityKeys,
   type RuntimeCapabilityKey,
   type RuntimeDescriptor,
   type RuntimeKind,
   runtimeDescriptorSchema,
 } from "@openducktor/contracts";
 
-export const DEFAULT_RUNTIME_KIND = "opencode" as const satisfies RuntimeKind;
-
-export const isRuntimeEnabled = (agentRuntimes: AgentRuntimes, runtimeKind: RuntimeKind): boolean =>
+const isRuntimeEnabled = (agentRuntimes: AgentRuntimes, runtimeKind: RuntimeKind): boolean =>
   agentRuntimes[runtimeKind]?.enabled === true;
 
-export const filterEnabledRuntimeDefinitions = (
+const filterEnabledRuntimeDefinitions = (
   runtimeDefinitions: RuntimeDescriptor[],
   agentRuntimes: AgentRuntimes,
 ): RuntimeDescriptor[] =>
@@ -127,21 +124,6 @@ export const filterRuntimeDefinitionsForStartMode = (
   return runtimeDefinitions.filter((definition) => runtimeSupportsStartMode(definition, startMode));
 };
 
-export const getAvailableRuntimeDefinitionsForStartMode = ({
-  runtimeDefinitions,
-  agentRuntimes,
-  startMode,
-}: {
-  runtimeDefinitions: RuntimeDescriptor[];
-  agentRuntimes: AgentRuntimes;
-  startMode: AgentSessionStartMode;
-}): RuntimeDescriptor[] => {
-  return filterRuntimeDefinitionsForStartMode(
-    getAvailableRuntimeDefinitions({ runtimeDefinitions, agentRuntimes }),
-    startMode,
-  );
-};
-
 export const runtimeSupportsCapability = (
   runtimeDescriptor: RuntimeDescriptor,
   capability: RuntimeCapabilityKey,
@@ -210,14 +192,6 @@ export const runtimeSupportsCapability = (
         runtimeDescriptor.capabilities.optionalSurfaces.supportedSubagentExecutionModes.length > 0
       );
   }
-};
-
-export const getMissingMandatoryRuntimeCapabilities = (
-  runtimeDescriptor: RuntimeDescriptor,
-): RuntimeCapabilityKey[] => {
-  return mandatoryRuntimeCapabilityKeys.filter(
-    (capability) => !runtimeSupportsCapability(runtimeDescriptor, capability),
-  );
 };
 
 type RuntimeScopedRole = { readonly runtimeScopes: readonly RuntimeSupportedScope[] };

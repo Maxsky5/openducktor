@@ -3,10 +3,8 @@ import type { WorkspaceRef } from "@openducktor/contracts";
 import type { TaskWorktreeSummary } from "@openducktor/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { scheduleTask, type ScheduleTask } from "../lib/scheduling";
-import type { HostClient } from "@openducktor/host-client";
 import { connectionHost } from "../connection/client-connection";
 
-export type TaskWorktreeQueryHost = Pick<HostClient, "taskWorktreeGet">;
 type TaskWorktreeQueryInput = WorkspaceRef & {
   taskId: string;
   taskVersion?: string | null;

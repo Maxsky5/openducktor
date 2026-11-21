@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { connectionHost } from "@openducktor/frontend-core/connection/client-connection";
 
-export const localImageQueryKeys = {
+const localImageQueryKeys = {
   image: (path: string) => ["local-image", path] as const,
 };
 

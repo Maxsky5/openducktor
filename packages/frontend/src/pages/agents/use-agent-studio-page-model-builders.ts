@@ -27,12 +27,6 @@ import {
   buildSessionSelectorGroups,
 } from "./agents-page-session-tabs";
 
-export type AgentStudioSessionContextUsage = {
-  totalTokens: number;
-  contextWindow: number;
-  outputLimit?: number;
-} | null;
-
 type BuildWorkflowModelContextArgs = {
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];

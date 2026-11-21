@@ -18,7 +18,7 @@ import { ROLE_LABELS, ROLES, type RoleId } from "../vocabulary";
 import "./MobileRail.css";
 
 /** The workflow tones of a step, as WorkflowStepTone. */
-export type RailTone =
+type RailTone =
   | "in_progress"
   | "done"
   | "available"
@@ -32,7 +32,7 @@ export type RailTone =
  * The mark after the role icon, as stateMark: done, a session that waits for input, a working or
  * a paused step, an available or optional step, an alert, or none.
  */
-export type RailMark =
+type RailMark =
   | "done"
   | "waiting"
   | "working"

@@ -3,12 +3,12 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { AgentSessionReadPort } from "../../../queries/agent-sessions";
 import type { HostClient } from "@openducktor/host-client";
 
-export type AgentOrchestratorHostPort = AgentSessionReadPort & {
+type AgentOrchestratorHostPort = AgentSessionReadPort & {
   taskMetadataGet: HostClient["taskMetadataGet"];
   taskWorktreeGet: HostClient["taskWorktreeGet"];
 };
 
-export type AgentOrchestratorLiveSessionHostPort = {
+type AgentOrchestratorLiveSessionHostPort = {
   agentSessionLiveLoadContext: HostClient["agentSessionLiveLoadContext"];
   agentSessionLiveRead: HostClient["agentSessionLiveRead"];
   agentSessionLiveReplyApproval: HostClient["agentSessionLiveReplyApproval"];

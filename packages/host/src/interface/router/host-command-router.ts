@@ -43,10 +43,10 @@ export type HostCommandHandlerError =
 export type HostCommandHandlerDefinitions = Partial<
   Record<HostCommandName, (args: HostCommandArgs) => void>
 >;
-export type HostCommandHandler<Command extends HostCommandName> = (
+type HostCommandHandler<Command extends HostCommandName> = (
   args: HostCommandArgs,
 ) => Effect.Effect<HostCommandResult<Command>, HostCommandHandlerError>;
-export type HostCommandHandlers = {
+type HostCommandHandlers = {
   [Command in HostCommandName]?: HostCommandHandler<Command>;
 };
 

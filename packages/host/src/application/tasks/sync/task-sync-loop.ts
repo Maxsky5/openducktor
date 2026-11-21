@@ -23,7 +23,7 @@ const TASK_SYNC_STEP_LABELS = {
   merge_detection: "Merge detection",
 } satisfies Record<TaskSyncStep, string>;
 
-export type TaskSyncLifecycleLogger = {
+type TaskSyncLifecycleLogger = {
   error(message: string): Effect.Effect<void, unknown>;
 };
 
@@ -35,7 +35,7 @@ export type TaskSyncLoopHandle = {
   stop(): Effect.Effect<void, HostOperationError>;
 };
 
-export type TaskSyncError =
+type TaskSyncError =
   | HostOperationError
   | TaskMergeDetectionError
   | TaskServiceError

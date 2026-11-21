@@ -7,8 +7,6 @@
     .mob-review-page {
       --pierre-page: #ffffff;
       --pierre-text: #0a0a0a;
-      --pierre-number: color-mix(in srgb, #0a0a0a 65%, #ffffff);
-      --pierre-separator: color-mix(in srgb, #ffffff 96%, #000000);
       --pierre-add: #0dbe4e;
       --pierre-add-line: color-mix(in srgb, #ffffff 88%, #0dbe4e);
       --pierre-add-gutter: color-mix(in srgb, #ffffff 91%, #0dbe4e);
@@ -24,8 +22,6 @@
     :where([data-theme="dark"]) & :is(.mob-diff, .mob-diff-comment, .mob-review-page) {
       --pierre-page: #0a0a0a;
       --pierre-text: #fafafa;
-      --pierre-number: color-mix(in srgb, #fafafa 65%, #0a0a0a);
-      --pierre-separator: color-mix(in srgb, #0a0a0a 85%, #ffffff);
       --pierre-add: #5ecc71;
       --pierre-add-line: color-mix(in srgb, #0a0a0a 80%, #5ecc71);
       --pierre-add-gutter: color-mix(in srgb, #0a0a0a 85%, #5ecc71);

@@ -17,7 +17,7 @@ const GITHUB_CLI_MACHINE_ENV = {
   GH_PROMPT_DISABLED: "1",
 };
 
-export type GithubCliAuth = {
+type GithubCliAuth = {
   authenticated: boolean;
   account: string | null;
   reason: string | null;

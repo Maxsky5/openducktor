@@ -12,11 +12,8 @@ import type {
   KanbanTaskSession,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import type { WorkflowPendingState } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
-import type { SessionStartFlowRequest } from "@openducktor/frontend-core/sessions/start/session-start-orchestration";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { KanbanBoardFilterModel } from "@openducktor/frontend-core/tasks/board/use-kanban-board-filter-model";
-
-export type KanbanSessionStartIntent = SessionStartFlowRequest;
 
 export type KanbanPageHeaderModel = {
   isLoadingTasks: boolean;

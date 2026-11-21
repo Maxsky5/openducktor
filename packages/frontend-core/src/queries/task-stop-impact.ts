@@ -2,11 +2,8 @@ import { workspaceScopeValue } from "./workspace-scope";
 import type { WorkspaceRef } from "@openducktor/contracts";
 import type { TaskStopImpactOperation } from "@openducktor/contracts";
 import { queryOptions } from "@tanstack/react-query";
-import type { HostClient } from "@openducktor/host-client";
 import { connectionHost } from "../connection/client-connection";
 import { normalizeAgentSessionTaskIds } from "./agent-sessions";
-
-export type TaskStopImpactReadPort = Pick<HostClient, "taskStopImpactGet">;
 
 export const taskStopImpactQueryKeys = {
   all: ["task-stop-impact"] as const,

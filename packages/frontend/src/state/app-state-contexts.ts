@@ -33,9 +33,6 @@ export const WorkspaceOperationsContext = createContext<WorkspaceOperationsConte
 export const useChecksOperationsContext = (): ChecksOperationsContextValue =>
   useRequiredContext(ChecksOperationsContext, "useChecksOperationsContext");
 
-export const useChecksStateContext = (): ChecksStateContextValue =>
-  useRequiredContext(ChecksStateContext, "useChecksStateContext");
-
 export const useWorkspaceOperationsContext = (): WorkspaceOperationsContextValue =>
   useRequiredContext(WorkspaceOperationsContext, "useWorkspaceOperationsContext");
 

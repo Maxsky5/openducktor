@@ -1,4 +1,4 @@
-export type ProbeGateToken = number;
+type ProbeGateToken = number;
 
 export type ProbeGateController = {
   begin: () => ProbeGateToken;

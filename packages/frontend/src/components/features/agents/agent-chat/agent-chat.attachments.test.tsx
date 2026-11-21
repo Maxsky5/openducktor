@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import { Activity, createRef } from "react";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import { AgentChat } from "./agent-chat";
+import { AgentChatSurface } from "./agent-chat";
 import {
   buildModelSelection,
   buildSessionTranscript,
@@ -139,12 +139,12 @@ const buildModel = () => ({
   },
 });
 
-describe("AgentChat attachments", () => {
+describe("AgentChatSurface attachments", () => {
   test("clears a file drag when its chat hides and accepts the next drag", () => {
     const model = buildModel();
     const chat = (mode: "visible" | "hidden") => (
       <Activity mode={mode}>
-        <AgentChat model={model} />
+        <AgentChatSurface model={model} />
       </Activity>
     );
     const view = render(chat("visible"));
@@ -171,7 +171,7 @@ describe("AgentChat attachments", () => {
 
   test("shows the drag overlay and stages dropped files in the composer", async () => {
     const file = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
-    const { getByTestId } = render(<AgentChat model={buildModel()} />);
+    const { getByTestId } = render(<AgentChatSurface model={buildModel()} />);
 
     const dropTarget = getByTestId("agent-chat-drop-target");
     fireEvent.dragEnter(dropTarget, {

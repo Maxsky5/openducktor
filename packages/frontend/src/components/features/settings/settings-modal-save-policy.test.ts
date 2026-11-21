@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { SettingsSnapshot } from "@openducktor/contracts";
 import {
   createRepoSettingsConfigFixture,
   createSettingsSnapshotFixture,
@@ -11,64 +10,18 @@ import {
   buildRuntimeAvailabilitySaveError,
   getSettingsSaveBlocker,
   hasAnyDirtySections,
-  hasSameSaveReadyGlobalGitConfig,
-  isGlobalGitOnlySave,
   validateGitProviderDrafts,
 } from "./settings-modal-save-policy";
 import { EMPTY_DIRTY_SECTIONS } from "./use-settings-modal-dirty-state";
 
-const createSnapshot = (): SettingsSnapshot => createSettingsSnapshotFixture();
-
 describe("settings-modal-save-policy", () => {
-  test("derives dirty and global-git-only save modes", () => {
+  test("detects a dirty settings section", () => {
     expect(hasAnyDirtySections(EMPTY_DIRTY_SECTIONS)).toBe(false);
-    expect(isGlobalGitOnlySave(EMPTY_DIRTY_SECTIONS)).toBe(false);
-
     const globalGitOnly = {
       ...EMPTY_DIRTY_SECTIONS,
       globalGit: true,
     };
     expect(hasAnyDirtySections(globalGitOnly)).toBe(true);
-    expect(isGlobalGitOnlySave(globalGitOnly)).toBe(true);
-
-    for (const section of Object.keys(EMPTY_DIRTY_SECTIONS)) {
-      if (section === "globalGit") {
-        continue;
-      }
-      expect(
-        isGlobalGitOnlySave({
-          ...globalGitOnly,
-          [section]: true,
-        }),
-      ).toBe(false);
-    }
-  });
-
-  test("compares save-ready global git configs by persisted fields", () => {
-    expect(
-      hasSameSaveReadyGlobalGitConfig(createSnapshot(), {
-        defaultMergeMethod: "merge_commit",
-        removeWorktreeOnClose: true,
-      }),
-    ).toBe(true);
-    expect(
-      hasSameSaveReadyGlobalGitConfig(createSnapshot(), {
-        defaultMergeMethod: "squash",
-        removeWorktreeOnClose: true,
-      }),
-    ).toBe(false);
-    expect(
-      hasSameSaveReadyGlobalGitConfig(createSnapshot(), {
-        defaultMergeMethod: "merge_commit",
-        removeWorktreeOnClose: false,
-      }),
-    ).toBe(false);
-    expect(
-      hasSameSaveReadyGlobalGitConfig(null, {
-        defaultMergeMethod: "merge_commit",
-        removeWorktreeOnClose: true,
-      }),
-    ).toBe(false);
   });
 
   test("allows a disabled Azure provider without repository details", () => {

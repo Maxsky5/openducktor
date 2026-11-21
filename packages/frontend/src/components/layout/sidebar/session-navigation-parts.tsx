@@ -17,13 +17,7 @@ import {
   visibleAttentionReasons,
 } from "@openducktor/frontend-core/sessions/navigation/session-navigation-entry-labels";
 
-export function AttentionBadge({
-  label,
-  className,
-}: {
-  label: string;
-  className?: string;
-}): ReactElement {
+function AttentionBadge({ label, className }: { label: string; className?: string }): ReactElement {
   return (
     <span
       className={cn(

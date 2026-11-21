@@ -24,7 +24,7 @@ import type { TaskGitContextMode } from "./task-worktree-paths";
 import { type TaskWorktreeState, useTaskWorktree } from "./use-task-worktree";
 
 /** The repository default target branch. Null until the repository settings load. */
-export type TaskGitRepoSettings = { defaultTargetBranch?: GitTargetBranch | null | undefined };
+type TaskGitRepoSettings = { defaultTargetBranch?: GitTargetBranch | null | undefined };
 
 export type TaskGitPanelInput = {
   workspaceId: string | null;

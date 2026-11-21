@@ -29,6 +29,7 @@ import { parseAdapterOutput as parseClaudeLiveSessionOutput } from "../../effect
 import type {
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
+  ApprovalReplyOptions,
 } from "../../ports/agent-session-live-adapter-port";
 import { createClaudeMessageControls } from "./claude-live-session-message-controls";
 import { beginClaudeGoalRestore } from "../claude/claude-agent-sdk-goals";
@@ -63,13 +64,10 @@ import {
 } from "./claude-live-session-runtime-guards";
 import { toLiveSessionRef } from "./live-session-ref";
 
-export type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 export { createClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 export type {
-  ClaudeLiveSessionAdapterPreparer,
   ClaudeRuntimeSessionAdapterPreparer,
   CreateClaudeLiveSessionAdapterPreparerInput,
-  PreparedClaudeLiveSessionAdapter,
 } from "./claude-live-session-adapter-contract";
 
 export const createClaudeLiveSessionAdapterPreparer =
@@ -156,7 +154,7 @@ export const createClaudeLiveSessionAdapterPreparer =
         operation: string,
         externalSessionId: string,
         prepare: Effect.Effect<ClaudePendingInputResolution, HostError>,
-        options?: import("../../ports/agent-session-live-adapter-port").ApprovalReplyOptions,
+        options?: ApprovalReplyOptions,
       ): Effect.Effect<void, HostError> =>
         eventCoordinator.runControlMutation(
           prepare.pipe(

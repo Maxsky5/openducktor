@@ -14,7 +14,7 @@ import {
 import { readThemeBlocks, TOKENS_FILE } from "@openducktor/theme/blocks";
 
 /** Desktop custom properties that the mobile theme uses, without the leading `--`. */
-export const DESKTOP_TOKEN_NAMES = [
+const DESKTOP_TOKEN_NAMES = [
   "background",
   "foreground",
   "card",
@@ -115,7 +115,7 @@ export const DESKTOP_TOKEN_NAMES = [
 ] as const;
 
 /** Tailwind palette families and shades that desktop badges and lanes use. */
-export const PALETTE_FAMILIES = [
+const PALETTE_FAMILIES = [
   "slate",
   "violet",
   "sky",
@@ -132,7 +132,7 @@ export const PALETTE_FAMILIES = [
   "teal",
   "yellow",
 ] as const;
-export const PALETTE_SHADES = [
+const PALETTE_SHADES = [
   "50",
   "100",
   "200",
@@ -156,10 +156,7 @@ export type DesktopThemeColors = {
 };
 
 /** Resolves the mobile token set from the desktop theme and the Tailwind palette. */
-export const resolveDesktopThemeColors = (
-  themeCss: string,
-  paletteCss: string,
-): DesktopThemeColors => {
+const resolveDesktopThemeColors = (themeCss: string, paletteCss: string): DesktopThemeColors => {
   const palette = readBlock(paletteCss, /@theme default \{/);
   const blocks = readThemeBlocks(themeCss);
   const light = readDeclarations(blocks.light);
@@ -186,7 +183,7 @@ export const resolveDesktopThemeColors = (
 };
 
 const repositoryRoot = resolve(import.meta.dir, "../../..");
-export const TAILWIND_PALETTE_PATH = resolve(
+const TAILWIND_PALETTE_PATH = resolve(
   repositoryRoot,
   "packages/frontend/node_modules/tailwindcss/theme.css",
 );

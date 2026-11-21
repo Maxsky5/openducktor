@@ -52,7 +52,7 @@ export type ElectronBrowserEngineInput = {
   reportFailure(operation: string, cause: unknown): void;
 };
 
-export type ElectronCertificateError = {
+type ElectronCertificateError = {
   readonly webContentsId: number;
   readonly url: string;
   readonly error: string;

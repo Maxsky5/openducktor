@@ -30,7 +30,7 @@ import {
   waitForDevToolsPort,
 } from "./devtools-port";
 
-export type ManagedElectronProcess = {
+type ManagedElectronProcess = {
   readonly devToolsPort: Promise<number> | null;
   readonly exited: Promise<number>;
   kill(signal?: NodeJS.Signals | number): void;
@@ -239,7 +239,7 @@ export const resolveRequiredMacosAppBundlePath = (electronExecutablePath: string
   return sourceAppPath;
 };
 
-export const resolveMacosDevAppPath = (): string =>
+const resolveMacosDevAppPath = (): string =>
   path.join(packageRoot, ".electron-dev", `${APPLICATION_NAME}.app`);
 
 export const resolveMacosDevExecutablePath = (devAppPath: string, executableName: string): string =>
@@ -448,14 +448,9 @@ const prepareMacosDevElectronBundleEffect = (
     return devExecutablePath;
   });
 
-export const buildElectronBundlesEffect = (): Effect.Effect<
-  void,
-  ElectronOperationErrorAggregate
-> =>
+const buildElectronBundlesEffect = (): Effect.Effect<void, ElectronOperationErrorAggregate> =>
   Effect.gen(function* () {
     yield* runStepEffect("Electron main build", ["bun", "run", "build:main"]);
-    // The import worker has its own bundle, as in the production build.
-    yield* runStepEffect("Electron import worker build", ["bun", "run", "build:import-worker"]);
     yield* runStepEffect("Electron preload build", ["bun", "run", "build:preload"]);
     yield* copyElectronSqliteMigrationsEffect();
   });

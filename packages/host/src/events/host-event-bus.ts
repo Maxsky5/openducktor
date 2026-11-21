@@ -7,7 +7,7 @@ import { HostValidationError } from "../effect/host-errors";
 
 export type HostEventListener = (envelope: HostEventEnvelope) => void;
 export type HostEventUnsubscribe = () => void;
-export type HostEventDeliveryFailure = {
+type HostEventDeliveryFailure = {
   channel: HostEventChannel;
   cause: unknown;
 };

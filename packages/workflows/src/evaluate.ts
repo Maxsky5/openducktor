@@ -41,8 +41,8 @@ export class WorkflowEvaluationError extends Error {
   }
 }
 
-export type WorkflowPredicate = (input: WorkflowInput) => boolean;
-export type CompiledWorkflowCondition = CompiledWorkflowDefinition["steps"][number]["requiredWhen"];
+type WorkflowPredicate = (input: WorkflowInput) => boolean;
+type CompiledWorkflowCondition = CompiledWorkflowDefinition["steps"][number]["requiredWhen"];
 
 export type WorkflowIdsOf<Definition extends WorkflowDefinition> = {
   state: Definition["states"][number]["id"];
@@ -63,7 +63,6 @@ export type Workflow<Ids extends WorkflowIds = WorkflowIds> = {
   availableActions(input: WorkflowInput): Ids["action"][];
   isEventAvailable(input: WorkflowInput, eventId: Ids["event"]): boolean;
   decide(input: WorkflowInput, eventId: Ids["event"]): WorkflowDecision<Ids>;
-  /** Checks an extra condition against this definition once and returns its predicate. */
   /** Compiles a condition once per condition object. */
   condition(condition: WorkflowCondition | CompiledWorkflowCondition): WorkflowPredicate;
   /** Selects from retained launch choices after their originating action commits. */

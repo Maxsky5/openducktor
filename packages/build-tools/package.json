@@ -10,12 +10,12 @@
     "./static-site": "./src/static-site.ts"
   },
   "scripts": {
-    "build": "bunx tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --pass-with-no-tests --timeout 1000",
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "devDependencies": {
-    "bun-types": "^1.4.2"
+    "bun-types": "^1.4.5"
   }
 }

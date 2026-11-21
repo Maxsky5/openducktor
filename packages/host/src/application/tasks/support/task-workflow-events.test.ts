@@ -16,7 +16,7 @@ import {
   requireApprovalAvailable,
   requirePullRequestManagement,
   requireTaskEvent,
-  requireTaskEventInput,
+  decideTaskEventInput,
   startWorktreeSessionHint,
 } from "./task-workflow-events";
 
@@ -92,34 +92,36 @@ describe("task workflow events", () => {
     ).toEqual({ kind: "transition", from: "in_progress", to: "blocked", cause: {} });
   });
 
-  test("reports status denials of validation commands with their allowed statuses", async () => {
+  test("reports status denials of validation commands with their allowed statuses", () => {
     const current = task({ status: "closed" });
-    const error = await Effect.runPromise(
-      Effect.flip(
-        requireTaskEventInput(
-          "Implementation reset is",
-          specPlanBuildWorkflow,
-          "reset-implementation",
-          current,
-          { taskId: current.id },
-        ),
-      ),
+    const result = decideTaskEventInput(
+      "Implementation reset is",
+      specPlanBuildWorkflow,
+      "reset-implementation",
+      current,
+      { taskId: current.id },
     );
+    if (!Result.isFailure(result)) throw new Error("Expected a validation failure.");
+    const error = result.failure;
     expect(error).toBeInstanceOf(HostValidationError);
     expect(error.message).toBe(
       "Implementation reset is only allowed from in_progress, blocked, ai_review, or human_review (current: closed).",
     );
   });
 
-  test("reports guard denials of validation commands with the guard message", async () => {
+  test("reports guard denials of validation commands with the guard message", () => {
     const current = task();
-    const error = await Effect.runPromise(
-      Effect.flip(
-        requireTaskEventInput("Build resume is", specPlanBuildWorkflow, "build-resumed", current, {
-          taskId: current.id,
-        }),
-      ),
+    const result = decideTaskEventInput(
+      "Build resume is",
+      specPlanBuildWorkflow,
+      "build-resumed",
+      current,
+      {
+        taskId: current.id,
+      },
     );
+    if (!Result.isFailure(result)) throw new Error("Expected a validation failure.");
+    const error = result.failure;
     expect(error.message).toBe(
       "Build resume is not allowed yet. Complete required planning first.",
     );

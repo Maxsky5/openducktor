@@ -2,6 +2,7 @@
 // loader of its timeline. Each timeline loads in its own chunk, so a page loads only the scenes
 // that it shows. This module loads no view, no React, and no text, so a page script can import it.
 // The React views load from views.ts.
+import { TOUR_SCENES } from "./tour-scenes";
 import type { SceneBuilder } from "./motion/scene";
 import type { ChatOptions } from "./scenes/chat/view";
 import type { HeroOptions } from "./scenes/hero/view";
@@ -20,18 +21,12 @@ type SceneEntry = { size: SceneSize; timeline: () => Promise<SceneBuilder<string
 type ChapterEntry = { size: SceneSize; chapters: () => Promise<ChapterBuilders> };
 
 export const SCENES = {
-  hero: {
-    size: { width: 1440, height: 700 },
-    timeline: async () => (await import("./scenes/hero/timeline")).build,
-  },
+  hero: TOUR_SCENES.hero,
   workflow: {
     size: { width: 1440, height: 780 },
     chapters: async () => (await import("./scenes/workflow/timeline")).build,
   },
-  palette: {
-    size: { width: 1440, height: 740 },
-    timeline: async () => (await import("./scenes/palette/timeline")).build,
-  },
+  palette: TOUR_SCENES.palette,
   runtimes: {
     size: { width: 760, height: 620 },
     timeline: async () => (await import("./scenes/runtimes/timeline")).build,

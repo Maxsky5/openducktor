@@ -14,7 +14,7 @@ export {
   expectFailureTag,
 } from "./task-store-port-contract-fixtures";
 
-export type TaskStorePortContractHarness = {
+type TaskStorePortContractHarness = {
   readonly cleanup?: (() => Promise<void>) | undefined;
   readonly scope: WorkspaceRef;
   readonly store: TaskStorePort;

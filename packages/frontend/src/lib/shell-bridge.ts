@@ -25,7 +25,7 @@ export type AppUpdateBridge = {
   subscribeState(listener: (state: AppUpdateState) => void): Promise<() => void>;
 };
 
-export type BrowserChannelState = "connected" | "disconnected";
+type BrowserChannelState = "connected" | "disconnected";
 
 export type BrowserChannelConnection = {
   send(message: Uint8Array): Promise<void>;

@@ -19,7 +19,7 @@ export type HostStatusSnapshot = Omit<HostRuntimeSnapshot, "mcpBridge"> & {
 };
 
 /** The latest read of one check. A read failure takes priority over a retained `data`. */
-export type CheckRead<T> = {
+type CheckRead<T> = {
   /** The latest observed result. Null when no result was observed. */
   data: T | null;
   /** The latest read failure. A retained `data` is then an earlier result. */

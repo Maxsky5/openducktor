@@ -3,7 +3,7 @@ import { remotePairingCodeSchema } from "@openducktor/contracts";
 /** The selection of the hidden code field: a caret, or one selected digit. */
 export type CodeSelection = { start: number; end: number };
 
-export const CODE_LENGTH = 6;
+const CODE_LENGTH = 6;
 /** The slot positions, as stable keys for the digit tiles. */
 export const CODE_SLOTS = [0, 1, 2, 3, 4, 5] as const;
 

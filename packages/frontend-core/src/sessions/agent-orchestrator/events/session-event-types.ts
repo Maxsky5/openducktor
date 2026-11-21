@@ -56,7 +56,7 @@ export type SessionStoreContext = {
   ensureSession: EnsureSession;
 };
 
-export type SessionTodosContext = { updateSessionTodos: UpdateSessionTodos };
+type SessionTodosContext = { updateSessionTodos: UpdateSessionTodos };
 
 export type SessionTurnContext = {
   turnMetadata: SessionTurnMetadata;
@@ -66,7 +66,7 @@ export type SessionTurnContext = {
   clearTurnDuration: (sessionKey: string, completedTimestamp?: string) => void;
 };
 
-export type SessionApprovalContext = {
+type SessionApprovalContext = {
   replyApproval: (input: ReplyApprovalInput) => Promise<void>;
   readOnlyApprovalAutoRejectSafe: boolean;
   buildReadOnlyApprovalRejectionMessage: BuildReadOnlyApprovalRejectionMessage;

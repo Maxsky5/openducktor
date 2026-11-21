@@ -5,7 +5,6 @@ import {
   ActiveWorkspaceContext,
   RuntimeDefinitionsContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
-import { autopilotSettingsQueryOptions } from "@openducktor/frontend-core/queries/autopilot";
 import { runtimeExecutableQueryOptions } from "@openducktor/frontend-core/queries/runtime";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
@@ -89,7 +88,6 @@ const renderOnboardingOverlays = () => {
   });
   const { queryClient } = connection;
   queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, snapshot);
-  queryClient.setQueryData(autopilotSettingsQueryOptions().queryKey, snapshot.autopilot);
   for (const kind of knownRuntimeKindValues) {
     const path = snapshot.agentRuntimes[kind].executablePath;
     queryClient.setQueryData(runtimeExecutableQueryOptions(kind, path).queryKey, {

@@ -6,7 +6,7 @@ export const KANBAN_TASK_QUERY_KEYS = {
 } as const;
 
 /** The query key that names the workspace of the Kanban page. */
-export const KANBAN_WORKSPACE_QUERY_KEY = "workspace";
+const KANBAN_WORKSPACE_QUERY_KEY = "workspace";
 
 /** The Kanban page of a workspace. */
 export const buildKanbanWorkspaceHref = (workspaceId: string): string => {

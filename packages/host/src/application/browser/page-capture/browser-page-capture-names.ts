@@ -1,5 +1,5 @@
 /** The component type of a React fiber, as React keeps it on the page. */
-export type PageFiberType = {
+type PageFiberType = {
   displayName?: string;
   name?: string;
   render?: PageFiberType;

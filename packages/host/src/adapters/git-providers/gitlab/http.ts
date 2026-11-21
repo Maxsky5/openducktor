@@ -43,7 +43,7 @@ export const gitlabProblemOf = (error: HostError): GitlabFailureDetails | null =
     ? (gitlabFailureDetailsSchema.safeParse(error.details).data ?? null)
     : null;
 
-export type GitlabHttpRequest = {
+type GitlabHttpRequest = {
   operation: string;
   /** The instance URL, without `/api/v4`. */
   instanceUrl: string;

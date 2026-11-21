@@ -5,7 +5,7 @@ import { hasNonEmptyText } from "./tool-lifecycle";
 
 const questionJsonValueSchema = z.json();
 
-export type QuestionToolOption = {
+type QuestionToolOption = {
   label: string;
   description: string | null;
 };

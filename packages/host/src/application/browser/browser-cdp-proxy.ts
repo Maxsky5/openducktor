@@ -17,7 +17,7 @@ export const cdpClientMessageSchema = z.object({
   params: cdpPayloadSchema.optional(),
   sessionId: z.string().optional(),
 });
-export type CdpClientMessage = z.infer<typeof cdpClientMessageSchema>;
+type CdpClientMessage = z.infer<typeof cdpClientMessageSchema>;
 
 type CdpProxyClientKind = "agent" | "devtools";
 

@@ -44,9 +44,7 @@ const githubPullResponseSchema = z.object({
   base: githubPullBranchRefSchema,
 });
 
-export type GithubPullBranchRef = z.infer<typeof githubPullBranchRefSchema>;
-
-export type GithubPullResponse = z.infer<typeof githubPullResponseSchema>;
+type GithubPullResponse = z.infer<typeof githubPullResponseSchema>;
 
 export type ResolvedPullRequest = {
   record: PullRequest;

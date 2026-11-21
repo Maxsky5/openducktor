@@ -76,7 +76,7 @@ export class FakeDebugger extends EventEmitter {
   }
 }
 
-export class FakePartitionSession extends EventEmitter implements ElectronBrowserPartitionSession {
+class FakePartitionSession extends EventEmitter implements ElectronBrowserPartitionSession {
   requestHandler:
     | Parameters<ElectronBrowserPartitionSession["setPermissionRequestHandler"]>[0]
     | null = null;
@@ -231,7 +231,7 @@ export class FakePopupWindow implements ElectronPopupWindow {
 }
 
 /** One page view that the engine created through the port. */
-export class FakeView implements ElectronBrowserView {
+class FakeView implements ElectronBrowserView {
   constructor(
     readonly partition: string,
     readonly webContents: FakeGuest,
@@ -239,7 +239,7 @@ export class FakeView implements ElectronBrowserView {
 }
 
 /** The view port of a test: it records each placement instead of showing a window. */
-export class FakeViewPort implements ElectronBrowserViewPort {
+class FakeViewPort implements ElectronBrowserViewPort {
   readonly views: FakeView[] = [];
   readonly placed: Array<{
     view: FakeView;

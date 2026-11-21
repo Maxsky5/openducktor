@@ -1,4 +1,4 @@
-export type StrictBase64Failure = "too_large" | "malformed" | "padding";
+type StrictBase64Failure = "too_large" | "malformed" | "padding";
 
 export type StrictBase64Result =
   | { ok: true; bytes: Buffer }

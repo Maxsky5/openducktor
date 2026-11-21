@@ -116,9 +116,6 @@ export const loadRepoConfigFromQuery = (
   workspaceId: string,
 ): Promise<RepoConfig> => queryClient.ensureQueryData(repoConfigQueryOptions(workspaceId));
 
-export const loadWorkspaceListFromQuery = (queryClient: QueryClient): Promise<WorkspaceRecord[]> =>
-  queryClient.fetchQuery(workspaceListQueryOptions());
-
 export const writeWorkspaceListToQuery = (
   queryClient: QueryClient,
   recordsOrUpdater: WorkspaceRecordUpdate,

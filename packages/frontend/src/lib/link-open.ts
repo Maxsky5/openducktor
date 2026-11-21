@@ -19,7 +19,7 @@ export type LinkMenuRequest = { url: string; anchor: LinkMenuAnchor };
 export type LinkClick = Pick<MouseEvent, "metaKey" | "ctrlKey" | "shiftKey" | "altKey">;
 
 /** The keyboard of this device, which can differ from the host in the web runner. */
-export const usesMacKeys = (): boolean => /Mac|iPhone|iPad/u.test(globalThis.navigator.platform);
+const usesMacKeys = (): boolean => /Mac|iPhone|iPad/u.test(globalThis.navigator.platform);
 
 /** The key cap label of the modifier that a click needs: ⌘ on macOS, Ctrl elsewhere. */
 export const linkModifierLabel = (): string => (usesMacKeys() ? "⌘" : "Ctrl");

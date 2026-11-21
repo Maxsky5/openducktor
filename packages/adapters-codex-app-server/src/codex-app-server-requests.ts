@@ -22,10 +22,6 @@ import type { CodexToolQuestion } from "./codex-tool-normalizer";
 import type { CodexNotificationRecord, CodexServerRequestRecord } from "./types";
 
 export { codexApprovalResponseForRequest } from "./codex-approval-responses";
-export {
-  parseCodexRuntimeNotificationRecord as parseNotificationRecord,
-  parseCodexRuntimeServerRequestRecord as parseServerRequestRecord,
-} from "./codex-runtime-event-schema";
 
 const MCP_APPROVAL_KIND_KEY = "codex_approval_kind";
 const MCP_APPROVAL_KIND_TOOL_CALL = "mcp_tool_call";

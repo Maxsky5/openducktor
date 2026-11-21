@@ -24,7 +24,7 @@ export const PAGE_SOURCE_DIRECTORY = path.join(
   MOBILE_ROOT,
   "src/rich-content/isolated-page/page-src",
 );
-export const PAGE_OUTPUT_DIRECTORY = path.join(MOBILE_ROOT, "assets/pages");
+const PAGE_OUTPUT_DIRECTORY = path.join(MOBILE_ROOT, "assets/pages");
 
 const FONT_MEDIA_TYPES = new Map([
   ["woff2", "font/woff2"],
@@ -40,7 +40,7 @@ const fontExtension = (url: string): string =>
  * Replaces each `@font-face` source list with one inline font: the woff2 source when the list
  * has one, because every supported WebView reads woff2.
  */
-export const inlineFontSources = async (css: string, directory: string): Promise<string> => {
+const inlineFontSources = async (css: string, directory: string): Promise<string> => {
   const fonts = [...css.matchAll(/src:([^;}]+)/g)].flatMap(([declaration, list = ""]) => {
     const sources = [
       ...list.matchAll(

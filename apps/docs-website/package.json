@@ -33,7 +33,7 @@
     "@expo-google-fonts/space-grotesk": "0.4.1",
     "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/bun": "^1.4.3",
+    "@types/bun": "^1.4.5",
     "@types/mdx": "^2.0.13",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",

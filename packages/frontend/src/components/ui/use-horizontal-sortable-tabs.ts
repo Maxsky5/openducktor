@@ -1,24 +1,5 @@
-import {
-  closestCenter,
-  type DragEndEvent,
-  type DragStartEvent,
-  MeasuringStrategy,
-  MouseSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { MouseSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { MOTION_EASE_OUT } from "./motion";
-
-export type HorizontalTabDropPosition = "before" | "after";
-type HorizontalTabDragStartEvent = {
-  active: Pick<DragStartEvent["active"], "id">;
-};
-type HorizontalTabDragEndEvent = HorizontalTabDragStartEvent & {
-  over: Pick<NonNullable<DragEndEvent["over"]>, "id"> | null;
-};
 
 export const horizontalTabDropAnimation = {
   duration: 220,
@@ -30,81 +11,10 @@ export const horizontalTabSortTransition = {
   easing: MOTION_EASE_OUT,
 };
 
-const horizontalTabMeasuring = { droppable: { strategy: MeasuringStrategy.Always } };
-const horizontalTabModifiers: [typeof restrictToHorizontalAxis] = [restrictToHorizontalAxis];
-
 const TAB_DRAG_SENSOR_OPTIONS = { activationConstraint: { distance: 6 } };
 
 /** The drag sensors of tab strips. A drag starts after 6 px, so a click still selects the tab. */
 export const useTabDragSensors = () => {
   const PrimarySensor = globalThis.PointerEvent === undefined ? MouseSensor : PointerSensor;
   return useSensors(useSensor(PrimarySensor, TAB_DRAG_SENSOR_OPTIONS));
-};
-
-const cancelPendingAnimationFrame = (frameRef: { current: number | null }): void => {
-  if (frameRef.current === null) return;
-  globalThis.cancelAnimationFrame(frameRef.current);
-  frameRef.current = null;
-};
-
-export const useHorizontalSortableTabs = ({
-  itemIds,
-  onReorder,
-}: {
-  itemIds: string[];
-  onReorder: (draggedId: string, targetId: string, position: HorizontalTabDropPosition) => void;
-}) => {
-  const sensors = useTabDragSensors();
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const suppressedSelectionIdRef = useRef<string | null>(null);
-  const selectionSuppressionFrameRef = useRef<number | null>(null);
-
-  const scheduleSelectionSuppressionClear = useCallback((): void => {
-    cancelPendingAnimationFrame(selectionSuppressionFrameRef);
-    selectionSuppressionFrameRef.current = globalThis.requestAnimationFrame(() => {
-      suppressedSelectionIdRef.current = null;
-      selectionSuppressionFrameRef.current = null;
-    });
-  }, []);
-  const handleDragStart = useCallback((event: HorizontalTabDragStartEvent): void => {
-    const id = String(event.active.id);
-    suppressedSelectionIdRef.current = id;
-    setActiveId(id);
-  }, []);
-  const handleDragCancel = useCallback((): void => {
-    setActiveId(null);
-    scheduleSelectionSuppressionClear();
-  }, [scheduleSelectionSuppressionClear]);
-  const handleDragEnd = useCallback(
-    (event: HorizontalTabDragEndEvent): void => {
-      const draggedId = String(event.active.id);
-      const targetId = event.over ? String(event.over.id) : null;
-      setActiveId(null);
-      scheduleSelectionSuppressionClear();
-      if (!targetId || draggedId === targetId) return;
-      const draggedIndex = itemIds.indexOf(draggedId);
-      const targetIndex = itemIds.indexOf(targetId);
-      if (draggedIndex < 0 || targetIndex < 0) return;
-      onReorder(draggedId, targetId, draggedIndex < targetIndex ? "after" : "before");
-    },
-    [itemIds, onReorder, scheduleSelectionSuppressionClear],
-  );
-  const shouldSuppressSelection = useCallback(
-    (id: string): boolean => suppressedSelectionIdRef.current === id,
-    [],
-  );
-
-  useEffect(() => () => cancelPendingAnimationFrame(selectionSuppressionFrameRef), []);
-
-  return {
-    activeId,
-    sensors,
-    collisionDetection: closestCenter,
-    measuring: horizontalTabMeasuring,
-    modifiers: horizontalTabModifiers,
-    handleDragStart,
-    handleDragEnd,
-    handleDragCancel,
-    shouldSuppressSelection,
-  };
 };

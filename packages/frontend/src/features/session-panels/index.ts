@@ -1,9 +1,4 @@
-export {
-  PANEL_TAB_KIND_RULES,
-  type PanelId,
-  type PanelTabKind,
-  type ToolTabKind,
-} from "./panel-tab-kinds";
+export { PANEL_TAB_KIND_RULES, type ToolTabKind } from "./panel-tab-kinds";
 export {
   appendRightPanelEntry,
   type BrowserTabEntry,
@@ -14,14 +9,13 @@ export {
   removePanelEntry,
   type SessionPanelLayout,
   type SessionPanelOwner,
-  type SessionPanelSelectionKey,
   sessionPanelOwnerKey,
 } from "./session-panel-layout";
 export {
   type SessionPanelLayoutStore,
   useSessionPanelLayoutStore,
 } from "./session-panel-layout-store";
-export { SessionPanel, type ToolTabView, type ToolTabViews } from "./session-panel";
+export { SessionPanel, type ToolTabViews } from "./session-panel";
 export {
   BottomPanelSplit,
   SessionPanelSplit,
@@ -33,7 +27,6 @@ export { useNarrowWindow } from "./use-narrow-window";
 export type { BrowserTabView } from "./use-session-panel-browser-tabs";
 export { useSessionPanelLayoutPruning } from "./use-session-panel-layout-pruning";
 export {
-  type PanelPresence,
   type SessionPanelBrowserModel,
   type SessionPanelModel,
   type SessionPanelsModel,

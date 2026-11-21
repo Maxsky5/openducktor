@@ -13,8 +13,8 @@ import {
 } from "./inline-comment-draft-storage";
 
 export type InlineCommentSide = "old" | "new";
-export type InlineCommentStatus = "pending" | "submitting";
-export type InlineCommentPersistenceWarning = "oversized" | "storage_unavailable";
+type InlineCommentStatus = "pending" | "submitting";
+type InlineCommentPersistenceWarning = "oversized" | "storage_unavailable";
 
 export type InlineCommentContextLine = {
   lineNumber: number;

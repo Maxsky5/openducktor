@@ -12,7 +12,7 @@ type TaskEvent = Extract<
   { subtype: "task_started" | "task_progress" | "task_updated" | "task_notification" }
 >;
 
-export type ClaudeNativeTaskRun = {
+type ClaudeNativeTaskRun = {
   runId: string;
   ambient: boolean;
   background: boolean;
@@ -40,7 +40,7 @@ type ClaudeInputActivityState = {
   subagentEventSessionsByTaskId?: ReadonlyMap<string, ClaudeInputActivityState>;
 };
 
-export const claudeBlockingInputActivity = (
+const claudeBlockingInputActivity = (
   session: ClaudeInputActivityState,
 ): "waiting_for_question" | "waiting_for_permission" | null => {
   let permission = (session.pendingApprovals?.size ?? 0) > 0;

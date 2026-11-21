@@ -42,7 +42,7 @@ import {
   useSessionViewShown,
 } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
 
-export type PanelDropState = "accepted" | "rejected" | null;
+type PanelDropState = "accepted" | "rejected" | null;
 
 type SessionPanelMoves = {
   dropState: (panel: PanelId) => PanelDropState;

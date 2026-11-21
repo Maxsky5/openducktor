@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
-import { deriveToolPreview, deriveToolType } from "./tool-preview";
+import { deriveToolPreview } from "./tool-preview";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
 
 describe("OpenCode tool strategy catalog", () => {
@@ -98,7 +98,6 @@ describe("OpenCode tool strategy catalog", () => {
     for (const testCase of cases) {
       const strategy = resolveOpencodeToolStrategy(testCase.tool);
       expect(strategy.toolType, testCase.label).toBe(testCase.expectedType);
-      expect(deriveToolType(testCase.tool), testCase.label).toBe(testCase.expectedType);
       expect(
         deriveToolPreview({
           tool: testCase.tool,
@@ -150,7 +149,6 @@ describe("OpenCode tool strategy catalog", () => {
           toolType: "workflow",
           previewStrategy: "workflow",
         });
-        expect(deriveToolType(toolName)).toBe("workflow");
       }
     }
   });

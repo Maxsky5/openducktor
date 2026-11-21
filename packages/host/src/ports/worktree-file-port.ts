@@ -10,7 +10,7 @@ export type ResolvedPathWithinRoot =
   | { canonicalPath: string; cleanupPath: string; isSymlink: boolean; kind: "descendant" }
   | { canonicalPath: string; cleanupPath: string; isSymlink: boolean; kind: "outside" };
 
-export type PreparedWorktreeAliasRemoval = {
+type PreparedWorktreeAliasRemoval = {
   remove: Effect.Effect<void, WorktreeFileError>;
 };
 

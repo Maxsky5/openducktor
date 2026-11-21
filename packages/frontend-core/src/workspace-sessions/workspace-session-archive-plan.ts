@@ -47,7 +47,7 @@ const worktreeTaskOwners = (preview: WorkspaceSessionArchivePreviewRead) =>
   preview.data?.taskOwners ?? [];
 
 /** True when other saved chats or open tasks need the worktree, so it stays. */
-export const isWorktreeNeeded = (preview: WorkspaceSessionArchivePreviewRead): boolean =>
+const isWorktreeNeeded = (preview: WorkspaceSessionArchivePreviewRead): boolean =>
   worktreeSharedWith(preview).length > 0 || worktreeTaskOwners(preview).length > 0;
 
 /** A worktree stays when other saved chats or open tasks need it. */

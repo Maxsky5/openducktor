@@ -51,11 +51,6 @@ import {
 import { useAgentStudioSessionStartFlow } from "./session-start/use-agent-studio-session-start-flow";
 import type { SelectAgentStudioSelection } from "./shell/agent-studio-selection-state";
 
-export type {
-  NewSessionStartDecision,
-  NewSessionStartRequest,
-} from "@openducktor/frontend-core/sessions/start/session-start-types";
-
 const EMPTY_PENDING_APPROVAL_REQUESTS = Object.freeze(new Array<AgentApprovalRequest>());
 const EMPTY_PENDING_QUESTION_REQUESTS = Object.freeze(new Array<AgentQuestionRequest>());
 

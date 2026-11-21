@@ -20,6 +20,7 @@ export function resolveAppVersion(env: NodeJS.ProcessEnv = process.env): string 
 }
 
 export default defineConfig(({ mode }) => ({
+  publicDir: path.resolve(__dirname, "../frontend/public"),
   ...(mode === "standalone" && { cacheDir: "node_modules/.vite-client" }),
   plugins: [
     createOpenDucktorStartupSplashPlugin(),

@@ -7,7 +7,7 @@ import {
   errorMessage,
 } from "./electron-errors.ts";
 
-export const DEFAULT_RENDERER_DEV_PORT = 0;
+const DEFAULT_RENDERER_DEV_PORT = 0;
 const packageVersionSchema = z.object({ version: z.string().trim().min(1) });
 
 export const resolveRendererDevPortEffect = (
@@ -74,7 +74,7 @@ export const readPackageVersionEffect = (
           }),
   });
 
-export const readPackageVersion = (packageJsonPath: string): string => {
+const readPackageVersion = (packageJsonPath: string): string => {
   let packageJson: unknown;
   try {
     packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));

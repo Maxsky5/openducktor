@@ -18,7 +18,6 @@ import { useNotificationContext } from "@/state/notifications/notification-conte
 import { useWorkspaceStateContext } from "../app-state-contexts";
 import { useAgentOperationsContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { readAutopilotHeldOutcomes } from "@openducktor/frontend-core/autopilot/autopilot-held-outcomes";
-import { autopilotQueryKeys } from "@openducktor/frontend-core/queries/autopilot";
 import { invalidateWorkspaceSettingsSnapshot } from "@openducktor/frontend-core/queries/workspace";
 import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
 import { invalidateTerminalList } from "@openducktor/frontend-core/queries/terminals";
@@ -117,24 +116,19 @@ export function AutopilotProvider({ children }: PropsWithChildren): ReactElement
     let disposed = false;
     let unsubscribe: (() => void) | null = null;
     const readWorkspaceIds = readWorkspaceIdsRef.current;
-    const refreshSavedSettings = () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: autopilotQueryKeys.settings(), exact: true }),
-        invalidateWorkspaceSettingsSnapshot(queryClient),
-      ]);
     host
       .subscribeRunEvents((payload) => {
         if ("__openducktorConnectionControl" in payload) {
           if (payload.kind !== CONNECTION_RECONNECTED_EVENT_KIND || !payload.missedEvents) return;
           return Promise.all([
-            refreshSavedSettings(),
+            invalidateWorkspaceSettingsSnapshot(queryClient),
             readHeldOutcomes(openWorkspaceIdsRef.current, { workspaceSelected: false }),
           ]).then(([, causes]) => {
             if (causes.length > 0) throw causes[0];
           });
         }
         if (payload.type === "autopilot_settings_saved") {
-          return refreshSavedSettings().then(() => {});
+          return invalidateWorkspaceSettingsSnapshot(queryClient);
         }
         // The shell parsed the payload with the run event contract.
         if (payload.type === "autopilot_outcome") presenter.present(payload.outcome);

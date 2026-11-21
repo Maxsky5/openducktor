@@ -212,12 +212,12 @@ export const runElectronMainStartupBoundary = async ({
   exitProcess(1);
 };
 
-export type ElectronMainShutdownOptions = {
+type ElectronMainShutdownOptions = {
   exitAfterShutdown?: boolean;
   reason: string;
 };
 
-export type ElectronMainShutdownRunOptions = {
+type ElectronMainShutdownRunOptions = {
   reason: string;
   runAfterShutdown(): Promise<void>;
 };

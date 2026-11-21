@@ -4,7 +4,7 @@ import { isKnownGitProviderId } from "../../git/git-provider-label";
 export type IssueImportProvider = NonNullable<RepositoryGitProviderContext>;
 
 /** The Git provider when its setup can import issues, or null when the setup is incomplete. */
-export const issueImportProvider = (
+const issueImportProvider = (
   provider: RepositoryGitProviderContext | undefined,
 ): IssueImportProvider | null =>
   provider?.config.enabled === true &&

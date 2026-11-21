@@ -129,10 +129,6 @@
       line-height: calc(16 * var(--u));
       text-wrap: pretty;
     }
-    .pd-title .pd-owner {
-      font-weight: 500;
-    }
-    .pd-title code,
     .pd-textarea pre,
     .pd-part pre {
       font-family:

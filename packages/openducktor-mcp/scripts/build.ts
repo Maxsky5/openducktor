@@ -1,3 +1,4 @@
+import { copyFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cleanDirectory, markExecutable, runCommand } from "@openducktor/build-tools";
@@ -6,7 +7,7 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDirectory, "..");
 const outputPath = join(packageRoot, "dist", "index.js");
 
-export const buildMcpPackage = async (): Promise<void> => {
+if (import.meta.main) {
   await cleanDirectory(join(packageRoot, "dist"));
   await runCommand({
     command: [
@@ -25,13 +26,5 @@ export const buildMcpPackage = async (): Promise<void> => {
     label: "MCP package JavaScript build",
   });
   await markExecutable(outputPath);
-  await runCommand({
-    command: ["bunx", "tsc", "-p", "tsconfig.json", "--emitDeclarationOnly"],
-    cwd: packageRoot,
-    label: "MCP package declaration build",
-  });
-};
-
-if (import.meta.main) {
-  await buildMcpPackage();
+  await copyFile(join(packageRoot, "index.d.ts"), join(packageRoot, "dist", "index.d.ts"));
 }

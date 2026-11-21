@@ -33,8 +33,8 @@ export type InlineCommentDraftsStorageReadResult =
   | { status: "expired" }
   | { status: "oversized"; byteLength: number };
 
-export const INLINE_COMMENT_DRAFT_STORAGE_PREFIX = "openducktor:git-diff-comments:v1";
-export const WORKSPACE_INLINE_COMMENT_DRAFT_STORAGE_PREFIX =
+const INLINE_COMMENT_DRAFT_STORAGE_PREFIX = "openducktor:git-diff-comments:v1";
+const WORKSPACE_INLINE_COMMENT_DRAFT_STORAGE_PREFIX =
   "openducktor:git-diff-comments:workspace-session:v1";
 export const INLINE_COMMENT_DRAFT_STORAGE_MAX_BYTES = 131_072;
 export const INLINE_COMMENT_DRAFT_STORAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -82,7 +82,7 @@ export const parseInlineCommentDraftStorageKey = (
   }
 };
 
-export const measureInlineCommentDraftsPayloadBytes = (payload: string): number =>
+const measureInlineCommentDraftsPayloadBytes = (payload: string): number =>
   encoder.encode(payload).byteLength;
 
 export const serializeInlineCommentDraftsPayload = ({

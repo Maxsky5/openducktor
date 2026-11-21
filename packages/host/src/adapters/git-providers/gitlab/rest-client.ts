@@ -21,7 +21,7 @@ export type GitlabProjectContext = GitlabAuthorization & {
   identity: string;
 };
 
-export type GitlabApiRequest = {
+type GitlabApiRequest = {
   operation: string;
   /** A path below `/api/v4`, such as `/projects/1/merge_requests`. */
   path: string;

@@ -6,20 +6,23 @@ Electron and the web runner bundle the shared frontend and host from workspace s
 
 | Package | Output | Builder |
 | --- | --- | --- |
-| Electron | Main process, preload, image worker | Bun, Node target |
+| Electron | Main process, preload, workers, shared chunks | Bun, Node target |
 | Electron | Renderer | Vite |
 | Electron | Standalone MCP sidecar | Bun, compiled executable |
-| Web runner | CLI, image worker, shared chunks | Bun, Node target |
+| Web runner | CLI, workers, shared chunks | Bun, Node target |
 | Web runner | Browser UI | Vite |
 | Web runner | MCP entrypoint | Bun, Node target |
 | MCP package | JavaScript entrypoint | Bun, Bun target |
 
+The standalone MCP package bundles the MCP SDK and Zod in `dist/index.js`. Its public entrypoint exports no library API, so the build copies the empty module declaration to `dist/index.d.ts`.
+
 The Bun builds use `--minify --keep-names` to reduce output size and keep function and class names for errors and logs. See [Bun minification](https://bun.com/docs/bundler/minifier).
 
-The web CLI build shares code between the CLI and image worker through `--splitting`. Shared chunks stay beside the entrypoints in `dist`, so code that uses `import.meta.url` keeps the same directory. Publish the full `dist` directory, including those chunks, the image worker, MCP entrypoint, browser assets, and SQLite migration files.
-
+The Electron main process and the web CLI use Bun code splitting to share modules with their workers. Keep the shared chunks beside the entrypoints in `dist`. Code that uses `import.meta.url` finds its worker scripts and SQLite migration folders there. Publish the full `dist` directory.
 
 Both Vite builds set `reportCompressedSize: false` to skip gzip work that only produces size reports. This option does not change the generated assets or package compression. See [Vite compressed size reports](https://vite.dev/config/build-options.html#build-reportcompressedsize).
+
+The web package builds the web shell, CLI, and MCP entrypoint in parallel. It builds the standalone client after that group completes to keep only one Vite build in memory at a time.
 
 ## Runtime dependencies
 
@@ -61,6 +64,8 @@ The change also removes the private `BrowserTabs` and `TaskSelector` modules, th
 Run the five full repository checks from [Contributing](../CONTRIBUTING.md#verification-commands). Also run the dependency gate from [Dependency hygiene](dependency-hygiene.md).
 
 The full test suite builds the image and Claude transcript worker bundles and runs them under Node, Bun, and Electron. Run it with `bun run test`. The tests use the Electron runtime from `apps/electron` and download it on first use when it is missing.
+
+After `bun run build`, run `bun run test:post-build`. This command checks that the SQLite import workers from the Electron and web builds can each import a legacy task under Node and Bun.
 
 Before a web release, build the package and check its required files:
 

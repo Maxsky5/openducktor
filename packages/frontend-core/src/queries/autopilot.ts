@@ -15,16 +15,3 @@ export const autopilotStateQueryOptions = (workspaceId: string) =>
     staleTime: 0,
     gcTime: 0,
   });
-
-/**
- * The saved Autopilot rules, apart from the settings snapshot. No settings mutation writes or
- * cancels this entry. The `autopilot_settings_saved` event and a reconnect after missed events
- * invalidate it.
- */
-export const autopilotSettingsQueryOptions = () =>
-  queryOptions({
-    queryKey: autopilotQueryKeys.settings(),
-    queryFn: async ({ client }) =>
-      (await connectionHost(client).workspaceGetSettingsSnapshot()).autopilot,
-    staleTime: Number.POSITIVE_INFINITY,
-  });

@@ -5,7 +5,7 @@ import type {
   HostValidationErrorAggregate,
 } from "../effect/host-errors";
 
-export type TaskActivityGuardError = HostOperationErrorAggregate | HostValidationErrorAggregate;
+type TaskActivityGuardError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 
 export type TaskActivityCleanupResult = {
   stoppedSessionCount: number;

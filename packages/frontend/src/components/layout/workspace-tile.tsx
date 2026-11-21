@@ -21,7 +21,7 @@ const TILE_SIZES = {
 } as const;
 
 /** The workspace image, or its abbreviation when it has no readable image. */
-export function WorkspaceTileContent({
+function WorkspaceTileContent({
   workspace,
   imageClassName,
   labelClassName,

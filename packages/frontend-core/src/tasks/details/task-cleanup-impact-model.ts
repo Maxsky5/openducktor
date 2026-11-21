@@ -9,64 +9,8 @@ import { isConfirmBlockedByImpact } from "./task-worktree-owner-copy";
 export const runningTerminalCount = (response: TerminalListResponse | undefined): number =>
   response?.terminals.filter((terminal) => terminal.lifecycle !== "exited").length ?? 0;
 
-export const formatManagedSessionCleanupMessage = (managedWorktreeCount: number): string => {
-  if (managedWorktreeCount === 1) {
-    return "1 linked task worktree and its related local branch will also be deleted. Any uncommitted changes in that worktree will be lost.";
-  }
-  if (managedWorktreeCount > 1) {
-    return `${managedWorktreeCount} linked task worktrees and their related local branches will also be deleted. Any uncommitted changes in those worktrees will be lost.`;
-  }
-
-  return "Linked task worktrees and their related local branches will also be deleted if they exist. Any uncommitted changes in those worktrees will be lost.";
-};
-
-export const formatUnknownManagedSessionCleanupMessage = (): string =>
-  "Linked task worktrees and their related local branches may also be deleted. Any uncommitted changes in those worktrees will be lost.";
-
-const cleanupOperationLabels = {
-  close: "closing",
-  delete: "deletion",
-  reset: "reset",
-} as const;
-
-export type TaskCleanupOperationLabel = keyof typeof cleanupOperationLabels;
-
-export const formatManagedSessionCleanupLoadingMessage = (
-  operation: TaskCleanupOperationLabel,
-): string =>
-  `Checking linked task worktree cleanup impact before ${cleanupOperationLabels[operation]}.`;
-
-export const formatActiveSessionStopLoadingMessage = (
-  operation: TaskCleanupOperationLabel,
-): string => `Checking active agent sessions before ${cleanupOperationLabels[operation]}.`;
-
-const activeSessionStopPhrases = {
-  close: "before closing.",
-  delete: "before deletion.",
-  reset: "before the reset.",
-} satisfies Record<TaskCleanupOperationLabel, string>;
-
-export const formatActiveSessionStopMessage = (
-  activeSessionCount: number,
-  operation: TaskCleanupOperationLabel,
-): string =>
-  `${activeSessionCount} active agent session${activeSessionCount === 1 ? "" : "s"} will be stopped ${activeSessionStopPhrases[operation]}`;
-
-/** What a confirmation says about worktree cleanup, or null when it knows of none. */
-export const formatCleanupImpactMessage = (
-  impact: Pick<
-    TaskConfirmImpact,
-    "isLoading" | "error" | "hasManagedSessionCleanup" | "managedWorktreeCount"
-  >,
-  operation: TaskCleanupOperationLabel,
-): string | null => {
-  if (impact.isLoading) return formatManagedSessionCleanupLoadingMessage(operation);
-  if (impact.error) return formatUnknownManagedSessionCleanupMessage();
-  if (impact.hasManagedSessionCleanup) {
-    return formatManagedSessionCleanupMessage(impact.managedWorktreeCount);
-  }
-  return null;
-};
+export const formatActiveSessionStopMessage = (activeSessionCount: number): string =>
+  `${activeSessionCount} active agent session${activeSessionCount === 1 ? "" : "s"} will be stopped before closing.`;
 
 /**
  * What a Close, Delete, or Reset Task confirmation shows. The host counts only the task worktrees

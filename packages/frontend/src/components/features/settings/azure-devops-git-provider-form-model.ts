@@ -99,7 +99,7 @@ export const azureRepositoryDraftErrors = (
   };
 };
 
-export const parseAzureRemotePushUrls = (value: string): string[] =>
+const parseAzureRemotePushUrls = (value: string): string[] =>
   value
     .split(/[\n,]/u)
     .map((item) => item.trim())

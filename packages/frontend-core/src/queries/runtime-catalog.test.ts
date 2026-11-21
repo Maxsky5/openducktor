@@ -12,7 +12,6 @@ import { QueryClient, skipToken } from "@tanstack/react-query";
 import { SKIPPED_QUERY_KEY_SEGMENT } from "./skipped-query";
 import {
   RUNTIME_CATALOG_STALE_TIME_MS,
-  loadRuntimeCatalogFromQuery,
   repoRuntimeFileSearchQueryOptions,
   resolveRuntimeCatalogSurface,
   retryRuntimeCatalog,
@@ -107,20 +106,6 @@ describe("runtime catalog queries", () => {
 
     expect(catalog).toBe(runtimeCatalogFixture);
     expect(loadCatalog).toHaveBeenCalledWith(workingDirectoryRefFixture);
-  });
-
-  test("loads the combined catalog through the imperative query helper", async () => {
-    const queryClient = new QueryClient();
-    const loadCatalog = mock(async () => runtimeCatalogFixture);
-
-    const catalog = await loadRuntimeCatalogFromQuery(
-      queryClient,
-      workingDirectoryRefFixture,
-      loadCatalog,
-    );
-
-    expect(catalog).toBe(runtimeCatalogFixture);
-    expect(loadCatalog).toHaveBeenCalledTimes(1);
   });
 
   test("projects an available surface", () => {

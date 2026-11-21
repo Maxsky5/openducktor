@@ -83,7 +83,7 @@
     "@types/react": "^19.3.0",
     "@xterm/xterm": "^6.0.0",
     "babel-preset-expo": "~58.0.17",
-    "bun-types": "^1.4.2",
+    "bun-types": "^1.4.5",
     "lucide-static": "1.69.0",
     "mermaid": "^12.3.0",
     "micromark": "^4.0.3",

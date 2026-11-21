@@ -45,7 +45,7 @@ export const remoteError = (
   message: string,
   nextAction: string,
 ): RemoteConnectionError => new RemoteConnectionError({ code, message, nextAction });
-export async function* abortableBody(
+async function* abortableBody(
   body: AsyncIterable<Uint8Array>,
   signal: AbortSignal,
 ): AsyncGenerator<Uint8Array> {

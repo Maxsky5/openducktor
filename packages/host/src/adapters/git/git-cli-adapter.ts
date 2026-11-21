@@ -73,10 +73,7 @@ import {
 } from "../../infrastructure/git/git-worktree-status";
 import type { GitFileListEntry, GitPort, GitRemote, GitRemoteEndpoint } from "../../ports/git-port";
 
-export type {
-  GitCommandResult,
-  GitCommandRunner,
-} from "../../infrastructure/git/git-command-runner";
+export type { GitCommandRunner } from "../../infrastructure/git/git-command-runner";
 
 export type CreateGitCliAdapterInput = (
   | { resolveCommand?: never; runner: GitCommandRunner }

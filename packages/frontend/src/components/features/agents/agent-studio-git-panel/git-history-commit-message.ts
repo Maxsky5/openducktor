@@ -1,5 +1,5 @@
 /** A list item. `line` is its first line in the message, so it is a stable key. */
-export type CommitBodyItem = { line: number; text: string };
+type CommitBodyItem = { line: number; text: string };
 
 /** One block of a commit body: a paragraph of joined lines, or a list of items. */
 export type CommitBodyBlock =

@@ -112,5 +112,3 @@ export const createBrowserDownloads = (input: BrowserDownloadsInput) => {
     },
   };
 };
-
-export type BrowserDownloads = ReturnType<typeof createBrowserDownloads>;

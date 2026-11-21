@@ -16,7 +16,7 @@ const browserRuntimeConfigSchema: z.ZodType<BrowserRuntimeConfig> = z.object({
   mode: z.enum(["local", "remote"]).default("local"),
 });
 
-export const loadBrowserRuntimeConfigEffect = (
+const loadBrowserRuntimeConfigEffect = (
   fetchImpl: typeof fetch = fetch,
 ): Effect.Effect<void, WebDependencyError | WebValidationError> =>
   Effect.gen(function* () {

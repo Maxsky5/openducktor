@@ -5,13 +5,7 @@ import {
   canInstallAppUpdate,
 } from "@openducktor/contracts";
 
-export type AppUpdateBadgeVariant =
-  | "default"
-  | "secondary"
-  | "outline"
-  | "success"
-  | "warning"
-  | "danger";
+type AppUpdateBadgeVariant = "default" | "secondary" | "outline" | "success" | "warning" | "danger";
 
 export type AppUpdateStatusDisplay = {
   badgeVariant: AppUpdateBadgeVariant;
@@ -21,16 +15,13 @@ export type AppUpdateStatusDisplay = {
 
 export const appUpdateErrorPanelClassName =
   "max-h-40 overflow-y-auto break-words whitespace-pre-wrap rounded-md border border-destructive/30 bg-destructive-surface/60 px-3 py-2 text-xs text-destructive-surface-foreground";
-export const appUpdateManualRecoveryPanelClassName =
-  "max-h-40 overflow-y-auto break-words whitespace-pre-wrap rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-xs text-warning-surface-foreground";
-
 export const getAppUpdateAvailableVersion = (state: AppUpdateState): string | undefined =>
   "availableVersion" in state ? state.availableVersion : undefined;
 
-export const getAppUpdateCheckedAt = (state: AppUpdateState): string | undefined =>
+const getAppUpdateCheckedAt = (state: AppUpdateState): string | undefined =>
   "checkedAt" in state ? state.checkedAt : undefined;
 
-export const getAppUpdateDisabledReason = (state: AppUpdateState): string | undefined =>
+const getAppUpdateDisabledReason = (state: AppUpdateState): string | undefined =>
   "disabledReason" in state ? state.disabledReason : undefined;
 
 export const getAppUpdateError = (state: AppUpdateState): AppUpdateError | undefined =>
@@ -58,11 +49,6 @@ export const requiresManualAppUpdate = (state: AppUpdateState): boolean =>
   state.status === "downloaded" &&
   state.installRetryDisabled === true &&
   state.error?.code === "incompatible_app_signature";
-
-export const getAppUpdateErrorPanelClassName = (state: AppUpdateState): string =>
-  requiresManualAppUpdate(state)
-    ? appUpdateManualRecoveryPanelClassName
-    : appUpdateErrorPanelClassName;
 
 const getErrorStatusDescription = (state: AppUpdateState): string => {
   const operation = state.status === "error" ? state.error.operation : undefined;

@@ -44,16 +44,13 @@ files:
 extraResources:
   - from: build/sidecars
     to: bin
-  - from: resources/icon.ico
-    to: icon.ico
-  - from: resources/icon.icns
-    to: icon.icns
-  - from: resources/icon.png
-    to: icon.png
 
 mac:
   artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}
   icon: resources/icon.icns
+  extraResources:
+    - from: resources/icon.png
+      to: icon.png
   minimumSystemVersion: "12.0"
   binaries:
     - Contents/Resources/bin/openducktor-mcp
@@ -82,6 +79,9 @@ dmg:
 win:
   artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}
   icon: resources/icon.ico
+  extraResources:
+    - from: resources/icon.ico
+      to: icon.ico
   target:
     - nsis
     - zip
@@ -91,6 +91,9 @@ linux:
   executableName: openducktor
   artifactName: OpenDucktor-${version}-${os}-${arch}.${ext}
   icon: resources/icon.png
+  extraResources:
+    - from: resources/icon.png
+      to: icon.png
   target:
     - AppImage
     - deb

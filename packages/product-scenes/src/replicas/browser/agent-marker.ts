@@ -8,7 +8,7 @@ import type { Scene } from "../../motion/scene";
 import { EASE } from "../../motion/tokens";
 
 /** The actions that show a marker: BrowserAgentMarkerAction in the contracts. */
-export type MarkerAction = "click" | "hover" | "type";
+type MarkerAction = "click" | "hover" | "type";
 
 /** The agent marker of a browser tab. */
 export type AgentMarker = {

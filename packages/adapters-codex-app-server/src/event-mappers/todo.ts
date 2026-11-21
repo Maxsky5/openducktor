@@ -34,7 +34,7 @@ const parseJsonObject = (value: CodexAppServerJsonValue | undefined) => {
   return isPlainObject(value) ? value : parseCodexJsonObjectString(value);
 };
 
-export type CodexTodoUpdate = {
+type CodexTodoUpdate = {
   explanation?: string;
   todos: AgentSessionTodoItem[];
 };

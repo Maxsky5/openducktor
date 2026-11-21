@@ -14,7 +14,7 @@ The package holds the animated copies of the product UI. The website, the app to
 | `src/registry.ts` | Scene names, sizes, and lazy timeline loaders. It loads no React and no text |
 | `src/views.ts` | Lazy view loaders for the React entry |
 | `src/astro/` | `Scene.astro`, its static view and timeline maps of the website scenes, and its page script |
-| `src/react/Scene.tsx` | `<Scene name theme keys framed options />` and `preloadScene` for a React host that controls when a scene plays, such as the app tour |
+| `src/react/Scene.tsx` | `<Scene name theme keys framed options />` and `preloadScene` for a React host that controls when a scene plays |
 | `src/react/PageScene.tsx`, `src/react/ScenePlayer.tsx`, `src/react/page-views.ts` | `<PageScene name theme keys options failure stylesheet />` for a page that a React server renders, such as the documentation, its client player, and its static view map of every scene |
 | `styles/` | Layer order, reset of the host base styles, generated theme, Tailwind palette values, replica base, state rules, and the generated stylesheets of `PageScene` in `page/` |
 | `src/films/` | The films: long videos that put scenes of the package together. See [Films](#films) |
@@ -104,6 +104,7 @@ A film puts scenes of the package together in one long video, for social media a
 | Export | Holds |
 |---|---|
 | `./react` | The React `Scene` and `preloadScene` |
+| `./react/tour` | The React player and preload function for the hero and palette scenes of the app tour |
 | `./react/page` | The React `PageScene` for a page that a React server renders |
 | `./astro` | `Scene.astro` for an Astro page. It renders only the scenes in `ASTRO_VIEWS` |
 | `./styles.css` | The base styles of every scene |

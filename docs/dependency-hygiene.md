@@ -13,8 +13,7 @@ bun run deps:check
 The gate runs on pull requests and pushes to `main`. It includes:
 
 - `bun run deps:audit`, which applies the high-severity and Hono policies to one audit response
-- `bun run deps:unused:deps`
-- `bun run deps:unused:exports`
+- `bun run deps:unused`, which checks files, dependencies, exports, and types across the root and all workspaces in one Knip run
 
 The workflow is `.github/workflows/dependency-hygiene.yml`.
 

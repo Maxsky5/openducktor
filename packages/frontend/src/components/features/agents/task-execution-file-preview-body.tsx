@@ -1,6 +1,7 @@
 import type { WorkspaceTextFileReadResult } from "@openducktor/contracts";
 import type { EditorFocus } from "@/types/editor-focus";
-import { lazy, Suspense, type ReactElement, type RefObject, useState, useCallback } from "react";
+import { type ReactElement, type RefObject, useState, useCallback } from "react";
+import TaskDescriptionEditor from "../task-description-editor/task-description-editor";
 import type { MarkdownImageProps } from "../task-description-editor/task-description-image-context";
 import { isChatLocalDestination } from "@openducktor/frontend-core/sessions/messages/chat-file-link";
 import { MarkdownFileImage } from "./markdown-file-image";
@@ -79,9 +80,6 @@ export function FilePreviewBody({
   return <FilePreviewState message="No file selected." />;
 }
 
-const TaskDescriptionEditor = lazy(
-  () => import("../task-description-editor/task-description-editor"),
-);
 const EMPTY_UPLOADS: [] = [];
 const EMPTY_PREVIEWS = new Map<string, string>();
 
@@ -127,19 +125,17 @@ function MarkdownFileEditor({
   );
   return (
     <div className="h-full overflow-auto p-4">
-      <Suspense fallback={<FilePreviewState message="Loading Markdown editor..." />}>
-        <TaskDescriptionEditor
-          markdown={contents}
-          disabled={disabled}
-          workspaceId={null}
-          taskId={null}
-          uploads={EMPTY_UPLOADS}
-          previews={EMPTY_PREVIEWS}
-          renderImage={renderImage}
-          onChange={onChange}
-          editorRef={editorRef}
-        />
-      </Suspense>
+      <TaskDescriptionEditor
+        markdown={contents}
+        disabled={disabled}
+        workspaceId={null}
+        taskId={null}
+        uploads={EMPTY_UPLOADS}
+        previews={EMPTY_PREVIEWS}
+        renderImage={renderImage}
+        onChange={onChange}
+        editorRef={editorRef}
+      />
     </div>
   );
 }

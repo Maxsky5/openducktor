@@ -4,7 +4,7 @@ import { connectionHost } from "../connection/client-connection";
 import { normalizeAgentSessionTaskIds } from "./agent-sessions";
 import { workspaceScopeValue } from "./workspace-scope";
 
-export const taskWorktreeOwnersQueryKeys = {
+const taskWorktreeOwnersQueryKeys = {
   all: ["task-worktree-owners"] as const,
   get: (scope: WorkspaceRef, normalizedTaskIds: string[], operation: TaskWorktreeOwnersOperation) =>
     [

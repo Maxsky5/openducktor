@@ -6,16 +6,13 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
-  clearRoleDefault,
   ensureDraftAgentDefault,
   findCatalogModel,
-  getNeededCatalogRuntimeKinds,
   isSettingsInteractionDisabled,
   resolveRepoAgentDefaultRuntimeKind,
   selectedModelKeyForRole,
   toRoleVariantOptions,
   updateRepoDefaultModel,
-  updateRoleDefault,
 } from "./settings-modal-model";
 
 const catalogFixture: AgentModelCatalog = {
@@ -139,17 +136,6 @@ describe("settings-modal-model", () => {
     ).toBeNull();
   });
 
-  test("updates and clears role defaults immutably", () => {
-    const withModel = updateRoleDefault(emptyDefaults, "build", "modelId", "gpt-5");
-    const withAgent = updateRoleDefault(withModel, "build", "profileId", "builder");
-    const cleared = clearRoleDefault(withAgent, "build");
-
-    expect(withModel.build?.modelId).toBe("gpt-5");
-    expect(withAgent.build?.profileId).toBe("builder");
-    expect(cleared.build).toBeNull();
-    expect(cleared.spec).toBeNull();
-  });
-
   test("resolves model key and variants for role", () => {
     const defaults = {
       ...emptyDefaults,
@@ -191,12 +177,6 @@ describe("settings-modal-model", () => {
     ).toBe("o3");
   });
 
-  test("derives one catalog target when all roles inherit the same runtime", () => {
-    expect(
-      getNeededCatalogRuntimeKinds(createRepoConfig(), [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR]),
-    ).toEqual(["opencode"]);
-  });
-
   test("resolves inherited role runtime kinds from the repo default runtime", () => {
     expect(
       resolveRepoAgentDefaultRuntimeKind({
@@ -212,59 +192,5 @@ describe("settings-modal-model", () => {
         role: "spec",
       }),
     ).toBe("opencode");
-  });
-
-  test("derives unique catalog targets from mixed role overrides", () => {
-    expect(
-      getNeededCatalogRuntimeKinds(
-        createRepoConfig({
-          agentDefaults: {
-            spec: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "default",
-              profileId: "spec-agent",
-            },
-            planner: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "default",
-              profileId: "planner-agent",
-            },
-            build: undefined,
-            qa: undefined,
-          },
-        }),
-        [OPENCODE_DESCRIPTOR, CODEX_DESCRIPTOR],
-      ),
-    ).toEqual(["opencode"]);
-  });
-
-  test("returns an empty target list when no runtime definitions are available", () => {
-    expect(getNeededCatalogRuntimeKinds(createRepoConfig(), [])).toEqual([]);
-  });
-
-  test("skips unknown stored runtime kinds instead of resolving to another runtime", () => {
-    expect(
-      getNeededCatalogRuntimeKinds(
-        createRepoConfig({
-          agentDefaults: {
-            spec: {
-              runtimeKind: "opencode",
-              providerId: "openai",
-              modelId: "gpt-5",
-              variant: "default",
-              profileId: "spec-agent",
-            },
-            planner: undefined,
-            build: undefined,
-            qa: undefined,
-          },
-        }),
-        [CODEX_DESCRIPTOR],
-      ),
-    ).toEqual(["opencode"]);
   });
 });

@@ -8,7 +8,6 @@ import {
 } from "./agent-studio-test-utils";
 import {
   coerceVisibleSelectionToCatalog,
-  extractCompletionTimestamp,
   isSameSelection,
   pickDefaultVisibleSelectionForCatalog,
   resolveAgentStudioBuilderSessionsForTask,
@@ -62,13 +61,6 @@ const catalogFixture: AgentModelCatalog = {
 describe("agents-page-selection", () => {
   test("builds the client-local panel key", () => {
     expect(toRightPanelStorageKey()).toBe("openducktor:agent-studio:right-panel");
-  });
-
-  test("extracts completion timestamp from tool output", () => {
-    const value = "Done at 2026-02-01T12:10:00.000Z";
-    const extracted = extractCompletionTimestamp(value);
-    expect(extracted?.raw).toBe("2026-02-01T12:10:00.000Z");
-    expect(extractCompletionTimestamp("not a timestamp")).toBeNull();
   });
 
   test("picks default model + primary agent", () => {

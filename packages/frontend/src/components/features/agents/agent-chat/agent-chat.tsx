@@ -234,15 +234,3 @@ export function AgentChatSurface({
     </div>
   );
 }
-
-export function AgentChat({
-  model,
-  header,
-  visitKey = 0,
-}: {
-  model: AgentChatSurfaceModel;
-  header?: ReactNode;
-  visitKey?: number;
-}): ReactElement {
-  return <AgentChatSurface model={model} header={header} visitKey={visitKey} />;
-}

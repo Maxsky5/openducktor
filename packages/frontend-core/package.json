@@ -7,7 +7,7 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "build": "bunx tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "typecheck": "bun check -p tsconfig.json && bun check -p tsconfig.test.json && bun check -p expo-compat/tsconfig.json",
     "test": "bun test --parallel --pass-with-no-tests --timeout 1000",
     "lint": "oxlint -c ../../.oxlintrc.json src expo-compat"
@@ -30,7 +30,7 @@
     "@testing-library/react": "^16.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "bun-types": "^1.4.2",
+    "bun-types": "^1.4.5",
     "react-dom": "^19.3.1"
   }
 }

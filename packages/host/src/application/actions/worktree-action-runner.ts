@@ -76,7 +76,7 @@ export type WorktreeActionTerminals = Pick<
 >;
 
 /** The new worktree that a run sets up. */
-export type WorktreeActionTarget = { worktreePath: string; branch: string };
+type WorktreeActionTarget = { worktreePath: string; branch: string };
 
 export type WorktreeActionRunInput = {
   context: TerminalOwnedContext;

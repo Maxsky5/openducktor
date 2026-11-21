@@ -187,8 +187,6 @@ import type {
 } from "./types";
 import { readCodexSubagentRole } from "./codex-subagent-role";
 
-export { createCodexAppServerClient } from "./app-server-client";
-
 const codexContinuationFailed = (
   externalSessionId: string,
   cause: unknown,

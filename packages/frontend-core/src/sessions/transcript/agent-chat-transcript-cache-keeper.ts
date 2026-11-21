@@ -30,7 +30,7 @@ import { withClaudeSkillMentions } from "./claude-skill-mentions";
 export const TRANSCRIPT_KEEP_DELAY_MS = 500;
 
 /** The active sessions whose transcripts the keeper builds before the user opens them. */
-export type PreparedActiveTranscripts = {
+type PreparedActiveTranscripts = {
   showThinkingMessages: boolean;
   repoPaths: readonly string[];
 };

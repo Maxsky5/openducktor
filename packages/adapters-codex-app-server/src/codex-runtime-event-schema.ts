@@ -3,12 +3,8 @@ import {
   codexAppServerConsumedRuntimeNotificationSchema,
   codexAppServerRuntimeStreamEventSchema,
   isCodexAppServerConsumedRuntimeNotification,
-  parseCodexAppServerRuntimeNotificationRecord,
-  parseCodexAppServerRuntimeServerRequestRecord,
   type CodexAppServerConsumedRuntimeNotification,
-  type CodexAppServerRuntimeNotificationRecord,
   type CodexAppServerRuntimeServerRequest,
-  type CodexAppServerRuntimeServerRequestRecord,
   type CodexAppServerRuntimeStreamEvent,
   type CodexAppServerUnconsumedRuntimeNotification,
   type CodexAppServerJsonValue,
@@ -22,8 +18,6 @@ const nonEmptyStringSchema = z
 
 export type CodexRuntimeNotification = CodexAppServerConsumedRuntimeNotification;
 export type CodexRuntimeServerRequest = CodexAppServerRuntimeServerRequest;
-export type CodexRuntimeNotificationRecord = CodexAppServerRuntimeNotificationRecord;
-export type CodexRuntimeServerRequestRecord = CodexAppServerRuntimeServerRequestRecord;
 export type CodexRuntimeStreamEvent =
   | Extract<CodexAppServerRuntimeStreamEvent, { kind: "server_request" }>
   | {
@@ -50,8 +44,6 @@ export type CodexParsedRuntimeStreamEvent =
       message: CodexAppServerUnconsumedRuntimeNotification;
     };
 
-export const parseCodexRuntimeServerRequestRecord = parseCodexAppServerRuntimeServerRequestRecord;
-export const parseCodexRuntimeNotificationRecord = parseCodexAppServerRuntimeNotificationRecord;
 export const parseCodexRuntimeStreamEvent = (
   value: CodexAppServerJsonValue,
 ): CodexParsedRuntimeStreamEvent => {

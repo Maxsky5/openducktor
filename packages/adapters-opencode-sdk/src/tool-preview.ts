@@ -4,7 +4,6 @@ import {
   opencodeProtocolObjectSchema,
   opencodeProtocolValueSchema,
 } from "./guards";
-import type { AgentToolType } from "@openducktor/core";
 import { basenameForPath } from "@openducktor/path-support";
 import { z } from "zod";
 import { resolveOpencodeToolStrategy } from "./tool-strategy-catalog";
@@ -17,10 +16,6 @@ const collectionItemsSchema = z.object({
   summary: z.array(opencodeProtocolValueSchema).optional(),
   todos: z.array(opencodeProtocolValueSchema).optional(),
 });
-
-export const deriveToolType = (toolName: string): AgentToolType => {
-  return resolveOpencodeToolStrategy(toolName).toolType;
-};
 
 const compactText = (value: string, maxLength = 160): string => {
   const normalized = value.replace(/\s+/g, " ").trim();

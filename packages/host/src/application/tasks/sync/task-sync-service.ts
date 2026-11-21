@@ -36,7 +36,7 @@ import {
   type TaskSyncLoop,
 } from "./task-sync-loop";
 
-export type { TaskSyncError, TaskSyncLifecycleLogger, TaskSyncLoopHandle } from "./task-sync-loop";
+export type { TaskSyncLoopHandle } from "./task-sync-loop";
 export type TaskSyncService = TaskSyncLoop & {
   runMutation<A, E, R>(repoPath: string, mutation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
   /**
@@ -76,7 +76,7 @@ type TaskEventPublicationFailureBase = {
   changes: TaskChangeSet;
   cause: unknown;
 };
-export type TaskEventPublicationFailure =
+type TaskEventPublicationFailure =
   | (TaskEventPublicationFailureBase & {
       stage: "acceptance";
       event: ExternalTaskSyncEvent;

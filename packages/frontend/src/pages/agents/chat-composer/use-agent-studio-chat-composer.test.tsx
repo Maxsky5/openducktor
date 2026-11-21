@@ -18,14 +18,12 @@ import type {
 } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { toAgentSessionIdentity } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { sessionMessagesToArray } from "@openducktor/frontend-core/test-support/session-message-test-helpers";
 import { QueryProvider } from "@/test-utils/query-provider";
 import type { AgentSessionSummary } from "@openducktor/frontend-core/sessions/agent-sessions-store";
 import { RuntimeDefinitionsContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
-import {
-  createSessionMessagesState,
-  getSessionMessagesSlice,
-} from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import type {
   AgentChatMessage,
@@ -2330,7 +2328,7 @@ describe("useAgentStudioChatComposer", () => {
           loadedSession: {
             ...loadedSession,
             messages: createSessionMessagesState(loadedSession.externalSessionId, [
-              ...getSessionMessagesSlice(loadedSession, 0),
+              ...sessionMessagesToArray(loadedSession),
               {
                 id: "tool-1",
                 role: "tool",
@@ -2378,7 +2376,7 @@ describe("useAgentStudioChatComposer", () => {
           loadedSession: {
             ...loadedSession,
             messages: createSessionMessagesState(loadedSession.externalSessionId, [
-              ...getSessionMessagesSlice(loadedSession, 0),
+              ...sessionMessagesToArray(loadedSession),
               {
                 id: "tool-tail-1",
                 role: "tool",

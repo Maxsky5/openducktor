@@ -43,7 +43,7 @@ import { createTerminalTargetResolver, type TerminalTargetServices } from "./ter
 
 const DEFAULT_GRID: TerminalGrid = { columns: 80, rows: 24 };
 
-export type TerminalAttachInput = TerminalSessionAttachInput;
+type TerminalAttachInput = TerminalSessionAttachInput;
 
 export type TerminalListObserver = {
   snapshot(list: TerminalListResponse): void;
@@ -51,7 +51,7 @@ export type TerminalListObserver = {
   removed(terminalId: string, revision: number): void;
 };
 
-export type TerminalCloseByTaskResult = { closedTerminalIds: string[] };
+type TerminalCloseByTaskResult = { closedTerminalIds: string[] };
 
 export type TerminalService = {
   readonly hostInstanceId: string;

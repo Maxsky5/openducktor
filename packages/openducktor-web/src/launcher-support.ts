@@ -379,15 +379,6 @@ export const waitForBackendEffect = (
     });
   });
 
-export const waitForBackend = (
-  backendUrl: string,
-  appToken: string,
-  timeoutMs: number,
-  hostProcess: ManagedHost,
-  dependencies: BackendReadinessDependencies = defaultReadinessDependencies,
-): Promise<void> =>
-  runWebBoundary(waitForBackendEffect(backendUrl, appToken, timeoutMs, hostProcess, dependencies));
-
 export const buildBrowserRuntimeConfigJson = (backendUrl: string, appToken: string): string =>
   `${JSON.stringify({ mode: "local", backendUrl, appToken })}\n`;
 
@@ -543,11 +534,6 @@ export const stopLauncherServicesEffect = (
     }
   });
 
-export const stopLauncherServices = (
-  input: StopLauncherServicesInput,
-  dependencies: LauncherShutdownDependencies = defaultLauncherShutdownDependencies,
-): Promise<void> => runWebBoundary(stopLauncherServicesEffect(input, dependencies));
-
 export const keepProcessAliveDuringEffect = <T, E>(
   operation: Effect.Effect<T, E>,
   dependencies: ProcessKeepAliveDependencies = {
@@ -558,26 +544,4 @@ export const keepProcessAliveDuringEffect = <T, E>(
     Effect.sync(() => dependencies.scheduleInterval(() => {}, SHUTDOWN_KEEP_ALIVE_INTERVAL_MS)),
     () => operation,
     (cancelInterval) => Effect.sync(cancelInterval),
-  );
-
-export const keepProcessAliveDuring = <T>(
-  operation: Promise<T>,
-  dependencies: ProcessKeepAliveDependencies = {
-    scheduleInterval,
-  },
-): Promise<T> =>
-  runWebBoundary(
-    keepProcessAliveDuringEffect(
-      Effect.tryPromise({
-        try: () => operation,
-        catch: (cause) =>
-          new WebDependencyError({
-            dependency: "launcher-operation",
-            operation: "keep-process-alive",
-            message: errorMessage(cause),
-            cause,
-          }),
-      }),
-      dependencies,
-    ),
   );

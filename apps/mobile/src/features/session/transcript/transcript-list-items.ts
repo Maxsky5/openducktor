@@ -21,13 +21,13 @@ export type TranscriptListKind = "latest" | "first";
  * reader is at the latest message, the list keeps it in place: new rows and a growing reply push
  * the rows above up, and the latest message stays in view.
  */
-export type BottomEdgeItem = { readonly kind: "bottom_edge"; readonly key: string };
+type BottomEdgeItem = { readonly kind: "bottom_edge"; readonly key: string };
 
 /**
  * The space or the notice above the first message. The cell reads the notice from
  * `TranscriptNoticeContext`, so a new notice changes no item of the list.
  */
-export type TopEdgeItem = { readonly kind: "top_edge"; readonly key: string };
+type TopEdgeItem = { readonly kind: "top_edge"; readonly key: string };
 
 /**
  * A run of consecutive tool run calls, as the desktop tool run: a header for two or more calls,

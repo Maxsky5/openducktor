@@ -1,13 +1,6 @@
 import { worktreeOwnersRead } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import {
-  formatActiveSessionStopMessage,
-  formatActiveSessionStopLoadingMessage,
-  formatManagedSessionCleanupLoadingMessage,
-  formatManagedSessionCleanupMessage,
-  formatUnknownManagedSessionCleanupMessage,
-} from "@openducktor/frontend-core/tasks/details/task-cleanup-impact-model";
 import { TaskDeleteConfirmDialog } from "./task-delete-confirm-dialog";
 
 const renderDialog = (
@@ -91,52 +84,6 @@ describe("TaskDeleteConfirmDialog", () => {
     );
 
     rendered.unmount();
-  });
-
-  test("formats singular session-stop copy", () => {
-    expect(formatActiveSessionStopMessage(1, "delete")).toBe(
-      "1 active agent session will be stopped before deletion.",
-    );
-  });
-
-  test("mentions worktree and related branch cleanup when managed sessions exist", () => {
-    const message = formatManagedSessionCleanupMessage(2);
-
-    expect(message).toContain("2 linked task worktrees");
-    expect(message).toContain("related local branches");
-    expect(message).toContain("uncommitted changes");
-  });
-
-  test("uses exact-count wording when managed worktree count is known", () => {
-    const message = formatManagedSessionCleanupMessage(1);
-
-    expect(message).not.toContain("if they exist");
-  });
-
-  test("uses explicit unknown-impact wording when cleanup impact cannot be loaded", () => {
-    const message = formatUnknownManagedSessionCleanupMessage();
-
-    expect(message).toContain("may also be deleted");
-    expect(message).toContain("related local branches");
-    expect(message).toContain("uncommitted changes");
-  });
-
-  test("uses explicit loading wording while cleanup impact is still resolving", () => {
-    const message = formatManagedSessionCleanupLoadingMessage("delete");
-
-    expect(message).toContain("Checking linked task worktree cleanup impact");
-    expect(message).toContain("before deletion");
-  });
-
-  test("uses operation-specific loading wording", () => {
-    expect(formatManagedSessionCleanupLoadingMessage("close")).toContain("before closing");
-    expect(formatManagedSessionCleanupLoadingMessage("reset")).toContain("before reset");
-  });
-
-  test("describes session probing separately from worktree loading", () => {
-    expect(formatActiveSessionStopLoadingMessage("delete")).toBe(
-      "Checking active agent sessions before deletion.",
-    );
   });
 
   test("hides incomplete copy and actions while the host stop preview is loading", () => {

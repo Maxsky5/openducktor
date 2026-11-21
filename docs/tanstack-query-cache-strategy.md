@@ -74,7 +74,6 @@ Runtime catalog reads follow these rules:
 | Task documents | 60 sec |
 | Task approval context | 60 sec |
 | Host runtime and MCP bridge status | Infinite, updated by events |
-| Saved Autopilot rules | Infinite, invalidated by events |
 | Task merge status | Infinite, updated by events |
 | Task worktree cleanup impact | 0 |
 
@@ -102,7 +101,7 @@ When a replacement snapshot arrives, the stream cancels all session-list reads a
 
 Query modules: `tasks.ts`, `agent-sessions.ts`, `documents.ts`, `task-approval.ts`, `runtime.ts`, `host-runtime-status.ts`, `autopilot.ts`, `task-merge-status.ts`, and `task-worktree-cleanup-impact.ts`.
 
-The saved Autopilot rules have their own entry, apart from the settings snapshot, so no settings mutation writes or cancels them. The `autopilot_settings_saved` run event and a reconnect after missed events invalidate the entry.
+The settings snapshot includes the saved Autopilot rules. The `autopilot_settings_saved` run event and a reconnect after missed events invalidate the snapshot.
 
 The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
 

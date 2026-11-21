@@ -12,8 +12,6 @@ import {
   filterRuntimeDefinitionsForRole,
   filterRuntimeDefinitionsForStartMode,
   getAvailableRuntimeDefinitions,
-  getAvailableRuntimeDefinitionsForStartMode,
-  getMissingMandatoryRuntimeCapabilities,
   getRuntimeDescriptorCapabilityConfigErrors,
   resolveRuntimeKindSelection,
   resolveRuntimeKindSelectionState,
@@ -51,9 +49,6 @@ describe("agent-runtime capability policies", () => {
       },
     });
 
-    expect(getMissingMandatoryRuntimeCapabilities(descriptor)).toEqual([
-      "workflow.supportsOdtWorkflowTools",
-    ]);
     expect(validateRuntimeDefinitionForOpenDucktor(descriptor)).toEqual([
       "[workflow] missing OpenDucktor workflow tool support",
     ]);
@@ -67,9 +62,6 @@ describe("agent-runtime capability policies", () => {
       },
     });
 
-    expect(getMissingMandatoryRuntimeCapabilities(descriptor)).toEqual([
-      "approvals.readOnlyAutoRejectSafe",
-    ]);
     expect(getRuntimeDescriptorCapabilityConfigErrors(descriptor)).toEqual([
       "[workflow] read-only roles must auto-reject mutating approval requests",
     ]);
@@ -279,23 +271,6 @@ describe("agent-runtime capability policies", () => {
         },
       }).map((definition) => definition.kind),
     ).toEqual(["codex"]);
-
-    expect(
-      getAvailableRuntimeDefinitionsForStartMode({
-        runtimeDefinitions: [OPENCODE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
-        agentRuntimes: {
-          opencode: {
-            defaults: { rules: [] },
-            roleOverrides: {},
-            enabled: true,
-            executablePath: "/bin/opencode",
-          },
-          codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
-          claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-        },
-        startMode: "fresh",
-      }).map((definition) => definition.kind),
-    ).toEqual(["opencode"]);
 
     expect(
       getAvailableRuntimeDefinitions({

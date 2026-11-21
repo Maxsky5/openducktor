@@ -39,7 +39,7 @@ import type { SessionStartFlowRequest } from "../../sessions/start/session-start
 import { startKanbanSessionFlow } from "./kanban-session-start-actions";
 
 /** A task view that a task action opens. */
-export type TaskViewTarget = Extract<SessionNavigationTarget, { kind: "task" | "task_session" }>;
+type TaskViewTarget = Extract<SessionNavigationTarget, { kind: "task" | "task_session" }>;
 
 /**
  * Opens a task view. `selected` names the repository when the user picked this exact session,

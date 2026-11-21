@@ -20,7 +20,7 @@ export type AgentStudioSelectionState = {
 
 export type SelectAgentStudioSelection = (selection: AgentStudioSelectionState) => void;
 
-export const emptyAgentStudioSelectionState = (): AgentStudioSelectionState => ({
+const emptyAgentStudioSelectionState = (): AgentStudioSelectionState => ({
   taskId: "",
   sessionExternalId: null,
   sessionIdentity: null,
@@ -80,15 +80,6 @@ export const createAgentStudioRouteSelectionState = ({
     keepSessionless: keepSessionlessParam,
   };
 };
-
-export const toAgentStudioTaskSelection = (taskId: string): AgentStudioSelectionState => ({
-  taskId,
-  sessionExternalId: null,
-  sessionIdentity: null,
-  role: null,
-  hasExplicitRoleSelection: false,
-  keepSessionless: false,
-});
 
 export const toAgentStudioSessionSelection = (
   session: AgentSessionIdentity & { taskId: string; role: AgentRole },

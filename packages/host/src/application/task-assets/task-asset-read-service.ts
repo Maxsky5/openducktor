@@ -15,7 +15,7 @@ import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskAssetFilePort } from "../../ports/task-asset-file-port";
 import type { TaskAssetRecord, TaskAssetRegistryPort } from "../../ports/task-asset-registry-port";
 
-export type TaskAssetResponseHeaders = {
+type TaskAssetResponseHeaders = {
   readonly "Cache-Control": string;
   readonly "Content-Disposition": string;
   readonly "Content-Type": TaskAssetMediaType;
@@ -28,7 +28,7 @@ export type TaskAssetReadResult = {
   headers: TaskAssetResponseHeaders;
 };
 
-export type TaskAssetBatchReadResult =
+type TaskAssetBatchReadResult =
   | {
       kind: "available";
       assets: Array<{ assetId: string; asset: TaskAssetReadResult }>;

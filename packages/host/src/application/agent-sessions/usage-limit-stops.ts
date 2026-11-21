@@ -367,5 +367,3 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
     },
   };
 };
-
-export type UsageLimitStops = ReturnType<typeof createUsageLimitStops>;

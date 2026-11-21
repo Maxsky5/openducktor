@@ -21,7 +21,6 @@ import type { DemoTaskStore } from "./demo-tasks";
 import type { DemoTerminals } from "./demo-terminals";
 import {
   DEMO_HOST_INSTANCE_ID,
-  type DemoTask,
   type DemoWorkspace,
   type DemoWorld,
   findTask,
@@ -676,5 +675,3 @@ export const createDemoLaunches = ({
 
   return { handlers, launch };
 };
-
-export type { DemoTask };

@@ -11,9 +11,4 @@ export {
   toProjectRelativePath,
   trimTrailingPathSeparators,
 } from "./lexical-path";
-export {
-  normalizeUserPathInput,
-  type ResolveUserPathOptions,
-  resolveNormalizedUserPath,
-  resolveUserPath,
-} from "./user-path";
+export { normalizeUserPathInput, resolveNormalizedUserPath, resolveUserPath } from "./user-path";

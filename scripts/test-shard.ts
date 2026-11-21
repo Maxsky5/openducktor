@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import path from "node:path";
 
 import { readPackageScripts, workspacePackageJsonPaths } from "./workspace-packages";
@@ -7,7 +8,7 @@ import { readPackageScripts, workspacePackageJsonPaths } from "./workspace-packa
 
 export type TestSuite = { directory: string; script: string; command: string };
 export type Shard = { index: number; total: number };
-export type SuiteRun = { directory: string; script: string; args: string[] };
+export type SuiteRun = { directory: string; script: string; args: string[][] };
 
 export const parseShard = (value: string | undefined): Shard => {
   const match = /^(\d+)\/(\d+)$/.exec(value ?? "");
@@ -27,13 +28,22 @@ const isBunTest = (command: string): boolean =>
 const isNodeTest = (command: string): boolean =>
   /^node .*--test\b/.test(command) && isSingleCommand(command);
 
-export const planShardRuns = (suites: TestSuite[], shard: Shard): SuiteRun[] =>
+export const planShardRuns = (
+  suites: TestSuite[],
+  shard: Shard,
+  cpuCount = availableParallelism(),
+): SuiteRun[] =>
   suites.flatMap(({ directory, script, command }) => {
     if (isBunTest(command)) {
-      return [{ directory, script, args: [`--shard=${shard.index}/${shard.total}`] }];
+      const fullFrontend = directory === path.join("packages", "frontend") && shard.total === 1;
+      const count = fullFrontend ? Math.min(3, Math.max(1, Math.floor(cpuCount / 2))) : 1;
+      const args = Array.from({ length: count }, (_, index) => [
+        `--shard=${shard.index + index}/${Math.max(shard.total, count)}`,
+      ]);
+      return [{ directory, script, args }];
     }
     if (isNodeTest(command)) {
-      return shard.index === 1 ? [{ directory, script, args: [] }] : [];
+      return shard.index === 1 ? [{ directory, script, args: [[]] }] : [];
     }
     throw new Error(
       `The '${script}' script of '${directory}' must be one 'bun test' or 'node --test' command. Received '${command}'.`,
@@ -56,11 +66,16 @@ if (import.meta.main) {
   const failed: string[] = [];
   for (const { directory, script, args } of runs) {
     console.log(`Testing ${directory} (${script})`);
-    const result = Bun.spawnSync(["bun", "run", script, ...args], {
-      cwd: directory,
-      stdio: ["inherit", "inherit", "inherit"],
-    });
-    if (result.exitCode !== 0) failed.push(directory);
+    const exitCodes = await Promise.all(
+      args.map(
+        (options) =>
+          Bun.spawn(["bun", "run", script, ...options], {
+            cwd: directory,
+            stdio: ["inherit", "inherit", "inherit"],
+          }).exited,
+      ),
+    );
+    if (exitCodes.some((code) => code !== 0)) failed.push(directory);
   }
   if (failed.length > 0) {
     console.error(

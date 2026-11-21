@@ -41,7 +41,7 @@ import {
   buildBackendUrl,
   buildBrowserBackendUrl,
   readinessHostForBind,
-  waitForBackend,
+  waitForBackendEffect,
 } from "./launcher-support";
 import { createTaskEventLeaseManager } from "@openducktor/remote-host/task-event-leases";
 import { BufferedHostEventBus } from "@openducktor/remote-host/host-event-bus";
@@ -905,9 +905,14 @@ describe("TypeScript web host backend", () => {
         expect(response.status).toBe(status);
         await response.text();
       }
-      await waitForBackend(buildBackendUrl(port, readinessHostForBind(bindHost)), APP_TOKEN, 1000, {
-        exited: new Promise<number>(() => {}),
-      });
+      await waitForBackendEffect(
+        buildBackendUrl(port, readinessHostForBind(bindHost)),
+        APP_TOKEN,
+        1000,
+        {
+          exited: new Promise<number>(() => {}),
+        },
+      ).pipe(Effect.runPromise);
     } finally {
       await server.stop(true);
     }
@@ -952,12 +957,13 @@ describe("TypeScript web host backend", () => {
       cmd: [
         process.execPath,
         "--eval",
-        `import { buildBackendUrl, readinessHostForBind, waitForBackend } from ${JSON.stringify(new URL("./launcher-support.ts", import.meta.url).href)};
+        `import { Effect } from "effect";
+         import { buildBackendUrl, readinessHostForBind, waitForBackendEffect } from ${JSON.stringify(new URL("./launcher-support.ts", import.meta.url).href)};
          const control = await fetch("http://proxy-check.invalid/", { signal: AbortSignal.timeout(2000) });
          if (control.status !== 503 || await control.text() !== "test proxy") throw new Error("Proxy control failed");
          const host = readinessHostForBind(${JSON.stringify(bindHost)});
          if (host !== "127.0.0.1") throw new Error("Expected IPv4 loopback readiness host");
-         await waitForBackend(buildBackendUrl(${server.port}, host), ${JSON.stringify(APP_TOKEN)}, 2000, { exited: new Promise(() => {}) });`,
+         await Effect.runPromise(waitForBackendEffect(buildBackendUrl(${server.port}, host), ${JSON.stringify(APP_TOKEN)}, 2000, { exited: new Promise(() => {}) }));`,
       ],
       env: {
         ...process.env,

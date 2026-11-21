@@ -8,7 +8,7 @@ export type OpenCodeRuntimeConnection = {
   endpoint: string;
   authentication: { type: "basic"; username: "opencode"; password: string };
 };
-export type ClientFactory = (
+type ClientFactory = (
   connection: OpenCodeRuntimeConnection,
   signal?: AbortSignal,
 ) => OpenCodeClient;
@@ -21,7 +21,7 @@ export type OpencodeStreamEventLog = {
   relevant: boolean;
   event: V2Event;
 };
-export type OpencodeEventLogger = (entry: OpencodeStreamEventLog) => void;
+type OpencodeEventLogger = (entry: OpencodeStreamEventLog) => void;
 export type OpencodeSdkAdapterOptions = {
   resolveCreationSettings: (scope: AgentSessionScope) => Promise<OpenCodeCreationSettings>;
   /** The tools and workspace access of a workflow role in the task workflow of the session task. */

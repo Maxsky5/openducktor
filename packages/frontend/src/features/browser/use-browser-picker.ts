@@ -102,8 +102,6 @@ export const useBrowserPicker = (channel: BrowserChannel, tabId: string, live: b
   };
 };
 
-export type BrowserPicker = ReturnType<typeof useBrowserPicker>;
-
 const samePoint = (a: PickerPoint, b: PickerPoint): boolean => a.x === b.x && a.y === b.y;
 
 const withPick = (
@@ -116,7 +114,7 @@ const withPick = (
     : current;
 
 /** Picks the selection after a click: a click selects one element, Shift-click adds or removes. */
-export const nextBrowserPickerSelection = (
+const nextBrowserPickerSelection = (
   selection: readonly BrowserPickedElement[],
   target: BrowserPickedElement,
   shiftKey: boolean,

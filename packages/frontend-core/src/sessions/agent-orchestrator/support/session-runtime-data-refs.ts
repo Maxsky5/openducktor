@@ -31,7 +31,7 @@ export type ResolveSessionRuntimeDataRefsInput = {
   runtimeDefinitions: RuntimeDescriptor[];
 };
 
-export const emptySessionRuntimeDataRefs: SessionRuntimeDataRefs = Object.freeze({
+const emptySessionRuntimeDataRefs: SessionRuntimeDataRefs = Object.freeze({
   kind: "none",
 });
 

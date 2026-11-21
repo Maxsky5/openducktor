@@ -12,7 +12,7 @@ import { LANE_TITLES, type LaneId } from "../vocabulary";
 import "./LaneSwitcher.css";
 
 /** The tones of the workflow states, as `tone` in the Spec, Plan, Build workflow. */
-export type LaneTone =
+type LaneTone =
   | "neutral"
   | "pending"
   | "info"

@@ -7,7 +7,7 @@ import type {
   SessionRef,
 } from "../types/agent-orchestrator";
 
-export type AgentSessionRuntimeActivity = AgentSessionActivity;
+type AgentSessionRuntimeActivity = AgentSessionActivity;
 
 export type AgentSessionActivityInput = {
   runtimeActivity: AgentSessionRuntimeActivity;

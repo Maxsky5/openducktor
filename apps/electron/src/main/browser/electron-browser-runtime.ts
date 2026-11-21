@@ -107,5 +107,3 @@ export const createElectronBrowserRuntime = ({ reportFailure }: ElectronBrowserR
     stop: (): Effect.Effect<void> => devTools.stop(),
   };
 };
-
-export type ElectronBrowserRuntime = ReturnType<typeof createElectronBrowserRuntime>;

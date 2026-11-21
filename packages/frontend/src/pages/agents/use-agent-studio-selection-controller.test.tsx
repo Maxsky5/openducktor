@@ -44,12 +44,12 @@ import {
   createHookHarness as createSharedHookHarness,
   createTaskCardFixture,
   enableReactActEnvironment,
+  taskSelectionFixture,
 } from "./agent-studio-test-utils";
 import {
   createAgentStudioRouteSelectionState,
   toAgentStudioSessionlessRoleSelection,
   toAgentStudioSessionSelection,
-  toAgentStudioTaskSelection,
 } from "./shell/agent-studio-selection-state";
 import { useAgentStudioSelectionController } from "./use-agent-studio-selection-controller";
 import { createAgentOperationsFixture } from "@openducktor/frontend-core/test-support/agent-operations-fixture";
@@ -1522,7 +1522,7 @@ describe("useAgentStudioSelectionController", () => {
           sessionExternalIdParam: sessionExternalIdParam(activeSession),
           hasExplicitRoleParam: true,
           roleFromQuery: "build",
-          selectionState: toAgentStudioTaskSelection("task-2"),
+          selectionState: taskSelectionFixture("task-2"),
         }),
         { readSessionTodos, runtimeDefinitionsContext: { loadRepoRuntimeCatalog } },
       );
@@ -1609,7 +1609,7 @@ describe("useAgentStudioSelectionController", () => {
           taskIdParam: "task-1",
           hasExplicitRoleParam: true,
           roleFromQuery: "build",
-          selectionState: toAgentStudioTaskSelection("task-2"),
+          selectionState: taskSelectionFixture("task-2"),
         }),
       );
 
@@ -1667,7 +1667,7 @@ describe("useAgentStudioSelectionController", () => {
           sessions: [sessionTaskOne, sessionTaskTwo],
           taskIdParam: "task-1",
           hasExplicitRoleParam: false,
-          selectionState: toAgentStudioTaskSelection("task-2"),
+          selectionState: taskSelectionFixture("task-2"),
         }),
       );
 
@@ -1940,7 +1940,7 @@ describe("useAgentStudioSelectionController", () => {
           sessionExternalIdParam: null,
           hasExplicitRoleParam: false,
           roleFromQuery: "qa",
-          selectionState: toAgentStudioTaskSelection("task-2"),
+          selectionState: taskSelectionFixture("task-2"),
         }),
       );
 

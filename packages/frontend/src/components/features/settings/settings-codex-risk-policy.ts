@@ -25,10 +25,6 @@ const collectDangerousSelectionKeys = (config: CodexRuntimeConfig): string[] => 
   return keys.toSorted();
 };
 
-export const codexHasDangerousSelection = (config: CodexRuntimeConfig): boolean => {
-  return collectDangerousSelectionKeys(config).length > 0;
-};
-
 export const buildNewCodexDangerousSelectionKey = ({
   baseline,
   draft,

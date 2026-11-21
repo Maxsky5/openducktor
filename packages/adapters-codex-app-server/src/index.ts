@@ -1,4 +1,5 @@
-export { CodexAppServerAdapter, createCodexAppServerClient } from "./codex-app-server-adapter";
+export { createCodexAppServerClient } from "./app-server-client";
+export { CodexAppServerAdapter } from "./codex-app-server-adapter";
 export { toCatalog as toCodexModelCatalog } from "./model-catalog";
 export { CodexMessageAcceptedError } from "./codex-message-accepted-error";
 export { CodexQuestionHistory } from "./codex-question-history";
@@ -7,34 +8,14 @@ export type {
   CodexAppServerClient,
   CodexAppServerFuzzyFileSearchParams,
   CodexAppServerFuzzyFileSearchResponse,
-  CodexCatalogInvalidation,
-  CodexInitializeParams,
   CodexJsonRpcRequest,
   CodexJsonRpcTransport,
-  CodexJsonRpcTransportFactory,
-  CodexLiveApprovalReplyInput,
-  CodexLiveQuestionReplyInput,
   CodexLiveSessionLocator,
   CodexLiveSessionMutation,
-  CodexModelCatalogRecord,
-  CodexModelListResponse,
-  CodexModelSelectionPayload,
-  CodexPolicyLogEntry,
-  CodexServerRequestRecord,
-  CodexServerRequestResponder,
   CodexSessionContextUsage,
-  CodexSessionState,
-  CodexThreadForkParams,
-  CodexThreadForkResult,
-  CodexThreadResumeParams,
-  CodexThreadResumeResult,
-  CodexThreadSetNameParams,
-  CodexThreadStartParams,
-  CodexThreadStartResult,
-  CodexTurnStartParams,
 } from "./types";
 
-export { codexImageGenerationPart, createCodexInlineImageRevision } from "./codex-image-generation";
+export { codexImageGenerationPart } from "./codex-image-generation";
 export type {
   CodexImageGenerationPreparation,
   CodexImageGenerationPreparer,

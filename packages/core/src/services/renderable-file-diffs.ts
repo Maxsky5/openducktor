@@ -554,9 +554,6 @@ const fileDiffCandidateMatch = (
   return otherHeaderMatch;
 };
 
-export const fileDiffCandidateMatchesFile = (candidate: string, filePath: string): boolean =>
-  fileDiffCandidateMatch(candidate, filePath) !== null;
-
 const hasExplicitFileHeader = (candidate: string): boolean => {
   for (const line of normalizeNewlines(candidate).trim().split("\n")) {
     if (line.startsWith("@@")) {

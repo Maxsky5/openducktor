@@ -6,7 +6,7 @@ import type {
 } from "@openducktor/contracts";
 
 /** The kind of a tool call, as the transcript shows it. */
-export type DemoToolType = "bash" | "read" | "list" | "search" | "file_edit" | "workflow" | "todo";
+type DemoToolType = "bash" | "read" | "list" | "search" | "file_edit" | "workflow" | "todo";
 
 /** One step of a scripted agent run. Each step shows as one part of the agent message. */
 export type DemoRunStep =

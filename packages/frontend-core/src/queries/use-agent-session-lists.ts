@@ -18,7 +18,7 @@ import {
   normalizeAgentSessionTaskIds,
 } from "./agent-sessions";
 
-export type AgentSessionListQueryResult = UseQueryResult<AgentSessionRecord[], Error>;
+type AgentSessionListQueryResult = UseQueryResult<AgentSessionRecord[], Error>;
 
 export type AgentSessionListsState = {
   data: Record<string, AgentSessionRecord[]>;

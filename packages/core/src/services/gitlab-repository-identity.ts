@@ -46,9 +46,6 @@ export const gitlabResolvedRepositoryIdentity = (repository: {
     "::",
   );
 
-export const gitlabProjectWebUrl = (repository: GitlabRepository): string =>
-  `${canonicalGitlabInstanceUrl(repository.instanceUrl)}/${repository.projectPath}`;
-
 /** The token page of an instance, with the name and the `api` scope filled in. */
 export const gitlabTokenPageUrl = (instanceUrl: string): string =>
   `${canonicalGitlabInstanceUrl(instanceUrl)}/-/user_settings/personal_access_tokens?name=OpenDucktor&scopes=api`;

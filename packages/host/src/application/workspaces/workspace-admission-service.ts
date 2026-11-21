@@ -8,9 +8,9 @@ import {
 } from "../../effect/host-errors";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
-export type WorkspaceBlockReason = "closed" | "removal";
+type WorkspaceBlockReason = "closed" | "removal";
 
-export type WorkspaceReservationOperation = "close" | "reopen" | "remove";
+type WorkspaceReservationOperation = "close" | "reopen" | "remove";
 
 export type WithProcessStartAdmission = <A, E, R>(
   repoPath: string,

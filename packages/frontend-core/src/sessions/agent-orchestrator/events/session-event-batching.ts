@@ -236,7 +236,7 @@ export type QueuedSessionEventBatchItem<Event extends QueuedSessionEvent = Queue
   firstTimestamp?: string;
 };
 
-export type PreparedQueuedSessionEvents<
+type PreparedQueuedSessionEvents<
   Item extends QueuedSessionEventBatchItem = QueuedSessionEventBatchItem,
 > = {
   readyEvents: Item[];

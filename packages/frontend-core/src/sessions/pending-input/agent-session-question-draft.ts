@@ -127,7 +127,7 @@ export const agentQuestionTitle = (
   questionIndex: number,
 ): string => question.header?.trim() || `Question ${questionIndex + 1}`;
 
-export const NO_ANSWER_PREVIEW = "No answer yet";
+const NO_ANSWER_PREVIEW = "No answer yet";
 
 /** What a client shows in place of the answer of a secret question, such as a password. */
 export const HIDDEN_ANSWER_LABEL = "Hidden answer";

@@ -20,9 +20,9 @@ const PANELS = "packages/frontend/src/features/session-panels";
 const { PANEL_TAB_KIND_RULES } = await importProduct<{
   PANEL_TAB_KIND_RULES: Record<string, TabKindRule>;
 }>(`${PANELS}/panel-tab-kinds.ts`);
-// SAFETY: session-panel-tab-presentation.ts exports these labels.
-const { NEW_TAB_LABEL: APP_NEW_TAB, PANEL_TAB_BADGE_LABELS } = await importProduct<{
-  NEW_TAB_LABEL: string;
+// SAFETY: the panel presentation reads the kind of the new tab.
+const { panelTabPresentation, PANEL_TAB_BADGE_LABELS } = await importProduct<{
+  panelTabPresentation: (tab: { id: string; kind: "new_tab" }) => { label: string };
   PANEL_TAB_BADGE_LABELS: Record<string, string>;
 }>(`${PANELS}/session-panel-tab-presentation.ts`);
 // SAFETY: session-panel-browser-tab-presentation.ts exports this function. It reads only the tab.
@@ -50,7 +50,7 @@ describe("the panels and the browser copied from the app", () => {
   });
 
   test("the tab labels and the badge are the labels of the app", () => {
-    expect(NEW_TAB_LABEL).toBe(APP_NEW_TAB);
+    expect(NEW_TAB_LABEL).toBe(panelTabPresentation({ id: "new_tab:main", kind: "new_tab" }).label);
     expect(SHARED_BADGE).toBe(PANEL_TAB_BADGE_LABELS.shared ?? "");
   });
 

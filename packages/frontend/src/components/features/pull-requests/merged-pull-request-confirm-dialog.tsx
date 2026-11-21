@@ -111,7 +111,7 @@ export const MergedPullRequestConfirmDialog = memo(function MergedPullRequestCon
             {/* A failed session read shows in the read error row, with a retry. */}
             {impact.activeSessionCount ? (
               <p className="leading-6">
-                {formatActiveSessionStopMessage(impact.activeSessionCount, "close")}
+                {formatActiveSessionStopMessage(impact.activeSessionCount)}
               </p>
             ) : null}
           </div>

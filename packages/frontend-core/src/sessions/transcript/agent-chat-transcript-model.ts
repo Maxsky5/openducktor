@@ -462,7 +462,7 @@ export function reuseUnchangedTranscriptRows(
  * Lists the user message rows. A streaming update usually keeps every user message, so this
  * returns the previous list when nothing changed, and the readers of the list do not render again.
  */
-export function buildAgentChatUserMessageAnchors(
+function buildAgentChatUserMessageAnchors(
   rows: AgentChatTranscriptRow[],
   previous: AgentChatUserMessageAnchor[] = [],
 ): AgentChatUserMessageAnchor[] {

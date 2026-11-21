@@ -3,7 +3,7 @@ import { create } from "zustand";
 /** The share of the page area that docked DevTools take when they first open, in percent. */
 export const BROWSER_DEVTOOLS_DEFAULT_SIZE = 40;
 
-export type BrowserDevToolsDock = {
+type BrowserDevToolsDock = {
   readonly open: boolean;
   /** The DevTools size in percent of the page area. It stays when DevTools close. */
   readonly size: number;

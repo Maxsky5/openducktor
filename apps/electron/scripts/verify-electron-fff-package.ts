@@ -31,7 +31,7 @@ type VerifyPackagedFffFileSearchInput = {
 
 type PackagedFffErrorDetails = { readonly nodeModulesDirectory: string };
 
-export type VerifiedPackagedFffFileSearch = {
+type VerifiedPackagedFffFileSearch = {
   modulePath: string;
 };
 

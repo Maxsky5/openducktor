@@ -1,7 +1,9 @@
 import { claudeTestRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, test } from "bun:test";
-import { parseClaudeHistoryMessages } from "./claude-agent-sdk-history-messages";
-import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
+import {
+  parseClaudeHistoryAssistantEntry,
+  parseClaudeUserToolResultIngress,
+} from "./claude-agent-sdk-ingress-schemas";
 import { createClaudePostToolUseHook } from "./claude-agent-sdk-post-tool-use-hook";
 import { createClaudePreToolUseHook } from "./claude-agent-sdk-pre-tool-use-hook";
 import { createClaudeSession } from "./claude-agent-sdk-session-io.test-support";
@@ -9,12 +11,14 @@ import { claudeSessionMessageFixture } from "./claude-agent-sdk-test-messages";
 
 describe("Claude SDK ingress", () => {
   test("rejects malformed history entries before history projection", () => {
-    const malformedHistory = [
-      claudeSessionMessageFixture({ type: "assistant", uuid: "malformed", message: new Date() }),
-    ];
+    const malformedEntry = claudeSessionMessageFixture({
+      type: "assistant",
+      uuid: "malformed",
+      message: new Date(),
+    });
     let error: unknown;
     try {
-      parseClaudeHistoryMessages(malformedHistory);
+      parseClaudeHistoryAssistantEntry(malformedEntry);
     } catch (cause) {
       error = cause;
     }

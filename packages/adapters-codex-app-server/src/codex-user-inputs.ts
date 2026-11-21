@@ -41,9 +41,6 @@ export const toCodexAsyncQuestionReplyInput = (
   text_elements: [],
 });
 
-export const toCodexUserInputList = (parts: AgentUserMessagePart[]): CodexUserInput[] =>
-  parts.map(toCodexUserInput);
-
 const wordlikeTextStartPattern = /[\p{L}\p{N}_]/u;
 
 const codexMarkerNeedsTrailingSpaceBefore = (part: AgentUserMessagePart | undefined): boolean => {

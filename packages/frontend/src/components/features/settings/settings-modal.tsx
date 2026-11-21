@@ -46,7 +46,6 @@ import {
 } from "./settings-modal-context";
 
 export { useSettingsModal } from "./settings-modal-context";
-export type { SettingsDeepLink } from "./settings-deep-link";
 
 type SettingsModalProps = {
   triggerClassName?: string;

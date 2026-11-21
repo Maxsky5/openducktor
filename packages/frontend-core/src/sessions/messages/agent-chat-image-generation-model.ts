@@ -22,7 +22,7 @@ export const IMAGE_GENERATION_INTERRUPTED_TEXT =
   "The turn stopped before the runtime confirmed an image result.";
 export const IMAGE_GENERATION_MISSING_SESSION_TEXT =
   "Preview unavailable: the session reference is missing. Reopen the session.";
-export const IMAGE_GENERATION_UNSUPPORTED_TEXT = "This runtime does not support image previews.";
+const IMAGE_GENERATION_UNSUPPORTED_TEXT = "This runtime does not support image previews.";
 
 export const imageGenerationIncompleteText = (part: AgentImageGenerationPart): string =>
   part.incompleteReason === "runtime_failure"
@@ -106,7 +106,7 @@ export const resolveGeneratedImagePreviewPlan = (
   return plan;
 };
 
-export const GENERATED_IMAGE_DEFAULT_ALT = "Generated image";
+const GENERATED_IMAGE_DEFAULT_ALT = "Generated image";
 
 export const generatedImageAlt = (part: AgentImageGenerationPart): string =>
   part.revisedPrompt || GENERATED_IMAGE_DEFAULT_ALT;

@@ -26,4 +26,4 @@ export type LocalAttachmentPort = {
   readFile(path: string): Effect.Effect<Uint8Array, HostOperationErrorAggregate>;
 };
 
-export type LocalFileInfo = { isFile: boolean; byteSize: number };
+type LocalFileInfo = { isFile: boolean; byteSize: number };

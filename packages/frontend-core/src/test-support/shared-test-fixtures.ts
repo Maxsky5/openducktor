@@ -434,7 +434,6 @@ type AgentSessionFixtureMessages = SessionMessagesState | AgentChatMessage[];
 
 export type AgentSessionFixtureOverrides = Partial<Omit<AgentSessionState, "messages">> & {
   messages?: AgentSessionFixtureMessages;
-  runId?: string | null;
 };
 
 const toAgentSessionFixtureMessages = (
@@ -460,8 +459,8 @@ export const createAgentSessionFixture = (
 ): AgentSessionState => {
   assertCanonicalAgentSessionFixtureInput(defaults);
   assertCanonicalAgentSessionFixtureInput(overrides);
-  const { runId: _defaultRunId, messages: defaultMessages, ...defaultSession } = defaults;
-  const { runId: _overrideRunId, messages: overrideMessages, ...overrideSession } = overrides;
+  const { messages: defaultMessages, ...defaultSession } = defaults;
+  const { messages: overrideMessages, ...overrideSession } = overrides;
   const externalSessionId =
     overrideSession.externalSessionId ??
     defaultSession.externalSessionId ??

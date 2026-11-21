@@ -1,8 +1,4 @@
-import type {
-  AgentSessionGoal,
-  AgentSessionTranscriptEventType,
-  RuntimeOperationFailure,
-} from "@openducktor/contracts";
+import type { AgentSessionGoal, RuntimeOperationFailure } from "@openducktor/contracts";
 import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
 import type { OpencodeRuntimeSnapshotSource } from "./live-session-snapshots";
 
@@ -10,10 +6,6 @@ export type OpencodeSessionContextUsage = {
   readonly totalTokens: number;
   readonly model?: AgentModelSelection;
 };
-export type OpencodeSessionTranscriptEvent = Extract<
-  AgentEvent,
-  { type: AgentSessionTranscriptEventType }
->;
 export type OpencodeSessionRuntimeSignal =
   | {
       readonly type: "session_event";

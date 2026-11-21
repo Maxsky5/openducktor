@@ -60,19 +60,6 @@ const buildSessionsByRole = (
   return sessionsByRole;
 };
 
-export const buildLatestSessionByTaskMap = (
-  sessions: AgentSessionWorkflowSummary[],
-): Map<string, AgentSessionWorkflowSummary> => {
-  const sortedSessions = sessions.toSorted(compareAgentSessionRecency);
-  const next = new Map<string, AgentSessionWorkflowSummary>();
-  for (const entry of sortedSessions) {
-    if (!next.has(entry.taskId)) {
-      next.set(entry.taskId, entry);
-    }
-  }
-  return next;
-};
-
 export const buildLatestSessionByRoleMap = (
   sessionsForTask: AgentSessionWorkflowSummary[],
 ): Record<AgentRole, AgentSessionWorkflowSummary | null> => {

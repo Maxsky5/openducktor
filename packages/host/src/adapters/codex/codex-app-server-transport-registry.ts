@@ -27,7 +27,7 @@ import {
 } from "./codex-app-server-response-parsers";
 import type { CodexAppServerTransportError } from "./codex-app-server-transport-types";
 
-export type CodexAppServerTransportRegistryError =
+type CodexAppServerTransportRegistryError =
   | CodexAppServerTransportError
   | HostResourceErrorAggregate;
 

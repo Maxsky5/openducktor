@@ -42,6 +42,7 @@ import type {
   AgentSessionControlContinueInterruptedTurnInput,
   AgentSessionSendOptions,
   AgentSessionTitleUpdateOutcome,
+  ApprovalReplyOptions,
 } from "../../ports/agent-session-live-adapter-port";
 import type { AgentSessionPersistencePort } from "../../ports/agent-session-persistence-port";
 import type {
@@ -127,7 +128,7 @@ export type AgentSessionLiveStateService = {
   ) => Effect.Effect<ReadonlyArray<FileDiff>, HostError>;
   readonly replyApproval: (
     input: AgentSessionLiveReplyApprovalInput,
-    options?: import("../../ports/agent-session-live-adapter-port").ApprovalReplyOptions,
+    options?: ApprovalReplyOptions,
   ) => Effect.Effect<void, HostError>;
   readonly replyQuestion: (
     input: AgentSessionLiveReplyQuestionInput,

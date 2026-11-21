@@ -31,26 +31,12 @@ export type AgentChatDraftIdentity =
       workspaceSessionId: string;
     };
 
-export type PersistedAgentChatDraftAttachment = {
+type PersistedAgentChatDraftAttachment = {
   id: string;
   path: string;
   name: string;
   kind: AgentAttachmentKind;
   mime?: string;
-};
-
-export type PersistedAgentChatDraftPayload = {
-  version: 2;
-  workspaceId: string;
-  externalSessionId: string;
-  runtimeKind: AgentChatDraftSessionIdentity["runtimeKind"];
-  workingDirectory: string;
-  taskId: string;
-  updatedAt: string;
-  draft: {
-    segments: AgentChatComposerSegment[];
-    attachments: PersistedAgentChatDraftAttachment[];
-  };
 };
 
 export type SerializedAgentChatDraftResult =
@@ -59,7 +45,7 @@ export type SerializedAgentChatDraftResult =
   | { status: "oversized"; byteLength: number }
   | { status: "serialized"; payload: string; byteLength: number };
 
-export type RestoredAgentChatDraft = {
+type RestoredAgentChatDraft = {
   taskId: string | null;
   updatedAt: string;
   draft: AgentChatComposerDraft;
@@ -72,10 +58,10 @@ export type AgentChatDraftStorageReadResult =
   | { status: "expired" }
   | { status: "oversized"; byteLength: number };
 
-export const AGENT_CHAT_DRAFT_STORAGE_PREFIX = "openducktor:agent-chat:draft:v2";
+const AGENT_CHAT_DRAFT_STORAGE_PREFIX = "openducktor:agent-chat:draft:v2";
 const WORKSPACE_CHAT_DRAFT_STORAGE_PREFIX = "openducktor:workspace-chat:draft:v1";
 export const AGENT_CHAT_DRAFT_STORAGE_MAX_BYTES = 20_480;
-export const AGENT_CHAT_DRAFT_STORAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const AGENT_CHAT_DRAFT_STORAGE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const encoder = new TextEncoder();
 const ATTACHMENT_KINDS = ["image", "audio", "video", "pdf"] as const;
@@ -163,7 +149,7 @@ export const toAgentChatDraftStorageKey = (identity: AgentChatDraftIdentity): st
   )}:${agentSessionIdentityKey(identity)}`;
 };
 
-export const isAgentChatDraftStorageKey = (key: string): boolean =>
+const isAgentChatDraftStorageKey = (key: string): boolean =>
   key.startsWith(`${AGENT_CHAT_DRAFT_STORAGE_PREFIX}:`) ||
   key.startsWith(`${WORKSPACE_CHAT_DRAFT_STORAGE_PREFIX}:`);
 
@@ -260,7 +246,7 @@ const parseAttachment = (
   return attachment ? { ...attachment, id: value.id } : null;
 };
 
-export const parseAgentChatDraftPayload = ({
+const parseAgentChatDraftPayload = ({
   raw,
   identity,
   now,

@@ -43,7 +43,7 @@ export type PromptTemplate = {
 };
 
 /** A prompt with the settings key of its owner: a role or the workflow. */
-export type OwnedPromptTemplate = PromptTemplate & {
+type OwnedPromptTemplate = PromptTemplate & {
   readonly key: string;
   readonly ownerKind: "role" | "workflow";
 };
@@ -64,7 +64,7 @@ type PromptRole = {
   readonly agentEvents: readonly TaskWorkflowAgentEvent[];
 };
 
-export type PromptTaskContext = {
+type PromptTaskContext = {
   taskId: string;
   title?: string;
   issueType?: string;
@@ -80,7 +80,7 @@ export type AgentPromptGitContext = {
   conflictOutput?: string;
 };
 
-export type ResolvedAgentPromptTemplate = {
+type ResolvedAgentPromptTemplate = {
   key: string;
   purpose: PromptPurpose;
   source: "builtin" | "override";
@@ -90,26 +90,26 @@ export type ResolvedAgentPromptTemplate = {
   content: string;
 };
 
-export type AgentPromptWarning = {
+type AgentPromptWarning = {
   type: "override_base_version_mismatch";
   key: string;
   builtinVersion: number;
   overrideBaseVersion: number;
 };
 
-export type BuiltAgentPrompt = {
+type BuiltAgentPrompt = {
   prompt: string;
   templates: ResolvedAgentPromptTemplate[];
   warnings: AgentPromptWarning[];
 };
 
-export type SystemPromptInput = {
+type SystemPromptInput = {
   role: string;
   task: PromptTaskContext;
   settings: PromptSettings;
 };
 
-export type KickoffPromptInput = {
+type KickoffPromptInput = {
   launchActionId: string;
   /** The role of the session. The core pull request launch needs it. */
   role?: string | undefined;
@@ -120,14 +120,14 @@ export type KickoffPromptInput = {
 };
 
 /** The instructions that tell a model how to write the goal of a Goal mode launch. */
-export type GoalPromptInput = {
+type GoalPromptInput = {
   launchActionId: string;
   task: PromptTaskContext;
   humanFeedback?: string | undefined;
   settings: PromptSettings;
 };
 
-export type MessagePromptInput = {
+type MessagePromptInput = {
   launchActionId: string;
   /** The role of the session. The core pull request launch needs it. */
   role?: string | undefined;

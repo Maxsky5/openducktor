@@ -1,6 +1,6 @@
 import type { AgentRoleDefinition, WorkflowDefinition } from "@openducktor/contracts";
 import { createTaskWorkflow, type TaskWorkflow } from "../src/task-workflow/task-workflow";
-import type { PromptTemplate } from "../src/task-workflow/task-prompts";
+import type { PromptPurpose, PromptTemplate } from "../src/task-workflow/task-prompts";
 
 const drafted = { artifact: "draft", present: true } as const;
 const accepted = { artifact: "review", verdict: "accept" } as const;
@@ -298,11 +298,12 @@ export const reviewTaskDefinition = (): WorkflowDefinition => ({
   launchOrder: [],
 });
 
-const template = (
-  id: string,
-  purpose: PromptTemplate["purpose"],
-  text: string,
-): PromptTemplate => ({ id, purpose, builtinVersion: 1, template: text });
+const template = (id: string, purpose: PromptPurpose, text: string): PromptTemplate => ({
+  id,
+  purpose,
+  builtinVersion: 1,
+  template: text,
+});
 
 const systemPrompt = (label: string, text: string) => ({
   builtinVersion: 1,

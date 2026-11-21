@@ -174,7 +174,7 @@ export const readElectronLocalAttachmentPreviewRequestPath = (requestUrl: string
   }
 };
 
-export const readElectronLocalAttachmentPreviewRequestPathEffect = (
+const readElectronLocalAttachmentPreviewRequestPathEffect = (
   requestUrl: string,
 ): Effect.Effect<string, ElectronValidationErrorAggregate> =>
   Effect.try({

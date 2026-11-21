@@ -27,7 +27,7 @@ export type LaunchTaskWorkflow = (
   committedTask?: ResolvedTaskCard,
 ) => void;
 
-export const selectTaskWorkflowContinuation = (
+const selectTaskWorkflowContinuation = (
   task: ResolvedTaskCard,
   continuation: TaskWorkflowContinuation,
 ): string | null => {

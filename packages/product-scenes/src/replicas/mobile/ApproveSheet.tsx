@@ -116,7 +116,7 @@ export function publishButtonLabel(branch: string, pushing: boolean): string {
 }
 
 /** A sentence with a branch name in the code font. */
-export type CodeSentence = { before: string; code: string; after: string };
+type CodeSentence = { before: string; code: string; after: string };
 
 function CodeText({ text, strong = false }: { text: CodeSentence; strong?: boolean }) {
   return (

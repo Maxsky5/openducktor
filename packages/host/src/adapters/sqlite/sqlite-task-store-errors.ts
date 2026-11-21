@@ -13,7 +13,6 @@ import {
 import { TaskAssetError } from "../../effect/task-asset-error";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 
-export type SqliteTaskStorePersistenceError = SqliteTaskStoreDataError | TaskStoreError;
 export type SqliteTaskStoreReadError = SqliteTaskStoreDataError | TaskStoreError;
 export type SqliteTaskStoreWriteError = SqliteTaskStoreDataError | TaskStoreError;
 

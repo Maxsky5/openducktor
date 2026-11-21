@@ -31,9 +31,3 @@ export class RuntimeShutdownError extends Data.TaggedError("RuntimeShutdownError
   readonly message: string;
   readonly failures: ReadonlyArray<string>;
 }> {}
-
-export type RuntimeOrchestrationError =
-  | RuntimeUnavailableError
-  | RuntimeLifecycleBusyError
-  | RuntimeSettingsError
-  | RuntimeShutdownError;

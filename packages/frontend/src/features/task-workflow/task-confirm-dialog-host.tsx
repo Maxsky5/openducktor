@@ -20,7 +20,7 @@ type TaskConfirmWorkspaceIdentity = { workspaceId: string; repoPath: string };
  * A confirmation for a task of the workspace that opened it. `id` changes with each request, so
  * a new request opens a new dialog.
  */
-export type TaskConfirmRequest = TaskConfirmWorkspaceIdentity & {
+type TaskConfirmRequest = TaskConfirmWorkspaceIdentity & {
   id: number;
   taskId: string;
   action: TaskConfirmRequestAction;

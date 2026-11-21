@@ -56,7 +56,7 @@ type RuntimeImpactDialogProps = {
   onCancel: () => void;
 };
 
-export const IMPACT_EXPLANATION =
+const IMPACT_EXPLANATION =
   "This action stops the live sessions listed below and rejects their pending input. Saved sessions stay available from history.";
 export const NO_IMPACT_MESSAGE = "No live sessions are affected.";
 

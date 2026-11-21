@@ -38,7 +38,7 @@ type SelectedSessionApprovalsContext = {
   onReply: (requestId: string, outcome: RuntimeApprovalReplyOutcome) => Promise<void>;
 };
 
-export type SelectedSessionPendingInputContext = {
+type SelectedSessionPendingInputContext = {
   waitingInputPlaceholder: string | null;
   pendingApprovalRequests: readonly AgentApprovalRequest[];
   pendingQuestionRequests: readonly AgentQuestionRequest[];

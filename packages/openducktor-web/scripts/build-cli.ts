@@ -1,10 +1,9 @@
 import { execFile } from "node:child_process";
 import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { markExecutable, runCommand } from "@openducktor/build-tools";
+import { markExecutable } from "@openducktor/build-tools";
 import {
   type SqliteMigrationCopyPlan,
   sqliteMigrationCopyPlans,
@@ -15,9 +14,8 @@ import {
   runWebBoundary,
   WebDependencyError,
 } from "@openducktor/remote-host/effect/web-errors";
+import { packageRoot, runBuildCommandEffect } from "./build-command";
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-const packageRoot = resolve(scriptDirectory, "..");
 const outputPath = join(packageRoot, "dist", "cli.js");
 const execFileAsync = promisify(execFile);
 
@@ -61,48 +59,12 @@ const CLI_BUILD_COMMAND = [
   "src/cli.ts",
   "src/generated-image-worker.ts",
   "src/claude-transcript-worker.ts",
-] as const;
-
-// The import worker has its own bundle, so its migration folders resolve from the dist folder
-// and not from a shared chunk.
-const IMPORT_WORKER_BUILD_COMMAND = [
-  "bun",
-  "build",
-  "--target=node",
-  "--minify",
-  "--keep-names",
-  "--outdir",
-  dirname(outputPath),
-  "--entry-naming",
-  "[name].[ext]",
   "src/host-database-import-worker.ts",
 ] as const;
 
-type WebBuild = { label: string; command: readonly [string, ...string[]] };
-
-const runWebBuildEffect = ({ label, command }: WebBuild): Effect.Effect<void, WebDependencyError> =>
-  Effect.tryPromise({
-    try: () => runCommand({ command, cwd: packageRoot, label }),
-    catch: (cause) =>
-      new WebDependencyError({
-        dependency: "build-command",
-        operation: "web-cli-build",
-        message: errorMessage(cause),
-        cause,
-        details: { command: [...command], cwd: packageRoot },
-      }),
-  });
-
-export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
+const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
-    yield* Effect.forEach(
-      [
-        { label: "Web CLI build", command: CLI_BUILD_COMMAND },
-        { label: "Web import worker build", command: IMPORT_WORKER_BUILD_COMMAND },
-      ],
-      runWebBuildEffect,
-      { concurrency: 2, discard: true },
-    );
+    yield* runBuildCommandEffect("Web CLI build", CLI_BUILD_COMMAND, "web-cli-build");
     yield* Effect.tryPromise({
       try: () => markExecutable(outputPath),
       catch: (cause) =>
@@ -145,10 +107,8 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
     });
   });
 
-export const buildWebCli = (): Promise<void> => runWebBoundary(buildWebCliEffect());
-
 if (import.meta.main) {
-  await buildWebCli().catch((cause: unknown) => {
+  await runWebBoundary(buildWebCliEffect()).catch((cause: unknown) => {
     console.error(errorMessage(cause));
     process.exit(1);
   });

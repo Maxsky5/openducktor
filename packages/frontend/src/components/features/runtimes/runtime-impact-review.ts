@@ -24,7 +24,7 @@ export type RuntimeImpactAction<Completed extends CompletedAction = CompletedAct
   impact: RuntimeLifecycleImpact,
 ) => Promise<RuntimeImpactActionResult<Completed>>;
 
-export type RuntimeImpactReviewRequest<Completed extends CompletedAction = CompletedAction> = {
+type RuntimeImpactReviewRequest<Completed extends CompletedAction = CompletedAction> = {
   readImpact: () => Promise<RuntimeLifecycleImpact>;
   run: RuntimeImpactAction<Completed>;
   /** Explains why the review opened. */

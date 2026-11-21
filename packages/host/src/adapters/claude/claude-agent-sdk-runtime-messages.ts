@@ -98,10 +98,6 @@ export const readClaudeTaskNotifications = (
     });
 };
 
-export const readClaudeTaskNotification = (
-  entry: ClaudeHistoryMessage,
-): ClaudeTaskNotification | null => readClaudeTaskNotifications(entry)[0] ?? null;
-
 export const readClaudeBackgroundAgentLaunch = (
   resultText: string,
 ): ClaudeBackgroundAgentLaunch | null => {

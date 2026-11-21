@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
   readClaudeBackgroundAgentLaunch,
-  readClaudeTaskNotification,
   readClaudeTaskNotifications,
 } from "./claude-agent-sdk-runtime-messages";
 import { claudeSessionMessageFixture } from "./claude-agent-sdk-test-messages";
@@ -9,7 +8,7 @@ import { claudeSessionMessageFixture } from "./claude-agent-sdk-test-messages";
 describe("Claude runtime control messages", () => {
   test("reads the SDK task-notification envelope", () => {
     expect(
-      readClaudeTaskNotification(
+      readClaudeTaskNotifications(
         claudeSessionMessageFixture({
           type: "user",
           uuid: "user-1",
@@ -25,13 +24,15 @@ describe("Claude runtime control messages", () => {
           },
         }),
       ),
-    ).toEqual({
-      taskId: "agent-1",
-      toolUseId: "agent-tool-1",
-      outputFile: "/tmp/agent-1.output",
-      status: "completed",
-      summary: "Agent finished",
-    });
+    ).toEqual([
+      {
+        taskId: "agent-1",
+        toolUseId: "agent-tool-1",
+        outputFile: "/tmp/agent-1.output",
+        status: "completed",
+        summary: "Agent finished",
+      },
+    ]);
   });
 
   test("reads the SDK background Agent launch result", () => {
@@ -71,14 +72,14 @@ output_file: /tmp/child-agent.output`),
 
   test("does not classify ordinary user or tool-result text as runtime control messages", () => {
     expect(
-      readClaudeTaskNotification(
+      readClaudeTaskNotifications(
         claudeSessionMessageFixture({
           type: "user",
           uuid: "user-3",
           message: { role: "user", content: "Tell me about <task-notification> messages." },
         }),
       ),
-    ).toBeNull();
+    ).toEqual([]);
     expect(readClaudeBackgroundAgentLaunch("The agent launched successfully.")).toBeNull();
   });
 });

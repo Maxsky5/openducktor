@@ -17,7 +17,7 @@ import type {
 } from "../../workspaces/workspace-settings-service";
 import { taskWorktreeIdError } from "./task-worktree-id";
 
-export type TaskWorktreeServiceError =
+type TaskWorktreeServiceError =
   | HostValidationErrorAggregate
   | SettingsConfigError
   | WorkspaceSettingsError;

@@ -155,7 +155,7 @@ export const createElectronBrowserIpcController = (input: ElectronBrowserIpcCont
   };
 };
 
-export type ElectronBrowserIpcController = ReturnType<typeof createElectronBrowserIpcController>;
+type ElectronBrowserIpcController = ReturnType<typeof createElectronBrowserIpcController>;
 
 /** A browser IPC handler. It reads only the sender of the Electron invoke event. */
 export type ElectronBrowserIpcHandler = (

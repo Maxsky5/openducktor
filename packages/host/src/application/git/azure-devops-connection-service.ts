@@ -15,9 +15,9 @@ import type {
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
 
-export type AzureDevOpsConnectionServiceError = HostError | WorkspaceSettingsError;
+type AzureDevOpsConnectionServiceError = HostError | WorkspaceSettingsError;
 
-export type AzureDevOpsConnectionInput = WorkspaceRef & {
+type AzureDevOpsConnectionInput = WorkspaceRef & {
   repository: AzureDevOpsRepository;
 };
 

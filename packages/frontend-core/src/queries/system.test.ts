@@ -2,8 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { SystemOpenInToolInfo } from "@openducktor/contracts";
 import { createTestClientConnection } from "../test-support/test-client-connection";
 import {
-  ensureOpenInToolsFromQuery,
-  loadOpenInToolsFromQuery,
+  openInToolsQueryOptions,
   platformQueryOptions,
   refreshOpenInToolsFromQuery,
   systemQueryKeys,
@@ -29,24 +28,6 @@ describe("system queries", () => {
     queryClient.clear();
   });
 
-  test("ensureOpenInToolsFromQuery reuses cached discovery data without refetching", async () => {
-    const systemListOpenInTools = mock(
-      async () =>
-        [
-          { toolId: "finder", iconDataUrl: null },
-          { toolId: "ghostty", iconDataUrl: "data:image/png;base64,ghostty" },
-        ] satisfies Array<SystemOpenInToolInfo>,
-    );
-    const { queryClient } = createTestClientConnection({ client: { systemListOpenInTools } });
-
-    await loadOpenInToolsFromQuery(queryClient);
-    expect(systemListOpenInTools).toHaveBeenCalledTimes(1);
-
-    await ensureOpenInToolsFromQuery(queryClient);
-    expect(systemListOpenInTools).toHaveBeenCalledTimes(1);
-    queryClient.clear();
-  });
-
   test("refreshOpenInToolsFromQuery bypasses the cached discovery result", async () => {
     const systemListOpenInTools = mock(
       async (forceRefresh = false) =>
@@ -60,7 +41,7 @@ describe("system queries", () => {
     const { queryClient } = createTestClientConnection({ client: { systemListOpenInTools } });
 
     const [first, refreshed] = await Promise.all([
-      loadOpenInToolsFromQuery(queryClient),
+      queryClient.fetchQuery(openInToolsQueryOptions()),
       refreshOpenInToolsFromQuery(queryClient),
     ]);
 

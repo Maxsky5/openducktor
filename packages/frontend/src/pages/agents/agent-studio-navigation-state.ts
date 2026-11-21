@@ -23,7 +23,7 @@ import type {
   ResolvedTaskCard as TaskCard,
 } from "@openducktor/workflows";
 
-export type AgentStudioNavigationViewSelection = {
+type AgentStudioNavigationViewSelection = {
   taskId: string;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];

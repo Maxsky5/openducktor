@@ -1,33 +1,14 @@
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { cleanDirectory, runCommand } from "@openducktor/build-tools";
+import { join } from "node:path";
+import { cleanDirectory } from "@openducktor/build-tools";
 import { Effect } from "effect";
 import {
   errorMessage,
   runWebBoundary,
   WebDependencyError,
 } from "@openducktor/remote-host/effect/web-errors";
+import { packageRoot, runBuildCommandEffect } from "./build-command";
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-const packageRoot = resolve(scriptDirectory, "..");
-
-const runBuildCommandEffect = (
-  label: string,
-  command: readonly [string, ...string[]],
-): Effect.Effect<void, WebDependencyError> =>
-  Effect.tryPromise({
-    try: () => runCommand({ command, cwd: packageRoot, label }),
-    catch: (cause) =>
-      new WebDependencyError({
-        dependency: "build-command",
-        operation: label,
-        message: errorMessage(cause),
-        cause,
-        details: { command: [...command], cwd: packageRoot },
-      }),
-  });
-
-export const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError> =>
+const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise({
       try: () => cleanDirectory(join(packageRoot, "dist")),
@@ -40,16 +21,19 @@ export const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError>
           details: { path: join(packageRoot, "dist") },
         }),
     });
-    yield* runBuildCommandEffect("Web shell build", ["bun", "run", "build:web-shell"]);
+    yield* runBuildCommandEffect("Web shell, CLI and MCP builds", [
+      "bun",
+      "run",
+      "--parallel",
+      "build:web-shell",
+      "build:cli",
+      "build:mcp",
+    ]);
     yield* runBuildCommandEffect("Standalone web client build", ["bun", "run", "build:client"]);
-    yield* runBuildCommandEffect("Web CLI build", ["bun", "run", "build:cli"]);
-    yield* runBuildCommandEffect("Web MCP entrypoint build", ["bun", "run", "build:mcp"]);
   });
 
-export const buildWebPackage = (): Promise<void> => runWebBoundary(buildWebPackageEffect());
-
 if (import.meta.main) {
-  await buildWebPackage().catch((cause: unknown) => {
+  await runWebBoundary(buildWebPackageEffect()).catch((cause: unknown) => {
     console.error(errorMessage(cause));
     process.exit(1);
   });

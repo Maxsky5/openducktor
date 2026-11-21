@@ -17,7 +17,7 @@ import {
 
 /** The data of a host WebSocket: a terminal connection or a host channel. */
 export type HostWebSocketData = TerminalWebSocketData | HostChannelSocketData;
-export type HostWebSocketServerSocket = NodeServerSocket<HostWebSocketData>;
+type HostWebSocketServerSocket = NodeServerSocket<HostWebSocketData>;
 
 /** The socket routes of a host listener and the subprotocol that each one selects. */
 export const HOST_SOCKET_PROTOCOLS: ReadonlyMap<string, string> = new Map([

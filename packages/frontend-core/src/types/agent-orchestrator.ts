@@ -227,7 +227,7 @@ export type AgentSessionContextUsage = {
  * it `loaded` again, or `stale` when the session can have new messages. `stale`: the transcript
  * misses messages, so it needs a new history read.
  */
-export type AgentSessionHistoryLoadState =
+type AgentSessionHistoryLoadState =
   | "not_requested"
   | "loading"
   | "loaded"
@@ -235,7 +235,7 @@ export type AgentSessionHistoryLoadState =
   | "stale"
   | "refreshing"
   | "failed";
-export type AgentSessionRuntimeAvailability = "runtime" | "missing";
+type AgentSessionRuntimeAvailability = "runtime" | "missing";
 
 export type AgentSessionState = {
   externalSessionId: string;
@@ -284,8 +284,6 @@ export type AgentSessionState = {
 export type WorkflowAgentSessionState = AgentSessionState & {
   sessionAssociation: AgentSessionWorkflowScope;
 };
-
-export type AgentTaskSessionBinding = Pick<AgentSessionWorkflowScope, "taskId" | "role">;
 
 export type AgentSessionIdentity = Pick<
   AgentSessionState,

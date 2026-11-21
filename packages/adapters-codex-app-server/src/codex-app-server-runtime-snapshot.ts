@@ -9,12 +9,12 @@ import {
 import type { CodexThreadInventory, CodexThreadSnapshot } from "./codex-app-server-threads";
 import type { CodexSessionState } from "./types";
 
-export type CodexRuntimeSnapshotSource =
+type CodexRuntimeSnapshotSource =
   | { type: "local" }
   | { type: "thread"; thread: CodexThreadSnapshot }
   | { type: "missing" };
 
-export type ResolveCodexRuntimeSnapshotSourceInput = {
+type ResolveCodexRuntimeSnapshotSourceInput = {
   session: CodexSessionState;
   thread: CodexThreadSnapshot | null;
   threadIsLoaded: boolean;

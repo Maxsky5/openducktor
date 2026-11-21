@@ -12,10 +12,10 @@ import type {
 } from "@openducktor/core";
 import type { NormalizedCodexToolInvocation } from "./codex-tool-normalizer";
 
-export type CodexCanonicalSource = "live" | "thread_read";
+type CodexCanonicalSource = "live" | "thread_read";
 
 // Live events use the emitting thread as owner; forked thread/read items are pre-owned at the fork boundary.
-export type CodexCanonicalEventBase = {
+type CodexCanonicalEventBase = {
   source: CodexCanonicalSource;
   mapper: string;
   threadId: string;

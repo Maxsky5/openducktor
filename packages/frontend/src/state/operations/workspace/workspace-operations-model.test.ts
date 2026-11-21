@@ -4,7 +4,6 @@ import {
   BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS,
   branchProbeErrorSignature,
   classifyBranchProbeError,
-  hasBranchIdentityChanged,
   shouldProbeExternalBranchChange,
   shouldReportBranchProbeError,
   shouldResetBranchStateForRepoChange,
@@ -53,15 +52,6 @@ describe("workspace-operations-model", () => {
     expect(shouldResetBranchStateForRepoChange("/repo-a", "/repo-b")).toBe(true);
     expect(shouldResetBranchStateForRepoChange("/repo-a", null)).toBe(true);
     expect(shouldResetBranchStateForRepoChange("/repo-a", "/repo-a")).toBe(false);
-  });
-
-  test("detects branch identity changes", () => {
-    expect(hasBranchIdentityChanged(branch("main", false), "main", false, null)).toBe(false);
-    expect(hasBranchIdentityChanged(branch("feature", false), "main", false, null)).toBe(true);
-    expect(hasBranchIdentityChanged(branch(undefined, true), null, false, null)).toBe(true);
-    expect(hasBranchIdentityChanged(branch(undefined, true, "abc123"), null, true, null)).toBe(
-      true,
-    );
   });
 
   test("skips no-op branch switch when already attached", () => {

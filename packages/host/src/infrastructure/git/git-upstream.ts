@@ -28,11 +28,6 @@ const rebaseConflictOutputUnavailable =
   "Git conflict is still in progress in this worktree. Previous command output is unavailable after reload.";
 export const normalizeMergeRef = (mergeRef: string): string =>
   mergeRef.startsWith("refs/") ? mergeRef : `refs/heads/${mergeRef}`;
-export type UpstreamTargetConfig = {
-  remote: string;
-  mergeRef: string;
-  upstreamRef: string;
-};
 export const resolveUpstreamRef = (remote: string, mergeRef: string): string => {
   const normalizedMerge = normalizeMergeRef(mergeRef);
   if (remote === ".") {

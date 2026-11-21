@@ -1,5 +1,5 @@
 /** Runtime-neutral reasons a resume-continuation request can be refused or fail. */
-export const interruptedTurnResumeFailureReasons = [
+const interruptedTurnResumeFailureReasons = [
   "unsupported",
   "live_turn",
   "waiting_input",

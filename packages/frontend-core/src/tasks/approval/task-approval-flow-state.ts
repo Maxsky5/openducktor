@@ -1,7 +1,7 @@
 import type { TaskApprovalContext } from "@openducktor/contracts";
 import type { PullRequestDraftMode, TaskApprovalMode } from "./task-approval-types";
 
-export type TaskApprovalFlowStage = "approval" | "complete_direct_merge" | "missing_worktree";
+type TaskApprovalFlowStage = "approval" | "complete_direct_merge" | "missing_worktree";
 export type TaskApprovalMergeMethod = "merge_commit" | "squash" | "rebase";
 
 export type TaskApprovalWorkspaceIdentity = {
@@ -78,7 +78,7 @@ export const CLOSED_TASK_APPROVAL_STATE: TaskApprovalFlowState = {
   kind: "closed",
 };
 
-export const resolveTaskApprovalStage = (
+const resolveTaskApprovalStage = (
   approvalContext: TaskApprovalContext | null,
 ): TaskApprovalFlowStage => (approvalContext?.directMerge ? "complete_direct_merge" : "approval");
 

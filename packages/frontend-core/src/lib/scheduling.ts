@@ -1,4 +1,4 @@
-export type CancelScheduledTask = () => void;
+type CancelScheduledTask = () => void;
 
 export type ScheduleTask = (callback: () => void, delayMs: number) => CancelScheduledTask;
 

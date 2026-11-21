@@ -1,6 +1,5 @@
 import {
   DEFAULT_AGENT_RUNTIMES,
-  ODT_WORKFLOW_AGENT_TOOL_NAMES,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
@@ -23,70 +22,16 @@ import {
 } from "./shared-test-fixtures";
 import { createTestClientConnection } from "./test-client-connection";
 
-export const cloneRuntimeDescriptor = (descriptor: RuntimeDescriptor): RuntimeDescriptor => {
-  const workflowToolAliasesByCanonical: RuntimeDescriptor["workflowToolAliasesByCanonical"] = {};
-  for (const toolName of ODT_WORKFLOW_AGENT_TOOL_NAMES) {
-    const aliases = descriptor.workflowToolAliasesByCanonical[toolName];
-    if (aliases) {
-      workflowToolAliasesByCanonical[toolName] = [...aliases];
-    }
-  }
-
-  return {
-    ...descriptor,
-    readOnlyRoleBlockedTools: [...descriptor.readOnlyRoleBlockedTools],
-    workflowToolAliasesByCanonical,
-    capabilities: {
-      ...descriptor.capabilities,
-      workflow: {
-        ...descriptor.capabilities.workflow,
-        supportedScopes: [...descriptor.capabilities.workflow.supportedScopes],
-      },
-      sessionLifecycle: {
-        ...descriptor.capabilities.sessionLifecycle,
-        supportedStartModes: [...descriptor.capabilities.sessionLifecycle.supportedStartModes],
-        forkTargets: [...descriptor.capabilities.sessionLifecycle.forkTargets],
-      },
-      history: {
-        ...descriptor.capabilities.history,
-        limitations: [...descriptor.capabilities.history.limitations],
-      },
-      approvals: {
-        ...descriptor.capabilities.approvals,
-        supportedRequestTypes: [...descriptor.capabilities.approvals.supportedRequestTypes],
-        supportedReplyOutcomes: [...descriptor.capabilities.approvals.supportedReplyOutcomes],
-        pendingVisibility: [...descriptor.capabilities.approvals.pendingVisibility],
-      },
-      structuredInput: {
-        ...descriptor.capabilities.structuredInput,
-        supportedAnswerModes: [...descriptor.capabilities.structuredInput.supportedAnswerModes],
-        pendingVisibility: [...descriptor.capabilities.structuredInput.pendingVisibility],
-      },
-      promptInput: {
-        ...descriptor.capabilities.promptInput,
-        supportedParts: [...descriptor.capabilities.promptInput.supportedParts],
-      },
-      optionalSurfaces: {
-        ...descriptor.capabilities.optionalSurfaces,
-        supportedSubagentExecutionModes: [
-          ...descriptor.capabilities.optionalSurfaces.supportedSubagentExecutionModes,
-        ],
-      },
-    },
-  };
-};
-
-export const createDefaultRuntimeDefinitions = (): RuntimeDescriptor[] => [
-  cloneRuntimeDescriptor(OPENCODE_RUNTIME_DESCRIPTOR),
+const createDefaultRuntimeDefinitions = (): RuntimeDescriptor[] => [
+  structuredClone(OPENCODE_RUNTIME_DESCRIPTOR),
 ];
 
 export const createRuntimeDefinitionsContextValue = (
   overrides: Partial<RuntimeDefinitionsContextValue> = {},
 ): RuntimeDefinitionsContextValue => {
-  const defaultRuntimeDefinitions = createDefaultRuntimeDefinitions();
   const runtimeDefinitions = overrides.runtimeDefinitions
-    ? overrides.runtimeDefinitions.map(cloneRuntimeDescriptor)
-    : defaultRuntimeDefinitions;
+    ? structuredClone(overrides.runtimeDefinitions)
+    : createDefaultRuntimeDefinitions();
   const agentRuntimes = overrides.agentRuntimes ?? DEFAULT_AGENT_RUNTIMES;
 
   return {

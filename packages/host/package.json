@@ -14,7 +14,7 @@
     "./chrome-for-testing": "./src/adapters/browser/chrome-for-testing/chrome-for-testing-engine.ts"
   },
   "scripts": {
-    "build": "bunx tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json",
     "db:generate": "drizzle-kit generate --config drizzle.host.config.ts",
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --pass-with-no-tests --timeout 5000 --parallel=2 --no-isolate",
@@ -51,7 +51,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "bippy": "0.7.3",
-    "bun-types": "^1.4.2",
+    "bun-types": "^1.4.5",
     "drizzle-kit": "0.31.11",
     "node-pty": "1.2.0-beta.18"
   }

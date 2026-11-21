@@ -5,7 +5,7 @@ import { RuntimeUnavailableError } from "../errors";
 type Control = Fiber.Fiber<unknown, unknown>;
 
 /** Why a closed kind admits nothing, and what the caller can do next. */
-export type RuntimeUnavailability = { state: string; message: string; nextAction: string };
+type RuntimeUnavailability = { state: string; message: string; nextAction: string };
 
 type AdmissionEntry = {
   runtimeKind: RuntimeKind;

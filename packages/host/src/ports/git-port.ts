@@ -131,7 +131,7 @@ export type GitPublicationProgress = {
     outcome: "not_issued" | "refused" | "confirmed" | "uncertain";
   }>;
 };
-export type RemoteBranchObservation = { destinationIdentity: string; oid: string | null };
+type RemoteBranchObservation = { destinationIdentity: string; oid: string | null };
 export type GitMergeBranchRequest = {
   onWorkIssued?: () => void;
   onApplied?: (targetOid: string) => void;
@@ -141,7 +141,7 @@ export type GitMergeBranchRequest = {
   method: GitMergeMethod;
   squashCommitMessage?: string;
 };
-export type GitMergeBranchResult =
+type GitMergeBranchResult =
   | {
       outcome: "merged";
       output: string;
@@ -166,7 +166,7 @@ export type GitRefTip = {
 };
 /** One reflog entry of a reference. `oid` is the value that the entry set. */
 export type GitReflogEntry = { oid: string; subject: string };
-export type GitBranchUpstreamSetup = {
+type GitBranchUpstreamSetup = {
   createdTrackingRef: string | null;
 };
 /** The branch facts of a repository that tell its default branch. */

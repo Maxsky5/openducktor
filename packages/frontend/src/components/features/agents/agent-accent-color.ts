@@ -1,6 +1,6 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 
-export const OPENCODE_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-opencode)";
+const OPENCODE_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-opencode)";
 export const CODEX_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-codex)";
 export const CLAUDE_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-claude)";
 

@@ -1,12 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import { Editor } from "@tiptap/core";
 import { hasMarkdownMath } from "@/components/ui/markdown-math-detection";
-import { splitTaskDescriptionFrontMatter } from "@openducktor/frontend-core/tasks/description/task-description-front-matter";
-import {
-  assessVisualMarkdownCompatibility,
-  canonicalizeTaskDescriptionMarkdown,
-} from "./task-description-markdown";
+import { assessVisualMarkdownCompatibility } from "./task-description-markdown";
 import { createTaskDescriptionMarkdownExtensions } from "./task-description-markdown-extensions";
+
+const createEditor = (content: string) =>
+  new Editor({
+    extensions: createTaskDescriptionMarkdownExtensions(),
+    content,
+    contentType: "markdown",
+  });
+
+function serializeMarkdown(markdown: string): string {
+  const editor = createEditor(markdown);
+  try {
+    return editor.getMarkdown();
+  } finally {
+    editor.destroy();
+  }
+}
 
 const supportedFixtures = [
   {
@@ -42,28 +54,11 @@ describe("task description Markdown dialect", () => {
       const result = assessVisualMarkdownCompatibility(fixture.markdown);
 
       expect(result).toEqual({ compatible: true });
-      expect(
-        assessVisualMarkdownCompatibility(canonicalizeTaskDescriptionMarkdown(fixture.markdown)),
-      ).toEqual({ compatible: true });
+      expect(assessVisualMarkdownCompatibility(serializeMarkdown(fixture.markdown))).toEqual({
+        compatible: true,
+      });
     });
   }
-
-  test("preserves YAML front matter exactly while canonicalizing only the body", () => {
-    const markdown =
-      "---\r\ntitle: 'Exact'\r\n# keep this comment\r\nsummary: |\r\n  many lines\r\n---\r\n# Body\r\n\r\nText";
-    const split = splitTaskDescriptionFrontMatter(markdown);
-
-    expect(split).toEqual({
-      kind: "valid",
-      raw: "---\r\ntitle: 'Exact'\r\n# keep this comment\r\nsummary: |\r\n  many lines\r\n---\r\n",
-      body: "# Body\r\n\r\nText",
-    });
-    expect(
-      canonicalizeTaskDescriptionMarkdown(markdown).startsWith(
-        split.kind === "valid" ? split.raw : "",
-      ),
-    ).toBe(true);
-  });
 
   test("blocks unterminated leading front matter", () => {
     expect(assessVisualMarkdownCompatibility("---\ntitle: broken\nBody")).toEqual({
@@ -128,7 +123,7 @@ describe("task description Markdown dialect", () => {
     const markdown = "| Value |\n| :---- |\n| \\*literal\\* |";
 
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
-    expect(canonicalizeTaskDescriptionMarkdown(markdown)).toContain("\\*literal\\*");
+    expect(serializeMarkdown(markdown)).toContain("\\*literal\\*");
   });
 
   test.each([
@@ -160,7 +155,7 @@ describe("task description Markdown dialect", () => {
   ])("semantically round-trips block math as the first child of %s", (_name, markdown) => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
 
-    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+    const canonical = serializeMarkdown(markdown);
 
     expect(canonical).toBe(markdown);
     expect(hasMarkdownMath(canonical)).toBe(true);
@@ -179,7 +174,7 @@ describe("task description Markdown dialect", () => {
   ])("semantically round-trips compound list math with %s", (_name, markdown) => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
 
-    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+    const canonical = serializeMarkdown(markdown);
 
     expect(hasMarkdownMath(canonical)).toBe(true);
     expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
@@ -194,7 +189,7 @@ describe("task description Markdown dialect", () => {
   ])("semantically round-trips ordered-list block math for %s", (_name, markdown) => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
 
-    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+    const canonical = serializeMarkdown(markdown);
 
     expect(hasMarkdownMath(canonical)).toBe(true);
     expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
@@ -210,7 +205,7 @@ describe("task description Markdown dialect", () => {
   ])("semantically round-trips list items with %s", (_name, markdown) => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
 
-    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+    const canonical = serializeMarkdown(markdown);
 
     expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
   });
@@ -269,7 +264,7 @@ describe("task description Markdown dialect", () => {
   ])("semantically round-trips ordered list items with %s", (_name, markdown) => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
 
-    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+    const canonical = serializeMarkdown(markdown);
 
     expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
   });
@@ -281,7 +276,7 @@ describe("task description Markdown dialect", () => {
   ])("preserves a blank line before a nested %s-start ordered list", (_name, markdown) => {
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
 
-    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+    const canonical = serializeMarkdown(markdown);
 
     expect(canonical).toContain("Parent\n\n   ");
     expect(assessVisualMarkdownCompatibility(canonical)).toEqual({ compatible: true });
@@ -305,7 +300,7 @@ describe("task description Markdown dialect", () => {
     ["a tab before CRLF and a following paragraph", "$$\r\nx\r\n$$\t\r\n\r\nAfter"],
     ["spaces at EOF", "$$\nx\n$$   "],
   ])("keeps renderer semantics stable for block math with %s", (_name, markdown) => {
-    const canonical = canonicalizeTaskDescriptionMarkdown(markdown);
+    const canonical = serializeMarkdown(markdown);
 
     expect(hasMarkdownMath(markdown)).toBe(true);
     expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
@@ -365,24 +360,9 @@ describe("task description Markdown dialect", () => {
       }
     },
   );
-
-  test("no-edit compatibility checks do not rewrite CRLF or unusual markers", () => {
-    const markdown = "# Heading\r\n\r\n+ first\r\n+ second\r\n";
-    const original = markdown;
-
-    expect(assessVisualMarkdownCompatibility(markdown)).toEqual({ compatible: true });
-    expect(markdown).toBe(original);
-  });
 });
 
 describe("task description list editing", () => {
-  const createEditor = (content: string) =>
-    new Editor({
-      extensions: createTaskDescriptionMarkdownExtensions(),
-      content,
-      contentType: "markdown",
-    });
-
   for (const { name, toggle, marker, nestedMarkdown } of [
     {
       name: "bullet",

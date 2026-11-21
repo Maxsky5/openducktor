@@ -34,7 +34,7 @@ import type { JSONType } from "zod";
 
 export type LocalHostChannelEvent = HostEventEnvelope | ConnectionControlEvent;
 export type LocalHostChannelListener = (event: LocalHostChannelEvent) => void | Promise<void>;
-export type LocalHostChannelRegistration = {
+type LocalHostChannelRegistration = {
   channel: HostEventChannel;
   /** The host event name, which selects the listeners of an event before its body is parsed. */
   eventName: string;
@@ -42,7 +42,7 @@ export type LocalHostChannelRegistration = {
   listener: LocalHostChannelListener;
 };
 
-export type LocalTaskSubscription = {
+type LocalTaskSubscription = {
   subscriptionId: string;
   acknowledge(cursor: TaskEventCursor): Promise<void>;
   unsubscribe(): Promise<void>;
@@ -84,7 +84,7 @@ export type LocalHostChannel = {
  * The WebSocket URL of the shell's own host channel. A `token` travels as the authorization
  * subprotocol tag, for a shell whose sockets cannot carry a session cookie.
  */
-export type LocalHostChannelEndpoint = { url: string; token: string | null };
+type LocalHostChannelEndpoint = { url: string; token: string | null };
 
 export type LocalHostChannelDependencies = {
   /**

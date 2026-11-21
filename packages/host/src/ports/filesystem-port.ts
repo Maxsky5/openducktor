@@ -14,7 +14,7 @@ export type FilesystemStats = {
   size?: number;
   mtimeMs?: number;
 };
-export type FilesystemStatOptions = {
+type FilesystemStatOptions = {
   followSymbolicLinks?: boolean;
 };
 export type FilesystemFileSnapshot = {

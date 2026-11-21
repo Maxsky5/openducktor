@@ -17,7 +17,6 @@ import { ChecksStateContext, WorkspaceStateContext } from "@/state/app-state-con
 import { HostRuntimeStatusContext } from "@openducktor/frontend-core/sessions/session-contexts";
 import { runtimeExecutableQueryOptions } from "@openducktor/frontend-core/queries/runtime";
 import { repoBranchesQueryOptions } from "@openducktor/frontend-core/queries/git";
-import { autopilotSettingsQueryOptions } from "@openducktor/frontend-core/queries/autopilot";
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { keyboardShortcutsQueryOptions } from "@openducktor/frontend-core/queries/keyboard-shortcuts";
 import {
@@ -445,7 +444,6 @@ function renderSettings(
     client.workspaceSaveKeyboardShortcuts = options.saveKeyboardShortcuts;
   const connection = createTestClientConnection({ client });
   const { queryClient } = connection;
-  queryClient.setQueryData(autopilotSettingsQueryOptions().queryKey, snapshot.autopilot);
   queryClient.setQueryData(keyboardShortcutsQueryOptions().queryKey, { version: 1, overrides: {} });
   if (options.cacheSnapshot !== false) {
     queryClient.setQueryData(settingsSnapshotQueryOptions().queryKey, snapshot);

@@ -2,7 +2,6 @@ import type {
   AgentSessionRecord,
   CustomAgentRole,
   GitTargetBranch,
-  PullRequest,
   RepoConfig,
   SourceIssue,
   TaskRecordData,
@@ -10,7 +9,7 @@ import type {
 } from "@openducktor/contracts";
 import type { DemoClock } from "./demo-clock";
 import type { DemoEvents } from "./demo-host-connection";
-import type { DemoFile, DemoRepository } from "./demo-repository";
+import type { DemoRepository } from "./demo-repository";
 import type { DemoTerminalAction } from "./demo-terminals";
 
 /** One host instance for every demo read, so the views see one consistent host. */
@@ -26,7 +25,7 @@ export type DemoDocument = {
 };
 
 /** A free artifact of a task, such as a design preview. */
-export type DemoFreeArtifact = {
+type DemoFreeArtifact = {
   code: string;
   name: string;
   fileName: string;
@@ -46,7 +45,7 @@ export type DemoTask = {
 };
 
 /** What the task commands ask of the sessions of a task. */
-export type DemoTaskSessionHooks = {
+type DemoTaskSessionHooks = {
   /** Stops the runs of the sessions of a task, without their outcomes. */
   stopTaskSessions(workspace: DemoWorkspace, taskId: string): void;
   /**
@@ -74,7 +73,7 @@ export type DemoWorkspace = {
 };
 
 /** The images that the demo serves for task descriptions and attachments, by ID or path. */
-export type DemoResources = Map<string, { mime: string; base64: string }>;
+type DemoResources = Map<string, { mime: string; base64: string }>;
 
 /** The shared state of one demo session. Each module reads and changes it. */
 export type DemoWorld = {
@@ -116,6 +115,3 @@ export const findTask = (workspace: DemoWorkspace, taskId: string): DemoTask => 
 /** A UUID made from a counter, so the demo needs no random source. */
 export const demoUuid = (value: number): string =>
   `00000000-0000-4000-8000-${value.toString(16).padStart(12, "0")}`;
-
-export type DemoPullRequest = PullRequest;
-export type { DemoFile };

@@ -93,7 +93,7 @@ export const UNIDENTIFIED_GIT_CONFLICT_ASK_BLOCKED_REASON =
   "Git could not identify the operation. Resolve the conflicting files in your repository before continuing.";
 
 /** The output of a conflict whose operation Git did not report. */
-export const UNIDENTIFIED_GIT_CONFLICT_OUTPUT =
+const UNIDENTIFIED_GIT_CONFLICT_OUTPUT =
   "Git could not identify the operation. Resolve the conflicting files in your repository before continuing.";
 
 /** The description of a conflict whose operation Git did not report. */

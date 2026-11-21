@@ -15,7 +15,7 @@ export class RepoActionNotFoundError extends Data.TaggedError("RepoActionNotFoun
   readonly message: string;
 }> {}
 
-export type RepoActionRunError =
+type RepoActionRunError =
   | RepoActionHasNoCommandError
   | RepoActionNotFoundError
   | TerminalServiceError

@@ -996,7 +996,7 @@ describe("kickoff customization", () => {
     ).toBe(true);
     view.rerender(<SessionStartModal model={{ ...model, requestId: "two" }} />);
     // The field closes before it leaves the page.
-    await waitFor(() => expect(screen.queryByLabelText("First message")).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText("First message") === null).toBe(true));
     toggle();
     expect(screen.getByLabelText<HTMLTextAreaElement>("First message").value).toBe("Default\ntext");
     view.unmount();

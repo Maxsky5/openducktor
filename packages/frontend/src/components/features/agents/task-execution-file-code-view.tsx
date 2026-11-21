@@ -1,5 +1,6 @@
 import type { CodeViewFileItem, CodeViewItem, CodeViewOptions, FileContents } from "@pierre/diffs";
 import { Editor, type EditorFactory } from "@pierre/diffs/edit";
+import { PIERRE_DIFF_THEME } from "@/lib/diff/pierre-config";
 import type { EditorFocus } from "@/types/editor-focus";
 import {
   type CSSProperties,
@@ -41,7 +42,7 @@ export function TaskExecutionFileCodeView({
   const { editorClipboard } = useShellPlatform();
   const options = useMemo<CodeViewOptions<undefined, undefined>>(
     () => ({
-      theme: THEME,
+      theme: PIERRE_DIFF_THEME,
       themeType: theme,
       overflow: "wrap",
       disableFileHeader: true,
@@ -106,7 +107,6 @@ export function TaskExecutionFileCodeView({
   );
 }
 
-const THEME = { dark: "pierre-dark", light: "pierre-light" } as const;
 const BACKGROUNDS = { dark: "#0a0a0a", light: "#ffffff" } as const;
 const LINE_HEIGHT = 18;
 const PADDING = 8;

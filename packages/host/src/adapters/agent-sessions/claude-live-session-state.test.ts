@@ -4,7 +4,6 @@ import { createSessionConditions } from "../../application/agent-sessions/agent-
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import { AsyncInputQueue } from "../claude/claude-agent-sdk-queue";
 import { handleClaudeSdkMessage } from "../claude/claude-agent-sdk-events";
-import { snapshotForClaudeSession } from "../claude/claude-agent-sdk-session-shape";
 import { emptyClaudeQuery } from "../claude/claude-agent-sdk-session-io.test-support";
 import { claudeSdkMessageFixture } from "../claude/claude-agent-sdk-test-messages";
 import type {
@@ -220,7 +219,6 @@ describe("Claude host live-session state", () => {
       type: "live",
       session: { activity: "running" },
     });
-    expect(snapshotForClaudeSession(wakeSession).classification).toBe("running");
 
     send(
       claudeSdkMessageFixture({
@@ -237,7 +235,6 @@ describe("Claude host live-session state", () => {
       type: "live",
       session: { activity: "running" },
     });
-    expect(snapshotForClaudeSession(wakeSession).classification).toBe("running");
 
     send(
       claudeSdkMessageFixture({
@@ -255,7 +252,6 @@ describe("Claude host live-session state", () => {
       type: "live",
       session: { activity: "idle" },
     });
-    expect(snapshotForClaudeSession(wakeSession).classification).toBe("idle");
   });
 
   test("blocks parent delivery on child input and restores its latest native activity", () => {

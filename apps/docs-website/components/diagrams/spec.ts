@@ -30,7 +30,7 @@ export type ItemData = {
 };
 
 /** A labeled area that holds other nodes. */
-export type ZoneData = {
+type ZoneData = {
   title: string;
   text?: string;
   Icon: LucideIcon;

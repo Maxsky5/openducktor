@@ -10,7 +10,7 @@ import {
 import { Effect } from "effect";
 import { BrowserServiceError } from "./browser-service-error";
 
-export type BrowserTabRecord = {
+type BrowserTabRecord = {
   readonly tabId: string;
   readonly workspaceId: string;
   readonly ownerKey: string;
@@ -35,7 +35,7 @@ export type BrowserTabRegistry = {
   onTabChange(listener: BrowserTabChangeListener): () => void;
 };
 
-export type BrowserTabChangeListener = (
+type BrowserTabChangeListener = (
   previous: BrowserTabSummary | null,
   next: BrowserTabSummary | null,
 ) => void;

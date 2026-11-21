@@ -19,7 +19,7 @@ export type ScopedAgentSessionRef = AgentSessionLiveRef & {
 /** A send input before the host picks its `delivery`. */
 export type AgentSessionSendContent = Omit<AgentSessionControlSendInput, "delivery">;
 
-export type PreparedSessionResume = {
+type PreparedSessionResume = {
   input: AgentSessionControlResumeInput;
   save(summary: AgentSessionControlSummary): Effect.Effect<void, HostError>;
 };

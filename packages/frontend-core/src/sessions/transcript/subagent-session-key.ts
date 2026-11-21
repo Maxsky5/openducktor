@@ -46,7 +46,7 @@ export const toSubagentTranscriptTarget = ({
   return target;
 };
 
-export const getSubagentMessageSessionIdentity = ({
+const getSubagentMessageSessionIdentity = ({
   message,
   parentSession,
 }: {

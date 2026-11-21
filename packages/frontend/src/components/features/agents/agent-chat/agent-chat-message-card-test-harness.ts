@@ -31,7 +31,7 @@ const CODEX_RUNTIME_PRESENTATION: ComponentProps<
   runtimeKind: "codex",
 });
 
-export const createDefaultTestSessionIdentity = (): ParentSessionRuntimeContext => ({
+const createDefaultTestSessionIdentity = (): ParentSessionRuntimeContext => ({
   runtimeKind: "opencode",
   workingDirectory: "/repo",
 });

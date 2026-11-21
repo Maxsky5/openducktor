@@ -39,7 +39,7 @@ export type AgentToolStatus = Extract<
   { kind: "tool" }
 >["status"];
 
-export type CodexToolInvocationMetadata = {
+type CodexToolInvocationMetadata = {
   codexServerRequest?: boolean;
   codexTodoUpdate?: boolean;
   requestId?: string;
