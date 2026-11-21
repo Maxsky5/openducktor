@@ -3,18 +3,22 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { runWorkerBundle, workerBundleRuntimes } from "../test-support/worker-bundle-runtimes";
+import {
+  runWorkerBundle,
+  type WorkerBundleRuntime,
+  workerBundleRuntimes,
+} from "../test-support/worker-bundle-runtimes";
 
 // Electron and the web runner ship these workers as Node bundles. This test builds each worker
 // with its fixture and runs the same protocol checks under Node, Bun, and Electron.
 const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
-// Resolve Electron before the tests start. Only the shard that loads this file needs the download.
-const runtimes = workerBundleRuntimes();
+let runtimes: WorkerBundleRuntime[];
 let outputDirectory = "";
 
 beforeAll(
   async () => {
     outputDirectory = await mkdtemp(path.join(tmpdir(), "odt-worker-bundles-"));
+    runtimes = workerBundleRuntimes();
     const result = await Bun.build({
       entrypoints: [
         path.join(sourceDirectory, "../adapters/attachments/generated-image-worker.ts"),
@@ -32,8 +36,8 @@ beforeAll(
     // The output has no package.json. Mark it as ESM so Node loads the .js bundles as modules.
     await writeFile(path.join(outputDirectory, "package.json"), '{"type":"module"}\n');
   },
-  // The build bundles two workers and their dependencies.
-  30_000,
+  // Setup may download Electron before bundling the workers and their dependencies.
+  120_000,
 );
 
 afterAll(async () => {

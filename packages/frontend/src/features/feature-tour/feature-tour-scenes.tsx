@@ -5,7 +5,6 @@ import { Scene, type SceneProps } from "@openducktor/product-scenes/react/tour";
 import { type ReactElement, Suspense } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { getAppVersion } from "@/lib/app-version";
-import type { TourSceneName } from "./feature-tour-dialog-loader";
 import { TourFrame } from "./feature-tour-stage";
 
 // The product scenes of the marketing website, live in the tour: each scene runs the timeline of
@@ -14,6 +13,8 @@ import { TourFrame } from "./feature-tour-stage";
 // tour. The tour dialog loads its scenes before it shows, so a scene never shows its fallback.
 
 const VERSION = getAppVersion();
+
+type TourSceneName = SceneProps["name"];
 
 /**
  * The options that fit each scene to the frame of the tour. The board shows no cut lane, and the

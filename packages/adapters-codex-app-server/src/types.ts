@@ -120,25 +120,19 @@ export type CodexModelListResponse = CodexAppServerModelListResponse;
 
 export type CodexSkillsListParams = CodexAppServerSkillsListParams;
 
-type CodexSkillsListResponse = CodexAppServerSkillsListResponse;
-
 export type CodexUserInput = CodexAppServerUserInput;
 export type CodexTextElement = Extract<CodexUserInput, { type: "text" }>["text_elements"][number];
 
-type CodexInitializeParams = CodexAppServerInitializeParams;
 export type CodexThreadStartParams = CodexAppServerThreadStartParams;
 export type CodexThreadResumeParams = CodexAppServerThreadResumeParams;
 export type CodexThreadForkParams = CodexAppServerThreadForkParams;
 export type CodexThreadSetNameParams = CodexAppServerThreadSetNameParams;
 export type CodexThreadCompactStartParams = CodexAppServerThreadCompactStartParams;
 
-type CodexThreadCompactStartResponse = CodexAppServerThreadCompactStartResult;
-
 export type CodexTurnStartParams = CodexAppServerTurnStartParams;
 export type CodexTurnStartResult = CodexAppServerTurnStartResult;
 
 export type CodexTurnSteerParams = CodexAppServerTurnSteerParams;
-type CodexTurnSteerResult = CodexAppServerTurnSteerResult;
 
 export type CodexTurnInterruptParams = CodexAppServerTurnInterruptParams;
 export type CodexThreadStartResult = CodexAppServerThreadStartResult;
@@ -166,16 +160,16 @@ export type CodexSessionState = {
 };
 
 export type CodexAppServerClient = {
-  initialize(params: CodexInitializeParams): Promise<void>;
+  initialize(params: CodexAppServerInitializeParams): Promise<void>;
   modelList(): Promise<CodexModelListResponse>;
-  skillsList(params: CodexSkillsListParams): Promise<CodexSkillsListResponse>;
+  skillsList(params: CodexSkillsListParams): Promise<CodexAppServerSkillsListResponse>;
   threadStart(params: CodexThreadStartParams): Promise<CodexThreadStartResult>;
   threadResume(params: CodexThreadResumeParams): Promise<CodexThreadResumeResult>;
   threadFork(params: CodexThreadForkParams): Promise<CodexThreadForkResult>;
   threadSetName(params: CodexThreadSetNameParams): Promise<CodexAppServerThreadSetNameResult>;
   threadCompactStart(
     params: CodexThreadCompactStartParams,
-  ): Promise<CodexThreadCompactStartResponse>;
+  ): Promise<CodexAppServerThreadCompactStartResult>;
   threadGoalSet(
     params: CodexAppServerThreadGoalSetParams,
   ): Promise<CodexAppServerThreadGoalSetResult>;
@@ -189,7 +183,7 @@ export type CodexAppServerClient = {
     params: CodexAppServerThreadSettingsUpdateParams,
   ): Promise<CodexAppServerThreadSetNameResult>;
   turnStart(params: CodexTurnStartParams): Promise<CodexTurnStartResult>;
-  turnSteer(params: CodexTurnSteerParams): Promise<CodexTurnSteerResult>;
+  turnSteer(params: CodexTurnSteerParams): Promise<CodexAppServerTurnSteerResult>;
   turnInterrupt(params: CodexTurnInterruptParams): Promise<CodexAppServerTurnInterruptResult>;
   fuzzyFileSearch(
     params: CodexAppServerFuzzyFileSearchParams,

@@ -1,5 +1,6 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { preloadTourScenes } from "@openducktor/product-scenes/react/tour";
 import { act, fireEvent, type RenderResult, render, waitFor, within } from "@testing-library/react";
 import { Activity, type ReactElement } from "react";
 import { ThemeProvider, useTheme } from "@/components/layout/theme-provider";
@@ -26,15 +27,8 @@ const withProviders = (scene: ReactElement): ReactElement => (
   </QueryProvider>
 );
 
-// A scene suspends while its view and its timeline load, so each render waits in `act`.
-const renderAsync = async (element: ReactElement): Promise<RenderResult> => {
-  let view: RenderResult | undefined;
-  await act(async () => {
-    view = render(element);
-  });
-  if (!view) throw new Error("The scene did not render.");
-  return view;
-};
+const renderAsync = (element: ReactElement): Promise<RenderResult> =>
+  act(async () => render(element));
 
 const renderScene = (scene: ReactElement): Promise<RenderResult> =>
   renderAsync(withProviders(scene));
@@ -45,22 +39,13 @@ const sceneRoot = (view: RenderResult, name: string): HTMLElement => {
   return root;
 };
 
-/** A scene suspends while its view and its timeline load, so a test waits for its root. */
-const findSceneRoot = (view: RenderResult, name: string): Promise<HTMLElement> =>
-  waitFor(() => sceneRoot(view, name));
-
-// The first load of the scene modules can exceed the test budget, so both scenes load once here.
-beforeAll(async () => {
-  for (const name of ["hero", "palette"] as const) {
-    (await renderScene(<TourScene scene={name} platform="darwin" />)).unmount();
-  }
-}, 10_000);
+await preloadTourScenes();
 
 describe("TourScene", () => {
   test("fills the tour frame in the theme of the app, and follows a theme change", async () => {
     const view = await renderScene(<TourScene scene="hero" platform="darwin" />);
     try {
-      const root = await findSceneRoot(view, "hero");
+      const root = sceneRoot(view, "hero");
       expect(root.dataset.theme).toBe("light");
       // The tour frame draws the window, so the scene is framed: it shows no window border and no
       // pointer.
@@ -85,7 +70,7 @@ describe("TourScene", () => {
       );
     const view = await renderAsync(slide("visible"));
     try {
-      const root = await findSceneRoot(view, "palette");
+      const root = sceneRoot(view, "palette");
       await waitFor(() => expect(root.dataset.motion).toBe("running"));
 
       view.rerender(slide("hidden"));
@@ -104,12 +89,12 @@ describe("TourScene", () => {
     const other = await renderScene(<TourScene scene="palette" platform="linux" />);
     try {
       /** The number of keys with each modifier label in the scene. */
-      const modifiers = async (view: RenderResult): Promise<{ mac: number; pc: number }> => {
-        const scene = within(await findSceneRoot(view, "palette"));
+      const modifiers = (view: RenderResult) => {
+        const scene = within(sceneRoot(view, "palette"));
         return { mac: scene.queryAllByText("⌘").length, pc: scene.queryAllByText("Ctrl").length };
       };
-      const macKeys = await modifiers(mac);
-      const pcKeys = await modifiers(other);
+      const macKeys = modifiers(mac);
+      const pcKeys = modifiers(other);
       expect(macKeys.mac).toBeGreaterThan(0);
       expect(macKeys.pc).toBe(0);
       expect(pcKeys.mac).toBe(0);

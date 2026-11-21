@@ -31,6 +31,13 @@ const taskContext = {
   latestQaReportMarkdown: "## QA",
 };
 
+const systemPromptForRole = (role: string): string =>
+  specPlanBuildWorkflow.prompts.systemPrompt({
+    role,
+    task: taskContext,
+    settings: EMPTY_PROMPT_SETTINGS,
+  }).prompt;
+
 const expectPromptToContainAll = (prompt: string, fragments: string[]) => {
   for (const fragment of fragments) {
     expect(prompt).toContain(fragment);
@@ -50,11 +57,7 @@ describe("buildAgentSystemPrompt", () => {
     ["build", "spec, plan"],
     ["qa", "qaReport"],
   ] as const)("shows %s workflow code access beside the shared artifact setter", (role, codes) => {
-    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-      role,
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const prompt = systemPromptForRole(role);
 
     expect(prompt).toContain("- odt_set_task_artifact(");
     expect(prompt).toContain(
@@ -68,11 +71,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("includes structured workflow guards, tool protocol, and task lock", () => {
-    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-      role: "planner",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const prompt = systemPromptForRole("planner");
 
     expectPromptToContainAll(prompt, [
       "Workflow constraints you must obey:",
@@ -135,11 +134,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("spec defines outcomes and leaves delivery methods to Builder and QA", () => {
-    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const prompt = systemPromptForRole("spec");
 
     expectPromptToContainAll(prompt, [
       "Planner owns the technical design",
@@ -152,11 +147,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("spec asks users for product decisions and follows their dependencies", () => {
-    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const prompt = systemPromptForRole("spec");
 
     expectPromptToContainAll(prompt, [
       "The user owns product decisions",
@@ -176,11 +167,7 @@ describe("buildAgentSystemPrompt", () => {
   test.each(["spec", "planner"] as const)(
     "%s saves ready artifacts without an extra approval round",
     (role) => {
-      const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-        role,
-        task: taskContext,
-        settings: EMPTY_PROMPT_SETTINGS,
-      }).prompt;
+      const prompt = systemPromptForRole(role);
 
       expectPromptToContainAll(prompt, [
         "Saving the artifact is part of your assignment",
@@ -197,11 +184,7 @@ describe("buildAgentSystemPrompt", () => {
   );
 
   test("spec keeps observable outcomes in the requirements without a second checklist", () => {
-    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const prompt = systemPromptForRole("spec");
 
     expectPromptToContainAll(prompt, [
       "When the user delegates a choice, make it and record the assumption",
@@ -220,11 +203,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("spec separates product behavior from design while preserving fixed scope and external contracts", () => {
-    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const prompt = systemPromptForRole("spec");
 
     expectPromptToContainAll(prompt, [
       "Describe behavior as users or external systems experience it",
@@ -242,11 +221,7 @@ describe("buildAgentSystemPrompt", () => {
   test.each(["spec", "planner", "build", "qa"] as const)(
     "%s receives shared Markdown rules for persisted artifacts",
     (role) => {
-      const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-        role,
-        task: taskContext,
-        settings: EMPTY_PROMPT_SETTINGS,
-      }).prompt;
+      const prompt = systemPromptForRole(role);
 
       expectPromptToContainAll(prompt, [
         "Artifact format:",
@@ -286,11 +261,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("planner defines design contracts and gives Builder control of implementation", () => {
-    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-      role: "planner",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const prompt = systemPromptForRole("planner");
 
     expectPromptToContainAll(prompt, [
       "required design decisions separate from suggestions",
@@ -353,11 +324,7 @@ describe("buildAgentSystemPrompt", () => {
   );
 
   test("builder owns execution and verification within the approved design", () => {
-    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-      role: "build",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const prompt = systemPromptForRole("build");
 
     expectPromptToContainAll(prompt, [
       "Choose implementation details, work order, and verification methods",
@@ -398,11 +365,7 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   test("QA reviews outcomes and contracts without enforcing implementation recipes", () => {
-    const prompt = specPlanBuildWorkflow.prompts.systemPrompt({
-      role: "qa",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const prompt = systemPromptForRole("qa");
 
     expectPromptToContainAll(prompt, [
       "Inspect the implementation and its wiring directly",
@@ -1075,11 +1038,7 @@ describe("prompt layers", () => {
         },
       },
     }).prompt;
-    const builtin = specPlanBuildWorkflow.prompts.systemPrompt({
-      role: "spec",
-      task: taskContext,
-      settings: EMPTY_PROMPT_SETTINGS,
-    }).prompt;
+    const builtin = systemPromptForRole("spec");
     const rulesStart = builtin.indexOf("Workflow constraints you must obey:");
 
     expect(prompt).toBe(

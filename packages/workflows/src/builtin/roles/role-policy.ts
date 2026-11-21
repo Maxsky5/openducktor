@@ -11,7 +11,8 @@ export const resolveCodexRolePolicy = (
   config: CodexRuntimeConfig,
   role: BuiltinRoleId | null,
 ): CodexEffectivePolicy =>
-  resolveCodexEffectivePolicy(config, role, role !== null && !isReadOnlyAgentRole(role));
-
-const isReadOnlyAgentRole = (role: BuiltinRoleId): boolean =>
-  builtinRole(role).workspaceAccess === "read";
+  resolveCodexEffectivePolicy(
+    config,
+    role,
+    role !== null && builtinRole(role).workspaceAccess === "write",
+  );

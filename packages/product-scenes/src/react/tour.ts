@@ -4,3 +4,9 @@ import { createScenePlayer, type SceneProps as PlayerProps } from "./create-scen
 
 export type SceneProps = PlayerProps<keyof typeof TOUR_SCENES>;
 export const { Scene, preloadScene } = createScenePlayer(TOUR_VIEWS, TOUR_SCENES);
+
+export async function preloadTourScenes(): Promise<void> {
+  // SAFETY: TOUR_SCENES is the object literal that defines SceneProps["name"].
+  const names = Object.keys(TOUR_SCENES) as SceneProps["name"][];
+  await Promise.all(names.map(preloadScene));
+}

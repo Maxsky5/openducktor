@@ -1,10 +1,9 @@
 import { execFile } from "node:child_process";
 import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { markExecutable, runCommand } from "@openducktor/build-tools";
+import { markExecutable } from "@openducktor/build-tools";
 import {
   type SqliteMigrationCopyPlan,
   sqliteMigrationCopyPlans,
@@ -15,9 +14,8 @@ import {
   runWebBoundary,
   WebDependencyError,
 } from "@openducktor/remote-host/effect/web-errors";
+import { packageRoot, runBuildCommandEffect } from "./build-command";
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-const packageRoot = resolve(scriptDirectory, "..");
 const outputPath = join(packageRoot, "dist", "cli.js");
 const execFileAsync = promisify(execFile);
 
@@ -66,18 +64,7 @@ const CLI_BUILD_COMMAND = [
 
 const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise({
-      try: () =>
-        runCommand({ command: CLI_BUILD_COMMAND, cwd: packageRoot, label: "Web CLI build" }),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "build-command",
-          operation: "web-cli-build",
-          message: errorMessage(cause),
-          cause,
-          details: { command: [...CLI_BUILD_COMMAND], cwd: packageRoot },
-        }),
-    });
+    yield* runBuildCommandEffect("Web CLI build", CLI_BUILD_COMMAND, "web-cli-build");
     yield* Effect.tryPromise({
       try: () => markExecutable(outputPath),
       catch: (cause) =>

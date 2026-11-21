@@ -60,7 +60,7 @@ Use [withViteTestServer](../packages/openducktor-web/src/vite-test-server.ts) fo
 - Each frontend shard runs `bun test --isolate --bail=1` in one process. Each file gets a fresh DOM, global object, and module registry. Bun does not cancel the async body of a timed-out test. Stopping at the first failure prevents that body from changing the DOM, React state, or mocks of a later test. The shard runner still runs the other workspace suites and reports the failed suite.
 - `packages/host` runs with `bun test --parallel=2 --no-isolate`. Two workers limit process load on Windows CI.
 - `packages/frontend-core` runs with `bun test --parallel`, so each file has its own global. Its tests run without DOM globals. A test file that renders React or reads browser APIs imports `test-support/dom-environment` first. Keep pure tests without it, so they prove that the package runs without a DOM.
-- The host worker bundle test runs under Node, Bun, and Electron. The shard that loads the test installs the Electron runtime from `apps/electron` before the first test starts.
+- The host worker bundle test runs under Node, Bun, and Electron. Its setup installs Electron from `apps/electron` only when the run includes a worker bundle test.
 - The SQLite task-store test helper uses disposable files with WAL and foreign keys. It disables synchronous disk flushes before running production migrations. Tests that check production connection setup use `openHostDatabaseConnection` directly.
 - `packages/openducktor-mcp` runs with `bun test --parallel`, so each test file gets an isolated worker process.
 - The other workspaces run serially in one process.

@@ -1,6 +1,5 @@
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { markExecutable, runCommand } from "@openducktor/build-tools";
+import { join, resolve } from "node:path";
+import { markExecutable } from "@openducktor/build-tools";
 import { Effect } from "effect";
 import {
   errorMessage,
@@ -8,9 +7,8 @@ import {
   WebDependencyError,
 } from "@openducktor/remote-host/effect/web-errors";
 import { WEB_PACKAGE_MCP_ENTRYPOINT } from "../src/web-runtime-distribution";
+import { packageRoot, runBuildCommandEffect } from "./build-command";
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-const packageRoot = resolve(scriptDirectory, "..");
 const workspaceRoot = resolve(packageRoot, "../..");
 const outputPath = join(packageRoot, "dist", WEB_PACKAGE_MCP_ENTRYPOINT);
 
@@ -28,17 +26,7 @@ const buildWebMcpEntrypointEffect = (): Effect.Effect<void, WebDependencyError> 
       "#!/usr/bin/env node",
       join(workspaceRoot, "packages", "openducktor-mcp", "src", "index.ts"),
     ] satisfies readonly [string, ...string[]];
-    yield* Effect.tryPromise({
-      try: () => runCommand({ command, cwd: packageRoot, label: "Web MCP entrypoint build" }),
-      catch: (cause) =>
-        new WebDependencyError({
-          dependency: "build-command",
-          operation: "web-mcp-entrypoint-build",
-          message: errorMessage(cause),
-          cause,
-          details: { command: [...command], cwd: packageRoot },
-        }),
-    });
+    yield* runBuildCommandEffect("Web MCP entrypoint build", command, "web-mcp-entrypoint-build");
     yield* Effect.tryPromise({
       try: () => markExecutable(outputPath),
       catch: (cause) =>

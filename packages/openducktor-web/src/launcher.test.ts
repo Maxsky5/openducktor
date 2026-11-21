@@ -1264,25 +1264,11 @@ describe("launcher internals", () => {
           },
         },
       ).pipe(runWebBoundary),
-    ).rejects.toThrow("host stop failed");
-    await expect(
-      stopLauncherServicesEffect(
-        {
-          frontendServer: null,
-          hostBackend,
-          logger: testLogger,
-        },
-        {
-          closeServer: async () => {},
-          stopHost: async () => {
-            throw new Error("host stop failed");
-          },
-        },
-      ).pipe(runWebBoundary),
     ).rejects.toMatchObject({
       _tag: "WebDependencyError",
       dependency: "typescript-host-backend",
       operation: "stop",
+      message: expect.stringContaining("host stop failed"),
     });
     expect(exitReads).toBe(0);
   });
