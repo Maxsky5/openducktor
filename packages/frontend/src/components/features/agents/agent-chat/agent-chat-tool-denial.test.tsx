@@ -62,7 +62,7 @@ describe("ToolDenialNotice", () => {
     expect(view.getByText("Blocked by auto-review")).toBeTruthy();
     expect(view.getByText("High risk")).toBeTruthy();
     expect(view.getByText("Sends the token to an unknown host.")).toBeTruthy();
-    expect(view.queryByRole("button", { name: "Allow" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Allow this call" })).toBeNull();
   });
 
   test("allows an available call and shows the allowed state from the snapshot", async () => {
@@ -75,16 +75,14 @@ describe("ToolDenialNotice", () => {
       },
     );
 
-    fireEvent.click(view.getByRole("button", { name: "Allow" }));
+    fireEvent.click(view.getByRole("button", { name: "Allow this call" }));
     await waitFor(() => expect(calls).toEqual([["session-1", "call-1"]]));
 
     act(() => {
       store.replaceSession({ ...session, deniedActions: [{ callId: "call-1", state: "allowed" }] });
     });
-    expect(view.queryByRole("button", { name: "Allow" })).toBeNull();
-    expect(view.getByTitle("You allowed this call. The agent can try it again.").textContent).toBe(
-      "Allowed",
-    );
+    expect(view.queryByRole("button", { name: "Allow this call" })).toBeNull();
+    expect(view.getByText("You allowed this call. The agent can try it again.")).toBeTruthy();
   });
 
   test("shows progress while the host sends the approval", () => {
@@ -105,10 +103,10 @@ describe("ToolDenialNotice", () => {
       },
     );
 
-    fireEvent.click(view.getByRole("button", { name: "Allow" }));
+    fireEvent.click(view.getByRole("button", { name: "Allow this call" }));
 
     expect(await view.findByText("The runtime refused the approval.")).toBeTruthy();
-    expect(view.getByRole("button", { name: "Allow" })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Allow this call" })).toBeTruthy();
   });
 
   test("a row reused for another call does not show the earlier call's request", async () => {
@@ -137,16 +135,16 @@ describe("ToolDenialNotice", () => {
       </AgentSessionsContext.Provider>
     );
     const view = render(tree("call-1"));
-    fireEvent.click(view.getByRole("button", { name: "Allow" }));
+    fireEvent.click(view.getByRole("button", { name: "Allow this call" }));
     expect(view.getByRole("button", { name: "Allowing" })).toBeTruthy();
 
     view.rerender(tree("call-2"));
-    expect(view.getByRole("button", { name: "Allow" })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Allow this call" })).toBeTruthy();
     await act(async () => {
       rejectFirst(new Error("Failure of call 1"));
     });
 
     expect(view.queryByText("Failure of call 1")).toBeNull();
-    expect(view.getByRole("button", { name: "Allow" })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Allow this call" })).toBeTruthy();
   });
 });
