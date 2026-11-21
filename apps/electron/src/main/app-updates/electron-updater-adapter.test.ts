@@ -34,7 +34,7 @@ class FakeNativeUpdater {
     <EventName extends keyof ElectronUpdaterEventMap>(
       eventName: EventName,
       listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
-    ) => {
+    ): FakeNativeUpdater => {
       const listeners = this.listeners[eventName];
       listeners.add(listener);
       return this;
@@ -45,7 +45,7 @@ class FakeNativeUpdater {
     <EventName extends keyof ElectronUpdaterEventMap>(
       eventName: EventName,
       listener: (payload: ElectronUpdaterEventMap[EventName]) => void,
-    ) => {
+    ): FakeNativeUpdater => {
       this.listeners[eventName].delete(listener);
       return this;
     },

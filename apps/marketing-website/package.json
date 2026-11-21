@@ -26,7 +26,7 @@
     "@openducktor/product-scenes": "workspace:*",
     "@openducktor/theme": "workspace:*",
     "@playwright/test": "^1.65.0",
-    "@types/bun": "^1.4.4",
+    "@types/bun": "^1.4.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "astro": "^7.4.7",

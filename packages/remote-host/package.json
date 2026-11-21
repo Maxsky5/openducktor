@@ -24,6 +24,6 @@
     "@openducktor/host-client": "workspace:*",
     "@types/mime-types": "^3.0.1",
     "@types/ws": "^8.18.2",
-    "bun-types": "^1.4.2"
+    "bun-types": "^1.4.5"
   }
 }

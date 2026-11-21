@@ -51,7 +51,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "bippy": "0.7.3",
-    "bun-types": "^1.4.2",
+    "bun-types": "^1.4.5",
     "drizzle-kit": "0.31.11",
     "node-pty": "1.2.0-beta.18"
   }

@@ -12,9 +12,9 @@ Some workspaces need different compiler settings for different inputs. The mobil
 
 Use the Bun version in the root manifest's `packageManager` field. GitHub Actions reads the same field. [Root package manifest](../package.json)
 
-The verification on 2026-10-18 used Bun `1.4.3`. Its checker uses TypeScript `7.0.2` and its standard library declarations. The root pins TypeScript to that exact version for declaration builds and editor tooling.
+Bun `1.4.5` uses TypeScript `7.0.2` and its standard library declarations. The root pins the same TypeScript version for declaration builds and editor tooling.
 
-The [Bun 1.4.3 release](https://bun.sh/blog/bun-v1.4.3) records compiler conformance results and some remaining differences, including recursive inference cases. It does not promise that every program has the same diagnostics as TypeScript. [Bun PR #45217](https://github.com/oven-sh/bun/pull/45217) merged on 2026-10-14, after this release. It fixes an inference hang, missed loop diagnostics, and false errors. Bun `1.4.3` does not include those fixes. Check the next stable release for them before an upgrade. Do not use a canary, suppress compiler failures, or add a required TypeScript comparison gate to work around a compiler defect.
+Bun `1.4.5` includes fixes for stalled inference, missed loop diagnostics, and false errors. Use a stable Bun release for repository checks. [Bun PR #45217](https://github.com/oven-sh/bun/pull/45217)
 
 When a compiler hangs, crashes, or disagrees with the matching TypeScript version, keep the failure visible. Record the failing configuration and a small reproduction for upstream. A temporary `tsc -p <config> --noEmit` comparison can help diagnose it. It is not a second required standalone gate.
 
