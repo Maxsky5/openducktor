@@ -63,6 +63,9 @@ export const createCodexAppServerClient = (
     async threadUnsubscribe(params) {
       return requestCodex(transport, { method: "thread/unsubscribe", params });
     },
+    async threadApproveGuardianDeniedAction(params) {
+      return requestCodex(transport, { method: "thread/approveGuardianDeniedAction", params });
+    },
     async threadSettingsUpdate(params) {
       return requestCodex(transport, { method: "thread/settings/update", params });
     },

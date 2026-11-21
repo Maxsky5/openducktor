@@ -15,6 +15,8 @@ import { CodexMessageAcceptedError } from "@openducktor/adapters-codex-app-serve
 import type {
   CodexAppServerAdapter,
   CodexAppServerAdapterOptions,
+  CodexDeniedActionClaim,
+  CodexDeniedActionLocator,
   CodexLiveSessionLocator,
   CodexSessionContextUsage,
 } from "@openducktor/adapters-codex-app-server";
@@ -51,7 +53,11 @@ import {
 } from "../../ports/agent-session-send-error";
 import { AgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import { createAgentSessionLiveStateService } from "../../application/agent-sessions/agent-session-live-state-service";
-import { HostOperationError, type HostOperationErrorAggregate } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  type HostOperationErrorAggregate,
+  HostValidationError,
+} from "../../effect/host-errors";
 import type {
   AgentSessionControlContinueInterruptedTurnInput,
   AgentSessionLiveAdapterChange,
@@ -61,6 +67,8 @@ import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-s
 import { createCodexLiveSessionAdapterPreparer } from "./codex-live-session-adapter";
 import type { CodexSessionController } from "./codex-live-session-adapter-contract";
 import { createLiveSessionAdapterRegistry } from "./live-session-adapter-registry";
+
+type CodexLiveApprovalReplyInput = Parameters<CodexAppServerAdapter["replyLiveApproval"]>[0];
 
 const runtime: RuntimeInstanceSummary = {
   kind: "codex",
@@ -213,6 +221,13 @@ type AgentControlInputs = {
   sends: SendAgentUserMessageInput[];
 };
 
+/** The denied action calls that a test controller records, and the outcomes that it returns. */
+type DeniedActionHarness = {
+  calls: Array<{ method: string; callId: string; failure?: string }>;
+  claim: CodexDeniedActionClaim;
+  allowError: Error | null;
+};
+
 const createControllerHarness = ({
   settleGeneratedImages = () => [],
   initialSnapshots = [liveSnapshot()],
@@ -238,6 +253,18 @@ const createControllerHarness = ({
     sends: [],
   };
   const goalControls: CodexGoalControlCall[] = [];
+  const approvalReplies: CodexLiveApprovalReplyInput[] = [];
+  const deniedActions: DeniedActionHarness = {
+    calls: [],
+    claim: { kind: "claimed" },
+    allowError: null,
+  };
+  const setDeniedAction = (
+    deniedAction: NonNullable<AgentSessionLiveSnapshot["deniedActions"]>[number],
+  ) => {
+    const snapshot = snapshots[0];
+    if (snapshot) snapshots = [{ ...snapshot, deniedActions: [deniedAction] }];
+  };
   const goalPausesForStop: SessionRef[] = [];
   const goalInputs = { controls: goalControls, pausesForStop: goalPausesForStop };
   const controlSummary = {
@@ -329,7 +356,23 @@ const createControllerHarness = ({
           sessionDiffLoads.push(input);
           return sessionDiffs;
         },
-        replyLiveApproval: async () => {
+        claimDeniedAction: (locator: CodexDeniedActionLocator) => {
+          deniedActions.calls.push({ method: "claim", callId: locator.callId });
+          if (deniedActions.claim.kind === "claimed")
+            setDeniedAction({ callId: locator.callId, state: "sending" });
+          return deniedActions.claim;
+        },
+        releaseDeniedActionClaim: (locator: CodexDeniedActionLocator, failure: string) => {
+          deniedActions.calls.push({ method: "release", callId: locator.callId, failure });
+          setDeniedAction({ callId: locator.callId, state: "available", failure });
+        },
+        allowDeniedAction: async (locator: CodexDeniedActionLocator) => {
+          deniedActions.calls.push({ method: "allow", callId: locator.callId });
+          if (deniedActions.allowError) throw deniedActions.allowError;
+          setDeniedAction({ callId: locator.callId, state: "allowed" });
+        },
+        replyLiveApproval: async (input: CodexLiveApprovalReplyInput) => {
+          approvalReplies.push(input);
           const snapshot = snapshots[0];
           if (!snapshot) {
             throw new Error("Expected a live Codex snapshot before replying to approval.");
@@ -474,6 +517,8 @@ const createControllerHarness = ({
     controlInputs,
     goalInputs,
     sendOptions,
+    approvalReplies,
+    deniedActions,
   };
 };
 
@@ -2451,4 +2496,123 @@ test("interrupting an image read aborts the controller's preparation signal", as
     await Effect.runPromise(Fiber.interrupt(fiber));
     await Effect.runPromise(prepared.discard());
   }
+});
+
+describe("Codex denied action Allow", () => {
+  const prepareAllowAdapter = async (changes: AgentSessionLiveAdapterChange[]) => {
+    const harness = createControllerHarness({ initialSnapshots: [liveSnapshot()] });
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
+        resolveMcpServerConfig,
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
+        liveSessionLifecycle: createLifecycle(changes),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+    changes.splice(0);
+    const allow = prepared.adapter.allowDeniedAction;
+    if (!allow) throw new Error("Expected the Codex adapter to allow denied actions.");
+    return { harness, allow };
+  };
+  const deniedActionStates = (changes: AgentSessionLiveAdapterChange[]) =>
+    changes.flatMap((change) =>
+      change.type === "session_upsert" ? [change.snapshot.deniedActions ?? []] : [],
+    );
+
+  test("shows the request to every client, then the allowed call", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const { harness, allow } = await prepareAllowAdapter(changes);
+
+    await Effect.runPromise(allow({ ...ref, callId: "cmd-1" }));
+
+    expect(harness.deniedActions.calls).toEqual([
+      { method: "claim", callId: "cmd-1" },
+      { method: "allow", callId: "cmd-1" },
+    ]);
+    expect(deniedActionStates(changes)).toEqual([
+      [{ callId: "cmd-1", state: "sending" }],
+      [{ callId: "cmd-1", state: "allowed" }],
+    ]);
+  });
+
+  test("rejects a call that the user cannot allow, without a native request", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const { harness, allow } = await prepareAllowAdapter(changes);
+    harness.deniedActions.claim = { kind: "unavailable", message: "This call is already allowed." };
+
+    const exit = await Effect.runPromiseExit(allow({ ...ref, callId: "cmd-1" }));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null;
+    expect(failure).toBeInstanceOf(HostValidationError);
+    expect(failure).toMatchObject({ message: "This call is already allowed." });
+    expect(harness.deniedActions.calls).toEqual([{ method: "claim", callId: "cmd-1" }]);
+    expect(changes).toEqual([]);
+  });
+
+  test("fails with the runtime reason and publishes the settled entry", async () => {
+    const changes: AgentSessionLiveAdapterChange[] = [];
+    const { harness, allow } = await prepareAllowAdapter(changes);
+    harness.deniedActions.allowError = new Error("Codex refused the approval.");
+
+    const exit = await Effect.runPromiseExit(allow({ ...ref, callId: "cmd-1" }));
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : null).toMatchObject({
+      message: expect.stringContaining("Codex refused the approval."),
+    });
+    expect(harness.deniedActions.calls.map(({ method }) => method)).toEqual([
+      "claim",
+      "allow",
+      "release",
+    ]);
+    expect(deniedActionStates(changes).at(-1)).toEqual([
+      {
+        callId: "cmd-1",
+        state: "available",
+        failure: "OpenDucktor could not send the approval to Codex. Try again.",
+      },
+    ]);
+  });
+
+  test("passes a read-only role reject to Codex as a policy denial", async () => {
+    const { harness } = await prepareAllowAdapter([]);
+    const prepared = await Effect.runPromise(
+      createCodexLiveSessionAdapterPreparer({
+        resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+        directoriesMatch,
+        resolveMcpServerConfig,
+        prepareImageGenerations: async () => {
+          throw new Error("Unexpected image preparation");
+        },
+        liveSessionLifecycle: createLifecycle([]),
+        codexAppServer,
+        onBackgroundFailure: noBackgroundFailure,
+        resolveRuntimePolicy,
+        createController: harness.createController,
+      })(runtime),
+    );
+    await Effect.runPromise(prepared.startForwarding());
+
+    await Effect.runPromise(
+      prepared.adapter.replyApproval(
+        { ...ref, requestId: "pending-opaque-1", outcome: "reject", message: "Read-only role." },
+        { denialSource: "read_only_role" },
+      ),
+    );
+
+    expect(harness.approvalReplies.at(-1)).toMatchObject({
+      outcome: "reject",
+      message: "Read-only role.",
+      denialSource: "read_only_role",
+    });
+  });
 });

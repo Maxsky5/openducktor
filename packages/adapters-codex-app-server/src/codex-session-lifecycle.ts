@@ -178,7 +178,9 @@ export const sessionStateFromThreadStart = (
     sessionAssociation: inputAssociation(input),
     status: agentSessionStatusFromActivity(status.classification),
   });
-  return buildSessionState(input, summary, runtimeId, model, status);
+  const session = buildSessionState(input, summary, runtimeId, model, status);
+  session.canAcceptDirectInput = response.thread.canAcceptDirectInput;
+  return session;
 };
 
 export const sessionStateFromThreadResume = (
@@ -205,7 +207,9 @@ export const sessionStateFromThreadFork = (
     sessionAssociation: inputAssociation(input),
     status: agentSessionStatusFromActivity(status.classification),
   });
-  return buildSessionState(input, summary, runtimeId, model, status);
+  const session = buildSessionState(input, summary, runtimeId, model, status);
+  session.canAcceptDirectInput = response.thread.canAcceptDirectInput;
+  return session;
 };
 
 export const sessionStateFromExistingThread = (
@@ -282,5 +286,6 @@ const sessionStateFromThreadResumeResponse = (
   });
   const session = buildSessionState(input, summary, runtimeId, model, threadSnapshot.status);
   session.nativeName = response.thread.name;
+  session.canAcceptDirectInput = response.thread.canAcceptDirectInput;
   return session;
 };
