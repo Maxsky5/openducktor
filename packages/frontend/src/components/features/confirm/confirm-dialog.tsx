@@ -1,11 +1,16 @@
-import { AlertTriangle, Loader2, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Loader2, type LucideIcon, X } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { ConfirmHeader, ConfirmImpact } from "./confirm-parts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogBody, DialogContent, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { focusDialogContent } from "@/lib/focus-dialog-content";
-import { cn } from "@/lib/utils";
 
 /** What a confirmed command changes and keeps, with its warning. */
 export type ConfirmImpactCopy = {
@@ -91,6 +96,13 @@ export function ConfirmDialog({
         loadingLabel={loadingLabel}
         onOpenAutoFocus={focusDialogContent}
         onCloseAutoFocus={onCloseAutoFocus}
+        closeButton={
+          // The close button lines up with the icon tile and the title of the header.
+          <DialogClose className="absolute top-6 right-4 z-20 flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+            <X className="size-4" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+        }
       >
         <ConfirmHeader icon={Icon} title={title} description={description}>
           {subject}
@@ -112,12 +124,8 @@ export function ConfirmDialog({
             </Alert>
           ) : null}
         </DialogBody>
-        <DialogFooter
-          className={cn(
-            "mt-0 border-t border-border px-6 py-4",
-            confirmLabel === null && "justify-end",
-          )}
-        >
+        {/* Close or Cancel always sits on the left, as in the other dialogs. */}
+        <DialogFooter className="mt-0 border-t border-border px-6 py-4">
           <Button type="button" variant="outline" disabled={pending} onClick={onCancel}>
             {confirmLabel === null ? "Close" : "Cancel"}
           </Button>
