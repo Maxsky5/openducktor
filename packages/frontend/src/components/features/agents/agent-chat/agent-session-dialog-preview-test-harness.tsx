@@ -195,6 +195,7 @@ export function createDialogPreviewHarness(fileLink = "src/file.ts", children?: 
     updateAgentSessionModel: async () => undefined,
     replyAgentApproval: async () => undefined,
     answerAgentQuestion: async () => undefined,
+    allowDeniedAction: async () => undefined,
   };
   function Providers({ children, repoPath }: PropsWithChildren<{ repoPath: string | null }>) {
     return (

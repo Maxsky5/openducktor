@@ -19,6 +19,7 @@ import {
   isToolMessageActive,
   isToolMessageFailure,
   type ToolLifecyclePhase,
+  type WorkflowToolPhase,
 } from "./tool-lifecycle";
 import { isShellCommandCall } from "./shell-command-call";
 import { extractPathFromInput } from "./tool-input-utils";
@@ -398,7 +399,7 @@ export const toolResultContentEntries = (content: readonly AgentToolResultConten
   );
 
 /** The status label of a workflow tool row. A completed call shows no label. */
-export const workflowToolStatusLabel = (phase: ToolLifecyclePhase): string | null => {
+export const workflowToolStatusLabel = (phase: WorkflowToolPhase): string | null => {
   switch (phase) {
     case "preparing":
       return "PREPARING";

@@ -46,6 +46,7 @@ type SessionActions = {
     request: AgentQuestionRequest,
     answers: string[][],
   ) => Promise<void>;
+  allowDeniedAction: AgentOperationsContextValue["allowDeniedAction"];
 };
 
 type CreatePublicOperationsArgs = {
@@ -118,4 +119,6 @@ export const createOrchestratorPublicOperations = ({
   updateAgentSessionModel: sessionActions.updateAgentSessionModel,
   replyAgentApproval: sessionActions.replyAgentApproval,
   answerAgentQuestion: sessionActions.answerAgentQuestion,
+  // The row shows a failure next to its Allow button.
+  allowDeniedAction: sessionActions.allowDeniedAction,
 });

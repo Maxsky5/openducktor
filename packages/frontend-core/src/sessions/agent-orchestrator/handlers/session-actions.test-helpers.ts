@@ -138,6 +138,7 @@ export const createSessionActions = (overrides: SessionActionTestOverrides = {})
     liveSessionHost: {
       agentSessionLiveReplyApproval: async () => {},
       agentSessionLiveReplyQuestion: async () => {},
+      agentSessionLiveAllowDeniedAction: async () => {},
     },
 
     refreshTaskData: async () => {},

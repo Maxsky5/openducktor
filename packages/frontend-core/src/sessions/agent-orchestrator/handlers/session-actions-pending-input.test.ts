@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  AgentSessionLiveAllowDeniedActionInput,
   AgentSessionLiveReplyApprovalInput,
   AgentSessionLiveReplyQuestionInput,
 } from "@openducktor/contracts";
@@ -76,6 +77,7 @@ const createPendingInputActionHarness = (
     workspaceRepoPath: "/active/repository",
     sessionsRef: createSessionsRef(sessions),
     liveSessionHost: {
+      agentSessionLiveAllowDeniedAction: async () => {},
       agentSessionLiveReplyApproval: async (input) => {
         approvalReplies.push(input);
       },
@@ -96,6 +98,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const actions = createSessionActions({
       sessionsRef,
       liveSessionHost: {
+        agentSessionLiveAllowDeniedAction: async () => {},
         agentSessionLiveReplyApproval: async (input) => {
           replies.push(input);
         },
@@ -121,6 +124,33 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       },
     ]);
     expect(getSession(sessionsRef).pendingApprovals).toEqual([request]);
+  });
+
+  test("allows a denied call of the session by its call id", async () => {
+    const sessionsRef = createSessionsRef([buildSession()]);
+    const allowed: AgentSessionLiveAllowDeniedActionInput[] = [];
+    const actions = createSessionActions({
+      sessionsRef,
+      liveSessionHost: {
+        agentSessionLiveAllowDeniedAction: async (input) => {
+          allowed.push(input);
+        },
+        agentSessionLiveReplyApproval: async () => {},
+        agentSessionLiveReplyQuestion: async () => {},
+      },
+    });
+
+    await actions.allowDeniedAction(getSession(sessionsRef), "call-7");
+
+    expect(allowed).toEqual([
+      {
+        repoPath: "/tmp/repo",
+        externalSessionId: "session-1",
+        runtimeKind: "opencode",
+        workingDirectory: "/tmp/repo/worktree",
+        callId: "call-7",
+      },
+    ]);
   });
 
   test("fails closed when an approval target has no recorded repository context", async () => {
@@ -188,6 +218,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       sessionsRef,
       sessionTurnState: sessionTurnState.sessionTurnState,
       liveSessionHost: {
+        agentSessionLiveAllowDeniedAction: async () => {},
         agentSessionLiveReplyApproval: async (input) => {
           replies.push(input);
         },
@@ -262,6 +293,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const actions = createSessionActions({
       sessionsRef,
       liveSessionHost: {
+        agentSessionLiveAllowDeniedAction: async () => {},
         agentSessionLiveReplyApproval: async () => {},
         agentSessionLiveReplyQuestion: async (input) => {
           replies.push(input);
@@ -299,6 +331,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       workspaceRepoPath: "/active/repository",
       sessionsRef,
       liveSessionHost: {
+        agentSessionLiveAllowDeniedAction: async () => {},
         agentSessionLiveReplyApproval: async () => {},
         agentSessionLiveReplyQuestion: async () => {},
       },
@@ -364,6 +397,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       workspaceRepoPath: "/active/repository",
       sessionsRef,
       liveSessionHost: {
+        agentSessionLiveAllowDeniedAction: async () => {},
         agentSessionLiveReplyApproval: async () => {},
         agentSessionLiveReplyQuestion: async () => {},
       },
@@ -398,6 +432,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
       workspaceRepoPath: "/active/repository",
       sessionsRef,
       liveSessionHost: {
+        agentSessionLiveAllowDeniedAction: async () => {},
         agentSessionLiveReplyApproval: async () => {},
         agentSessionLiveReplyQuestion: async () => {
           throw new HostInvokeError(
@@ -478,6 +513,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const actions = createSessionActions({
       sessionsRef,
       liveSessionHost: {
+        agentSessionLiveAllowDeniedAction: async () => {},
         agentSessionLiveReplyApproval: async () => {},
         agentSessionLiveReplyQuestion: async (input) => {
           replies.push(input);
@@ -580,6 +616,7 @@ describe("agent-orchestrator/handlers/session-actions pending input", () => {
     const actions = createSessionActions({
       sessionsRef,
       liveSessionHost: {
+        agentSessionLiveAllowDeniedAction: async () => {},
         agentSessionLiveReplyApproval: async () => {
           throw new Error("native reply failed");
         },

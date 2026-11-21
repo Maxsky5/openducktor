@@ -20,7 +20,7 @@ import {
   stripToolPrefix,
   toSingleLineMarkdown,
 } from "./agent-chat-message-card-model";
-import { resolveRegularToolSummary } from "./agent-chat-tool-presentation";
+import { readToolErrorPreview, resolveRegularToolSummary } from "./agent-chat-tool-presentation";
 
 type ToolMeta = Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "tool" }>;
 
@@ -240,6 +240,17 @@ describe("agent-chat-message-card-model", () => {
       expect(getToolLifecyclePhase(failed)).toBe("failed");
       expect(getToolLifecyclePhase(stopped)).toBe("cancelled");
       expect(getToolLifecyclePhase(unknown)).toBe("failed");
+    });
+
+    test("reads a call that a policy denied as blocked, even when its error reads as declined", () => {
+      const blocked = createToolMeta({
+        status: "error",
+        error: "The user doesn't want to take this action right now.",
+        denial: { source: "auto_mode", reason: "Deletes files outside the project." },
+      });
+
+      expect(getToolLifecyclePhase(blocked)).toBe("blocked");
+      expect(readToolErrorPreview(blocked)).toBeNull();
     });
 
     test("derives lifecycle phases from status, payload and errors", () => {

@@ -70,6 +70,7 @@ export const toToolMessageMeta = (part: AgentToolPart): ToolMessageMeta => {
   if (part.metadata) {
     meta.metadata = part.metadata;
   }
+  if (part.denial) meta.denial = part.denial;
   if (part.startedAtMs !== undefined) {
     meta.startedAtMs = part.startedAtMs;
   }

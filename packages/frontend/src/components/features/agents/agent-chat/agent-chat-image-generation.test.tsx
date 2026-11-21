@@ -191,6 +191,7 @@ const operations = (
   updateAgentSessionModel: async () => {},
   replyAgentApproval: async () => {},
   answerAgentQuestion: async () => {},
+  allowDeniedAction: async () => {},
 });
 const harness = (
   read = mock(async (input: AgentGeneratedImageReadInput) => payload(input)),

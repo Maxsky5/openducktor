@@ -154,6 +154,8 @@ const toolLineTextColor = (phase: ToolLifecyclePhase, desktop: AppTheme["desktop
       return desktop.destructiveMuted;
     case "cancelled":
       return desktop.cancelledMuted;
+    case "blocked":
+      return desktop.warningMuted;
     case "preparing":
     case "queued":
       return desktop.mutedForeground;

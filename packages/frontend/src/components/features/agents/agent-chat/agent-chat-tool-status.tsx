@@ -10,6 +10,7 @@ import {
   Clock3,
   LoaderCircle,
   type LucideIcon,
+  ShieldAlert,
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,12 @@ const TOOL_STATUS = {
     iconClassName: "text-destructive-accent",
     textClassName: "text-destructive-muted",
   },
+  blocked: {
+    label: TOOL_LIFECYCLE_LABELS.blocked,
+    Icon: ShieldAlert,
+    iconClassName: "text-warning-accent",
+    textClassName: "text-warning-muted",
+  },
   cancelled: {
     label: TOOL_LIFECYCLE_LABELS.cancelled,
     Icon: CircleSlash,
@@ -80,7 +87,7 @@ export const ToolStatusLabel = ({ phase }: { phase: ToolLifecyclePhase }): React
 
 /**
  * The colors of the icon of a call in its row by status. A call that succeeded keeps the color of
- * the other tool icons, so only running, failed, and cancelled calls stand out.
+ * the other tool icons, so only running, failed, blocked, and cancelled calls stand out.
  */
 const TOOL_CALL_ICON_COLORS = {
   preparing: "text-muted-foreground/60",
@@ -88,6 +95,7 @@ const TOOL_CALL_ICON_COLORS = {
   executing: "text-status-running-foreground",
   completed: "text-muted-foreground",
   failed: "text-destructive-muted",
+  blocked: "text-warning-accent",
   cancelled: "text-cancelled-muted",
 } as const satisfies Record<ToolLifecyclePhase, string>;
 

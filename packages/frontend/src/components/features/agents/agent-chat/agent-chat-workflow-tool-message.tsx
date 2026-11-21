@@ -2,10 +2,11 @@ import type { OdtToolName } from "@openducktor/contracts";
 import type { ReactElement, ReactNode } from "react";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { cn } from "@/lib/utils";
+import { getToolDuration } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
 import {
-  getToolDuration,
-  getToolLifecyclePhase,
-} from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model";
+  getWorkflowToolPhase,
+  type WorkflowToolPhase,
+} from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
 import {
   readWorkflowToolCard,
   workflowToolStatusLabel,
@@ -50,7 +51,7 @@ const WORKFLOW_TOOL_APPEARANCE = {
     foregroundClassName: "text-success-surface-foreground",
   },
 } satisfies Record<
-  ReturnType<typeof getToolLifecyclePhase>,
+  WorkflowToolPhase,
   {
     activity: ToolMessageActivity;
     statusClassName: string;
@@ -96,7 +97,7 @@ export const WorkflowToolMessage = ({
   action,
 }: WorkflowToolMessageProps): ReactElement => {
   const details = useToolDetailsRow(messageId);
-  const lifecyclePhase = getToolLifecyclePhase(meta);
+  const lifecyclePhase = getWorkflowToolPhase(meta);
   const statusLabel = workflowToolStatusLabel(lifecyclePhase);
   const { activity, statusClassName, foregroundClassName } =
     WORKFLOW_TOOL_APPEARANCE[lifecyclePhase];

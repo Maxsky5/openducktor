@@ -472,6 +472,10 @@ const applyDirectSnapshot = (
     pendingQuestions,
     contextUsage,
     goal: sameGoal(current.goal, snapshot.goal) ? current.goal : snapshot.goal,
+    deniedActions:
+      snapshot.deniedActions && snapshot.deniedActions.length > 0
+        ? replaceEqualDeep(current.deniedActions, snapshot.deniedActions)
+        : undefined,
   };
 };
 
@@ -531,6 +535,7 @@ const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionSta
     foregroundTurnActive: undefined,
     statusUnavailableReason: null,
     goal: undefined,
+    deniedActions: undefined,
     pendingApprovals: session.pendingApprovals.filter((request) => request.source !== undefined),
     pendingQuestions: session.pendingQuestions.filter((request) => request.source !== undefined),
     contextUsage: null,
@@ -564,6 +569,7 @@ const resetSessionLiveStateForSnapshot = (
     foregroundTurnActive: undefined,
     statusUnavailableReason: null,
     goal: undefined,
+    deniedActions: undefined,
     pendingApprovals: [],
     pendingQuestions: [],
     contextUsage: null,

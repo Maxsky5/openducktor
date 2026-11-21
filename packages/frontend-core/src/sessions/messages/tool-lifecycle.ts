@@ -73,6 +73,7 @@ export type ToolLifecyclePhase =
   | "queued"
   | "executing"
   | "completed"
+  | "blocked"
   | "cancelled"
   | "failed";
 
@@ -83,6 +84,7 @@ export const TOOL_LIFECYCLE_LABELS = {
   executing: "Running",
   completed: "Succeeded",
   failed: "Failed",
+  blocked: "Blocked",
   cancelled: "Cancelled",
 } as const satisfies Record<ToolLifecyclePhase, string>;
 
@@ -98,6 +100,14 @@ export const getToolLifecyclePhase = (meta: ToolMeta): ToolLifecyclePhase => {
   return phase;
 };
 
+/** The phase of a workflow tool row. A denied call shows as a regular row, never as a workflow row. */
+export type WorkflowToolPhase = Exclude<ToolLifecyclePhase, "blocked">;
+
+export const getWorkflowToolPhase = (meta: ToolMeta): WorkflowToolPhase => {
+  const phase = getToolLifecyclePhase(meta);
+  return phase === "blocked" ? "failed" : phase;
+};
+
 const readToolLifecyclePhase = (meta: ToolMeta): ToolLifecyclePhase => {
   if (meta.status === "pending") {
     if (meta.inputStreaming) return "preparing";
@@ -110,5 +120,6 @@ const readToolLifecyclePhase = (meta: ToolMeta): ToolLifecyclePhase => {
   if (meta.status === "completed") {
     return isToolMessageFailure(meta) ? "failed" : "completed";
   }
+  if (meta.denial) return "blocked";
   return isToolMessageCancelled(meta) ? "cancelled" : "failed";
 };

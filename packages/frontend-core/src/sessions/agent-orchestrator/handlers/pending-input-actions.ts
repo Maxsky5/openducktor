@@ -20,7 +20,9 @@ export type PendingInputActionDependencies = {
   workspaceRepoPath: string | null;
   liveSessionHost: Pick<
     HostClient,
-    "agentSessionLiveReplyApproval" | "agentSessionLiveReplyQuestion"
+    | "agentSessionLiveReplyApproval"
+    | "agentSessionLiveReplyQuestion"
+    | "agentSessionLiveAllowDeniedAction"
   >;
   readSessionSnapshot: ReadSessionSnapshot;
   updateSession: UpdateSession;
@@ -154,8 +156,23 @@ export const createPendingInputActions = (dependencies: PendingInputActionDepend
     }
   };
 
+  /** Allows one call that a policy denied in the transcript of this session. */
+  const allowDeniedAction = async (
+    identity: AgentSessionIdentity,
+    callId: string,
+  ): Promise<void> => {
+    await dependencies.liveSessionHost.agentSessionLiveAllowDeniedAction({
+      repoPath: requireWorkspaceRepoPath(dependencies.workspaceRepoPath),
+      externalSessionId: identity.externalSessionId,
+      runtimeKind: identity.runtimeKind,
+      workingDirectory: identity.workingDirectory,
+      callId,
+    });
+  };
+
   return {
     replyAgentApproval,
     answerAgentQuestion,
+    allowDeniedAction,
   };
 };

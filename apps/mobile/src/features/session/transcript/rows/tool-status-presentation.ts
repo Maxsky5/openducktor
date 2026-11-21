@@ -41,6 +41,12 @@ export const TOOL_STATUS = {
     color: (desktop) => desktop.destructiveAccent,
     textColor: (desktop) => desktop.destructiveMuted,
   },
+  blocked: {
+    label: TOOL_LIFECYCLE_LABELS.blocked,
+    icon: "shield-alert",
+    color: (desktop) => desktop.warningAccent,
+    textColor: (desktop) => desktop.warningMuted,
+  },
   cancelled: {
     label: TOOL_LIFECYCLE_LABELS.cancelled,
     icon: "circle-slash",
