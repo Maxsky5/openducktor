@@ -11,8 +11,12 @@ const native = loadProcessNative(workspaceProcessNativeDirectory());
 const directories: string[] = [];
 const children: Bun.Subprocess[] = [];
 
-afterEach(() => {
-  for (const child of children.splice(0)) child.kill("SIGKILL");
+afterEach(async () => {
+  // Windows keeps the working folder of a process locked until the process exits.
+  for (const child of children.splice(0)) {
+    child.kill("SIGKILL");
+    await child.exited;
+  }
   for (const directory of directories.splice(0))
     rmSync(directory, { recursive: true, force: true });
 });

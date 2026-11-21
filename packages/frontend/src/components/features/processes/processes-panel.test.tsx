@@ -219,7 +219,8 @@ test("detaches the list into a floating window and attaches it back to the rail"
   const flyout = await openFlyout();
   fireEvent.click(within(flyout).getByRole("button", { name: "Detach into a floating window" }));
   const window = await view.findByRole("dialog", { name: "Processes" });
-  expect(window.getAttribute("aria-modal")).toBe("false");
+  expect(window.tagName).toBe("DIALOG");
+  expect(window.hasAttribute("open")).toBe(true);
   expect(within(window).getByRole("button", { name: COMMAND })).toBeTruthy();
   // The window stays when the user clicks elsewhere in the app.
   fireEvent.pointerDown(document.body);

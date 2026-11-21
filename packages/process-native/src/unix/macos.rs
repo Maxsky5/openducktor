@@ -190,6 +190,8 @@ impl ProcessSource for LibProc {
       parent_pid: info.bsd.pbi_ppid,
       identity: info.unique.unique_id,
       name,
+      // XNU gives the instance a new PID version on each `exec`.
+      program: Some(u64::from(info.unique.id_version.cast_unsigned())),
     }))
   }
 
@@ -521,6 +523,26 @@ mod tests {
         .iter()
         .any(|found| found.port == port && found.address == "127.0.0.1")
     );
+  }
+
+  #[test]
+  fn a_program_that_the_instance_execs_gets_a_new_pid_version() {
+    use std::process::Command;
+    use std::time::Duration;
+    // The shell runs `exec` into a program with the same name, so only the PID version tells.
+    let mut child = Command::new("/bin/sh")
+      .args(["-c", "sleep 0.4; exec /bin/sh -c 'sleep 3'"])
+      .spawn()
+      .unwrap();
+    let pid = Pid::new(child.id()).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    let before = super::bsd_info(pid).unwrap().unwrap();
+    std::thread::sleep(Duration::from_millis(900));
+    let after = super::bsd_info(pid).unwrap().unwrap();
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert_eq!(before.unique.unique_id, after.unique.unique_id);
+    assert_ne!(before.unique.id_version, after.unique.id_version);
   }
 
   #[test]

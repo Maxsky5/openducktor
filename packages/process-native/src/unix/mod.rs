@@ -66,6 +66,10 @@ pub(crate) struct Snapshot {
   /// The Linux start time or the macOS unique ID.
   pub(crate) identity: u64,
   pub(crate) name: String,
+  /// A value that changes when the instance runs another program after `exec`, also one with the
+  /// same name: the macOS PID version. `None` where the system has no such value, as on Linux, so
+  /// the list reads the executable and the arguments each time.
+  pub(crate) program: Option<u64>,
 }
 
 /// The system reads that a process list needs. `Ok(None)` means that the process or the item does
@@ -102,8 +106,7 @@ pub(crate) struct FixedDetails {
 }
 
 struct CachedDetails {
-  /// The program name. A new program that the instance runs after `exec` has another name.
-  name: String,
+  program: u64,
   details: FixedDetails,
   seen: bool,
 }
@@ -114,15 +117,18 @@ pub(crate) struct FixedDetailsCache(HashMap<(Pid, u64), CachedDetails>);
 
 impl FixedDetailsCache {
   fn get_or_read(&mut self, pid: Pid, snapshot: &Snapshot, read: impl FnOnce() -> FixedDetails) -> FixedDetails {
+    let Some(program) = snapshot.program else {
+      return read();
+    };
     match self.0.get_mut(&(pid, snapshot.identity)) {
-      Some(cached) if cached.name == snapshot.name => {
+      Some(cached) if cached.program == program => {
         cached.seen = true;
         cached.details.clone()
       }
       _ => {
         let details = read();
         let cached = CachedDetails {
-          name: snapshot.name.clone(),
+          program,
           details: details.clone(),
           seen: true,
         };
@@ -278,6 +284,8 @@ mod tests {
     arguments: Vec<&'static str>,
     /// The identity that the second snapshot reads, such as after a PID reuse.
     identity_after: Option<u64>,
+    /// The program version, which a new program after `exec` changes.
+    program: Option<u64>,
   }
 
   #[derive(Default)]
@@ -303,6 +311,7 @@ mod tests {
       cwd: Ok("/work"),
       arguments: vec![name, "dev"],
       identity_after: None,
+      program: Some(1),
     }
   }
 
@@ -324,6 +333,7 @@ mod tests {
           process.identity
         },
         name: process.name.to_string(),
+        program: process.program,
       }))
     }
 
@@ -431,11 +441,20 @@ mod tests {
     list_processes_with(&mut source, &mut cache).unwrap();
     assert_eq!(source.argument_reads, 2);
 
-    // After `exec`, the instance runs another program, so its details are read again.
-    source.processes.insert(10, process(100, "esbuild"));
+    // After `exec`, the instance runs another program, so its details are read again, also when
+    // the new program has the same name, as `bash` that runs `exec bash -c ...` has.
+    let same_name = FakeProcess {
+      arguments: vec!["bash", "-c", "while :; do read -t 1; done"],
+      program: Some(2),
+      ..process(100, "node")
+    };
+    source.processes.insert(10, same_name);
     let processes = list_processes_with(&mut source, &mut cache).unwrap();
     assert_eq!(source.argument_reads, 3);
-    assert_eq!(processes[0].executable.as_deref(), Some("/bin/esbuild"));
+    assert_eq!(
+      processes[0].arguments,
+      Some(["bash", "-c", "while :; do read -t 1; done"].map(String::from).to_vec())
+    );
 
     // An instance that exited leaves the cache, so a new instance with its PID is read.
     source.processes.remove(&11);
@@ -443,6 +462,19 @@ mod tests {
     source.processes.insert(11, process(110, "vite"));
     list_processes_with(&mut source, &mut cache).unwrap();
     assert_eq!(source.argument_reads, 4);
+  }
+
+  #[test]
+  fn reads_the_details_on_every_list_without_a_program_version() {
+    let mut cache = FixedDetailsCache::default();
+    let linux = FakeProcess {
+      program: None,
+      ..process(100, "node")
+    };
+    let mut source = FakeSource::with(&[(10, linux)]);
+    list_processes_with(&mut source, &mut cache).unwrap();
+    list_processes_with(&mut source, &mut cache).unwrap();
+    assert_eq!(source.argument_reads, 2);
   }
 
   #[test]

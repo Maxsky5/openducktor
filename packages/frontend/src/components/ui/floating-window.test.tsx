@@ -49,7 +49,10 @@ const drag = (element: Element, dx: number, dy: number) => {
 
 test("floats without blocking the app", () => {
   const { windowElement } = mount();
-  expect(windowElement.getAttribute("aria-modal")).toBe("false");
+  // An open native dialog that is not modal takes no focus and leaves the page usable.
+  expect(windowElement.tagName).toBe("DIALOG");
+  expect(windowElement.hasAttribute("open")).toBe(true);
+  expect(windowElement.getAttribute("aria-modal")).not.toBe("true");
 });
 
 test("moves by its title bar and gives the owner the new place", () => {

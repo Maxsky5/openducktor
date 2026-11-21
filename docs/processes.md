@@ -71,7 +71,7 @@ One read (`createProcessRead`) also resolves each saved path once and checks eac
 
 One read lists every process of the machine, so its cost grows with the machine and not with the checkouts.
 
-- On macOS and Linux, the native module reads the working directory of each process on every list. It reads the executable and the arguments of an instance once and keeps them while the instance runs the same program: the key is the PID, the identity, and the name, which changes after `exec`. The cache holds only the instances of the last list. On Windows, one read of the process memory gives the directory and the command line together, so nothing is kept.
+- The native module reads the working directory of each process on every list. On macOS, it reads the executable and the arguments of an instance once and keeps them while the instance runs the same program: the key is the PID, the identity, and the PID version, which XNU changes on each `exec`, also into a program with the same name. The cache holds only the instances of the last list. Linux counts no `exec`, and `/proc` reads are cheap, so Linux reads the executable and the arguments on every list. On Windows, the reads of the process parameters give the directory and the command line together, so nothing is kept.
 - The host finds the checkout of a path by its parent folders in an index of the listed roots, not by a scan of all roots.
 - On an Apple silicon Mac with about 1,100 processes, the native list takes about 3.5 ms, and the host work after it about 5 ms. The first list after the host starts reads every executable and argument list, about 11 ms.
 

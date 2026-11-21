@@ -4,9 +4,11 @@ import {
   buildGroupViews,
   commandLabel,
   commandTitle,
+  contextRank,
   firstServerUrl,
   processTotals,
   readableCommand,
+  taskServerLinks,
 } from "./processes-view";
 
 const row = (
@@ -64,7 +66,7 @@ test("groups each process under the command that started it, in start order", ()
     [22, 2],
     [23, 3],
   ]);
-  expect(commands[1]?.members.map((member) => member.guides)).toEqual([
+  expect(commands[1]?.members.map((member) => member.guides.map(({ guide }) => guide))).toEqual([
     [],
     ["last"],
     ["space", "last"],
@@ -164,4 +166,17 @@ test("names a wrapped agent command by the program that its shell runs", () => {
 test("opens the first web port that a filter shows", () => {
   expect(firstServerUrl(buildGroupViews([app], "web"))).toBe("http://127.0.0.1:5173/");
   expect(firstServerUrl(buildGroupViews([quiet], ""))).toBeNull();
+});
+
+test("finds the worktree of a task that another workspace also opens", () => {
+  // The second workspace opens the task worktree as its repository, so it keeps the group.
+  const shared: WorkspaceProcessGroup = {
+    ...group("/worktrees/task-1", [row(90, "pnpm dev", { ports: [5174] })]),
+    workspaceId: "second",
+    owners: [{ kind: "task", workspaceId: "repo", taskId: "task-1", title: "Add login" }],
+  };
+  const list = { groups: [shared], issues: [] };
+  expect(taskServerLinks(list, "repo", "task-1").map((link) => link.port)).toEqual([5174]);
+  expect(taskServerLinks(list, "second", "task-1")).toEqual([]);
+  expect(contextRank(shared, { workspaceId: "repo", taskId: "task-1" }, "repo")).toBe(0);
 });

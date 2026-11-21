@@ -332,8 +332,8 @@ function ProcessMemberLine({
         {row.pid}
       </span>
       <span className="flex h-full min-w-0 flex-1 items-center">
-        {guides.map((guide, index) => (
-          <TreeGuideCell key={index} guide={guide} />
+        {guides.map((column) => (
+          <TreeGuideCell key={column.owner} guide={column.guide} />
         ))}
         <span
           className={cn(

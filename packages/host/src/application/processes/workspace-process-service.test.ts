@@ -234,7 +234,8 @@ const createService = (
         }),
     }),
     inspector,
-    pathPlatform: "posix",
+    // The fixtures use real temporary folders, so their paths follow the platform of the host.
+    pathPlatform: globalThis.process.platform === "win32" ? "windows" : "posix",
     hostProcessIds: () => [104],
     managedProcesses: () => options.managed ?? new Map(),
     hostLaunchPaths:

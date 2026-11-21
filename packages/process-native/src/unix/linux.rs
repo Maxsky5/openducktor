@@ -52,6 +52,8 @@ impl ProcessSource for ProcFs {
         parent_pid: stat.parent_pid,
         identity: stat.start_time,
         name: stat.name,
+        // Linux counts no `exec`, so the list reads the executable and the arguments each time.
+        program: None,
       })),
       Err(error) if is_gone(&error) => Ok(None),
       Err(error) => Err(error),

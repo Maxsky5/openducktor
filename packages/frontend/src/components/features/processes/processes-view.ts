@@ -11,6 +11,9 @@ import type {
  */
 export type TreeGuide = "line" | "space" | "branch" | "last";
 
+/** One column of tree lines. `owner` is the process of that level, which keys the column. */
+type TreeGuideColumn = { guide: TreeGuide; owner: string };
+
 /**
  * A process of a command, at its depth below the command. `guides` draw the tree lines before
  * it, and `matched` marks a filter match.
@@ -18,7 +21,7 @@ export type TreeGuide = "line" | "space" | "branch" | "last";
 export type ProcessMember = {
   row: WorkspaceProcessRow;
   depth: number;
-  guides: TreeGuide[];
+  guides: TreeGuideColumn[];
   matched: boolean;
 };
 
@@ -95,14 +98,15 @@ const commandsOf = (rows: readonly WorkspaceProcessRow[]): ProcessCommandView[] 
     const visit = (
       row: WorkspaceProcessRow,
       depth: number,
-      above: readonly TreeGuide[],
+      above: readonly TreeGuideColumn[],
       last: boolean,
     ) => {
       if (visited.has(row.processRef)) return;
       visited.add(row.processRef);
-      const guides: TreeGuide[] = depth === 0 ? [] : [...above, last ? "last" : "branch"];
+      const column = (guide: TreeGuide): TreeGuideColumn => ({ guide, owner: row.processRef });
+      const guides = depth === 0 ? [] : [...above, column(last ? "last" : "branch")];
       members.push({ row, depth, guides, matched: false });
-      const childAbove: TreeGuide[] = depth === 0 ? [] : [...above, last ? "space" : "line"];
+      const childAbove = depth === 0 ? [] : [...above, column(last ? "space" : "line")];
       const rowChildren = children.get(row.processRef) ?? [];
       rowChildren.forEach((child, index) =>
         visit(child, depth + 1, childAbove, index === rowChildren.length - 1),
@@ -188,10 +192,15 @@ export const processTotals = (views: readonly ProcessGroupView[]) => {
   };
 };
 
-/** True when a task owns the checkout. */
+/**
+ * True when a task owns the checkout. A task worktree that another workspace also opens belongs
+ * to the group of that workspace, so the owner names the workspace of the task.
+ */
 const ownedBy = (group: WorkspaceProcessGroup, workspaceId: string, taskId: string): boolean =>
-  group.workspaceId === workspaceId &&
-  group.owners.some((owner) => owner.kind === "task" && owner.taskId === taskId);
+  group.owners.some(
+    (owner) =>
+      owner.kind === "task" && owner.workspaceId === workspaceId && owner.taskId === taskId,
+  );
 
 /**
  * The place of a checkout in the list: 0 for the task that the user works on, 1 for the rest of

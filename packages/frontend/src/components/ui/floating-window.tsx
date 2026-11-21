@@ -192,7 +192,7 @@ export function FloatingWindow({
   children,
 }: FloatingWindowProps): ReactElement | null {
   const layer = useContext(FloatingWindowLayerContext);
-  const windowRef = useRef<HTMLDivElement | null>(null);
+  const windowRef = useRef<HTMLDialogElement | null>(null);
   const gestureRef = useRef<Gesture | null>(null);
   // The handlers stay the same between renders, so they read the latest props here.
   const latest = useRef({ rect, minSize, onRectChange });
@@ -284,17 +284,18 @@ export function FloatingWindow({
   if (!layer?.container) return null;
 
   return createPortal(
-    <div
+    // A non-modal native dialog: it takes no focus and blocks nothing. The resets remove the
+    // margin, padding, size limits, and colors that browsers give a dialog.
+    <dialog
       ref={windowRef}
-      role="dialog"
-      aria-modal="false"
+      open
       aria-label={title}
       data-floating-window={id}
       // A native browser page draws above the app, so it must leave room for the window.
       data-page-occluder=""
       data-gesture={gesture ?? undefined}
       className={cn(
-        "floating-window pointer-events-auto absolute top-0 left-0 flex flex-col rounded-xl border border-border bg-popover outline-none",
+        "floating-window pointer-events-auto absolute top-0 left-0 m-0 flex max-h-none max-w-none flex-col rounded-xl border border-border bg-popover p-0 text-popover-foreground outline-none",
         gesture && "select-none",
       )}
       style={{
@@ -353,7 +354,7 @@ export function FloatingWindow({
         aria-hidden="true"
         className="floating-window-grip pointer-events-none absolute right-1.5 bottom-1.5 size-2.5 text-muted-foreground/60"
       />
-    </div>,
+    </dialog>,
     layer.container,
   );
 }
