@@ -373,7 +373,8 @@ export function useWorkspaceSelectionOperations({
     async (workspaceId: string, onSelected?: () => void): Promise<void> => {
       const switchVersion = ++workspaceSwitchVersionRef.current;
 
-      setIsSwitchingWorkspace(true);
+      // The flag renders with the new workspace, so the host request starts before any render.
+      startTransition(() => setIsSwitchingWorkspace(true));
 
       try {
         const selectedWorkspace = await hostClient.workspaceSelect(workspaceId);
