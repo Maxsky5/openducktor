@@ -40,9 +40,12 @@ export type AgentJsonGenerationInput<Answer> = AgentTextGenerationInput & {
   answerSchema: z.ZodType<Answer>;
 };
 
-/** The JSON Schema that constrains the answer of a JSON generation. */
+/**
+ * The JSON Schema that constrains the answer of a JSON generation. It uses draft-07, because the
+ * Claude CLI checks `--json-schema` with draft-07 and rejects the draft 2020-12 meta-schema.
+ */
 export const agentJsonOutputSchema = (answerSchema: z.ZodType): AgentJsonOutputSchema =>
-  agentJsonOutputSchemaSchema.parse(z.toJSONSchema(answerSchema));
+  agentJsonOutputSchemaSchema.parse(z.toJSONSchema(answerSchema, { target: "draft-07" }));
 
 /** The error of a runtime answer that does not fit the answer schema of its JSON generation. */
 export const agentJsonAnswerMismatch = (runtime: string, error: z.ZodError): Error =>

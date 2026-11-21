@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { agentJsonOutputSchema } from "@openducktor/contracts";
 import { z } from "zod";
 import {
   generateClaudeJson,
@@ -90,7 +89,7 @@ describe("generateClaudeText", () => {
 describe("generateClaudeJson", () => {
   const answerSchema = z.strictObject({ title: z.string() });
 
-  test("constrains the answer to the JSON Schema of the answer and checks it", async () => {
+  test("constrains the answer to a draft-07 JSON Schema of the answer and checks it", async () => {
     const claude = fakeQuery([
       {
         type: "result",
@@ -109,7 +108,14 @@ describe("generateClaudeJson", () => {
     expect(answer).toEqual({ title: "Login fix" });
     expect(claude.calls[0]?.options.outputFormat).toEqual({
       type: "json_schema",
-      schema: agentJsonOutputSchema(answerSchema),
+      // The Claude CLI checks the schema with draft-07 and rejects the draft 2020-12 meta-schema.
+      schema: {
+        $schema: "http://json-schema.org/draft-07/schema#",
+        type: "object",
+        properties: { title: { type: "string" } },
+        required: ["title"],
+        additionalProperties: false,
+      },
     });
     expect(claude.calls[0]?.options).toMatchObject({ tools: [], maxTurns: 1 });
   });
