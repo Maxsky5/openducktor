@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "../types/agent-orchestrator";
 import {
   resolveInitialModelSelection,
@@ -213,6 +217,7 @@ describe("model-selection-state", () => {
     expect(
       resolveModelSelectionForPair({
         catalog,
+        currentCatalog: catalog,
         currentSelection: {
           ...EXPLICIT_SELECTION,
           providerId: "openai",
@@ -227,13 +232,35 @@ describe("model-selection-state", () => {
   });
 
   test.each([
-    { source: { variant: "high", speed: "fast" }, expected: { variant: "high", speed: "fast" } },
+    // Claude calls the "Fast" level `fast`, and Codex calls it `priority`.
+    {
+      source: { variant: "high", speed: "fast" },
+      expected: { variant: "high", speed: "priority" },
+    },
     { source: { variant: "max", speed: "turbo" }, expected: { variant: "low" } },
     // The runtime default ("medium" and "flex") must not replace a missing effort or speed.
     { source: {}, expected: { variant: "low" } },
   ])(
     "keeps the supported effort and speed of $source when the runtime changes",
     ({ source, expected }) => {
+      const claudeCatalog: AgentModelCatalog = {
+        runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+        models: [
+          {
+            id: "claude/claude-opus",
+            providerId: "claude",
+            providerName: "Claude",
+            modelId: "claude-opus",
+            modelName: "Claude Opus",
+            variants: ["low", "high", "max"],
+            speedLevels: [
+              { id: "fast", label: "Fast" },
+              { id: "turbo", label: "Turbo" },
+            ],
+          },
+        ],
+        defaultModelsByProvider: { claude: "claude-opus" },
+      };
       const codexCatalog: AgentModelCatalog = {
         runtime: CODEX_RUNTIME_DESCRIPTOR,
         models: [
@@ -245,19 +272,24 @@ describe("model-selection-state", () => {
             modelName: "GPT-5.5",
             variants: ["low", "medium", "high"],
             speedLevels: [
-              { id: "fast", label: "Fast" },
+              { id: "priority", label: "Fast" },
               { id: "flex", label: "Flex" },
             ],
           },
         ],
         defaultModelsByProvider: { openai: "gpt-5.5" },
       };
-      const { variant: _variant, ...selectionWithoutVariant } = EXPLICIT_SELECTION;
 
       expect(
         resolveModelSelectionForPair({
           catalog: codexCatalog,
-          currentSelection: { ...selectionWithoutVariant, ...source },
+          currentCatalog: claudeCatalog,
+          currentSelection: {
+            runtimeKind: "claude",
+            providerId: "claude",
+            modelId: "claude-opus",
+            ...source,
+          },
           defaultSelection: {
             runtimeKind: "codex",
             providerId: "openai",
@@ -297,7 +329,7 @@ describe("model-selection-state", () => {
           modelKey,
           runtimeKind: "opencode",
           preferredVariant: fast.variant,
-          preferredSpeed: fast.speed,
+          preferredSpeed: { id: fast.speed },
         })?.speed,
       ).toBe(modelKey === "openai/gpt-5" ? "fast" : undefined);
     }

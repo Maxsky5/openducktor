@@ -1,6 +1,6 @@
 import "../../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
-import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import { CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
@@ -86,6 +86,59 @@ describe("useSessionStartSpeed", () => {
       expect(harness.getLatest().change).toBeUndefined();
       await harness.run((speed) => speed.control?.onChange("standard"));
       await harness.waitFor((speed) => speed.change === "standard");
+      expect(feedback.shown).toEqual([]);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("keeps a chosen speed with the same label on a model of another runtime", async () => {
+    const fresh: Partial<SessionStartModalModel> = {
+      selectedStartMode: "fresh",
+      existingSessionOptions: [],
+    };
+    const { feedback, harness } = createHarness(
+      createModel([{ id: "fast", label: "Fast" }], fresh),
+    );
+    await harness.mount();
+    try {
+      await harness.run((speed) => speed.control?.onChange("fast"));
+      await harness.waitFor((speed) => speed.change === "fast");
+      // Codex calls the "Fast" level `priority`.
+      await harness.update(
+        createModel([], {
+          ...fresh,
+          selectedRuntimeKind: "codex",
+          selectedModelSelection: { runtimeKind: "codex", providerId: "codex", modelId: "gpt" },
+          modelPickerRuntimes: [
+            {
+              descriptor: CODEX_RUNTIME_DESCRIPTOR,
+              isEnabledForFavorites: true,
+              resource: {
+                status: "ready",
+                catalog: {
+                  runtime: CODEX_RUNTIME_DESCRIPTOR,
+                  models: [
+                    {
+                      id: "codex/gpt",
+                      providerId: "codex",
+                      providerName: "Codex",
+                      modelId: "gpt",
+                      modelName: "GPT",
+                      variants: [],
+                      speedLevels: [{ id: "priority", label: "Fast" }],
+                    },
+                  ],
+                  defaultModelsByProvider: {},
+                },
+              },
+            },
+          ],
+        }),
+      );
+
+      expect(harness.getLatest().control?.choice).toBe("priority");
+      expect(harness.getLatest().change).toBe("priority");
       expect(feedback.shown).toEqual([]);
     } finally {
       await harness.unmount();

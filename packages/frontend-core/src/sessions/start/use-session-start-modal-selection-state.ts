@@ -137,6 +137,7 @@ export function useSessionStartModalSelectionState({
     (value: ModelPickerValue, targetCatalog: AgentModelCatalog): void => {
       const resolvedPair = resolveModelSelectionForPair({
         catalog: targetCatalog,
+        currentCatalog: catalog,
         currentSelection: resolvedSelection,
         defaultSelection,
         selectedModel: intentSelectedModel,
@@ -144,7 +145,7 @@ export function useSessionStartModalSelectionState({
       });
       setSelection(resolvedPair?.selection ?? null);
     },
-    [defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
+    [catalog, defaultSelection, intentSelectedModel, resolvedSelection, setSelection],
   );
 
   const handleSelectVariant = useCallback(

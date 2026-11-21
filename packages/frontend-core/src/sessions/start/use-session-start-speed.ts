@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useClientConnection } from "../../connection/client-connection-react";
-import { findCatalogModel, STANDARD_SPEED, withSpeed } from "@openducktor/core";
+import {
+  findCatalogModel,
+  findMatchingCatalogSpeed,
+  type SpeedPreference,
+  STANDARD_SPEED,
+  withSpeed,
+} from "@openducktor/core";
 import { selectableModelPickerCatalog } from "../model-selection/model-picker-model";
 import { type SpeedControlModel, useSpeedControl } from "../model-selection/use-speed-control";
 import type { SessionStartModalModel } from "./session-start-modal-model";
@@ -12,8 +18,11 @@ type SessionStartSpeed = {
   change: string | undefined;
 };
 
+type SpeedDraft = { key: string; choice: SpeedPreference };
+
 /**
  * A reused session keeps its speed. A fresh or forked session starts at standard speed.
+ * A model change keeps the speed level with the same ID or label, also in another runtime.
  * The start sends a speed only when the user changes it.
  */
 export function useSessionStartSpeed(model: SessionStartModalModel): SessionStartSpeed {
@@ -25,8 +34,8 @@ export function useSessionStartSpeed(model: SessionStartModalModel): SessionStar
       ? model.existingSessionOptions.find((option) => option.value === selectedSourceSessionValue)
       : undefined;
   const initial = source?.selectedModel?.speed ?? STANDARD_SPEED;
-  const [draft, setDraft] = useState({ key, choice: initial });
-  const choice = draft.key === key ? draft.choice : initial;
+  const [draft, setDraft] = useState<SpeedDraft>({ key, choice: { id: initial } });
+  const preference = draft.key === key ? draft.choice : { id: initial };
   const catalog = selectableModelPickerCatalog(
     model.modelPickerRuntimes.find(
       (runtime) => runtime.descriptor.kind === model.selectedRuntimeKind,
@@ -34,13 +43,14 @@ export function useSessionStartSpeed(model: SessionStartModalModel): SessionStar
   );
   const catalogModel =
     catalog && selectedModelSelection ? findCatalogModel(catalog, selectedModelSelection) : null;
-  const unsupported =
-    choice !== STANDARD_SPEED &&
-    catalogModel !== null &&
-    !catalogModel.speedLevels?.some((level) => level.id === choice);
+  const matchedLevel = catalogModel
+    ? findMatchingCatalogSpeed(catalogModel, preference)
+    : undefined;
+  const unsupported = preference.id !== STANDARD_SPEED && catalogModel !== null && !matchedLevel;
+  const choice = matchedLevel?.id ?? (unsupported ? STANDARD_SPEED : preference.id);
   useEffect(() => {
     if (!unsupported) return;
-    setDraft({ key, choice: STANDARD_SPEED });
+    setDraft({ key, choice: { id: STANDARD_SPEED } });
     feedback.show(
       "info",
       "Speed was set to Standard because this model does not support the previous level.",
@@ -52,7 +62,11 @@ export function useSessionStartSpeed(model: SessionStartModalModel): SessionStar
     catalog,
     selection: selectedModelSelection && withSpeed(selectedModelSelection, choice),
     disabled: model.isStarting,
-    onSelect: (next) => setDraft({ key, choice: next }),
+    onSelect: (next) =>
+      setDraft({
+        key,
+        choice: catalogModel?.speedLevels?.find((level) => level.id === next) ?? { id: next },
+      }),
   });
   return { control, change: choice === initial ? undefined : choice };
 }

@@ -35,6 +35,8 @@ export const resolveRepoAgentDefaultModelPickerSelection = ({
   }
   const resolvedPair = resolveModelSelectionForPair({
     catalog: targetCatalog,
+    // A model default has no speed, so no speed label to match.
+    currentCatalog: null,
     currentSelection,
     defaultSelection: null,
     selectedModel: null,

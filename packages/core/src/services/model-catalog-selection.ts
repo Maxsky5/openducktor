@@ -1,3 +1,4 @@
+import type { AgentSpeedLevel } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "../types/agent-orchestrator";
 
 type CatalogProfile = NonNullable<AgentModelCatalog["profiles"]>[number];
@@ -73,6 +74,38 @@ export const normalizeCatalogSpeed = (
   speed: string | undefined,
 ): string | undefined =>
   speed && model.speedLevels?.some((level) => level.id === speed) ? speed : undefined;
+
+/** A speed to keep. The label is absent when the catalog of the speed is unknown. */
+export type SpeedPreference = { id: string; label?: string | undefined };
+
+/**
+ * Finds the speed level of `model` with the ID of `speed`, or else with its label.
+ * Runtimes can give one level different IDs: Codex calls "Fast" `priority` and Claude calls it `fast`.
+ */
+export const findMatchingCatalogSpeed = (
+  model: Pick<CatalogModel, "speedLevels">,
+  speed: SpeedPreference | undefined,
+): AgentSpeedLevel | undefined => {
+  if (!speed) return undefined;
+  const levels = model.speedLevels ?? [];
+  return (
+    levels.find((level) => level.id === speed.id) ??
+    levels.find((level) => level.label === speed.label)
+  );
+};
+
+/** Returns the speed of `selection` with its label from `catalog`, or undefined at standard speed. */
+export const selectionSpeedPreference = (
+  catalog: AgentModelCatalog | null,
+  selection: AgentModelSelection | null,
+): SpeedPreference | undefined => {
+  const speed = selection?.speed;
+  if (!speed) return undefined;
+  const level = findCatalogModel(catalog, selection)?.speedLevels?.find(
+    (entry) => entry.id === speed,
+  );
+  return level ?? { id: speed };
+};
 
 export const withSpeed = (selection: AgentModelSelection, speed: string): AgentModelSelection => {
   const { speed: _speed, ...rest } = selection;

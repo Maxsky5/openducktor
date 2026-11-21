@@ -290,7 +290,8 @@ describe("useModelSelectionActions", () => {
               modelId: "gpt-5",
               modelName: "GPT-5",
               variants: ["medium", "high"],
-              speedLevels: [{ id: "fast", label: "Fast" }],
+              // Codex calls the "Fast" level `priority`.
+              speedLevels: [{ id: "priority", label: "Fast" }],
             },
           ],
           defaultModelsByProvider: { openai: "gpt-5" },
@@ -303,7 +304,7 @@ describe("useModelSelectionActions", () => {
       providerId: "openai",
       modelId: "gpt-5",
       variant: "high",
-      speed: "fast",
+      speed: "priority",
     });
     expect(feedback.shownOf("info")).toEqual([]);
     await harness.unmount();
