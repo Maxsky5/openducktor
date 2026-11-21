@@ -1,4 +1,5 @@
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
+import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { ComposerState } from "@openducktor/frontend-core/tasks/create/task-composer-types";
@@ -59,10 +60,26 @@ const controllerMock: ReturnType<
       icon,
     }),
   ),
+  typeStepChoices: specPlanBuildWorkflow.definition.issueTypes.map(
+    ({ id, label, description, icon }) => ({
+      value: id,
+      label,
+      description: description ?? "",
+      guidance: description ?? "",
+      icon,
+    }),
+  ),
+  workflowChoices: [],
+  defaultWorkflowId: specPlanBuildWorkflow.reference.id,
+  workflowsForType: [],
+  selectWorkflow: (_workflowId: string) => {},
   workflowRead: {
     taskWorkflow: specPlanBuildWorkflow,
+    workflowChoices: [specPlanBuildWorkflow],
+    defaultWorkflow: specPlanBuildWorkflow,
     pending: false,
     error: null,
+    selectionError: null,
     retry: async () => {},
   },
   mode: "edit",
@@ -74,7 +91,10 @@ const controllerMock: ReturnType<
   isRecoveryBlocked: false,
   isSaveOrRecoveryLocked: false,
   step: "details",
-  setStep: (_step: "type" | "details") => {},
+  setStep: (_step: "type" | "workflow" | "details") => {},
+  steps: ["type", "details"],
+  stepAfter: null,
+  stepBefore: null,
   editSection: { artifactCode: "spec" },
   isTaskDraftDirty: false,
   dirtyDocuments: { spec: false, plan: false },
@@ -82,6 +102,7 @@ const controllerMock: ReturnType<
     _section: import("@openducktor/frontend-core/tasks/create/task-composer-types").EditTaskSection,
   ) => {},
   isTypeStepVisible: false,
+  isWorkflowStepVisible: false,
   selectedCreateIssueType: "task",
   selectCreateIssueType: (_issueType: string) => {},
   activeDocumentSection: "spec",
@@ -190,6 +211,60 @@ describe("TaskCreateModal", () => {
     } finally {
       await act(async () => rendered.unmount());
       trigger.remove();
+    }
+  });
+
+  test("shows only the types first, then the workflows that take the picked type", async () => {
+    const review = createReviewTaskWorkflow();
+    const typeStep = {
+      ...controllerMock,
+      mode: "create" as const,
+      taskId: null,
+      step: "type" as const,
+      isTypeStepVisible: true,
+      selectedCreateIssueType: null,
+      activeDocumentSection: null,
+      isEditingDocument: false,
+      workflowChoices: [specPlanBuildWorkflow, review],
+      steps: ["type", "workflow", "details"] as const,
+    };
+    controllerForTest = typeStep;
+    const props = { open: true, onOpenChange: () => {}, tasks: [] };
+    const rendered = render(createElement(TaskCreateModal, props));
+    try {
+      await screen.findByRole("dialog", { name: "Create task" });
+      expect(screen.getAllByText("Workflow").length).toBeGreaterThan(0);
+      expect(screen.queryByRole("radiogroup", { name: "Workflows" })).toBeNull();
+      // Nothing to continue with before a type.
+      expect(screen.queryByRole("button", { name: /Continue/ })).toBeNull();
+
+      controllerForTest = {
+        ...typeStep,
+        step: "workflow",
+        isTypeStepVisible: false,
+        isWorkflowStepVisible: true,
+        workflowsForType: [specPlanBuildWorkflow, review],
+        selectedCreateIssueType: "bug",
+        steps: ["type", "workflow", "details"],
+        stepAfter: "details",
+        stepBefore: "type",
+      };
+      rendered.rerender(createElement(TaskCreateModal, { ...props }));
+      const list = screen.getByRole("radiogroup", { name: "Workflows" });
+      const picked = screen.getByRole("radio", { checked: true });
+      expect(list.contains(picked)).toBe(true);
+      expect(picked.textContent).toContain(specPlanBuildWorkflow.definition.label);
+      expect(picked.textContent).toContain("Default");
+      // The track reads as the path of a new task, from the first column to Done.
+      const path = document.getElementById(picked.getAttribute("aria-describedby")!);
+      expect(path?.textContent).toStartWith("Backlog, then ");
+      expect(path?.textContent).toContain("(optional)");
+      expect(path?.textContent).toEndWith("then Done");
+      expect(screen.getAllByRole("radio")).toHaveLength(2);
+      expect(screen.getByRole("button", { name: /Back/ })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Continue/ })).toBeTruthy();
+    } finally {
+      await act(async () => rendered.unmount());
     }
   });
 

@@ -43,6 +43,7 @@ test("plain workflow events block duplicate taps and leave view updates to the t
         hostInstanceId: "mixed-host",
         board,
         workflows: [alpha.reference, beta.reference],
+        newTaskWorkflows: [alpha.reference],
         newTaskWorkflow: alpha.reference,
       }),
       taskApplyEvent: apply,
@@ -136,6 +137,7 @@ test.each([
           hostInstanceId: "mixed-host",
           board,
           workflows: [alpha.reference, beta.reference],
+          newTaskWorkflows: [before.workflow],
           newTaskWorkflow: before.workflow,
         }),
       },
@@ -231,6 +233,7 @@ test.each([{ outcome: "terminal" }, { outcome: "nonterminal" }, { outcome: "deni
           hostInstanceId: "mixed-host",
           board,
           workflows: [alpha.reference, beta.reference],
+          newTaskWorkflows: [before.workflow],
           newTaskWorkflow: before.workflow,
         }),
         taskApplyEvent: mutation,
@@ -252,6 +255,7 @@ test.each([{ outcome: "terminal" }, { outcome: "nonterminal" }, { outcome: "deni
       { workspaceId: "workspace", repoPath: "/repo" },
       [before.id],
       "close",
+      null,
     );
     connection.queryClient.setQueryData(impact, {});
     const harness = createHookHarness(

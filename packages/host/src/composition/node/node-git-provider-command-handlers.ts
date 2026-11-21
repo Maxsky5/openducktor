@@ -1,4 +1,7 @@
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
+import { createPullRequestReviewCommandHandlers } from "../../interface/commands/pull-request-review-command-handlers";
+import type { TaskReader } from "../../ports/task-repository-ports";
+import type { TaskWorkflowResolver, WorkspaceWorkflowPort } from "../../ports/task-workflow-port";
 import { createAzureDevOpsConnectionService } from "../../application/git/azure-devops-connection-service";
 import { createAzureAreaPathsService } from "../../application/git/azure-area-paths-service";
 import { createGitProviderService } from "../../application/git/git-provider-service";
@@ -17,12 +20,14 @@ import type { IssueImportStorePort } from "../../ports/issue-import-store-port";
 type NodeGitProviderCommandHandlers = ReturnType<typeof createGitProviderCommandHandlers> &
   ReturnType<typeof createIssueImportCommandHandlers> &
   ReturnType<typeof createAzureAreaPathsCommandHandlers> &
-  ReturnType<typeof createAzureDevOpsConnectionCommandHandlers>;
+  ReturnType<typeof createAzureDevOpsConnectionCommandHandlers> &
+  ReturnType<typeof createPullRequestReviewCommandHandlers>;
 
 export const createNodeGitProviderCommandHandlers = ({
   resolver,
   issueImportStore,
-  taskWorkflows,
+  taskReader,
+  workflows: { taskWorkflows, workspaceWorkflows },
   taskSyncService,
   workspaceSettingsService,
   azureDevOpsConnection,
@@ -30,7 +35,12 @@ export const createNodeGitProviderCommandHandlers = ({
 }: {
   resolver: GitProviderResolver;
   issueImportStore: IssueImportStorePort;
-  taskWorkflows: TaskWorkflowResolver;
+  taskReader: Pick<TaskReader, "getTask">;
+  /** The workflow ports, such as the shared ports of the host. */
+  workflows: {
+    taskWorkflows: TaskWorkflowResolver;
+    workspaceWorkflows: Pick<WorkspaceWorkflowPort, "newTaskWorkflow">;
+  };
   taskSyncService: Pick<TaskSyncService, "publishExternalTaskCreated" | "runStatusMutation">;
   workspaceSettingsService: WorkspaceSettingsService;
   azureDevOpsConnection: AzureDevOpsConnectionPort | undefined;
@@ -39,11 +49,15 @@ export const createNodeGitProviderCommandHandlers = ({
   ...createGitProviderCommandHandlers({
     service: createGitProviderService({ resolver, workspaceSettingsService }),
   }),
+  ...createPullRequestReviewCommandHandlers(
+    createPullRequestReviewService({ resolver, taskReader, workspaceSettingsService }),
+  ),
   ...createIssueImportCommandHandlers(
     createIssueImportService({
       resolver,
       store: issueImportStore,
       taskWorkflows,
+      workspaceWorkflows,
       workspaceSettingsService,
       publishTaskCreated: taskSyncService.publishExternalTaskCreated,
       runStatusMutation: taskSyncService.runStatusMutation,

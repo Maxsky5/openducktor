@@ -104,7 +104,10 @@ export const createTaskEventUseCase = (
         const context = { input: { workspaceId, repoPath, taskId }, eventId, artifactChanges };
         const task = yield* workflow
           .eventEffects(eventId)
-          .reduceRight((next, effect) => hostEffects[effect](context, next), commit);
+          .reduceRight(
+            (next, effect) => hostEffects[effect.id]({ ...context, effect }, next),
+            commit,
+          );
         return { task, artifactChanges };
       }).pipe(Effect.scoped, mapTaskMutationProgressErrors);
     },

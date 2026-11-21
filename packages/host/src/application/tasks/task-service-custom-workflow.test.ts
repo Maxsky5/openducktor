@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import type { IssueType } from "@openducktor/contracts";
-import { specPlanBuildWorkflow, createTaskWorkflow } from "@openducktor/workflows";
+import { createTaskWorkflow } from "@openducktor/workflows";
 import {
-  createReviewTaskWorkflow,
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
   reviewTaskRoles,
@@ -14,7 +13,11 @@ import {
   createSqliteTaskStoreHarness,
   type SqliteTaskStoreTestHarness,
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
-import { createTaskWorkflowResolver } from "./task-workflows";
+import { BUILTIN_TASK_ASSIGNMENT, createTaskWorkflowVersionCache } from "./task-workflows";
+import {
+  createTestWorkflowLibraryStore,
+  publishReviewWorkflow,
+} from "../../test-support/workflow-library-fixtures";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { reviewTaskWorkflows, singleTaskWorkflow } from "../../test-support/task-workflows";
 import { createWorkspaceSettingsServiceTestDouble } from "../../test-support/service-test-doubles";
@@ -490,34 +493,25 @@ describe("task service with a custom task workflow", () => {
 
 describe("task service with a workflow for each task", () => {
   test("reads, moves, and hides each task with the workflow of that task", async () => {
-    const review = createReviewTaskWorkflow();
-    // The issue type stands for the stored workflow of a task.
-    const taskWorkflows = createTaskWorkflowResolver({
-      forTask: (task: { readonly id: string; readonly issueType?: string }) =>
-        task.issueType === "feature" ? review : specPlanBuildWorkflow,
-      forNewTask: () => specPlanBuildWorkflow,
-      workflows: [specPlanBuildWorkflow, review],
-      forWorkspace: () => ({
-        workflows: [specPlanBuildWorkflow, review],
-        board: {
-          states: [
-            ...new Set(
-              [...specPlanBuildWorkflow.definition.states, ...review.definition.states].map(
-                ({ id }) => id,
-              ),
-            ),
-          ].map((id) => ({ id, taskOrder: "updated" as const })),
-        },
-      }),
-    });
+    // The version cache starts empty, so the first read of the task rows loads the review version.
+    const taskWorkflows = createTaskWorkflowVersionCache();
     await harness.cleanup();
     harness = await createSqliteTaskStoreHarness({ taskWorkflows });
+    await Effect.runPromise(
+      publishReviewWorkflow(
+        createTestWorkflowLibraryStore({ ...harness, cache: createTaskWorkflowVersionCache() }),
+      ),
+    );
     const tasks = service(taskWorkflows);
     const insert = (issueType: IssueType, status: string) =>
       Effect.runPromise(
         harness.store.createTask({
           ...harness.scope,
           task: { title: issueType, issueType, priority: 2 },
+          workflow:
+            issueType === "feature"
+              ? { workflowId: "review", workflowVersion: 1 }
+              : BUILTIN_TASK_ASSIGNMENT,
           status,
         }),
       );

@@ -1808,7 +1808,7 @@ describe("createTaskService task mutations and reset", () => {
     expect(result.failure.message).toContain("clear QA reports failed");
     expect(result.failure.message).toContain("Stopped 2 live agent sessions,");
     expect(result.failure.message).not.toContain("records..");
-    expect(result.failure.message).toContain("Cleared the session records of the worktree roles.");
+    expect(result.failure.message).toContain("Cleared the session records of the reset roles.");
     expect(result.failure).toMatchObject({ cause: failure });
   });
   test("rejects implementation reset when the canonical worktree is on the target branch", async () => {

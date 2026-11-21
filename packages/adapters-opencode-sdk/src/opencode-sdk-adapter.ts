@@ -233,6 +233,22 @@ export class OpencodeSdkAdapter {
     return summary;
   }
 
+  /**
+   * The root session whose role policy a session uses: its topmost bound ancestor. A delegated
+   * child uses the policy of the workflow session that started it.
+   */
+  policySessionId(detail: SessionInfo): string {
+    let current = detail;
+    const seen = new Set([detail.id]);
+    while (current.parentID && !seen.has(current.parentID)) {
+      const parent = this.bindings.get(current.parentID);
+      if (!parent) break;
+      seen.add(parent.detail.id);
+      current = parent.detail;
+    }
+    return current.id;
+  }
+
   admit(
     ref: SessionRef,
     scope: AgentSessionScope,
@@ -295,6 +311,7 @@ export class OpencodeSdkAdapter {
         detail,
         identity: input,
         scope: input.sessionScope,
+        policySessionId: this.policySessionId(detail),
         repoPath: input.repoPath,
         resolveWorkflowRolePolicy: this.options.resolveWorkflowRolePolicy,
         systemPrompt: input.systemPrompt,
@@ -316,6 +333,7 @@ export class OpencodeSdkAdapter {
       await this.hooks.ensureMcp(input);
       const policy = resolveOpencodeSessionPolicy(
         input,
+        null,
         OPENCODE_RUNTIME_DESCRIPTOR,
         "start the conversation",
         this.options.resolveWorkflowRolePolicy,
@@ -345,6 +363,7 @@ export class OpencodeSdkAdapter {
           detail,
           identity: ref,
           scope: input.sessionScope,
+          policySessionId: sessionID,
           repoPath: ref.repoPath,
           resolveWorkflowRolePolicy: this.options.resolveWorkflowRolePolicy,
           systemPrompt: input.systemPrompt,
@@ -518,6 +537,7 @@ export class OpencodeSdkAdapter {
           detail,
           identity: ref,
           scope: input.sessionScope,
+          policySessionId: sessionID,
           repoPath: ref.repoPath,
           resolveWorkflowRolePolicy: this.options.resolveWorkflowRolePolicy,
           systemPrompt: input.systemPrompt,
@@ -526,6 +546,7 @@ export class OpencodeSdkAdapter {
         });
         const title = resolveOpencodeSessionPolicy(
           input,
+          sessionID,
           OPENCODE_RUNTIME_DESCRIPTOR,
           "fork the conversation",
           this.options.resolveWorkflowRolePolicy,

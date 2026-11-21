@@ -113,7 +113,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         workspaceId: input.workspaceId,
         repoPath,
         task: current,
-        workflow,
         operationLabel: "Pull request linking",
       });
       // The cleanup needs the task branch. A relink can find it already removed.

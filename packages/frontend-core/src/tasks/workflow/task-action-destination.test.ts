@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
-import { resolveWorkflowBoard } from "@openducktor/workflows";
+import { resolveWorkspaceBoard } from "@openducktor/workflows";
 import {
   createReviewTaskWorkflow,
   createSharedBoardWorkflows,
@@ -147,10 +147,7 @@ describe("resolveTaskActionDestination", () => {
 
   test("routes the events of a custom workflow by their effects and following launches", () => {
     const workflow = createReviewTaskWorkflow();
-    const board = resolveWorkflowBoard(
-      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
-      [workflow],
-    );
+    const board = resolveWorkspaceBoard([{ workflow, latest: true }]);
     const task = createWorkflowTaskCardFixture(workflow, board, { status: "approval" });
     expect(resolveTaskActionDestination(task, "drop_review")).toEqual({
       kind: "confirm",

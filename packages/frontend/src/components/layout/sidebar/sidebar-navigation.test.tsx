@@ -94,17 +94,33 @@ describe("SidebarNavigation", () => {
   });
 
   test.each([
-    ["expanded", false, "Kanban"],
-    ["collapsed", true, ""],
-  ] as const)("keeps an accessible Kanban link with %s sidebar labels", (_mode, compact, text) => {
+    ["expanded", false, ["Kanban", "Workflows"]],
+    ["collapsed", true, ["", ""]],
+  ] as const)("keeps accessible page links with %s sidebar labels", (_mode, compact, texts) => {
     render(
       <MemoryRouter initialEntries={["/kanban"]}>
         <SidebarNavigation compact={compact} />
       </MemoryRouter>,
     );
 
-    expect(screen.getAllByRole("link")).toHaveLength(1);
-    expect(screen.getByRole("link", { name: "Kanban" }).textContent).toBe(text);
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Kanban" }).textContent).toBe(texts[0]);
+    expect(screen.getByRole("link", { name: "Workflows" }).textContent).toBe(texts[1]);
+  });
+
+  test("selects Workflows on the editor routes of a workflow", () => {
+    render(
+      <MemoryRouter initialEntries={["/workflows/review-flow/versions/2"]}>
+        <SidebarNavigation />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Workflows" }).className).toContain(
+      "bg-sidebar-accent",
+    );
+    expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain(
+      "bg-sidebar-accent",
+    );
   });
 
   test("opens Usage from the footer icon link and marks it as the active page", () => {

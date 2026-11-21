@@ -12,7 +12,10 @@ import {
 import { createTaskServiceWithMutationProgress } from "../../host/src/application/tasks/task-service";
 import { createDefaultGlobalConfig } from "../../host/src/config/global-config";
 import { createTaskEventStream } from "../../host/src/events/task-event-stream";
-import { builtinTaskWorkflows } from "../../host/src/test-support/task-workflows";
+import {
+  builtinTaskWorkflows,
+  testWorkspaceWorkflows,
+} from "../../host/src/test-support/task-workflows";
 import { createTaskViewSync } from "../../frontend-core/src/queries/task-view-sync";
 import { taskQueryKeys } from "../../frontend-core/src/queries/tasks";
 
@@ -36,6 +39,7 @@ test.each(["returned", "interrupted"] as const)(
       const { scope, store } = harness;
       const base = createTaskServiceWithMutationProgress({
         taskWorkflows: builtinTaskWorkflows,
+        workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
         taskStore: store,
       });
       const readCards = mock(base.listTasks);

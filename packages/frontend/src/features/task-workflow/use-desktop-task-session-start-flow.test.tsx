@@ -1,9 +1,8 @@
 import {
   SPEC_PLAN_BUILD_BOARD,
   createTaskWorkflow,
-  resolveWorkflowBoard,
+  resolveWorkspaceBoard,
   taskWorkflowDescriptor,
-  workflowRoleCatalog,
 } from "@openducktor/workflows";
 import {
   createReviewTaskWorkflow,
@@ -11,6 +10,7 @@ import {
   reviewTaskDefinition,
   reviewTaskPromptTemplates,
   reviewTaskRoles,
+  workflowRoleCatalog,
 } from "@openducktor/workflows/test-support";
 import { resolveTaskActionDestination } from "@openducktor/frontend-core/tasks/workflow/task-action-destination";
 import { createSessionStartWorkflowRunner } from "@/test-utils/workflow-launch-client";
@@ -878,10 +878,7 @@ describe("useDesktopTaskSessionStartFlow", () => {
         if (step?.kind === "agent") step.launchActions[1]!.context = "human_feedback";
       }
       const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
-      const board = resolveWorkflowBoard(
-        { states: definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
-        [workflow],
-      );
+      const board = resolveWorkspaceBoard([{ workflow, latest: true }]);
       const task = createWorkflowTaskCardFixture(workflow, board, {
         id: "TASK-1",
         status: "approval",
@@ -906,6 +903,7 @@ describe("useDesktopTaskSessionStartFlow", () => {
           hostInstanceId: "feedback-host",
           board,
           workflows: [task.workflow],
+          newTaskWorkflows: [task.workflow],
           newTaskWorkflow: task.workflow,
         }),
       };
@@ -967,10 +965,7 @@ describe("useDesktopTaskSessionStartFlow", () => {
 
   test("a custom feedback event opens the form and commits its event with the session start", async () => {
     const workflow = createReviewTaskWorkflow();
-    const board = resolveWorkflowBoard(
-      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
-      [workflow],
-    );
+    const board = resolveWorkspaceBoard([{ workflow, latest: true }]);
     const task = createWorkflowTaskCardFixture(workflow, board, {
       id: "TASK-1",
       status: "approval",
@@ -990,6 +985,7 @@ describe("useDesktopTaskSessionStartFlow", () => {
         hostInstanceId: "feedback-event-host",
         board,
         workflows: [task.workflow],
+        newTaskWorkflows: [task.workflow],
         newTaskWorkflow: task.workflow,
       }),
     };
@@ -1090,6 +1086,7 @@ describe("useDesktopTaskSessionStartFlow", () => {
         hostInstanceId: "committed-host",
         board: SPEC_PLAN_BUILD_BOARD,
         workflows: [task.workflow],
+        newTaskWorkflows: [task.workflow],
         newTaskWorkflow: task.workflow,
       }),
     };

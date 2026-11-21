@@ -31,8 +31,6 @@ export const findLatestCleanupTarget = (
     gitPort: GitPort;
     settingsConfig: SettingsConfigPort;
     taskWorktreeService: TaskWorktreeService;
-    /** The workflow roles whose sessions run in the task worktree. */
-    worktreeRoles: readonly string[];
   },
   taskStore: TaskStorePort,
   repoPath: string,
@@ -47,14 +45,13 @@ export const findLatestCleanupTarget = (
       taskId,
     });
     const metadata = yield* taskStore.getTaskMetadata({ workspaceId, repoPath, taskId });
-    const sessions = metadata.agentSessions
-      .filter((session) => dependencies.worktreeRoles.includes(session.role))
-      .sort((left, right) => {
-        const startedAtComparison = Date.parse(right.startedAt) - Date.parse(left.startedAt);
-        return startedAtComparison === 0
-          ? right.workingDirectory.localeCompare(left.workingDirectory)
-          : startedAtComparison;
-      });
+    // Every agent session of the task runs in a task worktree, so each one is a candidate.
+    const sessions = [...metadata.agentSessions].sort((left, right) => {
+      const startedAtComparison = Date.parse(right.startedAt) - Date.parse(left.startedAt);
+      return startedAtComparison === 0
+        ? right.workingDirectory.localeCompare(left.workingDirectory)
+        : startedAtComparison;
+    });
     const candidates = taskWorktree ? [taskWorktree, ...sessions] : sessions;
     for (const candidate of candidates) {
       const workingDirectory = candidate.workingDirectory.trim();
@@ -182,7 +179,7 @@ export const cleanupMergedTaskState = (
       return yield* cleanupKeptTaskWorktree(dependencies, taskStore, repoPath, taskId, workspaceId);
     }
     const cleanupTarget = yield* findLatestCleanupTarget(
-      { ...dependencies, worktreeRoles: dependencies.workflow.worktreeRoles },
+      dependencies,
       taskStore,
       repoPath,
       taskId,

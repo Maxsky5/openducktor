@@ -1,24 +1,40 @@
-import type { WorkflowRolePolicyResolver } from "@openducktor/core";
-import {
-  BUILTIN_TASK_WORKFLOWS,
-  SPEC_PLAN_BUILD_BOARD_LAYOUT,
-  specPlanBuildWorkflow,
-} from "@openducktor/workflows";
-import { createTaskWorkflowResolver } from "../../application/tasks/task-workflows";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import { Effect } from "effect";
+import { createSessionRolePolicies } from "../../application/agent-sessions/session-role-policies";
+import type { PrepareRolePolicy } from "../../application/agent-sessions/task-session-operations";
+import type { ReadWorkflowSettingsSource } from "../../application/workspaces/task-workflow-settings";
+import { createTaskWorkflowVersionCache } from "../../application/tasks/task-workflows";
+import { toHostOperationError } from "../../effect/host-errors";
+import type {
+  TaskWorkflowVersionCache,
+  WorkspaceWorkflowPort,
+} from "../../ports/task-workflow-port";
 
-/** Every task follows the Spec, Plan, Build workflow until tasks name their workflow. */
-export const builtinTaskWorkflowResolver = createTaskWorkflowResolver({
-  forTask: () => specPlanBuildWorkflow,
-  forNewTask: () => specPlanBuildWorkflow,
-  workflows: BUILTIN_TASK_WORKFLOWS,
-  forWorkspace: () => ({ board: SPEC_PLAN_BUILD_BOARD_LAYOUT, workflows: BUILTIN_TASK_WORKFLOWS }),
-});
-
-/** The tools and workspace access of a role in the task workflow of the session task. */
-export const workflowRolePolicies =
-  (taskWorkflows: TaskWorkflowResolver): WorkflowRolePolicyResolver =>
-  ({ taskId, role }) => {
-    const workflowRole = taskWorkflows.forTask({ id: taskId }).role(role);
-    return { tools: workflowRole.tools, readOnly: workflowRole.workspaceAccess === "read" };
+/**
+ * The host wiring of task workflows: the role policy that each live session keeps from its start,
+ * and the workflow owners of the settings.
+ */
+export const createNodeTaskWorkflowWiring = ({
+  taskWorkflows,
+  workspaceWorkflows,
+}: {
+  taskWorkflows: TaskWorkflowVersionCache;
+  workspaceWorkflows: WorkspaceWorkflowPort;
+}) => {
+  const rolePolicies = createSessionRolePolicies(taskWorkflows.forTaskId);
+  const prepareRolePolicy: PrepareRolePolicy = (scope) =>
+    workspaceWorkflows.sessionTaskWorkflow(scope).pipe(
+      Effect.mapError((cause) => toHostOperationError(cause, "session.role-policy")),
+      Effect.flatMap((workflow) => rolePolicies.prepare(scope, workflow)),
+    );
+  const readWorkflowSettings: ReadWorkflowSettingsSource = () =>
+    workspaceWorkflows
+      .settingsOwners()
+      .pipe(Effect.mapError((cause) => toHostOperationError(cause, "settings.workflow-owners")));
+  return {
+    resolveWorkflowRolePolicy: rolePolicies.resolve,
+    prepareRolePolicy,
+    readWorkflowSettings,
   };
+};
+
+export { createTaskWorkflowVersionCache };

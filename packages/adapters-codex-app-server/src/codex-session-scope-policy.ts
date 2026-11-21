@@ -25,7 +25,10 @@ export type CodexSessionScopePolicy =
       sessionScope: Extract<AgentSessionScope, { kind: "repository" }>;
     });
 
-/** A workflow session enables the tools of its role in the task workflow of its task. */
+/**
+ * A workflow session enables the tools of the role policy that it keeps from its start.
+ * `externalSessionId` is null while a start or fork has no thread yet.
+ */
 export const resolveCodexSessionScopePolicy = (
   {
     sessionScope,
@@ -34,6 +37,7 @@ export const resolveCodexSessionScopePolicy = (
     sessionScope?: AgentSessionScope | null | undefined;
     runtimePolicy?: AgentSessionRuntimePolicy | undefined;
   },
+  externalSessionId: string | null,
   action: string,
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver,
 ): CodexSessionScopePolicy => {
@@ -53,7 +57,9 @@ export const resolveCodexSessionScopePolicy = (
           kind: "workflow",
           sessionScope,
           runtimePolicy: effectivePolicy,
-          enabledTools: [...resolveWorkflowRolePolicy(sessionScope).tools],
+          enabledTools: [
+            ...resolveWorkflowRolePolicy({ ...sessionScope, externalSessionId }).tools,
+          ],
         };
   return withAgentSessionTitle(policy, sessionScope);
 };

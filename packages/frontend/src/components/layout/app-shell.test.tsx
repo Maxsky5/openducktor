@@ -1219,12 +1219,12 @@ describe("AppShell session navigation", () => {
     );
   });
 
-  test("keeps Kanban, New task, and Settings without page links for sessions or a branch selector", async () => {
+  test("keeps Kanban, Workflows, New task, and Settings without page links for sessions or a branch selector", async () => {
     renderAppShellForTest();
 
     await screen.findByRole("button", { name: /Chat mine/ });
     expect(screen.getByRole("link", { name: "Kanban" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Workflows" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Workflows" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Chats" })).toBeNull();
     expect(screen.queryByText("Branch")).toBeNull();
     expect(screen.getByRole("button", { name: "New task in OpenDucktor" })).toBeTruthy();

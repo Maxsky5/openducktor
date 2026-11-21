@@ -372,6 +372,8 @@ export const hostSettings = sqliteTable(
       mode: "boolean",
     }).notNull(),
     remoteAccessEnabled: integer("remote_access_enabled", { mode: "boolean" }).notNull(),
+    /** The workflow of a new task. It is available to every workspace. */
+    defaultWorkflowId: text("default_workflow_id").notNull().default("openducktor-spec-plan-build"),
   },
   (table) => [
     check("chk_host_settings_singleton", sql`${column(table.singletonId)} = 1`),

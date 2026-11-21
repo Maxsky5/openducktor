@@ -167,35 +167,32 @@ export const createDemoLaunches = ({
       tasks.applyEvent(workspace, task.record.id, startEvent);
 
     const scope = { kind: "task" as const, taskId: task.record.id, role };
+    // Every agent session of a task works in the task worktree, as on a host.
     let steps: StartupStep[] = [];
-    let workingDirectory = workspace.record.repoPath;
-    let checkout = workspace.repository.checkout(workspace.record.repoPath);
-    if (workflow.usesWorktree(role) || request.policy.decision.startMode !== "fresh") {
-      const worktree = tasks.ensureWorktree(workspace, task.record.id);
-      checkout = worktree.checkout;
-      workingDirectory = checkout.workingDirectory;
-      if (worktree.created) {
-        world.startingTasks.add(task);
-        try {
-          steps = await setUpWorktree({
-            workspace,
-            checkout,
-            context: request.startup,
-            scope,
-            terminalContext: {
-              workspaceId: workspace.record.workspaceId,
-              repoPath: workspace.record.repoPath,
-              taskId: task.record.id,
-            },
-          });
-        } finally {
-          world.startingTasks.delete(task);
-        }
+    const worktree = tasks.ensureWorktree(workspace, task.record.id);
+    const checkout = worktree.checkout;
+    const workingDirectory = checkout.workingDirectory;
+    if (worktree.created) {
+      world.startingTasks.add(task);
+      try {
+        steps = await setUpWorktree({
+          workspace,
+          checkout,
+          context: request.startup,
+          scope,
+          terminalContext: {
+            workspaceId: workspace.record.workspaceId,
+            repoPath: workspace.record.repoPath,
+            taskId: task.record.id,
+          },
+        });
+      } finally {
+        world.startingTasks.delete(task);
       }
-      // A reset, close, or delete during the setup removes the worktree, so the start ends here.
-      if (workspace.tasks.get(task.record.id)?.worktree?.workingDirectory !== workingDirectory)
-        throw new Error("The task changed during the worktree setup. Start the session again.");
     }
+    // A reset, close, or delete during the setup removes the worktree, so the start ends here.
+    if (workspace.tasks.get(task.record.id)?.worktree?.workingDirectory !== workingDirectory)
+      throw new Error("The task changed during the worktree setup. Start the session again.");
 
     const decision = request.policy.decision;
     let session: DemoSession;

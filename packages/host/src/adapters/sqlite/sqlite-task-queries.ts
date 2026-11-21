@@ -1,7 +1,11 @@
 import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { taskTargetBranchFromRow } from "./sqlite-task-store-validation";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
-import { and, asc, desc, eq, ne, type SQL, sql } from "drizzle-orm";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
+import {
+  loadTaskWorkflowVersions,
+  taskVersionPublishedAtMs,
+} from "./sqlite-task-workflow-versions";
+import { and, asc, desc, eq, getTableColumns, ne, type SQL, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
 import type { TaskReference } from "../../ports/task-repository-ports";
@@ -17,6 +21,8 @@ import {
 
 export type TaskCardRow = {
   task: TaskRow;
+  /** The `published_at_ms` of the stored version of the task, for the version cache. */
+  workflowPublishedAtMs: number | null;
   labels: string[];
   pullRequest: typeof taskPullRequests.$inferSelect | null;
   directMerge: typeof taskDirectMerges.$inferSelect | null;
@@ -74,6 +80,7 @@ export const taskCardRows = (
         database
           .select({
             task: tasks,
+            workflowPublishedAtMs: taskVersionPublishedAtMs,
             pullRequest: taskPullRequests,
             directMerge: taskDirectMerges,
             sourceIssue: taskIssueLinks,
@@ -115,15 +122,19 @@ export const taskCardRows = (
 export const mergeCandidates = (
   session: HostDatabaseSession,
   workspaceId: string,
-  taskWorkflows: Pick<TaskWorkflowResolver, "forTask">,
+  taskWorkflows: TaskWorkflowVersionCache,
 ) =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
       (db) =>
         db
           .select({
+            workspaceId: tasks.workspaceId,
             id: tasks.id,
             status: tasks.status,
+            workflowId: tasks.workflowId,
+            workflowVersion: tasks.workflowVersion,
+            workflowPublishedAtMs: taskVersionPublishedAtMs,
             targetBranch: tasks.targetBranch,
             targetRemote: tasks.targetRemote,
           })
@@ -132,6 +143,7 @@ export const mergeCandidates = (
           .orderBy(...taskLaneOrderBy),
       "sqliteTaskStore.mergeCandidates.selectTasks",
     );
+    yield* loadTaskWorkflowVersions(session, taskWorkflows, rows);
     const checked = rows.filter((row) => taskWorkflows.forTask(row).detectsMerge(row.status));
     return yield* Effect.forEach(checked, (row) =>
       Effect.gen(function* () {
@@ -155,16 +167,19 @@ export const taskReferenceCandidates = (
     "sqliteTaskStore.taskReferenceCandidates.selectTasks",
   );
 
+/** A task row with the `published_at_ms` of its stored version, for the version cache. */
+export type StampedTaskRow = TaskRow & { workflowPublishedAtMs: number | null };
+
 const getTaskRow = (
   session: HostDatabaseSession,
   workspaceId: string,
   taskId: string,
-): Effect.Effect<TaskRow | null, SqliteTaskStoreReadError> =>
+): Effect.Effect<StampedTaskRow | null, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const rows = yield* session.execute(
       (database) =>
         database
-          .select()
+          .select({ ...getTableColumns(tasks), workflowPublishedAtMs: taskVersionPublishedAtMs })
           .from(tasks)
           .where(and(eq(tasks.workspaceId, workspaceId), eq(tasks.id, taskId)))
           .limit(1),
@@ -179,7 +194,7 @@ export const requireTaskRow = (
   workspaceId: string,
   taskId: string,
   repoPath: string,
-): Effect.Effect<TaskRow, SqliteTaskStoreReadError> =>
+): Effect.Effect<StampedTaskRow, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const row = yield* getTaskRow(session, workspaceId, taskId);
     if (!row) {

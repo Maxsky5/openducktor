@@ -4,9 +4,9 @@ import {
   compileWorkflowCatalog,
   createTaskWorkflow,
   taskWorkflowDescriptor,
-  workflowRoleCatalog,
   type TaskWorkflow,
 } from "@openducktor/workflows";
+import { workflowRoleCatalog } from "@openducktor/workflows/test-support";
 import type {
   WorkflowCatalog,
   WorkflowDescriptor,
@@ -25,6 +25,7 @@ export const builtinWorkspaceWorkflowFixture: WorkspaceWorkflowContext = {
   hostInstanceId: "test-host",
   board: SPEC_PLAN_BUILD_BOARD,
   workflows: [specPlanBuildWorkflow.reference],
+  newTaskWorkflows: [specPlanBuildWorkflow.reference],
   newTaskWorkflow: specPlanBuildWorkflow.reference,
 };
 /** The compiled catalog and workspace read that the workflow queries return. */

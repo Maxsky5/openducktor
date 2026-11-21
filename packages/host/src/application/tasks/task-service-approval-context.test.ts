@@ -513,7 +513,7 @@ describe("approval preparation", () => {
         _tag: "HostValidationError",
         field: "taskId",
         message:
-          "Human approval requires a task worktree for task task-1. Start a Builder or QA session first.",
+          "Human approval requires a task worktree for task task-1. Start an agent session of the task first.",
         details: { repoPath: "/repo", taskId: "task-1" },
       });
     } else if (scenario === "targetError") {

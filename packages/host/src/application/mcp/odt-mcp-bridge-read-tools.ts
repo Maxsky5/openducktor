@@ -73,8 +73,10 @@ const executeSearchTasks: OdtMcpReadToolHandler = (context, input) =>
       input,
     );
     const scope = yield* context.workspaceScopeForWorkspace(parsed.workspaceId ?? "");
-    // A filter value is valid when a task workflow of the host declares it.
-    const { workflows } = context.taskWorkflows;
+    // A filter value is valid when a task workflow of the workspace declares it.
+    const workflows = (yield* context.workspaceWorkflows.context(scope)).workflows.map(
+      (reference) => context.taskWorkflows.forReference(reference),
+    );
     const issueTypes = [...new Set(workflows.flatMap(({ issueTypes }) => issueTypes))];
     if (parsed.issueType !== undefined && !issueTypes.includes(parsed.issueType)) {
       return yield* new HostValidationError({
@@ -195,7 +197,7 @@ const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
       ODT_TOOL_SCHEMAS.odt_read_task_artifacts,
       input,
     );
-    const workflow = context.taskWorkflows.forTask(task);
+    const workflow = context.taskWorkflows.forReference(task.workflow);
     const listedArtifacts = parsed.codes.some((code) => !workflow.artifact(code))
       ? (yield* context.taskService.listTaskArtifacts({ workspaceId, repoPath, taskId: task.id }))
           .artifacts

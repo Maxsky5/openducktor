@@ -14,7 +14,10 @@ import type { SettingsConfigPort } from "../../../ports/settings-config-port";
 import type { TaskActivityGuardPort } from "../../../ports/task-activity-guard-port";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 import type { WorkspaceSettingsService } from "../../workspaces/workspace-settings-service";
-import { collectImplementationResetSessionState } from "../support/implementation-reset-targets";
+import {
+  collectImplementationResetSessionState,
+  previewResetRoles,
+} from "../support/implementation-reset-targets";
 import {
   requireDependencies,
   requireTaskStopImpactDependencies,
@@ -67,7 +70,7 @@ const countStoppableSessions = (
       if (input.operation === "reset_implementation") {
         const { sessionState } = yield* collectImplementationResetSessionState(
           dependencies,
-          workflow,
+          yield* previewResetRoles(workflow, taskId, input.eventId),
           repoConfig,
           taskId,
           sessions,

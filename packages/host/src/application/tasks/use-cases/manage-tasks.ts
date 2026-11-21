@@ -1,9 +1,11 @@
 import { TASK_OPEN_STATE } from "@openducktor/contracts";
 import { Effect, Result } from "effect";
 import {
+  HostDependencyError,
   HostValidationError,
   type HostValidationErrorAggregate,
 } from "../../../effect/host-errors";
+import { assignmentOf } from "../task-workflows";
 import { TaskAssetError, TaskCreatedAssetError } from "../../../effect/task-asset-error";
 import type { TaskStoreError } from "../../../ports/task-repository-ports";
 import type { TaskPolicyError } from "../../../domain/task";
@@ -41,17 +43,28 @@ const preserveCommittedAssetMutation = (
 export const createTaskCrudUseCases = ({
   taskStore,
   taskWorkflows,
+  workspaceWorkflows,
 }: CreateTaskServiceInput): Pick<TaskServiceWithMutationProgress, "createTask" | "updateTask"> &
   Pick<TaskService, "applyStartEvent"> => ({
   createTask(input) {
     return Effect.gen(function* () {
       const { repoPath, task, descriptionAssets } = input;
-      const workflow = taskWorkflows.forNewTask(repoPath);
+      if (!workspaceWorkflows)
+        return yield* new HostDependencyError({
+          dependency: "workspaceWorkflows",
+          operation: "task_create",
+          message: "The workspace workflow port is required to create a task.",
+        });
+      const workflow = yield* workspaceWorkflows.newTaskWorkflow(
+        { workspaceId: input.workspaceId, repoPath },
+        task.workflowId,
+      );
       yield* requireWorkflowIssueType(workflow, task.issueType);
       const createInput: Parameters<typeof taskStore.createTask>[0] = {
         workspaceId: input.workspaceId,
         repoPath,
         task,
+        workflow: assignmentOf(workflow),
         status: TASK_OPEN_STATE,
       };
       if (descriptionAssets) {

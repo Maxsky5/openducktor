@@ -1,5 +1,3 @@
-import type { WorkspaceRef } from "@openducktor/contracts";
-import { HostValidationError } from "../../../effect/host-errors";
 import { loadTaskSessions } from "../support/task-sessions";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
@@ -34,16 +32,6 @@ export const createTaskQueryUseCases = ({
   | "agentSessionsListForTasks"
   | "agentSessionUpsert"
 > => {
-  const boardFor = (scope: WorkspaceRef) =>
-    Effect.try({
-      try: () => taskWorkflows.forWorkspace(scope).board,
-      catch: (cause) =>
-        new HostValidationError({
-          field: "board",
-          message: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-    });
   return {
     findTask: (input) =>
       taskStore
@@ -62,7 +50,6 @@ export const createTaskQueryUseCases = ({
         ),
     listTasks: (input) =>
       Effect.gen(function* () {
-        yield* boardFor(input);
         const tasks = yield* taskStore.listTasks(input);
         return enrichTasks(taskWorkflows, tasks);
       }),
@@ -78,7 +65,6 @@ export const createTaskQueryUseCases = ({
             }),
           );
         }
-        yield* boardFor(input);
         const settings = yield* settingsConfig.readGlobalConfig();
         const tasks = yield* taskStore.listTasks({
           ...input,

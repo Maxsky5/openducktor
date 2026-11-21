@@ -2,7 +2,7 @@ import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import type { TaskSearchInput } from "../../ports/task-repository-ports";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
 import { listTasksInDatabase } from "./sqlite-task-card-read-model";
 import { tasks, type HostDatabaseSession } from "./sqlite-host-database-schema";
 
@@ -10,7 +10,7 @@ export const searchTasksInDatabase = (
   session: HostDatabaseSession,
   workspaceId: string,
   input: TaskSearchInput,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ) =>
   Effect.gen(function* () {
     const tags = input.tags?.map(searchKey) ?? [];

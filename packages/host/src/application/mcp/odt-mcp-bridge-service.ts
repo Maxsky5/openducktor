@@ -10,7 +10,7 @@ import {
   type OdtHostBridgeReady,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflow } from "@openducktor/workflows";
 import type { JSONType, z } from "zod";
 import {
   executeOdtMcpBrowserTool,
@@ -54,11 +54,13 @@ export const createOdtMcpBridgeService = (
   const context = createOdtMcpToolContext(input);
   return {
     ready() {
-      return Effect.succeed({
-        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
-        toolNames: [...ODT_MCP_TOOL_NAMES],
-        activeStatuses: hostActiveStatuses(context.taskWorkflows),
-      });
+      return context.workspaceWorkflows.settingsOwners().pipe(
+        Effect.map(({ latest }) => ({
+          bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+          toolNames: [...ODT_MCP_TOOL_NAMES],
+          activeStatuses: hostActiveStatuses(latest),
+        })),
+      );
     },
     getWorkspaces(input) {
       return Effect.gen(function* () {
@@ -88,10 +90,10 @@ export const createOdtMcpBridgeService = (
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
 
-/** The states other than `closed` in the host workflows, unique, in first-use order. */
-const hostActiveStatuses = (taskWorkflows: TaskWorkflowResolver): string[] => [
+/** The states other than `closed` in the latest workflow versions, unique, in first-use order. */
+const hostActiveStatuses = (workflows: readonly TaskWorkflow[]): string[] => [
   ...new Set(
-    taskWorkflows.workflows.flatMap(({ definition }) =>
+    workflows.flatMap(({ definition }) =>
       definition.states.flatMap(({ id }) => (id === TASK_CLOSED_STATE ? [] : [id])),
     ),
   ),

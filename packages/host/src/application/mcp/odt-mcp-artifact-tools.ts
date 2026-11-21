@@ -55,7 +55,7 @@ export const executeSetTaskArtifact = (
       task.id,
       "write artifacts",
     );
-    const workflow = context.taskWorkflows.forTask(task);
+    const workflow = context.taskWorkflows.forReference(task.workflow);
     const declared = workflow.artifact(input.code);
     if (declared) {
       yield* rejectFreeArtifactFields(input);
@@ -215,7 +215,7 @@ export const executeDeleteTaskArtifact = (
       parsed.workspaceId ?? "",
       parsed.taskId,
     );
-    if (context.taskWorkflows.forTask(task).artifact(parsed.code)) {
+    if (context.taskWorkflows.forReference(task.workflow).artifact(parsed.code)) {
       return yield* new HostValidationError({
         field: "code",
         message: `${parsed.code} is a workflow artifact. Only free artifacts can be deleted.`,

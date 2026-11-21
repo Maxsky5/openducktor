@@ -1,7 +1,7 @@
 /** The shared render harness of the New task and Edit task controller tests. */
 import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import type { ClientConnection } from "../../connection/client-connection";
-import { workflowQueryKeys } from "../../queries/workflows";
+import { workflowQueryKeys, type WorkspaceWorkflows } from "../../queries/workflows";
 import {
   builtinCompiledCatalogFixture,
   builtinWorkspaceWorkflowsFixture,
@@ -116,6 +116,10 @@ type RenderOptions = {
   connection?: ClientConnection;
   collectAssetIds?: (markdown: string) => Set<string>;
   revokePreviewUrl?: (url: string) => void;
+  offerWorkflowChoice?: boolean;
+  /** The workflows of the active workspace. */
+  workspace?: WorkspaceWorkflows;
+  initialWorkflowId?: string | null;
 };
 
 export const renderController = ({
@@ -130,6 +134,9 @@ export const renderController = ({
   connection: providedConnection,
   collectAssetIds: readAssetIds = collectAssetIds,
   revokePreviewUrl: releasePreview = revokePreviewUrl,
+  offerWorkflowChoice = false,
+  workspace = builtinWorkspaceWorkflowsFixture,
+  initialWorkflowId = null,
 }: RenderOptions = {}) => {
   let latest: Controller | null = null;
   const scopeOf = (workspaces: WorkspaceRecord[]) => ({
@@ -145,11 +152,11 @@ export const renderController = ({
   const feedback = createFeedbackFake();
   const connection = providedConnection ?? createTestClientConnection({ feedback, client });
   connection.queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
-  for (const workspace of [activeWorkspace, otherWorkspace])
-    connection.queryClient.setQueryData(
-      workflowQueryKeys.workspace(workspace),
-      builtinWorkspaceWorkflowsFixture,
-    );
+  connection.queryClient.setQueryData(workflowQueryKeys.workspace(activeWorkspace), workspace);
+  connection.queryClient.setQueryData(
+    workflowQueryKeys.workspace(otherWorkspace),
+    builtinWorkspaceWorkflowsFixture,
+  );
 
   const Probe = ({ current }: { current: TaskCard | null }): null => {
     latest = useTaskCreateModalController({
@@ -164,6 +171,8 @@ export const renderController = ({
       revokePreviewUrl: releasePreview,
       collectAssetIds: readAssetIds,
       removeAssetImages,
+      offerWorkflowChoice,
+      initialWorkflowId,
     });
     return null;
   };

@@ -74,7 +74,7 @@ export function HumanFeedbackSheet({
 }): ReactElement {
   const submitBlocked = isHumanReviewFeedbackConfirmDisabled(feedback);
   return (
-    <GroupedSheet title={COPY.title} onClose={onClose} closable={!feedback.isSubmitting}>
+    <GroupedSheet title={feedback.confirmLabel} onClose={onClose} closable={!feedback.isSubmitting}>
       <ActionForm
         note={submitBlocked && !feedback.isSubmitting ? "Write your feedback to continue." : null}
         primary={

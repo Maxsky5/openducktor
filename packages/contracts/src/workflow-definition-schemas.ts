@@ -43,9 +43,8 @@ export const agentRoleDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
   label: z.string(),
   tools: z.array(agentToolNameSchema),
+  /** Every task session runs in the task worktree. A read-only role cannot edit its files. */
   workspaceAccess: z.enum(["read", "write"]),
-  /** A role works in the repository or in the task worktree, and may write only there. */
-  location: z.enum(["repository", "task_worktree"]),
   runtimeScopes: z.array(runtimeSupportedScopeSchema),
   systemPrompt: agentRoleSystemPromptSchema,
   icon: workflowIconSchema.optional(),
@@ -316,14 +315,25 @@ export type WorkflowEventGuard = z.infer<typeof workflowEventGuardSchema>;
  * effects of an event in order, then commits the event. When an effect fails, the host commits
  * nothing.
  *
- * - `worktree.reset`: stops the sessions of the worktree roles, runs the cleanup script, removes
- *   their other worktrees and branches, restores the task worktree to its start point, and clears
- *   the sessions of the worktree roles, the review artifacts, the pull request link, and the merge
- *   record.
+ * - `worktree.reset`: stops the sessions of the task, runs the cleanup script, removes the other
+ *   worktrees and branches of the task, restores the task worktree to its start point, and clears
+ *   the review artifacts, the pull request link, the merge record, and the session history of the
+ *   roles in `clearsSessionsOf`. The sessions of the other roles stay.
  */
 export const HOST_EFFECT_IDS = ["worktree.reset"] as const;
 export const hostEffectIdSchema = z.enum(HOST_EFFECT_IDS);
 export type HostEffectId = z.infer<typeof hostEffectIdSchema>;
+
+export const worktreeResetEffectSchema = z.strictObject({
+  id: z.literal("worktree.reset"),
+  /** The roles whose session history the reset deletes, such as the roles that build the code. */
+  clearsSessionsOf: z.array(workflowIdSchema),
+});
+export type WorktreeResetEffect = z.infer<typeof worktreeResetEffectSchema>;
+
+/** A host effect of an event, with the settings of the workflow for it. */
+export const workflowHostEffectSchema = z.discriminatedUnion("id", [worktreeResetEffectSchema]);
+export type WorkflowHostEffect = z.infer<typeof workflowHostEffectSchema>;
 
 /**
  * An event that agents of the roles may send with `odt_apply_workflow_event`. The role prompt
@@ -343,10 +353,12 @@ export type WorkflowAgentEvent = z.infer<typeof workflowAgentEventSchema>;
  */
 export const workflowEventDefinitionSchema = z.strictObject({
   id: workflowIdSchema,
+  /** The name of the transition in the editor. Without it, the editor names its triggers. */
+  label: z.string().optional(),
   from: z.array(workflowIdSchema).min(1),
   guards: z.array(workflowEventGuardSchema),
   outcomes: z.array(workflowEventOutcomeSchema).min(1),
-  effects: z.array(hostEffectIdSchema).optional(),
+  effects: z.array(workflowHostEffectSchema).optional(),
   agent: workflowAgentEventSchema.optional(),
 });
 export type WorkflowEventDefinition = z.infer<typeof workflowEventDefinitionSchema>;

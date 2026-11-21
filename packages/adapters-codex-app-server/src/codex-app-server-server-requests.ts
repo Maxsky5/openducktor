@@ -73,7 +73,10 @@ const decideTrustedOdtTool = (
     };
   }
 
-  const { tools } = resolveWorkflowRolePolicy(sessionAssociation);
+  const { tools } = resolveWorkflowRolePolicy({
+    ...sessionAssociation,
+    externalSessionId: session.summary.externalSessionId,
+  });
   if (tools.some((candidate) => candidate === workflowTool)) {
     return { kind: "allow" };
   }
@@ -416,7 +419,10 @@ export const handleCodexServerRequest = async (
     const policyAssociation = routeContext.policySession.summary.sessionAssociation;
     if (
       policyAssociation.kind === "workflow" &&
-      context.resolveWorkflowRolePolicy(policyAssociation).readOnly &&
+      context.resolveWorkflowRolePolicy({
+        ...policyAssociation,
+        externalSessionId: routeContext.policySession.summary.externalSessionId,
+      }).readOnly &&
       requestMutation === "read_only"
     ) {
       markHandled();

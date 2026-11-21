@@ -5,6 +5,7 @@ import {
   type WorkflowRoleId as AgentRole,
   type ResolvedTaskCard as TaskCard,
   workflowRoleIcon,
+  workflowRoleLabel,
   actionEmphasis,
 } from "@openducktor/workflows";
 import type { AgentSessionRecord } from "@openducktor/contracts";
@@ -136,7 +137,7 @@ export const buildPaletteTaskView = ({
         {
           key: "latest",
           label: "Open latest session",
-          detail: task.taskWorkflow.role(latest.role).label,
+          detail: workflowRoleLabel(task.taskWorkflow, latest.role),
           keywords: ["session", "resume", "continue"],
           icon: <History />,
           destructive: false,

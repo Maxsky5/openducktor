@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { describe, expect, test } from "bun:test";
 import type { AgentSessionRecord } from "@openducktor/contracts";
 import { and, asc, eq, sql } from "drizzle-orm";
@@ -39,6 +40,7 @@ describe("SQLite task agent session batches", () => {
         store.createTask({
           ...scope,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: {
             title: "First sessions",
             issueType: "task",
@@ -50,6 +52,7 @@ describe("SQLite task agent session batches", () => {
         store.createTask({
           ...scope,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: {
             title: "Second sessions",
             issueType: "task",
@@ -382,6 +385,7 @@ describe("SQLite task session model updates", () => {
         store.createTask({
           ...scope,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: {
             title: "Session model",
             issueType: "task",
@@ -450,6 +454,7 @@ describe("SQLite task session model updates", () => {
         store.createTask({
           ...scope,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: {
             title: "Codex session model",
             issueType: "bug",

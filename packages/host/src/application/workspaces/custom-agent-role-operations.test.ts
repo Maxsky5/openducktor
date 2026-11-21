@@ -1,10 +1,10 @@
+import { testWorkflowSettings } from "../../test-support/task-workflows";
 import { saveSettingsSnapshot } from "../../test-support/save-settings-snapshot";
 import { describe, expect, test } from "bun:test";
 import { globalConfigSchema } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { createSettingsConfigTestDouble } from "../../test-support/service-test-doubles";
 import { createWorkspaceSettingsService } from "./workspace-settings-service";
-import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 
 const setup = () => {
   let config = globalConfigSchema.parse({ version: 4 });
@@ -20,7 +20,7 @@ const setup = () => {
           return config;
         }),
     }),
-    builtinTaskWorkflows,
+    testWorkflowSettings(),
   );
   return { service, config: () => config };
 };

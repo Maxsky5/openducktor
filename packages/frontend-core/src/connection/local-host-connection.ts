@@ -33,6 +33,7 @@ const AGENT_SESSION_LIVE_EVENT_CHANNEL = "openducktor://agent-session-live-event
 const AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL = "openducktor://azure-devops-connection-updated";
 const RUNTIME_CHANGED_EVENT_CHANNEL = "openducktor://runtime-changed";
 const TASK_MERGE_STATUS_EVENT_CHANNEL = "openducktor://task-merge-status-updated";
+const WORKFLOW_LIBRARY_EVENT_CHANNEL = "openducktor://workflow-library-changed";
 const BROWSER_EVENT_CHANNEL = "openducktor://browser-event";
 const DEFAULT_EVENT_NAME = "message";
 const INITIAL_CHANNEL_READY_TIMEOUT_MS = 10_000;
@@ -49,6 +50,7 @@ export type LocalHostConnection = Pick<
   | "subscribeRuntimeChanges"
   | "subscribeTaskMergeStatusUpdates"
   | "subscribeUsageProgress"
+  | "subscribeWorkflowLibraryChanges"
   | "subscribeBrowserTabEvents"
   | "observeAgentSessionLive"
   | "subscribeNotificationStream"
@@ -209,6 +211,11 @@ export const createLocalHostConnection = ({
         },
         USAGE_EVENT_STREAM_NAME,
       ),
+    subscribeWorkflowLibraryChanges: (listener) =>
+      subscribeReady(WORKFLOW_LIBRARY_EVENT_CHANNEL, (event) => {
+        if (isConnectionControlEvent(event)) return listener(event);
+        if (event.channel === WORKFLOW_LIBRARY_EVENT_CHANNEL) return listener(event.payload);
+      }),
     subscribeBrowserTabEvents: (listener) =>
       subscribeReady(
         BROWSER_EVENT_CHANNEL,

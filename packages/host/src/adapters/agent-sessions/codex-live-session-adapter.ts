@@ -173,7 +173,6 @@ export const createCodexLiveSessionAdapterPreparer = ({
       const images = createCodexImageSettlement(controller, runtime.runtimeId, refreshProjection);
       const releaseRuntime = (): Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> =>
         projection.releaseRuntime(() => controller.releaseRuntime(runtime.runtimeId));
-
       const bindControlPolicy = createCodexControlPolicyBinder(
         runtime.runtimeId,
         resolveRuntimePolicy,
@@ -315,6 +314,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
                 : bindControlPolicy(
                     { ...input, sessionScope: input.sessionScope, runtimeKind: "codex" as const },
                     "reply-background-question",
+                    input.externalSessionId,
                   )
               ).pipe(
                 Effect.flatMap((boundInput) =>
@@ -355,7 +355,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
         settleRuntimeTranscript: images.settleRuntimeTranscript,
         releaseRuntime,
         startSession: (input) =>
-          bindControlPolicy(input, "start-session").pipe(
+          bindControlPolicy(input, "start-session", null).pipe(
             Effect.flatMap((boundInput) => {
               const { model, ...requiredInput } = boundInput;
               const request: Parameters<typeof controller.startSession>[0] = requiredInput;
@@ -370,7 +370,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
             }),
           ),
         resumeSession: (input) =>
-          bindControlPolicy(input, "resume-session").pipe(
+          bindControlPolicy(input, "resume-session", input.externalSessionId).pipe(
             Effect.flatMap((boundInput) => {
               // Codex restores settings from its native thread.
               const { model: _model, systemPrompt, ...requiredInput } = boundInput;
@@ -384,7 +384,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
             }),
           ),
         continueInterruptedTurn: (input) =>
-          bindControlPolicy(input, "continue-interrupted-turn").pipe(
+          bindControlPolicy(input, "continue-interrupted-turn", input.externalSessionId).pipe(
             Effect.flatMap((boundInput) => {
               const { model, systemPrompt, ...requiredInput } = boundInput;
               const request: Parameters<typeof controller.continueInterruptedTurn>[0] =
@@ -408,7 +408,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
             ),
           ),
         forkSession: (input) =>
-          bindControlPolicy(input, "fork-session").pipe(
+          bindControlPolicy(input, "fork-session", null).pipe(
             Effect.flatMap((boundInput) => {
               const request = toCodexForkRequest(boundInput);
               return withForkedSessionCleanup(input, adapter, (capture) =>
@@ -421,7 +421,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
             }),
           ),
         sendUserMessage: (input, options) =>
-          bindControlPolicy(input, "send-user-message").pipe(
+          bindControlPolicy(input, "send-user-message", input.externalSessionId).pipe(
             Effect.flatMap((boundInput) => {
               const request = toCodexSendRequest(boundInput);
               return Effect.tryPromise({

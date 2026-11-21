@@ -1,6 +1,13 @@
 import { cva } from "class-variance-authority";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { type ReactElement, type ReactNode, useMemo, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -55,6 +62,10 @@ type ComboboxProps = {
   footer?: ReactNode;
   /** A custom trigger must supply its own disabled state and accessible name. */
   trigger?: ReactElement;
+  /** The accessible name of the option list when no trigger label names it, such as "Reads". */
+  listLabel?: string;
+  /** False keeps the list open after a pick, so the user can pick several options in a row. */
+  closeOnSelect?: boolean;
 };
 
 type RenderGroup = {
@@ -73,6 +84,8 @@ type ComboboxOptionItemProps = {
   option: ComboboxOption;
   value: string;
   shouldWrapOptionLabels: boolean;
+  /** False keeps the list open after a pick. Undefined closes it. */
+  closeOnSelect: boolean | undefined;
   onValueChange: (value: string) => void;
   onSelectComplete: () => void;
 };
@@ -158,6 +171,19 @@ const matchesAllTerms = (option: ComboboxOption, searchTerms: string[]): boolean
   return searchTerms.every((term) => searchText.includes(term));
 };
 
+/** The accessible name of the option list: the trigger label, else the list label. */
+type ListNameProps = Pick<ComponentProps<typeof CommandList>, "label" | "aria-labelledby">;
+
+const listNameProps = (
+  listLabel: string | undefined,
+  labelledBy: string | undefined,
+): ListNameProps => {
+  const props: ListNameProps = {};
+  if (listLabel) props.label = listLabel;
+  if (labelledBy) props["aria-labelledby"] = labelledBy;
+  return props;
+};
+
 function ComboboxOptionLabel({
   option,
   shouldWrap,
@@ -181,6 +207,7 @@ function ComboboxOptionItem({
   option,
   value,
   shouldWrapOptionLabels,
+  closeOnSelect,
   onValueChange,
   onSelectComplete,
 }: ComboboxOptionItemProps): ReactElement {
@@ -194,7 +221,7 @@ function ComboboxOptionItem({
           return;
         }
         onValueChange(option.value);
-        onSelectComplete();
+        if (closeOnSelect !== false) onSelectComplete();
       }}
       className={comboboxOptionItemVariants({ wrap: shouldWrapOptionLabels })}
     >
@@ -259,6 +286,8 @@ export function Combobox({
   open: controlledOpen,
   footer,
   trigger,
+  listLabel,
+  closeOnSelect,
 }: ComboboxProps): ReactElement {
   const [internalOpen, setOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -382,7 +411,8 @@ export function Combobox({
         side={popoverSide}
         avoidCollisions={popoverAvoidCollisions}
         className={cn(
-          "w-[var(--radix-popover-trigger-width)] p-0",
+          // A closing list lets clicks through, so a quick click on the next control is not lost.
+          "w-[var(--radix-popover-trigger-width)] p-0 data-[state=closed]:pointer-events-none",
           !popoverAvoidCollisions &&
             "flex max-h-[var(--radix-popover-content-available-height)] flex-col overflow-hidden",
           className,
@@ -391,6 +421,8 @@ export function Combobox({
         <Command
           className={cn(!popoverAvoidCollisions && "min-h-0")}
           shouldFilter={searchable && !matchAllSearchTerms}
+          // The list opens on the current value, so assistive tech announces it as selected.
+          defaultValue={value}
         >
           <CommandInput
             disabled={disabled}
@@ -399,13 +431,18 @@ export function Combobox({
             value={searchQuery}
             onValueChange={searchable ? handleSearchQueryChange : () => {}}
           />
-          <CommandList ref={commandListRef} className={cn(!popoverAvoidCollisions && "min-h-0")}>
+          <CommandList
+            ref={commandListRef}
+            className={cn(!popoverAvoidCollisions && "min-h-0")}
+            {...listNameProps(listLabel, triggerAriaLabelledBy)}
+          >
             <CommandEmpty>{emptyText}</CommandEmpty>
             <ComboboxGroups
               groups={groupsToRender}
               value={value}
               shouldWrapOptionLabels={shouldWrapOptionLabels}
               onValueChange={onValueChange}
+              closeOnSelect={closeOnSelect}
               onSelectComplete={() => handleOpenChange(false)}
             />
           </CommandList>

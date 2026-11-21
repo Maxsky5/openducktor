@@ -71,7 +71,7 @@ const createLoadedConnection = () => {
       workspaceId: "workspace-1",
       repoPath: "/repo",
       taskIds: ["TASK-1"],
-      operation: "close",
+      preview: { operation: "close" },
     }).queryKey,
     noTaskWorktreeOwners,
   );
@@ -80,7 +80,7 @@ const createLoadedConnection = () => {
       workspaceId: "workspace-1",
       repoPath: "/repo",
       taskIds: ["TASK-1"],
-      operation: "close",
+      preview: { operation: "close" },
     }).queryKey,
     { stoppableSessionCount: 0 },
   );

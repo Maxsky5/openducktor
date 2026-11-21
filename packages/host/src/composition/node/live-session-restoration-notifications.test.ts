@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, test } from "bun:test";
@@ -48,6 +49,7 @@ test.each([
       db.store.createTask({
         ...db.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Saved build", issueType: "bug", priority: 2 },
       }),
     );

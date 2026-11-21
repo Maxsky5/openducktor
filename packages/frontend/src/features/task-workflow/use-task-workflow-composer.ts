@@ -6,6 +6,7 @@ import type { TaskCreateDestination } from "@openducktor/frontend-core/tasks/cre
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+import type { CreateTaskOptions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 
 export type TaskWorkflowTaskComposerModel = {
   open: boolean;
@@ -13,13 +14,19 @@ export type TaskWorkflowTaskComposerModel = {
   tasks: TaskCard[];
   destination: TaskCreateDestination | null;
   initialTitle: string;
+  initialWorkflowId: string | null;
   initialEditSection?: EditTaskSection;
   onOpenChange: (open: boolean) => void;
 };
 
 type TaskComposerState =
   | { kind: "closed" }
-  | { kind: "create"; destination: TaskCreateDestination | null; initialTitle: string }
+  | {
+      kind: "create";
+      destination: TaskCreateDestination | null;
+      initialTitle: string;
+      initialWorkflowId: string | null;
+    }
   | {
       kind: "edit";
       workspaceId: string;
@@ -32,7 +39,7 @@ type TaskComposerState =
 const CLOSED_TASK_COMPOSER: TaskComposerState = { kind: "closed" };
 
 type TaskWorkflowComposer = {
-  onCreateTask: (options?: { initialTitle?: string }) => void;
+  onCreateTask: (options?: CreateTaskOptions) => void;
   onEdit: (taskId: string, section?: EditTaskSection) => void;
   composer: TaskWorkflowTaskComposerModel;
 };
@@ -87,7 +94,7 @@ export function useTaskWorkflowComposer({
     savedEditTask ?? (lastSavedEditTask?.opening === state ? lastSavedEditTask.task : null);
 
   const onCreateTask = useCallback(
-    (options?: { initialTitle?: string }): void => {
+    (options?: CreateTaskOptions): void => {
       setState({
         kind: "create",
         destination:
@@ -95,6 +102,7 @@ export function useTaskWorkflowComposer({
             ? { workspaceId, workspaceName, repoPath }
             : null,
         initialTitle: options?.initialTitle ?? "",
+        initialWorkflowId: options?.workflowId ?? null,
       });
     },
     [workspaceId, workspaceName, repoPath],
@@ -143,6 +151,7 @@ function taskComposerModel(
               repoPath: state.repoPath,
             },
     initialTitle: state.kind === "create" ? state.initialTitle : "",
+    initialWorkflowId: state.kind === "create" ? state.initialWorkflowId : null,
     initialEditSection: state.kind === "edit" ? state.section : "details",
     onOpenChange,
   };

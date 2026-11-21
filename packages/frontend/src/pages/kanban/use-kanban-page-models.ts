@@ -101,6 +101,7 @@ export function useKanbanPageModels({
     taskCardView: taskCardViewState.taskCardView ?? DEFAULT_KANBAN_SETTINGS.taskCardView,
     showHorizontalScrollbars,
     tasks: board.matchingTasks,
+    mixedBoard: board.mixedBoard,
     hasLoadedTasks: board.kanbanTasks.length > 0,
     filter,
     historicalSessionsByTaskId: board.historicalSessionsByTaskId,

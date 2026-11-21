@@ -44,8 +44,9 @@ export const enrichTasks = (
 ): TaskCard[] => tasks.map((task) => enrichTask(taskWorkflows.forTask(task), task));
 export const enrichTask = (workflow: TaskWorkflow, task: TaskRecord): TaskCard => {
   const projection = workflow.project(task);
+  const { workflowId: _workflowId, workflowVersion: _workflowVersion, ...data } = task;
   return {
-    ...task,
+    ...data,
     ...projection,
     availableActions: availableTaskActions(workflow, task, projection.availableActions),
   };

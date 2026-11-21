@@ -21,10 +21,12 @@ export const antigravityManagedMcpServer = (
   sessionScope: AgentSessionScope,
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver,
   callerBindingId: string,
+  /** Null while a start has no native session yet. */
+  externalSessionId: string | null,
 ): McpServer => {
   const tools =
     sessionScope.kind === "workflow"
-      ? resolveWorkflowRolePolicy(sessionScope).tools
+      ? resolveWorkflowRolePolicy({ ...sessionScope, externalSessionId }).tools
       : ODT_MCP_TOOL_NAMES;
   const env = {
     ...server.environment,

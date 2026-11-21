@@ -263,7 +263,8 @@ describe("demo backend", () => {
     const demo = openDemo();
     await observeLive(demo);
     const backlog = await taskOf(demo, "Pin notes to the top of a notebook");
-    const spec = await demo.client.agentSessionWorkflowLaunch({
+    // Every task session works in the task worktree, so the Spec start sets it up first.
+    const specLaunch = demo.client.agentSessionWorkflowLaunch({
       ...FIELDNOTES,
       taskId: backlog.id,
       startup: { startupAttemptId: "a1", operationId: "o1" },
@@ -277,6 +278,8 @@ describe("demo backend", () => {
       },
       instruction: { kind: "kickoff" },
     });
+    await demo.advance(5_000);
+    const spec = await specLaunch;
     expect(spec.startupProgress?.prepared).toBeDefined();
     await demo.advance(15_000);
     expect((await taskOf(demo, backlog.title)).status).toBe("spec_ready");
@@ -308,7 +311,7 @@ describe("demo backend", () => {
     const demo = openDemo();
     await observeLive(demo);
     const backlog = await taskOf(demo, "Add a print style for notes");
-    const started = await demo.client.agentSessionWorkflowLaunch({
+    const launch = demo.client.agentSessionWorkflowLaunch({
       ...FIELDNOTES,
       taskId: backlog.id,
       policy: {
@@ -321,6 +324,8 @@ describe("demo backend", () => {
       },
       instruction: { kind: "kickoff" },
     });
+    await demo.advance(5_000);
+    const started = await launch;
     const session = started.session;
     if (!session) throw new Error("No session.");
     await demo.advance(2_000);
@@ -338,7 +343,7 @@ describe("demo backend", () => {
     const demo = openDemo();
     const { envelopes } = await observeLive(demo);
     const backlog = await taskOf(demo, "Pin notes to the top of a notebook");
-    await demo.client.agentSessionWorkflowLaunch({
+    const launch = demo.client.agentSessionWorkflowLaunch({
       ...FIELDNOTES,
       taskId: backlog.id,
       policy: {
@@ -351,6 +356,8 @@ describe("demo backend", () => {
       },
       instruction: { kind: "kickoff" },
     });
+    await demo.advance(5_000);
+    await launch;
     await demo.advance(1_000);
     demo.lifetime.abort();
     const count = envelopes.length;

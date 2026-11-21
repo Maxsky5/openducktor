@@ -1,3 +1,4 @@
+import { resolveTaskWorkflow } from "./sqlite-task-workflow-versions";
 import { searchTasksInDatabase } from "./sqlite-task-search";
 import { latestWorkflowArtifactRows } from "./sqlite-task-workflow-artifact-queries";
 import { HostValidationError } from "../../effect/host-errors";
@@ -227,6 +228,7 @@ export const createSqliteTaskRepository = ({
               createdAt: now(),
               session,
               status: input.status,
+              workflow: input.workflow,
               task: input.task,
               workspaceId: context.workspaceId,
             });
@@ -283,7 +285,11 @@ export const createSqliteTaskRepository = ({
         ({ session, workspaceId, taskWorkflows }) =>
           Effect.gen(function* () {
             const row = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
-            return yield* taskMetadata(session, row, taskWorkflows.forTask(row));
+            return yield* taskMetadata(
+              session,
+              row,
+              yield* resolveTaskWorkflow(session, taskWorkflows, row),
+            );
           }),
       ),
     listDirectMergeTaskIds: (input) =>
@@ -321,7 +327,7 @@ export const createSqliteTaskRepository = ({
         ({ session, workspaceId, taskWorkflows }) =>
           Effect.gen(function* () {
             const task = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
-            const workflow = taskWorkflows.forTask(task);
+            const workflow = yield* resolveTaskWorkflow(session, taskWorkflows, task);
             if (!workflow.artifact(input.code))
               return yield* new HostValidationError({
                 field: "code",

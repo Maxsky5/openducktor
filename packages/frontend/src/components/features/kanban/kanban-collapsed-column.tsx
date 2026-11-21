@@ -4,15 +4,21 @@ import {
   KANBAN_COLLAPSED_LANE_WIDTH_CLASS,
   KANBAN_LANE_HEADER_HEIGHT_CLASS,
 } from "@/components/features/kanban/kanban-layout";
+import { columnWorkflowsText } from "@/components/features/kanban/kanban-column";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 type KanbanCollapsedColumnProps = {
   column: KanbanColumnData;
+  /** The workflows that use the column, on a board of several workflows. */
+  workflows?: readonly string[] | null;
 };
 
-export function KanbanCollapsedColumn({ column }: KanbanCollapsedColumnProps): ReactElement {
+export function KanbanCollapsedColumn({
+  column,
+  workflows = null,
+}: KanbanCollapsedColumnProps): ReactElement {
   const theme = laneTheme(column.tone);
   const label = `${column.title} column is empty and collapsed`;
   const accentClass = theme.collapsedAccentClass ?? theme.headerAccentClass;
@@ -49,10 +55,13 @@ export function KanbanCollapsedColumn({ column }: KanbanCollapsedColumnProps): R
               </span>
             </span>
           </span>
-          <span className="flex w-full flex-1 flex-col items-center px-1.5 py-3">
+          <span className="flex w-full flex-1 flex-col items-center gap-3 px-1.5 py-4">
+            <span className="max-h-64 truncate text-xs font-semibold uppercase tracking-wide text-foreground/75 transition-colors [writing-mode:vertical-rl] group-hover:text-foreground">
+              {column.title}
+            </span>
             <span
               className={cn(
-                "mt-2 w-1 flex-1 rounded-full opacity-25 transition-opacity group-hover:opacity-45",
+                "w-1 flex-1 rounded-full opacity-25 transition-opacity group-hover:opacity-45",
                 accentClass,
               )}
               aria-hidden="true"
@@ -63,7 +72,10 @@ export function KanbanCollapsedColumn({ column }: KanbanCollapsedColumnProps): R
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={10} className="flex flex-col gap-1 px-3 py-2">
         <p className="text-sm font-semibold text-background">{column.title}</p>
-        <p className="text-xs font-medium text-background/75">Collapsed empty lane</p>
+        <p className="text-xs font-medium text-background/75">Empty column</p>
+        {workflows ? (
+          <p className="text-xs font-medium text-background/75">{columnWorkflowsText(workflows)}</p>
+        ) : null}
       </TooltipContent>
     </Tooltip>
   );

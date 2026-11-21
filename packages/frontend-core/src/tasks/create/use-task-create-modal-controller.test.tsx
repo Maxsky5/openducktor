@@ -1,16 +1,200 @@
+import { workspaceWorkflows, type WorkspaceWorkflows } from "../../queries/workflows";
+import {
+  builtinWorkflowCatalogFixture,
+  builtinWorkflowDescriptor,
+  builtinWorkspaceWorkflowFixture,
+} from "../../test-support/workflow-fixtures";
+import {
+  compileWorkflowCatalog,
+  specPlanBuildWorkflow,
+  taskWorkflowDescriptor,
+} from "@openducktor/workflows";
+import { createReviewTaskWorkflow, reviewTaskRoles } from "@openducktor/workflows/test-support";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
+import type { TaskCreateInput } from "@openducktor/contracts";
 import type { HostClient } from "@openducktor/host-client";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
 import { act } from "@testing-library/react";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
-import type { TasksStateContextValue } from "../../types/state-slices";
+import type { TaskCreateWorkspace, TasksStateContextValue } from "../../types/state-slices";
 import {
   createDocumentState,
   renderController,
   specSavedAt,
 } from "./use-task-create-modal-controller.test-harness";
+
+/** A repository that enables the built-in workflow, its default, and a custom review workflow. */
+const twoWorkflowWorkspace = (): WorkspaceWorkflows => {
+  const review = createReviewTaskWorkflow();
+  const catalog = compileWorkflowCatalog({
+    ...structuredClone(builtinWorkflowCatalogFixture),
+    roles: [...structuredClone(builtinWorkflowCatalogFixture.roles), ...reviewTaskRoles],
+    workflows: [structuredClone(builtinWorkflowDescriptor), taskWorkflowDescriptor(review)],
+  });
+  return workspaceWorkflows(catalog, {
+    ...structuredClone(builtinWorkspaceWorkflowFixture),
+    workflows: [specPlanBuildWorkflow.reference, review.reference],
+    newTaskWorkflows: [specPlanBuildWorkflow.reference, review.reference],
+  });
+};
+
+describe("useTaskCreateModalController workflow choice", () => {
+  test("offers the types of every workflow, then the workflows that take the picked type", async () => {
+    const createTask = mock(async () => {});
+    const harness = renderController({
+      createTask,
+      offerWorkflowChoice: true,
+      workspace: twoWorkflowWorkspace(),
+    });
+    try {
+      const choices = harness.getController().workflowChoices.map(({ reference }) => reference.id);
+      expect(choices).toEqual([specPlanBuildWorkflow.reference.id, "review"]);
+      expect(harness.getController().typeStepChoices.map(({ value }) => value)).toEqual([
+        "feature",
+        "bug",
+        "task",
+      ]);
+      expect(harness.getController().workflowsForType).toEqual([]);
+      // Both workflows take a bug, so the form opens the workflow step with the default picked.
+      act(() => harness.getController().selectCreateIssueType("bug"));
+      expect(harness.getController().step).toBe("workflow");
+      expect(harness.getController().stepBefore).toBe("type");
+      expect(harness.getController().workflowsForType.map(({ reference }) => reference.id)).toEqual(
+        [specPlanBuildWorkflow.reference.id, "review"],
+      );
+      expect(harness.getController().taskWorkflow?.reference.id).toBe(
+        specPlanBuildWorkflow.reference.id,
+      );
+      act(() => harness.getController().selectWorkflow("review"));
+      expect(harness.getController().step).toBe("workflow");
+      expect(harness.getController().stepAfter).toBe("details");
+      act(() => harness.getController().setStep("details"));
+      const controller = harness.getController();
+      expect(controller.step).toBe("details");
+      expect(controller.stepBefore).toBe("workflow");
+      expect(controller.taskWorkflow?.reference.id).toBe("review");
+      expect(controller.state.issueType).toBe("bug");
+      act(() => harness.getController().updateState({ title: "Draft" }));
+      await act(async () => {
+        await harness.getController().submit();
+      });
+      expect(createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId: "workspace-1" }),
+        expect.objectContaining({ title: "Draft", issueType: "bug", workflowId: "review" }),
+        undefined,
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("a type that one workflow takes picks that workflow and goes on to the details", () => {
+    const harness = renderController({
+      offerWorkflowChoice: true,
+      workspace: twoWorkflowWorkspace(),
+      initialWorkflowId: "review",
+    });
+    try {
+      // Both workflows take a bug, so the steps before a pick name the workflow step.
+      expect(harness.getController().steps).toEqual(["type", "workflow", "details"]);
+      // The review workflow has no "task" type.
+      act(() => harness.getController().selectCreateIssueType("task"));
+      expect(harness.getController().step).toBe("details");
+      // The stepper and Back skip the workflow step, since one workflow takes the type.
+      expect(harness.getController().steps).toEqual(["type", "details"]);
+      expect(harness.getController().stepBefore).toBe("type");
+      expect(harness.getController().taskWorkflow?.reference.id).toBe(
+        specPlanBuildWorkflow.reference.id,
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("asks for another workflow when the picked one is no longer enabled, and creates nothing", async () => {
+    const createTask = mock(async () => {});
+    const harness = renderController({
+      createTask,
+      offerWorkflowChoice: true,
+      workspace: twoWorkflowWorkspace(),
+      initialWorkflowId: "retired",
+    });
+    try {
+      const controller = harness.getController();
+      expect(controller.workflowRead.selectionError).toContain('Workflow "retired"');
+      expect(controller.footerError).toContain("Pick another workflow");
+      // The form stays open, so the type and workflow steps still work.
+      expect(controller.isFormDisabled).toBe(false);
+      act(() => harness.getController().updateState({ title: "Draft" }));
+      await act(async () => {
+        await harness.getController().submit();
+      });
+      expect(createTask).not.toHaveBeenCalled();
+      act(() => harness.getController().selectCreateIssueType("task"));
+      expect(harness.getController().workflowRead.selectionError).toBeNull();
+      expect(harness.getController().taskWorkflow?.reference.id).toBe(
+        specPlanBuildWorkflow.reference.id,
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("keeps the workflow that the opener names while it takes the picked type", () => {
+    const harness = renderController({
+      offerWorkflowChoice: true,
+      workspace: twoWorkflowWorkspace(),
+      initialWorkflowId: "review",
+    });
+    try {
+      expect(harness.getController().taskWorkflow?.reference.id).toBe("review");
+      act(() => harness.getController().selectCreateIssueType("bug"));
+      expect(harness.getController().step).toBe("workflow");
+      expect(harness.getController().taskWorkflow?.reference.id).toBe("review");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("shows no choice for one enabled workflow and still names it in the create input", async () => {
+    const createTask = mock(async () => {});
+    const harness = renderController({ createTask, offerWorkflowChoice: true });
+    try {
+      expect(harness.getController().workflowChoices).toEqual([]);
+      act(() => harness.getController().updateState({ title: "Draft" }));
+      await act(async () => {
+        await harness.getController().submit();
+      });
+      expect(createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId: "workspace-1" }),
+        expect.objectContaining({ workflowId: specPlanBuildWorkflow.reference.id }),
+        undefined,
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("leaves the workflow to the host when the form offers no choice", async () => {
+    const createTask = mock(async (_workspace: TaskCreateWorkspace, _input: TaskCreateInput) => {});
+    const harness = renderController({ createTask, workspace: twoWorkflowWorkspace() });
+    try {
+      expect(harness.getController().workflowChoices).toEqual([]);
+      expect(harness.getController().taskWorkflow?.reference.id).toBe(
+        specPlanBuildWorkflow.reference.id,
+      );
+      act(() => harness.getController().updateState({ title: "Draft" }));
+      await act(async () => {
+        await harness.getController().submit();
+      });
+      expect(createTask.mock.calls[0]?.[1]).not.toHaveProperty("workflowId");
+    } finally {
+      harness.unmount();
+    }
+  });
+});
 
 describe("useTaskCreateModalController", () => {
   test.each(["create", "edit"])(

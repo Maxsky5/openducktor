@@ -1,5 +1,8 @@
 import { allowAllGoalCommands } from "../../test-support/service-test-doubles";
-import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
+import {
+  builtinWorkflowRolePolicy,
+  prepareNoRolePolicy,
+} from "../../test-support/workflow-role-policy";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { commandPreparationFixture } from "./test-support/command-preparation-fixture";
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
@@ -95,6 +98,7 @@ describe("message acceptance through the command and live adapter modules", () =
         }),
       );
       const commands = createAgentSessionCommandService({
+        prepareRolePolicy: prepareNoRolePolicy,
         goalRules: allowAllGoalCommands,
         taskWorkflows: builtinTaskWorkflows,
         turnPreparation: commandPreparationFixture,

@@ -2,12 +2,11 @@ import type {
   AgentWorkflowState,
   WorkflowActionEmphasis,
   WorkflowActionSurface,
-  HostEffectId,
   TaskRecordData,
 } from "@openducktor/contracts";
 import { TASK_CLOSED_STATE, workflowActionSurfaceSchema } from "@openducktor/contracts";
 import type { ResolvedTaskCard } from "./task-workflow-view";
-import type { TaskWorkflow } from "./task-workflow/task-workflow";
+import type { TaskWorkflow, TaskWorkflowHostEffect } from "./task-workflow/task-workflow";
 
 export type TaskWorkflowAction = string;
 
@@ -76,8 +75,7 @@ export const availableTaskActions = (
         return (
           action.kind === "approval" ||
           action.kind === "view" ||
-          (action.kind === "event" &&
-            workflow.eventEffects(action.eventId).includes("worktree.reset"))
+          (action.kind === "event" && workflow.worktreeReset(action.eventId) !== undefined)
         );
       })
     : actions;
@@ -168,7 +166,7 @@ export type TaskActionCommand =
       kind: "event";
       eventId: string;
       /** The host effects that the host runs before it commits the event. */
-      effects: readonly HostEffectId[];
+      effects: readonly TaskWorkflowHostEffect[];
       launchActionIds: readonly string[];
       /** A following launch collects the feedback of a person, so the client asks for it first. */
       collectsFeedback: boolean;

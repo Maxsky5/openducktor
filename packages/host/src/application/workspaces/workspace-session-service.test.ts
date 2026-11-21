@@ -1,3 +1,4 @@
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { workspaces } from "../../adapters/sqlite/sqlite-host-settings-schema";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import {
@@ -109,6 +110,7 @@ describe("host-owned Workspace Session lifecycle", () => {
           hostInstanceId: "host",
           eventBus: undefined,
           taskWorkflows: builtinTaskWorkflows,
+          taskReader: createTaskStoreTestDouble({}),
           settings: {
             ...h.dependencies.settings,
             getRepoConfigByRepoPath: () => h.dependencies.settings.getRepoConfig("fairnest"),

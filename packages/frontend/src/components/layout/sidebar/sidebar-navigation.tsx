@@ -1,4 +1,4 @@
-import { ChartSpline, Columns3, type LucideIcon } from "lucide-react";
+import { ChartSpline, Columns3, type LucideIcon, Workflow } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { USAGE_PATH } from "@/pages";
 const KANBAN_ROUTE = "/kanban";
 
 type SidebarNavigationState = {
+  /** The page link that shows as selected before its route commits. */
   activatedRoute: string | null;
   committedLocationKey: string;
 };
@@ -121,7 +122,7 @@ function SidebarPageLinks({
   );
 }
 
-/** The Kanban link. Sessions have their own list, so the sidebar keeps no page links for them. */
+/** The page links. Sessions have their own list, so the sidebar keeps no page links for them. */
 export function SidebarNavigation({
   compact = false,
   onBeforeNavigate,
@@ -130,7 +131,11 @@ export function SidebarNavigation({
   return (
     <SidebarPageLinks
       label="Pages"
-      links={[{ route: KANBAN_ROUTE, label: "Kanban", title: kanbanTitle, icon: Columns3 }]}
+      links={[
+        { route: KANBAN_ROUTE, label: "Kanban", title: kanbanTitle, icon: Columns3 },
+        { route: "/workflows", label: "Workflows", title: "Workflows", icon: Workflow },
+      ]}
+      className="flex flex-col gap-1"
       iconOnly={compact}
       linkClassName={compact ? "size-9 justify-center" : "h-9 gap-2 px-3"}
       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"

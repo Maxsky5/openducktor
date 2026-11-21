@@ -1,4 +1,4 @@
-import { ArrowLeft, Flag, Loader2, RotateCcw, SquarePlus, Save } from "lucide-react";
+import { ArrowLeft, ArrowRight, Flag, Loader2, RotateCcw, SquarePlus, Save } from "lucide-react";
 import { lazy, type ReactElement, Suspense, useId, useRef } from "react";
 import { IssueTypeGrid } from "@/components/features/task-composer/issue-type-grid";
 import { TaskComposerStepper } from "@/components/features/task-composer/task-composer-stepper";
@@ -10,6 +10,7 @@ import {
   TaskCreateWorkspacePicker,
 } from "@/components/features/task-create/task-create-workspace-picker";
 import type { TaskCreateWorkspacePicker as TaskCreateWorkspacePickerModel } from "@openducktor/frontend-core/tasks/create/use-task-create-workspace";
+import { WorkflowPicker } from "@/components/features/task-create/workflow-picker";
 import { useTaskCreateModalController } from "@/components/features/task-create/use-task-create-modal-controller";
 import type { TaskCreateDestination } from "@openducktor/frontend-core/tasks/create/use-task-create-workspace";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,8 @@ type TaskCreateModalProps = {
   task?: TaskCard | null;
   destination?: TaskCreateDestination | null;
   initialTitle?: string;
+  /** The workflow that a new task starts with. */
+  initialWorkflowId?: string | null;
   initialEditSection?: EditTaskSection;
 };
 
@@ -89,11 +92,47 @@ function TaskCreateModalFooterActions({
 }: {
   controller: TaskCreateModalController;
 }): ReactElement {
-  if (controller.mode === "create" && controller.step === "type") return <span />;
+  if (controller.mode === "create" && controller.step !== "details")
+    return <StepFooterActions controller={controller} />;
   return controller.isEditingDocument ? (
     <TaskDocumentFooterActions controller={controller} />
   ) : (
     <TaskSubmitFooterActions controller={controller} />
+  );
+}
+
+/** Back and Continue of the type and workflow steps of a new task. */
+function StepFooterActions({
+  controller,
+}: {
+  controller: TaskCreateModalController;
+}): ReactElement {
+  const { stepBefore, stepAfter } = controller;
+  return (
+    <>
+      {stepBefore ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => controller.setStep(stepBefore)}
+          disabled={controller.isFormDisabled}
+        >
+          <ArrowLeft className="size-4" />
+          Back
+        </Button>
+      ) : null}
+      {stepAfter ? (
+        <Button
+          type="button"
+          className="-order-1 sm:order-none"
+          onClick={() => controller.setStep(stepAfter)}
+          disabled={controller.isFormDisabled}
+        >
+          Continue
+          <ArrowRight className="size-4" />
+        </Button>
+      ) : null}
+    </>
   );
 }
 
@@ -155,11 +194,11 @@ function TaskSubmitFooterActions({
 
   return (
     <>
-      {controller.mode === "create" && controller.step === "details" ? (
+      {controller.mode === "create" && controller.stepBefore ? (
         <Button
           type="button"
           variant="outline"
-          onClick={() => controller.setStep("type")}
+          onClick={() => controller.stepBefore && controller.setStep(controller.stepBefore)}
           disabled={controller.isFormDisabled}
         >
           <ArrowLeft className="size-4" />
@@ -195,11 +234,10 @@ function TaskCreateModalSectionNavigation({
   if (controller.mode === "create") {
     return (
       <TaskComposerStepper
+        steps={controller.steps}
         step={controller.step}
-        onStepChange={(nextStep) => {
-          if (nextStep === "details" && controller.step !== "details") return;
-          controller.setStep(nextStep);
-        }}
+        // The stepper opens a step that the user already passed, never one ahead.
+        onStepChange={controller.setStep}
       />
     );
   }
@@ -215,6 +253,38 @@ function TaskCreateModalSectionNavigation({
   );
 }
 
+/** The type step, then the workflow step while several workflows take the picked type. */
+function NewTaskChoiceStep({
+  controller,
+}: {
+  controller: TaskCreateModalController;
+}): ReactElement {
+  const issueType = controller.selectedCreateIssueType;
+  if (controller.isTypeStepVisible || issueType === null)
+    return (
+      <IssueTypeGrid
+        className="mb-5"
+        choices={controller.typeStepChoices}
+        selectedIssueType={issueType}
+        onSelectIssueType={controller.selectCreateIssueType}
+      />
+    );
+  return (
+    <WorkflowPicker
+      workflows={controller.workflowsForType}
+      defaultWorkflowId={controller.defaultWorkflowId}
+      issueType={issueType}
+      selectedWorkflowId={controller.taskWorkflow?.reference.id}
+      onSelect={controller.selectWorkflow}
+      onContinue={() => controller.setStep("details")}
+    />
+  );
+}
+
+/** Why the form has no task workflow yet: a read error, a workflow that is gone, or the read. */
+const workflowStatusText = ({ workflowRead }: TaskCreateModalController): string =>
+  workflowRead.error ?? workflowRead.selectionError ?? "Loading task workflow...";
+
 function TaskCreateModalSectionContent({
   controller,
   task,
@@ -222,17 +292,11 @@ function TaskCreateModalSectionContent({
   controller: TaskCreateModalController;
   task: TaskCard | null;
 }): ReactElement {
-  if (!controller.taskWorkflow)
-    return <p role="status">{controller.workflowRead.error ?? "Loading task workflow..."}</p>;
-  if (controller.isTypeStepVisible) {
-    return (
-      <IssueTypeGrid
-        choices={controller.issueTypeChoices}
-        selectedIssueType={controller.selectedCreateIssueType}
-        onSelectIssueType={controller.selectCreateIssueType}
-      />
-    );
-  }
+  // The type and workflow steps read the offered workflows only, so a picked workflow that is no
+  // longer enabled never hides them.
+  if (controller.isTypeStepVisible || controller.isWorkflowStepVisible)
+    return <NewTaskChoiceStep controller={controller} />;
+  if (!controller.taskWorkflow) return <p role="status">{workflowStatusText(controller)}</p>;
   const section = controller.activeDocumentSection;
   if (controller.mode === "edit" && section) {
     return (
@@ -261,6 +325,9 @@ function TaskCreateModalSectionContent({
   return (
     <TaskDetailsForm
       issueTypeChoices={controller.issueTypeChoices}
+      workflowLabel={
+        controller.workflowChoices.length > 0 ? controller.taskWorkflow.definition.label : undefined
+      }
       mode={controller.mode}
       disabled={controller.isSaveOrRecoveryLocked}
       state={controller.state}
@@ -299,6 +366,7 @@ export function TaskCreateModal({
   task = null,
   destination = null,
   initialTitle = "",
+  initialWorkflowId = null,
   initialEditSection = "details",
 }: TaskCreateModalProps): ReactElement {
   const openerRef = useRef<HTMLElement | null>(null);
@@ -310,6 +378,7 @@ export function TaskCreateModal({
     task,
     destination,
     initialTitle,
+    initialWorkflowId,
     initialEditSection,
   });
   return (

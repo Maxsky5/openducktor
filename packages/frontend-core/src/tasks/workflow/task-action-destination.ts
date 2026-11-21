@@ -58,7 +58,7 @@ export const resolveTaskActionDestination = (
   const continuation: TaskWorkflowContinuation | undefined = command.launchActionIds.length
     ? { workflow: task.workflow, launchActionIds: command.launchActionIds }
     : undefined;
-  if (command.effects.includes("worktree.reset"))
+  if (command.effects.some(({ id }) => id === "worktree.reset"))
     return {
       kind: "confirm",
       action: "reset_implementation",
@@ -79,7 +79,7 @@ export const eventActionStep = (
 ): "confirm" | "feedback" | "none" | null => {
   const action = workflow.action(actionId);
   if (action.kind !== "event") return null;
-  if (workflow.eventEffects(action.eventId).includes("worktree.reset")) return "confirm";
+  if (workflow.worktreeReset(action.eventId)) return "confirm";
   return (action.launchActionIds ?? []).some(
     (id) => workflow.launchAction(id).context === "human_feedback",
   )
@@ -96,10 +96,7 @@ export const availableWorktreeResetAction = (
 ): { eventId: string; label: string } | null => {
   for (const id of task.availableActions) {
     const action = task.taskWorkflow.action(id);
-    if (
-      action.kind === "event" &&
-      task.taskWorkflow.eventEffects(action.eventId).includes("worktree.reset")
-    )
+    if (action.kind === "event" && task.taskWorkflow.worktreeReset(action.eventId))
       return { eventId: action.eventId, label: taskActionLabel(id, task) };
   }
   return null;

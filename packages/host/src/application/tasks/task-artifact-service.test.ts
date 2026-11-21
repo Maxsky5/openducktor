@@ -1,3 +1,5 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
+import { BUILTIN_TASK_ASSIGNMENT } from "./task-workflows";
 import { createTaskSyncService } from "./sync/task-sync-service";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
@@ -31,12 +33,14 @@ const setup = async () => {
     harness.store.createTask({
       ...harness.scope,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: { title: "Artifacts", issueType: "task", priority: 2 },
     }),
   );
   const scope = { ...harness.scope, taskId: task.id };
   const base = createTaskServiceWithMutationProgress({
     taskWorkflows: builtinTaskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     taskStore: harness.store,
   });
   const attachSync = (
@@ -101,6 +105,7 @@ describe("task artifact service", () => {
         );
         const base = createTaskServiceWithMutationProgress({
           taskWorkflows: builtinTaskWorkflows,
+          workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
           taskStore: {
             ...h.store,
             saveWorkflowArtifact: (input) =>
@@ -361,6 +366,7 @@ describe("task artifact service", () => {
       await run(Deferred.await(entered));
       const service = createTaskServiceWithMutationProgress({
         taskWorkflows: builtinTaskWorkflows,
+        workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
         taskStore: h.store,
         taskSessionLifecycleCoordinator: coordinator,
       });

@@ -1,16 +1,27 @@
-import { useTaskFormWorkflow } from "../../queries/use-task-form-workflow";
 import { workflowQueryKeys, type WorkspaceWorkflows } from "../../queries/workflows";
-import { issueTypeChoices } from "./task-composer-options";
+import { issueTypeChoices, issueTypeChoicesOf } from "./task-composer-options";
+import {
+  adjacentSteps,
+  newTaskSteps,
+  useTaskEditorWorkflow,
+  workflowsForIssueType,
+} from "./new-task-workflow-choice";
+import {
+  areComposerStatesEqual,
+  type DocumentSection,
+  initialTaskCreateModalState,
+  type PendingDiscardIntent,
+  startComposer,
+  type TaskCreateModalAction,
+  type TaskCreateModalState,
+  taskCreateModalReducer,
+} from "./task-create-modal-state";
 import {
   rebaseTaskComposer,
   type RetainedTaskFields,
   type RetainedTaskWorkspace,
 } from "./task-editor-drafts";
-import {
-  type WorkflowIssueTypeId as IssueType,
-  type ResolvedTaskCard as TaskCard,
-} from "@openducktor/workflows";
-import type { TaskAssetFailure } from "@openducktor/contracts";
+import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import {
   type Dispatch,
   useCallback,
@@ -52,30 +63,22 @@ import type {
   EditTaskSection,
 } from "./task-composer-types";
 import {
+  documentWorkflowBlocker,
   hasUnsavedDocumentChanges,
-  isDocumentNewerOnHost,
   isDocumentSection,
+  saveTaskEditorDocument,
+  submitBlocker,
   taskEditorFooter,
-  type TaskCreateModalError,
   toTaskCreateInput,
   toTaskUpdatePatch,
 } from "./task-create-modal-model";
-import {
-  type TaskDocumentSection,
-  useTaskDocumentEditorState,
-} from "./use-task-document-editor-state";
+import { useTaskDocumentEditorState } from "./use-task-document-editor-state";
 import {
   type TaskCreateDestination,
   useKnownTaskLabels,
   useTaskCreateWorkspacePicker,
   useTaskEditorWorkspace,
 } from "./use-task-create-workspace";
-
-type DocumentSection = TaskDocumentSection;
-
-type PendingDiscardIntent =
-  | { type: "close-modal" }
-  | { type: "switch-section"; next: EditTaskSection };
 
 export type TaskCreateModalControllerOptions<F extends TaskDescriptionImageFile> = {
   open: boolean;
@@ -85,6 +88,13 @@ export type TaskCreateModalControllerOptions<F extends TaskDescriptionImageFile>
   destination?: TaskCreateDestination | null;
   /** The title of a new task when the modal opens. Edit mode ignores it. */
   initialTitle?: string;
+  /** The workflow that a new task starts with, such as one the user just published. */
+  initialWorkflowId?: string | null;
+  /**
+   * True when the form offers the enabled workflows of the repository and creates the task with
+   * the selected one. Otherwise the host uses the default workflow of the repository.
+   */
+  offerWorkflowChoice?: boolean;
   initialEditSection?: EditTaskSection;
   /** Reads a picked description image as base64. Pass a stable function. */
   readFileBase64: (file: F) => Promise<string>;
@@ -97,168 +107,13 @@ export type TaskCreateModalControllerOptions<F extends TaskDescriptionImageFile>
   removeAssetImages: (markdown: string, assetIds: ReadonlySet<string>) => string;
 };
 
-type TaskCreateModalState = {
-  step: ComposerStep;
-  editSection: EditTaskSection;
-  composer: ComposerState;
-  selectedCreateIssueType: IssueType | null;
-  error: TaskCreateModalError | null;
-  documentError: TaskCreateModalError | null;
-  isSubmitting: boolean;
-  isSavingDocument: DocumentSection | null;
-  pendingDiscardIntent: PendingDiscardIntent | null;
-  taskAssetFailure: TaskAssetFailure | null;
-  /** The workspace that the user picked for a new task, or null for its destination. */
-  workspacePick: RetainedTaskWorkspace | null;
-};
-
-type TaskCreateModalAction =
-  | {
-      type: "resetForOpenTask";
-      task: TaskCard | null;
-      initialTitle: string;
-      initialEditSection: EditTaskSection;
-      composer?: ComposerState;
-      workspacePick: RetainedTaskWorkspace | null;
-    }
-  | { type: "externalTaskApplied"; composer: ComposerState }
-  | { type: "composerPatched"; patch: Partial<ComposerState> }
-  | { type: "issueTypeSelected"; issueType: IssueType }
-  | {
-      type: "createWorkspaceChanged";
-      workspace: RetainedTaskWorkspace;
-      /** True when the workflow of the next workspace offers the chosen issue type. */
-      keepsIssueType: boolean;
-    }
-  | { type: "stepChanged"; step: ComposerStep }
-  | { type: "documentErrorCleared" }
-  | { type: "discardIntentSet"; intent: PendingDiscardIntent }
-  | { type: "sectionChanged"; section: EditTaskSection }
-  | { type: "submitBlocked"; error: string }
-  | { type: "submitStarted" }
-  | {
-      type: "submitFailed";
-      error: TaskCreateModalError;
-      taskAssetFailure: TaskAssetFailure | null;
-    }
-  | { type: "submitFinished" }
-  | { type: "documentSaveStarted"; section: DocumentSection }
-  | { type: "documentSaveFailed"; error: TaskCreateModalError }
-  | { type: "documentSaveFinished" }
-  | { type: "discardIntentCleared" };
-
-/** The composer that an editor starts from: the saved task, or a new task with its title. */
-const startComposer = (task: TaskCard | null, initialTitle: string): ComposerState =>
-  task ? toComposerState(task) : { ...toComposerState(null), title: initialTitle };
-
-const initialTaskCreateModalState = (
-  task: TaskCard | null,
-  initialTitle = "",
-  initialEditSection: EditTaskSection = "details",
-): TaskCreateModalState => ({
-  step: task ? "details" : "type",
-  editSection: task ? initialEditSection : "details",
-  composer: startComposer(task, initialTitle),
-  selectedCreateIssueType: task?.issueType ?? null,
-  error: null,
-  documentError: null,
-  isSubmitting: false,
-  isSavingDocument: null,
-  pendingDiscardIntent: null,
-  taskAssetFailure: null,
-  workspacePick: null,
-});
-
-const areComposerStatesEqual = (left: ComposerState, right: ComposerState): boolean =>
-  left.issueType === right.issueType &&
-  left.removeWorktreeOnClose === right.removeWorktreeOnClose &&
-  left.title === right.title &&
-  left.priority === right.priority &&
-  left.description === right.description &&
-  left.labels.length === right.labels.length &&
-  left.labels.every((label, index) => label === right.labels[index]);
-
-const EXTERNAL_DOCUMENT_CONFLICT_MESSAGE =
-  "This document changed on the host while you were editing. Your edits are kept. Copy what you need, then close and reopen the task to load the latest version.";
-
-const taskCreateModalReducer = (
-  state: TaskCreateModalState,
-  action: TaskCreateModalAction,
-): TaskCreateModalState => {
-  switch (action.type) {
-    case "resetForOpenTask":
-      return {
-        ...initialTaskCreateModalState(action.task, action.initialTitle, action.initialEditSection),
-        composer: action.composer ?? startComposer(action.task, action.initialTitle),
-        workspacePick: action.workspacePick,
-      };
-    case "externalTaskApplied":
-      return {
-        ...state,
-        composer: action.composer,
-        selectedCreateIssueType: action.composer.issueType,
-        error: null,
-        taskAssetFailure: null,
-      };
-    case "composerPatched":
-      return { ...state, composer: { ...state.composer, ...action.patch } };
-    case "issueTypeSelected":
-      return {
-        ...state,
-        selectedCreateIssueType: action.issueType,
-        composer: { ...state.composer, issueType: action.issueType },
-        step: "details",
-      };
-    case "stepChanged":
-      return { ...state, step: action.step };
-    // Each workspace has its own workflow. When it does not offer the chosen issue type, the user
-    // picks the issue type again.
-    case "createWorkspaceChanged":
-      if (action.keepsIssueType) return { ...state, workspacePick: action.workspace, error: null };
-      return {
-        ...state,
-        workspacePick: action.workspace,
-        step: "type",
-        selectedCreateIssueType: null,
-        error: null,
-      };
-    case "documentErrorCleared":
-      return { ...state, documentError: null };
-    case "discardIntentSet":
-      return { ...state, pendingDiscardIntent: action.intent };
-    case "sectionChanged":
-      return { ...state, editSection: action.section, documentError: null };
-    case "submitBlocked":
-      return { ...state, error: { message: action.error, outcomeUnknown: false } };
-    case "submitStarted":
-      return {
-        ...state,
-        error: null,
-        documentError: null,
-        taskAssetFailure: null,
-        isSubmitting: true,
-      };
-    case "submitFailed":
-      return { ...state, error: action.error, taskAssetFailure: action.taskAssetFailure };
-    case "submitFinished":
-      return { ...state, isSubmitting: false };
-    case "documentSaveStarted":
-      return { ...state, error: null, documentError: null, isSavingDocument: action.section };
-    case "documentSaveFailed":
-      return { ...state, documentError: action.error };
-    case "documentSaveFinished":
-      return { ...state, isSavingDocument: null };
-    case "discardIntentCleared":
-      return { ...state, pendingDiscardIntent: null };
-  }
-};
-
 function useExternalTaskSync({
   open,
   task,
   taskId,
   initialTitle,
   initialEditSection,
+  initialWorkflowId,
   composer,
   workspacePick,
   dispatch,
@@ -273,6 +128,7 @@ function useExternalTaskSync({
   taskId: string | null;
   initialTitle: string;
   initialEditSection: EditTaskSection;
+  initialWorkflowId: string | null;
   composer: ComposerState;
   dispatch: Dispatch<TaskCreateModalAction>;
 }): void {
@@ -299,6 +155,7 @@ function useExternalTaskSync({
           task,
           initialTitle,
           initialEditSection,
+          initialWorkflowId,
           composer: retained
             ? rebaseTaskComposer(retained.composer, retained.baseline, nextServerComposer)
             : startComposer(task, initialTitle),
@@ -334,6 +191,7 @@ function useExternalTaskSync({
     drafts,
     initialTitle,
     initialEditSection,
+    initialWorkflowId,
     open,
     task,
     taskId,
@@ -354,6 +212,7 @@ function createTaskSubmit({
   onOpenChange,
   task,
   updateTask,
+  workflowId,
   workspace,
 }: {
   collectAssetIds: (markdown: string) => Set<string>;
@@ -368,6 +227,7 @@ function createTaskSubmit({
   onOpenChange: (open: boolean) => void;
   task: TaskCard | null;
   updateTask: TasksStateContextValue["updateTask"];
+  workflowId: string | undefined;
   workspace: TaskCreateWorkspace | null;
 }): () => Promise<void> {
   return async () => {
@@ -402,7 +262,7 @@ function createTaskSubmit({
       const descriptionAssets =
         suppliedAssetIds.length > 0 ? { stagedAssetIds: suppliedAssetIds } : undefined;
       if (mode === "create") {
-        await createTask(workspace, toTaskCreateInput(composer), descriptionAssets);
+        await createTask(workspace, toTaskCreateInput(composer, workflowId), descriptionAssets);
       } else if (task) {
         const patch = toTaskUpdatePatch(composer);
         const baseline = toTaskUpdatePatch(toComposerState(task));
@@ -530,6 +390,7 @@ function selectTaskCreateModalView({
   const isSaveOrRecoveryLocked = isSaving || isRecoveryBlocked;
   const isFormDisabled = isSaveOrRecoveryLocked || isUploading;
   const isTypeStepVisible = mode === "create" && modalState.step === "type";
+  const isWorkflowStepVisible = mode === "create" && modalState.step === "workflow";
   const isEditingDocument = mode === "edit" && activeDocumentSection !== null;
   const footerError = isEditingDocument ? modalState.documentError : modalState.error;
   const isActiveDocumentDirty = hasUnsavedActiveDocument;
@@ -543,6 +404,7 @@ function selectTaskCreateModalView({
     isSaveOrRecoveryLocked,
     isFormDisabled,
     isTypeStepVisible,
+    isWorkflowStepVisible,
     isEditingDocument,
     footerError,
     isActiveDocumentDirty,
@@ -561,6 +423,8 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   destination = null,
   initialTitle = "",
   initialEditSection = "details",
+  initialWorkflowId = null,
+  offerWorkflowChoice,
   readFileBase64,
   createPreviewUrl,
   revokePreviewUrl,
@@ -572,9 +436,14 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   const retainedDrafts = connection.drafts.taskEditors;
   const [modalState, dispatch] = useReducer(
     taskCreateModalReducer,
-    { task, initialTitle, initialEditSection },
+    { task, initialTitle, initialEditSection, initialWorkflowId },
     (initial) =>
-      initialTaskCreateModalState(initial.task, initial.initialTitle, initial.initialEditSection),
+      initialTaskCreateModalState(
+        initial.task,
+        initial.initialTitle,
+        initial.initialEditSection,
+        initial.initialWorkflowId,
+      ),
   );
   const {
     activeWorkspace,
@@ -589,15 +458,6 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   } = useTaskEditorWorkspace({ task, destination, workspacePick: modalState.workspacePick });
   // Only Edit task loads and saves documents, so only its destination error blocks them.
   const editDestinationError = target.mode === "edit" ? target.destinationError : null;
-  const workflowRead = useTaskFormWorkflow(task, workspaceScope, open);
-  const taskWorkflow = workflowRead.taskWorkflow;
-  const documentCodes = useMemo(
-    () =>
-      taskWorkflow?.definition.artifacts
-        .filter(({ kind }) => kind === "document")
-        .map(({ id }) => id) ?? [],
-    [taskWorkflow],
-  );
   const { createTask, updateTask } = useRequiredContext(
     TasksStateContext,
     "useTaskCreateModalController",
@@ -624,6 +484,23 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     pendingDiscardIntent,
     workspacePick,
   } = modalState;
+  const {
+    workflowRead,
+    taskWorkflow,
+    documentCodes,
+    selectWorkflow,
+    selectIssueType: selectCreateIssueType,
+    offeredChoices,
+    createWith,
+  } = useTaskEditorWorkflow({
+    task,
+    workspaceId,
+    workspaceRepoPath,
+    open,
+    offerWorkflowChoice,
+    selectedWorkflowId: modalState.selectedWorkflowId,
+    dispatch,
+  });
 
   const activeDocumentSection = documentCodeForSection(mode, editSection);
 
@@ -667,6 +544,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     taskId,
     initialTitle,
     initialEditSection,
+    initialWorkflowId,
     composer,
     workspacePick,
     dispatch,
@@ -742,6 +620,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     isSaveOrRecoveryLocked,
     isFormDisabled,
     isTypeStepVisible,
+    isWorkflowStepVisible,
     isEditingDocument,
     footerError,
     isActiveDocumentDirty,
@@ -764,15 +643,21 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     isBusy,
     isRecoveryBlocked,
     onPick: ({ workspaceId: pickedId, workspaceName, repoPath }) => {
-      // The workflows of the open workspaces are usually cached. Without one, the form asks for
-      // the issue type again.
-      const nextWorkflow = connection.queryClient.getQueryData<WorkspaceWorkflows>(
+      // The workflows of the open workspaces are usually cached. The picked workspace keeps the
+      // choice when it offers the chosen workflow and that workflow takes the type. Else the form
+      // asks for the issue type again.
+      const next = connection.queryClient.getQueryData<WorkspaceWorkflows>(
         workflowQueryKeys.workspace({ workspaceId: pickedId, repoPath }),
-      )?.newTaskWorkflow;
+      );
+      const selectedId = modalState.selectedWorkflowId;
+      const nextWorkflow =
+        selectedId === null
+          ? next?.newTaskWorkflow
+          : next?.newTaskWorkflows.find(({ reference }) => reference.id === selectedId);
       dispatch({
         type: "createWorkspaceChanged",
         workspace: { workspaceId: pickedId, workspaceName },
-        keepsIssueType:
+        keepsChoice:
           nextWorkflow?.definition.issueTypes.some(({ id }) => id === composer.issueType) === true,
       });
     },
@@ -783,10 +668,6 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   // renders only when its own value changes.
   const updateState = useCallback((patch: Partial<ComposerState>): void => {
     dispatch({ type: "composerPatched", patch });
-  }, []);
-
-  const selectCreateIssueType = useCallback((issueType: IssueType): void => {
-    dispatch({ type: "issueTypeSelected", issueType });
   }, []);
 
   // A toast shows the failure on each section. The footer shows only the error of the open one.
@@ -846,71 +727,32 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     },
     task,
     updateTask,
+    workflowId: createWith,
     workspace: saveWorkspace,
   });
   const submit = async (): Promise<void> => {
-    if (
-      !taskWorkflow ||
-      workflowRead.error ||
-      !taskWorkflow.definition.issueTypes.some(({ id }) => id === composer.issueType)
-    ) {
-      dispatch({
-        type: "submitBlocked",
-        error: workflowRead.error ?? "Select an issue type from the task workflow.",
-      });
+    const blocked = submitBlocker(
+      taskWorkflow,
+      workflowRead.error ?? workflowRead.selectionError,
+      composer.issueType,
+    );
+    if (blocked !== null) {
+      dispatch({ type: "submitBlocked", error: blocked });
       return;
     }
     await saveFlight.start(submitTask);
   };
 
-  const saveDocument = async (): Promise<void> => {
-    if (!task || !activeDocumentSection || !activeDocument) return;
-    if (editDestinationError) {
-      dispatch({
-        type: "documentSaveFailed",
-        error: { message: editDestinationError, outcomeUnknown: false },
-      });
-      return;
-    }
-    if (!taskWorkflow || workflowRead.error) {
-      dispatch({
-        type: "documentSaveFailed",
-        error: {
-          message: workflowRead.error ?? "Task workflow is loading.",
-          outcomeUnknown: false,
-        },
-      });
-      return;
-    }
-    // The live task card carries the version of each document, so a save never overwrites a
-    // newer document from an agent or another client.
-    if (
-      isDocumentNewerOnHost(
-        activeDocument.updatedAt,
-        task.artifactSummary[activeDocumentSection]?.updatedAt,
-      )
-    ) {
-      dispatch({
-        type: "documentSaveFailed",
-        error: { message: EXTERNAL_DOCUMENT_CONFLICT_MESSAGE, outcomeUnknown: false },
-      });
-      return;
-    }
-
-    const markdown = activeDocument.draftMarkdown.trim();
-    dispatch({ type: "documentSaveStarted", section: activeDocumentSection });
-    try {
-      const saved = await saveTaskDocument(task.id, activeDocumentSection, markdown);
-      applySavedDocument(activeDocumentSection, markdown, saved.updatedAt);
-    } catch (reason) {
-      dispatch({
-        type: "documentSaveFailed",
-        error: { message: errorMessage(reason), outcomeUnknown: isOutcomeUnknown(reason) },
-      });
-    } finally {
-      dispatch({ type: "documentSaveFinished" });
-    }
-  };
+  const saveDocument = (): Promise<void> =>
+    saveTaskEditorDocument({
+      task,
+      section: activeDocumentSection,
+      document: activeDocument,
+      blocker: editDestinationError ?? documentWorkflowBlocker(taskWorkflow, workflowRead.error),
+      dispatch,
+      saveTaskDocument,
+      applySavedDocument,
+    });
   const saveActiveDocument = async (): Promise<void> => {
     await saveFlight.start(saveDocument);
   };
@@ -934,13 +776,37 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
   const footer = taskEditorFooter({
     isRecoveryBlocked,
     destinationError,
-    workflowError: workflowRead.error,
+    workflowError: workflowRead.error ?? workflowRead.selectionError,
     error: footerError,
   });
+  const workflowsForType = workflowsForIssueType(offeredChoices, selectedCreateIssueType);
+  const steps = newTaskSteps(offeredChoices, selectedCreateIssueType);
+  const { before: stepBefore, after: stepAfter } = adjacentSteps(
+    steps,
+    step,
+    selectedCreateIssueType !== null,
+  );
 
   return {
     taskWorkflow,
     issueTypeChoices: issueTypeChoices(taskWorkflow),
+    /** The types of the first step: those of every offered workflow, or of the task workflow. */
+    typeStepChoices:
+      offeredChoices.length > 0
+        ? issueTypeChoicesOf(offeredChoices)
+        : issueTypeChoices(taskWorkflow),
+    workflowChoices: offeredChoices,
+    /** The default workflow of the workspace, as the board shows it. */
+    defaultWorkflowId: workflowRead.defaultWorkflow?.reference.id,
+    /** The offered workflows that take the picked type. Empty before a type or without a choice. */
+    workflowsForType,
+    /** The steps of a new task, the one source of the stepper and of Back and Continue. */
+    steps,
+    /** The step that Continue opens, or null when the step offers no Continue. */
+    stepAfter,
+    /** The step that Back opens, or null on the first step. */
+    stepBefore,
+    selectWorkflow,
     workflowRead,
     mode,
     taskId,
@@ -969,6 +835,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     isRecoveryBlocked,
     isSaveOrRecoveryLocked,
     isTypeStepVisible,
+    isWorkflowStepVisible,
     isEditingDocument,
     footerError: footer.message,
     /** True when the footer error is a lost save result. The host may have saved the change. */

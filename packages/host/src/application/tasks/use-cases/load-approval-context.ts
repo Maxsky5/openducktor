@@ -44,7 +44,7 @@ export const createTaskApprovalContextUseCase = ({
         const directMerge = metadata.directMerge;
         const targetBranch = normalizeApprovalTargetBranch(directMerge.targetBranch);
         const cleanupTarget = yield* findLatestCleanupTarget(
-          { ...dependencies, worktreeRoles: workflow.worktreeRoles },
+          dependencies,
           taskStore,
           effectiveRepoPath,
           taskId,

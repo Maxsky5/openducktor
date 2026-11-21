@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { createTaskSyncService } from "../tasks/sync/task-sync-service";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
@@ -354,6 +355,7 @@ const createAutopilotHarness = async ({
         workspaceId: repoPath.split("/").at(-1)!,
         repoPath,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title, issueType: "task", priority: 2 },
       }),
     );

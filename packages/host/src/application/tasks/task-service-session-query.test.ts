@@ -1,3 +1,5 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
+import { BUILTIN_TASK_ASSIGNMENT } from "./task-workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Effect, Result } from "effect";
@@ -32,6 +34,7 @@ describe("single-task session queries", () => {
     const calls: unknown[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStoreTestDouble({
         listAgentSessionsForTasks: (input) => {
           calls.push(input);
@@ -58,6 +61,7 @@ describe("single-task session queries", () => {
         store.createTask({
           ...harness.scope,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: { title: "Session query", issueType: "task", priority: 2 },
         }),
       );

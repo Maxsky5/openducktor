@@ -258,9 +258,8 @@ export const seedDemo = ({ world, engine, outcomes, terminals }: DemoSeedModules
     model: AgentSessionModelSelection,
     endedMinutesAgo: number,
   ): DemoSession => {
-    const checkout = workflow.usesWorktree(role)
-      ? outcomesWithWorktree(workspace, task)
-      : workspace.repository.checkout(workspace.record.repoPath);
+    // Every agent session of a task works in the task worktree, as on a host.
+    const checkout = outcomesWithWorktree(workspace, task);
     const session = engine.create({
       externalSessionId: `${runtimeOf(model)}-seed-${sessionNumber++}`,
       workspace,

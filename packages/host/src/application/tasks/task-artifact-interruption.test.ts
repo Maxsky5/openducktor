@@ -1,3 +1,5 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
+import { BUILTIN_TASK_ASSIGNMENT } from "./task-workflows";
 import { createTaskSyncService } from "./sync/task-sync-service";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, test } from "bun:test";
@@ -57,6 +59,7 @@ const createInterruptedTaskMutation = async (
   });
   const base = createTaskServiceWithMutationProgress({
     taskWorkflows: builtinTaskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     taskStore,
     taskSessionLifecycleCoordinator: coordinator,
   });
@@ -64,6 +67,7 @@ const createInterruptedTaskMutation = async (
     harness.store.createTask({
       ...harness.scope,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: {
         title: "Interrupted artifact",
         issueType: "task",

@@ -11,7 +11,8 @@ import type {
   SourceIssue,
   WorkspaceRef,
 } from "@openducktor/contracts";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowResolver, WorkspaceWorkflowPort } from "../../ports/task-workflow-port";
+import { assignmentOf } from "../tasks/task-workflows";
 import { requireWorkflowIssueType } from "../tasks/support/task-workflow-events";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -125,6 +126,7 @@ export const createIssueImportService = ({
   resolver,
   store,
   taskWorkflows,
+  workspaceWorkflows,
   workspaceSettingsService,
   publishTaskCreated,
   runStatusMutation,
@@ -132,6 +134,7 @@ export const createIssueImportService = ({
   resolver: GitProviderResolver;
   store: IssueImportStorePort;
   taskWorkflows: TaskWorkflowResolver;
+  workspaceWorkflows: Pick<WorkspaceWorkflowPort, "newTaskWorkflow">;
   runStatusMutation: TaskSyncService["runStatusMutation"];
   workspaceSettingsService: Pick<WorkspaceSettingsService, "getRepoConfig">;
   publishTaskCreated: (
@@ -393,12 +396,14 @@ export const createIssueImportService = ({
                 input,
                 "create-task",
                 Effect.gen(function* () {
-                  const workflow = taskWorkflows.forNewTask(input.repoPath);
+                  // An import follows the default workflow of the repository.
+                  const workflow = yield* workspaceWorkflows.newTaskWorkflow(input);
                   yield* requireWorkflowIssueType(workflow, review.issueType);
                   return yield* store.createImportedTask({
                     workspaceId: input.workspaceId,
                     repoPath: input.repoPath,
                     sourceIssue: source,
+                    workflow: assignmentOf(workflow),
                     status: TASK_OPEN_STATE,
                     task: {
                       title: source.title,
@@ -419,9 +424,14 @@ export const createIssueImportService = ({
                         reason: `This source item is already linked to Task ${created.taskId}.`,
                       };
                     }
+                    const {
+                      workflowId: _workflowId,
+                      workflowVersion: _workflowVersion,
+                      ...task
+                    } = created.task;
                     const workflow = taskWorkflows.forTask(created.task);
                     yield* publishTaskCreated(input, {
-                      ...created.task,
+                      ...task,
                       workflow: {
                         id: workflow.definition.id,
                         revision: workflow.definition.revision,

@@ -1,9 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import { workflowDefinitionSchema } from "@openducktor/contracts";
-import { createTaskWorkflow, workflowRoleCatalog } from "@openducktor/workflows";
+import { createTaskWorkflow } from "@openducktor/workflows";
 import {
   createSharedBoardWorkflows,
   createWorkflowTaskCardFixture,
+  workflowRoleCatalog,
 } from "@openducktor/workflows/test-support";
 import { toWireTaskCard } from "../../test-support/shared-test-fixtures";
 import { createFeedbackFake } from "../../test-support/feedback-fake";

@@ -1,5 +1,6 @@
 import type { AgentSessionControlSummary } from "@openducktor/contracts";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, type Scope } from "effect";
+import type { PreparedRolePolicy } from "./session-role-policies";
 import {
   causeMessage,
   HostOperationError,
@@ -8,7 +9,8 @@ import {
 } from "../../effect/host-errors";
 import { resumeAndSaveSession } from "./session-resume";
 import type { TaskService, TaskServiceError } from "../tasks/task-service";
-import type { TaskStorePort, TaskRecord } from "../../ports/task-repository-ports";
+import type { TaskRecordData } from "@openducktor/contracts";
+import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import type { TaskSessionStartPreparationService } from "../tasks/worktrees/task-session-start-preparation-service";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
@@ -36,6 +38,15 @@ export type RuntimeControl = Pick<
 >;
 
 export type TaskLifecycle = Pick<TaskSessionLifecycleCoordinator, "acquireLifecycle">;
+/**
+ * Reads the task workflow with current role copies and holds the role policy of the session that
+ * starts, forks, or resumes now, while the scope is open. A new session has no runtime identity
+ * yet, so it passes `externalSessionId: null` and keeps the policy once the runtime returns its
+ * identity. Other live sessions keep their policy, so a role save reaches later sessions only.
+ */
+export type PrepareRolePolicy = (
+  scope: AgentSessionWorkflowScope & { repoPath: string; externalSessionId: string | null },
+) => Effect.Effect<PreparedRolePolicy, HostError, Scope.Scope>;
 export type CanonicalizeRepoPath = (repoPath: string) => Effect.Effect<string, HostError>;
 export type PreparedTaskSession = {
   session: AgentSessionControlSummary;
@@ -54,7 +65,7 @@ export type TaskSessionWrites = {
   ) => Effect.Effect<{ publish: Effect.Effect<void, TaskServiceError> }, TaskServiceError>;
   applyStartEvent: (input: Parameters<TaskService["applyStartEvent"]>[0]) => Effect.Effect<
     {
-      task: TaskRecord;
+      task: TaskRecordData;
       publish: Effect.Effect<void, TaskServiceError>;
     },
     TaskServiceError
@@ -68,6 +79,7 @@ export type TaskSessionOperationDependencies = {
   >;
   taskReader: Pick<TaskStorePort, "getTask">;
   taskWorkflows: TaskWorkflowResolver;
+  prepareRolePolicy: PrepareRolePolicy;
   tasks: Pick<TaskService, "agentSessionsList">;
   taskLifecycle: TaskLifecycle;
   taskSessionStart: Pick<TaskSessionStartPreparationService, "prepare" | "complete">;
@@ -76,8 +88,16 @@ export type TaskSessionOperationDependencies = {
 
 /** Creates native sessions and saves ownership before returning publication work. */
 export const createTaskSessionOperations = (deps: TaskSessionOperationDependencies) => {
-  const { canonicalizeRepoPath, runtime, taskReader, taskWorkflows, tasks, taskLifecycle, writes } =
-    deps;
+  const {
+    canonicalizeRepoPath,
+    runtime,
+    taskReader,
+    taskWorkflows,
+    tasks,
+    taskLifecycle,
+    writes,
+    prepareRolePolicy,
+  } = deps;
   return {
     start: createStartTaskWorkflowSession(deps),
     completeSavedStart: (input: {
@@ -134,6 +154,11 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
           const scope = input.sessionScope;
           const repoPath = yield* canonicalizeRepoPath(input.repoPath);
           yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "resume session");
+          yield* prepareRolePolicy({
+            ...scope,
+            repoPath,
+            externalSessionId: input.externalSessionId,
+          });
           const stored = yield* readStoredWorkflowSession(
             tasks,
             { ...input, repoPath, sessionScope: scope },
@@ -173,6 +198,11 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
         Effect.gen(function* () {
           const repoPath = yield* canonicalizeRepoPath(input.repoPath);
           yield* taskLifecycle.acquireLifecycle(repoPath, [scope.taskId], "fork session");
+          const rolePolicy = yield* prepareRolePolicy({
+            ...scope,
+            repoPath,
+            externalSessionId: null,
+          });
           const task = yield* taskReader
             .getTask({ workspaceId: scope.workspaceId, repoPath, taskId: scope.taskId })
             .pipe(
@@ -230,6 +260,7 @@ export const createTaskSessionOperations = (deps: TaskSessionOperationDependenci
                       message:
                         "The runtime did not return a distinct idle fork in the source checkout. Reopen the source session and retry.",
                     });
+                  yield* rolePolicy.keep(summary.externalSessionId);
                   yield* progress.created(summary);
                   yield* progress.checkCanceled();
                   const stored = yield* storeWorkflowSession(writes.saveSession, {

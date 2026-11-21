@@ -120,7 +120,7 @@ describe("definition display fields", () => {
     expect(resolveWorkflowAction(review, "reset_implementation")).toEqual({
       kind: "event",
       eventId: "reset-implementation",
-      effects: ["worktree.reset"],
+      effects: [{ id: "worktree.reset", clearsSessionsOf: ["build", "qa"] }],
       launchActionIds: [],
       collectsFeedback: false,
     });
@@ -229,17 +229,17 @@ describe("display references", () => {
       invalid((definition) => {
         definition.defaultIssueType = "task";
       }),
-    ).toThrow('Unknown issueTypes ID "task"');
+    ).toThrow('uses the missing issue type "task"');
     expect(
       invalid((definition) => {
         definition.states[0]!.historyRoles = ["missing"];
       }),
-    ).toThrow('Unknown roles ID "missing"');
+    ).toThrow('uses the missing role "missing"');
     expect(
       invalid((definition) => {
         definition.launchOrder = [{ when: true, order: ["missing"] }];
       }),
-    ).toThrow('Unknown launch actions ID "missing"');
+    ).toThrow('uses the missing way to start "missing"');
     expect(
       invalid((definition) => {
         definition.actions.push({
@@ -251,6 +251,6 @@ describe("display references", () => {
           availableWhen: true,
         });
       }),
-    ).toThrow("has a step and a target");
+    ).toThrow('Button "Open editor" opens both a step and a target.');
   });
 });

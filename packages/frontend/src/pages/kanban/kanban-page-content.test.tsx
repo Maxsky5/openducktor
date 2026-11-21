@@ -34,6 +34,7 @@ const model: KanbanPageContentModel = {
   taskCardView: "normal",
   showHorizontalScrollbars: false,
   columns: [createKanbanColumnFixture("open", [], { title: "Backlog" })],
+  mixedBoard: null,
   hasLoadedTasks: false,
   filter: { isActive: false, onClear: () => {} },
   taskSessionsByTaskId: new Map(),

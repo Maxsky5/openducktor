@@ -5,7 +5,8 @@ import {
   taskRecordDataSchema,
 } from "@openducktor/contracts";
 import { type SQL, eq, inArray, gte, or, ne } from "drizzle-orm";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
+import { loadTaskWorkflowVersions } from "./sqlite-task-workflow-versions";
 import { Effect } from "effect";
 import { HostResourceError } from "../../effect/host-errors";
 import { normalizeLabels } from "../../domain/task/task-labels";
@@ -24,7 +25,7 @@ export const getTaskRecord = (
   workspaceId: string,
   taskId: string,
   repoPath: string,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<TaskRecord, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const task = yield* findTaskRecord(session, workspaceId, taskId, taskWorkflows);
@@ -43,7 +44,7 @@ export const findTaskRecord = (
   session: HostDatabaseSession,
   workspaceId: string,
   taskId: string,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<TaskRecord | null, SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     const rows = yield* taskCardRows(session, workspaceId, eq(tasks.id, taskId));
@@ -57,7 +58,7 @@ export const listTasksInDatabase = (
   workspaceId: string,
   input: TaskStoreListTasksInput,
   now: () => Date,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     if (input.taskIds !== undefined) {
@@ -81,7 +82,7 @@ const readChangedCards = (
   session: HostDatabaseSession,
   workspaceId: string,
   taskIds: readonly string[],
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
     if (taskIds.length === 0) return [];
@@ -97,9 +98,20 @@ const rowsToTaskRecords = (
   session: HostDatabaseSession,
   workspaceId: string,
   rows: readonly TaskCardRow[],
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
 ): Effect.Effect<TaskRecord[], SqliteTaskStoreReadError> =>
   Effect.gen(function* () {
+    yield* loadTaskWorkflowVersions(
+      session,
+      taskWorkflows,
+      rows.map(({ task, workflowPublishedAtMs }) => ({
+        workspaceId: task.workspaceId,
+        id: task.id,
+        workflowId: task.workflowId,
+        workflowVersion: task.workflowVersion,
+        workflowPublishedAtMs,
+      })),
+    );
     const workflows = new Map(rows.map(({ task }) => [task.id, taskWorkflows.forTask(task)]));
     const summaries = yield* artifactSummariesByTaskId(session, workspaceId, workflows);
     return yield* Effect.forEach(rows, (row) => rowToTaskRecord(row, summaries.get(row.task.id)));
@@ -137,7 +149,8 @@ const rowToTaskRecord = (
       updatedAt: row.updatedAt.toISOString(),
       removeWorktreeOnClose: row.removeWorktreeOnClose,
     };
-    return yield* validateWithSchema(taskRecordSchema, taskCard, "task card read model", {
+    const data = yield* validateWithSchema(taskRecordSchema, taskCard, "task card read model", {
       taskId: row.id,
     });
+    return { ...data, workflowId: row.workflowId, workflowVersion: row.workflowVersion };
   });

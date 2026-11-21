@@ -6,7 +6,7 @@ import { createNodeGitProviderComposition } from "./git-provider-composition";
 import { createNodeHostDefaultPorts } from "./node-host-default-ports";
 import type { CreateNodeHostCommandRouterInput } from "./node-host-command-router-types";
 import { createNodeSharedStorage } from "./node-shared-storage";
-import { builtinTaskWorkflowResolver } from "./task-workflow-composition";
+import { createTaskWorkflowVersionCache } from "./task-workflow-composition";
 
 export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRouterInput) =>
   Effect.uninterruptibleMask((restore) =>
@@ -19,7 +19,7 @@ export const createNodeEffectHostCommandRouter = (input: CreateNodeHostCommandRo
           );
           const defaultPorts = yield* createNodeSharedStorage(
             ports,
-            input.taskWorkflows ?? builtinTaskWorkflowResolver,
+            input.taskWorkflows ?? createTaskWorkflowVersionCache(),
             input.onHostDatabaseImport,
           );
           return yield* Effect.gen(function* () {

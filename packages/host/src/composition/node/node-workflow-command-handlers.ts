@@ -11,10 +11,14 @@ import type { createNodeSessionLaunchControls } from "./node-session-launch-cont
 import type { createNodeMessageDelivery } from "./node-message-delivery";
 import type { createNodeTaskSessionServices } from "./node-task-session-services";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
+import type { NodeHostSharedPorts } from "./node-shared-storage";
 import { createTaskAssetCommandHandlers } from "../../interface/commands/task-asset-command-handlers";
 import { createTaskCommandHandlers } from "../../interface/commands/task-command-handlers";
 import { createTaskMergeStatusCommandHandlers } from "../../interface/commands/task-merge-status-command-handlers";
 import { createTaskWorktreeCommandHandlers } from "../../interface/commands/task-worktree-command-handlers";
+import { createNodeWorkflowLibraryCommandHandlers } from "./node-workflow-library-composition";
+
+type LibraryDeps = Parameters<typeof createNodeWorkflowLibraryCommandHandlers>[0];
 
 export const createNodeWorkflowCommandHandlers = ({
   launchControls,
@@ -29,6 +33,10 @@ export const createNodeWorkflowCommandHandlers = ({
   textGeneration,
   taskAssetStagingService,
   taskWorktreeService,
+  eventBus,
+  live,
+  workspaceSessions,
+  workspaceSettingsService,
 }: {
   launchControls: ReturnType<
     typeof createNodeSessionLaunchControls<
@@ -37,7 +45,7 @@ export const createNodeWorkflowCommandHandlers = ({
   >;
   messageDelivery: ReturnType<typeof createNodeMessageDelivery>;
   taskSessions: ReturnType<typeof createNodeTaskSessionServices>;
-  defaultPorts: NodeHostDefaultPorts;
+  defaultPorts: NodeHostDefaultPorts & Pick<NodeHostSharedPorts, "workflowLibraryStore">;
   git: Parameters<typeof previewModels>[1];
   runtimeDefinitionsService: Parameters<typeof previewModels>[2];
   clientVersion: Parameters<typeof previewModels>[3];
@@ -46,7 +54,19 @@ export const createNodeWorkflowCommandHandlers = ({
   textGeneration: AgentTextGenerationPort;
   taskAssetStagingService: Parameters<typeof createTaskAssetCommandHandlers>[0];
   taskWorktreeService: Parameters<typeof createTaskWorktreeCommandHandlers>[0];
+  eventBus: LibraryDeps["eventBus"];
+  live: LibraryDeps["live"];
+  workspaceSessions: { readSessionRootRefs: LibraryDeps["readSessionRootRefs"] };
+  workspaceSettingsService: LibraryDeps["settings"];
 }) => ({
+  ...createNodeWorkflowLibraryCommandHandlers({
+    store: defaultPorts.workflowLibraryStore,
+    eventBus,
+    live,
+    readSessionRootRefs: workspaceSessions.readSessionRootRefs,
+    settings: workspaceSettingsService,
+    taskSync: taskSessions.taskSyncService,
+  }),
   ...createWorkflowReadCommandHandlers(taskSessions.workflowReads),
   ...createAgentSessionLiveCommandHandlers(launchControls.commands, messageDelivery),
   ...createWorkflowLaunchCommandHandlers(taskSessions.workflowLaunchService),

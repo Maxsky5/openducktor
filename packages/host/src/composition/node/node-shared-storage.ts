@@ -19,7 +19,9 @@ import { resolveSqliteHostDatabasePath } from "../../infrastructure/sqlite/sqlit
 import { createSqliteSharedSettingsDatabase } from "../../adapters/sqlite/sqlite-shared-settings-database";
 import { createSqliteHostDatabaseManager } from "../../adapters/sqlite/sqlite-task-repository-context";
 import { createRuntimeConfigInitializer } from "../../application/runtimes/runtime-config-initializer";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowVersionCache } from "../../ports/task-workflow-port";
+import { createSqliteWorkflowLibraryStore } from "../../adapters/sqlite/sqlite-workflow-library-store";
+import { createSqliteWorkspaceWorkflows } from "../../adapters/sqlite/sqlite-workspace-workflows";
 import type { NodeHostBootstrapPorts } from "./node-host-default-ports";
 import { toHostStorageStartupError } from "./host-startup-storage-error";
 import { guardRuntimeConfigInitializer } from "./user-path-guards";
@@ -48,7 +50,7 @@ export const loadConfigToImport = <E>(
 
 export const createNodeSharedStorage = <Ports extends StoragePorts>(
   ports: Ports,
-  taskWorkflows: TaskWorkflowResolver,
+  taskWorkflows: TaskWorkflowVersionCache,
   onHostDatabaseImport: (phase: "started" | "finished") => Effect.Effect<void> = () => Effect.void,
 ) =>
   Effect.gen(function* () {
@@ -104,7 +106,28 @@ export const createNodeSharedStorage = <Ports extends StoragePorts>(
       configPath,
       sharedSettings: createSqliteSharedSettingsDatabase(taskDatabase),
     });
-    return { ...ports, settingsConfig, taskDatabase, hostInstanceId };
+    const databasePath = resolveSqliteHostDatabasePath(configRoot);
+    const workspaceWorkflows = createSqliteWorkspaceWorkflows({
+      withDatabase: taskDatabase.withDatabase,
+      withHostDatabase: taskDatabase.withHostDatabase,
+      databasePath,
+      cache: taskWorkflows,
+      hostInstanceId,
+    });
+    const workflowLibraryStore = createSqliteWorkflowLibraryStore({
+      withHostDatabase: taskDatabase.withHostDatabase,
+      databasePath,
+      cache: taskWorkflows,
+    });
+    return {
+      ...ports,
+      settingsConfig,
+      taskDatabase,
+      hostInstanceId,
+      taskWorkflows,
+      workspaceWorkflows,
+      workflowLibraryStore,
+    };
   });
 
 export type NodeHostSharedPorts = Effect.Success<

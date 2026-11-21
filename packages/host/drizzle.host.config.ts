@@ -10,5 +10,6 @@ export default defineConfig({
     "./src/adapters/sqlite/sqlite-host-settings-schema.ts",
     "./src/adapters/sqlite/sqlite-runtime-settings-schema.ts",
     "./src/adapters/sqlite/sqlite-global-prompt-schema.ts",
+    "./src/adapters/sqlite/sqlite-workflow-library-schema.ts",
   ],
 });

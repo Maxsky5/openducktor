@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { replaceTaskSessions } from "./sqlite-task-relations";
@@ -64,6 +65,7 @@ test("task activity survives stale upserts and does not edit the task", async ()
     harness.store.createTask({
       ...harness.scope,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: { title: "Activity", issueType: "task", priority: 2 },
     }),
   );
@@ -136,6 +138,7 @@ test("task activity changes only its stored row among 100 sessions and colliding
     harness.store.createTask({
       ...harness.scope,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: { title: "Activity rows", issueType: "task", priority: 2 },
     }),
   );
@@ -143,6 +146,7 @@ test("task activity changes only its stored row among 100 sessions and colliding
     harness.store.createTask({
       ...harness.scope,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: { title: "Other owner", issueType: "task", priority: 2 },
     }),
   );
@@ -268,6 +272,7 @@ test.each([
     harness.store.createTask({
       ...harness.scope,
       status: "open",
+      workflow: BUILTIN_TASK_ASSIGNMENT,
       task: { title: "Path activity", issueType: "task", priority: 2 },
     }),
   );
@@ -308,6 +313,7 @@ test("task activity picks the full identity among tasks sharing a runtime sessio
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: workingDirectory, issueType: "task", priority: 2 },
       }),
     );
@@ -358,6 +364,7 @@ test("task activity rejects duplicate owners after matching their paths", async 
       harness.store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: workingDirectory, issueType: "task", priority: 2 },
       }),
     );

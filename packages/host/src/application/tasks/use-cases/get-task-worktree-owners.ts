@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import {
   collectImplementationResetRemovedPaths,
   collectImplementationResetSessionState,
+  previewResetRoles,
 } from "../support/implementation-reset-targets";
 import {
   requireDependencies,
@@ -47,25 +48,33 @@ export const createTaskWorktreeOwnersUseCase = ({
           };
         }),
       );
-      const { operation } = input;
       const worktreePaths =
-        operation === "reset_implementation"
+        input.operation === "reset_implementation"
           ? (yield* Effect.forEach(targets, (target) =>
-              collectImplementationResetSessionState(
-                dependencies,
-                target.workflow,
-                repoConfig,
-                target.taskId,
-                target.sessions,
-              ).pipe(
-                Effect.flatMap((state) =>
-                  collectImplementationResetRemovedPaths(dependencies, repoPath, target, state),
-                ),
-              ),
+              Effect.gen(function* () {
+                const resetRoles = yield* previewResetRoles(
+                  target.workflow,
+                  target.taskId,
+                  input.eventId,
+                );
+                const state = yield* collectImplementationResetSessionState(
+                  dependencies,
+                  resetRoles,
+                  repoConfig,
+                  target.taskId,
+                  target.sessions,
+                );
+                return yield* collectImplementationResetRemovedPaths(
+                  dependencies,
+                  repoPath,
+                  { ...target, resetRoles },
+                  state,
+                );
+              }),
             )).flat()
           : yield* collectRemovedWorktreePaths(
               { ...dependencies, taskWorktreeService },
-              operation,
+              input.operation,
               repoConfig,
               repoPath,
               targets,

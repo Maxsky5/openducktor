@@ -1,3 +1,4 @@
+import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
 import { createDefaultGlobalConfig } from "../../config/global-config";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
@@ -68,6 +69,7 @@ describe("Workspace Session persistence through the shared command module", () =
             hostInstanceId: "host",
             eventBus: undefined,
             taskWorkflows: builtinTaskWorkflows,
+            taskReader: createTaskStoreTestDouble({}),
             settings: {
               getRepoConfig: () => Effect.succeed(config),
               getRepoConfigByRepoPath: () => Effect.succeed(config),

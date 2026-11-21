@@ -186,3 +186,4 @@ export * from "./workflow-client-schemas";
 
 export * from "./keyboard-shortcut-schemas";
 export * from "./usage-schemas";
+export * from "./workflow-library-schemas";

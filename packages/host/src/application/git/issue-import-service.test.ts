@@ -1,3 +1,4 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
 import { collectTaskStatusChanges } from "../../ports/task-status-changes";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
@@ -153,6 +154,7 @@ const fixture = (
   const mutationGate = createSerialGate();
   const service = createIssueImportService({
     taskWorkflows: builtinTaskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     resolver,
     store: savedStore ?? store,
     workspaceSettingsService: { getRepoConfig: () => Effect.succeed(currentRepoConfig) },

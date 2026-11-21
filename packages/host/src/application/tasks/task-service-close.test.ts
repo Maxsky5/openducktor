@@ -1,3 +1,6 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
+import type { TaskWorkflowAssignment } from "../../ports/task-workflow-port";
+import { BUILTIN_TASK_ASSIGNMENT } from "./task-workflows";
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, mock, test } from "bun:test";
@@ -33,6 +36,8 @@ import {
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import type { TaskWorktreeService } from "./worktrees/task-worktree-service";
 
+type StoredTaskCard = import("@openducktor/contracts").TaskCard & TaskWorkflowAssignment;
+
 const run = <A>(effect: Effect.Effect<A, unknown>): Promise<A> => Effect.runPromise(effect);
 
 const createTaskService = (input: CreateTaskServiceInput) =>
@@ -45,7 +50,8 @@ const createTaskService = (input: CreateTaskServiceInput) =>
       } satisfies NonNullable<CreateTaskServiceInput["terminalService"]>),
   });
 
-const task = (overrides: Partial<TaskCard> = {}): TaskCard => ({
+const task = (overrides: Partial<StoredTaskCard> = {}): StoredTaskCard => ({
+  ...BUILTIN_TASK_ASSIGNMENT,
   id: "task-1",
   title: "Task",
   description: "",
@@ -112,7 +118,7 @@ const createMetadata = (agentSessions: AgentSessionRecord[] = []): TaskMetadataP
 });
 
 const createTaskStore = (
-  tasks: TaskCard[],
+  tasks: StoredTaskCard[],
   calls: string[] = [],
   sessionsByTaskId: Record<string, AgentSessionRecord[]> = {},
 ): TaskStorePort =>
@@ -207,6 +213,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
@@ -236,6 +243,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
@@ -261,6 +269,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
@@ -285,6 +294,7 @@ describe("TaskService.closeTask", () => {
   test("closes an in-progress task", async () => {
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task({ status: "in_progress" })]),
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
@@ -310,6 +320,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task({ status: "closed" })], calls),
     });
 
@@ -337,6 +348,7 @@ describe("TaskService.closeTask", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], [], { "task-1": [buildSession] }),
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
@@ -362,6 +374,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -413,6 +426,7 @@ describe("TaskService.closeTask", () => {
     );
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -459,6 +473,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -502,6 +517,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -530,6 +546,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(new Set(["/repo"])),
@@ -568,6 +585,7 @@ describe("TaskService.closeTask", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({ calls }),
@@ -595,6 +613,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -631,6 +650,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -662,6 +682,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls, registered: false }),
       settingsConfig: createSettingsConfig(new Set(["/worktrees/repo/task-1"])),
@@ -700,6 +721,7 @@ describe("TaskService.closeTask", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({
@@ -734,6 +756,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({
         calls,
@@ -784,6 +807,7 @@ describe("TaskService.closeTask", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls, { "task-1": [qaSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({ calls }),
@@ -810,6 +834,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
@@ -850,6 +875,7 @@ describe("TaskService.closeTask", () => {
     const calls: string[] = [];
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls),
       gitPort: createGitPort({ calls }),
       settingsConfig: createSettingsConfig(),
@@ -905,6 +931,7 @@ describe("TaskService.closeTask", () => {
     const taskSessionLifecycleCoordinator = createTaskSessionLifecycleCoordinator();
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore,
       gitPort: createGitPort({}),
       settingsConfig: createSettingsConfig(),
@@ -970,6 +997,7 @@ describe("TaskService.closeTask", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls, {
         "task-1": [specSession, plannerSession],
       }),
@@ -1018,6 +1046,7 @@ describe("TaskService.closeTask", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({ calls }),
@@ -1076,6 +1105,7 @@ describe("TaskService.closeTask", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       taskStore: createTaskStore([task()], calls, { "task-1": [buildSession] }),
       taskActivityGuard: activityGuard,
       gitPort: createGitPort({ calls }),

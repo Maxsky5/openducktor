@@ -1,6 +1,8 @@
 import { savedSettingsResult } from "@/test-utils/settings-save-fixtures";
 import { expect, test } from "bun:test";
 import { fireEvent, render, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import type { ReactNode } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
   createTaskCardFixture,
@@ -13,6 +15,17 @@ import {
 import { WorkspaceStateContext } from "@/state/app-state-contexts";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { createMessageCardElement } from "./agent-chat-message-card-test-harness";
+import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
+import { createWorkspaceActivityObserverStub as createActivityStub } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
+
+/** The sheet links to the workflow of the task and shows its live role lane. */
+const RouterWithActivity = ({ children }: { children: ReactNode }) => (
+  <MemoryRouter>
+    <WorkspaceActivityContext.Provider value={createActivityStub()}>
+      {children}
+    </WorkspaceActivityContext.Provider>
+  </MemoryRouter>
+);
 
 enableReactActEnvironment();
 
@@ -68,6 +81,7 @@ function renderTaskCard() {
       throw new Error("Unexpected model mutation");
     },
   };
+  // The detail sheet links to the workflow of the task, so the chat has a router.
   return render(
     <QueryProvider>
       <WorkspaceStateContext value={workspace}>
@@ -113,6 +127,7 @@ function renderTaskCard() {
         </ActiveWorkspaceContext>
       </WorkspaceStateContext>
     </QueryProvider>,
+    { wrapper: RouterWithActivity },
   );
 }
 

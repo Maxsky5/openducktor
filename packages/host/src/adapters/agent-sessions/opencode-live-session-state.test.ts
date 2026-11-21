@@ -353,6 +353,51 @@ describe("OpenCode host live-session state", () => {
     expect(state.listSnapshots()).toEqual([]);
   });
 
+  test("checks a child approval against the policy of its workflow session", () => {
+    const policyReads: (string | null)[] = [];
+    const state = createOpenCodeLiveSessionState({
+      // The workflow session keeps a read-only policy; a role save made the current role writable.
+      resolveWorkflowRolePolicy: ({ externalSessionId }) => {
+        policyReads.push(externalSessionId);
+        return { tools: [], readOnly: externalSessionId === "parent" };
+      },
+      runtime,
+      nextOccurrenceId: () => "opaque-1",
+    });
+    state.applyControlSummary(REPO, summary("parent"));
+    const parentRef = state.listSnapshots()[0]!.ref;
+    // The runtime list gives the delegated child the inherited workflow scope.
+    applySources(state, [
+      sourceFor(parentRef),
+      sourceFor(
+        { externalSessionId: "child", workingDirectory: parentRef.workingDirectory },
+        { parentExternalSessionId: "parent" },
+      ),
+    ]);
+    const childRef = state.refForExternalSession("child")!;
+    state.applyEvent(childRef, {
+      type: "approval_required",
+      externalSessionId: "child",
+      timestamp: "2026-07-16T10:02:00.000Z",
+      requestId: "child-edit",
+      requestType: "file_change",
+      title: "Edit",
+      action: { name: "write" },
+      mutation: "mutating",
+    });
+    const child = state.listSnapshots().find(({ ref }) => ref.externalSessionId === "child")!;
+    const route = state.requirePendingRoute(
+      childRef,
+      child.pendingApprovals[0]!.requestId,
+      "approval",
+    );
+
+    expect(() => state.assertApprovalAllowed(route, "approve_once")).toThrow(
+      "The build role cannot approve this OpenCode operation.",
+    );
+    expect(policyReads).toEqual(["parent"]);
+  });
+
   test("blocks child approval when a refresh drops its parent after a new request", () => {
     const state = createState();
     state.applyControlSummary(REPO, {

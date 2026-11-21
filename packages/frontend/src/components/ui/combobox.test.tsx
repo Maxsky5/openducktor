@@ -297,4 +297,61 @@ describe("Combobox", () => {
 
     expect(list.scrollTop).toBe(0);
   });
+
+  test("opens on the current value and names the list after its label", async () => {
+    render(
+      <>
+        <span id="panel-label">Side panel</span>
+        <Combobox
+          value="diffs"
+          options={[
+            { value: "document", label: "Document" },
+            { value: "diffs", label: "Diffs" },
+          ]}
+          searchable={false}
+          triggerAriaLabelledBy="panel-label"
+          onValueChange={() => {}}
+        />
+      </>,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+
+    expect(screen.getByRole("listbox", { name: "Side panel" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Diffs" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("option", { name: "Document" }).getAttribute("aria-selected")).toBe(
+      "false",
+    );
+  });
+
+  test("keeps the list open after a pick when it picks several options", async () => {
+    const onValueChange = mock(() => {});
+    render(
+      <Combobox
+        value=""
+        options={[
+          { value: "ready", label: "Ready" },
+          { value: "blocked", label: "Blocked" },
+        ]}
+        searchable={false}
+        listLabel="States"
+        closeOnSelect={false}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("option", { name: "Ready" }));
+    });
+
+    expect(onValueChange).toHaveBeenCalledWith("ready");
+    expect(screen.getByRole("listbox", { name: "States" })).toBeTruthy();
+  });
 });

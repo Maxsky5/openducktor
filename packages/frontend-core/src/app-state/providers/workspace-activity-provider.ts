@@ -10,6 +10,7 @@ import { createWorkspaceActivityObserver } from "../../workspace-activity/worksp
 import { useHostConnection } from "../../connection/client-connection-react";
 import { observeWorkspaceSessionRecords } from "../../queries/workspace-session-updates";
 import { observeTaskMergeStatusUpdates } from "../../queries/task-merge-status";
+import { observeWorkflowLibraryChanges } from "../../queries/workflow-library-changes";
 import { createAgentSessionListLiveSync } from "../../queries/agent-sessions";
 import { createAgentTurnGitSync } from "../../queries/agent-turn-git-sync";
 import { getSessionHistoryFreshnessTracker } from "../../queries/agent-session-history-freshness-tracker";
@@ -79,6 +80,9 @@ export function WorkspaceActivityProvider({ children }: PropsWithChildren): Reac
 
   // Merge detection events keep the merge status of each workspace current without polling.
   useEffect(() => observeTaskMergeStatusUpdates(queryClient), [queryClient]);
+
+  // Library events keep workflows, boards, and Settings current without polling.
+  useEffect(() => observeWorkflowLibraryChanges(queryClient), [queryClient]);
 
   // Saved chat events keep archived lists current without polling.
   useEffect(

@@ -77,8 +77,12 @@ Runtime catalog reads follow these rules:
 | Task merge status | Infinite, updated by events |
 | Task worktree cleanup impact | 0 |
 | Usage report | Infinity, read again by Refresh; reset when the host refuses the authorization or another host instance answers. Reconnect recovery skips it (`skipHostRecovery`) because a cold read can take a minute; the connection reads it again after admission |
+| Workflow library list and versions | 0, invalidated by library events |
+| Workflow document, task moves, role impact, and export | 0, not kept after the view closes |
 
 The connection owns the workflow catalog and each workspace board in `workflows.ts`. Every task projection resolves its exact workflow ID and revision before it enters the task cache. Recovery reloads the catalog and invalidates board reads. Each workspace reloads its board within its own task recovery, so a failed board does not block the other workspaces. Closing a workspace cancels and removes its board query. Missing definitions or invalid board metadata fail the affected read without a built-in substitution.
+
+The workflow library reads in `workflow-library.ts` use the key prefix `workflow-library`. The event `openducktor://workflow-library-changed` marks them stale with the workflow catalog, every workspace board, the task lists, and the settings reads. Only the reads that a view observes read again. A draft save sends no event, so the library list reads again each time a view opens it. The editor seeds its store once from a fresh document read and keeps the open document outside TanStack Query.
 
 Action owners observe tasks that details or session views loaded in the complete task cache. This lets retained tasks use their declared actions without adding them to the Kanban list or starting another task read.
 

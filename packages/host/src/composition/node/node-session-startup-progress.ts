@@ -14,8 +14,9 @@ import {
 } from "../../application/agent-sessions/session-startup-progress";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-service";
 import type { HostEventBusPort } from "../../events/host-event-bus";
-import { errorMessage, HostOperationError } from "../../effect/host-errors";
+import { errorMessage, HostOperationError, toHostOperationError } from "../../effect/host-errors";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
+import type { TaskStorePort } from "../../ports/task-repository-ports";
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { z } from "zod";
 import type { HostCommandArgs } from "../../interface/commands/command-inputs";
@@ -28,6 +29,7 @@ export const createNodeSessionStartupTracker =
     eventBus: HostEventBusPort | undefined;
     settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "getRepoConfigByRepoPath">;
     taskWorkflows: TaskWorkflowResolver;
+    taskReader: Pick<TaskStorePort, "getTask">;
     finalize: AgentSessionLiveStateService["finalizeStartupPreparation"];
     runtime: Pick<RuntimeRegistryPort, "probeSessionStatus">;
   }) =>
@@ -51,10 +53,18 @@ export const createNodeSessionStartupTracker =
           role: origin.sessionScope.role,
         };
       if (origin.taskId && origin.policy) {
-        const action = yield* requireLaunchAction(
-          dependencies.taskWorkflows.forTask({ id: origin.taskId }),
-          { policy: origin.policy },
-        );
+        const task = yield* dependencies.taskReader
+          .getTask({
+            workspaceId: config.workspaceId,
+            repoPath: config.repoPath,
+            taskId: origin.taskId,
+          })
+          .pipe(
+            Effect.mapError((cause) => toHostOperationError(cause, "session.startup-progress")),
+          );
+        const action = yield* requireLaunchAction(dependencies.taskWorkflows.forTask(task), {
+          policy: origin.policy,
+        });
         scope = {
           kind: "task",
           taskId: origin.taskId,

@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "./task-workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, mock, test } from "bun:test";
 import type { GitProviderDescriptor, PullRequest } from "@openducktor/contracts";
@@ -224,6 +225,7 @@ describe("createTaskService Pull Request provider ports", () => {
           workspaceId: first.workspaceId,
           repoPath: "/repo",
           status: "human_review",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: { title: "First", issueType: "task", priority: 2 },
         }),
       );

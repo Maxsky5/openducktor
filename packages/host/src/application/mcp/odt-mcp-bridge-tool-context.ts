@@ -1,4 +1,4 @@
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowResolver, WorkspaceWorkflowPort } from "../../ports/task-workflow-port";
 import {
   odtCallerSchema,
   type OdtBrowserToolName,
@@ -71,6 +71,7 @@ type OdtMcpWorkspaceSettingsService = Pick<
 
 export type CreateOdtMcpToolContextInput = {
   taskWorkflows: TaskWorkflowResolver;
+  workspaceWorkflows: Pick<WorkspaceWorkflowPort, "context" | "settingsOwners">;
   browserAgentTools: Pick<BrowserService, "runAgentTool">;
   browserCallers: BrowserCallerResolver;
   managedCallers: ManagedCallerResolver;
@@ -81,6 +82,7 @@ export type CreateOdtMcpToolContextInput = {
 
 export const createOdtMcpToolContext = ({
   taskWorkflows,
+  workspaceWorkflows,
   browserAgentTools,
   browserCallers,
   managedCallers,
@@ -121,6 +123,7 @@ export const createOdtMcpToolContext = ({
 
   return {
     taskWorkflows,
+    workspaceWorkflows,
     browserAgentTools,
     browserCallers,
     managedCallers,

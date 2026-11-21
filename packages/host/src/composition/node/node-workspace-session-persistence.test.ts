@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../../application/tasks/task-workflows";
 import { expect, test } from "bun:test";
 import { createMemoryAgentSessionTurnStore } from "../../ports/agent-session-turn-store.test-support";
 import { disabledNamingService } from "../../test-support/naming-test-doubles";
@@ -37,6 +38,7 @@ test("activity still saves after another host closes the running session's task"
       database.store.createTask({
         ...database.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: { title: "Running session", issueType: "task", priority: 2 },
       }),
     );

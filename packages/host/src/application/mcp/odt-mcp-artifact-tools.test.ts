@@ -1,3 +1,4 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
 import { createTaskSyncService } from "../tasks/sync/task-sync-service";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -103,6 +104,7 @@ beforeEach(async () => {
   );
   const base = createTaskServiceWithMutationProgress({
     taskWorkflows: builtinTaskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     taskStore: harness.store,
   });
   service = createEventPublishingTaskService({
@@ -141,6 +143,7 @@ const bridgeWith = (
 ) =>
   createOdtMcpBridgeService({
     taskWorkflows: builtinTaskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     browserAgentTools: { runAgentTool: () => Effect.die("Unexpected browser call") },
     browserCallers: { resolve: () => Effect.die("Unexpected browser caller") },
     managedCallers: {

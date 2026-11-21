@@ -1,4 +1,5 @@
 import {
+  agentRoleDefinitionSchema,
   TASK_OPEN_STATE,
   taskCardSchema,
   type TaskCard,
@@ -9,12 +10,22 @@ import {
 import { createTaskWorkflow, type TaskWorkflow } from "../src/task-workflow/task-workflow";
 import { resolveWorkflowTaskCards, type ResolvedTaskCard } from "../src/task-workflow-view";
 import {
-  resolveWorkflowBoard,
+  resolveWorkspaceBoard,
   taskWorkflowDescriptor,
   workflowReferenceKey,
-  workflowRoleCatalog,
-  type WorkflowBoardLayout,
 } from "../src/workflow-catalog";
+
+/** The catalog form of the roles that the workflows bind, once each, in first-use order. */
+export const workflowRoleCatalog = (
+  workflows: readonly TaskWorkflow[],
+): readonly AgentRoleDefinition[] => {
+  const roles = new Map<string, AgentRoleDefinition>();
+  for (const workflow of workflows)
+    for (const { writes: _writes, defaultArtifact: _defaultArtifact, ...role } of workflow.roles)
+      if (!roles.has(role.id))
+        roles.set(role.id, agentRoleDefinitionSchema.parse(structuredClone(role)));
+  return [...roles.values()];
+};
 
 const publishingWorkflow = (prefix: "alpha" | "beta") => {
   const writer = `${prefix}_writer`;
@@ -240,7 +251,6 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
       label: `${prefix} Writer`,
       tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
       workspaceAccess: "write",
-      location: "task_worktree",
       runtimeScopes: ["build"],
       systemPrompt: systemPrompt(writer),
     },
@@ -249,7 +259,6 @@ const publishingWorkflow = (prefix: "alpha" | "beta") => {
       label: `${prefix} Editor`,
       tools: ["odt_read_task", "odt_read_task_artifacts", "odt_set_task_artifact"],
       workspaceAccess: "read",
-      location: "repository",
       runtimeScopes: ["workspace"],
       systemPrompt: systemPrompt(editor),
     },
@@ -271,31 +280,16 @@ export const createSharedBoardWorkflows = () => {
   const alpha = publishingWorkflow("alpha");
   const beta = publishingWorkflow("beta");
   const workflows = [alpha, beta];
-  const order = [
-    "open",
-    "beta_work",
-    "alpha_hold",
-    "shared_review",
-    "alpha_work",
-    "beta_hold",
-    "alpha_approval",
-    "beta_approval",
-    "closed",
-  ];
-  const layout: WorkflowBoardLayout = {
-    states: order.map((id) => ({ id, taskOrder: "updated" })),
-  };
-  const board = resolveWorkflowBoard(layout, workflows);
+  const board = resolveWorkspaceBoard(workflows.map((workflow) => ({ workflow, latest: true })));
   return {
     alpha,
     beta,
     workflows,
-    layout,
     board,
     catalog: {
       hostInstanceId: "mixed-host",
       roles: [...workflowRoleCatalog(workflows)],
-      workflows: workflows.map(taskWorkflowDescriptor),
+      workflows: workflows.map((workflow) => taskWorkflowDescriptor(workflow)),
     },
   };
 };
@@ -331,6 +325,7 @@ export const createWorkflowTaskCardFixture = (
       hostInstanceId: "fixture-host",
       board,
       workflows: [workflow.reference],
+      newTaskWorkflows: [workflow.reference],
       newTaskWorkflow: workflow.reference,
     },
     [card],

@@ -2,7 +2,10 @@ import { allowAllGoalCommands } from "../../test-support/service-test-doubles";
 import { createNamingTestDependencies } from "../../test-support/naming-test-doubles";
 import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
 import { workspaceSessionOwnership } from "../../test-support/workspace-session-ownership";
-import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
+import {
+  builtinWorkflowRolePolicy,
+  prepareNoRolePolicy,
+} from "../../test-support/workflow-role-policy";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { commandPreparationFixture } from "../agent-sessions/test-support/command-preparation-fixture";
 import { noMessageQueues } from "../../test-support/message-queue-observer-test-double";
@@ -151,6 +154,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
       }),
     );
     const commands = createAgentSessionCommandService({
+      prepareRolePolicy: prepareNoRolePolicy,
       goalRules: allowAllGoalCommands,
       taskWorkflows: builtinTaskWorkflows,
       turnPreparation: commandPreparationFixture,

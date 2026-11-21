@@ -19,13 +19,13 @@ import {
   sessionNavigationTargetKey,
 } from "@openducktor/frontend-core/sessions/navigation/session-navigation-target";
 import {
+  BUILTIN_ROLES,
   type ResolvedTaskCard,
   resolveWorkflowTaskCards,
   SPEC_PLAN_BUILD_BOARD,
   specPlanBuildWorkflow,
   type WorkflowRoleId,
   workflowReferenceKey,
-  workflowRoleCatalog,
 } from "@openducktor/workflows";
 
 // Fixed sample data of the tour pictures: the fictional Fieldnotes notes app of the marketing
@@ -79,7 +79,7 @@ type DocumentCode = "spec" | "plan" | "qaReport";
 const SAMPLE_HOST = "feature-tour";
 const SAMPLE_CATALOG = {
   hostInstanceId: SAMPLE_HOST,
-  roles: workflowRoleCatalog([specPlanBuildWorkflow]),
+  roles: BUILTIN_ROLES,
   workflows: new Map([
     [workflowReferenceKey(specPlanBuildWorkflow.reference), specPlanBuildWorkflow],
   ]),
@@ -88,6 +88,7 @@ const SAMPLE_WORKSPACE_WORKFLOWS = {
   hostInstanceId: SAMPLE_HOST,
   board: SPEC_PLAN_BUILD_BOARD,
   workflows: [specPlanBuildWorkflow.reference],
+  newTaskWorkflows: [specPlanBuildWorkflow.reference],
   newTaskWorkflow: specPlanBuildWorkflow.reference,
 };
 

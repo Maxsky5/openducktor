@@ -7,8 +7,16 @@ import {
   worktreeOwnersRead,
 } from "@openducktor/frontend-core/test-support/worktree-owners-read";
 import { describe, expect, mock, test } from "bun:test";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { createElement, type PropsWithChildren } from "react";
+import {
+  act,
+  fireEvent,
+  type RenderOptions,
+  render as renderView,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskWorkflowActions } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
@@ -32,6 +40,8 @@ import {
   createSettingsSnapshotFixture,
 } from "@/test-utils/shared-test-fixtures";
 import type { WorkspaceStateContextValue } from "@/types/state-slices";
+import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
+import { createWorkspaceActivityObserverStub as createActivityStub } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 
 enableReactActEnvironment();
 
@@ -96,6 +106,18 @@ const createSheetConnection = () =>
     client: { workspaceGetSettingsSnapshot: async () => createSettingsSnapshotFixture() },
   });
 
+/** The sheet links to the workflow of the task and shows its live role lane. */
+const RouterWithActivity = ({ children }: PropsWithChildren) => (
+  <MemoryRouter>
+    <WorkspaceActivityContext.Provider value={createActivityStub()}>
+      {children}
+    </WorkspaceActivityContext.Provider>
+  </MemoryRouter>
+);
+
+const render = (ui: ReactElement, options?: RenderOptions) =>
+  renderView(ui, { ...options, wrapper: RouterWithActivity });
+
 const IsolatedProviders = ({ children }: PropsWithChildren) => (
   <QueryProvider connection={createSheetConnection()}>
     <WorkspaceStateContext.Provider value={createWorkspaceStateValue()}>
@@ -131,7 +153,7 @@ const createTaskCleanupImpactHookMock = () =>
   }));
 
 const createTaskStopImpactHookMock = () =>
-  mock((_args: { taskIds: string[]; operation: string; enabled: boolean }) => ({
+  mock((_args: Parameters<typeof useTaskStopImpact>[0]) => ({
     stoppableSessionCount: null,
     removedWorktreeCount: null,
     isLoading: false,
@@ -290,7 +312,7 @@ describe("TaskDetailsSheet", () => {
       expect(harness.getLatest().deleteConfirm.dialog.impact.isLoadingStopImpact).toBe(true);
 
       taskStopImpactHookMock.mockImplementation(
-        (_args: { taskIds: string[]; operation: string; enabled: boolean }) => ({
+        (_args: Parameters<typeof useTaskStopImpact>[0]) => ({
           stoppableSessionCount: 0,
           removedWorktreeCount: null,
           isLoading: false,
@@ -563,18 +585,22 @@ describe("TaskDetailsSheet", () => {
 
     const html = renderToStaticMarkup(
       createElement(
-        IsolatedProviders,
+        MemoryRouter,
         null,
-        createElement(TaskDetailsSheet, {
-          activeWorkspace: {
-            workspaceId: "workspace-a",
-            workspaceName: "Workspace A",
-            repoPath: "/repo-a",
-          },
-          task,
-          open: true,
-          onOpenChange: () => {},
-        }),
+        createElement(
+          IsolatedProviders,
+          null,
+          createElement(TaskDetailsSheet, {
+            activeWorkspace: {
+              workspaceId: "workspace-a",
+              workspaceName: "Workspace A",
+              repoPath: "/repo-a",
+            },
+            task,
+            open: true,
+            onOpenChange: () => {},
+          }),
+        ),
       ),
     );
 

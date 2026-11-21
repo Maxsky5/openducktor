@@ -141,6 +141,8 @@ export const taskCreateInputSchema = z.object({
   description: z.string().optional(),
   labels: z.array(z.string()).optional(),
   removeWorktreeOnClose: taskRemoveWorktreeOnCloseSchema.optional(),
+  /** An enabled workflow of the repository. Omitted means the default workflow of the repository. */
+  workflowId: workflowIdSchema.optional(),
 });
 export type TaskCreateInput = z.infer<typeof taskCreateInputSchema>;
 
@@ -166,11 +168,32 @@ export const taskStopImpactOperationSchema = z.enum([
 ]);
 export type TaskStopImpactOperation = z.infer<typeof taskStopImpactOperationSchema>;
 
-export const taskStopImpactRequestSchema = z.object({
+/**
+ * The operation of a preview read. A Reset Implementation names its event: the `worktree.reset`
+ * effect of that event decides the sessions.
+ */
+export type TaskRemovalPreview<Operation extends string> =
+  | { operation: Exclude<Operation, "reset_implementation"> }
+  | { operation: "reset_implementation"; eventId: string };
+
+const resetImplementationPreviewFields = {
+  operation: z.literal("reset_implementation"),
+  /** The event whose `worktree.reset` effect the preview reads. */
+  eventId: z.string().min(1),
+};
+
+const stopImpactTaskFields = {
   ...workspaceRefSchema.shape,
   taskIds: z.array(z.string().min(1)),
-  operation: taskStopImpactOperationSchema,
-});
+};
+
+export const taskStopImpactRequestSchema = z.discriminatedUnion("operation", [
+  z.object({
+    ...stopImpactTaskFields,
+    operation: taskStopImpactOperationSchema.exclude(["reset_implementation"]),
+  }),
+  z.object({ ...stopImpactTaskFields, ...resetImplementationPreviewFields }),
+]);
 export type TaskStopImpactRequest = z.infer<typeof taskStopImpactRequestSchema>;
 
 export const taskStopImpactSchema = z.object({
@@ -215,11 +238,18 @@ export const taskWorktreeOwnersOperationSchema = z.enum([
 ]);
 export type TaskWorktreeOwnersOperation = z.infer<typeof taskWorktreeOwnersOperationSchema>;
 
-export const taskWorktreeOwnersRequestSchema = z.strictObject({
+const worktreeOwnersTaskFields = {
   ...workspaceRefSchema.shape,
   taskIds: z.array(z.string().min(1)).min(1),
-  operation: taskWorktreeOwnersOperationSchema,
-});
+};
+
+export const taskWorktreeOwnersRequestSchema = z.discriminatedUnion("operation", [
+  z.strictObject({
+    ...worktreeOwnersTaskFields,
+    operation: taskWorktreeOwnersOperationSchema.exclude(["reset_implementation"]),
+  }),
+  z.strictObject({ ...worktreeOwnersTaskFields, ...resetImplementationPreviewFields }),
+]);
 export type TaskWorktreeOwnersRequest = z.infer<typeof taskWorktreeOwnersRequestSchema>;
 
 /** The others that need a worktree that a task action removes. Only a confirmation reads them. */

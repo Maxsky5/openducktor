@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { TaskCreateInput, WorkspaceRef } from "@openducktor/contracts";
 import { Effect, Result } from "effect";
 import type { TaskStorePort, TaskRecord } from "./task-repository-ports";
+import { BUILTIN_TASK_ASSIGNMENT } from "../application/tasks/task-workflows";
 import {
   createAgentSessionRecord,
   createDirectMergeRecord,
@@ -26,11 +27,13 @@ const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise
 
 const SQLITE_ORDERING_CONTRACT_TEST_TIMEOUT_MS = 20_000;
 
+const workflow = BUILTIN_TASK_ASSIGNMENT;
 const createTask = (
   store: TaskStorePort,
   scope: WorkspaceRef,
   input: TaskCreateInput,
-): Promise<TaskRecord> => run(store.createTask({ ...scope, status: "open", task: input }));
+): Promise<TaskRecord> =>
+  run(store.createTask({ ...scope, status: "open", workflow, task: input }));
 
 const SPEC_PLAN_BUILD_WORKFLOW_ID = "openducktor-spec-plan-build";
 

@@ -85,7 +85,7 @@ export const MessageHeader = ({
           <AssistantRoleIcon role={assistantRole} />
         ) : null}
         {message.role === "assistant" && assistantRole
-          ? (task?.taskWorkflow.roles.find(({ id }) => id === assistantRole)?.label ??
+          ? (task?.taskWorkflow.catalogRole(assistantRole)?.label ??
             roleLabel(message.role, message))
           : roleLabel(message.role, message)}
       </span>

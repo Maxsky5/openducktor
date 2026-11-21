@@ -6,7 +6,7 @@ OpenDucktor stores shared workspace data and execution settings in `<config-root
 
 | Store | Data |
 |---|---|
-| `database.sqlite` | Workspace registration, settings and lifecycle; task data; agent session turns; custom roles; prompt overrides and appends; runtime policies; Git defaults; Autopilot policy; host identity; remote-access settings. |
+| `database.sqlite` | Workspace registration, settings and lifecycle; task data with the workflow and version of each task; agent session turns; custom workflows, their drafts and published versions; workflow roles; the workflows that each workspace enables; custom roles; prompt overrides and appends; runtime policies; Git defaults; Autopilot policy; host identity; remote-access settings. |
 | `config.json` | Theme, appearance, chat, Kanban, general UI, notifications, reusable prompts, model favorites, preferred Open In tool, active workspace, order, recent workspaces, and Agent Studio state. |
 | `usage-index.sqlite` | A disposable cache of the native runtime history and the last downloaded API rates for the Usage page. Deleting it costs one rebuild. See [Usage](usage.md#index). |
 | Existing external files | Asset bytes and owner markers, worktrees, browser permissions and saved tabs, MCP discovery, logs, Electron profiles, and keychain secrets. |
@@ -24,6 +24,18 @@ Workspace removal deletes only the target registration and owned rows. It keeps 
 - A history read adds the saved facts where the runtime history has only approximate times. A row applies only when the history has its user message ID with the same text fingerprint.
 - Each row keeps the runtime and the model of its turn, so turns of several runtime sessions can form one conversation.
 - Workspace removal deletes the rows of the workspace. Task and Workspace Session deletion keep them, because the native session stays in the runtime.
+
+### Workflow library
+
+- `workflows` stores one row for each custom workflow. The built-in workflow has no row. A delete while only closed tasks use the workflow sets `deleted_at_ms` and keeps the row and its versions, so those tasks still open. The library does not list the workflow, and its ID stays taken.
+- `workflow_drafts` stores the one draft of a workflow as a `workflowDocumentSchema` value. A rename of a workflow without a version updates its draft through `ON UPDATE CASCADE`.
+- `workflow_versions` stores each published version as a `workflowVersionDocumentSchema` value. A version never changes.
+- `workflow_roles` stores each workflow role as an `agentRoleDefinitionSchema` value. `updated_at_ms` tells a host that its compiled copy of the role is older.
+- `workflow_availability` stores the rule of a workflow that not every workspace can use: `only` the listed workspaces, or every workspace `except` them. `workflow_availability_workspaces` lists those workspaces. A workflow without a rule is available to every workspace, also to a workspace added later. The built-in workflow can have a rule too.
+- `host_settings.default_workflow_id` names the workflow of a new task. The library service keeps it available to every workspace and blocks its delete.
+- `tasks.workflow_id` and `tasks.workflow_version` name the workflow version of a task. A NULL version means the built-in workflow that ships with the app. No foreign key goes from `tasks` to `workflow_versions`, so the library service checks the references before a delete.
+- A workflow delete and a role delete remove the settings keyed by the workflow or the role in the same transaction.
+- Each host caches compiled versions by workflow ID and version. A task read loads a version that the cache lacks in the same database session. The latest versions, the availability, the default, and the roles come from database reads.
 
 ### GitLab accounts
 

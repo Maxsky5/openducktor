@@ -23,22 +23,30 @@ export const createHumanReviewFeedbackState = (
       postStartAction: launchSessionCommand(launch),
     };
   };
+  // The dialog takes the name of the available event action that sends the event, such as
+  // "Resume diagnosis", so it says what the click does.
+  const eventActionLabel = (eventId: string) => {
+    for (const id of task.availableActions) {
+      const action = task.taskWorkflow.action(id);
+      if (action.kind === "event" && action.eventId === eventId) return action.label;
+    }
+    return HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel;
+  };
   if (request.kind === "launch") {
     // A launch that an available event action starts next also commits the event of that action,
     // so the task moves as it does from the action.
     let eventId: string | null = null;
+    let actionLabel: string | null = null;
     for (const id of task.availableActions) {
       const action = task.taskWorkflow.action(id);
       if (action.kind === "event" && action.launchActionIds?.includes(request.launchActionId)) {
         eventId = action.eventId;
+        actionLabel = action.label;
         break;
       }
     }
     return {
-      confirmLabel:
-        eventId !== null
-          ? HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel
-          : task.taskWorkflow.launchAction(request.launchActionId).label,
+      confirmLabel: actionLabel ?? task.taskWorkflow.launchAction(request.launchActionId).label,
       launch: toLaunch(request.launchActionId),
       eventId,
       taskId,
@@ -59,7 +67,7 @@ export const createHumanReviewFeedbackState = (
     ? task.taskWorkflow.launchAfterEvent(eventId, task, candidates)
     : null;
   return {
-    confirmLabel: HUMAN_REVIEW_FEEDBACK_COPY.confirmLabel,
+    confirmLabel: eventActionLabel(eventId),
     launch: following ? toLaunch(following) : null,
     eventId,
     taskId,
@@ -99,18 +107,15 @@ export const buildHumanReviewFeedbackModalModel = ({
   };
 };
 
-/** The text of the Request Changes feedback step. */
+/** The text of the feedback step. Its title and its confirm button name the action. */
 export const HUMAN_REVIEW_FEEDBACK_COPY = {
-  title: "Request changes",
   description: (roleLabel: string | null) =>
     roleLabel
-      ? `Describe the changes you want the ${roleLabel} to make. Next, you choose to continue an existing ${roleLabel} session or start a new one.`
-      : "Describe the changes you want. This action updates the task without starting an agent session.",
+      ? `Tell the ${roleLabel} what to do next. Then you choose to continue an existing ${roleLabel} session or start a new one.`
+      : "Write your feedback. This action updates the task without starting an agent session.",
   messageLabel: "Your feedback",
   messagePlaceholder: (roleLabel: string | null) =>
-    roleLabel
-      ? `Describe the changes you want the ${roleLabel} to make.`
-      : "Describe the changes you want.",
+    roleLabel ? `Tell the ${roleLabel} what to do next.` : "Write your feedback.",
   cancelLabel: "Cancel",
   confirmLabel: "Request changes",
 } as const;

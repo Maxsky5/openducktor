@@ -1,4 +1,3 @@
-import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { createGitPortTestDouble } from "../../../test-support/service-test-doubles";
@@ -19,7 +18,6 @@ const scope = {
 };
 const branchInput = {
   ...scope,
-  workflow: specPlanBuildWorkflow,
   operationLabel: "direct_merge",
 };
 const workspaceSettingsService = createBuildWorkspaceSettingsService({
@@ -52,7 +50,7 @@ describe("requireTaskBranches", () => {
       path: null,
       currentBranch: { detached: true },
       message:
-        "direct_merge requires a task worktree for task task-1. Start a Builder or QA session first.",
+        "direct_merge requires a task worktree for task task-1. Start an agent session of the task first.",
     },
     {
       path: worktreePath,

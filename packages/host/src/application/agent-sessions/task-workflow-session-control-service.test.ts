@@ -1,3 +1,6 @@
+import { prepareNoRolePolicy } from "../../test-support/workflow-role-policy";
+import type { TaskWorkflowAssignment } from "../../ports/task-workflow-port";
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { disabledNamingService } from "../../test-support/naming-test-doubles";
 import { specPlanBuildWorkflow, EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
@@ -51,6 +54,7 @@ type TestControlServiceInput = Omit<
   | "approvalPolicy"
   | "taskWorkflows"
   | "goalRules"
+  | "prepareRolePolicy"
 > & {
   runtime: Omit<
     ControlServiceInput["runtime"],
@@ -82,6 +86,7 @@ const createAgentSessionCommandService = ({
 }: TestControlServiceInput) =>
   createControlService({
     taskWorkflows: builtinTaskWorkflows,
+    prepareRolePolicy: prepareNoRolePolicy,
     pauseForStop,
     turnPreparation: {
       context: () => Effect.succeed("Current host context"),
@@ -200,7 +205,8 @@ const storedModel: AgentSessionRecord["selectedModel"] = {
   profileId: "build",
 };
 
-const task = (status: TaskCard["status"]): TaskCard => ({
+const task = (status: TaskCard["status"]): TaskCard & TaskWorkflowAssignment => ({
+  ...BUILTIN_TASK_ASSIGNMENT,
   id: "task-1",
   title: "Task 1",
   description: "",
@@ -385,6 +391,7 @@ const createReplyForkHarness = (
     tasks,
   });
   const sessions = createTaskSessionOperations({
+    prepareRolePolicy: prepareNoRolePolicy,
     taskWorkflows: builtinTaskWorkflows,
     ...deps,
     tasks,
@@ -1071,6 +1078,7 @@ describe("createAgentSessionCommandService", () => {
     });
     const taskLifecycle = createTaskSessionLifecycleCoordinator();
     const sessions = createTaskSessionOperations({
+      prepareRolePolicy: prepareNoRolePolicy,
       taskWorkflows: builtinTaskWorkflows,
       canonicalizeRepoPath: (repoPath) => Effect.succeed(repoPath),
       taskReader: taskStore,

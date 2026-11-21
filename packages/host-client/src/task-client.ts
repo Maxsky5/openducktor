@@ -38,6 +38,8 @@ import {
   type TaskMetadataPayload,
   type TaskStopImpact,
   type TaskStopImpactOperation,
+  type TaskRemovalPreview,
+  type TaskStopImpactRequest,
   type TaskUpdatePatch,
   taskAgentSessionsSchema,
   taskAssetDescriptionMutationSchema,
@@ -420,16 +422,19 @@ export class HostTaskClient {
     );
   }
 
+  /** A Reset Implementation preview names the event whose `worktree.reset` effect it reads. */
   async taskStopImpactGet(
     scope: WorkspaceRef,
     taskIds: string[],
-    operation: TaskStopImpactOperation,
+    preview: TaskRemovalPreview<TaskStopImpactOperation>,
   ): Promise<TaskStopImpact> {
-    return this.invokeFn(
-      "task_stop_impact_get",
-      { workspaceId: scope.workspaceId, repoPath: scope.repoPath, taskIds, operation },
-      taskStopImpactSchema,
-    );
+    const request: TaskStopImpactRequest = {
+      workspaceId: scope.workspaceId,
+      repoPath: scope.repoPath,
+      taskIds,
+      ...preview,
+    };
+    return this.invokeFn("task_stop_impact_get", request, taskStopImpactSchema);
   }
 
   async agentSessionsListForTasks(

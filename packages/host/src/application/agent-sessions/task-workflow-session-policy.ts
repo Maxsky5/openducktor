@@ -19,6 +19,7 @@ import {
   type CanonicalizeRepoPath,
   type RuntimeControl,
   type TaskLifecycle,
+  type PrepareRolePolicy,
 } from "./task-session-operations";
 import { readStoredWorkflowSession, storeWorkflowSession } from "./task-workflow-session-storage";
 import type {
@@ -46,7 +47,9 @@ export const createTaskWorkflowSessionPolicy = ({
   taskSessionStart,
   persistTaskModel,
   resolveRoot,
+  prepareRolePolicy,
 }: {
+  prepareRolePolicy: PrepareRolePolicy;
   canonicalizeRepoPath: CanonicalizeRepoPath;
   runtime: RuntimeControl;
   taskReader: TaskReader;
@@ -73,6 +76,7 @@ export const createTaskWorkflowSessionPolicy = ({
     taskWorkflows,
     taskLifecycle,
     taskSessionStart,
+    prepareRolePolicy,
     writes: {
       saveSession: (input) =>
         tasks.agentSessionUpsert(input).pipe(Effect.as({ publish: Effect.void })),

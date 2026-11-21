@@ -1,3 +1,4 @@
+import { HostValidationError } from "../../effect/host-errors";
 import type {
   AgentSessionControlResumeInput,
   AgentSessionControlSendInput,
@@ -204,17 +205,29 @@ export const createWorkflowLaunchService = (
           Effect.map((result) => (result.kind === "accepted" ? result.acceptedMessage : undefined)),
         );
     },
+    // The launch result names the role, so a missing task fails the launch before it starts.
     initial: (request) =>
-      // A missing task fails in the launch, which reports it in the result.
-      requireInitialLaunchRole(deps.taskWorkflows.forTask({ id: request.taskId }), request).pipe(
-        Effect.map((role) => ({
+      deps.taskReader
+        .getTask({
           workspaceId: request.workspaceId,
           repoPath: request.repoPath,
           taskId: request.taskId,
-          role,
-          status: "completed" as const,
-        })),
-      ),
+        })
+        .pipe(
+          Effect.mapError(
+            (cause) => new HostValidationError({ field: "taskId", message: cause.message, cause }),
+          ),
+          Effect.flatMap((task) =>
+            requireInitialLaunchRole(deps.taskWorkflows.forTask(task), request),
+          ),
+          Effect.map((role) => ({
+            workspaceId: request.workspaceId,
+            repoPath: request.repoPath,
+            taskId: request.taskId,
+            role,
+            status: "completed" as const,
+          })),
+        ),
     key: (request) => JSON.stringify([request.workspaceId, request.taskId]),
     target: (request) =>
       request.policy.kind === "manual" && request.policy.decision.startMode === "reuse"

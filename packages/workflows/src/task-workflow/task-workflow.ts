@@ -13,7 +13,6 @@ import {
   type WorkflowDefinition,
   type WorkflowReference,
   type TaskWorkflowStepState,
-  type HostEffectId,
   type WorkflowNotificationKind,
   type WorkflowSessionActivity,
   type WorkflowStepDisplayRule,
@@ -21,7 +20,8 @@ import {
 import { deepFreeze } from "../deep-freeze";
 import { createWorkflow, WorkflowEvaluationError } from "../evaluate";
 import { workflowNotificationDefaults } from "../notification-defaults";
-import { unsupportedGoalObjectivePlaceholder } from "./launch-goal";
+import { createProblemSink, firstError, problemText } from "../rules/problems";
+import { collectTaskWorkflowProblems } from "../rules/task-workflow-rules";
 import { isPullRequestLaunch, PULL_REQUEST_LAUNCH } from "./pull-request-launch";
 import { createTaskInputs, taskIssueTypes, type TaskCardFacts, type TaskFacts } from "./task-input";
 import {
@@ -54,6 +54,12 @@ export type TaskWorkflowLaunchAction = TaskWorkflowLaunchDefinition & { role: st
 type TaskWorkflowAutomation = Definition["automations"][number] & {
   roles: readonly string[];
   startMode: AgentSessionStartMode;
+};
+
+/** A host effect of an event, as the frozen workflow keeps it. */
+export type TaskWorkflowHostEffect = {
+  readonly id: "worktree.reset";
+  readonly clearsSessionsOf: readonly string[];
 };
 
 /** An agent event with the roles that may send it. An agent event has no host effects. */
@@ -110,8 +116,6 @@ export type TaskWorkflow = {
   readonly issueTypes: readonly IssueType[];
   /** The review artifacts. An implementation reset drops them. */
   readonly reviewArtifactCodes: readonly string[];
-  /** Roles whose sessions run in the task worktree. */
-  readonly worktreeRoles: readonly string[];
   /** The declared pull request roles. Empty: the sessions of every role can create it. */
   readonly pullRequestRoles: readonly string[];
   createsPullRequest(roleId: string): boolean;
@@ -120,19 +124,25 @@ export type TaskWorkflow = {
    * its approval is available.
    */
   pullRequestLaunchAvailable(task: TaskFacts): boolean;
-  usesWorktree(roleId: string): boolean;
   /** Whether merge detection checks the task branch of a task in this state. */
   detectsMerge(status: string): boolean;
   state(status: string): TaskWorkflowState;
   role(roleId: string): TaskWorkflowRole;
   hasRole(roleId: string): boolean;
+  /**
+   * A role of the catalog that compiled the workflow, bound or not. A task that moved to another
+   * version can keep sessions of a role that this version does not bind.
+   */
+  catalogRole(roleId: string): AgentRoleDefinition | undefined;
   /** The workflow artifact of a code, or undefined for a free artifact code. */
   artifact(code: string): TaskWorkflowArtifact | undefined;
   /** The event that a submit sends: the event of the review verdict, or the document save event. */
   artifactSubmitEvent(code: string, verdict: string | undefined): string | undefined;
   emptyArtifactSummary(): TaskArtifactSummary;
   /** The host effects that the host runs, in order, before it commits the event. */
-  eventEffects(eventId: string): readonly HostEffectId[];
+  eventEffects(eventId: string): readonly TaskWorkflowHostEffect[];
+  /** The `worktree.reset` effect of the event, with the roles whose sessions it clears. */
+  worktreeReset(eventId: string): TaskWorkflowHostEffect | undefined;
   /** The events that agents of the role may send, in declaration order. */
   agentEvents(roleId: string): readonly TaskWorkflowAgentEvent[];
   /** The agent declaration of an event, or undefined when agents cannot send it. */
@@ -223,17 +233,23 @@ export const createTaskWorkflow = (
 ): TaskWorkflow => {
   const evaluator = createWorkflow(source);
   const { definition } = evaluator;
+  const sink = createProblemSink();
+  collectTaskWorkflowProblems(definition, templates, roleCatalog, sink);
+  const problem = firstError(sink.problems);
+  if (problem)
+    throw new WorkflowEvaluationError(
+      "invalid_definition",
+      `Task workflow "${definition.id}" is invalid. ${problemText(problem)}`,
+    );
   const catalogRoles = new Map(roleCatalog.map((role) => [role.id, role]));
+  const frozenCatalogRoles = new Map(
+    deepFreeze(structuredClone([...roleCatalog])).map((role) => [role.id, role]),
+  );
   const roles: readonly TaskWorkflowRole[] = deepFreeze(
-    definition.roles.map((binding) => {
-      const catalogRole = catalogRoles.get(binding.id);
-      if (!catalogRole)
-        throw new WorkflowEvaluationError(
-          "invalid_definition",
-          `Task workflow "${definition.id}" binds unknown role "${binding.id}". Add the role to the role catalog.`,
-        );
-      return { ...structuredClone(catalogRole), ...binding };
-    }),
+    definition.roles.map((binding) => ({
+      ...structuredClone(catalogRoles.get(binding.id)!),
+      ...binding,
+    })),
   );
   const agentEventsById = new Map(
     definition.events.flatMap(({ id, agent }) =>
@@ -241,13 +257,8 @@ export const createTaskWorkflow = (
     ),
   );
   const agentEventsByRole = new Map(
-    roles.map(({ id: roleId, tools }) => {
+    roles.map(({ id: roleId }) => {
       const events = [...agentEventsById.values()].filter(({ roles }) => roles.includes(roleId));
-      if (events.length > 0 && !tools.includes("odt_apply_workflow_event"))
-        throw new WorkflowEvaluationError(
-          "invalid_definition",
-          `Task workflow "${definition.id}" lets role "${roleId}" send events ${events.map(({ id }) => id).join(", ")}, but the role has no odt_apply_workflow_event tool. Add the tool to the role, or remove the role from these events.`,
-        );
       return [
         roleId,
         deepFreeze(events.map(({ id, description, note }) => ({ id, description, note }))),
@@ -276,22 +287,6 @@ export const createTaskWorkflow = (
   const event = lookup(definition.id, "event", eventsById);
   const agentSteps = definition.steps.filter((step): step is AgentStep => step.kind === "agent");
   const stepByRole = new Map(agentSteps.map((step) => [step.roleId, step]));
-  if (stepByRole.size !== agentSteps.length) {
-    throw new WorkflowEvaluationError(
-      "invalid_definition",
-      `Task workflow "${definition.id}" gives a role two agent steps. Give each role one agent step.`,
-    );
-  }
-  for (const launch of agentSteps.flatMap((step) => step.launchActions)) {
-    const placeholder =
-      launch.goal &&
-      unsupportedGoalObjectivePlaceholder(launch.goal.defaultObjective, launch.context);
-    if (placeholder)
-      throw new WorkflowEvaluationError(
-        "invalid_definition",
-        `The default goal of launch action "${launch.id}" in task workflow "${definition.id}" uses placeholder "${placeholder}". Use only {{task.id}} and {{task.title}}, and {{humanFeedback}} in a launch that collects human feedback.`,
-      );
-  }
   const workflowLaunchAction = lookup(
     definition.id,
     "launch action",
@@ -330,9 +325,6 @@ export const createTaskWorkflow = (
   );
   const mergeDetectionStates = new Set(
     definition.states.filter(({ mergeDetection }) => mergeDetection).map(({ id }) => id),
-  );
-  const worktreeRoleSet = new Set(
-    roles.filter(({ location }) => location === "task_worktree").map(({ id }) => id),
   );
   const action = lookup(
     definition.id,
@@ -433,7 +425,6 @@ export const createTaskWorkflow = (
     reviewArtifactCodes: definition.artifacts
       .filter(({ kind }) => kind === "review")
       .map(({ id }) => id),
-    worktreeRoles: [...worktreeRoleSet],
     pullRequestRoles: definition.pullRequestRoles,
     createsPullRequest,
     pullRequestLaunchAvailable: (task) =>
@@ -441,10 +432,10 @@ export const createTaskWorkflow = (
       approvalAction !== undefined &&
       project(task).availableActions.includes(approvalAction.id),
     detectsMerge: (status) => mergeDetectionStates.has(status),
-    usesWorktree: (roleId) => worktreeRoleSet.has(roleId),
     state,
     role,
     hasRole: (roleId) => rolesById.has(roleId),
+    catalogRole: (roleId) => frozenCatalogRoles.get(roleId),
     artifact: (code) => artifactsById.get(code),
     artifactSubmitEvent: (code, verdict) => {
       const artifact = artifactsById.get(code);
@@ -455,6 +446,8 @@ export const createTaskWorkflow = (
     },
     emptyArtifactSummary: inputs.emptyArtifactSummary,
     eventEffects: (eventId) => event(eventId).effects ?? [],
+    worktreeReset: (eventId) =>
+      event(eventId).effects?.find((effect) => effect.id === "worktree.reset"),
     agentEvents,
     agentEvent: (eventId) => agentEventsById.get(eventId),
     taskAfterEvent,

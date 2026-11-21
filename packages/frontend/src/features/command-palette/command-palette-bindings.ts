@@ -1,3 +1,4 @@
+import { workflowRoleLabel } from "@openducktor/workflows";
 import type { AppPlatform } from "@openducktor/contracts";
 import { hasPlatformModifier, platformKeyLabels } from "@/lib/keyboard-shortcuts";
 import type { CommandPaletteHint } from "./command-palette-footer";
@@ -96,7 +97,7 @@ export const mainListEnterHint = ({
       if (!open) return null;
       const label =
         open.kind === "open_session"
-          ? `Open ${entry.item.task.taskWorkflow.role(open.session.role).label} session`
+          ? `Open ${workflowRoleLabel(entry.item.task.taskWorkflow, open.session.role)} session`
           : "Open details";
       return enterHint(label, () => openTask(entry.item));
     }

@@ -1,3 +1,4 @@
+import type { MixedBoard } from "@openducktor/frontend-core/tasks/board/use-kanban-board-data";
 import type {
   AgentSessionRecord,
   KanbanEmptyColumnDisplay,
@@ -23,6 +24,7 @@ type UseKanbanBoardModelArgs = {
   showHorizontalScrollbars: boolean | null;
   /** The tasks that the search and filters show. */
   tasks: TaskCard[];
+  mixedBoard: MixedBoard | null;
   hasLoadedTasks: boolean;
   filter: KanbanPageContentModel["filter"];
   historicalSessionsByTaskId: Map<string, AgentSessionRecord[]>;
@@ -45,6 +47,7 @@ export function useKanbanBoardModel({
   pendingState,
   showHorizontalScrollbars,
   tasks,
+  mixedBoard,
   hasLoadedTasks,
   filter,
   historicalSessionsByTaskId,
@@ -69,6 +72,7 @@ export function useKanbanBoardModel({
     pendingState,
     showHorizontalScrollbars,
     columns,
+    mixedBoard,
     hasLoadedTasks,
     filter,
     taskSessionsByTaskId,

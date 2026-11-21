@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createTaskWorkflow, resolveWorkflowBoard } from "@openducktor/workflows";
+import { createTaskWorkflow, resolveWorkspaceBoard } from "@openducktor/workflows";
 import {
   createWorkflowTaskCardFixture,
   reviewTaskDefinition,
@@ -243,10 +243,7 @@ describe("session-start-orchestration", () => {
     const write = definition.steps.find(({ id }) => id === "write")!;
     write.availableWhen = { stateIn: ["open", "writing", "paused"] };
     const workflow = createTaskWorkflow(definition, reviewTaskPromptTemplates, reviewTaskRoles);
-    const board = resolveWorkflowBoard(
-      { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
-      [workflow],
-    );
+    const board = resolveWorkspaceBoard([{ workflow, latest: true }]);
     const selectedTask = createWorkflowTaskCardFixture(workflow, board, { status: "approval" });
     const build = (eventId?: string) => {
       const request: SessionStartFlowRequest = {

@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { ComponentType } from "react";
-import { createCachedPageLoader } from "./index";
+import { createCachedPageLoader, loadedPage } from "./index";
 
 const TestPage: ComponentType = () => null;
 
@@ -34,5 +34,12 @@ describe("createCachedPageLoader", () => {
 
     expect(secondLoad).toBe(firstLoad);
     expect(loadPage).toHaveBeenCalledTimes(1);
+  });
+
+  test("gives the loaded page once the load finishes, so a route can skip the lazy fallback", async () => {
+    const loadCachedPage = createCachedPageLoader(async () => ({ default: TestPage }));
+    expect(loadedPage(loadCachedPage)).toBeUndefined();
+    await loadCachedPage();
+    expect(loadedPage(loadCachedPage)).toBe(TestPage);
   });
 });

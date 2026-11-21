@@ -11,7 +11,8 @@ const ISSUE_TYPE_PRESENTATION = new Map<WorkflowIcon, IssueTypePaint>([
     "feature",
     {
       icon: Sparkles,
-      iconClass: "bg-info-surface text-info-muted",
+      iconClass:
+        "bg-info-surface text-info-muted dark:bg-info-surface-selected dark:text-info-surface-foreground",
     },
   ],
   [

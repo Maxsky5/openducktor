@@ -43,6 +43,13 @@
       "when": 1795351406732,
       "tag": "0005_agent_session_turns",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795476088489,
+      "tag": "0006_workflow_library",
+      "breakpoints": true
     }
   ]
 }

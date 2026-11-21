@@ -1,3 +1,4 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
@@ -130,6 +131,7 @@ type TestOdtMcpBridgeServiceInput = Omit<
   | "browserCallers"
   | "managedCallers"
   | "taskWorkflows"
+  | "workspaceWorkflows"
 > & {
   taskService: OdtTaskService;
   taskAssetReadService?: TaskAssetReadService;
@@ -137,6 +139,7 @@ type TestOdtMcpBridgeServiceInput = Omit<
 const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =>
   createOdtMcpBridgeService({
     taskWorkflows: builtinTaskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     taskAssetReadService: input.taskAssetReadService ?? {
       read: () => Effect.succeed(null),
       readBatch: () => Effect.succeed({ kind: "missing", assetIds: [] }),

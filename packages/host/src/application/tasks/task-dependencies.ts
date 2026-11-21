@@ -7,7 +7,7 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
 import type { TaskStorePort } from "../../ports/task-repository-ports";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
+import type { TaskWorkflowResolver, WorkspaceWorkflowPort } from "../../ports/task-workflow-port";
 import type { TaskWorktreeOwnerReader } from "../../ports/task-worktree-owner-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import type { WorktreeFilePort } from "../../ports/worktree-file-port";
@@ -34,6 +34,8 @@ export type CreateTaskServiceInput = {
   gitProviderResolver?: GitProviderResolver;
   taskStore: TaskStorePort;
   taskWorkflows: TaskWorkflowResolver;
+  /** The workflow choices of a workspace. Task creation needs it. */
+  workspaceWorkflows?: WorkspaceWorkflowPort;
   taskActivityGuard?: TaskActivityGuardPort;
   settingsConfig?: SettingsConfigPort;
   systemCommands?: SystemCommandPort;

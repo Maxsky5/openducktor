@@ -1,3 +1,4 @@
+import { testWorkflowSettings } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +9,6 @@ import { hostPreferencesSchema } from "../../config/global-config";
 import type { SharedSettingsDatabase } from "../../ports/settings-config-port";
 import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { createWorkspaceSettingsService } from "./workspace-settings-service";
-import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 
 const withConfigFile = async (
   run: (configPath: string, sharedSettings: SharedSettingsDatabase) => Promise<void>,
@@ -27,7 +27,7 @@ const withConfigFile = async (
 const startHost = (configPath: string, sharedSettings: SharedSettingsDatabase) =>
   createWorkspaceSettingsService(
     createSettingsConfigAdapter({ configPath, sharedSettings }),
-    builtinTaskWorkflows,
+    testWorkflowSettings(),
   );
 
 const readFileConfig = async (configPath: string) =>

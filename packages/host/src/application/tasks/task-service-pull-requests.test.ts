@@ -1,3 +1,4 @@
+import { testWorkspaceWorkflows } from "../../test-support/task-workflows";
 import { createReviewTaskWorkflow } from "@openducktor/workflows/test-support";
 import { builtinTaskWorkflows, reviewTaskWorkflows } from "../../test-support/task-workflows";
 import { noWorktreeOwners } from "../../test-support/service-test-doubles";
@@ -82,6 +83,7 @@ const createGithubTaskService = (
   const providerDependencies = createGithubTaskDependencies(gitPort, input.systemCommands);
   return createTaskService({
     taskWorkflows: builtinTaskWorkflows,
+    workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
     ...input,
     ...providerDependencies,
   });
@@ -226,6 +228,7 @@ describe("createTaskService pull requests", () => {
     const providerDependencies = await createGithubTaskDependencies(gitPort, systemCommands);
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       ...providerDependencies,
       taskStore,
       taskWorktreeService: createDirectMergeTaskWorktreeService("/worktrees/repo/task-1"),
@@ -291,6 +294,7 @@ describe("createTaskService pull requests", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       gitPort: createDirectMergeGitPort({ calls }),
       systemCommands: createPullRequestDetectSystemCommands({
         calls,
@@ -474,6 +478,7 @@ describe("createTaskService pull requests", () => {
     const providerDependencies = await createGithubTaskDependencies(gitPort, systemCommands);
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       ...providerDependencies,
       taskStore,
       workspaceSettingsService: createBuildWorkspaceSettingsService({
@@ -1549,6 +1554,7 @@ describe("createTaskService pull requests", () => {
       Effect.runPromise(
         createTaskService({
           taskWorkflows: builtinTaskWorkflows,
+          workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
           gitPort: extendGitPort(
             createDirectMergeGitPort({
               calls,
@@ -1741,6 +1747,7 @@ describe("createTaskService pull requests", () => {
       Effect.runPromise(
         createTaskService({
           taskWorkflows: builtinTaskWorkflows,
+          workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
           gitPort: createDirectMergeGitPort({ calls }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           systemCommands: createPullRequestUpsertSystemCommands({
@@ -2941,6 +2948,7 @@ describe("createTaskService pull requests", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       gitPort: createDirectMergeGitPort({
         calls,
         currentBranches: {
@@ -3206,6 +3214,7 @@ describe("createTaskService pull requests", () => {
     };
     const service = createTaskServiceWithMutationProgress({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       gitPort: createDirectMergeGitPort({
         calls: [],
         currentBranches: { "/worktrees/repo/task-1": { name: "odt/task-1", detached: false } },
@@ -3321,6 +3330,7 @@ describe("createTaskService pull requests", () => {
     };
     const service = createTaskService({
       taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
       gitPort: createDirectMergeGitPort({ calls }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       taskStore,
@@ -3453,6 +3463,7 @@ describe("createTaskService pull requests", () => {
       Effect.runPromise(
         createTaskService({
           taskWorkflows: builtinTaskWorkflows,
+          workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
           gitPort: createDirectMergeGitPort({ calls: [] }),
           settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
           taskStore,

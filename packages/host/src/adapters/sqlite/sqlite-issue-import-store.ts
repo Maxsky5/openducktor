@@ -203,6 +203,7 @@ export const createSqliteIssueImportStore = ({
               createdAt: now(),
               session,
               status: input.status,
+              workflow: input.workflow,
               task: input.task,
               workspaceId: context.workspaceId,
             });

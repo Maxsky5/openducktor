@@ -184,6 +184,8 @@ export const installOpenCodePolicy = async (input: {
   client: OpenCodeClient;
   detail: SessionInfo;
   scope: AgentSessionScope;
+  /** The root session whose role policy the session uses. */
+  policySessionId: string;
   repoPath: string;
   resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   creationSettings?: OpenCodeCreationSettings;
@@ -192,6 +194,7 @@ export const installOpenCodePolicy = async (input: {
   const { client, detail, scope, creationSettings } = input;
   const policy = resolveOpencodeSessionPolicy(
     { sessionScope: scope },
+    input.policySessionId,
     OPENCODE_RUNTIME_DESCRIPTOR,
     "install V2 session controls",
     input.resolveWorkflowRolePolicy,

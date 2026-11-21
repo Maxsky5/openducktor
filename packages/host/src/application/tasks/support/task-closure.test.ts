@@ -1,3 +1,5 @@
+import type { TaskWorkflowAssignment } from "../../../ports/task-workflow-port";
+import { BUILTIN_TASK_ASSIGNMENT } from "../task-workflows";
 import { createTaskWorkflow } from "@openducktor/workflows";
 import {
   reviewTaskDefinition,
@@ -6,13 +8,14 @@ import {
   specPlanBuildReference,
 } from "@openducktor/workflows/test-support";
 import { builtinTaskWorkflows, singleTaskWorkflow } from "../../../test-support/task-workflows";
-import type { TaskCard } from "@openducktor/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { HostOperationError } from "../../../effect/host-errors";
 import type { TaskStorePort } from "../../../ports/task-repository-ports";
 import { createTaskSessionLifecycleCoordinator } from "../worktrees/task-session-lifecycle-coordinator";
 import { completeTaskClosure } from "./task-closure";
 import { coreTaskTransition } from "./task-workflow-events";
+
+type StoredTaskCard = import("@openducktor/contracts").TaskCard & TaskWorkflowAssignment;
 
 const closeDecision = coreTaskTransition(builtinTaskWorkflows, "close");
 
@@ -25,7 +28,8 @@ const closureDependencies = () => ({
   decide: closeDecision,
 });
 
-const closedTask = (): TaskCard => ({
+const closedTask = (): StoredTaskCard => ({
+  ...BUILTIN_TASK_ASSIGNMENT,
   id: "task-1",
   title: "Task 1",
   description: "",

@@ -1,3 +1,4 @@
+import { prepareNoRolePolicy } from "../../../test-support/workflow-role-policy";
 import { allowAllGoalCommands } from "../../../test-support/service-test-doubles";
 import {
   workspaceSessionCatalog,
@@ -430,6 +431,7 @@ export const createPersistenceHarness = async (
   events.length = 0;
   const commands = createAgentSessionCommandService({
     taskWorkflows: builtinTaskWorkflows,
+    prepareRolePolicy: prepareNoRolePolicy,
     goalRules: allowAllGoalCommands,
     turnPreparation: commandPreparationFixture,
     readSessionRootRefs: () =>

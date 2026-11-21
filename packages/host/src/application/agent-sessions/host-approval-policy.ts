@@ -7,8 +7,12 @@ import type {
   AgentSessionLiveSnapshot,
   RuntimeDescriptor,
 } from "@openducktor/contracts";
-import { agentSessionRefKey, normalizeOdtWorkflowToolName } from "@openducktor/core";
-import type { TaskWorkflowRole } from "@openducktor/workflows";
+import {
+  agentSessionRefKey,
+  normalizeOdtWorkflowToolName,
+  type WorkflowRolePolicy,
+  type WorkflowRolePolicyResolver,
+} from "@openducktor/core";
 import { Deferred, Effect, Exit, FiberSet, Scope } from "effect";
 import {
   HostValidationError,
@@ -16,7 +20,6 @@ import {
   errorMessage,
   toHostOperationError,
 } from "../../effect/host-errors";
-import { requireWorkflowRole } from "../tasks/support/task-workflow-events";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { resolveRuntimeDescriptor } from "../runtimes/runtime-request-resolution";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
@@ -27,11 +30,11 @@ import { createHostOperationWorkers } from "../../effect/host-operation-workers"
 
 /** A read-only role may use the workflow tools of its policy. Reject its other tools that write. */
 const requiresReadOnlyApprovalRejection = (
-  role: TaskWorkflowRole,
+  role: WorkflowRolePolicy,
   request: AgentSessionLivePendingApprovalRequest,
   descriptor: RuntimeDescriptor,
 ): boolean => {
-  if (role.workspaceAccess !== "read") return false;
+  if (!role.readOnly) return false;
   let permittedWorkflowTool = false;
   for (const name of [request.action?.name, request.tool?.name]) {
     if (!name) continue;
@@ -56,6 +59,8 @@ export const createHostApprovalPolicy = (deps: {
     ReturnType<typeof createSessionTurnPreparation>,
     "promptSettings" | "taskWorkflow"
   >;
+  /** The role policy that the live session kept from its start. */
+  resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   reportFailure: (error: HostError) => Effect.Effect<void>;
 }) => {
   const workers = createHostOperationWorkers();
@@ -146,7 +151,14 @@ export const createHostApprovalPolicy = (deps: {
                 }
               : null;
           const workflowRole = workflowSession
-            ? yield* requireWorkflowRole(workflowSession.workflow, workflowSession.scope.role)
+            ? yield* Effect.try({
+                try: () =>
+                  deps.resolveWorkflowRolePolicy({
+                    ...workflowSession.scope,
+                    externalSessionId: root.externalSessionId,
+                  }),
+                catch: (cause) => toHostOperationError(cause, "approval-policy.role-policy"),
+              })
             : null;
           const reject =
             workflowRole !== null &&

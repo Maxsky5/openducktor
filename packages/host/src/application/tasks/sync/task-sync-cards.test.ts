@@ -1,3 +1,5 @@
+import { testWorkspaceWorkflows } from "../../../test-support/task-workflows";
+import { BUILTIN_TASK_ASSIGNMENT } from "../task-workflows";
 import { createTaskSyncService } from "./task-sync-service";
 import { specPlanBuildWorkflow } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
@@ -38,12 +40,14 @@ describe("committed task cards", () => {
           workspaceId: "fairnest",
           repoPath,
           status: "open",
+          workflow: BUILTIN_TASK_ASSIGNMENT,
           task: { title: "Task", issueType: "task", priority: 2 },
         }),
       );
       const base = {
         ...createTaskServiceWithMutationProgress({
           taskWorkflows: builtinTaskWorkflows,
+          workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
           taskStore: store,
         }),
         resetTask: (input: { workspaceId: string; repoPath: string; taskId: string }) =>
@@ -176,6 +180,7 @@ describe("committed task cards", () => {
             workspaceId: "fairnest",
             repoPath,
             status: "open",
+            workflow: BUILTIN_TASK_ASSIGNMENT,
             task: { title, issueType: "task", priority: 2 },
           }),
         );
@@ -183,6 +188,7 @@ describe("committed task cards", () => {
       await create("Unrelated");
       const base = createTaskServiceWithMutationProgress({
         taskWorkflows: builtinTaskWorkflows,
+        workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
         taskStore: store,
       });
       const events: ExternalTaskSyncEvent[] = [];

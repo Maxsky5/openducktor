@@ -3,7 +3,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { workflowDefinitionSchema, type WorkflowLaunchRequest } from "@openducktor/contracts";
 import {
   createTaskWorkflow,
-  resolveWorkflowBoard,
+  resolveWorkspaceBoard,
   type ResolvedTaskCard,
 } from "@openducktor/workflows";
 import {
@@ -44,10 +44,7 @@ const approvalTask = (kind: "kickoff" | "message"): ResolvedTaskCard => {
     ),
     reviewTaskRoles,
   );
-  const board = resolveWorkflowBoard(
-    { states: workflow.definition.states.map(({ id }) => ({ id, taskOrder: "updated" })) },
-    [workflow],
-  );
+  const board = resolveWorkspaceBoard([{ workflow, latest: true }]);
   return createWorkflowTaskCardFixture(workflow, board, {
     issueType: "feature",
     status: "approval",

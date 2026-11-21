@@ -34,10 +34,14 @@ export type TaskSessionRecords = {
   taskId: string;
   sessions: AgentSessionRecord[];
 };
+/**
+ * The sessions that a worktree reset stops: the sessions of the reset roles, and every session
+ * that works in the canonical task worktree.
+ */
 export const collectSessionsUsingCanonicalWorktree = (
   gitPort: GitPort,
   settingsConfig: SettingsConfigPort,
-  workflow: TaskWorkflow,
+  resetRoles: readonly string[],
   sessions: AgentSessionRecord[],
   canonicalWorktreePath: string,
 ) =>
@@ -48,7 +52,7 @@ export const collectSessionsUsingCanonicalWorktree = (
       ? normalizePathForComparison(yield* gitPort.canonicalizePath(canonicalWorktreePath))
       : null;
     for (const session of sessions) {
-      if (workflow.worktreeRoles.includes(session.role.trim())) {
+      if (resetRoles.includes(session.role.trim())) {
         guarded.push(session);
       } else if (
         canonical &&

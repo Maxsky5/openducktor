@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
@@ -16,6 +17,17 @@ import type { WorkspaceStateContextValue } from "@/types/state-slices";
 import { AgentChatTaskTool } from "../agents/agent-chat/agent-chat-task-tool";
 import { TaskDetailsSheetFrame } from "../task-details/task-details-sheet-frame";
 import TaskDetailsSheetViewer from "./task-details-sheet-viewer";
+import { WorkspaceActivityContext } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
+import { createWorkspaceActivityObserverStub as createActivityStub } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
+
+/** The sheet links to the workflow of the task and shows its live role lane. */
+const RouterWithActivity = ({ children }: { children: ReactNode }) => (
+  <MemoryRouter>
+    <WorkspaceActivityContext.Provider value={createActivityStub()}>
+      {children}
+    </WorkspaceActivityContext.Provider>
+  </MemoryRouter>
+);
 
 const activeWorkspace = {
   workspaceId: "workspace-a",
@@ -98,11 +110,16 @@ function createHarness(
       <TaskDetailsSheetViewer taskId="task-1" onOpenChange={onOpenChange} />
     </TaskDetailsSheetFrame>
   );
+  // The sheet links to the workflow of the task, so the render has a router.
   const h = render(sheet(true), {
     wrapper: ({ children }) => (
-      <QueryProvider>
-        <Providers>{children}</Providers>
-      </QueryProvider>
+      <MemoryRouter>
+        <WorkspaceActivityContext.Provider value={createActivityStub()}>
+          <QueryProvider>
+            <Providers>{children}</Providers>
+          </QueryProvider>
+        </WorkspaceActivityContext.Provider>
+      </MemoryRouter>
     ),
   });
   return {
@@ -267,6 +284,7 @@ function renderChatTaskTool(
         </WorkspaceStateContext>
       </ActiveWorkspaceContext>
     </QueryProvider>,
+    { wrapper: RouterWithActivity },
   );
 }
 

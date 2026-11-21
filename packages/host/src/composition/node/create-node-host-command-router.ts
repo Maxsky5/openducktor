@@ -1,4 +1,4 @@
-import { builtinTaskWorkflowResolver, workflowRolePolicies } from "./task-workflow-composition";
+import { createNodeTaskWorkflowWiring } from "./task-workflow-composition";
 import { createNodeWorkflowCommandHandlers } from "./node-workflow-command-handlers";
 import {
   createWorkflowWorkspaceObservation,
@@ -24,7 +24,6 @@ import { createWorkspaceFilesService } from "../../application/filesystem/worksp
 import { createWorkspaceActivityInspector } from "../../application/workspaces/workspace-activity-inspector";
 import { createWorkspaceLifecycleService } from "../../application/workspaces/workspace-lifecycle-service";
 import { createRemoteFetchService } from "../../application/git/remote-fetch-service";
-import { createPullRequestReviewService } from "../../application/pull-requests/pull-request-review-service";
 import { createRuntimeAdmissionPort } from "../../application/runtimes/host-runtime-ports";
 import { createTaskSessionStopService } from "../../application/tasks/task-session-stop-service";
 import { createTaskSessionLifecycleCoordinator } from "../../application/tasks/worktrees/task-session-lifecycle-coordinator";
@@ -41,8 +40,6 @@ import type { GitProviderResolver } from "../../application/git/git-provider-res
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
 import type { AzureAreaPathsPort } from "../../ports/azure-area-paths-port";
 import { createLocalAttachmentCommandHandlers } from "../../interface/commands/local-attachment-command-handlers";
-import { createPullRequestReviewCommandHandlers } from "../../interface/commands/pull-request-review-command-handlers";
-import { createRuntimeDefinitionsCommandHandlers } from "../../interface/commands/runtime-definitions-command-handlers";
 import { createRuntimeCommandHandlers } from "../../interface/commands/runtime-command-handlers";
 import { createRepoActionCommandHandlers } from "../../interface/commands/repo-action-command-handlers";
 import { createTerminalCommandHandlers } from "../../interface/commands/terminal-command-handlers";
@@ -91,8 +88,9 @@ export const assembleNodeEffectHostCommandRouter = (
     runtimeStarter: configuredRuntimeStarter,
     taskStore: configuredTaskStore,
     taskEventPublicationReporter,
-    taskWorkflows = builtinTaskWorkflowResolver,
   } = input;
+  const { taskWorkflows, workspaceWorkflows } = defaultPorts;
+  const workflowWiring = createNodeTaskWorkflowWiring(defaultPorts);
   const {
     filesystem,
     git,
@@ -110,7 +108,7 @@ export const assembleNodeEffectHostCommandRouter = (
   } = defaultPorts;
   const automation = createNodeSessionAutomation(onBackgroundFailure, lifecycleLogger, git);
   const notificationComposition = createNodeNotificationServices(
-    withTaskWorkflowSettings(baseSettingsConfig, taskWorkflows),
+    withTaskWorkflowSettings(baseSettingsConfig, workflowWiring.readWorkflowSettings),
     eventBus,
     automation.configCommitted,
   );
@@ -119,7 +117,7 @@ export const assembleNodeEffectHostCommandRouter = (
     { ...defaultPorts, settingsConfig },
     { ...input, gitlab },
     (repoPath) => observeWorkflowWorkspace(repoPath),
-    taskWorkflows,
+    workflowWiring.readWorkflowSettings,
   );
   const { workspaceSettingsService, workspaceProviderSetup, workspaceAdmissionService } = setup;
   const claudeSessionMetadata = createClaudeSessionMetadataAdapter(readEnv);
@@ -204,7 +202,7 @@ export const assembleNodeEffectHostCommandRouter = (
     liveState: agentSessionLiveStateService,
     onBackgroundFailure,
     resolveBridge: () => resolvedMcpHostBridge,
-    resolveWorkflowRolePolicy: workflowRolePolicies(taskWorkflows),
+    resolveWorkflowRolePolicy: workflowWiring.resolveWorkflowRolePolicy,
     runtimeAdmissionGate,
     runtimeDefinitionsService,
     settingsConfig,
@@ -260,7 +258,6 @@ export const assembleNodeEffectHostCommandRouter = (
     worktreeFiles,
   });
   const taskSessions = createNodeTaskSessionServices({
-    hostInstanceId,
     naming,
     runtimeAdmission,
     taskServiceInput: {
@@ -271,6 +268,7 @@ export const assembleNodeEffectHostCommandRouter = (
       gitProviderResolver,
       taskStore,
       taskWorkflows,
+      workspaceWorkflows,
       settingsConfig,
       systemCommands,
       toolDiscovery,
@@ -299,6 +297,8 @@ export const assembleNodeEffectHostCommandRouter = (
     pauseForStop: messageDelivery.pauseForStop,
     savedSessions: assets,
     claudeSessionMetadata,
+    ...workflowWiring,
+    workspaceWorkflows,
     workflowLaunch: {
       messageDelivery,
       resolveParts: (parts) => resolveSessionMessageParts(parts, localAttachmentService),
@@ -333,13 +333,9 @@ export const assembleNodeEffectHostCommandRouter = (
     taskSessions,
     settingsConfig,
   });
-  const pullRequestReviewService = createPullRequestReviewService({
-    resolver: gitProviderResolver,
-    taskReader: taskStore,
-    workspaceSettingsService,
-  });
   resolvedMcpHostBridge ??= createNodeMcpHostBridge({
     taskWorkflows,
+    workspaceWorkflows,
     browserAgentTools: browserService,
     ...callers,
     taskAssetReadService,
@@ -433,12 +429,17 @@ export const assembleNodeEffectHostCommandRouter = (
       textGeneration,
       taskAssetStagingService,
       taskWorktreeService,
+      eventBus,
+      live: agentSessionLiveStateService,
+      workspaceSessions,
+      workspaceSettingsService,
     }),
     ...createWorkspaceFilesCommandHandlers(workspaceFiles),
     ...createNodeGitProviderCommandHandlers({
       resolver: gitProviderResolver,
       issueImportStore: assets.issueImportStore,
-      taskWorkflows,
+      taskReader: taskStore,
+      workflows: defaultPorts,
       taskSyncService,
       workspaceSettingsService,
       azureDevOpsConnection,
@@ -452,8 +453,6 @@ export const assembleNodeEffectHostCommandRouter = (
       runtimeDefinitionsService,
       { ...workingDirectoryDependencies, worktreeFiles },
     ),
-    ...createPullRequestReviewCommandHandlers(pullRequestReviewService),
-    ...createRuntimeDefinitionsCommandHandlers(runtimeDefinitionsService),
     ...createNodeRuntimeExecutableCommandHandlers({
       runtimeDefinitionsService,
       runtimeHealth,
@@ -484,6 +483,7 @@ export const assembleNodeEffectHostCommandRouter = (
       eventBus,
       settings: workspaceSettingsService,
       taskWorkflows,
+      taskReader: taskStore,
       finalize: agentSessionLiveStateService.finalizeStartupPreparation,
       runtime: runtimeRegistry,
     }),

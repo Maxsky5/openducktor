@@ -24,9 +24,9 @@ export const saveWorkspace = (
     const actionsChanged = !jsonValuesEqual(previous?.actions.items, config.actions.items);
     const values = workspaceValues(config);
     if (actionsChanged) values.defaultActionId = null;
-    if (!previous)
+    if (!previous) {
       yield* session.execute((db) => db.insert(schema.workspaces).values(values), operation);
-    else if (!jsonValuesEqual(workspaceValues(previous), values))
+    } else if (!jsonValuesEqual(workspaceValues(previous), values))
       yield* session.execute(
         (db) =>
           db

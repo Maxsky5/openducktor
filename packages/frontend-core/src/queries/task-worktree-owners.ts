@@ -1,18 +1,29 @@
-import type { TaskWorktreeOwnersOperation, WorkspaceRef } from "@openducktor/contracts";
-import { queryOptions } from "@tanstack/react-query";
+import type {
+  TaskRemovalPreview,
+  TaskWorktreeOwnersOperation,
+  WorkspaceRef,
+} from "@openducktor/contracts";
+import { queryOptions, skipToken } from "@tanstack/react-query";
 import { connectionHost } from "../connection/client-connection";
 import { normalizeAgentSessionTaskIds } from "./agent-sessions";
+import { previewEventId } from "./task-stop-impact";
 import { workspaceScopeValue } from "./workspace-scope";
 
 const taskWorktreeOwnersQueryKeys = {
   all: ["task-worktree-owners"] as const,
-  get: (scope: WorkspaceRef, normalizedTaskIds: string[], operation: TaskWorktreeOwnersOperation) =>
+  get: (
+    scope: WorkspaceRef,
+    normalizedTaskIds: string[],
+    operation: TaskWorktreeOwnersOperation | null,
+    eventId: string | null,
+  ) =>
     [
       ...taskWorktreeOwnersQueryKeys.all,
       "get",
       workspaceScopeValue(scope),
       normalizedTaskIds,
       operation,
+      eventId,
     ] as const,
 };
 
@@ -21,25 +32,30 @@ export const taskWorktreeOwnersQueryOptions = ({
   workspaceId,
   repoPath,
   taskIds,
-  operation,
+  preview,
 }: WorkspaceRef & {
   taskIds: string[];
-  operation: TaskWorktreeOwnersOperation;
+  /** The operation to preview. Null reads nothing. */
+  preview: TaskRemovalPreview<TaskWorktreeOwnersOperation> | null;
 }) => {
   const normalizedTaskIds = normalizeAgentSessionTaskIds(taskIds);
   return queryOptions({
     queryKey: taskWorktreeOwnersQueryKeys.get(
       { workspaceId, repoPath },
       normalizedTaskIds,
-      operation,
+      preview?.operation ?? null,
+      previewEventId(preview),
     ),
-    queryFn: ({ client }) =>
-      connectionHost(client).taskWorktreeOwnersGet({
-        workspaceId,
-        repoPath,
-        taskIds: normalizedTaskIds,
-        operation,
-      }),
+    queryFn:
+      preview === null
+        ? skipToken
+        : ({ client }) =>
+            connectionHost(client).taskWorktreeOwnersGet({
+              workspaceId,
+              repoPath,
+              taskIds: normalizedTaskIds,
+              ...preview,
+            }),
     // Each confirmation reads the current owners before Confirm works.
     staleTime: 0,
     gcTime: 0,

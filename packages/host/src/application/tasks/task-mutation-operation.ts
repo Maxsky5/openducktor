@@ -19,6 +19,7 @@ export type TaskMutationOperation =
   | "direct-merge"
   | "link-merged-pull-request"
   | "link-pull-request"
+  | "move-task-workflow"
   | "repo-pull-request-sync"
   | "reset-task"
   | "save-workflow-artifact"

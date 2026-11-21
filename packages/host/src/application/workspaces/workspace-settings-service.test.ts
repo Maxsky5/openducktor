@@ -1,3 +1,6 @@
+import type { ReadWorkflowSettingsSource } from "./task-workflow-settings";
+import { builtinWorkflowSettingsOwners } from "../../test-support/task-workflows";
+import { testWorkflowSettings } from "../../test-support/task-workflows";
 import { withSettingsConfigMutationTestMethods } from "../../test-support/settings-config-mutations";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { withTaskWorkflowSettings } from "./task-workflow-settings";
@@ -24,24 +27,19 @@ import { createSettingsConfigAdapter } from "../../adapters/settings/settings-co
 import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { HostOperationError } from "../../effect/host-errors";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
-import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import { createWorkspaceSettingsService as createEffectWorkspaceSettingsService } from "./workspace-settings-service";
 import type {
   SettingsWriteResult,
   WorkspaceSettingsError,
   WorkspaceSettingsService,
 } from "./workspace-settings-model";
-import {
-  specPlanBuildWorkflow,
-  createTaskWorkflow,
-  workflowRoleCatalog,
-} from "@openducktor/workflows";
+import { BUILTIN_ROLES, specPlanBuildWorkflow, createTaskWorkflow } from "@openducktor/workflows";
 import { createSpecPlanBuildNotificationSettings } from "@openducktor/workflows/test-support";
 
 const createWorkspaceSettingsService = (
   settingsConfig: SettingsConfigPort,
-  taskWorkflows: TaskWorkflowResolver = builtinTaskWorkflows,
-) => createEffectWorkspaceSettingsService(settingsConfig, taskWorkflows);
+  workflowSettings: ReadWorkflowSettingsSource = testWorkflowSettings(builtinTaskWorkflows),
+) => createEffectWorkspaceSettingsService(settingsConfig, workflowSettings);
 const saveWith = <A, E>(
   service: WorkspaceSettingsService,
   edits: SettingsSnapshotSaveInput,
@@ -372,12 +370,14 @@ describe("createWorkspaceSettingsService", () => {
     const otherWorkflow = createTaskWorkflow(
       workflowDefinitionSchema.parse({ ...specPlanBuildWorkflow.definition, id: "other" }),
       specPlanBuildWorkflow.workflowTemplates,
-      workflowRoleCatalog([specPlanBuildWorkflow]),
+      BUILTIN_ROLES,
     );
-    const service = createWorkspaceSettingsService(port, {
-      ...builtinTaskWorkflows,
-      workflows: [specPlanBuildWorkflow, otherWorkflow],
-    });
+    const service = createWorkspaceSettingsService(port, () =>
+      Effect.succeed({
+        latest: [specPlanBuildWorkflow, otherWorkflow],
+        roles: builtinWorkflowSettingsOwners.roles,
+      }),
+    );
     await Effect.runPromise(
       saveWith(
         service,
@@ -2227,7 +2227,7 @@ describe("createWorkspaceSettingsService", () => {
       config: globalConfig(),
     });
     const service = createWorkspaceSettingsService(
-      withTaskWorkflowSettings(settingsConfig, builtinTaskWorkflows),
+      withTaskWorkflowSettings(settingsConfig, testWorkflowSettings()),
     );
     const snapshot = await Effect.runPromise(service.getSettingsSnapshot());
 

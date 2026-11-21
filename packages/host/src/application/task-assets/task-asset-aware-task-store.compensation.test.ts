@@ -1,3 +1,4 @@
+import { BUILTIN_TASK_ASSIGNMENT } from "../tasks/task-workflows";
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { HostDependencyError } from "../../effect/host-errors";
@@ -179,6 +180,7 @@ describe("asset-aware task store compensation", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Promotion failure",
           issueType: "task",
@@ -246,6 +248,7 @@ describe("asset-aware task store compensation", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Resolver create failure",
           issueType: "task",
@@ -313,6 +316,7 @@ describe("asset-aware task store compensation", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Destination collision",
           issueType: "task",
@@ -376,6 +380,7 @@ describe("asset-aware task store compensation", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Purge failure",
           issueType: "task",
@@ -431,6 +436,7 @@ describe("asset-aware task store compensation", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Discard failure",
           issueType: "task",
@@ -588,6 +594,7 @@ describe("asset-aware task store compensation", () => {
       store.createTask({
         ...harness.scope,
         status: "open",
+        workflow: BUILTIN_TASK_ASSIGNMENT,
         task: {
           title: "Partial create",
           issueType: "task",

@@ -57,12 +57,12 @@ export function useTaskConfirmDialog<Result>({
   const cleanup = taskCleanupImpactHook(impactTaskIds, loadImpact);
   const stop = taskStopImpactHook({
     taskIds: impactTaskIds,
-    operation: action,
+    preview: { operation: action },
     enabled: loadImpact,
   });
   const owners = taskWorktreeOwnersHook({
     taskIds: impactTaskIds,
-    operation: action,
+    preview: { operation: action },
     enabled: loadImpact,
   });
 

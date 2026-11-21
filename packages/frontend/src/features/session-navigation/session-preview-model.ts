@@ -1,7 +1,14 @@
 import { toAgentWorkflowStep } from "@/components/features/agents/agent-workflow-step";
-import type { AgentSessionLiveRef, AgentSessionScope } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveRef,
+  AgentSessionRecord,
+  AgentSessionScope,
+} from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
-import { type WorkflowRoleId as AgentRole } from "@openducktor/workflows";
+import {
+  type ResolvedTaskCard as TaskCard,
+  type WorkflowRoleId as AgentRole,
+} from "@openducktor/workflows";
 import type { AgentWorkflowStep } from "@/components/features/agents/agent-studio-header.types";
 import type { WorkspaceActivityProjection } from "@openducktor/frontend-core/workspace-activity/workspace-activity-projection";
 import {
@@ -113,19 +120,22 @@ const pendingInputs = (
   return pending;
 };
 
-/** The workflow rail steps of a task entry, and the session target of each role. */
-export const previewWorkflow = (
-  entry: SessionNavigationEntry,
+/**
+ * The role lane of a task: one rail step for each workflow step, with the live state of the latest
+ * session of its role, and the session target that each role opens.
+ */
+export const taskRoleLane = (
+  task: TaskCard,
+  sessions: readonly AgentSessionRecord[],
+  workspaceId: string,
   projection: WorkspaceActivityProjection | null,
 ): Pick<SessionPreviewModel, "steps" | "roleTargets"> => {
   const roleTargets = new Map<AgentRole, SessionNavigationTarget>();
-  const { context } = entry;
-  if (context.kind !== "task") return { steps: [], roleTargets };
   const facts = projection
     ? foldWorkspaceSessionLiveFacts(projection.sessions, projection.faults)
     : null;
-  const rail = buildWorkflowRail(context.task, (role) => {
-    const latest = context.sessions
+  const rail = buildWorkflowRail(task, (role) => {
+    const latest = sessions
       .filter((session) => session.role === role)
       .toSorted(compareAgentSessionRecency)[0];
     const sessionKey = latest ? agentSessionIdentityKey(latest) : null;
@@ -134,12 +144,12 @@ export const previewWorkflow = (
       latest
         ? {
             kind: "task_session",
-            workspaceId: entry.workspace.workspaceId,
-            taskId: context.task.id,
+            workspaceId,
+            taskId: task.id,
             role,
             identity: toAgentSessionIdentity(latest),
           }
-        : { kind: "task", workspaceId: entry.workspace.workspaceId, taskId: context.task.id, role },
+        : { kind: "task", workspaceId, taskId: task.id, role },
     );
     return {
       session: sessionKey,
@@ -149,6 +159,15 @@ export const previewWorkflow = (
         : false,
     };
   });
-  const steps = rail.map(toAgentWorkflowStep);
-  return { steps, roleTargets };
+  return { steps: rail.map(toAgentWorkflowStep), roleTargets };
+};
+
+/** The workflow rail steps of a task entry, and the session target of each role. */
+export const previewWorkflow = (
+  entry: SessionNavigationEntry,
+  projection: WorkspaceActivityProjection | null,
+): Pick<SessionPreviewModel, "steps" | "roleTargets"> => {
+  const { context } = entry;
+  if (context.kind !== "task") return { steps: [], roleTargets: new Map() };
+  return taskRoleLane(context.task, context.sessions, entry.workspace.workspaceId, projection);
 };

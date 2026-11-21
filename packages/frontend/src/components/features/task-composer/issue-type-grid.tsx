@@ -8,15 +8,17 @@ type IssueTypeGridProps = {
   choices: Parameters<typeof issueTypeOptions>[0];
   selectedIssueType: IssueType | null;
   onSelectIssueType: (issueType: IssueType) => void;
+  className?: string;
 };
 
 export function IssueTypeGrid({
   choices,
   selectedIssueType,
   onSelectIssueType,
+  className,
 }: IssueTypeGridProps): ReactElement {
   return (
-    <div className="grid gap-3 sm:grid-cols-3 mt-5">
+    <div className={cn("mt-5 grid gap-3 sm:grid-cols-3", className)}>
       {issueTypeOptions(choices).map((option) => {
         const selected = selectedIssueType === option.value;
         const Icon = option.icon;
@@ -25,7 +27,7 @@ export function IssueTypeGrid({
             key={option.value}
             type="button"
             className={cn(
-              "group grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-36 sm:grid-cols-[1fr_auto]",
+              "group grid grid-cols-[auto_minmax(0,1fr)_auto] content-start items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-36 sm:grid-cols-[1fr_auto]",
               // A selected card keeps its surface and takes the selected border.
               selected && "border-primary hover:bg-card",
             )}

@@ -3,7 +3,7 @@ import type { WorkflowIssueTypeId as IssueType } from "@openducktor/workflows";
 
 export type ComposerMode = "create" | "edit";
 
-export type ComposerStep = "type" | "details";
+export type ComposerStep = "type" | "workflow" | "details";
 
 export type EditTaskSection = "details" | { artifactCode: string };
 

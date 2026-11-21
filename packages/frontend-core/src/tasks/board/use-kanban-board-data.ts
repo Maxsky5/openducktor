@@ -16,6 +16,12 @@ import { isKanbanForegroundLoading } from "./kanban-board-loading";
 import { useKanbanBoardFilterModel } from "./use-kanban-board-filter-model";
 
 const NO_TASKS: TaskCard[] = [];
+
+/** A board with tasks of several workflows. Each column names the workflows that use it. */
+export type MixedBoard = {
+  /** The workflow names of each column, by state ID. */
+  readonly columnWorkflows: ReadonlyMap<string, readonly string[]>;
+};
 const NO_SESSIONS: AgentSessionRecord[] = [];
 
 /**
@@ -46,6 +52,23 @@ export function useKanbanBoardData({
   const kanbanTasks =
     repoPath && workspace && !workflowError && !settingsQuery.isError ? tasks : NO_TASKS;
   const taskIds = useMemo(() => kanbanTasks.map((task) => task.id), [kanbanTasks]);
+  const mixedBoard = useMemo((): MixedBoard | null => {
+    if (!workspace) return null;
+    const workflowIds = new Set(kanbanTasks.map((task) => task.workflow.id));
+    if (workflowIds.size <= 1) return null;
+    // The enabled workflows, then the workflows of tasks that a repository no longer enables.
+    const definitions = new Map(
+      [
+        ...workspace.workflows.map(({ definition }) => definition),
+        ...kanbanTasks.map((task) => task.taskWorkflow.definition),
+      ].map((definition) => [definition.id, definition]),
+    );
+    const columnWorkflows = new Map<string, string[]>();
+    for (const definition of definitions.values())
+      for (const state of definition.states)
+        columnWorkflows.set(state.id, [...(columnWorkflows.get(state.id) ?? []), definition.label]);
+    return { columnWorkflows };
+  }, [kanbanTasks, workspace]);
   const issueTypeOptions = useMemo(() => {
     const options = new Map<
       IssueType,
@@ -102,6 +125,7 @@ export function useKanbanBoardData({
     filter,
     /** The tasks that the search and filters keep. */
     matchingTasks,
+    mixedBoard,
     historicalSessionsByTaskId,
     historicalSessionsError: sessionLists.error,
     isLoadingTasks,
