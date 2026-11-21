@@ -94,7 +94,8 @@ const DeniedToolActionRow = ({ action }: { action: DeniedToolAction }): ReactEle
     );
   }
   return (
-    <div className="mt-3 space-y-1.5">
+    // The reason line has half leading under it, so the button row needs less space above it.
+    <div className="mt-2 space-y-1.5">
       <Button
         type="button"
         variant="warning"

@@ -108,7 +108,8 @@ function DeniedToolActionRow({ action }: { action: DeniedToolAction }): ReactEle
     );
   }
   return (
-    <View style={styles.actionBlock}>
+    // The reason line has half leading under it, so the button row needs less space above it.
+    <View style={styles.buttonBlock}>
       <View style={styles.actionRow}>
         {/* The hint is for screen readers: a note under the button would make the card too tall. */}
         <Button
@@ -161,6 +162,7 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.desktop.mutedForeground,
   },
   actionBlock: { marginTop: 12, gap: 6 },
+  buttonBlock: { marginTop: 8, gap: 6 },
   actionRow: { flexDirection: "row" },
   failure: { ...sansWeight("regular"), ...SMALL_TEXT, color: theme.desktop.destructiveMuted },
   // The check sits in the shield column, so the text starts under the label.
