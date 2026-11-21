@@ -16,6 +16,7 @@ export const taskQueryKeys = {
   all: ["tasks"] as const,
   skippedBoard: ["tasks", "skipped", "board"] as const,
   skippedComplete: ["tasks", "skipped", "complete"] as const,
+  skippedLabels: ["tasks", "skipped", "labels"] as const,
   repoDataPrefix: (scope: WorkspaceRef) =>
     [...taskQueryKeys.all, "repo-data", workspaceScopeValue(scope)] as const,
   repoData: (scope: WorkspaceRef) => taskQueryKeys.repoDataPrefix(scope),

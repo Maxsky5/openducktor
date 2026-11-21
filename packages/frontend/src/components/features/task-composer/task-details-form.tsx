@@ -29,6 +29,8 @@ type TaskDetailsFormProps = {
   state: ComposerState;
   priorityOptions: ComboboxOption[];
   knownLabels: string[];
+  /** Why the label suggestions could not load. */
+  labelsError?: string | null;
   onStateChange: (patch: Partial<ComposerState>) => void;
   onRequestTypeChange: () => void;
   workspaceId: string | null;
@@ -46,6 +48,7 @@ export function TaskDetailsForm({
   state,
   priorityOptions,
   knownLabels,
+  labelsError = null,
   onStateChange,
   onRequestTypeChange,
   workspaceId,
@@ -145,6 +148,11 @@ export function TaskDetailsForm({
           suggestions={knownLabels}
           onChange={(nextLabels) => onStateChange({ labels: nextLabels })}
         />
+        {labelsError ? (
+          <p role="alert" className="text-xs text-destructive">
+            {labelsError}
+          </p>
+        ) : null}
       </div>
     </div>
   );

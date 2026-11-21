@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { WorkspacePicker } from "@/components/features/workspace-picker/workspace-picker";
 
 /**
- * The workspace of New task, on the title line: "Create task in [workspace]". One open workspace
- * shows as text.
+ * The workspace of New task, on the title line: "Create task in [workspace]". When the selected
+ * workspace is the only open one, it shows as text.
  */
 export function TaskCreateWorkspacePicker({
   picker,
@@ -19,12 +19,14 @@ export function TaskCreateWorkspacePicker({
   const { selected } = picker;
   // A closed workspace has no record, so the picker shows its name as the placeholder.
   const name = selected?.workspaceName ?? picker.target?.workspaceName ?? "a workspace";
+  // Without a selected workspace, the user must be able to choose the one open workspace.
+  const onlyChoice = picker.choices.length < 2 && selected !== null;
   return (
     <div className="flex min-w-0 items-center gap-1 text-lg font-semibold leading-6">
       <span className="text-muted-foreground">in</span>
-      {picker.choices.length < 2 ? (
+      {onlyChoice ? (
         <span className="flex min-w-0 items-center gap-2 px-1.5">
-          {selected ? <WorkspaceTile workspace={selected} size="xs" /> : null}
+          <WorkspaceTile workspace={selected} size="xs" />
           <span className="truncate">{name}</span>
         </span>
       ) : (

@@ -13,16 +13,18 @@ import { useAppTheme } from "@/theme/app-theme-context";
 import { Icon, type IconName } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
+import { useAnnounce } from "@/ui/use-announce";
 
 /**
  * A form field as the desktop task dialog: the label above its control, as the desktop `Label`
- * (`text-sm font-medium text-foreground`), and an optional note under the control.
+ * (`text-sm font-medium text-foreground`), and an optional error and note under the control.
  */
 export function FormField({
   label,
   required = false,
   trailing,
   note,
+  error,
   children,
 }: PropsWithChildren<{
   label: string;
@@ -31,7 +33,10 @@ export function FormField({
   /** A control at the trailing edge of the label row, such as a mode switch. */
   trailing?: ReactNode;
   note?: string | null | undefined;
+  /** A problem under the control, which screen readers announce. */
+  error?: string | null | undefined;
 }>): ReactElement {
+  useAnnounce(error);
   return (
     <View style={styles.field}>
       <View style={styles.labelRow}>
@@ -41,6 +46,11 @@ export function FormField({
         {trailing}
       </View>
       {children}
+      {error ? (
+        <Text variant="footnote" weight="medium" tone="red" accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      ) : null}
       {note ? (
         <Text variant="footnote" tone="tertiary">
           {note}

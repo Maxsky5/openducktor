@@ -7,7 +7,8 @@ import {
   useRequiredContext,
   WorkspaceScopeContext,
 } from "../../app-state/app-state-contexts";
-import { repoTaskDataQueryOptions } from "../../queries/tasks";
+import { skippedQueryOptions } from "../../queries/skipped-query";
+import { type RepoTaskData, repoTaskDataQueryOptions, taskQueryKeys } from "../../queries/tasks";
 import type { ActiveWorkspace } from "../../types/session-slices";
 import type { TaskCreateWorkspace } from "../../types/state-slices";
 import { collectKnownLabels } from "./task-composer-options";
@@ -240,7 +241,11 @@ export function useTaskCreateWorkspacePicker({
   };
 }
 
-const NO_WORKSPACE: WorkspaceRef = { workspaceId: "__disabled__", repoPath: "__disabled__" };
+type KnownTaskLabels = {
+  labels: string[];
+  /** Why New task could not read the labels of its workspace. */
+  labelsError: string | null;
+};
 
 /**
  * The labels that the label field suggests: the labels of the tasks in the workspace of the form.
@@ -257,12 +262,21 @@ export function useKnownTaskLabels({
   task: TaskCard | null;
   tasks: TaskCard[];
   workspaceScope: WorkspaceRef | null;
-}): string[] {
+}): KnownTaskLabels {
   const createScope = open && !task ? workspaceScope : null;
-  const createTasks = useQuery({
-    ...repoTaskDataQueryOptions(createScope ?? NO_WORKSPACE),
-    enabled: createScope !== null,
-  });
+  const createTasks = useQuery(
+    createScope
+      ? repoTaskDataQueryOptions(createScope)
+      : skippedQueryOptions<RepoTaskData>({
+          queryKey: taskQueryKeys.skippedLabels,
+          staleTime: Infinity,
+        }),
+  );
   const labelTasks = task ? tasks : createTasks.data?.tasks;
-  return useMemo(() => collectKnownLabels(labelTasks ?? []), [labelTasks]);
+  const labels = useMemo(() => collectKnownLabels(labelTasks ?? []), [labelTasks]);
+  const labelsError =
+    createScope && createTasks.error
+      ? `Label suggestions are not available: ${createTasks.error.message}`
+      : null;
+  return { labels, labelsError };
 }

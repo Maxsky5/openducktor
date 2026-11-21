@@ -1,7 +1,7 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { HostInvokeError } from "@openducktor/host-client";
-import { act } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import { taskQueryKeys } from "../../queries/tasks";
 import { workflowQueryKeys } from "../../queries/workflows";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
@@ -189,6 +189,27 @@ describe("New task workspace", () => {
       act(() => harness.getController().workspacePicker!.select("workspace-2"));
 
       expect(harness.getController().knownLabels).toEqual(["api"]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  test("tells why the labels of the chosen workspace are not available", async () => {
+    const connection = createTestClientConnection({
+      client: {
+        tasksList: async () => {
+          throw new Error("The host is offline.");
+        },
+      },
+    });
+    const harness = renderController({ connection });
+    try {
+      await waitFor(() =>
+        expect(harness.getController().labelsError).toBe(
+          "Label suggestions are not available: The host is offline.",
+        ),
+      );
+      expect(harness.getController().knownLabels).toEqual([]);
     } finally {
       harness.unmount();
     }

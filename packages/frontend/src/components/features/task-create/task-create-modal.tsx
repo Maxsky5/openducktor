@@ -266,6 +266,7 @@ function TaskCreateModalSectionContent({
       state={controller.state}
       priorityOptions={controller.priorityOptions}
       knownLabels={controller.knownLabels}
+      labelsError={controller.labelsError}
       onStateChange={controller.updateState}
       onRequestTypeChange={() => controller.setStep("type")}
       workspaceId={controller.workspaceId}

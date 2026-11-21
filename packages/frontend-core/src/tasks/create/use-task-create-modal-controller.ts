@@ -724,7 +724,12 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     retention: descriptionAssetRetention,
   });
 
-  const knownLabels = useKnownTaskLabels({ open, task, tasks, workspaceScope });
+  const { labels: knownLabels, labelsError } = useKnownTaskLabels({
+    open,
+    task,
+    tasks,
+    workspaceScope,
+  });
   const priorityOptions = useMemo(() => toPrioritySelectOptions(), []);
 
   const {
@@ -953,6 +958,7 @@ export function useTaskCreateModalController<F extends TaskDescriptionImageFile>
     activeDraft,
     pendingDiscardIntent,
     knownLabels,
+    labelsError,
     priorityOptions,
     isTaskDraftDirty,
     dirtyDocuments,

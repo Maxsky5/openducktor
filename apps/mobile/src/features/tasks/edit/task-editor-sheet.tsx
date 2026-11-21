@@ -557,7 +557,7 @@ function TaskFields({
         uploads={controller.descriptionAssetUploads}
         images={images}
       />
-      <FormField label="Labels">
+      <FormField label="Labels" error={controller.labelsError}>
         <MemoLabelsField
           labels={state.labels}
           knownLabels={controller.knownLabels}

@@ -110,6 +110,7 @@ const controllerMock: ReturnType<
   },
   priorityOptions: [],
   knownLabels: [],
+  labelsError: null,
   updateState: (_patch: Partial<ComposerState>) => {},
   footerError: noFooterError(),
   footerErrorOutcomeUnknown: false,
@@ -359,6 +360,47 @@ describe("TaskCreateModal", () => {
     expect(hint?.textContent).toBe("Description images belong to this workspace.");
     fireEvent.click(screen.getByRole("button", { name: "Remove images" }));
     expect(removedImages).toBe(1);
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("lets the user pick the one open workspace while the chosen one is closed", async () => {
+    const beta = createWorkspaceRecordFixture({ workspaceId: "beta", workspaceName: "Beta" });
+    const chosen: string[] = [];
+    controllerForTest = {
+      ...controllerMock,
+      mode: "create",
+      taskId: null,
+      editSection: "details",
+      activeDocumentSection: null,
+      isEditingDocument: false,
+      workspacePicker: workspacePickerFixture({
+        target: { workspaceId: "alpha", workspaceName: "Alpha" },
+        choices: [beta],
+        canChange: true,
+        select: (workspaceId) => chosen.push(workspaceId),
+      }),
+      destinationError: "Alpha is closed. Reopen it or pick another workspace to create this task.",
+    };
+    testSpies.push(
+      spyOn(taskDetailsFormModule, "TaskDetailsForm").mockImplementation(() =>
+        createElement("div", null, "Mock task details form"),
+      ),
+    );
+    const rendered = render(
+      createElement(TaskCreateModal, { open: true, onOpenChange: () => {}, tasks: [] }),
+    );
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Workspace: Alpha" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("option", { name: "Beta" }));
+    });
+
+    expect(chosen).toEqual(["beta"]);
 
     await act(async () => {
       rendered.unmount();

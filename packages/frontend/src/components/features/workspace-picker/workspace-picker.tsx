@@ -151,17 +151,18 @@ function WorkspacePickerRow({
 }
 
 const workspacePickerTriggerVariants = cva(
-  "flex min-w-0 items-center gap-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60",
+  "flex min-w-0 items-center gap-2 text-foreground outline-none disabled:pointer-events-none disabled:opacity-60",
   {
     variants: {
       variant: {
         /** A small chip, such as the workspace filter of the command palette. */
-        chip: "h-7 max-w-48 shrink-0 gap-1.5 rounded-md border border-border bg-muted/60 px-2 text-xs font-medium hover:bg-muted",
+        chip: "h-7 max-w-48 shrink-0 gap-1.5 rounded-md border border-border bg-muted/60 px-2 text-xs font-medium hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
         /** A full-width form field. */
         field:
-          "h-9 w-full justify-between rounded-md border border-input bg-card px-3 text-sm hover:bg-accent",
+          "h-9 w-full justify-between rounded-md border border-input bg-card px-3 text-sm hover:bg-accent focus-visible:border-ring",
         /** Text in a title, such as "Create task in [workspace]". */
-        inline: "h-8 rounded-md px-1.5 text-lg font-semibold hover:bg-accent/60",
+        inline:
+          "h-8 rounded-md px-1.5 text-lg font-semibold hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring",
       },
     },
   },
