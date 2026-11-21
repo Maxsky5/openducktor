@@ -234,7 +234,7 @@ export const resolveModelSelectionForPair = ({
     currentSelection: runtimeSelection,
     modelKey: `${model.providerId}/${model.modelId}`,
     runtimeKind: value.runtimeKind,
-    // Keep the effort of the replaced selection, also across runtimes.
+    // Keep only the effort of the replaced selection, never a runtime default effort.
     variant: currentSelection?.variant,
   });
   if (
@@ -274,19 +274,19 @@ export const resolveModelSelectionForProfileChange = ({
   return { ...currentSelection, profileId: normalizedProfileId };
 };
 
-/** Keeps `variant` (default: the current variant) when the new model supports it. */
+/** Keeps `variant` when the new model supports it, else uses the first variant of the model. */
 export const resolveModelSelectionForModelChange = ({
   catalog,
   currentSelection,
   modelKey,
   runtimeKind,
-  variant: preferredVariant = currentSelection?.variant,
+  variant: preferredVariant,
 }: {
   catalog: AgentModelCatalog | null;
   currentSelection: AgentModelSelection | null;
   modelKey: string;
   runtimeKind: RuntimeKind;
-  variant?: string | undefined;
+  variant: string | undefined;
 }): AgentModelSelection | null => {
   if (!catalog || (catalog.runtime?.kind && catalog.runtime.kind !== runtimeKind)) {
     return currentSelection;

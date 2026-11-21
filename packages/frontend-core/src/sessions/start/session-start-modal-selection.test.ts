@@ -158,6 +158,7 @@ describe("session-start selection adapter", () => {
         },
         modelKey: "anthropic/claude-sonnet",
         runtimeKind: "opencode",
+        variant: undefined,
       }),
     ).toEqual({
       runtimeKind: "opencode",

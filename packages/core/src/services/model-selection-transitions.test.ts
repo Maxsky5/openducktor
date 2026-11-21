@@ -163,6 +163,7 @@ describe("model-selection-state", () => {
         },
         modelKey: "anthropic/claude-sonnet",
         runtimeKind: "opencode",
+        variant: "high",
       }),
     ).toEqual({
       runtimeKind: "opencode",
@@ -190,6 +191,7 @@ describe("model-selection-state", () => {
         currentSelection: null,
         modelKey: "openai/o3",
         runtimeKind: "opencode",
+        variant: undefined,
       }),
     ).toEqual({
       runtimeKind: "opencode",
@@ -213,6 +215,7 @@ describe("model-selection-state", () => {
         currentSelection: high,
         modelKey: "openai/o3",
         runtimeKind: "opencode",
+        variant: high.variant,
       })?.variant,
     ).toBe("high");
     expect(
@@ -241,10 +244,13 @@ describe("model-selection-state", () => {
       ],
       defaultModelsByProvider: { openai: "gpt-5.5" },
     };
-    const resolveVariant = (variant: string): string | undefined =>
+    const { variant: _variant, ...selectionWithoutVariant } = EXPLICIT_SELECTION;
+    const resolveVariant = (variant: string | undefined): string | undefined =>
       resolveModelSelectionForPair({
         catalog: codexCatalog,
-        currentSelection: { ...EXPLICIT_SELECTION, variant },
+        currentSelection: variant
+          ? { ...selectionWithoutVariant, variant }
+          : selectionWithoutVariant,
         defaultSelection: {
           runtimeKind: "codex",
           providerId: "openai",
@@ -257,6 +263,8 @@ describe("model-selection-state", () => {
 
     expect(resolveVariant("high")).toBe("high");
     expect(resolveVariant("max")).toBe("low");
+    // The runtime default effort ("medium") must not replace a missing effort.
+    expect(resolveVariant(undefined)).toBe("low");
   });
 
   test("keeps a speed only on models that support it", () => {
@@ -283,6 +291,7 @@ describe("model-selection-state", () => {
           currentSelection: fast,
           modelKey,
           runtimeKind: "opencode",
+          variant: fast.variant,
         })?.speed,
       ).toBe(modelKey === "openai/gpt-5" ? "fast" : undefined);
     }
