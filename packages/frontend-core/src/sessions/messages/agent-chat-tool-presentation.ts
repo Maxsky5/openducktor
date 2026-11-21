@@ -425,14 +425,16 @@ export type ToolTiming = { isActive: boolean; durationMs: number | null };
 
 export const readToolTiming = (meta: ToolMeta, messageTimestamp: string): ToolTiming => ({
   isActive: isToolMessageActive(meta),
-  durationMs: getToolDuration(meta, messageTimestamp),
+  // A policy blocked the call before it ran, so it has no run time to show.
+  durationMs: meta.denial ? null : getToolDuration(meta, messageTimestamp),
 });
 
 /** The timing of a regular Tool Call row. A pending call with complete arguments shows no progress. */
 export const readRegularToolTiming = (meta: ToolMeta, messageTimestamp: string): ToolTiming => ({
   isActive:
     isToolMessageActive(meta) && (meta.status !== "pending" || meta.inputStreaming !== false),
-  durationMs: getToolDuration(meta, messageTimestamp),
+  // A policy blocked the call before it ran, so it has no run time to show.
+  durationMs: meta.denial ? null : getToolDuration(meta, messageTimestamp),
 });
 
 const DEFAULT_COMPUTER_USE_ACTION_TITLE = "Computer action";

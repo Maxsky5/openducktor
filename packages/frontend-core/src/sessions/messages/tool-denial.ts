@@ -36,6 +36,8 @@ const MISSING_REASONS = {
 /** What the row of a blocked call shows. */
 export type ToolDenialPresentation = {
   label: string;
+  /** A short category that names the reason, such as `Git Destructive`, else null. */
+  category: string | null;
   /** The reason of the policy, or a note when the policy gave none. Null for no text. */
   reason: string | null;
   /** The risk level of an auto-review denial, else null. */
@@ -45,17 +47,16 @@ export type ToolDenialPresentation = {
 /** The Claude auto mode classifier gives a category in brackets, such as `[Git Destructive]`. */
 const BRACKETED_CATEGORY = /^\[([^[\]]+)\]$/u;
 
-const readReason = (denial: AgentToolDenial): string | null => {
+export const readToolDenialPresentation = (denial: AgentToolDenial): ToolDenialPresentation => {
   const reason = denial.reason?.trim();
-  if (!reason) return MISSING_REASONS[denial.source];
-  return BRACKETED_CATEGORY.exec(reason)?.[1]?.trim() ?? reason;
+  const category = reason ? (BRACKETED_CATEGORY.exec(reason)?.[1]?.trim() ?? null) : null;
+  return {
+    label: TOOL_DENIAL_LABELS[denial.source],
+    category,
+    reason: category ? null : reason || MISSING_REASONS[denial.source],
+    risk: denial.source === "auto_review" && denial.riskLevel ? RISKS[denial.riskLevel] : null,
+  };
 };
-
-export const readToolDenialPresentation = (denial: AgentToolDenial): ToolDenialPresentation => ({
-  label: TOOL_DENIAL_LABELS[denial.source],
-  reason: readReason(denial),
-  risk: denial.source === "auto_review" && denial.riskLevel ? RISKS[denial.riskLevel] : null,
-});
 
 /** The Allow state of one denied call of a session, or null when the user cannot allow it. */
 export const findDeniedAction = (
@@ -64,5 +65,6 @@ export const findDeniedAction = (
 ): AgentSessionDeniedAction | null =>
   deniedActions?.find((action) => action.callId === callId) ?? null;
 
-export const TOOL_DENIAL_ALLOW_HINT = "Allow lets the agent try this exact call again.";
+export const TOOL_DENIAL_ALLOW_HINT = "Lets the agent try this exact call again.";
+export const TOOL_DENIAL_ALLOWED_LABEL = "Allowed";
 export const TOOL_DENIAL_ALLOWED_MESSAGE = "You allowed this call. The agent can try it again.";

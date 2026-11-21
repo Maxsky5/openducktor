@@ -82,7 +82,9 @@ describe("ToolDenialNotice", () => {
       store.replaceSession({ ...session, deniedActions: [{ callId: "call-1", state: "allowed" }] });
     });
     expect(view.queryByRole("button", { name: "Allow" })).toBeNull();
-    expect(view.getByText("You allowed this call. The agent can try it again.")).toBeTruthy();
+    expect(view.getByTitle("You allowed this call. The agent can try it again.").textContent).toBe(
+      "Allowed",
+    );
   });
 
   test("shows progress while the host sends the approval", () => {

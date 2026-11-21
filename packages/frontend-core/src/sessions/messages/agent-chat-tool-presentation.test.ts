@@ -170,6 +170,19 @@ describe("tool presentation", () => {
     ).toBe(true);
   });
 
+  test("shows no run time for a call that a policy blocked before it ran", () => {
+    const timed = {
+      status: "error" as const,
+      startedAtMs: Date.parse("2026-02-22T10:21:00.000Z"),
+      endedAtMs: Date.parse("2026-02-22T10:21:05.700Z"),
+    };
+    const at = "2026-02-22T10:21:10.000Z";
+    expect(readRegularToolTiming(meta(timed), at).durationMs).toBe(5_700);
+    expect(
+      readRegularToolTiming(meta({ ...timed, denial: { source: "auto_review" } }), at).durationMs,
+    ).toBeNull();
+  });
+
   test("labels workflow phases and keeps no label for a completed call", () => {
     expect(workflowToolStatusLabel("executing")).toBe("RUNNING");
     expect(workflowToolStatusLabel("queued")).toBe("PREPARING");
