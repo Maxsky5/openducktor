@@ -10,7 +10,7 @@ export const FOLD_MOTION_MS = 280;
  * the translation goes to zero on the UI thread. A translation never changes the layout, so the
  * scroll anchor stays exact. This is the FLIP technique.
  */
-export type FoldMotionPhase = "start" | "run";
+type FoldMotionPhase = "start" | "run";
 
 export type FoldMotion = {
   /** Changes for each motion, so cells start each motion again. */

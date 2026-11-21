@@ -29,26 +29,6 @@ const parseBodyToJson = (body: string): JSONContent => {
   }
 };
 
-const nodeText = (node: JSONContent): string =>
-  node.text ?? (node.content ?? []).map(nodeText).join("");
-
-export const getTaskDescriptionVisualMermaidSources = (markdown: string): string[] => {
-  const frontMatter = splitTaskDescriptionFrontMatter(markdown);
-  if (frontMatter.kind === "malformed") {
-    throw new Error("Malformed front matter cannot enter Visual mode.");
-  }
-
-  const sources: string[] = [];
-  const collect = (node: JSONContent): void => {
-    if (node.type === "codeBlock" && node.attrs?.language === "mermaid") {
-      sources.push(nodeText(node));
-    }
-    node.content?.forEach(collect);
-  };
-  collect(parseBodyToJson(frontMatter.body));
-  return sources;
-};
-
 const canonicalizeBody = (body: string): string => {
   const editor = createMarkdownEditor(body);
   try {
@@ -167,18 +147,4 @@ export const assessVisualMarkdownCompatibility = (
   }
 
   return { compatible: true };
-};
-
-export const canonicalizeTaskDescriptionMarkdown = (markdown: string): string => {
-  const compatibility = assessVisualMarkdownCompatibility(markdown);
-  if (!compatibility.compatible) {
-    throw new Error(compatibility.reason);
-  }
-
-  const frontMatter = splitTaskDescriptionFrontMatter(markdown);
-  if (frontMatter.kind === "malformed") {
-    throw new Error("Malformed front matter cannot be canonicalized.");
-  }
-
-  return `${frontMatter.raw}${canonicalizeBody(frontMatter.body)}`;
 };

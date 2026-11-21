@@ -83,7 +83,7 @@ export type SendAgentMessageDependencies = {
   ) => number | undefined;
 };
 
-export const settleStartingSession = (
+const settleStartingSession = (
   identity: AgentSessionIdentity,
   status: Extract<AgentSessionState["status"], "idle" | "error">,
   readSessionSnapshot: ReadSessionSnapshot,

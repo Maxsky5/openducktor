@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createRepoStaleGuard, throwIfRepoStale } from "./core";
+import { createRepoStaleGuard } from "./core";
 
 describe("agent-orchestrator/support/core", () => {
   test("creates a stale-repo guard bound to initial repo epoch", () => {
@@ -28,10 +28,5 @@ describe("agent-orchestrator/support/core", () => {
     expect(isStale()).toBe(false);
     currentWorkspaceRepoPathRef.current = "/repo/b";
     expect(isStale()).toBe(true);
-  });
-
-  test("throws when stale guard reports changed repo", () => {
-    expect(() => throwIfRepoStale(() => false, "stale")).not.toThrow();
-    expect(() => throwIfRepoStale(() => true, "stale")).toThrow("stale");
   });
 });

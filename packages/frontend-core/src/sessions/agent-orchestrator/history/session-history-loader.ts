@@ -21,7 +21,7 @@ import {
 import type { SessionHistoryReadGeneration } from "./session-history-read-generation";
 import type { LoadSessionHistorySystemPromptContext } from "./workflow-session-history-policy";
 
-export type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
+type SessionHistoryLoaderAdapter = Pick<AgentEnginePort, "loadSessionHistory">;
 
 type CreateLoadAgentSessionHistoryArgs = {
   workspaceRepoPath: string | null;

@@ -27,14 +27,6 @@ export const openInToolsQueryOptions = () =>
     staleTime: OPEN_IN_TOOLS_STALE_TIME_MS,
   });
 
-export const loadOpenInToolsFromQuery = (
-  queryClient: QueryClient,
-): Promise<SystemOpenInToolInfo[]> => queryClient.fetchQuery(openInToolsQueryOptions());
-
-export const ensureOpenInToolsFromQuery = (
-  queryClient: QueryClient,
-): Promise<SystemOpenInToolInfo[]> => queryClient.ensureQueryData(openInToolsQueryOptions());
-
 export const refreshOpenInToolsFromQuery = (
   queryClient: QueryClient,
 ): Promise<SystemOpenInToolInfo[]> => {

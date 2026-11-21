@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export type AuditAdvisory = {
+type AuditAdvisory = {
   title?: string;
   url?: string;
   severity?: string;

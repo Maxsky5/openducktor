@@ -1,6 +1,1 @@
-export type {
-  AgentChatComposerModel,
-  AgentChatModel,
-  AgentChatSurfaceModel,
-  AgentChatThreadModel,
-} from "./agent-chat.types";
+export type { AgentChatModel } from "./agent-chat.types";

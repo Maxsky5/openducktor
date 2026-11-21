@@ -45,7 +45,7 @@ import type {
 import { createRuntimeAdmissionGate, type RuntimeAdmissionGate } from "./runtime-admission-gate";
 import { createRuntimeRegistry, type RuntimeLifecycleReservation } from "./runtime-registry";
 
-export type RuntimeSettingsCheck =
+type RuntimeSettingsCheck =
   | {
       type: "accepted";
       /** Applies the checked change after the settings write, while the reservation is held. */
@@ -54,7 +54,7 @@ export type RuntimeSettingsCheck =
   | { type: "impact_changed"; impact: RuntimeLifecycleImpact };
 
 /** A settings change that owns the lifecycle of its kinds until it ends. */
-export type RuntimeSettingsChangeSession<E> = {
+type RuntimeSettingsChangeSession<E> = {
   /**
    * Checks the latest change against the reserved kinds, the executables it starts, and the
    * reviewed impact. Call it after reading the latest settings and before writing them.

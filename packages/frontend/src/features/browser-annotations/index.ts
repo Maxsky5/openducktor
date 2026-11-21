@@ -1,8 +1,5 @@
 export { BrowserAnnotationCommentBox } from "./browser-annotation-comment-box";
-export {
-  BROWSER_ANNOTATION_NUMBER_CLASS_NAME,
-  BrowserAnnotationList,
-} from "./browser-annotation-list";
+export { BrowserAnnotationList } from "./browser-annotation-list";
 export {
   type BrowserAnnotation,
   type BrowserAnnotationChanges,

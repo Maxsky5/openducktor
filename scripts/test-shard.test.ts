@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import path from "node:path";
 
 import { parseShard, planShardRuns, type TestSuite } from "./test-shard";
 
@@ -23,14 +24,30 @@ describe("test shard plan", () => {
 
   test("gives each Bun suite the shard and runs Node suites only in the first shard", () => {
     expect(planShardRuns(suites, { index: 1, total: 3 })).toEqual([
-      { directory: "packages/host", script: "test", args: ["--shard=1/3"] },
-      { directory: "tools/oxlint/anti-slop", script: "test", args: [] },
-      { directory: ".", script: "test:scripts", args: ["--shard=1/3"] },
+      { directory: "packages/host", script: "test", args: [["--shard=1/3"]] },
+      { directory: "tools/oxlint/anti-slop", script: "test", args: [[]] },
+      { directory: ".", script: "test:scripts", args: [["--shard=1/3"]] },
     ]);
     expect(planShardRuns(suites, { index: 2, total: 3 })).toEqual([
-      { directory: "packages/host", script: "test", args: ["--shard=2/3"] },
-      { directory: ".", script: "test:scripts", args: ["--shard=2/3"] },
+      { directory: "packages/host", script: "test", args: [["--shard=2/3"]] },
+      { directory: ".", script: "test:scripts", args: [["--shard=2/3"]] },
     ]);
+  });
+
+  test("splits only a full frontend suite when at least four CPUs are available", () => {
+    const frontend = {
+      directory: path.join("packages", "frontend"),
+      script: "test",
+      command: "bun test --isolate --bail=1",
+    };
+    for (const [cpuCount, total, args] of [
+      [4, 1, [["--shard=1/2"], ["--shard=2/2"]]],
+      [2, 1, [["--shard=1/1"]]],
+      [4, 3, [["--shard=1/3"]]],
+      [16, 1, [["--shard=1/3"], ["--shard=2/3"], ["--shard=3/3"]]],
+    ] as const) {
+      expect(planShardRuns([frontend], { index: 1, total }, cpuCount)[0]?.args).toEqual(args);
+    }
   });
 
   test("rejects a shard outside its total", () => {

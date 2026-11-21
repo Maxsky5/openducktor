@@ -7,16 +7,14 @@ import {
   ODT_BROWSER_WAIT_DEFAULT_TIMEOUT_MS,
   ODT_EXTERNAL_MCP_TOOL_NAMES,
   ODT_READ_ONLY_TOOL_NAMES,
-  type OdtBrowserToolName,
-} from "@openducktor/contracts";
-import type { z } from "zod";
-import packageJson from "../package.json" with { type: "json" };
-import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_MCP_TOOL_NAMES,
   ODT_TOOL_SCHEMAS,
   ODT_WORKSPACE_SCOPED_TOOL_NAMES,
-} from "./lib";
+  type OdtBrowserToolName,
+} from "@openducktor/contracts";
+import type { z } from "zod";
+import packageJson from "../package.json" with { type: "json" };
 import {
   getListedToolInputSchema,
   getListedToolOutputSchema,

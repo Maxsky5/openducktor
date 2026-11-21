@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { BrowserWindowConstructorOptions } from "electron";
 
 /** Light and dark colors of the startup pages. Windows use them as background before the page loads. */
-export const STARTUP_WINDOW_BACKGROUND = {
+const STARTUP_WINDOW_BACKGROUND = {
   light: OPEN_DUCKTOR_STARTUP_BACKGROUND,
   dark: "#202124",
 } as const;
@@ -32,7 +32,7 @@ ${body}
 </body>
 </html>`;
 
-export const STARTUP_ERROR_TITLE = "OpenDucktor could not start";
+const STARTUP_ERROR_TITLE = "OpenDucktor could not start";
 
 export const renderStartupErrorHtml = (message: string, logDirectory: string): string =>
   renderStartupPage(
@@ -43,7 +43,7 @@ export const renderStartupErrorHtml = (message: string, logDirectory: string): s
   <p>Close OpenDucktor and restart it after you correct the problem.</p>`,
   );
 
-export const DATA_UPGRADE_TITLE = "Upgrading OpenDucktor data";
+const DATA_UPGRADE_TITLE = "Upgrading OpenDucktor data";
 
 export const renderDataUpgradeHtml = (): string =>
   renderStartupPage(

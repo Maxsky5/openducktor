@@ -38,7 +38,7 @@ import {
 import { removeWorktreeAndFilesystemPath } from "./worktree-removal";
 
 export type { CreateGitServiceInput } from "./git-service-inputs";
-export type { GitService, GitServiceError } from "./git-service-types";
+export type { GitService } from "./git-service-types";
 
 export const createGitService = (input: GitPort | CreateGitServiceInput): GitService => {
   const { gitPort, settingsConfig, worktreeFiles, remoteFetch } =

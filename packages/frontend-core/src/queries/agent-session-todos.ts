@@ -10,7 +10,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "../lib/working-directory";
 import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
-export const SESSION_TODOS_STALE_TIME_MS = 30_000;
+const SESSION_TODOS_STALE_TIME_MS = 30_000;
 
 export const agentSessionTodosQueryKeys = {
   all: ["agent-session-todos"] as const,

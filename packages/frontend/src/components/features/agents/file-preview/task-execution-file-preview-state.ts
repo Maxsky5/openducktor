@@ -101,7 +101,7 @@ export const reportTaskExecutionFilePreviewLeavePolicy = (
   return { ...state, leavePolicy: policy };
 };
 
-export const forceClearTaskExecutionFilePreviewState = (
+const forceClearTaskExecutionFilePreviewState = (
   state: TaskExecutionFilePreviewState,
 ): TaskExecutionFilePreviewState =>
   state.selectedFile === null

@@ -7,7 +7,7 @@ import { createWorktreeResetEffect } from "./worktree-reset";
 
 export type HostEffectError = TaskServiceError | TaskMutationProgressFailure;
 
-export type HostEffectContext = {
+type HostEffectContext = {
   readonly input: TaskIdInput;
   readonly eventId: string;
   /** The effect adds each artifact that it changes, so the task event reports the change. */

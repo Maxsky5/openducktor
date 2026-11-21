@@ -12,7 +12,7 @@
     "./startup-splash/vite-plugin": "./src/startup-splash/vite-plugin.ts"
   },
   "scripts": {
-    "build": "bunx tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --pass-with-no-tests --timeout 1000 --isolate --bail=1",
     "lint": "oxlint -c ../../.oxlintrc.json src"
@@ -53,8 +53,6 @@
     "@tiptap/extension-list": "3.32.0",
     "@tiptap/extension-mathematics": "3.32.0",
     "@tiptap/extension-table": "3.32.0",
-    "@tiptap/extension-task-item": "3.32.0",
-    "@tiptap/extension-task-list": "3.32.0",
     "@tiptap/markdown": "3.32.0",
     "@tiptap/react": "3.32.0",
     "@tiptap/starter-kit": "3.32.0",

@@ -39,14 +39,6 @@ export const readPersistedSessionRuntimeKind = ({
 }: Pick<AgentSessionRecord, "externalSessionId" | "runtimeKind">): RuntimeKind =>
   readRuntimeKind(runtimeKind, `Persisted session '${externalSessionId}' is missing runtime kind.`);
 
-export const readFreshSessionRuntimeKind = (
-  selectedModel: Pick<AgentModelSelection, "runtimeKind">,
-): RuntimeKind =>
-  readRuntimeKind(
-    selectedModel.runtimeKind,
-    "Runtime kind is required to start a session. Select an explicit runtime before starting.",
-  );
-
 export const readSelectedModelRuntimeKind = (
   sessionDescription: string,
   sessionRuntimeKind: RuntimeKind,

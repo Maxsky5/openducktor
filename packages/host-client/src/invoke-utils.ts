@@ -27,8 +27,6 @@ export type InvokeFn = <Result>(
   options?: InvokeOptions,
 ) => Promise<Result>;
 
-export type OkResult = { ok: boolean };
-
 export const voidResultSchema = z
   .union([z.undefined(), z.null()])
   .transform((): undefined => undefined);

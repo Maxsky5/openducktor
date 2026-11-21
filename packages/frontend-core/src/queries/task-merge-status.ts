@@ -7,7 +7,7 @@ import { errorMessage } from "../lib/errors";
 import { CONNECTION_RECONNECTED_EVENT_KIND } from "../recovery/connection-control-events";
 import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
-export const taskMergeStatusQueryKeys = {
+const taskMergeStatusQueryKeys = {
   all: ["task-merge-status"] as const,
   repo: (repoPath: WorkspaceRef) =>
     [...taskMergeStatusQueryKeys.all, "repo", workspaceScopeValue(repoPath)] as const,

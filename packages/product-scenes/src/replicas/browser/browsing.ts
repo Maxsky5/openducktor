@@ -22,7 +22,7 @@ const MARKER_OFFSET = 10;
 const LABEL_HEIGHT = 20;
 
 /** An element of the Fieldnotes page, by its `data-fn` name. */
-export type PageElement = "notebook-travel" | "empty-title" | "empty-subtitle" | "create-note";
+type PageElement = "notebook-travel" | "empty-title" | "empty-subtitle" | "create-note";
 
 /** The browser tab of a scene and its steps. */
 export type BrowserTabSteps = {

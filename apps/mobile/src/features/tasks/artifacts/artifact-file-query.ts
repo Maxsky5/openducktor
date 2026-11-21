@@ -8,7 +8,7 @@ import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import type { ResourceFiles } from "@/platform/resource-files";
 
 /** What the view of a saved file shows. A text format carries its text. */
-export type ArtifactPreview =
+type ArtifactPreview =
   | { kind: "image" | "none" }
   | { kind: "markdown" | "text" | "html"; text: string }
   /** A text format whose bytes are not valid UTF-8. */

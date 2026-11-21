@@ -20,9 +20,9 @@ const unavailableState = (message: string, operation: AppUpdateOperation): AppUp
 const errorMessage = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-export type AppUpdateAction = "check" | "download" | "install";
+type AppUpdateAction = "check" | "download" | "install";
 
-export type AppUpdateCommandError = {
+type AppUpdateCommandError = {
   code?: AppUpdateErrorCode;
   message: string;
   operation: AppUpdateOperation;

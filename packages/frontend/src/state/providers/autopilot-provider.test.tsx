@@ -19,7 +19,6 @@ import {
   createWorkspaceRecordFixture,
   createWorkspaceStateFixture,
 } from "@/test-utils/shared-test-fixtures";
-import { autopilotQueryKeys } from "@openducktor/frontend-core/queries/autopilot";
 import { workspaceQueryKeys } from "@openducktor/frontend-core/queries/workspace";
 import { taskWorktreeQueryKeys } from "@openducktor/frontend-core/queries/build-runtime";
 import { AutopilotProvider } from "./autopilot-provider";
@@ -309,18 +308,15 @@ describe("AutopilotProvider", () => {
     }
   });
 
-  test("a local settings save refreshes the saved rules and settings snapshot", async () => {
+  test("a local Autopilot settings save refreshes the settings snapshot", async () => {
     const provider = renderProvider({});
     try {
       await provider.waitForAttachReads();
-      const rulesKey = autopilotQueryKeys.settings();
       const snapshotKey = workspaceQueryKeys.settingsSnapshot();
-      provider.queryClient.setQueryData(rulesKey, { rules: [] });
       provider.queryClient.setQueryData(snapshotKey, { autopilot: { rules: [] } });
 
       await provider.emit({ type: "autopilot_settings_saved" });
 
-      expect(provider.queryClient.getQueryState(rulesKey)?.isInvalidated).toBe(true);
       expect(provider.queryClient.getQueryData(snapshotKey)).toBeUndefined();
       expect(info).not.toHaveBeenCalled();
     } finally {

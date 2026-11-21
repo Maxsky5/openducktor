@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "./lib";
+import { ODT_TOOL_SCHEMAS, ODT_WORKSPACE_SCOPED_TOOL_NAMES } from "@openducktor/contracts";
 
 const listedToolObjectSchema = z.record(z.string(), z.json());
 

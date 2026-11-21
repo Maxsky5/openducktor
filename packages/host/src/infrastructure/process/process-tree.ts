@@ -9,14 +9,14 @@ import {
 
 export type ProcessTreePlatform = NodeJS.Platform;
 export type KillProcess = (pid: number, signal?: NodeJS.Signals | 0) => boolean;
-export type ProcessCommandResult = {
+type ProcessCommandResult = {
   status: number | null;
   stdout: Buffer;
   stderr: Buffer;
   error?: Error;
 };
 
-export type ProcessCommandRunner = (
+type ProcessCommandRunner = (
   command: string,
   args: string[],
 ) => Effect.Effect<ProcessCommandResult>;

@@ -28,6 +28,7 @@ const resolveRendererDevPort = (): number =>
 
 export default defineConfig({
   base: "./",
+  publicDir: path.join(packagesRoot, "frontend/public"),
   plugins: [createOpenDucktorStartupSplashPlugin(), react(), tailwindcss()],
   define: {
     "import.meta.env.VITE_ODT_APP_VERSION": JSON.stringify(resolveAppVersion()),

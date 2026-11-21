@@ -17,7 +17,7 @@ export type LocalWorkspaceDetails = {
 
 // Setup IDs are random, so parallel test files can share this map.
 const sessions = new Map<string, WorkspaceProviderSetupSession>();
-export const localOnlySetupPath = (setupId: string): string => {
+const localOnlySetupPath = (setupId: string): string => {
   const value = sessions.get(setupId);
   if (!value) throw new Error("Setup not found");
   return value.repoPath;

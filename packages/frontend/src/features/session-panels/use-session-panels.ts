@@ -70,14 +70,11 @@ import {
   useSessionPanelVisibility,
 } from "./use-session-panel-visibility";
 
-export type {
-  BrowserAddressFocus,
-  SessionPanelBrowserModel,
-} from "./use-session-panel-browser-tabs";
+export type { SessionPanelBrowserModel } from "./use-session-panel-browser-tabs";
 export type { PanelPresence } from "./use-session-panel-visibility";
 
 /** An action that removes the cause of a disabled launcher card, such as Retry for a failed read. */
-export type PanelLauncherRecovery = { label: string; disabled: boolean; onRun: () => void };
+type PanelLauncherRecovery = { label: string; disabled: boolean; onRun: () => void };
 
 export type PanelLauncherEntry = {
   kind: ToolTabKind | HostTabKind;

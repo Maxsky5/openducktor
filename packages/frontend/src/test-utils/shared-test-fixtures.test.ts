@@ -5,7 +5,6 @@ import {
   getSessionMessageCount,
 } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import {
-  type AgentSessionFixtureOverrides,
   createAgentSessionFixture,
   createChatSettingsFixture,
   createGitProviderContextFixture,
@@ -14,17 +13,7 @@ import {
   TEST_EXTERNAL_SESSION_IDS,
 } from "@/test-utils/shared-test-fixtures";
 
-type ExpectTrue<Value extends true> = Value;
-type AgentSessionFixtureUsesOnlyCanonicalAssociation = ExpectTrue<
-  Extract<keyof AgentSessionFixtureOverrides, "taskId" | "role"> extends never ? true : false
->;
-const agentSessionFixtureUsesOnlyCanonicalAssociation: AgentSessionFixtureUsesOnlyCanonicalAssociation = true;
-
 describe("shared test fixtures", () => {
-  test("accepts only the canonical session association fields", () => {
-    expect(agentSessionFixtureUsesOnlyCanonicalAssociation).toBeTrue();
-  });
-
   test("rejects legacy session association sentinel fields at runtime", () => {
     expect(() =>
       // @ts-expect-error This negative test verifies rejection of the removed taskId field.

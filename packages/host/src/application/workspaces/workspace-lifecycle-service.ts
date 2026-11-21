@@ -36,7 +36,7 @@ import {
   type WorkspaceWorktreeInventoryError,
 } from "./workspace-worktree-inventory";
 
-export type WorkspaceLifecycleError =
+type WorkspaceLifecycleError =
   | GitPortError
   | HostOperationErrorAggregate
   | HostValidationErrorAggregate

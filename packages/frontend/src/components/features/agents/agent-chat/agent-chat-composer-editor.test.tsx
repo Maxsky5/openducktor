@@ -104,14 +104,6 @@ beforeEach(async () => {
     spyOn(actualComposerSelectionModule, "getCaretOffsetWithinElement").mockImplementation(
       getCaretOffsetWithinElementMock,
     ),
-    spyOn(actualComposerSelectionModule, "insertTextAtCaretWithinElement").mockImplementation(
-      (element: HTMLElement, text: string, fallbackOffset: number) => {
-        const currentText = (element.textContent ?? "").replace(/\u200B/g, "");
-        const nextText = `${currentText.slice(0, fallbackOffset)}${text}${currentText.slice(fallbackOffset)}`;
-        element.textContent = nextText;
-        return fallbackOffset + text.length;
-      },
-    ),
     spyOn(actualComposerSelectionModule, "setCaretOffsetWithinElement").mockImplementation(
       setCaretOffsetWithinElementMock,
     ),

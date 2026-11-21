@@ -20,7 +20,7 @@ type UseAgentStudioRightPanelBridgeArgs = {
   gitProviderReadError?: UseAgentsPageRightPanelModelArgs["gitProviderReadError"];
 };
 
-export type AgentStudioRightPanelRuntimeModel = {
+type AgentStudioRightPanelRuntimeModel = {
   activeWorkspace: UseAgentsPageRightPanelModelArgs["activeWorkspace"];
   buildTools: UseAgentsPageRightPanelModelArgs["buildTools"];
   selectedView: UseAgentsPageRightPanelModelArgs["selectedView"];

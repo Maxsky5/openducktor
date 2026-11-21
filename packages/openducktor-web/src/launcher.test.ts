@@ -10,7 +10,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { createBrowserRuntimeConfigState } from "./browser-runtime-config-state";
 import { parseCliArgs } from "./cli";
-import { WebOperationError } from "@openducktor/remote-host/effect/web-errors";
+import { runWebBoundary, WebOperationError } from "@openducktor/remote-host/effect/web-errors";
 import {
   buildWebLauncherBaseEnv,
   logDuplicateWebTerminationNotice,
@@ -32,12 +32,12 @@ import {
   closeFrontendServer,
   closeViteFrontendServer,
   indexStaticAssetPaths,
-  keepProcessAliveDuring,
+  keepProcessAliveDuringEffect,
   readinessHostForBind,
   resolveIndexedStaticAssetPath,
   resolveStaticAssetPath,
-  stopLauncherServices,
-  waitForBackend,
+  stopLauncherServicesEffect,
+  waitForBackendEffect,
 } from "./launcher-support";
 import * as backend from "./typescript-host-backend";
 import {
@@ -703,13 +703,13 @@ describe("launcher internals", () => {
       return new Response(null, { status: 200 });
     };
 
-    await waitForBackend(
+    await waitForBackendEffect(
       "http://127.0.0.1:14327",
       "app-token",
       1_000,
       createHostProcess(new Promise<number>(() => {})),
       { fetch: fetchImpl, sleep: async () => {} },
-    );
+    ).pipe(runWebBoundary);
 
     expect(requests).toEqual([
       { url: "http://127.0.0.1:14327/health", method: undefined, token: "app-token" },
@@ -727,24 +727,21 @@ describe("launcher internals", () => {
     await exited;
 
     await expect(
-      waitForBackend("http://127.0.0.1:14327", "app-token", 0, createHostProcess(exited), {
+      waitForBackendEffect("http://127.0.0.1:14327", "app-token", 0, createHostProcess(exited), {
         fetch: async () => new Response(null, { status: 503 }),
         sleep: async () => {},
-      }),
-    ).rejects.toThrow("OpenDucktor web host exited before startup completed with code 9.");
-    await expect(
-      waitForBackend("http://127.0.0.1:14327", "app-token", 0, createHostProcess(exited), {
-        fetch: async () => new Response(null, { status: 503 }),
-        sleep: async () => {},
-      }),
-    ).rejects.toMatchObject({ _tag: "WebOperationError" });
+      }).pipe(runWebBoundary),
+    ).rejects.toMatchObject({
+      _tag: "WebOperationError",
+      message: "OpenDucktor web host exited before startup completed with code 9.",
+    });
   });
 
   test("fails fast when the host readiness exit rejects", async () => {
     const backgroundFailure = new Error("task-sync persistent logging failed");
 
     await expect(
-      waitForBackend(
+      waitForBackendEffect(
         "http://127.0.0.1:14327",
         "app-token",
         0,
@@ -753,7 +750,7 @@ describe("launcher internals", () => {
           fetch: async () => new Response(null, { status: 503 }),
           sleep: async () => {},
         },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toMatchObject({
       _tag: "WebOperationError",
       operation: "web.launcher.wait-for-backend",
@@ -772,7 +769,7 @@ describe("launcher internals", () => {
       });
 
     await expect(
-      waitForBackend(
+      waitForBackendEffect(
         "http://127.0.0.1:14327",
         "app-token",
         10,
@@ -781,7 +778,7 @@ describe("launcher internals", () => {
           fetch: fetchImpl,
           sleep: async () => {},
         },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toThrow("Timed out waiting for OpenDucktor web host");
     expect(aborted).toBe(true);
   });
@@ -808,7 +805,7 @@ describe("launcher internals", () => {
       },
     };
 
-    await stopLauncherServices(
+    await stopLauncherServicesEffect(
       {
         frontendServer,
         hostBackend,
@@ -822,7 +819,7 @@ describe("launcher internals", () => {
           await backend.stop();
         },
       },
-    );
+    ).pipe(runWebBoundary);
 
     expect(frontendCloseCalls).toBe(1);
     expect(stopCalls).toBe(1);
@@ -913,14 +910,17 @@ describe("launcher internals", () => {
       finishOperation = resolve;
     });
 
-    const keepAlivePromise = keepProcessAliveDuring(operation, {
-      scheduleInterval: (callback) => {
-        intervalCallback = callback;
-        return () => {
-          intervalCancelled = true;
-        };
+    const keepAlivePromise = keepProcessAliveDuringEffect(
+      Effect.promise(() => operation),
+      {
+        scheduleInterval: (callback) => {
+          intervalCallback = callback;
+          return () => {
+            intervalCancelled = true;
+          };
+        },
       },
-    });
+    ).pipe(runWebBoundary);
 
     expect(intervalCallback).not.toBeNull();
     expect(intervalCancelled).toBe(false);
@@ -1128,7 +1128,7 @@ describe("launcher internals", () => {
   test("closes the frontend without a host", async () => {
     const calls: string[] = [];
 
-    await stopLauncherServices(
+    await stopLauncherServicesEffect(
       { frontendServer: null, hostBackend: null, logger: testLogger },
       {
         closeServer: async () => {
@@ -1138,7 +1138,7 @@ describe("launcher internals", () => {
           calls.push("stop host");
         },
       },
-    );
+    ).pipe(runWebBoundary);
 
     expect(calls).toEqual(["close frontend"]);
   });
@@ -1148,7 +1148,7 @@ describe("launcher internals", () => {
     const calls: string[] = [];
 
     await expect(
-      stopLauncherServices(
+      stopLauncherServicesEffect(
         {
           frontendServer: null,
           hostBackend: null,
@@ -1165,7 +1165,7 @@ describe("launcher internals", () => {
             calls.push("stop host");
           },
         },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toMatchObject({
       _tag: "WebDependencyError",
       dependency: "frontend-server",
@@ -1178,7 +1178,7 @@ describe("launcher internals", () => {
 
   test("reports a nonzero host exit after a successful stop", async () => {
     await expect(
-      stopLauncherServices(
+      stopLauncherServicesEffect(
         {
           frontendServer: null,
           hostBackend: {
@@ -1190,7 +1190,7 @@ describe("launcher internals", () => {
           logger: testLogger,
         },
         { closeServer: async () => {}, stopHost: async () => {} },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toMatchObject({
       _tag: "WebOperationError",
       operation: "web.launcher.shutdown",
@@ -1204,7 +1204,7 @@ describe("launcher internals", () => {
     const frontendFailure = new Error("frontend close failed");
 
     await expect(
-      stopLauncherServices(
+      stopLauncherServicesEffect(
         {
           frontendServer: null,
           hostBackend: {
@@ -1232,7 +1232,7 @@ describe("launcher internals", () => {
           },
           stopHost: async () => {},
         },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toMatchObject({ cause: frontendFailure });
     expect(calls).toEqual(["log call: frontend close failed", "log finished", "read exit"]);
   });
@@ -1251,7 +1251,7 @@ describe("launcher internals", () => {
     };
 
     await expect(
-      stopLauncherServices(
+      stopLauncherServicesEffect(
         {
           frontendServer: null,
           hostBackend,
@@ -1263,10 +1263,10 @@ describe("launcher internals", () => {
             throw new Error("host stop failed");
           },
         },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toThrow("host stop failed");
     await expect(
-      stopLauncherServices(
+      stopLauncherServicesEffect(
         {
           frontendServer: null,
           hostBackend,
@@ -1278,7 +1278,7 @@ describe("launcher internals", () => {
             throw new Error("host stop failed");
           },
         },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toMatchObject({
       _tag: "WebDependencyError",
       dependency: "typescript-host-backend",
@@ -1298,7 +1298,7 @@ describe("launcher internals", () => {
     };
 
     await expect(
-      stopLauncherServices(
+      stopLauncherServicesEffect(
         { frontendServer: null, hostBackend, logger: testLogger },
         {
           closeServer: async () => {
@@ -1308,7 +1308,7 @@ describe("launcher internals", () => {
             throw hostFailure;
           },
         },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toMatchObject({
       _tag: "WebOperationError",
       operation: "web.launcher.shutdown",
@@ -1332,7 +1332,7 @@ describe("launcher internals", () => {
     };
 
     await expect(
-      stopLauncherServices(
+      stopLauncherServicesEffect(
         { frontendServer: null, hostBackend, logger: testLogger },
         {
           closeServer: async () => {
@@ -1340,7 +1340,7 @@ describe("launcher internals", () => {
           },
           stopHost: async () => {},
         },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toMatchObject({
       _tag: "WebOperationError",
       operation: "web.launcher.shutdown",
@@ -1367,7 +1367,7 @@ describe("launcher internals", () => {
     };
 
     await expect(
-      stopLauncherServices(
+      stopLauncherServicesEffect(
         {
           frontendServer: null,
           hostBackend,
@@ -1383,7 +1383,7 @@ describe("launcher internals", () => {
           },
           stopHost: async () => {},
         },
-      ),
+      ).pipe(runWebBoundary),
     ).rejects.toMatchObject({
       _tag: "WebOperationError",
       operation: "web.launcher.shutdown",

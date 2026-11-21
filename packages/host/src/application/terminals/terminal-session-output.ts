@@ -36,7 +36,7 @@ export type TerminalSessionAttachInput = {
   sink: TerminalAttachment["sink"];
 };
 
-export type TerminalOutputEvent =
+type TerminalOutputEvent =
   | { type: "attachments_empty" }
   | { type: "overflow" }
   | { type: "pause_requested" }

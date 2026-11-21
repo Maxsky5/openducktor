@@ -1,7 +1,7 @@
 import type { SystemOpenInToolId } from "@openducktor/contracts";
 import { HostValidationError } from "../../effect/host-errors";
 
-export type OpenInLaunchStrategy = "open-directory" | "editor" | "jetbrains";
+type OpenInLaunchStrategy = "open-directory" | "editor" | "jetbrains";
 
 export type MacOpenInToolMetadata = {
   id: SystemOpenInToolId;

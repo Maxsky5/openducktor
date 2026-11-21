@@ -210,7 +210,7 @@ const defaultWebSignalProcessBoundary: WebSignalProcessBoundary = {
 
 export { logDuplicateWebTerminationNotice } from "./launcher-lifecycle";
 
-export const resolveWebSignalExitCode = (
+const resolveWebSignalExitCode = (
   requestedExitCode: number,
   duplicateTerminationLogFailed: boolean,
 ): number => (duplicateTerminationLogFailed ? 1 : requestedExitCode);
@@ -937,6 +937,3 @@ export const runLauncherEffect = (
       }),
     );
   });
-
-export const runLauncher = (options: LauncherOptions, logger: WebLogger): Promise<number> =>
-  runWebBoundary(runLauncherEffect(options, logger));

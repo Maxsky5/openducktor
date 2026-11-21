@@ -39,12 +39,11 @@ export type CodexAppServerError =
 
 export type {
   CodexAppServerProtocolMessage,
-  CodexAppServerRequestId,
   CodexAppServerRequestMethod,
   CodexAppServerRequestResult,
 };
 
-export type CodexAppServerRequestInput = { runtimeId: string } & CodexAppServerClientRequest;
+type CodexAppServerRequestInput = { runtimeId: string } & CodexAppServerClientRequest;
 export type CodexAppServerRespondInput = {
   onIssued?: (() => void) | undefined;
   runtimeId: string;
@@ -52,7 +51,7 @@ export type CodexAppServerRespondInput = {
   result?: CodexAppServerRespondResult;
   error?: CodexAppServerRespondError;
 };
-export type CodexAppServerLoadedThreadListInput = {
+type CodexAppServerLoadedThreadListInput = {
   runtimeId: string;
   cursor: string | null;
   limit: number;
@@ -63,12 +62,12 @@ export type CodexAppServerLoadedThreadListResponse = {
 };
 export type CodexSessionStatus = "active" | "idle" | "notLoaded" | "systemError";
 export type CodexAppServerStreamEvent = CodexAppServerRuntimeStreamEvent;
-export type CodexAppServerThreadEntry = {
+type CodexAppServerThreadEntry = {
   id: string;
   cwd: string;
   status: CodexSessionStatus;
 };
-export type CodexAppServerThreadListInput = {
+type CodexAppServerThreadListInput = {
   runtimeId: string;
   cursor: string | null;
   limit: number;

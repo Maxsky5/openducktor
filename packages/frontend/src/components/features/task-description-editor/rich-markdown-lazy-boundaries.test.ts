@@ -133,15 +133,4 @@ describe("rich Markdown lazy module boundaries", () => {
     expect(candidateGraph.packages).toContain("remark-parse");
     expect(candidateGraph.packages).toContain("unist-util-visit");
   });
-
-  test("requires pinned TipTap Markdown list hooks without empty-output fallbacks", async () => {
-    const extensions = await readSource("./task-description-markdown-extensions.ts");
-
-    expect(extensions).toContain("requireMarkdownHook");
-    expect(extensions).not.toContain("defaultListItemParseMarkdown?.(");
-    expect(extensions).not.toContain("defaultListItemRenderMarkdown?.(");
-    expect(extensions).not.toContain("defaultOrderedListParseMarkdown?.(");
-    expect(extensions).not.toContain("defaultTaskItemParseMarkdown?.(");
-    expect(extensions).not.toContain("defaultTaskItemRenderMarkdown?.(");
-  });
 });

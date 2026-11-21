@@ -75,7 +75,7 @@ function splitTrimmedNonEmpty(value: string, separator: RegExp): string[] {
   }, []);
 }
 
-export function splitPatchCandidates(rawDiff: string): string[] {
+function splitPatchCandidates(rawDiff: string): string[] {
   const trimmed = trimPatch(rawDiff);
   if (trimmed.length === 0) {
     return [];
@@ -103,7 +103,7 @@ export function splitPatchCandidates(rawDiff: string): string[] {
   return [trimmed];
 }
 
-export function patchMatchesFile(candidate: string, filePath: string): boolean {
+function patchMatchesFile(candidate: string, filePath: string): boolean {
   const normalizedPath = filePath.replaceAll("\\", "/");
   const quotedPath = normalizedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const suffixPattern = new RegExp(`(^|[\\s"'])((a|b)/)?${quotedPath}($|[\\s"'])`, "m");

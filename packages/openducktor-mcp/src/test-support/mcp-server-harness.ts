@@ -6,10 +6,10 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { CallToolResult, ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { RegisteredToolName } from "../listed-tool-schema";
-import { ODT_TOOL_SCHEMAS } from "../lib";
 import { createMcpServer } from "../mcp-server";
 import {
   ODT_MCP_TOOL_NAMES,
+  ODT_TOOL_SCHEMAS,
   type OdtToolErrorPayload,
   type ReadTaskArtifactsResult,
   type McpTaskArtifact,

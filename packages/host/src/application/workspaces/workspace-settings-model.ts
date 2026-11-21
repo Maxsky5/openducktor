@@ -146,7 +146,7 @@ export type PreparedSettingsSnapshot = {
   readonly current: GlobalConfig;
   readonly next: GlobalConfig;
 };
-export type WorkspaceAddInput = {
+type WorkspaceAddInput = {
   repoPath: string;
   workspaceId: string;
   workspaceName: string;

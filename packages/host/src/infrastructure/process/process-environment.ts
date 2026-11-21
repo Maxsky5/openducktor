@@ -35,7 +35,7 @@ export type ReadUserShell = () => string | null;
 
 export { ProcessEnvironmentError } from "./process-environment-error";
 
-export type ReadLoginShellPath = (
+type ReadLoginShellPath = (
   env: NodeJS.ProcessEnv,
   shell: string,
 ) => Effect.Effect<string, ProcessEnvironmentError>;

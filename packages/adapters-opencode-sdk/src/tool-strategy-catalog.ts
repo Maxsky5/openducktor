@@ -1,7 +1,7 @@
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { retiredArtifactToolName, type AgentToolType } from "@openducktor/core";
 
-export type OpenCodeToolPreviewStrategy =
+type OpenCodeToolPreviewStrategy =
   | "shell"
   | "read"
   | "list"

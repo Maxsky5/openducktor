@@ -23,7 +23,7 @@ export type HostTabKind = (typeof HOST_TAB_KINDS)[number];
  * Kinds whose tab shows a view that the page opens for a moment, such as the details of a tool
  * call of the transcript. The layout does not save them, and the launcher does not offer them.
  */
-export const VIEW_TAB_KINDS = ["tool_call"] as const;
+const VIEW_TAB_KINDS = ["tool_call"] as const;
 export type ViewTabKind = (typeof VIEW_TAB_KINDS)[number];
 
 /** All kinds in launcher order. */

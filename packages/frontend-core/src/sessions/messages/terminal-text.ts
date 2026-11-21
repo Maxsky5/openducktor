@@ -1,7 +1,7 @@
 import Anser from "anser";
 
 /** The eight base colors of a terminal. Each client paints them with its theme colors. */
-export const TERMINAL_TONES = [
+const TERMINAL_TONES = [
   "black",
   "red",
   "green",

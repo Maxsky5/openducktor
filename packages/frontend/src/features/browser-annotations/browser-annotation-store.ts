@@ -26,9 +26,9 @@ export type BrowserAnnotation = {
   status: BrowserAnnotationStatus;
 };
 
-export type BrowserAnnotationSnapshot = Pick<BrowserAnnotation, "id" | "revision">;
+type BrowserAnnotationSnapshot = Pick<BrowserAnnotation, "id" | "revision">;
 
-export type AddBrowserAnnotationInput = {
+type AddBrowserAnnotationInput = {
   capture: BrowserAnnotationCapture;
   comment: string;
   includeScreenshot: boolean;

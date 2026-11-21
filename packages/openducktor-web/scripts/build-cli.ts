@@ -61,48 +61,23 @@ const CLI_BUILD_COMMAND = [
   "src/cli.ts",
   "src/generated-image-worker.ts",
   "src/claude-transcript-worker.ts",
-] as const;
-
-// The import worker has its own bundle, so its migration folders resolve from the dist folder
-// and not from a shared chunk.
-const IMPORT_WORKER_BUILD_COMMAND = [
-  "bun",
-  "build",
-  "--target=node",
-  "--minify",
-  "--keep-names",
-  "--outdir",
-  dirname(outputPath),
-  "--entry-naming",
-  "[name].[ext]",
   "src/host-database-import-worker.ts",
 ] as const;
 
-type WebBuild = { label: string; command: readonly [string, ...string[]] };
-
-const runWebBuildEffect = ({ label, command }: WebBuild): Effect.Effect<void, WebDependencyError> =>
-  Effect.tryPromise({
-    try: () => runCommand({ command, cwd: packageRoot, label }),
-    catch: (cause) =>
-      new WebDependencyError({
-        dependency: "build-command",
-        operation: "web-cli-build",
-        message: errorMessage(cause),
-        cause,
-        details: { command: [...command], cwd: packageRoot },
-      }),
-  });
-
-export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
+const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
-    yield* Effect.forEach(
-      [
-        { label: "Web CLI build", command: CLI_BUILD_COMMAND },
-        { label: "Web import worker build", command: IMPORT_WORKER_BUILD_COMMAND },
-      ],
-      runWebBuildEffect,
-      { concurrency: 2, discard: true },
-    );
+    yield* Effect.tryPromise({
+      try: () =>
+        runCommand({ command: CLI_BUILD_COMMAND, cwd: packageRoot, label: "Web CLI build" }),
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "build-command",
+          operation: "web-cli-build",
+          message: errorMessage(cause),
+          cause,
+          details: { command: [...CLI_BUILD_COMMAND], cwd: packageRoot },
+        }),
+    });
     yield* Effect.tryPromise({
       try: () => markExecutable(outputPath),
       catch: (cause) =>
@@ -145,10 +120,8 @@ export const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
     });
   });
 
-export const buildWebCli = (): Promise<void> => runWebBoundary(buildWebCliEffect());
-
 if (import.meta.main) {
-  await buildWebCli().catch((cause: unknown) => {
+  await runWebBoundary(buildWebCliEffect()).catch((cause: unknown) => {
     console.error(errorMessage(cause));
     process.exit(1);
   });

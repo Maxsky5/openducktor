@@ -1834,20 +1834,23 @@ describe("AgentChatThread", () => {
   test("showing every earlier call of a run longer than the row window keeps the rows above it", async () => {
     const rendered = renderLongRun(80);
     await act(flush);
+    const earlierCallControls = (label: string) =>
+      within(screen.getByText(label).closest("button")!.parentElement!);
 
     for (const name of [
       "Show 25 of 75 earlier calls",
       "Show 25 of 50 earlier calls",
       "Show 25 earlier calls",
     ]) {
-      fireEvent.click(screen.getByRole("button", { name }));
+      fireEvent.click(earlierCallControls(name).getByRole("button", { name }));
       await act(flush);
     }
 
     // The window keeps the rows above the run, so nothing above the header moves, and mounts the
     // first calls under it, up to the most rows that it mounts.
-    expect(screen.queryByRole("button", { name: /Show .* earlier calls/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Hide 75 earlier calls" })).toBeTruthy();
+    const controls = earlierCallControls("Hide 75 earlier calls");
+    expect(controls.queryByRole("button", { name: /Show .* earlier calls/ })).toBeNull();
+    expect(controls.getByRole("button", { name: "Hide 75 earlier calls" })).toBeTruthy();
     expect(screen.getByText("echo check 0")).toBeTruthy();
     expect(screen.getByText("Run every check")).toBeTruthy();
     expect(rendered.container.querySelectorAll("[data-row-key]").length).toBeLessThanOrEqual(60);

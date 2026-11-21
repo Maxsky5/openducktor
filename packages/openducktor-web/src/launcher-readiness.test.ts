@@ -2,95 +2,89 @@ import { expect, test } from "bun:test";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { waitForBackend } from "./launcher-support";
+import { Effect } from "effect";
+import { waitForBackendEffect } from "./launcher-support";
 
-test.each(["waitForBackend", "waitForBackendEffect"])(
-  "%s uses direct readiness transport despite environment proxies",
-  async (entryPoint) => {
-    const requests: Array<{ path: string; method: string; token: string | null }> = [];
-    const backend = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch(request) {
-        const path = new URL(request.url).pathname;
-        // Local tools can probe the root of a new loopback port. Readiness never requests it.
-        if (path !== "/") {
-          requests.push({
-            path,
-            method: request.method,
-            token: request.headers.get("x-openducktor-app-token"),
-          });
-        }
-        return new Response("ready");
-      },
-    });
-    const proxyRequests: string[] = [];
-    const proxy = createServer((request, response) => {
-      // A proxied request names its target in absolute form. Another local client can reach this
-      // reused loopback port with an origin-form request, which is not proxy traffic.
-      if (request.url?.startsWith("http://")) proxyRequests.push(request.url);
-      response.end("proxy success");
-    });
-    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
-    const address = z.object({ port: z.number() }).parse(proxy.address());
-    const proxyUrl = `http://127.0.0.1:${address.port}`;
-    const child = Bun.spawn({
-      cwd: fileURLToPath(new URL("..", import.meta.url)),
-      cmd: [
-        process.execPath,
-        "--eval",
-        `import { Effect } from "effect";
-         import { ${entryPoint} } from ${JSON.stringify(new URL("./launcher-support.ts", import.meta.url).href)};
+test("uses direct readiness transport despite environment proxies", async () => {
+  const requests: Array<{ path: string; method: string; token: string | null }> = [];
+  const backend = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const path = new URL(request.url).pathname;
+      // Local tools can probe the root of a new loopback port. Readiness never requests it.
+      if (path !== "/") {
+        requests.push({
+          path,
+          method: request.method,
+          token: request.headers.get("x-openducktor-app-token"),
+        });
+      }
+      return new Response("ready");
+    },
+  });
+  const proxyRequests: string[] = [];
+  const proxy = createServer((request, response) => {
+    // A proxied request names its target in absolute form. Another local client can reach this
+    // reused loopback port with an origin-form request, which is not proxy traffic.
+    if (request.url?.startsWith("http://")) proxyRequests.push(request.url);
+    response.end("proxy success");
+  });
+  await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+  const address = z.object({ port: z.number() }).parse(proxy.address());
+  const proxyUrl = `http://127.0.0.1:${address.port}`;
+  const child = Bun.spawn({
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+    cmd: [
+      process.execPath,
+      "--eval",
+      `import { Effect } from "effect";
+         import { waitForBackendEffect } from ${JSON.stringify(new URL("./launcher-support.ts", import.meta.url).href)};
          const control = await fetch("http://proxy-check.invalid/", { signal: AbortSignal.timeout(2000) });
          const body = await control.text();
          if (body !== "proxy success") throw new Error("Proxy control failed: " + body);
-         const result = ${entryPoint}("http://127.0.0.1:${backend.port}", "readiness-test-token", 2000, { exited: new Promise(() => {}) });
-         await ${entryPoint === "waitForBackendEffect" ? "Effect.runPromise(result)" : "result"};`,
-      ],
-      env: {
-        ...process.env,
-        HTTP_PROXY: proxyUrl,
-        http_proxy: proxyUrl,
-        HTTPS_PROXY: proxyUrl,
-        https_proxy: proxyUrl,
-        ALL_PROXY: proxyUrl,
-        all_proxy: proxyUrl,
-        NO_PROXY: "unrelated.invalid",
-        no_proxy: "unrelated.invalid",
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    try {
-      const [exitCode, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stderr).text(),
-      ]);
-      expect(exitCode, stderr).toBe(0);
-      expect(proxyRequests).toEqual(["http://proxy-check.invalid/"]);
-      expect(requests).toEqual([
-        { path: "/health", method: "GET", token: "readiness-test-token" },
-        { path: "/session", method: "POST", token: "readiness-test-token" },
-      ]);
-    } finally {
-      child.kill();
-      await child.exited;
-      backend.stop(true);
-      await new Promise<void>((resolve, reject) =>
-        proxy.close((error) => (error ? reject(error) : resolve())),
-      );
-    }
-  },
-  10_000,
-);
+         const result = waitForBackendEffect("http://127.0.0.1:${backend.port}", "readiness-test-token", 2000, { exited: new Promise(() => {}) });
+         await Effect.runPromise(result);`,
+    ],
+    env: {
+      ...process.env,
+      HTTP_PROXY: proxyUrl,
+      http_proxy: proxyUrl,
+      HTTPS_PROXY: proxyUrl,
+      https_proxy: proxyUrl,
+      ALL_PROXY: proxyUrl,
+      all_proxy: proxyUrl,
+      NO_PROXY: "unrelated.invalid",
+      no_proxy: "unrelated.invalid",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  try {
+    const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+    expect(exitCode, stderr).toBe(0);
+    expect(proxyRequests).toEqual(["http://proxy-check.invalid/"]);
+    expect(requests).toEqual([
+      { path: "/health", method: "GET", token: "readiness-test-token" },
+      { path: "/session", method: "POST", token: "readiness-test-token" },
+    ]);
+  } finally {
+    child.kill();
+    await child.exited;
+    backend.stop(true);
+    await new Promise<void>((resolve, reject) =>
+      proxy.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+}, 10_000);
 
-test.each([
+test.concurrent.each([
   { failure: "health", message: "Health endpoint returned 503" },
   { failure: "session", message: "status 401" },
   { failure: "health-redirect", message: "fetch failed" },
   { failure: "session-redirect", message: "fetch failed" },
-  { failure: "refused", message: "fetch failed" },
   { failure: "timeout", message: "aborted" },
+  { failure: "refused", message: "fetch failed" },
 ])(
   "direct readiness rejects $failure",
   async ({ failure, message }) => {
@@ -121,9 +115,10 @@ test.each([
     // deadline, so a slow CI runner does not turn its error into an abort.
     const deadlineMs = failure === "timeout" ? 150 : 1_000;
     try {
-      await expect(
-        waitForBackend(url, "readiness-test-token", deadlineMs, { exited: new Promise(() => {}) }),
-      ).rejects.toMatchObject({
+      const error = await waitForBackendEffect(url, "readiness-test-token", deadlineMs, {
+        exited: new Promise(() => {}),
+      }).pipe(Effect.flip, Effect.runPromise);
+      expect(error).toMatchObject({
         _tag: "WebOperationError",
         message: expect.stringContaining(message),
       });

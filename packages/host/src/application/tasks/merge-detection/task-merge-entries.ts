@@ -15,7 +15,7 @@ import { findTaskBranch } from "../support/task-branch-tips";
 import type { OwnCommit } from "./task-merge-check";
 
 /** The task branch and target tips of the last successful check. */
-export type CheckedTips = { branchOid: string; targetOid: string };
+type CheckedTips = { branchOid: string; targetOid: string };
 
 /** The own commit result of a branch, and the branch tip that it is for. */
 export type KnownOwnCommit = { branchOid: string; kind: OwnCommit };

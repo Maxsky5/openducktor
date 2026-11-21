@@ -13,7 +13,7 @@ const CHAIN = {
 };
 
 /** A step of a chain: an item, with its place in the row and the column. */
-export type ChainStep<Id extends string> = ItemData & {
+type ChainStep<Id extends string> = ItemData & {
   id: Id;
   /** The width of the box in the row, relative to the other steps. 1 by default. */
   flex?: number;

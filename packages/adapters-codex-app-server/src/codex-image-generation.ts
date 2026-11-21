@@ -18,20 +18,9 @@ export type CodexImageGenerationContext = {
   turnStatus?: CodexAppServerTurn["status"];
 };
 
-export const createCodexInlineImageRevision = () => {
-  const hash = sha256.create().update(utf8ToBytes("inline\0"));
-  return {
-    update: (bytes: Uint8Array): void => {
-      hash.update(bytes);
-    },
-    digest: (): string => bytesToHex(hash.digest()),
-  };
-};
-
 const inlineImageRevision = (result: string): string => {
-  const revision = createCodexInlineImageRevision();
-  revision.update(utf8ToBytes(result));
-  return revision.digest();
+  const hash = sha256.create().update(utf8ToBytes("inline\0"));
+  return bytesToHex(hash.update(utf8ToBytes(result)).digest());
 };
 
 export const codexImageGenerationPart = (

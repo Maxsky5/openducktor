@@ -7,8 +7,6 @@ import { createHostClientFixture } from "@openducktor/frontend-core/test-support
 export const withShellPlatform = (children: ReactNode, value: ShellBridge) =>
   createElement(ShellPlatformContext, { value }, children);
 
-export { createHostClientFixture } from "@openducktor/frontend-core/test-support/focused-fixture";
-
 type ShellBridgeFixtureOptions = {
   client?: Partial<HostClient>;
   bridge?: Partial<ShellBridge>;

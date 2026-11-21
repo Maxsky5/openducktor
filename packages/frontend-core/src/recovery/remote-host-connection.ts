@@ -38,7 +38,7 @@ type LiveOwner = {
 };
 
 /** Recovers platform state, such as a terminal view, before remote work unlocks. */
-export type RemoteRecoveryOwner = (signal: AbortSignal) => Promise<void>;
+type RemoteRecoveryOwner = (signal: AbortSignal) => Promise<void>;
 
 export type RemoteHostConnection = HostConnection & {
   remote: RemoteHostClient;

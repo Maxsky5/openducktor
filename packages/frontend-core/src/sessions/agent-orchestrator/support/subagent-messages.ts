@@ -18,7 +18,7 @@ export type SubagentMessage = AgentChatMessage & {
   meta: SubagentMeta;
 };
 
-export const toSubagentMessageId = (correlationKey: string): string => `subagent:${correlationKey}`;
+const toSubagentMessageId = (correlationKey: string): string => `subagent:${correlationKey}`;
 
 const isTerminalSubagentStatus = (status: SubagentMeta["status"]): boolean => {
   return status === "completed" || status === "cancelled" || status === "error";
@@ -69,7 +69,7 @@ const isPreviousRunTerminalUpdate = (
   incomingMeta.endedAtMs !== undefined &&
   incomingMeta.endedAtMs < existingMeta.startedAtMs;
 
-export const formatSubagentContent = (meta: {
+const formatSubagentContent = (meta: {
   agent?: string;
   prompt?: string;
   description?: string;

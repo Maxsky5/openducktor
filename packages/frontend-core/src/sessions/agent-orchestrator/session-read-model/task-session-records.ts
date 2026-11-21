@@ -2,7 +2,6 @@ import type { AgentSessionRecord, WorkspaceRef } from "@openducktor/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   agentSessionQueryKeys,
-  loadAgentSessionListsFromQuery,
   normalizeAgentSessionTaskIds,
 } from "../../../queries/agent-sessions";
 import type { PersistedTaskSessionRecord } from "../support/persistence";
@@ -65,30 +64,4 @@ export const readCachedTaskSessionRecords = (
     recordsByTaskId,
     scope.workspaceId,
   );
-};
-
-export const loadTaskSessionRecordsForTasks = async ({
-  queryClient,
-  repoPath,
-  workspaceId,
-  tasks,
-  forceFresh,
-}: {
-  queryClient: QueryClient;
-  repoPath: string;
-  workspaceId: string;
-  tasks: Pick<TaskCard, "id">[];
-  forceFresh?: boolean;
-}): Promise<TaskSessionRecords> => {
-  if (tasks.length === 0) {
-    return { workspaceId, taskIds: [], records: [] };
-  }
-
-  const recordsByTaskId = await loadAgentSessionListsFromQuery(
-    queryClient,
-    { workspaceId, repoPath },
-    tasks.map((task) => task.id),
-    forceFresh === undefined ? undefined : { forceFresh },
-  );
-  return toTaskSessionRecords(tasks, recordsByTaskId, workspaceId);
 };

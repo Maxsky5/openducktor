@@ -6,7 +6,7 @@ import {
   summarizeTaskLoadError,
 } from "@openducktor/frontend-core/tasks/task-load-errors";
 
-export const TASK_STORE_PREPARATION_TOAST_DELAY_MS = 1_000;
+const TASK_STORE_PREPARATION_TOAST_DELAY_MS = 1_000;
 
 type ToastId = string | number;
 

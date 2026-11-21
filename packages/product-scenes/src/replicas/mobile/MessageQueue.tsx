@@ -11,9 +11,6 @@ import "./MessageQueue.css";
 /** The delivery labels of STATUS_LABELS in queue-item-state.ts that the scenes show. */
 export const QUEUE_STATUS_LABELS = { queued: "Queued", steering: "Steering…" } as const;
 
-/** The state of a queued message: it waits, or it is on its way to the running turn. */
-export type QueueCardState = keyof typeof QUEUE_STATUS_LABELS;
-
 type QueuePanelProps = {
   /** The text of the queued message. */
   text: string;

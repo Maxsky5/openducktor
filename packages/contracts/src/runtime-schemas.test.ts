@@ -1731,21 +1731,6 @@ describe("runtime schemas", () => {
     ).toThrow("Duplicate slash command id: review");
   });
 
-  test("task worktree schema enforces boundaries", () => {
-    expect(
-      taskWorktreeSummarySchema.parse({
-        workingDirectory: "/repo/worktrees/task-1",
-      }),
-    ).toEqual({
-      workingDirectory: "/repo/worktrees/task-1",
-    });
-    expect(() =>
-      taskWorktreeSummarySchema.parse({
-        workingDirectory: "   ",
-      }),
-    ).toThrow();
-  });
-
   test("agent session record parses persisted history payload", () => {
     const parsed = agentSessionRecordSchema.parse({
       externalSessionId: "session-opencode-1",

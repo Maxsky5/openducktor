@@ -12,7 +12,7 @@ import { normalizeWorkingDirectory } from "../lib/working-directory";
 import { SKIPPED_QUERY_KEY_SEGMENT, skippedQueryOptions } from "./skipped-query";
 
 export const RUNTIME_CATALOG_STALE_TIME_MS = 30 * 60_000;
-export const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
+const RUNTIME_FILE_SEARCH_STALE_TIME_MS = 15_000;
 
 const runtimeCatalogKey = ["runtime-catalog"] as const;
 
@@ -100,13 +100,6 @@ export const skippedRuntimeCatalogQueryOptions = (runtimeKind?: RuntimeKind) =>
       : runtimeCatalogQueryKeys.skipped,
     staleTime: RUNTIME_CATALOG_STALE_TIME_MS,
   });
-
-export const loadRuntimeCatalogFromQuery = (
-  queryClient: QueryClient,
-  runtimeRef: RuntimeWorkingDirectoryRef,
-  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>,
-): Promise<CachedRuntimeCatalog> =>
-  queryClient.fetchQuery(runtimeCatalogQueryOptions(runtimeRef, loadRuntimeCatalog));
 
 /**
  * Marks the entry stale first: fetchQuery skips the network for a fresh entry.

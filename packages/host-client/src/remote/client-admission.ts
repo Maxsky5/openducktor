@@ -209,5 +209,3 @@ export const createClientAdmission = (options: {
     },
   };
 };
-
-export type ClientAdmission = ReturnType<typeof createClientAdmission>;

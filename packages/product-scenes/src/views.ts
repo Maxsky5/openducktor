@@ -1,5 +1,6 @@
 // The React view of each scene, loaded on demand, so a host that renders one scene loads only its
 // view and its styles.
+import { TOUR_VIEWS } from "./tour-views";
 import type { ComponentType } from "react";
 import type { ViewPropsOf } from "./frame/SceneFrame";
 import type { SceneName } from "./registry";
@@ -10,9 +11,9 @@ export type SceneViewLoaders = {
 };
 
 export const VIEWS = {
-  hero: async () => (await import("./scenes/hero/view")).HeroView,
+  hero: TOUR_VIEWS.hero,
   workflow: async () => (await import("./scenes/workflow/view")).WorkflowView,
-  palette: async () => (await import("./scenes/palette/view")).PaletteView,
+  palette: TOUR_VIEWS.palette,
   autopilot: async () => (await import("./scenes/autopilot/view")).AutopilotView,
   runtimes: async () => (await import("./scenes/runtimes/view")).RuntimesView,
   chat: async () => (await import("./scenes/chat/view")).ChatView,

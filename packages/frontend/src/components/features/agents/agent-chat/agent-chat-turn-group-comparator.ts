@@ -26,7 +26,7 @@ export type AgentChatTurnGroupProps = {
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
 };
 
-export const areAgentSessionTranscriptTargetsEqual = (
+const areAgentSessionTranscriptTargetsEqual = (
   left: AgentSessionTranscriptTarget | null,
   right: AgentSessionTranscriptTarget | null,
 ): boolean => {
@@ -64,7 +64,7 @@ export const isAgentChatTurnRowStreamingAssistant = (
   row.message.id === activeStreamingAssistantMessageId &&
   isAssistantMessageStreaming(row.message);
 
-export const areChatRowsEquivalent = (
+const areChatRowsEquivalent = (
   left: AgentChatTranscriptRow,
   right: AgentChatTranscriptRow,
 ): boolean => {

@@ -98,25 +98,6 @@ export const workflowAgentSessionScope = (
   role: AgentRole,
 ): AgentSessionWorkflowScope => ({ kind: "workflow", workspaceId, taskId, role });
 
-export const isWorkflowAgentSessionScope = (
-  scope: AgentSessionAssociation | null | undefined,
-): scope is AgentSessionWorkflowScope => scope?.kind === "workflow";
-
-export const requireWorkflowAgentSessionScope = (
-  scope: AgentSessionAssociation | null | undefined,
-  action: string,
-): AgentSessionWorkflowScope => {
-  if (!scope) {
-    throw new Error(`Cannot ${action} without workflow session context.`);
-  }
-  if (!isWorkflowAgentSessionScope(scope)) {
-    throw new Error(
-      `Cannot ${action} with ${scope.kind} session context; workflow session context is required.`,
-    );
-  }
-  return scope;
-};
-
 export function assertAgentRuntimePolicyBinding(
   input: { runtimeKind: RuntimeKind; runtimePolicy: AgentSessionRuntimePolicy },
   action: string,
@@ -152,7 +133,7 @@ export const markAgentWorkIssued = (input: AgentWorkStartOptions & { repoPath: s
 export const markAgentWorkAccepted = (input: AgentWorkStartOptions & { repoPath: string }) =>
   input.onWorkAccepted?.();
 
-export type PolicyBoundSessionControlRef = PolicyBoundSessionRef &
+type PolicyBoundSessionControlRef = PolicyBoundSessionRef &
   AgentWorkStartOptions & {
     sessionScope: AgentSessionScope;
   };
@@ -249,8 +230,6 @@ export const AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX = "Instructions update:\n\
 
 export type AgentSessionHistoryMessage = ContractsAgentSessionHistoryMessage;
 
-export type AgentSessionRuntimeSnapshotAvailability = "runtime" | "missing";
-
 export type AgentSessionRuntimeSnapshot =
   | {
       availability: "runtime";
@@ -304,7 +283,7 @@ export type AgentSessionTitleUpdateResult =
   | { readonly status: "renamed"; readonly summary: AgentSessionSummary }
   | { readonly status: "not_attached" };
 
-export interface AgentRuntimeDefinitionsPort {
+interface AgentRuntimeDefinitionsPort {
   listRuntimeDefinitions(): RuntimeDescriptor[];
 }
 
@@ -329,7 +308,7 @@ export interface AgentSessionLivePort {
 }
 
 /** Runtime-neutral session controls owned by the host application boundary. */
-export interface AgentSessionControlPort {
+interface AgentSessionControlPort {
   startSession(input: AgentSessionControlStartInput): Promise<AgentSessionControlSummary>;
   resumeSession(input: AgentSessionResumeIntent): Promise<AgentSessionControlSummary>;
   continueInterruptedTurn(
@@ -365,7 +344,7 @@ export interface AgentSessionHistoryPort {
 }
 
 /** Reads the full details of one tool part after a history read with `toolDetails: "on_demand"`. */
-export interface AgentSessionToolPartReadPort {
+interface AgentSessionToolPartReadPort {
   loadSessionToolPart(
     input: LoadAgentSessionToolPartInput,
   ): Promise<import("@openducktor/contracts").AgentToolPart>;

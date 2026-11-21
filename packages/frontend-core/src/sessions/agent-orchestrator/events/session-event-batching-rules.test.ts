@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { QueuedSessionEvent, SessionEventBatcher } from "./session-event-batching";
-import { createSessionEventBatcher } from "./session-events-test-harness";
+import {
+  createSessionEventBatcher,
+  type QueuedSessionEvent,
+  type SessionEventBatcher,
+} from "./session-event-batching";
 
 const prepareQueuedEvents = (batcher: SessionEventBatcher, events: QueuedSessionEvent[]) => {
   const prepared = batcher.prepareQueuedSessionEvents(

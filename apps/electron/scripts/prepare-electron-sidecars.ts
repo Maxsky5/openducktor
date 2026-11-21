@@ -23,7 +23,7 @@ import {
   electronSidecarExecutableName,
 } from "./electron-sidecar-manifest";
 
-export type ElectronSidecarBuildPlan = {
+type ElectronSidecarBuildPlan = {
   compileCommand: [string, ...string[]];
   entrypoint: string;
   outputDirectory: string;
@@ -31,7 +31,7 @@ export type ElectronSidecarBuildPlan = {
   workspaceRoot: string;
 };
 
-export type PreparedElectronSidecar = {
+type PreparedElectronSidecar = {
   id: ElectronSidecarId;
   outputPath: string;
 };

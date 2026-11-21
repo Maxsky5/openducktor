@@ -1,3 +1,4 @@
+import type { AgentStudioSelectionState } from "./shell/agent-studio-selection-state";
 import { workflowQueryKeys } from "@openducktor/frontend-core/queries/workflows";
 import { builtinCompiledCatalogFixture } from "@openducktor/frontend-core/test-support/workflow-fixtures";
 import type { QueryClient } from "@tanstack/react-query";
@@ -20,10 +21,7 @@ import type { AgentSessionTranscriptState } from "@openducktor/frontend-core/ses
 import { settingsSnapshotQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createHookHarness as createSharedHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createRuntimeDefinitionsContextValue } from "@openducktor/frontend-core/test-support/runtime-hook-harness";
-export {
-  createDefaultRuntimeDefinitions,
-  createRuntimeDefinitionsContextValue,
-} from "@openducktor/frontend-core/test-support/runtime-hook-harness";
+export { createRuntimeDefinitionsContextValue } from "@openducktor/frontend-core/test-support/runtime-hook-harness";
 export { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import {
   type AgentSessionFixtureOverrides,
@@ -38,6 +36,15 @@ import {
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import type { HostRuntimeStatusContextValue } from "@/types/state-slices";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
+
+export const taskSelectionFixture = (taskId: string): AgentStudioSelectionState => ({
+  taskId,
+  sessionExternalId: null,
+  sessionIdentity: null,
+  role: null,
+  hasExplicitRoleSelection: false,
+  keepSessionless: false,
+});
 
 type RuntimeDefinitionsContextValue = NonNullable<
   ComponentProps<typeof RuntimeDefinitionsContext.Provider>["value"]

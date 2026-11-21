@@ -35,7 +35,7 @@ export const TOOL_RUN_CALL_KINDS = [
   "web",
   "tool",
 ] as const;
-export type ToolRunCallKind = (typeof TOOL_RUN_CALL_KINDS)[number];
+type ToolRunCallKind = (typeof TOOL_RUN_CALL_KINDS)[number];
 
 /** The kind of a call that a tool run holds, or null for a call with its own display. */
 export type ToolRunClassifier = (meta: ToolMeta) => ToolRunCallKind | null;
@@ -251,7 +251,7 @@ const countEditedFiles = (meta: ToolMeta): number => {
   return count;
 };
 
-export const summarizeToolRun = (
+const summarizeToolRun = (
   run: readonly ToolRunRow[],
   classify: ToolRunClassifier,
 ): ToolRunSummary => {

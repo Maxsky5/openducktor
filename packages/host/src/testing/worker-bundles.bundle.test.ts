@@ -8,6 +8,8 @@ import { runWorkerBundle, workerBundleRuntimes } from "../test-support/worker-bu
 // Electron and the web runner ship these workers as Node bundles. This test builds each worker
 // with its fixture and runs the same protocol checks under Node, Bun, and Electron.
 const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
+// Resolve Electron before the tests start. Only the shard that loads this file needs the download.
+const runtimes = workerBundleRuntimes();
 let outputDirectory = "";
 
 beforeAll(
@@ -38,34 +40,21 @@ afterAll(async () => {
   await rm(outputDirectory, { recursive: true, force: true });
 });
 
-test(
-  "the bundled generated image worker handles its protocol under Node, Bun, and Electron",
-  async () => {
-    for (const runtime of workerBundleRuntimes()) {
+test.each([
+  { name: "generated image", file: "generated-image" },
+  { name: "Claude transcript", file: "claude-transcript" },
+])(
+  "the bundled $name worker handles its protocol under Node, Bun, and Electron",
+  async ({ file }) => {
+    for (const runtime of runtimes) {
       const stdout = await runWorkerBundle(
         runtime,
-        path.join(outputDirectory, "generated-image-worker-bundle.fixture.js"),
-        path.join(outputDirectory, "generated-image-worker.js"),
+        path.join(outputDirectory, `${file}-worker-bundle.fixture.js`),
+        path.join(outputDirectory, `${file}-worker.js`),
       );
       expect(stdout).toContain(`Worker bundle passed: ${runtime.name} `);
     }
   },
-  // The first run may download the Electron runtime before it spawns three child processes.
-  120_000,
-);
-
-test(
-  "the bundled Claude transcript worker handles its protocol under Node, Bun, and Electron",
-  async () => {
-    for (const runtime of workerBundleRuntimes()) {
-      const stdout = await runWorkerBundle(
-        runtime,
-        path.join(outputDirectory, "claude-transcript-worker-bundle.fixture.js"),
-        path.join(outputDirectory, "claude-transcript-worker.js"),
-      );
-      expect(stdout).toContain(`Worker bundle passed: ${runtime.name} `);
-    }
-  },
-  // The first run may download the Electron runtime before it spawns three child processes.
+  // The protocol check starts a child process for each runtime.
   120_000,
 );

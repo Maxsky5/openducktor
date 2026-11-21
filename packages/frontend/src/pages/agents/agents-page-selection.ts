@@ -30,46 +30,10 @@ import type { AgentSessionReadModelLoadState } from "@openducktor/frontend-core/
 
 export { toRightPanelStorageKey } from "./query-sync/agent-studio-navigation";
 
-const ISO_TIMESTAMP_PATTERN = /\d{4}-\d{2}-\d{2}T[0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})/;
-
-export type CompletionTimestamp = {
-  raw: string;
-  timestamp: number;
-};
-
 type AgentStudioViewSessionSelection = {
   role: AgentRole | null;
   sessionIdentity: AgentSessionIdentity | null;
   sessionSummary: AgentSessionSummary | null;
-};
-
-export const parseTimestamp = (value: string | null | undefined): number | null => {
-  if (!value) {
-    return null;
-  }
-  const date = new Date(value);
-  const time = date.getTime();
-  return Number.isNaN(time) ? null : time;
-};
-
-export const extractCompletionTimestamp = (
-  value: string | undefined,
-): CompletionTimestamp | null => {
-  if (!value) {
-    return null;
-  }
-  const match = value.match(ISO_TIMESTAMP_PATTERN);
-  if (!match?.[0]) {
-    return null;
-  }
-  const timestamp = parseTimestamp(match[0]);
-  if (timestamp === null) {
-    return null;
-  }
-  return {
-    raw: match[0],
-    timestamp,
-  };
 };
 
 type AgentStudioSessionSelectionInput = {

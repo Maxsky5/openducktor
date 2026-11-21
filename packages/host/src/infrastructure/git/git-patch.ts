@@ -1,7 +1,7 @@
 import { type HostErrorDetails, HostValidationError } from "../../effect/host-errors";
 import { parseDiffGitHeaderToken } from "./git-diff";
 
-export type HunkSpec = {
+type HunkSpec = {
   oldStart: number;
   oldCount: number;
   newStart: number;
@@ -13,7 +13,7 @@ export type ParsedHunk = {
   spec: HunkSpec;
 };
 
-export type RenamePaths = {
+type RenamePaths = {
   oldPath: string;
   newPath: string;
 };

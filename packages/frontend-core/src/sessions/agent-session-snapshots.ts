@@ -32,10 +32,7 @@ export type AgentActivitySessionsSnapshot = {
 export type AgentSessionPendingInputSummary = AgentSessionIdentity &
   Pick<AgentSessionSummary, "pendingApprovalCount" | "pendingQuestionCount">;
 
-export type RepositoryAgentSessionSummary = Omit<
-  AgentSessionSummary,
-  "workspaceId" | "taskId" | "role"
->;
+type RepositoryAgentSessionSummary = Omit<AgentSessionSummary, "workspaceId" | "taskId" | "role">;
 
 export const createEmptyAgentActivitySnapshot = (
   workspaceRepoPath: string | null,

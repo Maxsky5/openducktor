@@ -1,7 +1,7 @@
 import "@openducktor/product-scenes/styles.css";
 import type { AppPlatform } from "@openducktor/contracts";
 import { MAC_KEYS, PC_KEYS } from "@openducktor/product-scenes/keys";
-import { Scene, type SceneProps } from "@openducktor/product-scenes/react";
+import { Scene, type SceneProps } from "@openducktor/product-scenes/react/tour";
 import { type ReactElement, Suspense } from "react";
 import { useTheme } from "@/components/layout/theme-provider";
 import { getAppVersion } from "@/lib/app-version";

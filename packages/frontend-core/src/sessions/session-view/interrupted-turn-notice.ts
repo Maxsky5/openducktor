@@ -6,7 +6,7 @@ import {
 } from "./interrupted-turn-copy";
 
 /** A piece of the detail line. Clients render a time and a countdown in their own way. */
-export type InterruptedTurnDetailPart =
+type InterruptedTurnDetailPart =
   | { kind: "text"; text: string }
   | { kind: "time"; time: Date }
   | { kind: "timer"; text: string };

@@ -42,7 +42,7 @@ import {
 } from "./codex-user-input-display";
 import { readCodexShellScript } from "./codex-shell-command";
 import { codexUserInputsFromItem } from "./codex-user-inputs";
-import { type CodexTodoUpdate, codexTodosFromThreadRead, todoMapper } from "./event-mappers/todo";
+import { codexTodosFromThreadRead, todoMapper } from "./event-mappers/todo";
 import {
   type CodexAppServerCommandAction,
   type CodexAppServerThreadItem,
@@ -107,8 +107,7 @@ type CodexWebSearchFindInPageInput = {
   url?: string;
 };
 
-export type { AgentToolStatus } from "./codex-tool-normalizer";
-export { type CodexTodoUpdate, codexTodosFromThreadRead };
+export { codexTodosFromThreadRead };
 
 const codexTimestampFromSeconds = (seconds: number | null): string | undefined => {
   if (seconds === null || !Number.isFinite(seconds)) {

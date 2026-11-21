@@ -5,7 +5,7 @@ import type {
 } from "./codex-app-server-protocol";
 import type { CodexSessionHistoryError } from "./codex-session-history-error";
 
-export type CodexSessionHistoryPageInput = {
+type CodexSessionHistoryPageInput = {
   runtimeId: string;
 } & CodexAppServerThreadTurnsListParams;
 

@@ -14,7 +14,7 @@
     "./chrome-for-testing": "./src/adapters/browser/chrome-for-testing/chrome-for-testing-engine.ts"
   },
   "scripts": {
-    "build": "bunx tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json",
     "db:generate": "drizzle-kit generate --config drizzle.host.config.ts",
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --pass-with-no-tests --timeout 5000 --parallel=2 --no-isolate",

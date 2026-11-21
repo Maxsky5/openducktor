@@ -54,7 +54,7 @@ export type ClaudeHistoryResultMessage = ClaudeHistoryEntry & {
   modelUsage?: unknown;
 };
 
-export type ClaudeHistoryRetractionMessage = ClaudeHistoryEntry & {
+type ClaudeHistoryRetractionMessage = ClaudeHistoryEntry & {
   type: "system";
   subtype: "model_refusal_fallback";
   retracted_message_uuids?: unknown;
@@ -76,14 +76,14 @@ export type ClaudeHistoryCompactBoundaryMessage = ClaudeHistoryEntry & {
   uuid: string;
 };
 
-export type ClaudeHistoryLocalCommandMessage = ClaudeHistoryEntry & {
+type ClaudeHistoryLocalCommandMessage = ClaudeHistoryEntry & {
   type: "system";
   subtype: "local_command" | "local_command_output";
   content: unknown;
   uuid: string;
 };
 
-export type ClaudeHistoryQueueOperationMessage = ClaudeHistoryEntry & {
+type ClaudeHistoryQueueOperationMessage = ClaudeHistoryEntry & {
   type: "queue-operation";
   operation: "enqueue";
   content: unknown;
@@ -100,17 +100,6 @@ export type ClaudeHistoryMessage =
   | ClaudeHistoryCompactBoundaryMessage
   | ClaudeHistoryLocalCommandMessage
   | ClaudeHistoryQueueOperationMessage;
-
-export const parseClaudeHistoryMessages = (messages: SessionMessage[]): SessionMessage[] => {
-  for (const message of messages) {
-    if (message.type === "assistant") {
-      parseClaudeHistoryAssistantEntry(message);
-    } else if (message.type === "user") {
-      parseClaudeHistoryConversationEntry(message);
-    }
-  }
-  return messages;
-};
 
 export const isClaudeHistorySubagentSystemMessage = (
   entry: ClaudeHistoryMessage,

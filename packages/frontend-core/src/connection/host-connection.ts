@@ -40,7 +40,7 @@ export type RuntimeChangeListener = (
 ) => void | Promise<void>;
 
 /** Merge detection snapshots of a workspace. Control events report stream loss and reconnects. */
-export type TaskMergeStatusUpdateListener = (
+type TaskMergeStatusUpdateListener = (
   payload: HostEventPayload<"openducktor://task-merge-status-updated"> | ConnectionControlEvent,
 ) => void | Promise<void>;
 

@@ -19,7 +19,7 @@ export type HostRuntimeStatusOwnerPorts = {
   runtimeStatus: () => Promise<HostRuntimeSnapshot>;
 };
 
-export type HostRuntimeStatusConnection = {
+type HostRuntimeStatusConnection = {
   /** Live runtime updates are unavailable. Cached state is not current. */
   streamError: string | null;
   /** Only a full read clears this error. Live row updates can clear the query error. */

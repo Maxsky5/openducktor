@@ -29,7 +29,7 @@ import {
 } from "./odt-mcp-bridge-tool-context";
 
 export type { OdtMcpBrowserBridgeError } from "./odt-mcp-bridge-browser-tools";
-export type { OdtMcpBridgeError, OdtMcpTaskToolName } from "./odt-mcp-bridge-tool-context";
+export type { OdtMcpTaskToolName } from "./odt-mcp-bridge-tool-context";
 
 export type WorkspaceScopedOdtToolResult = z.output<
   (typeof ODT_HOST_BRIDGE_RESPONSE_SCHEMAS)[OdtMcpTaskToolName]

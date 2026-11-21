@@ -20,7 +20,7 @@ export type CompactableAgentSessionRecord = Omit<
   selectedModel: CompactableAgentSessionModelSelection;
 };
 
-export type AgentSessionRecordCompactionError = {
+type AgentSessionRecordCompactionError = {
   field: string;
   message: string;
 };

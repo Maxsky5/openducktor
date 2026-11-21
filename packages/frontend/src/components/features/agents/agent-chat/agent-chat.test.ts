@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
-import { AgentChat, AgentChatSurface } from "./agent-chat";
+import { AgentChatSurface } from "./agent-chat";
 import {
   buildEmptyTranscript,
   buildModelSelection,
@@ -121,10 +121,10 @@ const buildModel = () => ({
   },
 });
 
-describe("AgentChat", () => {
+describe("AgentChatSurface", () => {
   test("renders thread and composer sections", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentChat, {
+      createElement(AgentChatSurface, {
         model: buildModel(),
       }),
     );
@@ -135,7 +135,7 @@ describe("AgentChat", () => {
 
   test("renders optional header slot", () => {
     const html = renderToStaticMarkup(
-      createElement(AgentChat, {
+      createElement(AgentChatSurface, {
         header: createElement("div", null, "Header slot"),
         model: buildModel(),
       }),
@@ -170,7 +170,7 @@ describe("AgentChat", () => {
     expect(transcript.target).not.toBeNull();
 
     const html = renderToStaticMarkup(
-      createElement(AgentChat, {
+      createElement(AgentChatSurface, {
         model: {
           ...model,
           thread: completeThreadModel({
@@ -188,7 +188,7 @@ describe("AgentChat", () => {
   test("renders the todo stack immediately above the composer", () => {
     const model = buildModel();
     const html = renderToStaticMarkup(
-      createElement(AgentChat, {
+      createElement(AgentChatSurface, {
         model: {
           ...model,
           thread: completeThreadModel({
@@ -214,7 +214,7 @@ describe("AgentChat", () => {
   test("renders session auxiliary errors in the bottom stack above the composer", () => {
     const model = buildModel();
     const html = renderToStaticMarkup(
-      createElement(AgentChat, {
+      createElement(AgentChatSurface, {
         model: {
           ...model,
           thread: completeThreadModel({

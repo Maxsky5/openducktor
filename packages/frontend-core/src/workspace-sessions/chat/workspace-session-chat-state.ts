@@ -23,7 +23,7 @@ import {
   type AgentSessionTranscriptState,
 } from "../../sessions/agent-orchestrator/transcript/session-transcript-state";
 
-export const resolveRuntimeDefinition = (
+const resolveRuntimeDefinition = (
   runtimeDefinitions: readonly RuntimeDescriptor[],
   runtimeKind: WorkspaceSession["runtimeKind"],
 ): RuntimeDescriptor | null =>

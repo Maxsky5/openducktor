@@ -47,7 +47,7 @@ export const taskCloseEffectLines = (
   }
   // A failed session read shows in the read error row, with a retry.
   if (impact.activeSessionCount) {
-    lines.push(formatActiveSessionStopMessage(impact.activeSessionCount, "close"));
+    lines.push(formatActiveSessionStopMessage(impact.activeSessionCount));
   }
   return lines;
 };

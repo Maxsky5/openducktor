@@ -4,7 +4,7 @@ import type { ElectronCancelableEvent } from "./electron-debugger-cdp-connection
 
 type MediaType = "video" | "audio";
 
-export type ElectronPermissionDecision =
+type ElectronPermissionDecision =
   | { readonly kind: "allow" }
   | { readonly kind: "deny" }
   | { readonly kind: "ask"; readonly permissions: readonly BrowserPermissionKind[] };
@@ -98,7 +98,7 @@ export const createBrowserPermissionGrants = () => {
   };
 };
 
-export type BrowserPermissionGrants = ReturnType<typeof createBrowserPermissionGrants>;
+type BrowserPermissionGrants = ReturnType<typeof createBrowserPermissionGrants>;
 
 type PermissionWebContents = { readonly id: number };
 

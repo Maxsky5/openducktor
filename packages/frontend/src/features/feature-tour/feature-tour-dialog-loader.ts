@@ -6,7 +6,7 @@ export type TourSceneName = (typeof TOUR_SCENES)[number];
 
 /** Loads the views and the timelines of the tour scenes. */
 const loadTourScenes = async (): Promise<void> => {
-  const { preloadScene } = await import("@openducktor/product-scenes/react");
+  const { preloadScene } = await import("@openducktor/product-scenes/react/tour");
   await Promise.all(TOUR_SCENES.map(preloadScene));
 };
 

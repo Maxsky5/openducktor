@@ -13,7 +13,7 @@ import {
 } from "./use-task-close-impact";
 import { useConfirmedImpact } from "./use-confirmed-impact";
 
-export type CloseTaskRun = (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
+type CloseTaskRun = (taskId: string, options: CloseTaskOptions) => Promise<WireTaskCard>;
 
 export type TaskCloseConfirmDialogModel = Omit<TaskConfirmDialogState, "impact"> & {
   impact: TaskCloseImpact;

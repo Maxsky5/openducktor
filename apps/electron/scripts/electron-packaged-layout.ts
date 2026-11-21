@@ -7,7 +7,7 @@ type PackagedLayoutInput = {
   releaseDirectory: string;
 };
 
-export const resolvePackagedUnpackedDirectory = ({
+const resolvePackagedUnpackedDirectory = ({
   arch,
   platform,
   releaseDirectory,

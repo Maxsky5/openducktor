@@ -4,31 +4,9 @@
 
 Run `bun run typecheck` from the repository root. The root keeps `bun run --workspaces typecheck`, so local development, `.husky/pre-commit`, and the Linux, macOS, and Windows jobs in `.github/workflows/ci.yml` use the same workspace scripts. The MCP publish workflow also uses its workspace script. A checker failure fails the workspace runner and its caller.
 
-Each standalone workspace runs `bun check -p tsconfig.json`. The mobile app checks its app sources without DOM types in `tsconfig.json` and its tests and tools in `tsconfig.test.json`. MCP, frontend core, and workflows also check the configurations listed below. The workflows test configuration checks its compile-only public contract tests. Keep the explicit project paths. The repository has no root `tsconfig.json`, and `bun check .` does not replace these checks.
+Each workspace lists the projects that it checks in the `typecheck` script of its `package.json`. Keep the explicit project paths. The repository has no root `tsconfig.json`. For a single workspace, run `bun run --filter <workspace-name> typecheck`. [Root scripts](../package.json)
 
-| Workspace directory | Standalone configurations |
-|---|---|
-| `apps/docs-website` | `tsconfig.json` |
-| `apps/electron` | `tsconfig.json` |
-| `apps/mobile` | `tsconfig.json`, `tsconfig.test.json` |
-| `packages/adapters-codex-app-server` | `tsconfig.json` |
-| `packages/adapters-opencode-sdk` | `tsconfig.json` |
-| `packages/build-tools` | `tsconfig.json` |
-| `packages/contracts` | `tsconfig.json` |
-| `packages/core` | `tsconfig.json` |
-| `packages/frontend` | `tsconfig.json` |
-| `packages/frontend-core` | `tsconfig.json`, `tsconfig.test.json`, `expo-compat/tsconfig.json` |
-| `packages/host` | `tsconfig.json` |
-| `packages/host-client` | `tsconfig.json` |
-| `packages/openducktor-mcp` | `tsconfig.json`, `tsconfig.scripts.json` |
-| `packages/openducktor-web` | `tsconfig.json` |
-| `packages/path-support` | `tsconfig.json` |
-| `packages/remote-host` | `tsconfig.json` |
-| `packages/runtime-orchestration` | `tsconfig.json` |
-| `packages/workflows` | `tsconfig.json`, `tsconfig.test.json` |
-| `tools/oxlint/anti-slop` | `tsconfig.json` |
-
-These are 24 configurations across 19 workspaces. The website adds its Astro check. `packages/host/tsconfig.build.json` remains a build configuration, separate from the host's standalone check.
+Some workspaces need different compiler settings for different inputs. The mobile app checks its app sources without DOM types and uses separate projects for its tests and tools. Frontend core also checks Expo compatibility. The workflows test project checks its compile-only public contract tests. The host uses `tsconfig.build.json` for its build. [Mobile scripts](../apps/mobile/package.json), [Frontend core scripts](../packages/frontend-core/package.json), [Workflows scripts](../packages/workflows/package.json), [Host scripts](../packages/host/package.json)
 
 ## Compiler versions and limits
 
@@ -40,7 +18,7 @@ The [Bun 1.4.3 release](https://bun.sh/blog/bun-v1.4.3) records compiler conform
 
 When a compiler hangs, crashes, or disagrees with the matching TypeScript version, keep the failure visible. Record the failing configuration and a small reproduction for upstream. A temporary `tsc -p <config> --noEmit` comparison can help diagnose it. It is not a second required standalone gate.
 
-The [Bun checker contract](https://bun.com/docs/runtime/check) states that `bun check` only checks types. It does not emit JavaScript, declarations, source maps, or `.tsbuildinfo`. It does not read or reuse TypeScript's `.tsbuildinfo` caches. Each run checks the whole project. Keep the existing `tsc` build commands for declaration output, including MCP's published `dist/index.d.ts`.
+The [Bun checker contract](https://bun.com/docs/runtime/check) states that `bun check` only checks types. It does not emit JavaScript, declarations, source maps, or `.tsbuildinfo`. It does not read or reuse TypeScript's `.tsbuildinfo` caches. Each run checks the whole project. Use `tsc` to generate declarations for packages that export a library API.
 
 Bun upgrades can change compiler behavior even when the installed `typescript` package does not change. After an upgrade, inspect `bun -p process.versions.typescript` and align the root TypeScript version. Run all five repository checks, compare all standalone configurations when compiler behavior changes, and check published declaration output. Editors must continue to use a TypeScript 7 language service as described in [Contributing](../CONTRIBUTING.md#local-tooling-reference).
 

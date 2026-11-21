@@ -6,7 +6,6 @@ export type {
   OpencodeSessionRuntimeConnection,
   PreparedOpencodeSessionRuntime,
   PrepareOpencodeSessionRuntime,
-  PrepareOpencodeSessionRuntimeInput,
 } from "./opencode-session-runtime";
 export type {
   OpencodeRuntimeSnapshotFailure,
@@ -16,13 +15,10 @@ export type {
 export type {
   OpencodeSessionContextUsage,
   OpencodeSessionRuntimeSignal,
-  OpencodeSessionTranscriptEvent,
 } from "./opencode-session-runtime-signals";
 export type {
   OpenCodeRuntimeConnection,
-  OpencodeSdkAdapterOptions,
   ReadOpencodeDirectory,
-  OpencodeEventLogger,
   OpencodeStreamEventLog,
 } from "./types";
 export { assertOpenCodeV2Connection, OpenCodeOperationError } from "./opencode-client";

@@ -19,9 +19,3 @@ export const createRepoStaleGuard = ({
   return (): boolean =>
     repoEpochRef.current !== repoEpochAtStart || currentWorkspaceRepoPathRef.current !== repoPath;
 };
-
-export const throwIfRepoStale = (isStaleRepoOperation: () => boolean, message: string): void => {
-  if (isStaleRepoOperation()) {
-    throw new Error(message);
-  }
-};

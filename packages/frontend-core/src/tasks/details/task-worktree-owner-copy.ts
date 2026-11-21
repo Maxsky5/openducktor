@@ -1,4 +1,3 @@
-import type { WorktreeOwners } from "@openducktor/contracts";
 import { describeWorktreeOwners, type WorktreeOwnerLine } from "@openducktor/core";
 import type { TaskWorktreeOwnersRead } from "../../queries/use-task-worktree-owners";
 
@@ -23,10 +22,6 @@ export const hasWorktreeOwnerReadResult = (read: TaskWorktreeOwnersRead): boolea
 /** True while the owner read runs, fails, or finds another workspace, task, or chat. */
 export const isWorktreeOwnerReadBlocking = (read: TaskWorktreeOwnersRead): boolean =>
   read.isLoading || read.error !== null || worktreeOwnerLines(read).some((line) => line.blocking);
-
-/** True while another workspace, task, or chat stops the cleanup. */
-export const hasBlockingWorktreeOwners = (owners: WorktreeOwners | null): boolean =>
-  owners !== null && describeWorktreeOwners(owners).some((line) => line.blocking);
 
 /**
  * The color of an owner line in a cleanup choice. Only the color changes with the choice, so the

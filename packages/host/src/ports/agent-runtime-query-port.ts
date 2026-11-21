@@ -18,7 +18,7 @@ type NativeQueryResponse<Method extends keyof NativeAgentRuntimeQueries> = Await
 >;
 
 /** Native reads as Effects. Failures keep the adapter cause. */
-export type NativeAgentRuntimeQueryPort = {
+type NativeAgentRuntimeQueryPort = {
   readonly [Method in keyof NativeAgentRuntimeQueries]: (
     input: Parameters<NativeAgentRuntimeQueries[Method]>[0],
   ) => Effect.Effect<NativeQueryResponse<Method>, RuntimeQueryError>;

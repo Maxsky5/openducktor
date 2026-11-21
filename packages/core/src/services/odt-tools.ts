@@ -2,19 +2,12 @@ import {
   isOdtBrowserToolName,
   ODT_MCP_TOOL_NAMES,
   ODT_READ_ONLY_TOOL_NAMES,
-  ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
   odtToolNameSchema,
   type OdtToolName,
 } from "@openducktor/contracts";
 import type { AgentApprovalMutation } from "../types/agent-orchestrator";
-import { ODT_WORKFLOW_READ_TOOL_NAMES } from "./odt-workflow-tools";
 
 export type OdtToolAliasResolver = (canonicalToolName: OdtToolName) => readonly string[];
-
-export const ODT_READ_TOOL_NAMES = [
-  ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
-  ...ODT_WORKFLOW_READ_TOOL_NAMES,
-] as const satisfies readonly OdtToolName[];
 
 const ODT_READ_ONLY_TOOL_NAME_SET = new Set<OdtToolName>(ODT_READ_ONLY_TOOL_NAMES);
 

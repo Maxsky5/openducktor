@@ -47,7 +47,7 @@ export type TaskStoreListTasksInput = {
   /** Read these tasks for a committed change event. */
   taskIds?: readonly string[];
 };
-export type PullRequestSyncCandidate = {
+type PullRequestSyncCandidate = {
   id: string;
   pullRequest: PullRequest;
   status: string;
@@ -124,7 +124,7 @@ export type AtomicWorkflowArtifactWrite<E> = WorkflowArtifactWrite & {
   decide: DecideTaskTransition<E>;
 };
 
-export type TaskWriter = {
+type TaskWriter = {
   createTask(input: {
     workspaceId: string;
     repoPath: string;
@@ -147,7 +147,7 @@ export type TaskWriter = {
     descriptionAssets?: TaskAssetDescriptionMutation;
   }): Effect.Effect<TaskRecord, TaskStoreError>;
 };
-export type WorkflowArtifactRepository = {
+type WorkflowArtifactRepository = {
   getWorkflowArtifact(input: {
     workspaceId: string;
     repoPath: string;
@@ -195,7 +195,7 @@ export type StoredArtifactContent = {
   artifact: TaskArtifact;
   content: Uint8Array;
 };
-export type TaskArtifactRepository = {
+type TaskArtifactRepository = {
   listArtifacts(input: ArtifactStoreScope): Effect.Effect<TaskArtifact[], TaskStoreError>;
   readArtifact(
     input: ArtifactStoreReference,
@@ -250,7 +250,7 @@ export type AgentSessionRepository = {
     identity: AgentSessionIdentity;
   }): Effect.Effect<boolean, TaskStoreError>;
 };
-export type PullRequestRepository = {
+type PullRequestRepository = {
   listPullRequestSyncCandidates(input: {
     workspaceId: string;
     repoPath: string;
@@ -262,7 +262,7 @@ export type PullRequestRepository = {
     pullRequest: PullRequest | null;
   }): Effect.Effect<boolean, TaskStoreError>;
 };
-export type DirectMergeRepository = {
+type DirectMergeRepository = {
   /** Read the IDs of the tasks that have a recorded direct merge, without loading metadata. */
   listDirectMergeTaskIds(input: {
     workspaceId: string;

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BROWSER_PERMISSION_TEXT } from "./browser-permission-text";
 
-export type BrowserSitePermission = BrowserSitePermissionsResponse["permissions"][number];
+type BrowserSitePermission = BrowserSitePermissionsResponse["permissions"][number];
 
 export type BrowserSiteMenuProps = {
   /** The origin of the current page, or null when the page has no site, such as a blank page. */

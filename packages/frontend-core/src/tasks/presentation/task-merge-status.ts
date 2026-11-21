@@ -17,7 +17,7 @@ export const findTaskMergeStatus = (
   taskId: string,
 ): TaskMergeStatus | undefined => snapshot?.tasks.find((status) => status.taskId === taskId);
 
-export const mergeTargetLabel = (status: TaskMergeStatus | undefined): string =>
+const mergeTargetLabel = (status: TaskMergeStatus | undefined): string =>
   status?.targetBranch ? canonicalTargetBranch(status.targetBranch) : "the target branch";
 
 /** The merge status text of a detection candidate. A failed check shows its reason first. */
@@ -75,7 +75,7 @@ export const buildAutoCloseFailures = (
   return failures;
 };
 
-export const autoCloseFailureText = (message: string): string =>
+const autoCloseFailureText = (message: string): string =>
   `Pull request merged, but the task did not close. ${message}`;
 
 /** The merged proposals of a task list, by task ID. */

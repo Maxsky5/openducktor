@@ -43,7 +43,7 @@ export type CodexPolicyLogOperation =
   | "thread/fork"
   | "turn/start";
 
-export type CodexNetworkAccessLogValue = boolean | "unrestricted";
+type CodexNetworkAccessLogValue = boolean | "unrestricted";
 
 export type CodexPolicyLogEntry = {
   operation: CodexPolicyLogOperation;

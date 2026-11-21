@@ -1,4 +1,4 @@
-export const EMPTY_TEXT_SEGMENT_SENTINEL = "\u200B";
+const EMPTY_TEXT_SEGMENT_SENTINEL = "\u200B";
 
 export const readEditableTextContent = (element: HTMLElement): string => {
   return (element.textContent ?? "").split(EMPTY_TEXT_SEGMENT_SENTINEL).join("");
@@ -132,58 +132,6 @@ export const focusEditorEnd = (editor: HTMLElement): void => {
     }
   }
   editor.focus();
-};
-
-export const insertTextAtCaretWithinElement = (
-  element: HTMLElement,
-  text: string,
-  fallbackLogicalOffset: number,
-): number | null => {
-  const ownerDocument = element.ownerDocument;
-  const selection = ownerDocument.defaultView?.getSelection() ?? globalThis.getSelection?.();
-  if (!selection) {
-    return null;
-  }
-
-  const textNode = normalizeEditableTextNode(element);
-  if (textNode.textContent === EMPTY_TEXT_SEGMENT_SENTINEL) {
-    textNode.textContent = "";
-  }
-
-  if (
-    selection.rangeCount === 0 ||
-    !element.contains(selection.anchorNode) ||
-    !element.contains(selection.focusNode)
-  ) {
-    focusEditableTarget(element);
-    const clampedFallbackOffset = Math.max(
-      0,
-      Math.min(fallbackLogicalOffset, textNode.textContent?.length ?? 0),
-    );
-    const fallbackRange = ownerDocument.createRange();
-    fallbackRange.setStart(textNode, clampedFallbackOffset);
-    fallbackRange.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(fallbackRange);
-  }
-
-  if (selection.rangeCount === 0) {
-    return null;
-  }
-
-  const range = selection.getRangeAt(0);
-  range.deleteContents();
-  const insertedNode = ownerDocument.createTextNode(text);
-  range.insertNode(insertedNode);
-
-  focusEditableTarget(element);
-  const nextRange = ownerDocument.createRange();
-  nextRange.setStart(insertedNode, insertedNode.textContent?.length ?? text.length);
-  nextRange.collapse(true);
-  selection.removeAllRanges();
-  selection.addRange(nextRange);
-
-  return getCaretOffsetWithinElement(element);
 };
 
 export const getComposerContentRoot = (root: HTMLElement): HTMLElement | null => {

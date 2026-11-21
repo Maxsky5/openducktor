@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, jest, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import {
@@ -11,6 +11,14 @@ import {
   DialogTitle,
 } from "./dialog";
 
+beforeEach(() => {
+  jest.useFakeTimers();
+});
+
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 function Form() {
   const [value, setValue] = useState("");
   return (
@@ -18,7 +26,7 @@ function Form() {
   );
 }
 
-test("reveals prepared content and actions together after at least 500 ms and keeps form state", async () => {
+test("reveals prepared content and actions together after at least 500 ms and keeps form state", () => {
   const dialog = (loading: boolean) => (
     <Dialog open>
       <DialogContent loading={loading}>
@@ -39,7 +47,6 @@ test("reveals prepared content and actions together after at least 500 ms and ke
   fireEvent.change(screen.getByRole("textbox", { name: "Draft" }), {
     target: { value: "Keep me" },
   });
-  const startedAt = performance.now();
   view.rerender(dialog(true));
   expect(screen.getByRole("status")).toBeDefined();
   expect(screen.getByRole("status").closest('[data-slot="dialog-body"]')).not.toBeNull();
@@ -50,14 +57,15 @@ test("reveals prepared content and actions together after at least 500 ms and ke
   expect(screen.getByRole("dialog").getAttribute("aria-busy")).toBe("true");
   view.rerender(dialog(false));
   expect(screen.queryByRole("button", { name: "Confirm task" })).toBeNull();
-  await screen.findByRole("button", { name: "Confirm task" });
-  expect(performance.now() - startedAt).toBeGreaterThanOrEqual(500);
+  act(() => jest.advanceTimersByTime(499));
+  expect(screen.queryByRole("button", { name: "Confirm task" })).toBeNull();
+  act(() => jest.advanceTimersByTime(1));
   expect(screen.queryByRole("status")).toBeNull();
   expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Draft" }).value).toBe("Keep me");
   expect(screen.getByRole("button", { name: "Confirm task" })).toBeDefined();
 });
 
-test("shows ready content at once and gives a reopened dialog its own loading interval", async () => {
+test("shows ready content at once and gives a reopened dialog its own loading interval", () => {
   const dialog = (open: boolean, loading: boolean) => (
     <Dialog open={open}>
       <DialogContent loading={loading}>
@@ -75,16 +83,15 @@ test("shows ready content at once and gives a reopened dialog its own loading in
   expect(screen.getByRole("alert")).toBeDefined();
   expect(screen.queryByRole("status")).toBeNull();
   view.rerender(dialog(true, true));
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  });
+  act(() => jest.advanceTimersByTime(100));
   view.rerender(dialog(false, true));
-  const reopenedAt = performance.now();
   view.rerender(dialog(true, true));
   view.rerender(dialog(true, false));
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-  await screen.findByRole("button", { name: "Retry" });
-  expect(performance.now() - reopenedAt).toBeGreaterThanOrEqual(500);
+  act(() => jest.advanceTimersByTime(499));
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  act(() => jest.advanceTimersByTime(1));
+  expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
   expect(screen.getByRole("alert").textContent).toContain("Retry the read");
 });

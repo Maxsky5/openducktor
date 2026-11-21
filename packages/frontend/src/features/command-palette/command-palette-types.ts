@@ -4,7 +4,7 @@ import type { ReactElement, ReactNode } from "react";
 import type { OpenRepositoryModalView } from "@/components/features/repository/open-repository-modal";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
-export type CommandTarget = {
+type CommandTarget = {
   kind: "app" | "workspace" | "task" | "chat" | "session" | "panel" | "item" | "overlay";
   key: string;
   sessionKey?: string;

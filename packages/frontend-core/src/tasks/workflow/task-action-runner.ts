@@ -41,7 +41,7 @@ export type TaskActionRunnerHandlers = {
 };
 
 /** The surface parts of a workflow action run. Without them, the shared controls run it. */
-export type TaskActionRunOptions = {
+type TaskActionRunOptions = {
   sessionOptionsOf?: SessionOptionsOf | undefined;
 };
 

@@ -15,7 +15,7 @@ export type TaskConfirmImpact = {
 };
 
 /** The confirmed action: whether it runs, and the reason of its last failure. */
-export type TaskConfirmOperation = {
+type TaskConfirmOperation = {
   isPending: boolean;
   error: string | null;
   /** True when the connection lost the result of the last run. The host may have run it. */

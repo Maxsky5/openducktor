@@ -7,7 +7,7 @@ import { describeBrowserAnnotationElements } from "./browser-annotation-message"
 import type { BrowserAnnotation, BrowserAnnotationChanges } from "./browser-annotation-store";
 
 /** Number badge of an annotation. Page markers use the same look. */
-export const BROWSER_ANNOTATION_NUMBER_CLASS_NAME =
+const BROWSER_ANNOTATION_NUMBER_CLASS_NAME =
   "inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-sky-300 text-[11px] font-semibold leading-none text-neutral-950";
 
 export type BrowserAnnotationListProps = {

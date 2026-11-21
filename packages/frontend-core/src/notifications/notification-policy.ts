@@ -19,7 +19,7 @@ export type NotificationDispatchContext =
   | { phase: "local"; errorMessage?: string; inAppFeedbackHandled?: boolean }
   | { phase: "external"; appFocused: boolean | undefined };
 
-export type NotificationExternalDeliveryPlan = {
+type NotificationExternalDeliveryPlan = {
   requiresFocus: boolean;
 };
 

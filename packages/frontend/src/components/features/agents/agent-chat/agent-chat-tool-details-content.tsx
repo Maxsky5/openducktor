@@ -71,7 +71,7 @@ export const DetailsHeading = ({
  * The status of a call and its run facts, such as `Failed · exit 2 · 1.2s · 09:28:50 PM`. Each
  * fact shows only when the runtime gave it.
  */
-export const DetailsStatusLine = ({
+const DetailsStatusLine = ({
   meta,
   messageTimestamp,
   timeLabel,

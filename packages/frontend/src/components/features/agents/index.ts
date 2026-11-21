@@ -1,16 +1,6 @@
-export { CODEX_SESSION_ACCENT_COLOR, resolveAgentSessionAccentColor } from "./agent-accent-color";
-export type {
-  AgentChatComposerModel,
-  AgentChatModel,
-  AgentChatSurfaceModel,
-  AgentChatThreadModel,
-} from "./agent-chat";
-export { AgentChatSurface } from "./agent-chat/agent-chat";
 export type { AgentRoleOption, AgentStudioHeaderModel } from "./agent-studio-header";
-export { SessionStartModal } from "./session-start-modal";
 export type { TaskExecutionDocumentPanelModel } from "./task-execution-document-panel";
 export type {
-  TaskExecutionFileExplorerPanelModel,
   TaskExecutionFileSelectionResult,
   TaskExecutionSelectedFile,
 } from "./task-execution-file-explorer-model";

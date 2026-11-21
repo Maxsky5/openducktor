@@ -42,7 +42,7 @@ type BuildSessionStartModalRequestArgs = {
   selectedTask?: TaskCard | null;
 };
 
-export type RunSessionStartWorkflowInput = {
+type RunSessionStartWorkflowInput = {
   startupAttemptId?: string;
   request: SessionStartFlowRequest;
   decision: ResolvedSessionStartDecision;

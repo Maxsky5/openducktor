@@ -5,7 +5,7 @@ import { Check, Info, TriangleAlert, X } from "lucide-react";
 import type { ReactElement } from "react";
 import "./MobileToast.css";
 
-export type ToastKind = "success" | "info" | "warning" | "error";
+type ToastKind = "success" | "info" | "warning" | "error";
 
 const ICONS = { success: Check, info: Info, warning: TriangleAlert, error: X } as const;
 

@@ -1,17 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
-    "declaration": true,
-    "emitDeclarationOnly": true,
-    "noEmit": false,
-    "rootDir": "src",
-    "outDir": "dist",
-    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "lib": ["ES2023"],
-    "types": ["node", "bun-types"],
-    "resolveJsonModule": true
+    "types": ["node", "bun-types"]
   },
-  "include": ["src"],
+  "include": ["index.d.ts", "src"],
   "exclude": ["src/test-support", "src/**/*.test.ts", "src/**/*.spec.ts"]
 }

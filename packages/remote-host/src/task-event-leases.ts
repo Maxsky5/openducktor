@@ -27,7 +27,7 @@ export type TaskEventFrameSink = {
   close(): void;
 };
 
-export type TaskEventLeaseConnection = {
+type TaskEventLeaseConnection = {
   readonly sink: TaskEventFrameSink;
   readonly generation: number;
 };

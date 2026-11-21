@@ -36,12 +36,3 @@ export const useAutoCloseFailures = (
   const mergeStatus = useQuery(workspaceTaskMergeStatusQueryOptions(repoPath));
   return useMemo(() => buildAutoCloseFailures(tasks, mergeStatus.data), [tasks, mergeStatus.data]);
 };
-
-/** Why the pull request sync could not close one task, or null. */
-export const useAutoCloseFailure = (
-  repoPath: WorkspaceRef | null,
-  task: Pick<TaskCard, "id" | "status"> | null,
-): string | null => {
-  const mergeStatus = useQuery(workspaceTaskMergeStatusQueryOptions(repoPath));
-  return task ? (buildAutoCloseFailures([task], mergeStatus.data).get(task.id) ?? null) : null;
-};

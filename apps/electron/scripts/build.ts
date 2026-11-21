@@ -62,10 +62,7 @@ const runBuildCommandEffect = (
       }),
   });
 
-export const buildElectronPackageEffect = (): Effect.Effect<
-  void,
-  ElectronOperationErrorAggregate
-> =>
+const buildElectronPackageEffect = (): Effect.Effect<void, ElectronOperationErrorAggregate> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise({
       try: () => cleanDirectory(join(packageRoot, "dist")),
@@ -80,13 +77,6 @@ export const buildElectronPackageEffect = (): Effect.Effect<
     yield* Effect.all(
       [
         runBuildCommandEffect("Electron main build", ["bun", "run", "build:main"]),
-        // The import worker has its own bundle. In the split main bundle, its migration code moves
-        // into a chunk, and the migration folders resolve from the chunk folder.
-        runBuildCommandEffect("Electron import worker build", [
-          "bun",
-          "run",
-          "build:import-worker",
-        ]),
         runBuildCommandEffect("Electron preload build", ["bun", "run", "build:preload"]),
         runBuildCommandEffect("Electron renderer build", ["bun", "run", "build:renderer"]),
       ],
@@ -95,12 +85,9 @@ export const buildElectronPackageEffect = (): Effect.Effect<
     yield* copyElectronSqliteMigrationsEffect();
   });
 
-export const buildElectronPackage = (): Promise<void> =>
-  runElectronEffect(buildElectronPackageEffect());
-
 if (import.meta.main) {
   try {
-    await buildElectronPackage();
+    await runElectronEffect(buildElectronPackageEffect());
   } catch (error) {
     console.error(error);
     process.exit(1);

@@ -81,12 +81,12 @@ export const isFailingCheck = (check: PullRequestReviewCheck): boolean =>
 export const isPendingCheck = (check: PullRequestReviewCheck): boolean =>
   check.status === "queued" || check.status === "in_progress";
 
-export const isPassingCheck = (check: PullRequestReviewCheck): boolean =>
+const isPassingCheck = (check: PullRequestReviewCheck): boolean =>
   check.status === "completed" &&
   (check.conclusion === "success" || check.conclusion === "skipped");
 
 /** A failed check that does not block the pull request. It is neither failing nor passing. */
-export const isWarningCheck = (check: PullRequestReviewCheck): boolean =>
+const isWarningCheck = (check: PullRequestReviewCheck): boolean =>
   check.status === "completed" && check.conclusion === "warning";
 
 const pluralize = (count: number, singular: string, plural = `${singular}s`): string =>

@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
   CODEX_APP_SERVER_SERVER_REQUEST_METHOD,
+  parseCodexAppServerRuntimeNotificationRecord,
+  parseCodexAppServerRuntimeServerRequestRecord,
   type CodexAppServerJsonValue,
 } from "@openducktor/contracts";
 import {
   classifyCodexRequestMutation,
   codexApprovalResponseForRequest,
   codexServerRequestThreadId,
-  parseNotificationRecord,
   parseQuestionRequest,
-  parseServerRequestRecord,
   toApprovalRequest,
   toMcpElicitationApprovalRequest,
 } from "./codex-app-server-requests";
@@ -45,7 +45,7 @@ const codexMcpToolApprovalRequest = (
 describe("Codex App Server request parsing", () => {
   test("preserves string request ids from the Codex protocol", () => {
     expect(
-      parseServerRequestRecord({
+      parseCodexAppServerRuntimeServerRequestRecord({
         id: "permission-request-1",
         method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.ITEM_PERMISSIONS_REQUEST_APPROVAL,
         params: { threadId: "thread-1" },
@@ -102,7 +102,7 @@ describe("Codex App Server request parsing", () => {
   });
 
   test("extracts legacy conversation ids as thread identifiers", () => {
-    const request = parseServerRequestRecord({
+    const request = parseCodexAppServerRuntimeServerRequestRecord({
       id: 54,
       method: CODEX_APP_SERVER_SERVER_REQUEST_METHOD.APPLY_PATCH_APPROVAL,
       params: {
@@ -365,7 +365,7 @@ describe("Codex MCP approval requests", () => {
 describe("Codex App Server notification parsing", () => {
   test("preserves receivedAt when reparsing materialized notification records", () => {
     expect(
-      parseNotificationRecord({
+      parseCodexAppServerRuntimeNotificationRecord({
         method: "thread/tokenUsage/updated",
         params: { threadId: "thread-1" },
         receivedAt: "2026-06-23T10:00:00.000Z",
@@ -379,7 +379,7 @@ describe("Codex App Server notification parsing", () => {
 
   test("uses an explicit receivedAt argument when provided", () => {
     expect(
-      parseNotificationRecord(
+      parseCodexAppServerRuntimeNotificationRecord(
         {
           method: "thread/tokenUsage/updated",
           receivedAt: "2026-06-23T10:00:00.000Z",
@@ -391,7 +391,7 @@ describe("Codex App Server notification parsing", () => {
 
   test("rejects notifications without a receivedAt timestamp", () => {
     expect(() =>
-      parseNotificationRecord({
+      parseCodexAppServerRuntimeNotificationRecord({
         method: "thread/tokenUsage/updated",
         params: { threadId: "thread-1" },
       }),
@@ -400,7 +400,7 @@ describe("Codex App Server notification parsing", () => {
 
   test("rejects empty explicit receivedAt arguments", () => {
     expect(() =>
-      parseNotificationRecord(
+      parseCodexAppServerRuntimeNotificationRecord(
         {
           method: "thread/tokenUsage/updated",
           receivedAt: "2026-06-23T10:00:00.000Z",
@@ -412,7 +412,7 @@ describe("Codex App Server notification parsing", () => {
 
   test("rejects unparsable receivedAt timestamps", () => {
     expect(() =>
-      parseNotificationRecord({
+      parseCodexAppServerRuntimeNotificationRecord({
         method: "thread/tokenUsage/updated",
         params: { threadId: "thread-1" },
         receivedAt: "not-a-date",

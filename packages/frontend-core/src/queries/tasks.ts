@@ -65,11 +65,6 @@ export const repoTaskIdsQueryOptions = (
     staleTime: TASK_DATA_STALE_TIME_MS,
   });
 
-export const loadRepoTaskDataFromQuery = (
-  queryClient: QueryClient,
-  scope: WorkspaceRef,
-): Promise<RepoTaskData> => queryClient.fetchQuery(repoTaskDataQueryOptions(scope));
-
 const invalidateRepoTaskDataQueries = (
   queryClient: QueryClient,
   scope: WorkspaceRef,

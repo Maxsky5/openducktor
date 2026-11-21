@@ -326,7 +326,7 @@ const panelOwnerOf = ({ workspaceId, kind, ownerId }: StoredOwner): SessionPanel
 };
 
 /** One current list of owners. Each list removes the layouts of the owners that it no longer has. */
-export type SessionPanelLayoutPruneInput =
+type SessionPanelLayoutPruneInput =
   | { kind: "workspaces"; ids: ReadonlySet<string> }
   | { kind: "tasks"; workspaceId: string; ids: ReadonlySet<string> }
   | { kind: "chats"; workspaceId: string; ids: ReadonlySet<string> };

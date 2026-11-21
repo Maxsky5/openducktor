@@ -74,7 +74,7 @@ export const buildWebDevProcessEnvironment = (
   FORCE_COLOR: env.FORCE_COLOR ?? "1",
 });
 
-export const keepWebDevProcessAliveDuringEffect = <T, E>(
+const keepWebDevProcessAliveDuringEffect = <T, E>(
   operation: Effect.Effect<T, E>,
   dependencies: ProcessKeepAliveDependencies = {
     scheduleInterval,
@@ -175,7 +175,7 @@ const stopWebCliEffect = (
     }
   });
 
-export const runWebDevEffect = (
+const runWebDevEffect = (
   args: readonly string[] = process.argv.slice(2),
 ): Effect.Effect<number, WebDependencyError> =>
   Effect.gen(function* () {

@@ -23,7 +23,7 @@ export const baseSelection: AgentModelSelection = {
   profileId: "Hephaestus (Deep Agent)",
 };
 
-export const baseMessage: AgentChatMessage = {
+const baseMessage: AgentChatMessage = {
   id: "msg-1",
   role: "assistant",
   content: "Initial response",

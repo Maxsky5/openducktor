@@ -135,16 +135,6 @@ export const createProductionTaskChatDraftCleanup = (
     feedback,
   });
 
-export const prepareTaskChatDraftCleanupTargets = (
-  input: TaskChatDraftCleanupInput & { agentSessionReadPort: AgentSessionReadPort },
-): Promise<TaskChatDraftCleanupPlan> => {
-  const { agentSessionReadPort, ...cleanupInput } = input;
-  return createProductionTaskChatDraftCleanup(
-    agentSessionReadPort,
-    connectionOf(cleanupInput.queryClient).feedback,
-  ).prepareTargets(cleanupInput);
-};
-
 export const runTaskMutationWithChatDraftCleanup = <TResult>(
   input: RunTaskMutationWithChatDraftCleanupInput<TResult> & {
     agentSessionReadPort: AgentSessionReadPort;

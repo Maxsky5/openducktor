@@ -1,23 +1,20 @@
 import electronKnipConfig from "./apps/electron/knip.config";
-import frontendKnipConfig from "./packages/frontend/knip.config";
 import webKnipConfig from "./packages/openducktor-web/knip.config";
 
 export default {
-  tags: ["-internal"],
   workspaces: {
+    ".": {
+      entry: [".agents/skills/pr-spotlight/scripts/render.ts", "scripts/test-support/*.test.ts"],
+    },
     "apps/docs-website": {
       entry: ["app/**/*.{ts,tsx}", "scripts/*.ts", "tests/*.test.ts", "browser-tests/*.ts"],
-      project: ["**/*.{ts,tsx}"],
-      // Tailwind loads through PostCSS. GSAP comes in through the product scenes, and
-      // scripts/finish-export.ts reads its license notices from this workspace. The layout and the
-      // link preview route load the font files by path, and app/global.css `@import`s the theme.
+      project: ["**/*.{ts,tsx,mdx,css}"],
+      // The export script reads the GSAP notices. The layout and link previews load fonts by path.
       ignoreDependencies: [
-        "tailwindcss",
         "gsap",
         "@fontsource-variable/space-grotesk",
         "@fontsource/ibm-plex-mono",
         "@expo-google-fonts/space-grotesk",
-        "@openducktor/theme",
       ],
     },
     "apps/marketing-website": {
@@ -49,12 +46,16 @@ export default {
       ],
     },
     "packages/frontend-core": {
-      entry: ["src/**/*.{ts,tsx}", "expo-compat/*.ts"],
+      entry: ["src/**/*.test.{ts,tsx}", "expo-compat/consumer.ts"],
       project: ["src/**/*.{ts,tsx}", "expo-compat/*.ts"],
       // Knip does not read the configurations that `bun check -p` receives.
       typescript: { config: ["tsconfig.json", "tsconfig.test.json", "expo-compat/tsconfig.json"] },
     },
-    "packages/frontend": frontendKnipConfig,
+    "packages/frontend": {
+      // The startup splash plugin reads the font faces as text.
+      entry: ["src/**/*.test.{ts,tsx}", "src/fonts/faces.css"],
+      project: ["src/**/*.{ts,tsx,css}"],
+    },
     "packages/product-scenes": {
       // Knip adds the files of the package.json exports. It does not read `Scene.astro`, because the
       // package has no Astro dependency, so the modules that it imports are entries too.
@@ -76,10 +77,18 @@ export default {
       // Knip does not read the configurations that `bun check -p` receives.
       typescript: { config: ["tsconfig.json", "tsconfig.test.json"] },
     },
+    "packages/workflows": {
+      entry: ["type-tests/**/*.ts"],
+    },
     "packages/host": {
+      // Bun builds the capture page and starts these fixtures in child processes.
+      entry: [
+        "src/application/browser/page-capture/browser-page-capture.page.ts",
+        "src/testing/*.fixture.ts",
+        "src/adapters/claude/claude-agent-sdk-history-*.test-support.ts",
+        "src/adapters/claude/test-support/{claude-reply-fork,claude-session-metadata}.ts",
+      ],
       drizzle: { config: ["drizzle.host.config.ts"] },
-      // A Bun macro bundles the page capture code with bippy through `bun build`.
-      ignoreDependencies: ["bippy"],
     },
     "packages/openducktor-web": webKnipConfig,
   },

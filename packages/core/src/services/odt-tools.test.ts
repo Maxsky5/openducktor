@@ -5,7 +5,7 @@ import {
   ODT_MCP_TOOL_NAMES,
   toClaudeOdtToolAliases,
 } from "@openducktor/contracts";
-import { classifyOdtToolMutation, normalizeOdtToolName, ODT_READ_TOOL_NAMES } from "./odt-tools";
+import { classifyOdtToolMutation, normalizeOdtToolName } from "./odt-tools";
 
 describe("ODT tool metadata", () => {
   test("normalizes every canonical tool and its Claude aliases", () => {
@@ -17,14 +17,7 @@ describe("ODT tool metadata", () => {
     }
   });
 
-  test("keeps the complete read-only catalog explicit", () => {
-    expect(ODT_READ_TOOL_NAMES).toEqual([
-      "odt_get_workspaces",
-      "odt_search_tasks",
-      "odt_read_task",
-      "odt_read_task_assets",
-      "odt_read_task_artifacts",
-    ]);
+  test("classifies task reads and writes", () => {
     expect(classifyOdtToolMutation("odt_create_task")).toBe("mutating");
     expect(classifyOdtToolMutation("odt_search_tasks")).toBe("read_only");
   });

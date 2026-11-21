@@ -17,7 +17,7 @@ export type DemoFile =
     };
 
 /** File changes by path. `null` deletes the file. */
-export type DemoFileChanges = ReadonlyMap<string, DemoFile | null>;
+type DemoFileChanges = ReadonlyMap<string, DemoFile | null>;
 
 /** One commit of a demo branch: its ID and the files that it changes. */
 type DemoCommit = { readonly id: string; readonly changes: DemoFileChanges };

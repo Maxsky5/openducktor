@@ -20,7 +20,7 @@ export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): st
   return `${role} agent default runtime kind is required when provider and model are configured.`;
 };
 
-export const REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR =
+const REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR =
   "Default Model runtime kind is required when provider and model are configured.";
 
 export const pickRepoAgentDefault = <T>(
@@ -41,7 +41,7 @@ export const normalizeRepoAgentDefaultForSave = (
 ): RuntimeBoundModelSelection | undefined =>
   prepareModelDefault(entry, repoAgentDefaultRuntimeKindError(role));
 
-export const normalizeRepoDefaultModelForSave = (
+const normalizeRepoDefaultModelForSave = (
   entry: RepoAgentDefaultDraft | null | undefined,
 ): RuntimeBoundModelSelection | undefined =>
   prepareModelDefault(entry, REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR);

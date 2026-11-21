@@ -9,10 +9,10 @@ import type {
 export const LOADING_STATUS: DiagnosticsStatus = { health: "loading", label: "Checking" };
 export const UNAVAILABLE_STATUS: DiagnosticsStatus = { health: "neutral", label: "Unavailable" };
 
-export type RefreshFailure = { error: string; failureKind: DiagnosticsFailureKind };
+type RefreshFailure = { error: string; failureKind: DiagnosticsFailureKind };
 
 /** A failed refresh controls the check. A retained result shows only as an earlier result. */
-export const buildRefreshFailedCheck = (
+const buildRefreshFailedCheck = (
   check: DiagnosticsCheckBase,
   failure: RefreshFailure,
   observedAt: string | null,

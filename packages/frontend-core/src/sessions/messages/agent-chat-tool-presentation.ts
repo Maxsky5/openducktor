@@ -434,7 +434,7 @@ export const readRegularToolTiming = (meta: ToolMeta, messageTimestamp: string):
   durationMs: getToolDuration(meta, messageTimestamp),
 });
 
-export const DEFAULT_COMPUTER_USE_ACTION_TITLE = "Computer action";
+const DEFAULT_COMPUTER_USE_ACTION_TITLE = "Computer action";
 
 export type ComputerUsePresentation = {
   actionTitle: string;

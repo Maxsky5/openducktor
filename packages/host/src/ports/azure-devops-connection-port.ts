@@ -7,7 +7,7 @@ import type { Effect } from "effect";
 import type { HostError } from "../effect/host-errors";
 import type { GitProviderWorkspace } from "./git-provider-workspace";
 
-export type AzureDevOpsAuthorization = {
+type AzureDevOpsAuthorization = {
   headerValue: string;
   account: string | null;
 };

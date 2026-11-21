@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { type ReactElement, type ReactNode, useId } from "react";
 import { cn } from "@/lib/utils";
 
-export type BrowserStateTone = "neutral" | "info" | "warning" | "danger";
+type BrowserStateTone = "neutral" | "info" | "warning" | "danger";
 
 const TONE_CLASS_NAMES = {
   neutral: "bg-muted text-muted-foreground ring-border",

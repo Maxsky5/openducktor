@@ -1,11 +1,11 @@
 import type { ClaudeLaunchPolicyPort } from "../../application/runtimes/claude-launch-policy";
+import type { ClaudeGoalTracking } from "./claude-agent-sdk-goals";
 import type { ErrorState } from "./claude-agent-sdk-errors";
 import type {
   PermissionResult,
   Query,
   SDKMessage,
   SDKUserMessage,
-  SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AgentEvent,
@@ -144,7 +144,7 @@ export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
     | "setModel"
   >;
 
-export type ClaudePendingUserMessageAdmission = {
+type ClaudePendingUserMessageAdmission = {
   readonly admit: () => void;
   readonly reject: (reason: Error) => void;
 };
@@ -202,7 +202,7 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     /** Steered messages that no turn has read yet, by message UUID. */
     unreadSteeredUserMessages: Map<string, ClaudeAcceptedUserMessage>;
     /** The goal state that the adapter read. It exists after a restore or a goal command. */
-    goalTracking?: import("./claude-agent-sdk-goals").ClaudeGoalTracking;
+    goalTracking?: ClaudeGoalTracking;
     /** The environment of the Claude process, which locates its transcript. */
     transcriptEnvironment: NodeJS.ProcessEnv;
   };
@@ -241,11 +241,4 @@ export type ClaudeSessionStore = {
   ): Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   stopSessionsForRuntime(runtimeId: string): Effect.Effect<void, HostOperationErrorAggregate>;
   values(): IterableIterator<ClaudeSession>;
-};
-
-export type ClaudeAgentSdkCatalog = {
-  agents: Awaited<ReturnType<Query["supportedAgents"]>>;
-  commands: SlashCommand[];
-  models: Awaited<ReturnType<Query["supportedModels"]>>;
-  skills: SlashCommand[];
 };

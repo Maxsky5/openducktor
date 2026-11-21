@@ -34,7 +34,7 @@ type UseAgentStudioSelectionControllerArgs = {
   isLoadingRepoSettings: boolean;
 };
 
-export type AgentStudioSelectedView = {
+type AgentStudioSelectedView = {
   taskId: string;
   selectedTask: TaskCard | null;
   sessionsForTask: AgentSessionSummary[];

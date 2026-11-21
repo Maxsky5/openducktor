@@ -7,11 +7,7 @@ import {
 import { projectCodexCanonicalEvents } from "./codex-canonical-projector";
 import { createCodexEventMapperPipeline } from "./codex-event-mapper-pipeline";
 import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-display";
-import {
-  codexUserInputsFromItem,
-  toCodexTurnInputList,
-  toCodexUserInputList,
-} from "./codex-user-inputs";
+import { codexUserInputsFromItem, toCodexTurnInputList } from "./codex-user-inputs";
 import { codexTurnFixture } from "./test-fixtures/codex-protocol";
 
 describe("Codex App Server transcript parsing", () => {
@@ -111,18 +107,6 @@ describe("Codex App Server transcript parsing", () => {
     ]);
   });
 
-  test("maps skill message parts to structured Codex skill input", () => {
-    const skill = {
-      id: "/skills/review/SKILL.md",
-      name: "review",
-      path: "/skills/review/SKILL.md",
-    };
-
-    const inputs = toCodexUserInputList([{ kind: "skill_mention", skill }]);
-    expect(inputs).toEqual([{ type: "skill", name: "review", path: "/skills/review/SKILL.md" }]);
-    expect(codexUserInputListToText(inputs)).toBe("$review");
-  });
-
   test("rejects subagent references because the Codex app-server input contract lacks them", () => {
     const subagent = {
       id: "reviewer",
@@ -130,32 +114,13 @@ describe("Codex App Server transcript parsing", () => {
       label: "Reviewer",
     };
 
-    expect(() => toCodexUserInputList([{ kind: "subagent_reference", subagent }])).toThrow(
-      "Codex app-server does not support 'subagent_reference' user message parts.",
-    );
     expect(() => toCodexTurnInputList([{ kind: "subagent_reference", subagent }])).toThrow(
       "Codex app-server does not support 'subagent_reference' user message parts.",
     );
   });
 
-  test("maps file references to structured Codex mention input", () => {
-    const inputs = toCodexUserInputList([
-      {
-        kind: "file_reference",
-        file: {
-          id: "src/main.ts",
-          path: "src/main.ts",
-          name: "main.ts",
-          kind: "code",
-        },
-      },
-    ]);
-
-    expect(inputs).toEqual([{ type: "mention", name: "main.ts", path: "src/main.ts" }]);
-  });
-
   test("maps directory references to structured Codex mention input", () => {
-    const inputs = toCodexUserInputList([
+    const inputs = toCodexTurnInputList([
       {
         kind: "file_reference",
         file: {
@@ -167,7 +132,7 @@ describe("Codex App Server transcript parsing", () => {
       },
     ]);
 
-    expect(inputs).toEqual([{ type: "mention", name: "components", path: "src/components" }]);
+    expect(inputs).toContainEqual({ type: "mention", name: "components", path: "src/components" });
   });
 
   test("keeps a path marker in Codex turn input for file references", () => {

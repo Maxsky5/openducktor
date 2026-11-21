@@ -21,7 +21,7 @@ const LOOPBACK_RESPONSE_URLS = ["http://127.0.0.1:*/*"];
 const CORS_ALLOW_HEADERS =
   "content-type, x-opencode-directory, x-opencode-workspace, x-openducktor-app-token";
 const CORS_ALLOW_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
-export const ELECTRON_PACKAGED_RENDERER_ORIGIN = "null";
+const ELECTRON_PACKAGED_RENDERER_ORIGIN = "null";
 
 export const resolveElectronLoopbackCorsOrigin = (rendererDevUrl: string | undefined): string =>
   rendererDevUrl ? new URL(rendererDevUrl).origin : ELECTRON_PACKAGED_RENDERER_ORIGIN;
@@ -31,7 +31,7 @@ export const resolveElectronLoopbackCorsOrigin = (rendererDevUrl: string | undef
  * keeps the `file://` origin of the window, and the handshake sends it serialized as `file://`.
  * HTTP fetches from the same window send the `null` origin instead.
  */
-export const ELECTRON_PACKAGED_RENDERER_SOCKET_ORIGIN = "file://";
+const ELECTRON_PACKAGED_RENDERER_SOCKET_ORIGIN = "file://";
 
 /** The origin that a desktop window sends on its host channel socket. */
 export const resolveElectronRendererSocketOrigins = (

@@ -12,10 +12,10 @@ type BuiltinPrompt = {
 };
 
 // SAFETY: The product returns records with these prompt fields.
-const { listSpecPlanBuildPromptTemplates } = await importProduct<{
-  listSpecPlanBuildPromptTemplates: () => BuiltinPrompt[];
-}>("packages/workflows/src/builtin/spec-plan-build/agent-prompts.ts");
-const prompts = listSpecPlanBuildPromptTemplates();
+const { specPlanBuildWorkflow } = await importProduct<{
+  specPlanBuildWorkflow: { prompts: { templates: readonly BuiltinPrompt[] } };
+}>("packages/workflows/src/builtin/spec-plan-build/workflow.ts");
+const prompts = specPlanBuildWorkflow.prompts.templates;
 
 /** The built-in workflow prompt with its placeholders. */
 function template(id: string): string {

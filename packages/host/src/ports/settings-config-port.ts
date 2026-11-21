@@ -23,7 +23,7 @@ export type SettingsConfigPersistence = {
   shared: "unchanged" | "saved";
   preferences: "unchanged" | "saved" | { message: string };
 };
-export type SettingsConfigCommit = SettingsConfigPersistence & { config: GlobalConfig };
+type SettingsConfigCommit = SettingsConfigPersistence & { config: GlobalConfig };
 export type GlobalSettings = Omit<GlobalConfig, "workspaces">;
 export type SharedRepoConfig = Omit<RepoConfig, "agentStudioState">;
 export type WorkspaceCatalogRepo = Pick<
@@ -41,7 +41,7 @@ export type WorkspaceCatalogRepo = Pick<
 export type SettingsConfigView = GlobalSettings & {
   workspaces: Record<string, WorkspaceCatalogRepo>;
 };
-export type SharedWorkspaceCatalogSnapshot = {
+type SharedWorkspaceCatalogSnapshot = {
   catalogRevision: number;
   workspaces: WorkspaceCatalogRepo[];
 };

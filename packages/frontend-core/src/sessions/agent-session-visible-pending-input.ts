@@ -18,11 +18,10 @@ export type AgentSessionVisiblePendingInput = {
   pendingQuestions: readonly AgentQuestionRequest[];
 };
 
-export const EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT: AgentSessionVisiblePendingInput =
-  Object.freeze({
-    pendingApprovals: Object.freeze(new Array<AgentApprovalRequest>()),
-    pendingQuestions: Object.freeze(new Array<AgentQuestionRequest>()),
-  });
+const EMPTY_AGENT_SESSION_VISIBLE_PENDING_INPUT: AgentSessionVisiblePendingInput = Object.freeze({
+  pendingApprovals: Object.freeze(new Array<AgentApprovalRequest>()),
+  pendingQuestions: Object.freeze(new Array<AgentQuestionRequest>()),
+});
 
 type PendingInputRequest = AgentApprovalRequest | AgentQuestionRequest;
 

@@ -39,10 +39,7 @@ import { createStartupPreparationFinalizer } from "./startup-preparation-receipt
 import { updateStartup } from "./session-startup-progress";
 import { createLiveSessionStartAdmission } from "./live-session-start-admission";
 
-export type {
-  AgentSessionLiveEnvelopePublisher,
-  AgentSessionLiveFaultLogger,
-} from "./agent-session-live-envelope";
+export type { AgentSessionLiveFaultLogger } from "./agent-session-live-envelope";
 
 export type { AgentSessionLiveStateService, CreateAgentSessionLiveStateServiceInput };
 import type {

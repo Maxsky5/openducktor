@@ -8,7 +8,7 @@ import {
 export type AutopilotSkippedOutcome = Extract<AutopilotOutcome, { kind: "skipped" }>;
 
 /** An outcome that the host holds until a client reads it: a failed or skipped action. */
-export type AutopilotHeldOutcome = AutopilotFailedOutcome | AutopilotSkippedOutcome;
+type AutopilotHeldOutcome = AutopilotFailedOutcome | AutopilotSkippedOutcome;
 
 export const AUTOPILOT_RETRY_MESSAGE_LABEL = "Retry message";
 export const AUTOPILOT_FAILURE_TITLE = "Autopilot cannot evaluate task changes.";

@@ -1,7 +1,6 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
-import type { AgentSessionRecord, TaskPullRequestDetectResult } from "@openducktor/contracts";
-import { QueryClient } from "@tanstack/react-query";
+import type { TaskPullRequestDetectResult } from "@openducktor/contracts";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
 import { IsolatedQueryWrapper } from "../../test-support/isolated-query-wrapper";
 import { createHookHarness } from "../../test-support/react-hook-harness";
@@ -15,7 +14,6 @@ import {
 } from "../../test-support/shared-test-fixtures";
 import type { AgentSessionReadPort } from "../../queries/agent-sessions";
 import { workspaceQueryKeys } from "../../queries/workspace";
-import { prepareTaskChatDraftCleanupTargets } from "./task-chat-draft-cleanup";
 import { useTaskOperations } from "./use-task-operations";
 import { useTaskResetOperations } from "./use-task-reset-operations";
 
@@ -230,44 +228,5 @@ describe("useTaskOperations", () => {
     } finally {
       await harness.unmount();
     }
-  });
-
-  test("builds task mutation cleanup targets from the injected session read port", async () => {
-    const session: AgentSessionRecord = {
-      runtimeKind: "opencode",
-      externalSessionId: "session-1",
-      role: "build",
-      startedAt: "2026-07-23T10:00:00.000Z",
-      workingDirectory: "/repo/worktree",
-      selectedModel: null,
-    };
-    const agentSessionReadPort: AgentSessionReadPort = {
-      agentSessionsListForTasks: mock(async () => [{ taskId: "task-1", agentSessions: [session] }]),
-    };
-    const { queryClient } = createTestClientConnection({
-      queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-    });
-
-    const plan = await prepareTaskChatDraftCleanupTargets({
-      queryClient,
-      repoPath: "/repo",
-      workspaceId: "workspace-1",
-      taskIds: ["task-1"],
-      agentSessionReadPort,
-    });
-
-    expect(agentSessionReadPort.agentSessionsListForTasks).toHaveBeenCalledWith(
-      { workspaceId: "workspace-1", repoPath: "/repo" },
-      ["task-1"],
-    );
-    expect(plan.targets).toEqual([
-      {
-        workspaceId: "workspace-1",
-        externalSessionId: "session-1",
-        runtimeKind: "opencode",
-        workingDirectory: "/repo/worktree",
-        taskId: "task-1",
-      },
-    ]);
   });
 });

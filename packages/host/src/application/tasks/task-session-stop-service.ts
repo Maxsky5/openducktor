@@ -9,7 +9,7 @@ import type { TaskStorePort, TaskStoreError } from "../../ports/task-repository-
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { resolveRepoPath, resolveRuntimeDescriptor } from "../runtimes/runtime-request-resolution";
 
-export type TaskSessionStopError = GitPortError | HostError | TaskStoreError;
+type TaskSessionStopError = GitPortError | HostError | TaskStoreError;
 
 export type TaskSessionStopService = {
   /** Stops the native session of one task session in its shared runtime. */

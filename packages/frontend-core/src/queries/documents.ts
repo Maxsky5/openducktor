@@ -196,34 +196,6 @@ export const fetchFreshTaskDocumentFromQuery = (
   });
 };
 
-export const removeCachedTaskDocumentQueries = (
-  queryClient: QueryClient,
-  repoPath: WorkspaceRef,
-  taskIds: string[],
-): void => {
-  const taskIdSet = new Set(taskIds);
-  for (const query of queryClient.getQueryCache().findAll({
-    queryKey: documentQueryKeys.all,
-    exact: false,
-  })) {
-    const [scope, _section, _cachedRepoPath, cachedTaskId] = query.queryKey;
-    const cachedTaskIdResult = queryKeyStringSchema.safeParse(cachedTaskId);
-    if (
-      scope !== documentQueryKeys.all[0] ||
-      !queryMatchesWorkspace(query, repoPath) ||
-      !cachedTaskIdResult.success ||
-      !taskIdSet.has(cachedTaskIdResult.data)
-    ) {
-      continue;
-    }
-
-    queryClient.removeQueries({
-      queryKey: query.queryKey,
-      exact: true,
-    });
-  }
-};
-
 export const invalidateCachedTaskDocumentQueries = async (
   queryClient: QueryClient,
   repoPath: WorkspaceRef,

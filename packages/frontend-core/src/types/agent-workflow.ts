@@ -12,7 +12,7 @@ export type WorkflowStepTone =
 
 export type WorkflowStepAvailability = "available" | "optional" | "blocked";
 
-export type WorkflowStepCompletion = "not_started" | "in_progress" | "done" | "rejected";
+type WorkflowStepCompletion = "not_started" | "in_progress" | "done" | "rejected";
 
 export type WorkflowStepLiveSession = AgentSessionActivityState | "none";
 

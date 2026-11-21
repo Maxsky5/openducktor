@@ -59,7 +59,7 @@ export type SessionNavigationWorkspaceSources = {
 
 export type SessionNavigationAttentionReason = "question" | "permission" | "blocked";
 
-export type SessionNavigationStatus =
+type SessionNavigationStatus =
   | { kind: "running" }
   | { kind: "settled"; failed: boolean }
   /** Live status has not answered yet. */
@@ -73,7 +73,7 @@ export type SessionNavigationStatus =
  * `started` means no later activity time is known, so the UI must not present it as the
  * latest activity.
  */
-export type SessionNavigationTime =
+type SessionNavigationTime =
   | { kind: "activity"; at: number }
   | { kind: "started"; at: number }
   | { kind: "none" };
@@ -283,7 +283,7 @@ const liveAttention = (
  * A ready stream without the session means that the session is not running. A failed status
  * read of the session makes its status unknown, also when an older snapshot stays.
  */
-export const sessionStatus = (
+const sessionStatus = (
   live: WorkspaceSessionLiveState,
   { facts, statusFailure }: SessionLiveFacts,
 ): SessionNavigationStatus => {

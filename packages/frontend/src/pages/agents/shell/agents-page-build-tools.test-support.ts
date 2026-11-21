@@ -5,7 +5,7 @@ type BuildToolsSnapshot = AgentsPageBuildTools["buildToolsSnapshot"];
 type GitActionsState = AgentsPageBuildTools["gitActions"];
 type ScopeState = BuildToolsSnapshot["diffData"]["scopeStatesByScope"]["target"];
 
-export const createEmptyScopeStateFixture = (): ScopeState => ({
+const createEmptyScopeStateFixture = (): ScopeState => ({
   branch: null,
   localChanges: null,
   gitConflict: null,

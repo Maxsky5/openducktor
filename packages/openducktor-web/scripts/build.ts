@@ -27,7 +27,7 @@ const runBuildCommandEffect = (
       }),
   });
 
-export const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError> =>
+const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise({
       try: () => cleanDirectory(join(packageRoot, "dist")),
@@ -40,16 +40,19 @@ export const buildWebPackageEffect = (): Effect.Effect<void, WebDependencyError>
           details: { path: join(packageRoot, "dist") },
         }),
     });
-    yield* runBuildCommandEffect("Web shell build", ["bun", "run", "build:web-shell"]);
+    yield* runBuildCommandEffect("Web shell, CLI and MCP builds", [
+      "bun",
+      "run",
+      "--parallel",
+      "build:web-shell",
+      "build:cli",
+      "build:mcp",
+    ]);
     yield* runBuildCommandEffect("Standalone web client build", ["bun", "run", "build:client"]);
-    yield* runBuildCommandEffect("Web CLI build", ["bun", "run", "build:cli"]);
-    yield* runBuildCommandEffect("Web MCP entrypoint build", ["bun", "run", "build:mcp"]);
   });
 
-export const buildWebPackage = (): Promise<void> => runWebBoundary(buildWebPackageEffect());
-
 if (import.meta.main) {
-  await buildWebPackage().catch((cause: unknown) => {
+  await runWebBoundary(buildWebPackageEffect()).catch((cause: unknown) => {
     console.error(errorMessage(cause));
     process.exit(1);
   });

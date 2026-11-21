@@ -11,7 +11,7 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 
-export type BrowserPickerTarget = { box: BrowserBox; label: string };
+type BrowserPickerTarget = { box: BrowserBox; label: string };
 
 export type BrowserPickerOverlayProps = {
   /** The element under the pointer, from the host, or null. */

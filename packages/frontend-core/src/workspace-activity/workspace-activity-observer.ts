@@ -16,7 +16,7 @@ import {
   type WorkspaceSessionLiveState,
 } from "./workspace-activity-state";
 
-export type WorkspaceActivityWorkspace = {
+type WorkspaceActivityWorkspace = {
   workspaceId: string;
   repoPath: string;
 };

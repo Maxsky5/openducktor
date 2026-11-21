@@ -5,11 +5,14 @@ import {
   readyAgentSessionReadModelLoadState,
 } from "@openducktor/frontend-core/types/agent-session-read-model";
 import { resolveAgentStudioNavigationState } from "./agent-studio-navigation-state";
-import { createAgentSessionSummaryFixture, createTaskCardFixture } from "./agent-studio-test-utils";
+import {
+  createAgentSessionSummaryFixture,
+  createTaskCardFixture,
+  taskSelectionFixture,
+} from "./agent-studio-test-utils";
 import {
   createAgentStudioRouteSelectionState,
   toAgentStudioSessionSelection,
-  toAgentStudioTaskSelection,
 } from "./shell/agent-studio-selection-state";
 
 const createTask = (id: string) => createTaskCardFixture({ id, title: id });
@@ -239,7 +242,7 @@ describe("resolveAgentStudioNavigationState", () => {
         sessionExternalIdParam: sessionExternalIdParam(routeSession),
         hasExplicitRoleParam: true,
         roleFromQuery: "spec",
-        selectionState: toAgentStudioTaskSelection("task-2"),
+        selectionState: taskSelectionFixture("task-2"),
       }).queryUpdate,
     ).toBeNull();
   });

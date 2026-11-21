@@ -2,7 +2,7 @@ import { z } from "zod";
 import { create } from "zustand";
 import { GRAPH_ACCENT_WIDTH } from "./git-history-graph";
 
-export const HISTORY_COLUMN_IDS = ["refs", "graph", "message", "author", "date", "sha"] as const;
+const HISTORY_COLUMN_IDS = ["refs", "graph", "message", "author", "date", "sha"] as const;
 export type HistoryColumnId = (typeof HISTORY_COLUMN_IDS)[number];
 
 /** The label and width of each column. The message column takes the free width. */
@@ -88,7 +88,7 @@ export const visibleHistoryColumns = (state: HistoryColumnsState): HistoryColumn
   return state.order.filter((id) => !hidden.has(id));
 };
 
-export function readHistoryColumns(): HistoryColumnsState {
+function readHistoryColumns(): HistoryColumnsState {
   try {
     const saved = globalThis.localStorage.getItem(HISTORY_COLUMNS_STORAGE_KEY);
     if (saved === null) return DEFAULT_HISTORY_COLUMNS;

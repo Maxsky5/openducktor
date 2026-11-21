@@ -55,7 +55,7 @@ export type ClientConnectionOptions = {
 };
 
 /** Drafts that belong to one host connection. Repository paths alone never identify a host. */
-export type ClientDrafts = {
+type ClientDrafts = {
   readonly taskEditors: ReturnType<typeof createTaskEditorDraftState>;
   readonly settings: { retained: { baseline: SettingsSnapshot; draft: SettingsSnapshot } | null };
   readonly chat: AgentChatDraftStore;

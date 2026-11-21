@@ -1000,24 +1000,7 @@ const createPullRequestSyncSystemCommands = ({
     },
   });
 
-export type {
-  AgentSessionRecord,
-  CommitsAheadBehind,
-  GitBranch,
-  GitCurrentBranch,
-  GitPort,
-  RepoConfig,
-  RuntimeRegistryPort,
-  SettingsConfigPort,
-  SystemCommandPort,
-  TaskActivityGuardPort,
-  TaskCard,
-  TaskStorePort,
-  TaskWorktreeService,
-  WorkspaceRecord,
-  WorkspaceSettingsService,
-  WorktreeFilePort,
-};
+export type { RuntimeRegistryPort, TaskActivityGuardPort, TaskStorePort, WorktreeFilePort };
 export {
   createAgentSessionRecord,
   createAgentSessionSettingsConfig,

@@ -5,7 +5,7 @@ import type { AzureDevOpsProtectedStorage } from "./protected-storage";
 
 const AUTHORITY = "https://login.microsoftonline.com/common";
 
-export type AzureDevOpsPublicClient = Pick<
+type AzureDevOpsPublicClient = Pick<
   PublicClientApplication,
   "acquireTokenByDeviceCode" | "acquireTokenSilent" | "getAllAccounts"
 >;

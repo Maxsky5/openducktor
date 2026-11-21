@@ -13,8 +13,7 @@ const AGENT_STUDIO_MANAGED_URL_QUERY_KEYS = [
   ...REMOVED_QUERY_KEYS,
 ];
 
-export type AgentStudioQueryKey =
-  (typeof AGENT_STUDIO_QUERY_KEYS)[keyof typeof AGENT_STUDIO_QUERY_KEYS];
+type AgentStudioQueryKey = (typeof AGENT_STUDIO_QUERY_KEYS)[keyof typeof AGENT_STUDIO_QUERY_KEYS];
 
 export type AgentStudioQueryUpdate = Partial<Record<AgentStudioQueryKey, string | undefined>> & {
   keepSessionless?: boolean;

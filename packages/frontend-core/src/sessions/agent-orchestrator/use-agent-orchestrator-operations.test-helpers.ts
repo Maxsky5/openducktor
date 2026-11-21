@@ -27,7 +27,6 @@ export {
   listHarnessSessions,
   type OrchestratorDependencies,
 } from "./use-agent-orchestrator-operations.test-harness";
-export { createDeferred } from "./use-agent-orchestrator-operations.test-support";
 
 export const acceptedUserMessageForInput = (
   input: SendAgentUserMessageInput,

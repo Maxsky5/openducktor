@@ -11,7 +11,7 @@ It covers one affected task and 100 affected tasks.
 | Version | Commit |
 | --- | --- |
 | Before | `88a965d1bf8125c99c0c2f186c3a81449ae6ef24`, the merge base with `origin/main` |
-| After | This branch. The measured commit `a5c5c345d` has the same code before the squash and rebase. |
+| After | `12eb375999fdf875148f86d1da9a6352f105b594`, the merged version of the measured commit `a5c5c345d`. |
 
 The before version refreshes each affected task with its own `agentSessionsList` request.
 
@@ -19,13 +19,11 @@ The after version reads the affected tasks of a workspace through one `agentSess
 
 ## Method
 
-Run the measurement from `packages/frontend`:
+Run the original measurement from `packages/frontend` in a checkout of commit `12eb375999fdf875148f86d1da9a6352f105b594`.
 
 ```sh
-SESSION_REFRESH_BASELINE=88a965d1bf8125c99c0c2f186c3a81449ae6ef24 bun run ../../scripts/measure-session-refresh.ts
+SESSION_REFRESH_BASELINE=88a965d1bf8125c99c0c2f186c3a81449ae6ef24 bun test ../../scripts/measure-session-refresh.ts
 ```
-
-The script [measure-session-refresh.ts](../../scripts/measure-session-refresh.ts) copies the baseline `agent-sessions.ts` and `agent-session-view-sync.ts` from Git and removes the copies after the run.
 
 The workload uses these conditions:
 

@@ -41,7 +41,7 @@ export const useTaskWorkflowContextQuery = (
     refetch: query.refetch,
   };
 };
-export const loadTaskWorkflowContext = async (
+const loadTaskWorkflowContext = async (
   queryClient: QueryClient,
   scope: WorkspaceRef,
   taskId: string,

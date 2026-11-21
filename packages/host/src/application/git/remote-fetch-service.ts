@@ -9,9 +9,9 @@ const FRESH_FOR_MS = 5 * 60 * 1000;
 /** A fetch that runs longer fails, so a remote that does not answer cannot block its callers. */
 const FETCH_TIMEOUT: Duration.Input = "60 seconds";
 
-export type RemoteFetchError = GitPortError | HostOperationError;
+type RemoteFetchError = GitPortError | HostOperationError;
 
-export type RemoteFetchResult = { outcome: "fetched"; output: string } | { outcome: "fresh" };
+type RemoteFetchResult = { outcome: "fetched"; output: string } | { outcome: "fresh" };
 
 /**
  * The one way the host fetches a remote. The Git panel and merge detection share it, so they do

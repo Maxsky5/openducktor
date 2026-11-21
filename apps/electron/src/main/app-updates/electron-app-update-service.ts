@@ -52,7 +52,7 @@ export type ElectronAppUpdateService = {
   subscribe(listener: (state: AppUpdateState) => void): () => void;
 };
 
-export type ElectronAppUpdateScheduledTask = {
+type ElectronAppUpdateScheduledTask = {
   cancel(): void;
 };
 
@@ -92,7 +92,7 @@ const updateProviderConfigSchema = z.object({ provider: z.string() });
 const releaseVersionPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+)(?:\.[0-9A-Za-z-]+)*)?$/;
 
-export const deriveElectronUpdateChannel = (version: string): string | null =>
+const deriveElectronUpdateChannel = (version: string): string | null =>
   releaseVersionPattern.exec(version)?.[4] ?? null;
 
 const defaultAppUpdateScheduler: ElectronAppUpdateScheduler = {

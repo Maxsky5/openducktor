@@ -17,7 +17,7 @@ type StopHostBackendInput = {
   stopServer: () => void | Promise<void>;
 };
 
-export const stopHostBackendEffect = ({
+const stopHostBackendEffect = ({
   disposeHost,
   logger,
   resolveExited,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "@openducktor/contracts";
 import { specPlanBuildWorkflow } from "./workflow";
-import { AGENT_ROLE_TOOL_POLICY } from "../roles/role-policy";
+import { builtinRole, BUILTIN_ROLES } from "../roles/roles";
 import { loadWorkflowContractFixture } from "../../../test-support/workflow-contract-fixture";
 
 describe("agent orchestrator role policy contract", () => {
@@ -20,19 +20,19 @@ describe("agent orchestrator role policy contract", () => {
   test("matches the workflow tool catalog", () => {
     const fixture = loadWorkflowContractFixture();
     expect([...fixture.tools].sort()).toEqual([...ODT_WORKFLOW_AGENT_TOOL_NAMES].sort());
-    const grantedTools = new Set(Object.values(AGENT_ROLE_TOOL_POLICY).flat());
+    const grantedTools = new Set(BUILTIN_ROLES.flatMap((role) => role.tools));
     expect([...grantedTools].sort()).toEqual([...fixture.tools].sort());
   });
 
   test("keeps odt_set_pull_request restricted to Builder sessions", () => {
-    expect(AGENT_ROLE_TOOL_POLICY.build).toContain("odt_set_pull_request");
-    expect(AGENT_ROLE_TOOL_POLICY.spec).not.toContain("odt_set_pull_request");
-    expect(AGENT_ROLE_TOOL_POLICY.planner).not.toContain("odt_set_pull_request");
-    expect(AGENT_ROLE_TOOL_POLICY.qa).not.toContain("odt_set_pull_request");
+    expect(builtinRole("build").tools).toContain("odt_set_pull_request");
+    expect(builtinRole("spec").tools).not.toContain("odt_set_pull_request");
+    expect(builtinRole("planner").tools).not.toContain("odt_set_pull_request");
+    expect(builtinRole("qa").tools).not.toContain("odt_set_pull_request");
   });
 
   test("lets every workflow role read task data", () => {
-    for (const tools of Object.values(AGENT_ROLE_TOOL_POLICY)) {
+    for (const { tools } of BUILTIN_ROLES) {
       expect(tools).toContain("odt_read_task");
       expect(tools).toContain("odt_read_task_assets");
       expect(tools).toContain("odt_read_task_artifacts");
@@ -40,14 +40,14 @@ describe("agent orchestrator role policy contract", () => {
   });
 
   test("lets every workflow role search and create tasks", () => {
-    for (const tools of Object.values(AGENT_ROLE_TOOL_POLICY)) {
+    for (const { tools } of BUILTIN_ROLES) {
       expect(tools).toContain("odt_search_tasks");
       expect(tools).toContain("odt_create_task");
     }
   });
 
   test("lets every workflow role update task fields", () => {
-    for (const tools of Object.values(AGENT_ROLE_TOOL_POLICY)) {
+    for (const { tools } of BUILTIN_ROLES) {
       expect(tools).toContain("odt_update_task");
     }
   });

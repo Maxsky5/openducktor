@@ -19,20 +19,8 @@ export const createCachedPageLoader = (loadPage: PageLoader): PageLoader => {
   };
 };
 
-const reportRoutePreloadError = (pageName: string, cause: unknown): void => {
-  console.error(`[route-preload] Failed to preload ${pageName} page.`, cause);
-};
-
-const preloadRoutePage = (pageName: string, loadPage: PageLoader): void => {
-  void loadPage().catch((error) => reportRoutePreloadError(pageName, error));
-};
-
 export const loadNotFoundPage = createCachedPageLoader(() =>
   import("./not-found-page").then((module) => ({
     default: module.NotFoundPage,
   })),
 );
-
-export const preloadNotFoundPage = (): void => {
-  preloadRoutePage("Not Found", loadNotFoundPage);
-};

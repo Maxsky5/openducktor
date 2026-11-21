@@ -37,7 +37,7 @@ export type NewSessionStartRequest = {
   initialSourceSession?: AgentSessionIdentity | null;
 };
 
-export type FreshSessionStartDecision = {
+type FreshSessionStartDecision = {
   startMode: "fresh";
   selectedModel: AgentModelSelection;
   targetBranch?: GitTargetBranch;
@@ -57,7 +57,7 @@ export type ReuseSessionStartDecision = {
   goalObjective?: string;
 };
 
-export type ForkSessionStartDecision = {
+type ForkSessionStartDecision = {
   startMode: "fork";
   selectedModel: AgentModelSelection;
   sourceSession: AgentSessionIdentity;

@@ -107,7 +107,7 @@ export function MergedPullRequestConfirm({
         // A failed session read shows in the read error row, with a retry.
         detail={
           impact.activeSessionCount
-            ? formatActiveSessionStopMessage(impact.activeSessionCount, "close")
+            ? formatActiveSessionStopMessage(impact.activeSessionCount)
             : null
         }
       />

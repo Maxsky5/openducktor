@@ -41,7 +41,7 @@ export class ElectronLifecycleError<Details extends object = never> extends Data
 
 export type ElectronValidationErrorAggregate = ElectronValidationError<object>;
 export type ElectronOperationErrorAggregate = ElectronOperationError<object>;
-export type ElectronLifecycleErrorAggregate = ElectronLifecycleError<object>;
+type ElectronLifecycleErrorAggregate = ElectronLifecycleError<object>;
 
 export type ElectronError =
   | ElectronLifecycleErrorAggregate

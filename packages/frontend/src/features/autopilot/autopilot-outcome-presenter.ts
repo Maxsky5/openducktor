@@ -166,5 +166,3 @@ export const createAutopilotOutcomePresenter = (ports: AutopilotOutcomePresenter
     },
   };
 };
-
-export type AutopilotOutcomePresenter = ReturnType<typeof createAutopilotOutcomePresenter>;

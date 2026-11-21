@@ -4,8 +4,7 @@ import {
   type AgentToolName,
 } from "@openducktor/contracts";
 import { deepFreeze } from "../../deep-freeze";
-import { recordBy } from "../../record-by";
-import { BUILTIN_ROLE_IDS, type BuiltinRoleId } from "./ids";
+import type { BuiltinRoleId } from "./ids";
 import { ROLE_SYSTEM_PROMPT_METADATA } from "./prompt-metadata";
 import { ROLE_SYSTEM_PROMPTS } from "./prompt-templates";
 
@@ -83,8 +82,3 @@ export const builtinRole = (id: BuiltinRoleId): BuiltinAgentRole => {
   if (!role) throw new Error(`The built-in role catalog has no role ${id}.`);
   return role;
 };
-/** Builds a value for each built-in role. */
-export const byRole = <Value>(
-  read: (role: BuiltinAgentRole) => Value,
-): Readonly<Record<BuiltinRoleId, Value>> =>
-  deepFreeze(recordBy(BUILTIN_ROLE_IDS, (id) => read(builtinRole(id))));

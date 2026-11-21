@@ -9,9 +9,9 @@ import {
 } from "./catalogue";
 import { shortcutFocusWithin } from "./shortcut-focus";
 
-export const isVisibleCommand = (command: CommandPalettePageCommand): boolean =>
+const isVisibleCommand = (command: CommandPalettePageCommand): boolean =>
   command.isVisible?.() !== false && !command.disabledReason?.();
-export const isProtectedFocus = (focus: Element | null): boolean =>
+const isProtectedFocus = (focus: Element | null): boolean =>
   focus instanceof HTMLElement &&
   (focus.isContentEditable ||
     Boolean(

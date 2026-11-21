@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ODT_HOST_BRIDGE_RESPONSE_SCHEMAS } from "./lib";
+import { ODT_HOST_BRIDGE_RESPONSE_SCHEMAS } from "@openducktor/contracts";
 import { getListedToolInputSchema, getListedToolOutputSchema } from "./listed-tool-schema";
 
 type ListedToolSchema = ReturnType<typeof getListedToolInputSchema>;

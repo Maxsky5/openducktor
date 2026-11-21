@@ -16,7 +16,6 @@ import { buildRoleEnabledMapForTask } from "@openducktor/frontend-core/sessions/
 import {
   type AgentSessionWorkflowSummary,
   buildLatestSessionByRoleMap,
-  buildLatestSessionByTaskMap,
   buildLiveSessionByRoleMap,
   buildSessionCreateOptions,
   buildSessionSelectorGroups,
@@ -65,45 +64,6 @@ const buildWorkflowStateByRole = (params: {
   );
 
 describe("agents-page-session-tabs", () => {
-  test("selects latest session per task", () => {
-    const map = buildLatestSessionByTaskMap([
-      buildSession({
-        sessionAssociation: createWorkflowAssociationFixture("spec"),
-        externalSessionId: "older",
-        startedAt: "2026-02-20T09:00:00.000Z",
-      }),
-      buildSession({
-        sessionAssociation: createWorkflowAssociationFixture("spec"),
-        externalSessionId: "newer",
-        startedAt: "2026-02-20T11:00:00.000Z",
-      }),
-      buildSession({
-        sessionAssociation: createWorkflowAssociationFixture("spec", "task-2"),
-        externalSessionId: "task-2-session",
-      }),
-    ]);
-
-    expect(map.get("task-1")?.externalSessionId).toBe("newer");
-    expect(map.get("task-2")?.externalSessionId).toBe("task-2-session");
-  });
-
-  test("uses deterministic tiebreaker when timestamps are equal", () => {
-    const map = buildLatestSessionByTaskMap([
-      buildSession({
-        sessionAssociation: createWorkflowAssociationFixture("spec"),
-        externalSessionId: "first",
-        startedAt: "2026-02-20T10:00:00.000Z",
-      }),
-      buildSession({
-        sessionAssociation: createWorkflowAssociationFixture("spec"),
-        externalSessionId: "second",
-        startedAt: "2026-02-20T10:00:00.000Z",
-      }),
-    ]);
-
-    expect(map.get("task-1")?.externalSessionId).toBe("second");
-  });
-
   test("builds role enablement from backend workflow payload", () => {
     const task = buildTask({
       issueType: "feature",

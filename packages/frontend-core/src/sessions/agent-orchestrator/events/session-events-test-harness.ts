@@ -356,17 +356,6 @@ export const getSessionMessages = (
   externalSessionId = "session-1",
 ) => sessionMessagesToArray(getSession(sessionsRef, externalSessionId));
 
-export const getSessionMessagesByIdentity = (
-  sessionsRef: { current: AgentSessionCollection },
-  identity: AgentSessionIdentity,
-) => {
-  const session = getAgentSession(sessionsRef.current, identity);
-  if (!session) {
-    return [];
-  }
-  return sessionMessagesToArray(session);
-};
-
 type ObserveAgentSessionEventsTestParams = Omit<
   ObserveAgentSessionParams,
   | "sessionRef"
@@ -484,7 +473,6 @@ export const getLastSessionMessage = (
 export type { AgentSessionState, SessionEvent, SessionEventAdapter, SessionPartEventContext };
 export type SessionUpdateFn = ObserveAgentSessionParams["updateSession"];
 export {
-  createSessionEventBatcher,
   createSessionTurnMetadata,
   handleAssistantPart,
   OPENCODE_RUNTIME_DESCRIPTOR,

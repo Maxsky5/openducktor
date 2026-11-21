@@ -8,7 +8,7 @@ import {
 } from "./use-session-start-kickoff-draft";
 
 export const BLANK_GOAL_ERROR = "Enter a goal.";
-export const GOAL_GENERATION_RUNNING = "Wait for the generated goal.";
+const GOAL_GENERATION_RUNNING = "Wait for the generated goal.";
 
 /** The Goal mode switch and goal text of a start form. */
 export type SessionStartGoalDraft = {

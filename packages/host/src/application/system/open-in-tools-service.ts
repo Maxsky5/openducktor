@@ -14,7 +14,7 @@ import {
 import type { OpenInToolsPort, OpenInToolsPortError } from "../../ports/open-in-tools-port";
 
 const OPEN_IN_TOOL_CACHE_TTL_MS = 5 * 60 * 1000;
-export type OpenInToolsServiceError =
+type OpenInToolsServiceError =
   | HostOperationErrorAggregate
   | HostValidationErrorAggregate
   | OpenInToolsPortError;

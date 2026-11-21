@@ -9,7 +9,7 @@ import { useClientConnection, useHostClient } from "../../connection/client-conn
 import { errorMessage } from "../../lib/errors";
 import { settingsSnapshotQueryOptions } from "../../queries/workspace";
 
-export const SESSION_GROUPING_MUTATION_KEY = ["settings", "sidebar-session-grouping"] as const;
+const SESSION_GROUPING_MUTATION_KEY = ["settings", "sidebar-session-grouping"] as const;
 
 export type SessionGrouping = {
   grouping: SidebarSessionGrouping;

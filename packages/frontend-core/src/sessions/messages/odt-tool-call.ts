@@ -29,7 +29,7 @@ export const readOdtToolName = (tool: string): OdtToolName | null =>
 export type OdtToolIconKind = "workflow" | "git-pull-request";
 
 /** What the card of an ODT tool reads from its call. */
-export type OdtToolCardContent = {
+type OdtToolCardContent = {
   /**
    * The event of an `odt_apply_workflow_event` call in title case words, such as "Build
    * Completed" for `build-completed`. Null for another tool or before the input has an event.

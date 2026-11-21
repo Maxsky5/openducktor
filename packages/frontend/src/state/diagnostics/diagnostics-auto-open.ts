@@ -1,4 +1,4 @@
-export type DiagnosticsAutoOpenInput = {
+type DiagnosticsAutoOpenInput = {
   hasHostBlockingFailure: boolean;
   workspaceId: string | null;
   hasWorkspaceBlockingFailure: boolean;

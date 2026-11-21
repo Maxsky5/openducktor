@@ -84,7 +84,7 @@ type AgentSessionCollectionCommit<Result> = (current: AgentSessionCollection) =>
   collection: AgentSessionCollection;
   result: Result;
 };
-export type AgentSessionSource = {
+type AgentSessionSource = {
   session: AgentSessionState;
   lifetime: symbol;
 };

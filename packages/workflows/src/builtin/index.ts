@@ -2,7 +2,6 @@ import type { TaskWorkflow } from "../task-workflow/task-workflow";
 import { specPlanBuildWorkflow } from "./spec-plan-build/workflow";
 
 export {
-  type AgentPromptGitContext,
   type BuildAgentKickoffPromptInput,
   buildGitConflictAssistancePrompt,
   buildReadOnlyPermissionRejectionMessage,

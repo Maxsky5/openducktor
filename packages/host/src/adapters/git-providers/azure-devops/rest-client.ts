@@ -22,7 +22,7 @@ export type AzureDevOpsRequest = {
   body?: AzureDevOpsJson;
 };
 
-export type AzureDevOpsResponse = {
+type AzureDevOpsResponse = {
   body: AzureDevOpsJson;
   continuationToken: string | null;
 };

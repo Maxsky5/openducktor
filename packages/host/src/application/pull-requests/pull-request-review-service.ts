@@ -15,11 +15,11 @@ import type {
   WorkspaceSettingsService,
 } from "../workspaces/workspace-settings-service";
 
-export type PullRequestReviewContextInput = WorkspaceRef & {
+type PullRequestReviewContextInput = WorkspaceRef & {
   taskId?: string;
 };
 
-export type PullRequestReviewServiceError = HostValidationError | WorkspaceSettingsError;
+type PullRequestReviewServiceError = HostValidationError | WorkspaceSettingsError;
 
 export type PullRequestReviewService = {
   getContext(

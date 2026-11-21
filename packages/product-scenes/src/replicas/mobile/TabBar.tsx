@@ -14,7 +14,7 @@ import type { ReactElement } from "react";
 import { flag } from "../flag";
 import "./TabBar.css";
 
-export type MobileTab = "sessions" | "tasks" | "host" | "settings";
+type MobileTab = "sessions" | "tasks" | "host" | "settings";
 
 /** The geometry of tab-bar-geometry.ts, in dp, at the width of the phone. */
 const BAR = { width: 411, height: 64, create: 56, lift: -12, gap: 5, shoulder: 16 } as const;

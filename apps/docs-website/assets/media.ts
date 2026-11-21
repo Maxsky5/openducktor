@@ -143,7 +143,7 @@ import newTaskImportMenuLight from "./screens/new-task-import-menu-light.webp";
 import newTaskImportMenuDark from "./screens/new-task-import-menu-dark.webp";
 
 /** A box around a part of a capture, in percent of the capture: left, top, width, and height. */
-export type PartBox = { x: number; y: number; w: number; h: number };
+type PartBox = { x: number; y: number; w: number; h: number };
 
 /**
  * A screenshot: its light and dark captures, and the boxes of the parts that an

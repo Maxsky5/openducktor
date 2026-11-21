@@ -114,5 +114,3 @@ export const createBrowserClientHub = ({ tabs, picker }: BrowserClientHubInput) 
     },
   };
 };
-
-export type BrowserClientHub = ReturnType<typeof createBrowserClientHub>;

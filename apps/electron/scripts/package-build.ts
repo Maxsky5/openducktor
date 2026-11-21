@@ -40,7 +40,7 @@ import {
 
 export { isInstallableReleaseArtifact, isReleaseArtifact, isUpdateMetadataArtifact };
 
-export type ElectronPackageBuildOptions = {
+type ElectronPackageBuildOptions = {
   arch: ElectronReleaseArch;
   electronPackageDirectory: string;
   outputDirectory: string | undefined;
@@ -211,7 +211,7 @@ const readReleaseDirectoryEntriesEffect = (
       }),
   });
 
-export const collectReleaseArtifactsEffect = ({
+const collectReleaseArtifactsEffect = ({
   outputDirectory,
   platform,
   releaseDirectory,
@@ -342,7 +342,7 @@ const runPackageCommandEffect = ({
       }),
   });
 
-export const buildElectronPackageEffect = ({
+const buildElectronPackageEffect = ({
   arch,
   electronPackageDirectory,
   outputDirectory,

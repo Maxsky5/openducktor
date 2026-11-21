@@ -3,7 +3,6 @@ import {
   type RuntimeKind,
   type SettingsSnapshot,
 } from "@openducktor/contracts";
-import { prepareGlobalGitSettingsForSave } from "./settings-save/global-git-settings";
 import type { DirtySections } from "./use-settings-modal-dirty-state";
 
 const DIRTY_SECTION_KEYS = [
@@ -23,22 +22,6 @@ const DIRTY_SECTION_KEYS = [
 
 export const hasAnyDirtySections = (dirtySections: DirtySections): boolean =>
   DIRTY_SECTION_KEYS.some((section) => Boolean(dirtySections[section]));
-
-export const isGlobalGitOnlySave = (dirtySections: DirtySections): boolean =>
-  dirtySections.globalGit &&
-  DIRTY_SECTION_KEYS.every((section) => section === "globalGit" || !dirtySections[section]);
-
-export const hasSameSaveReadyGlobalGitConfig = (
-  loadedSnapshot: SettingsSnapshot | null,
-  saveReadyGit: SettingsSnapshot["git"],
-): boolean => {
-  if (loadedSnapshot === null) return false;
-  const loadedGit = prepareGlobalGitSettingsForSave(loadedSnapshot.git);
-  return (
-    loadedGit.defaultMergeMethod === saveReadyGit.defaultMergeMethod &&
-    loadedGit.removeWorktreeOnClose === saveReadyGit.removeWorktreeOnClose
-  );
-};
 
 export const buildPromptValidationSaveError = (totalErrorCount: number): string => {
   const suffix = totalErrorCount > 1 ? "s" : "";

@@ -18,7 +18,7 @@ import type {
 } from "../workspaces/workspace-settings-service";
 import type { GitProviderResolver } from "./git-provider-resolver";
 
-export type GitProviderServiceError =
+type GitProviderServiceError =
   | GitProviderRepositoryError
   | GitProviderResolutionError
   | HostError

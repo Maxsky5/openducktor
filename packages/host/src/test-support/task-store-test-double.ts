@@ -32,7 +32,7 @@ const getTaskFromList =
       }),
     );
 
-export type ResolvedTestTaskTransition = Omit<AtomicTaskTransition<never>, "decide"> & {
+type ResolvedTestTaskTransition = Omit<AtomicTaskTransition<never>, "decide"> & {
   status: string;
   cause?: import("@openducktor/workflows").TransitionCause;
 };

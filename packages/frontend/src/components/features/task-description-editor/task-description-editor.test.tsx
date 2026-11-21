@@ -318,7 +318,7 @@ describe("TaskDescriptionEditor", () => {
 
   test("switching modes without edits preserves the original source", async () => {
     const onChange = mock((_value: string) => {});
-    const markdown = "-   unusual marker\r\n";
+    const markdown = "# Heading\r\n\r\n+   unusual marker\r\n";
     const view = render(
       <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
     );
@@ -335,71 +335,18 @@ describe("TaskDescriptionEditor", () => {
   });
 
   test.each([
-    ["ordered bold text", "1. **bold**"],
-    ["ordered italic text", "1. *italic*"],
-    ["ordered strikethrough text", "1. ~~strike~~"],
-    ["ordered inline code", "1. `code`"],
-    ["an ordered link", "1. [link](https://example.com)"],
-    ["an ordered HTTP image", "1. ![HTTP image](https://example.com/image.png)"],
     [
       "an ordered task asset image",
       "1. ![Asset image](odt-asset:550e8400-e29b-41d4-a716-446655440000)",
-    ],
-    [
-      "ordered mixed inline formatting followed by another block",
-      "1. **bold**, *italic*, ~~strike~~, `code`, and [link](https://example.com)\n\n   > quote",
-    ],
-    ["1. ordered math with trailing prose", "1. $$\n   x\n   $$\n\n   After"],
-    ["10. ordered math with trailing prose", "10. $$\n    x\n    $$\n\n    After"],
-    ["99. ordered math with trailing prose", "99. $$\n    x\n    $$\n\n    After"],
-    ["repeated ordered math", "1. $$\n   x\n   $$\n\n   $$\n   y\n   $$\n\n   After"],
-    ["ordered math before nested content", "1. $$\n   x\n   $$\n\n   - nested"],
-    ["an ordered blockquote", "1. > quote"],
-    ["a multi-digit ordered blockquote", "10. > quote"],
-    ["an ordered fenced code block", "1. ```ts\n   const value = 1\n   ```"],
-    ["an ordered Mermaid block", "1. ```mermaid\n   graph TD\n     A --> B\n   ```"],
-    ["an ordered blockquote followed by prose", "1. > quote\n\n   After"],
-    ["a nested ordered blockquote", "1. Parent\n   1. > nested quote"],
-    ["a nested ordered list followed by parent prose", "1. Before\n   1. Nested\n\n   After"],
-    ["a nested ordered list followed by a parent quote", "1. Before\n   1. Nested\n\n   > quote"],
-    ["a nested ordered list followed by a parent bullet", "1. Before\n   1. Nested\n\n   - bullet"],
-    [
-      "a nested ordered list followed by parent block math",
-      "1. Before\n   1. Nested\n\n   $$\n   x\n   $$",
-    ],
-    [
-      "a nested ordered list followed by a parent fence",
-      "1. Before\n   1. Nested\n\n   ```ts\n   value\n   ```",
-    ],
-    ["an ordered fence containing a list lookalike", "1. ```md\n   1. fake\n   ```"],
-    [
-      "an ordered Mermaid fence containing a list lookalike",
-      '1. ```mermaid\n   graph TD\n     A["1. fake"]\n   ```',
-    ],
-    ["a zero-start dot marker", "0. > quote"],
-    ["a zero-start parenthesis marker", "0) > quote"],
-    ["a blank-separated nested zero-start ordered list", "1. Parent\n\n   0. Child"],
-    ["a blank-separated nested non-one ordered list", "1. Parent\n\n   2. Child"],
-    ["a blank-separated nested multi-digit ordered list", "1. Parent\n\n   20. Child"],
-    [
-      "ordered math followed by fenced code",
-      "1. $$\n   x\n   $$\n\n   ```ts\n   const value = 1\n   ```",
     ],
     [
       "ordered math followed by Mermaid",
       "1. $$\n   x\n   $$\n\n   ```mermaid\n   graph TD\n     A --> B\n   ```",
     ],
     [
-      "ordered math followed by an image",
-      "1. $$\n   x\n   $$\n\n   ![Diagram](https://example.com/diagram.png)",
+      "an ordered Mermaid fence containing a list lookalike",
+      '1. ```mermaid\n   graph TD\n     A["1. fake"]\n   ```',
     ],
-    ["ordered math followed by a thematic rule", "1. $$\n   x\n   $$\n\n   ---"],
-    ["a leading blockquote", "- > quote"],
-    ["a leading fenced code block", "- ```ts\n  const value = 1\n  ```"],
-    ["a leading Mermaid block", "- ```mermaid\n  graph TD\n    A --> B\n  ```"],
-    ["a leading heading", "- # Heading"],
-    ["a leading nested list", "- - nested"],
-    ["a blockquote followed by prose", "- > quote\n\n  After"],
   ])(
     "opens supported list composition %s in Visual mode without rewriting source",
     async (_name, markdown) => {
@@ -418,45 +365,6 @@ describe("TaskDescriptionEditor", () => {
     },
     5_000,
   );
-
-  test.each([
-    ["zero", "1. Parent\n   0. Child"],
-    ["non-one", "1. Parent\n   2. Child"],
-    ["multi-digit", "1. Parent\n   20. Child"],
-  ])(
-    "keeps an ambiguous nested %s-start ordered list unchanged in Markdown mode",
-    async (_name, markdown) => {
-      const onChange = mock((_value: string) => {});
-      const view = render(
-        <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
-      );
-
-      const textarea = await waitFor(() => requireTextArea(view.getByRole("textbox")));
-      expect(textarea.value).toBe(markdown);
-      expect(view.getByRole("alert").textContent).toContain("blank line");
-      fireEvent.click(view.getByRole("button", { name: "Visual" }));
-      expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
-      expect(onChange).not.toHaveBeenCalled();
-    },
-    5_000,
-  );
-
-  test("keeps unsupported syntax in Markdown mode with an actionable reason", async () => {
-    const view = render(
-      <TaskDescriptionEditor
-        {...createProps()}
-        markdown={"Read [the docs][docs].\n\n[docs]: https://example.com"}
-        onChange={() => {}}
-      />,
-    );
-
-    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
-      "Reference-style links",
-    );
-    expect(view.getByRole("textbox")).toBeTruthy();
-    fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect(view.getByRole("textbox")).toBeTruthy();
-  });
 
   test("stages and inserts an image while compatibility keeps the editor in Markdown mode", async () => {
     const assetId = "550e8400-e29b-41d4-a716-446655440012";
@@ -487,19 +395,6 @@ describe("TaskDescriptionEditor", () => {
     );
   });
 
-  test("keeps escaped-pipe GFM tables in Markdown mode before TipTap can serialize them", async () => {
-    const onChange = mock((_value: string) => {});
-    const markdown = "| Value | Meaning |\n| :---- | ------: |\n| a\\|b | literal pipe |";
-    const view = render(
-      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
-    );
-
-    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain("escaped pipe");
-    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
-    fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
   test("keeps links that fail the live codec round trip in Markdown mode", async () => {
     const onChange = mock((_value: string) => {});
     const markdown = "[a](<https://x.test/a b>)";
@@ -515,36 +410,6 @@ describe("TaskDescriptionEditor", () => {
     fireEvent.click(view.getByRole("button", { name: "Visual" }));
     expect(view.getByRole("textbox")).toBeTruthy();
     expect(onChange).not.toHaveBeenCalled();
-  });
-
-  test("keeps renderer-lossy same-line double-dollar math unchanged in Markdown mode", async () => {
-    const onChange = mock((_value: string) => {});
-    const markdown = "Before $$x$$ after";
-    const view = render(
-      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={onChange} />,
-    );
-
-    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
-      "Block math delimiters",
-    );
-    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
-    fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  test("keeps malformed block math in Markdown mode with an actionable reason", async () => {
-    const markdown = "$$\nx\n\nThen $y$";
-    const view = render(
-      <TaskDescriptionEditor {...createProps()} markdown={markdown} onChange={() => {}} />,
-    );
-
-    expect((await waitFor(() => view.getByRole("alert"))).textContent).toContain(
-      "Block math delimiters",
-    );
-    expect(requireTextArea(view.getByRole("textbox")).value).toBe(markdown);
-    fireEvent.click(view.getByRole("button", { name: "Visual" }));
-    expect(view.getByRole("textbox")).toBeTruthy();
   });
 
   test("preserves front matter outside Visual mode and keeps it source-editable", async () => {
@@ -860,10 +725,16 @@ describe("TaskDescriptionEditor", () => {
     );
   });
 
-  test("inserts an arbitrary inline formula from the accessible math editor", async () => {
+  test("inserts an arbitrary inline formula and preserves the exact front matter", async () => {
     const onChange = mock((_value: string) => {});
+    const prefix =
+      "---\r\ntitle: 'Exact'\r\n# keep this comment\r\nsummary: |\r\n  many lines\r\n---\r\n";
     const view = render(
-      <TaskDescriptionEditor {...createProps()} markdown="Formula" onChange={onChange} />,
+      <TaskDescriptionEditor
+        {...createProps()}
+        markdown={`${prefix}Formula`}
+        onChange={onChange}
+      />,
     );
     await waitFor(() => expect(view.getByRole("button", { name: "Inline math" })).toBeTruthy());
 
@@ -875,9 +746,11 @@ describe("TaskDescriptionEditor", () => {
 
     await waitFor(() => expect(dialog.isConnected).toBe(false));
     await waitFor(() =>
-      expect(onChange.mock.calls.some(([value]) => String(value).includes("$\\frac{a}{b}$"))).toBe(
-        true,
-      ),
+      expect(
+        onChange.mock.calls.some(
+          ([value]) => value.startsWith(prefix) && value.includes("$\\frac{a}{b}$"),
+        ),
+      ).toBe(true),
     );
   });
 

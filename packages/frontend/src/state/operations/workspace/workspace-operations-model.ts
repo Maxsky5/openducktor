@@ -14,7 +14,7 @@ export const BRANCH_PROBE_ERROR_TOAST_THROTTLE_MS = 120000;
 
 export type BranchProbeStage = "current_branch_probe" | "branch_refresh";
 
-export type BranchProbeErrorCode =
+type BranchProbeErrorCode =
   | "authorization_failed"
   | "git_command_failed"
   | "runtime_unavailable"
@@ -56,16 +56,6 @@ export const shouldProbeExternalBranchChange = ({
     !isSyncInFlight,
   );
 };
-
-export const hasBranchIdentityChanged = (
-  current: GitCurrentBranch,
-  lastKnownName: string | null,
-  lastKnownDetached: boolean | null,
-  lastKnownRevision: string | null,
-): boolean =>
-  (current.name ?? null) !== lastKnownName ||
-  current.detached !== lastKnownDetached ||
-  (current.revision ?? null) !== lastKnownRevision;
 
 export const shouldSkipBranchSwitch = (
   activeBranch: GitCurrentBranch | null,

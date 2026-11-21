@@ -6,7 +6,6 @@ import {
   normalizeTargetBranch,
   resolveTaskTargetBranchState,
   targetBranchFromSelection,
-  targetBranchRemote,
   targetBranchSelectionValue,
   targetBranchSelectionValueOrEmpty,
   taskTargetBranchValidationError,
@@ -40,9 +39,7 @@ describe("target-branch helpers", () => {
     const target = { remote: "upstream", branch: "release" };
     expect(canonicalTargetBranch(target)).toBe("upstream/release");
     expect(checkoutTargetBranch(target)).toBe("release");
-    expect(targetBranchRemote(target)).toBe("upstream");
     expect(canonicalTargetBranch({ branch: UPSTREAM_TARGET_BRANCH })).toBe(UPSTREAM_TARGET_BRANCH);
-    expect(targetBranchRemote({ branch: UPSTREAM_TARGET_BRANCH })).toBeNull();
   });
 
   test("has an empty selection value without a target", () => {

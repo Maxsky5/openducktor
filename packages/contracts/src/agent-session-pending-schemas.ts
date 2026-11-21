@@ -23,8 +23,6 @@ const agentSessionQuestionItemSchema = z
   })
   .strict();
 
-export type AgentTranscriptQuestionItem = z.infer<typeof agentSessionQuestionItemSchema>;
-
 export const agentSessionPendingQuestionRequestFields = {
   requestId: agentPendingRequestIdSchema,
   requestInstanceId: z.string().optional(),
@@ -39,7 +37,6 @@ export const projectApprovalGrantSchema = z.strictObject({
   projectDirectory: z.string().min(1),
   rules: z.array(z.strictObject({ action: z.string(), resource: z.string() })).optional(),
 });
-export type ProjectApprovalGrant = z.infer<typeof projectApprovalGrantSchema>;
 
 export const agentSessionPendingQuestionRequestSchema = z
   .object(agentSessionPendingQuestionRequestFields)

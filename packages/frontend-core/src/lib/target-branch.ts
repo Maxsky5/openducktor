@@ -96,14 +96,6 @@ export const targetBranchSelectionValue = (value: GitTargetBranch): string => {
 export const targetBranchSelectionValueOrEmpty = (value: GitTargetBranch | null): string =>
   value ? targetBranchSelectionValue(value) : "";
 
-export const targetBranchRemote = (value: GitTargetBranch): string | null => {
-  const normalized = normalizeTargetBranch(value);
-  if (normalized.branch === UPSTREAM_TARGET_BRANCH) {
-    return null;
-  }
-  return normalized.remote ?? null;
-};
-
 export const targetBranchFromSelection = (value: string): GitTargetBranch => {
   const trimmed = value.trim();
   if (!trimmed) {

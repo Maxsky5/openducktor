@@ -1,10 +1,14 @@
-import { describe, expect, spyOn, test } from "bun:test";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { Activity, type ReactElement } from "react";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { MediaPreviewDialog } from "./media-preview-dialog";
 
 enableReactActEnvironment();
+
+afterEach(() => {
+  jest.useRealTimers();
+});
 
 const baseProps = {
   onOpenChange: () => {},
@@ -58,8 +62,8 @@ describe("MediaPreviewDialog", () => {
     },
   );
 
-  test("waits for every preview to load or fail and keeps a fast loader for 500 ms", async () => {
-    const startedAt = performance.now();
+  test("waits for every preview to load or fail and keeps a fast loader for 500 ms", () => {
+    jest.useFakeTimers();
     const view = render(
       <MediaPreviewDialog
         {...baseProps}
@@ -78,8 +82,9 @@ describe("MediaPreviewDialog", () => {
       expect(view.queryAllByRole("img").length).toBe(0);
       fireEvent.error(second);
       expect(view.queryAllByRole("img").length).toBe(0);
-      await view.findByRole("img", { name: "First" });
-      expect(performance.now() - startedAt).toBeGreaterThanOrEqual(500);
+      act(() => jest.advanceTimersByTime(499));
+      expect(view.queryByRole("img", { name: "First" })).toBeNull();
+      act(() => jest.advanceTimersByTime(1));
       expect(view.getByRole("img", { name: "First" })).toBeDefined();
       expect(view.getByRole("alert").textContent).toBe("Preview unavailable.");
     } finally {
@@ -152,42 +157,40 @@ describe("MediaPreviewDialog", () => {
     },
   );
 
-  // Each case completes two 500 ms loading intervals.
-  test.each(["new node", "new source"])(
-    "waits for media again after a %s",
-    async (change) => {
-      const dialog = (open: boolean, src = "https://example.invalid/first.png") => (
-        <MediaPreviewDialog
-          {...baseProps}
-          open={open}
-          media={[{ id: "image", kind: "image", src, alt: "Current image" }]}
-        />
-      );
-      const view = render(dialog(true));
-      try {
-        const first = view.getByRole("dialog").querySelector("img");
-        if (!first) throw new Error("Expected a pending image.");
-        fireEvent.load(first);
-        await view.findByRole("img", { name: "Current image" });
-        if (change === "new node") {
-          view.rerender(dialog(false));
-          view.rerender(dialog(true));
-        } else {
-          view.rerender(dialog(true, "https://example.invalid/second.png"));
-        }
-        const current = view.getByRole("dialog").querySelector("img");
-        if (!current) throw new Error("Expected the current image.");
-        expect(current === first).toBe(change === "new source");
-        expect(view.getByRole("status")).toBeDefined();
-        expect(view.queryByRole("img")).toBeNull();
-        fireEvent.load(current);
-        await view.findByRole("img", { name: "Current image" });
-      } finally {
-        view.unmount();
+  test.each(["new node", "new source"])("waits for media again after a %s", (change) => {
+    jest.useFakeTimers();
+    const dialog = (open: boolean, src = "https://example.invalid/first.png") => (
+      <MediaPreviewDialog
+        {...baseProps}
+        open={open}
+        media={[{ id: "image", kind: "image", src, alt: "Current image" }]}
+      />
+    );
+    const view = render(dialog(true));
+    try {
+      const first = view.getByRole("dialog").querySelector("img");
+      if (!first) throw new Error("Expected a pending image.");
+      fireEvent.load(first);
+      act(() => jest.advanceTimersByTime(500));
+      expect(view.getByRole("img", { name: "Current image" })).toBeDefined();
+      if (change === "new node") {
+        view.rerender(dialog(false));
+        view.rerender(dialog(true));
+      } else {
+        view.rerender(dialog(true, "https://example.invalid/second.png"));
       }
-    },
-    2_000,
-  );
+      const current = view.getByRole("dialog").querySelector("img");
+      if (!current) throw new Error("Expected the current image.");
+      expect(current === first).toBe(change === "new source");
+      expect(view.getByRole("status")).toBeDefined();
+      expect(view.queryByRole("img")).toBeNull();
+      fireEvent.load(current);
+      act(() => jest.advanceTimersByTime(500));
+      expect(view.getByRole("img", { name: "Current image" })).toBeDefined();
+    } finally {
+      view.unmount();
+    }
+  });
 
   test("renders images and videos in order", () => {
     const view = render(

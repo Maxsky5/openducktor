@@ -10,11 +10,11 @@ import { createElement, type ReactElement, useLayoutEffect } from "react";
 import {
   createHookHarness as createSharedHookHarness,
   enableReactActEnvironment,
+  taskSelectionFixture,
 } from "../agent-studio-test-utils";
 import {
   toAgentStudioSessionlessRoleSelection,
   toAgentStudioSessionSelection,
-  toAgentStudioTaskSelection,
 } from "./agent-studio-selection-state";
 import { useAgentStudioSelectionState } from "./use-agent-studio-selection-state";
 import { useAgentStudioQuerySync } from "../query-sync/use-agent-studio-query-sync";
@@ -284,13 +284,13 @@ describe("useAgentStudioSelectionState", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.selectAgentStudioSelection(toAgentStudioTaskSelection("task-2"));
+      state.selectAgentStudioSelection(taskSelectionFixture("task-2"));
     });
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
     expect(scheduleQueryUpdate).not.toHaveBeenCalled();
     await harness.run(() => applyTransition?.());
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
     expect(scheduleQueryUpdate).toHaveBeenCalledWith({
       keepSessionless: false,
       task: "task-2",
@@ -320,7 +320,7 @@ describe("useAgentStudioSelectionState", () => {
       }),
     );
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
     expect(harness.getLatest().isRoutePending).toBe(true);
     await harness.run(() => applyTransition?.());
     expect(harness.getLatest().selection).toEqual({
@@ -355,7 +355,7 @@ describe("useAgentStudioSelectionState", () => {
       }),
     );
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
     await harness.run(() => cancelTransition?.());
     expect(scheduleQueryUpdate).toHaveBeenCalledWith({
       keepSessionless: false,
@@ -363,7 +363,7 @@ describe("useAgentStudioSelectionState", () => {
       session: undefined,
       agent: undefined,
     });
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
 
     await harness.unmount();
   });
@@ -380,7 +380,7 @@ describe("useAgentStudioSelectionState", () => {
     await harness.update(baseProps({ taskIdParam: "task-3", requestContextTransition }));
     await harness.run(() => firstApplyTransition?.());
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-3"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-3"));
     await harness.unmount();
   });
 
@@ -445,7 +445,7 @@ describe("useAgentStudioSelectionState", () => {
       state.selectAgentStudioSelection(toAgentStudioSessionSelection(session));
     });
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
     await harness.update(
       baseProps({
         sessionExternalIdParam: session.externalSessionId,
@@ -475,7 +475,7 @@ describe("useAgentStudioSelectionState", () => {
       state.selectAgentStudioSelection(toAgentStudioSessionSelection(session));
     });
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
     await harness.update(
       baseProps({
         sessionExternalIdParam: session.externalSessionId,
@@ -595,18 +595,18 @@ describe("useAgentStudioSelectionState", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.selectAgentStudioSelection(toAgentStudioTaskSelection("task-2"));
+      state.selectAgentStudioSelection(taskSelectionFixture("task-2"));
     });
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
 
     await harness.update(baseProps());
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
 
     await harness.update(baseProps({ taskIdParam: "task-2" }));
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-2"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-2"));
 
     await harness.unmount();
   });
@@ -616,7 +616,7 @@ describe("useAgentStudioSelectionState", () => {
 
     await harness.mount();
     await harness.run((state) => {
-      state.selectAgentStudioSelection(toAgentStudioTaskSelection("task-2"));
+      state.selectAgentStudioSelection(taskSelectionFixture("task-2"));
     });
 
     await harness.update(
@@ -655,7 +655,7 @@ describe("useAgentStudioSelectionState", () => {
       );
     });
 
-    expect(harness.getLatest().selection).toEqual(toAgentStudioTaskSelection("task-1"));
+    expect(harness.getLatest().selection).toEqual(taskSelectionFixture("task-1"));
 
     // The older request can reach the router before the fresh-role request.
     await harness.update(

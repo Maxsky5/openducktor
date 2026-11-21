@@ -3,7 +3,7 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
 
-export const getMarkdownMermaidSources = (markdown: string): string[] => {
+const getMarkdownMermaidSources = (markdown: string): string[] => {
   const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown);
   const sources = new Set<string>();
 

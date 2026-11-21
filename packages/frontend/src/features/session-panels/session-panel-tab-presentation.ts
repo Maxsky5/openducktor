@@ -23,15 +23,13 @@ export type PanelTabPresentation = {
   hasPrompts: boolean;
 };
 
-export const NEW_TAB_LABEL = "New tab";
-
 export const PANEL_TAB_BADGE_LABELS = {
   shared: "Shared",
   agent: "Agent",
 } satisfies Record<PanelTabBadge, string>;
 
 export const panelTabPresentation = (tab: ResolvedPanelTab): PanelTabPresentation => {
-  if (tab.kind === "new_tab") return plainPresentation(NEW_TAB_LABEL, LayoutGrid);
+  if (tab.kind === "new_tab") return plainPresentation("New tab", LayoutGrid);
   if (tab.kind === "terminal") {
     const label = terminalTabLabel(tab.terminal);
     return plainPresentation(

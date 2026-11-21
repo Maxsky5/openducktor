@@ -26,7 +26,7 @@ import { KanbanBoardLoadingShell } from "./pages/kanban/kanban-board-loading-she
 
 const NotFoundPage = lazy(loadNotFoundPage);
 
-export type AppRouterMode = "browser" | "hash";
+type AppRouterMode = "browser" | "hash";
 
 type AppProps = {
   routerMode?: AppRouterMode;

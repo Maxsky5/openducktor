@@ -7,7 +7,7 @@ const encodeSessionRefKeyPart = (value: string): string => encodeURIComponent(va
 
 const normalizeSessionRefPath = (value: string): string => trimTrailingPathSeparators(value.trim());
 
-export const agentSessionRuntimeStreamKey = ({
+const agentSessionRuntimeStreamKey = ({
   repoPath,
   runtimeKind,
 }: Pick<SessionRef, "repoPath" | "runtimeKind">): string =>

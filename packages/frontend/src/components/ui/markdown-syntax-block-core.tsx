@@ -8,7 +8,7 @@ export type MarkdownSyntaxBlockProps = {
   className?: string;
 };
 
-export type MarkdownSyntaxLanguageRegistrationResult =
+type MarkdownSyntaxLanguageRegistrationResult =
   | { status: "registered" }
   | { status: "unsupported" }
   | { status: "failed"; error: Error };

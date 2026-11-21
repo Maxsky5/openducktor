@@ -27,14 +27,12 @@ import {
   type StagedAttachmentIndex,
 } from "./local-attachment-index";
 
-export type LocalAttachmentServiceError =
-  | HostOperationErrorAggregate
-  | HostValidationErrorAggregate;
+type LocalAttachmentServiceError = HostOperationErrorAggregate | HostValidationErrorAggregate;
 
-export type StagedLocalAttachment = {
+type StagedLocalAttachment = {
   path: string;
 };
-export type ResolvedLocalAttachment = {
+type ResolvedLocalAttachment = {
   path: string;
 };
 export type LocalAttachmentService = {

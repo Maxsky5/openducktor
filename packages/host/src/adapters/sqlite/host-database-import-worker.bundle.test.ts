@@ -9,19 +9,21 @@ import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 import { sqliteMigrationCopyPlans } from "./sqlite-migration-assets";
 import { createLegacyTaskStore, insertLegacyTask } from "./sqlite-task-store-test-support";
 
-// Electron and the web runner ship the import worker as one unsplit bundle next to the migration
-// folders. In a split build, the migration code moves into a chunk folder and resolves its
-// migrations from there. This test builds the worker the same way and runs the bundle.
 const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
 let outputDirectory = "";
 
 beforeAll(async () => {
   outputDirectory = await mkdtemp(path.join(tmpdir(), "odt-import-worker-bundle-"));
   const result = await Bun.build({
-    entrypoints: [path.join(sourceDirectory, "host-database-import-worker.ts")],
+    // The worker and the host load migrations from the directory of their shared chunk.
+    entrypoints: [
+      path.join(sourceDirectory, "host-database-import-worker.ts"),
+      path.join(sourceDirectory, "sqlite-migration-assets.ts"),
+    ],
+    splitting: true,
     outdir: outputDirectory,
     target: "node",
-    naming: "[name].[ext]",
+    naming: { entry: "[name].[ext]", chunk: "[name]-[hash].[ext]" },
   });
   if (!result.success) throw new AggregateError(result.logs, "The import worker bundle failed.");
   for (const asset of sqliteMigrationCopyPlans(outputDirectory))

@@ -6,7 +6,7 @@ import type {
 import { type QueryClient, type QueryKey, queryOptions } from "@tanstack/react-query";
 import { normalizeWorkingDirectory } from "../lib/working-directory";
 
-export const SESSION_CONTEXT_STALE_TIME_MS = 0;
+const SESSION_CONTEXT_STALE_TIME_MS = 0;
 
 export const agentSessionContextQueryKeys = {
   all: ["agent-session-context"] as const,
@@ -36,7 +36,7 @@ type LoadAgentSessionContext = (
   input: AgentSessionLiveLoadContextInput,
 ) => Promise<AgentSessionContextUsage | null>;
 
-export const sessionContextQueryOptions = (
+const sessionContextQueryOptions = (
   input: AgentSessionLiveLoadContextInput,
   loadContext: LoadAgentSessionContext,
 ) =>

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { GithubCliStatus, GithubRepositoryDraft } from "./use-repository-git-section-model";
 
-export type GithubGitProviderFormModel = {
+type GithubGitProviderFormModel = {
   configuredProviderId: string | undefined;
   detectionMessage: string | null;
   githubHost: string;

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 type ActivityCountByKey = Record<string, number>;
 
-export type AsyncActivityHandle = {
+type AsyncActivityHandle = {
   add: (key: string) => void;
   finish: () => void;
 };

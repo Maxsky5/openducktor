@@ -30,10 +30,8 @@ export type {
   AgentOperationsContextValue,
   AgentSessionHistoryLoadContextValue,
   AgentSessionReadModelStateContextValue,
-  HostRuntimeEventListener,
   HostRuntimeEvents,
   HostRuntimeStatusContextValue,
-  HostRuntimeStreamHealth,
   RepoAgentDefaultInput,
   RepoSettingsInput,
 } from "@openducktor/frontend-core/types/session-slices";

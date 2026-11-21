@@ -47,7 +47,7 @@ import type {
   GitWorktreeStatusInput,
 } from "./git-service-inputs";
 
-export type GitServiceError =
+type GitServiceError =
   | GitPortError
   | HostDependencyErrorAggregate
   | HostOperationErrorAggregate

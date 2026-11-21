@@ -7,7 +7,7 @@ import {
 import { z } from "zod";
 import { remoteError } from "./transport";
 
-export const savedRemoteAuthorizationSchema = z.strictObject({
+const savedRemoteAuthorizationSchema = z.strictObject({
   version: z.literal(1),
   endpoint: remoteEndpointSchema,
   authorization: remoteAuthorizationSchema,

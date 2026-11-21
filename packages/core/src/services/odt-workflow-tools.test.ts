@@ -2,9 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ODT_BROWSER_TOOL_NAMES, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import {
   isOdtWorkflowMutationToolName,
-  isOdtWorkflowToolName,
   normalizeOdtWorkflowToolName,
-  resolveOdtWorkflowToolNameForAuthorization,
   toOdtWorkflowToolDisplayName,
 } from "./odt-workflow-tools";
 
@@ -47,21 +45,7 @@ describe("odt workflow tools", () => {
     ).toBeNull();
   });
 
-  test("detects workflow tool ids", () => {
-    expect(isOdtWorkflowToolName("odt_apply_workflow_event")).toBe(true);
-    expect(isOdtWorkflowToolName("openducktor_odt_apply_workflow_event")).toBe(false);
-    expect(isOdtWorkflowToolName("functions.openducktor_odt_apply_workflow_event")).toBe(false);
-    expect(
-      isOdtWorkflowToolName("openducktor_odt_apply_workflow_event", workflowToolAliasesByCanonical),
-    ).toBe(true);
-    expect(
-      isOdtWorkflowToolName(
-        "functions.openducktor_odt_apply_workflow_event",
-        workflowToolAliasesByCanonical,
-      ),
-    ).toBe(true);
-    expect(isOdtWorkflowToolName("customprefix_odt_apply_workflow_event")).toBe(false);
-    expect(isOdtWorkflowToolName("glob")).toBe(false);
+  test("classifies workflow mutation tools", () => {
     expect(isOdtWorkflowMutationToolName("odt_apply_workflow_event")).toBe(true);
     expect(isOdtWorkflowMutationToolName("odt_read_task")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_read_task_assets")).toBe(false);
@@ -74,39 +58,7 @@ describe("odt workflow tools", () => {
   test("keeps browser tools out of the workflow mutation set", () => {
     for (const toolName of ODT_BROWSER_TOOL_NAMES) {
       expect(isOdtWorkflowMutationToolName(toolName)).toBe(false);
-      expect(isOdtWorkflowToolName(toolName)).toBe(true);
     }
-  });
-
-  test("resolves trusted workflow tool ids for authorization with exact case-sensitive matching", () => {
-    expect(resolveOdtWorkflowToolNameForAuthorization("odt_set_task_artifact")).toBe(
-      "odt_set_task_artifact",
-    );
-    expect(
-      resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_task_artifact"),
-    ).toBeNull();
-    expect(
-      resolveOdtWorkflowToolNameForAuthorization(
-        "openducktor_odt_set_task_artifact",
-        workflowToolAliasesByCanonical,
-      ),
-    ).toBe("odt_set_task_artifact");
-    expect(
-      resolveOdtWorkflowToolNameForAuthorization(
-        "functions.openducktor_odt_set_task_artifact",
-        workflowToolAliasesByCanonical,
-      ),
-    ).toBe("odt_set_task_artifact");
-    expect(
-      resolveOdtWorkflowToolNameForAuthorization("openducktor_odt_set_task_artifact_extra"),
-    ).toBeNull();
-    expect(
-      resolveOdtWorkflowToolNameForAuthorization("OpenDucktor_ODT_SET_TASK_ARTIFACT"),
-    ).toBeNull();
-    expect(resolveOdtWorkflowToolNameForAuthorization("odt_SET_TASK_ARTIFACT")).toBeNull();
-    expect(
-      resolveOdtWorkflowToolNameForAuthorization("customprefix_odt_set_task_artifact"),
-    ).toBeNull();
   });
 
   test("formats tool display name from normalized workflow ids", () => {

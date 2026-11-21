@@ -18,7 +18,7 @@ export type ToolDiscoveryContext = {
   providedToolPaths: Partial<Record<ToolDiscoveryId, string>>;
 };
 
-export type ToolDiscoverySource =
+type ToolDiscoverySource =
   | {
       directories: (context: ToolDiscoveryContext) => (string | undefined)[];
       kind: "searchDirectories";

@@ -10,7 +10,6 @@ import type { AgentStudioQuickActionOption } from "@openducktor/frontend-core/se
 
 export type {
   AgentStudioQuickActionOption,
-  AgentStudioSessionQuickActionOption,
   AgentStudioTaskQuickAction,
   AgentStudioTaskQuickActionOption,
 } from "@openducktor/frontend-core/sessions/start/agent-studio-quick-actions";

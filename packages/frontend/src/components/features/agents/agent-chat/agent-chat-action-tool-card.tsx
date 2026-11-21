@@ -21,7 +21,7 @@ export type ActionToolSection = { label: string; text: string; tone?: "error" };
 type ShownActionToolSection = ActionToolSection & { open: boolean };
 
 /** The screenshots of an action. A card that reads them from the host loads them on request. */
-export type ActionToolScreenshots = {
+type ActionToolScreenshots = {
   count: number;
   /** Image sources, such as data URLs, or null until `load` reads them. */
   sources: readonly string[] | null;

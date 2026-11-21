@@ -135,16 +135,6 @@ const taskEventPolicyError = (
   );
 };
 
-/** Decides a named event for a command that reports a status denial as invalid input. */
-export const requireTaskEventInput = <Details extends object>(
-  subject: string,
-  workflow: TaskWorkflow,
-  eventId: string,
-  task: TaskFacts,
-  details: Details,
-): Effect.Effect<AdmittedTaskEvent, HostValidationError<Details>> =>
-  Effect.fromResult(decideTaskEventInput(subject, workflow, eventId, task, details));
-
 export const decideTaskEventInput = <Details extends object>(
   subject: string,
   workflow: TaskWorkflow,

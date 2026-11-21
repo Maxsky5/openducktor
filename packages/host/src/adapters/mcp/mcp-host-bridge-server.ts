@@ -35,7 +35,7 @@ import { bridgeErrorPayload, bridgeMessagePayload } from "./mcp-host-bridge-erro
 
 export { resolveMcpBridgeDiscoveryPath } from "./mcp-bridge-discovery-file";
 
-export type McpHostBridgeConnectionInput = {
+type McpHostBridgeConnectionInput = {
   workspaceId?: string;
   repoPath: string;
 };
@@ -50,7 +50,7 @@ export type McpHostBridgeServer = {
   close(): Effect.Effect<McpHostBridgeCloseResult, HostOperationErrorAggregate>;
 };
 
-export type McpHostBridgeCloseResult = {
+type McpHostBridgeCloseResult = {
   baseUrl: string | null;
   closed: boolean;
 };

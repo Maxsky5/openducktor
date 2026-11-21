@@ -14,7 +14,7 @@ const packageRoot = resolve(scriptDirectory, "..");
 const workspaceRoot = resolve(packageRoot, "../..");
 const outputPath = join(packageRoot, "dist", WEB_PACKAGE_MCP_ENTRYPOINT);
 
-export const buildWebMcpEntrypointEffect = (): Effect.Effect<void, WebDependencyError> =>
+const buildWebMcpEntrypointEffect = (): Effect.Effect<void, WebDependencyError> =>
   Effect.gen(function* () {
     const command = [
       "bun",
@@ -52,11 +52,8 @@ export const buildWebMcpEntrypointEffect = (): Effect.Effect<void, WebDependency
     });
   });
 
-export const buildWebMcpEntrypoint = (): Promise<void> =>
-  runWebBoundary(buildWebMcpEntrypointEffect());
-
 if (import.meta.main) {
-  await buildWebMcpEntrypoint().catch((cause: unknown) => {
+  await runWebBoundary(buildWebMcpEntrypointEffect()).catch((cause: unknown) => {
     console.error(errorMessage(cause));
     process.exit(1);
   });

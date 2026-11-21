@@ -17,7 +17,7 @@ export type TaskDescriptionAssetDraftFile = { name: string };
 
 type DraftAsset = { previewUrl: string; workspaceId: string; revokePreviewUrl(url: string): void };
 export type RetainedDescriptionAssets = Map<string, Map<string, DraftAsset>>;
-export type DescriptionAssetRetention = {
+type DescriptionAssetRetention = {
   drafts: RetainedDescriptionAssets;
   referencedAssetIds(draftKey: string): ReadonlySet<string>;
 };

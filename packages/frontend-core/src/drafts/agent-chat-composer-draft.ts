@@ -99,7 +99,7 @@ const hasMeaningfulContentBeforeSegment = (
   });
 };
 
-export type AgentChatComposerFocusTarget = {
+type AgentChatComposerFocusTarget = {
   segmentId: string;
   offset: number;
 };
@@ -307,7 +307,7 @@ const withDraftSegments = (
   segments,
 });
 
-export const updateTextSegmentInDraft = (
+const updateTextSegmentInDraft = (
   draft: AgentChatComposerDraft,
   segmentId: string,
   text: string,

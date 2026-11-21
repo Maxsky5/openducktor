@@ -24,10 +24,10 @@ export type MarkdownBlockContent = {
 };
 
 /** A block content, and the key of its input. Blocks with the same key share the content. */
-export type KeyedContent = { inputKey: string; content: MarkdownBlockContent };
+type KeyedContent = { inputKey: string; content: MarkdownBlockContent };
 
 /** A top-level block: its content, and the facts of its parse that its content does not hold. */
-export type DescribedBlock = KeyedContent & Pick<ParsedBlock, "start" | "openFenceCode">;
+type DescribedBlock = KeyedContent & Pick<ParsedBlock, "start" | "openFenceCode">;
 
 export type DescribedMarkdown = {
   markdown: string;

@@ -21,7 +21,7 @@ const recentPageSchema = z.object({
   title: z.string().max(BROWSER_TITLE_MAX_LENGTH).nullable(),
   favicon: z.string().max(FAVICON_MAX_LENGTH).nullable(),
 });
-export type BrowserRecentPage = z.infer<typeof recentPageSchema>;
+type BrowserRecentPage = z.infer<typeof recentPageSchema>;
 
 const recentPagesRecordSchema = z.object({
   version: z.literal(1),

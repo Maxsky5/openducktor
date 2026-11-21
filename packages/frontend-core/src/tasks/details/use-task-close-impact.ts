@@ -212,7 +212,7 @@ export const useRemoveWorktreeSettingsRead = (
  * The cleanup choice that a close starts with: the task value, else the global setting. Null while
  * a task without its own value waits for the global setting.
  */
-export const useDefaultRemoveWorktree = (
+const useDefaultRemoveWorktree = (
   taskRemoveWorktreeOnClose: TaskCard["removeWorktreeOnClose"],
 ): boolean | null => {
   const globalRemoveWorktreeOnClose = useGlobalRemoveWorktreeOnClose().data;

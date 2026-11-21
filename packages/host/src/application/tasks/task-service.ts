@@ -218,16 +218,16 @@ export type TaskService = {
     input: RepoPathInput,
   ): Effect.Effect<RepoPullRequestSyncResult, RepoPullRequestSyncDetailedError>;
 };
-export type TaskDeleteResult = {
+type TaskDeleteResult = {
   ok: boolean;
   changes: TaskChangeSet;
 };
-export type TaskResetResult = {
+type TaskResetResult = {
   task: TaskCard;
   removedArtifactIds: string[];
 };
 /** A committed workflow event and the artifacts that its host effects changed. */
-export type TaskEventResult = {
+type TaskEventResult = {
   task: TaskCard;
   artifactChanges: TaskArtifactChange[];
 };
@@ -276,7 +276,7 @@ export type AutoCloseFailure = { taskId: string; failure: TaskServiceError };
 export type RepoPullRequestSyncResult =
   | { ran: true; changedTaskIds: string[]; autoCloseFailures: AutoCloseFailure[] }
   | { ran: false; changedTaskIds: []; reason: RepoPullRequestSyncSkipReason; message: string };
-export type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
+type RepoPullRequestSyncDetailedError = TaskServiceError | TaskMutationProgressFailure;
 export type {
   CreateTaskServiceInput,
   TaskServiceUseCaseInput,

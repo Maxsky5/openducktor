@@ -101,7 +101,7 @@ export const withAssignment = (
 };
 
 /** A `when` choice equal to the default is removed, so the saved document lists only changes. */
-export const withWhenChoice = (
+const withWhenChoice = (
   preferences: ShortcutPreferences,
   command: ShortcutCommandDefinition,
   when: ShortcutWhen,

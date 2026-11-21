@@ -13,7 +13,7 @@ import type { TaskRecord } from "./task-repository-ports";
  * The workspace as the transaction of a status change read it. A status change needs `open`
  * access, so the workspace is open when the change commits.
  */
-export type CommittedWorkspaceState = {
+type CommittedWorkspaceState = {
   repoPath: string;
   workspaceName: string;
 };

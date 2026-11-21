@@ -63,7 +63,7 @@ export const sessionEntryRoleLabel = (entry: SessionNavigationEntry): string | n
 export const sessionEntryRuntimeLabel = (entry: SessionNavigationEntry): string | null =>
   entry.runtimeKind === null ? null : RUNTIME_DESCRIPTORS_BY_KIND[entry.runtimeKind].label;
 
-export const sessionEntryAttentionText = (entry: SessionNavigationEntry): string =>
+const sessionEntryAttentionText = (entry: SessionNavigationEntry): string =>
   entry.attention.map((reason) => ATTENTION_REASON_LABELS[reason]).join(", ");
 
 /** Live state for the floating card and accessible names. */

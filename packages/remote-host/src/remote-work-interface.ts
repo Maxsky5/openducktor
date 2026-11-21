@@ -572,7 +572,7 @@ export const createRemoteWorkInterface = (
   };
 };
 
-export const remoteJson = <const Payload>(
+const remoteJson = <const Payload>(
   payload: Payload,
   status = 200,
   headers: HeadersInit = {},
@@ -585,10 +585,7 @@ export const remoteJson = <const Payload>(
       ...headers,
     },
   });
-export const remoteFailureResponse = (
-  failure: RemoteFailure,
-  headers: HeadersInit = {},
-): Response => {
+const remoteFailureResponse = (failure: RemoteFailure, headers: HeadersInit = {}): Response => {
   let status = 409;
   if (failure.code === "protocol_mismatch") status = 426;
   else if (failure.code === "invalid_protocol") status = 400;

@@ -77,27 +77,6 @@ const findLastMessageIndexByRole = (
   return -1;
 };
 
-const updateMessageAtIndex = (
-  owner: SessionMessageOwner,
-  index: number,
-  updater: (message: AgentChatMessage) => AgentChatMessage,
-): SessionMessagesState => {
-  const previous = getSessionState(owner);
-  const existing = previous.items[index];
-  if (!existing) {
-    return previous;
-  }
-
-  const updated = updater(existing);
-  if (updated === existing || areMessagesShallowEqual(existing, updated)) {
-    return previous;
-  }
-
-  const nextMessages = previous.items.slice();
-  nextMessages[index] = updated;
-  return createDerivedState(previous, nextMessages);
-};
-
 const CODEX_SYNTHETIC_USER_MESSAGE_CONFIRMATION_WINDOW_MS = 10_000;
 
 const userMessageAttachments = (
@@ -218,14 +197,6 @@ export const getSessionMessages = (owner: SessionMessageOwner): readonly AgentCh
   return getMessageData(owner);
 };
 
-export const getSessionMessagesSlice = (
-  owner: SessionMessageOwner,
-  start: number,
-  end?: number,
-): AgentChatMessage[] => {
-  return getMessageData(owner).slice(start, end);
-};
-
 export const forEachSessionMessage = (
   owner: SessionMessageOwner,
   visitor: (message: AgentChatMessage, index: number) => void,
@@ -267,33 +238,12 @@ export const someSessionMessage = (
   return false;
 };
 
-export const everySessionMessage = (
-  owner: SessionMessageOwner,
-  predicate: (message: AgentChatMessage, index: number) => boolean,
-): boolean => {
-  const messages = getMessageData(owner);
-  for (let index = 0; index < messages.length; index += 1) {
-    const message = messages[index];
-    if (message && !predicate(message, index)) {
-      return false;
-    }
-  }
-  return true;
-};
-
 export const findSessionMessageById = (
   owner: SessionMessageOwner,
   messageId: string,
 ): AgentChatMessage | undefined => {
   const index = findMessageIndexById(owner, messageId);
   return index >= 0 ? getMessageData(owner)[index] : undefined;
-};
-
-export const findLastSessionMessage = (
-  owner: SessionMessageOwner,
-): AgentChatMessage | undefined => {
-  const messages = getMessageData(owner);
-  return messages.length > 0 ? messages[messages.length - 1] : undefined;
 };
 
 export const findLastSessionMessageByRole = (
@@ -303,12 +253,6 @@ export const findLastSessionMessageByRole = (
 ): AgentChatMessage | undefined => {
   const index = findLastMessageIndexByRole(owner, role, predicate);
   return index >= 0 ? getMessageData(owner)[index] : undefined;
-};
-
-export const findLastUserSessionMessage = (
-  owner: SessionMessageOwner,
-): AgentChatMessage | undefined => {
-  return findLastSessionMessageByRole(owner, "user");
 };
 
 export const findLastToolSessionMessage = (
@@ -354,14 +298,6 @@ export const removeSessionMessageById = (
   const nextMessages = previous.items.slice();
   nextMessages.splice(index, 1);
   return createDerivedState(previous, nextMessages);
-};
-
-export const updateLastSessionMessage = (
-  owner: SessionMessageOwner,
-  updater: (message: AgentChatMessage) => AgentChatMessage,
-): SessionMessagesState => {
-  const lastIndex = getSessionMessageCount(owner) - 1;
-  return lastIndex >= 0 ? updateMessageAtIndex(owner, lastIndex, updater) : getSessionState(owner);
 };
 
 export const updateSessionMessagesByRole = (

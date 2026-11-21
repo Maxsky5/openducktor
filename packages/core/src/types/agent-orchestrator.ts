@@ -41,8 +41,6 @@ import type {
   SubagentCatalog as ContractsSubagentCatalog,
   SubagentDescriptor as ContractsSubagentDescriptor,
   RepoRuntimeRef,
-  RuntimeCapabilities,
-  RuntimeDescriptor,
 } from "@openducktor/contracts";
 
 export type { RepoRuntimeRef, RuntimeKind } from "@openducktor/contracts";
@@ -81,8 +79,6 @@ export type AgentModelCatalog = ContractsAgentModelCatalog;
 export type AgentRuntimeCatalog = ContractsAgentRuntimeCatalog;
 export type AgentRuntimeCatalogSurface<Catalog> = ContractsAgentRuntimeCatalogSurface<Catalog>;
 
-export type AgentRuntimeCapabilities = RuntimeCapabilities;
-export type AgentRuntimeDefinition = RuntimeDescriptor;
 export type AgentSkillReference = ContractsSkillDescriptor;
 export type AgentSkillCatalog = ContractsSkillCatalog;
 export type AgentSlashCommand = ContractsSlashCommandDescriptor;
@@ -184,19 +180,6 @@ export type AgentApprovalMutation = "mutating" | "read_only" | "unknown";
 export type AgentPendingApprovalRequest = ContractsAgentTranscriptPendingApprovalRequest;
 
 export type AgentPendingQuestionRequest = ContractsAgentTranscriptPendingQuestionRequest;
-
-export type AgentRuntimePendingInput = {
-  approvals: AgentPendingApprovalRequest[];
-  questions: AgentPendingQuestionRequest[];
-};
-
-export type AgentSessionContext = RepoRuntimeRef & {
-  workingDirectory: string;
-  taskId: string;
-  role: AgentRole;
-  systemPrompt: string;
-  model?: AgentModelSelection;
-};
 
 export type AgentStreamPart = ContractsAgentTranscriptStreamPart;
 

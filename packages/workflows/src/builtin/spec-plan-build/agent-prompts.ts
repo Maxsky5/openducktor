@@ -1,5 +1,4 @@
 import {
-  PULL_REQUEST_LAUNCH_ID,
   WORKFLOW_PROMPT_IDS,
   type IssueType,
   type GitConflictOperation,
@@ -8,36 +7,12 @@ import {
 import {
   requirePullRequestTarget,
   type AgentPromptGitContext,
-  type BuiltAgentPrompt,
-  type OwnedPromptTemplate,
 } from "../../task-workflow/task-prompts";
 import type { PromptSettings } from "../../task-workflow/prompt-layers";
 import { GIT_CONFLICT_INSTRUCTIONS } from "./prompt-templates";
 import { specPlanBuildWorkflow } from "./workflow";
 import type { BuiltinRoleId } from "../roles/ids";
 import type { SpecPlanBuildPromptId } from "./ids";
-
-export type {
-  AgentPromptGitContext,
-  AgentPromptWarning,
-  BuiltAgentPrompt,
-  ResolvedAgentPromptTemplate,
-} from "../../task-workflow/task-prompts";
-export type { PromptSettings } from "../../task-workflow/prompt-layers";
-
-export type AgentPromptTaskContext = {
-  taskId: string;
-  title: string;
-  issueType: IssueType;
-  status: string;
-  description?: string;
-};
-
-export type BuildAgentPromptInput = {
-  role: BuiltinRoleId;
-  task: AgentPromptTaskContext;
-  settings: PromptSettings;
-};
 
 /** The prompt of the Spec, Plan, Build workflow that a launch sends into a running session. */
 export type AgentMessageTemplateId = "messages.build_git_conflict";
@@ -62,7 +37,7 @@ export type BuildAgentKickoffPromptInput = {
   settings: PromptSettings;
 };
 
-export type AgentKickoffPromptGitContext = {
+type AgentKickoffPromptGitContext = {
   targetBranch?: GitTargetBranch;
 };
 
@@ -75,36 +50,9 @@ export type GitConflictRequestContext = {
   conflictOutput: string | null;
 };
 
-export type BuildAgentMessagePromptInput = {
-  role: BuiltinRoleId;
-  templateId: AgentMessageTemplateId;
-  task: BuildAgentKickoffPromptInput["task"];
-  git?: AgentPromptGitContext;
-  settings: PromptSettings;
-};
-
 export type BuildReadOnlyPermissionRejectionMessageInput = {
   role: BuiltinRoleId;
   settings: PromptSettings;
-};
-
-const prompts = specPlanBuildWorkflow.prompts;
-
-/** The launch action of each kickoff and message template. Built-in templates have one each. */
-const launchActionByTemplate = new Map<string, string>([
-  ...specPlanBuildWorkflow.definition.steps.flatMap((step) =>
-    step.kind === "agent"
-      ? step.launchActions.map((launch) => [launch.template.id, launch.id] as const)
-      : [],
-  ),
-  [WORKFLOW_PROMPT_IDS.pullRequest, PULL_REQUEST_LAUNCH_ID],
-]);
-const launchActionOf = (templateId: string): string => {
-  const launchActionId = launchActionByTemplate.get(templateId);
-  if (launchActionId === undefined) {
-    throw new Error(`Unknown prompt template id "${templateId}".`);
-  }
-  return launchActionId;
 };
 
 const unavailable = (value: string | null) => value?.trim() || "Unavailable";
@@ -155,48 +103,9 @@ export const buildGitConflictAssistancePrompt = (input: {
 export const resolvePullRequestTarget = (targetBranch: GitTargetBranch | undefined): string =>
   requirePullRequestTarget(WORKFLOW_PROMPT_IDS.pullRequest, targetBranch);
 
-/** The prompts of the Spec, Plan, Build workflow and of the roles that it binds. */
-export const listSpecPlanBuildPromptTemplates = (): OwnedPromptTemplate[] =>
-  prompts.templates.map((definition) => ({ ...definition }));
-
-export const buildAgentSystemPromptBundle = (input: BuildAgentPromptInput): BuiltAgentPrompt =>
-  prompts.systemPrompt(input);
-
-export function buildAgentSystemPrompt(input: BuildAgentPromptInput): string {
-  return buildAgentSystemPromptBundle(input).prompt;
-}
-
-export const buildAgentKickoffPromptBundle = (
-  input: BuildAgentKickoffPromptInput,
-): BuiltAgentPrompt =>
-  prompts.kickoffPrompt({
-    launchActionId: launchActionOf(input.templateId),
-    role: input.role,
-    task: input.task,
-    humanFeedback: input.extraPlaceholders?.humanFeedback,
-    targetBranch: input.git?.targetBranch,
-    settings: input.settings,
-  });
-
-export const buildAgentKickoffPrompt = (input: BuildAgentKickoffPromptInput): string =>
-  buildAgentKickoffPromptBundle(input).prompt;
-
-export const buildAgentMessagePromptBundle = (
-  input: BuildAgentMessagePromptInput,
-): BuiltAgentPrompt =>
-  prompts.messagePrompt({
-    launchActionId: launchActionOf(input.templateId),
-    task: input.task,
-    git: input.git ?? {},
-    settings: input.settings,
-  });
-
-export const buildAgentMessagePrompt = (input: BuildAgentMessagePromptInput): string =>
-  buildAgentMessagePromptBundle(input).prompt;
-
 export const buildReadOnlyPermissionRejectionMessage = (
   input: BuildReadOnlyPermissionRejectionMessageInput,
-): string => prompts.readOnlyRejection(input);
+): string => specPlanBuildWorkflow.prompts.readOnlyRejection(input);
 
 const GIT_CONFLICT_OPERATION_LABELS = {
   rebase: "rebase",

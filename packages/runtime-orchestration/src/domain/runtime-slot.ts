@@ -28,7 +28,7 @@ export type SlotStatus = {
 };
 
 /** The private resources and lifecycle ownership of a slot. They are never published. */
-export type SlotResources = {
+type SlotResources = {
   /** The started resource. Its summary gives the published runtime ID and start time. */
   handle: RuntimeHandle | null;
   /** Cleanup of a partly started resource that the orchestrator still owns. */

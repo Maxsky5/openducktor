@@ -10,11 +10,9 @@ import type { AgentToolName } from "../types/agent-orchestrator";
 export const ODT_WORKFLOW_TOOL_NAMES =
   ODT_WORKFLOW_AGENT_TOOL_NAMES satisfies readonly AgentToolName[];
 
-export const ODT_WORKFLOW_READ_TOOL_NAMES =
-  ODT_TASK_READ_TOOL_NAMES satisfies readonly AgentToolName[];
 type WorkflowToolAliasesByCanonical = RuntimeDescriptor["workflowToolAliasesByCanonical"];
 
-const ODT_WORKFLOW_READ_TOOL_SET = new Set<AgentToolName>(ODT_WORKFLOW_READ_TOOL_NAMES);
+const ODT_WORKFLOW_READ_TOOL_SET = new Set<AgentToolName>(ODT_TASK_READ_TOOL_NAMES);
 
 /**
  * Tools that change task or workflow state. Browser tools act on web pages and never change
@@ -43,7 +41,7 @@ const resolveAliasedOdtWorkflowToolName = (
   return null;
 };
 
-const resolveOdtWorkflowToolName = (
+export const normalizeOdtWorkflowToolName = (
   toolId: string,
   workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
 ): AgentToolName | null => {
@@ -57,21 +55,6 @@ const resolveOdtWorkflowToolName = (
     resolveAliasedOdtWorkflowToolName(trimmedToolId, workflowToolAliasesByCanonical)
   );
 };
-
-export const normalizeOdtWorkflowToolName = (
-  toolName: string,
-  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
-): AgentToolName | null => resolveOdtWorkflowToolName(toolName, workflowToolAliasesByCanonical);
-
-export const resolveOdtWorkflowToolNameForAuthorization = (
-  toolId: string,
-  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
-): AgentToolName | null => resolveOdtWorkflowToolName(toolId, workflowToolAliasesByCanonical);
-
-export const isOdtWorkflowToolName = (
-  toolName: string,
-  workflowToolAliasesByCanonical?: WorkflowToolAliasesByCanonical,
-): boolean => normalizeOdtWorkflowToolName(toolName, workflowToolAliasesByCanonical) !== null;
 
 export const isOdtWorkflowMutationToolName = (
   toolName: string,

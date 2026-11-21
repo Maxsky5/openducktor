@@ -4,7 +4,7 @@ import type { TaskApprovalContextLoadResult } from "@openducktor/contracts";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { connectionHost } from "../connection/client-connection";
 
-export const taskApprovalQueryKeys = {
+const taskApprovalQueryKeys = {
   all: ["task-approval"] as const,
   context: (repoPath: WorkspaceRef, taskId: string) =>
     [...taskApprovalQueryKeys.all, "context", workspaceScopeValue(repoPath), taskId] as const,

@@ -58,7 +58,7 @@ export const readDevToolsUpgradeTab = (
   return browserTabIdSchema.safeParse(tabId).success ? tabId : null;
 };
 
-export const devToolsFrontendUrl = (port: number, secret: string, tabId: string): string =>
+const devToolsFrontendUrl = (port: number, secret: string, tabId: string): string =>
   `devtools://devtools/bundled/devtools_app.html?ws=${LOOPBACK_HOST}:${port}/${secret}/devtools/${tabId}`;
 
 const refuseUpgrade = (socket: Duplex, status: string): void => {

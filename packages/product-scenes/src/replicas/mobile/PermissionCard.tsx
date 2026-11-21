@@ -7,7 +7,7 @@ import { ReplyButton, type ReplyVariant, RequestCard, REQUEST_LABELS } from "./R
 import "./PermissionCard.css";
 
 /** A reply of the request: its outcome, its label, and its look. */
-export type PermissionReply = { outcome: string; label: string; variant: ReplyVariant };
+type PermissionReply = { outcome: string; label: string; variant: ReplyVariant };
 
 /** The fields of AgentApprovalRequest that the card shows. */
 export type PermissionRequest = {

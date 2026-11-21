@@ -1,5 +1,4 @@
 export {
-  type AgentPromptGitContext,
   BUILTIN_ROLES,
   BUILTIN_TASK_WORKFLOWS,
   type BuildAgentKickoffPromptInput,
@@ -14,11 +13,9 @@ export {
 } from "./builtin";
 export {
   createWorkflow,
-  WorkflowEvaluationError,
-  type CompiledWorkflowCondition,
   type Workflow,
+  WorkflowEvaluationError,
   type WorkflowEvaluationErrorCode,
-  type WorkflowPredicate,
 } from "./evaluate";
 export { recordBy } from "./record-by";
 export {
@@ -26,14 +23,10 @@ export {
   type TaskEventDecision,
   type TaskEventDenial,
   type TaskProjection,
-  type TaskStateNotification,
   type TaskWorkflow,
   type TaskWorkflowArtifact,
-  type TaskWorkflowAutomation,
   type TaskWorkflowLaunchAction,
-  type TaskWorkflowLaunchDefinition,
   type TaskWorkflowRole,
-  type TaskWorkflowState,
   type TransitionCause,
 } from "./task-workflow/task-workflow";
 export type { TaskFacts } from "./task-workflow/task-input";

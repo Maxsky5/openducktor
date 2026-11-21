@@ -34,17 +34,16 @@ import {
 type Definition = CompiledWorkflowDefinition;
 /** A catalog role as a workflow binds it: the role and what it may do in this workflow. */
 export type TaskWorkflowRole = CompiledAgentRoleDefinition & Definition["roles"][number];
-export type TaskWorkflowState = Definition["states"][number];
+type TaskWorkflowState = Definition["states"][number];
 export type TaskWorkflowArtifact = Definition["artifacts"][number];
 type AgentStep = Extract<Definition["steps"][number], { kind: "agent" }>;
-export type TaskWorkflowAction = Definition["actions"][number];
-export type TaskWorkflowAgentStep = AgentStep;
+type TaskWorkflowAction = Definition["actions"][number];
 type LaunchSurface = "studio" | "git_conflict";
 type StepDisplay = Pick<WorkflowStepDisplayRule, "completion" | "attention">;
 /** A view action that opens the latest session of its step role. */
-export type TaskWorkflowSessionView = { action: string; role: string; label: string };
+type TaskWorkflowSessionView = { action: string; role: string; label: string };
 /** A launch action as a workflow step or the core pull request launch declares it. */
-export type TaskWorkflowLaunchDefinition = AgentStep["launchActions"][number];
+type TaskWorkflowLaunchDefinition = AgentStep["launchActions"][number];
 export type TaskWorkflowLaunchAction = TaskWorkflowLaunchDefinition & { role: string };
 /**
  * An automation with its candidate roles and the start mode that Autopilot uses. Autopilot
@@ -52,13 +51,13 @@ export type TaskWorkflowLaunchAction = TaskWorkflowLaunchDefinition & { role: st
  * session. An automation of a workflow launch action has the one role of its step. An automation
  * of the core pull request launch has every pull request role of the workflow.
  */
-export type TaskWorkflowAutomation = Definition["automations"][number] & {
+type TaskWorkflowAutomation = Definition["automations"][number] & {
   roles: readonly string[];
   startMode: AgentSessionStartMode;
 };
 
 /** An agent event with the roles that may send it. An agent event has no host effects. */
-export type TaskWorkflowAgentEventDefinition = TaskWorkflowAgentEvent & {
+type TaskWorkflowAgentEventDefinition = TaskWorkflowAgentEvent & {
   readonly roles: readonly string[];
 };
 
@@ -87,7 +86,7 @@ export type TaskProjection = {
   readonly agentWorkflows: AgentWorkflows;
 };
 
-export type TaskStateNotification = {
+type TaskStateNotification = {
   kind: WorkflowNotificationKind;
   status: string;
   title: string;
@@ -169,7 +168,7 @@ export type TaskWorkflow = {
   readonly approvalAction: TaskWorkflowAction | undefined;
   /** Whether the approval action of the workflow is available for the task. */
   approvalAvailable(task: TaskFacts): boolean;
-  agentStep(roleId: string): TaskWorkflowAgentStep | undefined;
+  agentStep(roleId: string): AgentStep | undefined;
   /** The role whose session a view action with a step opens. */
   viewActionRole(actionId: string): string | undefined;
   readonly sessionViews: readonly TaskWorkflowSessionView[];
