@@ -31,6 +31,7 @@ import {
 import { useClientConnection } from "../../connection/client-connection-react";
 import type { HostClient } from "@openducktor/host-client";
 import type { CloseTaskOptions } from "../../types/task-close";
+import type { TaskCreateWorkspace } from "../../types/state-slices";
 
 type UseTaskMutationCommandsArgs = {
   activeRepoPath: string | null;
@@ -40,7 +41,12 @@ type UseTaskMutationCommandsArgs = {
 };
 
 export type TaskMutationCommands = {
-  createTask: (input: TaskCreateInput, assets?: TaskAssetDescriptionMutation) => Promise<void>;
+  /** Creates the task in `workspace`, which can be a workspace other than the active one. */
+  createTask: (
+    workspace: TaskCreateWorkspace,
+    input: TaskCreateInput,
+    assets?: TaskAssetDescriptionMutation,
+  ) => Promise<void>;
   updateTask: (
     taskId: string,
     patch: TaskUpdatePatch,
@@ -77,18 +83,20 @@ export const createTaskMutationCommands = ({
 }: CreateTaskMutationCommandsArgs): TaskMutationCommands => {
   const scopeFor = (repoPath: string) => requireWorkspaceRef(repoPath, activeWorkspaceId);
   const createTask = async (
+    { workspaceId, workspaceName, repoPath }: TaskCreateWorkspace,
     input: TaskCreateInput,
     assets?: TaskAssetDescriptionMutation,
   ): Promise<void> => {
-    requireActiveRepo(activeRepoPath);
     const title = toNormalizedTitle(input.title);
     if (!title) return;
 
     await runTaskMutation({
-      run: async (repoPath) => {
-        await hostPort.taskCreate(scopeFor(repoPath), { ...input, title }, assets);
+      run: async () => {
+        await hostPort.taskCreate({ workspaceId, repoPath }, { ...input, title }, assets);
       },
-      successTitle: "Task created",
+      // A task in another workspace does not show on the board, so the message names its workspace.
+      successTitle:
+        workspaceId === activeWorkspaceId ? "Task created" : `Task created in ${workspaceName}`,
       successDescription: title,
       failureTitle: "Failed to create task",
     });

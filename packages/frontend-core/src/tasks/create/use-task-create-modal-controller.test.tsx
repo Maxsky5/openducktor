@@ -1,171 +1,16 @@
-import { createWireTaskCardFixture } from "../../test-support/shared-test-fixtures";
-import type { ClientConnection } from "../../connection/client-connection";
-import { workflowQueryKeys } from "../../queries/workflows";
-import {
-  builtinCompiledCatalogFixture,
-  builtinWorkspaceWorkflowsFixture,
-} from "../../test-support/workflow-fixtures";
-import { type ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
 import type { HostClient } from "@openducktor/host-client";
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
-import { act, render } from "@testing-library/react";
-import type { ReactElement, ReactNode } from "react";
-import {
-  ActiveWorkspaceContext,
-  DocumentStateContext,
-  TasksStateContext,
-} from "../../app-state/app-state-contexts";
-import { ClientConnectionProvider } from "../../connection/client-connection-react";
-import { createFeedbackFake } from "../../test-support/feedback-fake";
+import { act } from "@testing-library/react";
 import { createTaskCardFixture } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
-import type { ActiveWorkspace } from "../../types/session-slices";
-import type { DocumentStateContextValue, TasksStateContextValue } from "../../types/state-slices";
+import type { TasksStateContextValue } from "../../types/state-slices";
 import {
-  type TaskCreateDestination,
-  useTaskCreateModalController,
-} from "./use-task-create-modal-controller";
-
-type TestImage = { name: string; type: string; size: number };
-
-const activeWorkspace: ActiveWorkspace = {
-  workspaceId: "workspace-1",
-  workspaceName: "Workspace",
-  repoPath: "/repo",
-};
-
-const createDocumentState = (
-  overrides: Partial<DocumentStateContextValue> = {},
-): DocumentStateContextValue => ({
-  loadDocument: async (_taskId, code) =>
-    code === "spec"
-      ? { markdown: "# Spec", updatedAt: "2026-07-25T10:00:00.000Z" }
-      : { markdown: "", updatedAt: null },
-  saveDocument: async () => ({ updatedAt: "2026-07-25T10:00:00.000Z" }),
-  ...overrides,
-});
-
-const createTasksState = (
-  updateTask: TasksStateContextValue["updateTask"],
-  createTask: TasksStateContextValue["createTask"] = async () => {},
-): TasksStateContextValue => ({
-  tasksAreCurrent: true,
-  isForegroundLoadingTasks: false,
-  isRefreshingTasksInBackground: false,
-  isLoadingTasks: false,
-  detectingPullRequestTaskIds: new Set<string>(),
-  linkingMergedPullRequestTaskId: null,
-  unlinkingPullRequestTaskIds: new Set<string>(),
-  pendingMergedPullRequest: null,
-  tasks: [],
-  refreshTasks: async () => {},
-  syncPullRequests: async () => {},
-  linkMergedPullRequest: async () => {},
-  cancelLinkMergedPullRequest: () => {},
-  unlinkPullRequest: async () => {},
-  createTask,
-  updateTask,
-  setTaskTargetBranch: async () => {},
-  deleteTask: async () => {},
-  closeTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId, status: "closed" }),
-  removeTaskWorktree: async () => {},
-  resetTaskImplementation: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
-  resetTask: async (taskId: string) => createWireTaskCardFixture({ id: taskId }),
-});
-
-const readFileBase64 = async (_file: TestImage): Promise<string> => "AQID";
-const createPreviewUrl = (file: TestImage): string => `preview:${file.name}`;
-const revokePreviewUrl = (_url: string): void => {};
-const collectAssetIds = (_markdown: string): Set<string> => new Set();
-
-const specSavedAt = (updatedAt: string): TaskCard["artifactSummary"] => ({
-  spec: { present: true, updatedAt },
-  plan: { present: false },
-  qaReport: { present: false },
-});
-
-type Controller = ReturnType<typeof useTaskCreateModalController<TestImage>>;
-
-type RenderOptions = {
-  task?: TaskCard | null;
-  updateTask?: TasksStateContextValue["updateTask"];
-  createTask?: TasksStateContextValue["createTask"];
-  destination?: TaskCreateDestination | null;
-  initialTitle?: string;
-  documentState?: DocumentStateContextValue;
-  client?: Partial<HostClient>;
-  connection?: ClientConnection;
-  collectAssetIds?: (markdown: string) => Set<string>;
-  revokePreviewUrl?: (url: string) => void;
-};
-
-const renderController = ({
-  task = null,
-  updateTask = async () => {},
-  createTask = async () => {},
-  destination = null,
-  initialTitle = "",
-  documentState = createDocumentState(),
-  client = {},
-  connection: providedConnection,
-  collectAssetIds: readAssetIds = collectAssetIds,
-  revokePreviewUrl: releasePreview = revokePreviewUrl,
-}: RenderOptions = {}) => {
-  let latest: Controller | null = null;
-  const feedback = createFeedbackFake();
-  const connection = providedConnection ?? createTestClientConnection({ feedback, client });
-  connection.queryClient.setQueryData(workflowQueryKeys.catalog, builtinCompiledCatalogFixture);
-  connection.queryClient.setQueryData(
-    workflowQueryKeys.workspace(activeWorkspace),
-    builtinWorkspaceWorkflowsFixture,
-  );
-
-  const Probe = ({ current }: { current: TaskCard | null }): null => {
-    latest = useTaskCreateModalController({
-      open: true,
-      onOpenChange: () => {},
-      tasks: current ? [current] : [],
-      task: current,
-      destination,
-      initialTitle,
-      readFileBase64,
-      createPreviewUrl,
-      revokePreviewUrl: releasePreview,
-      collectAssetIds: readAssetIds,
-    });
-    return null;
-  };
-
-  const providers = (children: ReactNode): ReactElement => (
-    <ClientConnectionProvider connection={connection}>
-      <ActiveWorkspaceContext.Provider value={{ activeWorkspace, setActiveWorkspace: () => {} }}>
-        <TasksStateContext.Provider value={createTasksState(updateTask, createTask)}>
-          <DocumentStateContext.Provider value={documentState}>
-            {children}
-          </DocumentStateContext.Provider>
-        </TasksStateContext.Provider>
-      </ActiveWorkspaceContext.Provider>
-    </ClientConnectionProvider>
-  );
-
-  const view = render(providers(<Probe current={task} />));
-  return {
-    feedback,
-    connection,
-    getController: (): Controller => {
-      if (!latest) {
-        throw new Error("Controller did not render.");
-      }
-      return latest;
-    },
-    replaceTask: (next: TaskCard): void => {
-      view.rerender(providers(<Probe current={next} />));
-    },
-    unmount: view.unmount,
-  };
-};
+  createDocumentState,
+  renderController,
+  specSavedAt,
+} from "./use-task-create-modal-controller.test-harness";
 
 describe("useTaskCreateModalController", () => {
   test.each(["create", "edit"])(
@@ -212,49 +57,6 @@ describe("useTaskCreateModalController", () => {
       await act(async () => {
         const controller = harness.getController();
         await Promise.all([controller.submit(), controller.submit()]);
-      });
-
-      expect(createTask).toHaveBeenCalledTimes(1);
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("creates a new task only in the workspace that was active when it opened", async () => {
-    const createTask = mock(async () => {});
-    const harness = renderController({
-      createTask,
-      destination: { workspaceId: "workspace-2", workspaceName: "Other workspace" },
-    });
-    try {
-      act(() => harness.getController().updateState({ title: "Draft" }));
-      expect(harness.getController().footerError).toBe(
-        "This task is for Other workspace. Open Other workspace again to save this task.",
-      );
-
-      await act(async () => {
-        await harness.getController().submit();
-      });
-
-      expect(createTask).not.toHaveBeenCalled();
-      expect(harness.getController().state.title).toBe("Draft");
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  test("creates a new task when its workspace is active", async () => {
-    const createTask = mock(async () => {});
-    const harness = renderController({
-      createTask,
-      destination: { workspaceId: "workspace-1", workspaceName: "Workspace" },
-    });
-    try {
-      act(() => harness.getController().updateState({ title: "Draft" }));
-      expect(harness.getController().footerError).toBeNull();
-
-      await act(async () => {
-        await harness.getController().submit();
       });
 
       expect(createTask).toHaveBeenCalledTimes(1);

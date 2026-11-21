@@ -2,7 +2,7 @@ import { unfilteredRepoTaskDataQueryOptions } from "@openducktor/frontend-core/q
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { TaskCreateDestination } from "@openducktor/frontend-core/tasks/create/use-task-create-modal-controller";
+import type { TaskCreateDestination } from "@openducktor/frontend-core/tasks/create/use-task-create-workspace";
 import type { ActiveWorkspace } from "@/types/state-slices";
 import type { EditTaskSection } from "@openducktor/frontend-core/tasks/create/task-composer-types";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
@@ -39,8 +39,8 @@ type TaskWorkflowComposer = {
 
 /**
  * The New task and Edit task form of the task workflow actions.
- * - New task keeps the workspace that was active when it opened. The form blocks a save in
- *   another workspace.
+ * - New task starts in the workspace that was active when it opened. The user can pick another
+ *   open workspace in the form.
  * - Edit task keeps its workspace and last saved task while local drafts remain open.
  * - Each opening has its own close handler, so an earlier save cannot close a later form.
  */

@@ -4,10 +4,17 @@ import type {
   TaskAssetDescriptionMutation,
   TaskCreateInput,
   TaskUpdatePatch,
+  WorkspaceRecord,
 } from "@openducktor/contracts";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 import type { CloseTaskOptions } from "./task-close";
 import type { TaskPullRequestOperations } from "./task-pull-request";
+
+/** The workspace that a new task goes to. Its name names it in the result message. */
+export type TaskCreateWorkspace = Pick<
+  WorkspaceRecord,
+  "workspaceId" | "workspaceName" | "repoPath"
+>;
 
 export type TasksStateContextValue = TaskPullRequestOperations & {
   tasksAreCurrent: boolean;
@@ -16,7 +23,12 @@ export type TasksStateContextValue = TaskPullRequestOperations & {
   isLoadingTasks: boolean;
   tasks: TaskCard[];
   refreshTasks: () => Promise<void>;
-  createTask: (input: TaskCreateInput, assets?: TaskAssetDescriptionMutation) => Promise<void>;
+  /** Creates the task in `workspace`, which can be a workspace other than the active one. */
+  createTask: (
+    workspace: TaskCreateWorkspace,
+    input: TaskCreateInput,
+    assets?: TaskAssetDescriptionMutation,
+  ) => Promise<void>;
   updateTask: (
     taskId: string,
     patch: TaskUpdatePatch,

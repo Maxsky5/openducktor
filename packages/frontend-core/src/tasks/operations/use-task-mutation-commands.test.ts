@@ -17,6 +17,8 @@ import {
 } from "./use-task-mutation-commands";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
+const SCOPE = { ...workspaceRefFixture("/repo"), workspaceName: "Workspace" };
+
 const createQueryClient = (): QueryClient => createTestClientConnection().queryClient;
 
 const createHostPort = (): TaskMutationCommandHostPort => ({
@@ -77,7 +79,7 @@ describe("createTaskMutationCommands", () => {
     }
   });
 
-  test("normalizes a nonblank title before creating the task", async () => {
+  test("creates the task in the given workspace with a normalized title", async () => {
     const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
     const taskCreate = mock(async () => createTaskCardFixture());
     const commands = createTaskMutationCommands({
@@ -89,14 +91,17 @@ describe("createTaskMutationCommands", () => {
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
-    await commands.createTask({
-      title: "  Ship the release  ",
-      issueType: "task",
-      priority: 2,
-    });
+    await commands.createTask(
+      { workspaceId: "workspace-2", workspaceName: "Other workspace", repoPath: "/other-repo" },
+      {
+        title: "  Ship the release  ",
+        issueType: "task",
+        priority: 2,
+      },
+    );
 
     expect(taskCreate).toHaveBeenCalledWith(
-      { workspaceId: "workspace-1", repoPath: "/repo" },
+      { workspaceId: "workspace-2", repoPath: "/other-repo" },
       {
         title: "Ship the release",
         issueType: "task",
@@ -105,6 +110,8 @@ describe("createTaskMutationCommands", () => {
       undefined,
     );
     expect(received).toHaveLength(1);
+    // The board shows the active workspace, so the message names the other workspace.
+    expect(received[0]?.successTitle).toBe("Task created in Other workspace");
   });
 
   test("does nothing for a blank title", async () => {
@@ -119,7 +126,7 @@ describe("createTaskMutationCommands", () => {
       taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
     });
 
-    await commands.createTask({
+    await commands.createTask(SCOPE, {
       title: " \n\t ",
       issueType: "task",
       priority: 2,
@@ -127,63 +134,6 @@ describe("createTaskMutationCommands", () => {
 
     expect(taskCreate).not.toHaveBeenCalled();
     expect(received).toEqual([]);
-  });
-
-  test("rejects task creation without an active repository before calling the host", async () => {
-    const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
-    const taskCreate = mock(async () => createTaskCardFixture());
-    const commands = createTaskMutationCommands({
-      activeRepoPath: null,
-      activeWorkspaceId: "workspace-1",
-      runTaskMutation: createRunTaskMutation(received),
-      hostPort: { ...createHostPort(), taskCreate },
-      queryClient: createQueryClient(),
-      taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
-    });
-
-    await expect(
-      commands.createTask({
-        title: "Create task",
-        issueType: "task",
-        priority: 2,
-      }),
-    ).rejects.toThrow("Select a workspace first.");
-
-    expect(taskCreate).not.toHaveBeenCalled();
-    expect(received).toEqual([]);
-  });
-
-  test("runs a task create once and reports its result", async () => {
-    const received: Parameters<TaskMutationRunner["runTaskMutation"]>[0][] = [];
-    const taskCreate = mock(async () => createTaskCardFixture());
-    const runTaskMutation: TaskMutationRunner["runTaskMutation"] = async (options) => {
-      received.push(options);
-      return options.run("/current-repo");
-    };
-    const commands = createTaskMutationCommands({
-      activeRepoPath: "/current-repo",
-      activeWorkspaceId: "workspace-1",
-      runTaskMutation,
-      hostPort: { ...createHostPort(), taskCreate },
-      queryClient: createQueryClient(),
-      taskChatDraftCleanup: { runMutation: (input) => input.mutation() },
-    });
-
-    await commands.createTask({
-      title: "Create task",
-      issueType: "task",
-      priority: 2,
-    });
-
-    expect(taskCreate).toHaveBeenCalledWith(
-      { workspaceId: "workspace-1", repoPath: "/current-repo" },
-      {
-        title: "Create task",
-        issueType: "task",
-        priority: 2,
-      },
-      undefined,
-    );
   });
 
   test("does not report success or refresh after a create host failure", async () => {
@@ -215,7 +165,7 @@ describe("createTaskMutationCommands", () => {
     });
 
     await expect(
-      commands.createTask({
+      commands.createTask(SCOPE, {
         title: "Create task",
         issueType: "task",
         priority: 2,
@@ -251,6 +201,7 @@ describe("createTaskMutationCommands", () => {
     };
 
     await commands.createTask(
+      SCOPE,
       {
         title: "Create task",
         issueType: "task",

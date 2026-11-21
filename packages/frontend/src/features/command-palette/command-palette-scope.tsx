@@ -1,20 +1,13 @@
 import type { WorkspaceRecord } from "@openducktor/contracts";
-import { Check, ChevronDown, Layers } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
-import { WorkspaceTile } from "@/components/layout/workspace-tile";
 import {
-  Command,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+  AllWorkspacesIcon,
+  WorkspacePickerList,
+  WorkspacePickerTrigger,
+} from "@/components/features/workspace-picker/workspace-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { KeyCaps } from "./command-palette-key-caps";
-
-const ALL_WORKSPACES_VALUE = "scope:all";
 
 export type CommandPaletteScopeProps = {
   workspaces: readonly WorkspaceRecord[];
@@ -61,7 +54,6 @@ export function CommandPaletteScope({
   onChange,
   onCloseAutoFocus,
 }: CommandPaletteScopeProps): ReactElement {
-  const label = workspace?.workspaceName ?? "All workspaces";
   return (
     // Modal: the palette rows behind the list get no pointer events. A hover there would move
     // focus out of the list and close it.
@@ -70,21 +62,16 @@ export function CommandPaletteScope({
         <Tooltip>
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
-              <button
-                type="button"
+              <WorkspacePickerTrigger
+                workspace={workspace}
+                label="Workspace filter"
+                placeholder="All workspaces"
+                emptyIcon={<AllWorkspacesIcon />}
+                variant="chip"
+                // The palette input keeps focus; the scope opens from a click or its shortcut.
                 tabIndex={-1}
-                aria-label={`Workspace filter: ${label}`}
-                className="flex h-7 max-w-48 shrink-0 items-center gap-1.5 rounded-md border border-border bg-muted/60 px-2 text-xs font-medium text-foreground hover:bg-muted"
                 onMouseDown={(event) => event.preventDefault()}
-              >
-                {workspace ? (
-                  <WorkspaceTile workspace={workspace} size="xs" className="size-4 shadow-none" />
-                ) : (
-                  <Layers className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                )}
-                <span className="truncate">{label}</span>
-                <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
-              </button>
+              />
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="flex items-center gap-2">
@@ -100,59 +87,13 @@ export function CommandPaletteScope({
         portalContainer={portalContainer}
         onCloseAutoFocus={onCloseAutoFocus}
       >
-        <Command loop label="Workspace filter">
-          <CommandInput placeholder="Filter workspaces…" autoFocus />
-          <CommandList className="max-h-72 p-1">
-            <CommandGroup>
-              <ScopeOption
-                value={ALL_WORKSPACES_VALUE}
-                label="All workspaces"
-                checked={workspace === null}
-                icon={<Layers className="size-4 text-muted-foreground" aria-hidden="true" />}
-                onSelect={() => onChange(null)}
-              />
-              {workspaces.map((choice) => (
-                <ScopeOption
-                  key={choice.workspaceId}
-                  value={`scope:${choice.workspaceId}`}
-                  label={choice.workspaceName}
-                  checked={workspace?.workspaceId === choice.workspaceId}
-                  icon={<WorkspaceTile workspace={choice} size="xs" className="shadow-none" />}
-                  onSelect={() => onChange(choice.workspaceId)}
-                />
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
+        <WorkspacePickerList
+          workspaces={workspaces}
+          value={workspace?.workspaceId ?? null}
+          allowAll
+          onSelect={onChange}
+        />
       </PopoverContent>
     </Popover>
-  );
-}
-
-function ScopeOption({
-  value,
-  label,
-  checked,
-  icon,
-  onSelect,
-}: {
-  value: string;
-  label: string;
-  checked: boolean;
-  icon: ReactElement;
-  onSelect: () => void;
-}): ReactElement {
-  return (
-    <CommandItem value={value} keywords={[label]} onSelect={onSelect} className="gap-2.5">
-      <span className="flex size-5 shrink-0 items-center justify-center">{icon}</span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <Check
-        className={cn(
-          "size-4 shrink-0 text-selected-accent",
-          checked ? "opacity-100" : "opacity-0",
-        )}
-        aria-hidden="true"
-      />
-    </CommandItem>
   );
 }

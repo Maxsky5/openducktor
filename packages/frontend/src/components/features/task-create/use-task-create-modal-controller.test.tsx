@@ -13,6 +13,7 @@ import {
   ActiveWorkspaceContext,
   DocumentStateContext,
   TasksStateContext,
+  WorkspaceScopeContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { TaskWorkflowActionsContext } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { WorkflowArtifactControls } from "@/components/features/task-artifacts/artifact-controls";
@@ -161,15 +162,19 @@ describe("workflow artifact editor shortcuts", () => {
       const view = render(
         <WorkflowTestProvider>
           <WorkspaceStateContext.Provider value={workspaceState}>
-            <ActiveWorkspaceContext.Provider
-              value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
+            <WorkspaceScopeContext.Provider
+              value={{ workspaces: [workspace], activeWorkspace: workspace }}
             >
-              <TasksStateContext.Provider value={createTasksState(async () => {})}>
-                <DocumentStateContext.Provider value={documents}>
-                  <EditorFlow />
-                </DocumentStateContext.Provider>
-              </TasksStateContext.Provider>
-            </ActiveWorkspaceContext.Provider>
+              <ActiveWorkspaceContext.Provider
+                value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
+              >
+                <TasksStateContext.Provider value={createTasksState(async () => {})}>
+                  <DocumentStateContext.Provider value={documents}>
+                    <EditorFlow />
+                  </DocumentStateContext.Provider>
+                </TasksStateContext.Provider>
+              </ActiveWorkspaceContext.Provider>
+            </WorkspaceScopeContext.Provider>
           </WorkspaceStateContext.Provider>
         </WorkflowTestProvider>,
       );
@@ -228,17 +233,21 @@ describe("task workflow editor save ownership", () => {
       const tree = (workspace: typeof workspaceA, task: typeof taskA): ReactElement => (
         <WorkflowTestProvider>
           <WorkspaceStateContext.Provider value={{ ...workspaceState, activeWorkspace: workspace }}>
-            <ActiveWorkspaceContext.Provider
-              value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
+            <WorkspaceScopeContext.Provider
+              value={{ workspaces: [workspaceA, workspaceB], activeWorkspace: workspace }}
             >
-              <TasksStateContext.Provider
-                value={{ ...createTasksState(updateTask), tasks: [task] }}
+              <ActiveWorkspaceContext.Provider
+                value={{ activeWorkspace: workspace, setActiveWorkspace: () => {} }}
               >
-                <DocumentStateContext.Provider value={documentState}>
-                  <ComposerProbe workspace={workspace} task={task} />
-                </DocumentStateContext.Provider>
-              </TasksStateContext.Provider>
-            </ActiveWorkspaceContext.Provider>
+                <TasksStateContext.Provider
+                  value={{ ...createTasksState(updateTask), tasks: [task] }}
+                >
+                  <DocumentStateContext.Provider value={documentState}>
+                    <ComposerProbe workspace={workspace} task={task} />
+                  </DocumentStateContext.Provider>
+                </TasksStateContext.Provider>
+              </ActiveWorkspaceContext.Provider>
+            </WorkspaceScopeContext.Provider>
           </WorkspaceStateContext.Provider>
         </WorkflowTestProvider>
       );
