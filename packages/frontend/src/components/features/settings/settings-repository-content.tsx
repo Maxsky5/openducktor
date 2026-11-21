@@ -232,6 +232,8 @@ export function SettingsRepositoryContent({
         workspaceId: workspace.workspaceId,
         workspaceName: `${workspace.workspaceName} (unavailable draft)`,
         repoPath: workspace.repoPath,
+        abbreviation: workspace.abbreviation ?? null,
+        tileColor: workspace.tileColor ?? null,
       }));
     return [...controller.workspaces, ...unavailableDrafts];
   }, [controller.workspaces, snapshotDraft?.workspaces]);

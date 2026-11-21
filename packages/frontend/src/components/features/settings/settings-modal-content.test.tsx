@@ -210,7 +210,9 @@ describe("settings modal content", () => {
     try {
       await act(async () => {
         fireEvent.click(
-          screen.getByRole("button", { name: "Removed repository (unavailable draft)" }),
+          screen.getByRole("button", {
+            name: "Repository: Removed repository (unavailable draft)",
+          }),
         );
       });
       await act(async () => {
@@ -218,7 +220,7 @@ describe("settings modal content", () => {
       });
       expect(screen.queryByRole("alert")).toBeNull();
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Live repository" }));
+        fireEvent.click(screen.getByRole("button", { name: "Repository: Live repository" }));
       });
       await act(async () => {
         fireEvent.click(

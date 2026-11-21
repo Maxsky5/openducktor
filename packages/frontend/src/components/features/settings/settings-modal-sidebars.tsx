@@ -1,7 +1,7 @@
 import { plural } from "@openducktor/frontend-core/lib/plural";
 import { useId, type ReactElement } from "react";
-import { RepositorySelector } from "@/components/features/repository/repository-selector";
-import type { RepositorySelectorWorkspace } from "@/components/features/repository/repository-selector-model";
+import { WorkspacePicker } from "@/components/features/workspace-picker/workspace-picker";
+import type { WorkspacePickerWorkspace } from "@/components/features/workspace-picker/workspace-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { RepositorySectionId, SettingsSectionId } from "./settings-modal-constants";
@@ -93,7 +93,7 @@ export function SettingsSidebar({
 }
 
 type RepositorySidebarProps = {
-  workspaces: RepositorySelectorWorkspace[];
+  workspaces: WorkspacePickerWorkspace[];
   selectedWorkspaceId: string | null;
   selectedRepositorySection: RepositorySectionId;
   disabled: boolean;
@@ -128,11 +128,12 @@ export function RepositorySidebar({
     <aside className="flex min-h-0 flex-col gap-3 border-b border-border bg-muted p-3 lg:overflow-y-auto lg:border-b-0 lg:border-r">
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">Repository</Label>
-        <RepositorySelector
+        <WorkspacePicker
           workspaces={workspaces}
-          value={selectedWorkspaceId ?? ""}
+          value={selectedWorkspaceId}
+          label="Repository"
           placeholder={workspaces.length > 0 ? "Select repository" : "No repository configured"}
-          searchPlaceholder="Search repositories…"
+          variant="field"
           disabled={disabled || workspaces.length === 0}
           errorCountByWorkspaceId={repoErrorCountByWorkspaceId}
           onValueChange={onSelectWorkspaceId}
