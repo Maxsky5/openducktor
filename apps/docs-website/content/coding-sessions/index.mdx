@@ -184,6 +184,12 @@ Some harnesses also show these replies:
 
 To get fewer requests, set the [permissions of each harness](/harnesses/#permissions).
 
+### Allow a blocked call [#allow-a-blocked-call]
+
+Some calls never reach you. Claude Code auto mode, the Codex automatic review, a deny rule, or a read-only role can block a call at once. The transcript then shows the call with its source and reason, for example **Blocked by auto mode**. The Codex automatic review also shows its risk level.
+
+For a call that Claude Code auto mode or the Codex automatic review blocked, select <Action>Allow</Action>. The agent gets your consent for that one call and can try it again. The harness checks the new try again, so a rule can still block it. The Allow button stays only while the session runs.
+
 ## Review the work [#inspect-work]
 
 Open the **Diffs** tab. **Branch changes** compares the task branch with its target branch.

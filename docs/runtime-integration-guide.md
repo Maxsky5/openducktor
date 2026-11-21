@@ -433,6 +433,24 @@ Inherit native permissions and sandbox settings. Add session hooks through SDK o
 
 A persistent approval must show its native scope and rules. Use `Allow for project` for a project grant, and offer it only when the native request supplies rules to save. Show when rejection can cancel other pending requests.
 
+#### Automatic denials
+
+A policy can deny a tool call without a prompt. The adapter then sets `denial` on every emission of the tool part and keeps `status: "error"`. The client shows a blocked row with the source and the reason instead of a failed tool.
+
+| `denial.source` | Runtime signal | Allow |
+|---|---|---|
+| `auto_mode` | Claude `permission_denied` with `decision_reason_type: "classifier"`, or history `toolDenialKind: "automode-blocked"` | Main live session only |
+| `permission_settings` | Claude `permission_denied` from a rule, mode, or background agent; Claude history `permission-rule`; OpenCode `permission.rejected` with no `permission.asked` | No |
+| `auto_review` | Codex `item/autoApprovalReview/completed` with `status: "denied"` | Threads that accept direct input, except `requestPermissions` |
+| `auto_review_timeout` | Codex review with `status: "timedOut"` | No |
+| `read_only_role` | A host reject for a read-only role, marked by `ApprovalReplyOptions.denialSource` | No |
+
+A user reject in an approval prompt never sets `denial`. Claude Agent SDK 0.3.319 sends no live signal for a PreToolUse hook deny or a path-scoped file rule deny, so such a call shows as a plain failed tool until a history load. Do not guess a denial from error text.
+
+Only the Claude and Codex adapters add `deniedActions` entries to live snapshots. An `available` entry is the only signal that shows Allow. The adapter implements `allowDeniedAction`, moves the entry through `sending` to `allowed`, and drops all entries when the session stops taking input. Claude sends a hidden user consent for the exact call, as Claude Code does: a shell call names its command, and another call names its tool and input as compact JSON. Like Claude Code, Claude offers no Allow when that JSON is longer than 4096 characters. The consent keeps the human origin with `client_composed: true`, because the CLI tells the model that a synthetic message does not come from the user. History hides it by its exact text. Codex sends `thread/approveGuardianDeniedAction` and starts one follow-up turn when the thread is idle. The runtime checks the retry again, so Allow bypasses no rule.
+
+A Codex `execve`, terminal input, network, or permission request review gets its own row with the call ID `auto-review:<reviewId>`, because it does not deny a whole tool item, and Codex creates no tool item for a network or permission request. A Codex permission prompt that the host rejects for the read-only role also gets its own row, after Codex accepts the reply. Codex also declines the command of a denied `execve` review, so that command row shows the denial without Allow. Denial state lives in host memory only. The host keeps the last denied tool part of each live call and adds it to history reads, because Codex and OpenCode history does not keep denials.
+
 Show question cancellation only when the request has `canCancel: true`. The native adapter sets this flag only when it can cancel that request. Keep the flag through live snapshots and frontend conversion.
 
 Do not block Bash only because a role is read-only. Spec, Planner, and QA need it for search and checks.
