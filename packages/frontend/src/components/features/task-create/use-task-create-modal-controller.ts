@@ -2,12 +2,19 @@ import {
   type TaskCreateModalControllerOptions,
   useTaskCreateModalController as useSharedTaskCreateModalController,
 } from "@openducktor/frontend-core/tasks/create/use-task-create-modal-controller";
-import { collectTaskDescriptionAssetIds } from "@/components/features/task-description-editor/task-description-assets";
+import {
+  collectTaskDescriptionAssetIds,
+  removeTaskDescriptionAssetImages,
+} from "@/components/features/task-description-editor/task-description-assets";
 import { readFileAsBase64 } from "@/lib/read-file-as-base64";
 
 type DesktopTaskCreateModalControllerOptions = Omit<
   TaskCreateModalControllerOptions<File>,
-  "readFileBase64" | "createPreviewUrl" | "revokePreviewUrl" | "collectAssetIds"
+  | "readFileBase64"
+  | "createPreviewUrl"
+  | "revokePreviewUrl"
+  | "collectAssetIds"
+  | "removeAssetImages"
 >;
 
 // The shared controller revokes each preview URL through `revokePreviewUrl`.
@@ -23,4 +30,5 @@ export const useTaskCreateModalController = (options: DesktopTaskCreateModalCont
     createPreviewUrl,
     revokePreviewUrl,
     collectAssetIds: collectTaskDescriptionAssetIds,
+    removeAssetImages: removeTaskDescriptionAssetImages,
   });

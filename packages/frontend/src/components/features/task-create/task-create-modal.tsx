@@ -1,12 +1,17 @@
 import { ArrowLeft, Flag, Loader2, RotateCcw, SquarePlus, Save } from "lucide-react";
-import { lazy, type ReactElement, Suspense, useRef } from "react";
+import { lazy, type ReactElement, Suspense, useId, useRef } from "react";
 import { IssueTypeGrid } from "@/components/features/task-composer/issue-type-grid";
 import { TaskComposerStepper } from "@/components/features/task-composer/task-composer-stepper";
 import { TaskDetailsForm } from "@/components/features/task-composer/task-details-form";
 import { TaskEditSectionSwitcher } from "@/components/features/task-composer/task-edit-section-switcher";
 import { TaskCreateDiscardDialog } from "@/components/features/task-create/task-create-discard-dialog";
+import {
+  TaskCreateWorkspaceHint,
+  TaskCreateWorkspacePicker,
+} from "@/components/features/task-create/task-create-workspace-picker";
+import type { TaskCreateWorkspacePicker as TaskCreateWorkspacePickerModel } from "@openducktor/frontend-core/tasks/create/use-task-create-workspace";
 import { useTaskCreateModalController } from "@/components/features/task-create/use-task-create-modal-controller";
-import type { TaskCreateDestination } from "@openducktor/frontend-core/tasks/create/use-task-create-modal-controller";
+import type { TaskCreateDestination } from "@openducktor/frontend-core/tasks/create/use-task-create-workspace";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -283,10 +288,8 @@ function TaskCreateModalSectionContent({
   );
 }
 
-const createDescription = (destination: TaskCreateDestination | null): string =>
-  destination
-    ? `Create a task in ${destination.workspaceName}.`
-    : "Add a task and describe the work to do.";
+const createDescription = ({ target }: TaskCreateWorkspacePickerModel): string =>
+  target ? `Create a task in ${target.workspaceName}.` : "Choose a workspace for the task.";
 
 export function TaskCreateModal({
   open,
@@ -298,6 +301,7 @@ export function TaskCreateModal({
   initialEditSection = "details",
 }: TaskCreateModalProps): ReactElement {
   const openerRef = useRef<HTMLElement | null>(null);
+  const hintId = useId();
   const controller = useTaskCreateModalController({
     open,
     onOpenChange,
@@ -325,15 +329,29 @@ export function TaskCreateModal({
           onCloseAutoFocus={returnFocusOnClose(() => openerRef.current)}
         >
           <DialogHeader className="border-b border-border px-5 py-4 pr-14">
-            <DialogTitle className="flex items-center gap-2">
-              <SquarePlus className="size-4 text-muted-foreground" aria-hidden="true" />
-              {controller.mode === "create" ? "Create task" : "Edit task"}
-            </DialogTitle>
-            <DialogDescription>
-              {controller.mode === "create"
-                ? createDescription(controller.destination)
-                : `Edit the details and documents of ${task?.id ?? "this task"}.`}
-            </DialogDescription>
+            {/* The picker sits on the title line, outside the disabled form, so a workspace with a
+                broken workflow does not trap the user. */}
+            <div className="flex min-w-0 items-center gap-1">
+              <DialogTitle className="flex shrink-0 items-center gap-2">
+                <SquarePlus className="size-4 text-muted-foreground" aria-hidden="true" />
+                {controller.mode === "create" ? "Create task" : "Edit task"}
+              </DialogTitle>
+              {controller.workspacePicker ? (
+                <TaskCreateWorkspacePicker picker={controller.workspacePicker} hintId={hintId} />
+              ) : null}
+            </div>
+            {controller.workspacePicker ? (
+              <>
+                <TaskCreateWorkspaceHint picker={controller.workspacePicker} hintId={hintId} />
+                <DialogDescription className="sr-only">
+                  {createDescription(controller.workspacePicker)}
+                </DialogDescription>
+              </>
+            ) : (
+              <DialogDescription>
+                {`Edit the details and documents of ${task?.id ?? "this task"}.`}
+              </DialogDescription>
+            )}
           </DialogHeader>
 
           <fieldset

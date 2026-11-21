@@ -1,5 +1,9 @@
 import { TASK_ASSET_URI_PREFIX } from "@openducktor/contracts";
-import { collectTaskDescriptionAssetIdsFromTree } from "@openducktor/frontend-core/tasks/description/task-description-assets";
+import {
+  collectTaskDescriptionAssetIdsFromTree,
+  removeTaskDescriptionImagesFromTree,
+  type TaskDescriptionMarkdownNode,
+} from "@openducktor/frontend-core/tasks/description/task-description-assets";
 import { parseMarkdownDocument } from "@/rich-content/markdown/markdown-document";
 
 /** The image types that the host accepts for task images. HEIC photos become JPEG when picked. */
@@ -12,6 +16,11 @@ export const TASK_IMAGE_PICKER_TYPES = [
   "image/heif",
 ];
 
+const parseDescription = (markdown: string): TaskDescriptionMarkdownNode => ({
+  type: "root",
+  children: parseMarkdownDocument(markdown, null).blocks.map((block) => block.node),
+});
+
 /**
  * The task asset IDs that the images of a description use, with the shared asset rules. The
  * editor reads them after each change, so a description without an asset URI skips the full
@@ -19,11 +28,14 @@ export const TASK_IMAGE_PICKER_TYPES = [
  */
 export const collectDescriptionAssetIds = (markdown: string): Set<string> => {
   if (!markdown.includes(TASK_ASSET_URI_PREFIX)) return new Set();
-  return collectTaskDescriptionAssetIdsFromTree({
-    type: "root",
-    children: parseMarkdownDocument(markdown, null).blocks.map((block) => block.node),
-  });
+  return collectTaskDescriptionAssetIdsFromTree(parseDescription(markdown));
 };
+
+/** Removes the images of `assetIds` that `collectDescriptionAssetIds` finds. */
+export const removeDescriptionAssetImages = (
+  markdown: string,
+  assetIds: ReadonlySet<string>,
+): string => removeTaskDescriptionImagesFromTree(markdown, parseDescription(markdown), assetIds);
 
 /** The Markdown of a staged image. */
 export const taskImageMarkdown = (name: string, assetId: string): string =>

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { taskDescriptionImageError } from "@openducktor/frontend-core/tasks/operations/use-task-description-asset-operations";
+import { testTaskDescriptionImageRemoval } from "@openducktor/frontend-core/test-support/task-description-image-removal-cases";
 import {
   collectDescriptionAssetIds,
   insertAtCursor,
+  removeDescriptionAssetImages,
   taskImageMarkdown,
 } from "./description-assets";
 
@@ -47,4 +49,8 @@ describe("task image limits", () => {
       "Task images must be PNG, JPEG, WebP, or GIF files.",
     );
   });
+});
+
+describe("removeDescriptionAssetImages", () => {
+  testTaskDescriptionImageRemoval(removeDescriptionAssetImages, collectDescriptionAssetIds);
 });

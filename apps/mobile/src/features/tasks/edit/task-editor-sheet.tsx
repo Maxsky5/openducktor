@@ -50,6 +50,7 @@ import { pickedImagePreviewUri, releasePickedImagePreview } from "./description-
 import {
   collectDescriptionAssetIds,
   insertAtCursor,
+  removeDescriptionAssetImages,
   TASK_IMAGE_PICKER_TYPES,
   taskImageMarkdown,
 } from "./description-assets";
@@ -59,6 +60,7 @@ import { IssueTypeGrid, IssueTypeSummary } from "./issue-type-grid";
 import { LabelsField } from "./labels-field";
 import { MarkdownEditorField } from "./markdown-editor-field";
 import { taskEditorSaveDisabled } from "./task-editor-model";
+import { TaskWorkspaceField } from "./task-workspace-field";
 import { closeScreen } from "@/navigation/close-screen";
 
 const PRIORITY_CHOICES = PRIORITY_OPTIONS.map((option) => ({
@@ -252,6 +254,7 @@ export function TaskEditorSheet({
     createPreviewUrl: pickedImagePreviewUri,
     revokePreviewUrl: releasePickedImagePreview,
     collectAssetIds: collectDescriptionAssetIds,
+    removeAssetImages: removeDescriptionAssetImages,
   });
   const { mode, editSection, step, isFormDisabled, isBusy } = controller;
   const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
@@ -287,11 +290,17 @@ export function TaskEditorSheet({
         >
           <View style={styles.content}>
             {mode === "create" ? (
-              <CreateIntro
-                step={controller.step}
-                disabled={isFormDisabled}
-                setStep={controller.setStep}
-              />
+              <>
+                <CreateIntro
+                  step={controller.step}
+                  disabled={isFormDisabled}
+                  setStep={controller.setStep}
+                />
+                {/* The field stays usable while the workflow of the workspace fails to load. */}
+                {controller.workspacePicker ? (
+                  <TaskWorkspaceField picker={controller.workspacePicker} />
+                ) : null}
+              </>
             ) : (
               <EditIntro controller={controller} taskId={task?.id ?? null} />
             )}

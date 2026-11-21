@@ -1,7 +1,14 @@
 import type { ComposerState } from "./task-composer-types";
 import type { RetainedDescriptionAssets } from "../description/use-task-description-asset-draft";
 
-export type RetainedTaskFields = { composer: ComposerState; baseline: ComposerState };
+/** The workspace that the user picked for a New task draft. */
+export type RetainedTaskWorkspace = { workspaceId: string; workspaceName: string };
+export type RetainedTaskFields = {
+  composer: ComposerState;
+  baseline: ComposerState;
+  /** The picked workspace of a New task draft, or null for the workspace that it opened in. */
+  workspacePick: RetainedTaskWorkspace | null;
+};
 export type RetainedTaskDocument = {
   draftMarkdown: string;
   serverMarkdown: string;

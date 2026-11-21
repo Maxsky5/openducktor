@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { selectSubmittedTaskDescriptionAssets } from "@openducktor/frontend-core/tasks/description/task-description-assets";
-import { collectTaskDescriptionAssetIds } from "./task-description-assets";
+import { testTaskDescriptionImageRemoval } from "@openducktor/frontend-core/test-support/task-description-image-removal-cases";
+import {
+  collectTaskDescriptionAssetIds,
+  removeTaskDescriptionAssetImages,
+} from "./task-description-assets";
 
 describe("task description asset references", () => {
   test("collects distinct logical image references and ignores code and links", () => {
@@ -63,4 +67,8 @@ describe("task description asset references", () => {
       selectSubmittedTaskDescriptionAssets(referencedAssetIds, [referenced, unreferenced]),
     ).toEqual([referenced]);
   });
+});
+
+describe("removeTaskDescriptionAssetImages", () => {
+  testTaskDescriptionImageRemoval(removeTaskDescriptionAssetImages, collectTaskDescriptionAssetIds);
 });

@@ -2,10 +2,14 @@ import { specPlanBuildWorkflow } from "@openducktor/workflows";
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { ComposerState } from "@openducktor/frontend-core/tasks/create/task-composer-types";
-import { render, screen, waitFor } from "@testing-library/react";
+import type { TaskCreateWorkspacePicker } from "@openducktor/frontend-core/tasks/create/use-task-create-workspace";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, createElement } from "react";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
-import { createTaskCardFixture } from "@/test-utils/shared-test-fixtures";
+import {
+  createTaskCardFixture,
+  createWorkspaceRecordFixture,
+} from "@/test-utils/shared-test-fixtures";
 import * as taskDetailsFormModule from "@/components/features/task-composer/task-details-form";
 import * as taskCreateModalControllerModule from "./use-task-create-modal-controller";
 
@@ -27,6 +31,20 @@ const emptyDocument = {
   loaded: true,
   error: null,
 };
+
+const workspacePickerFixture = (
+  overrides: Partial<TaskCreateWorkspacePicker> = {},
+): TaskCreateWorkspacePicker => ({
+  target: null,
+  selected: null,
+  choices: [],
+  canChange: false,
+  isLocked: false,
+  blockedReason: null,
+  select: () => {},
+  removeImages: () => {},
+  ...overrides,
+});
 
 const controllerMock: ReturnType<
   typeof taskCreateModalControllerModule.useTaskCreateModalController
@@ -95,7 +113,7 @@ const controllerMock: ReturnType<
   updateState: (_patch: Partial<ComposerState>) => {},
   footerError: noFooterError(),
   footerErrorOutcomeUnknown: false,
-  destination: null,
+  workspacePicker: null,
   destinationError: noFooterError(),
   isEditingDocument: true,
   close: async () => {},
@@ -199,7 +217,7 @@ describe("TaskCreateModal", () => {
     });
   });
 
-  test("names the destination workspace and blocks Create while it is not active", async () => {
+  test("names the task workspace and blocks Create while that workspace is closed", async () => {
     controllerForTest = {
       ...controllerMock,
       mode: "create",
@@ -207,9 +225,11 @@ describe("TaskCreateModal", () => {
       editSection: "details",
       activeDocumentSection: null,
       isEditingDocument: false,
-      destination: { workspaceId: "alpha", workspaceName: "Alpha" },
-      destinationError: "This task is for Alpha. Open Alpha again to create it.",
-      footerError: "This task is for Alpha. Open Alpha again to create it.",
+      workspacePicker: workspacePickerFixture({
+        target: { workspaceId: "alpha", workspaceName: "Alpha" },
+      }),
+      destinationError: "Alpha is closed. Reopen it or pick another workspace to create this task.",
+      footerError: "Alpha is closed. Reopen it or pick another workspace to create this task.",
     };
     testSpies.push(
       spyOn(taskDetailsFormModule, "TaskDetailsForm").mockImplementation(() =>
@@ -221,8 +241,153 @@ describe("TaskCreateModal", () => {
     );
 
     expect(await screen.findByText("Create a task in Alpha.")).toBeTruthy();
-    expect(screen.getByText("This task is for Alpha. Open Alpha again to create it.")).toBeTruthy();
+    expect(
+      screen.getByText("Alpha is closed. Reopen it or pick another workspace to create this task."),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Create task" }).hasAttribute("disabled")).toBe(true);
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("tells apart workspaces with the same name by their repository", async () => {
+    const alphaWork = createWorkspaceRecordFixture({
+      workspaceId: "alpha-1",
+      workspaceName: "Alpha",
+      repoPath: "/work/alpha",
+    });
+    const alphaFork = createWorkspaceRecordFixture({
+      workspaceId: "alpha-2",
+      workspaceName: "Alpha",
+      repoPath: "/forks/alpha",
+    });
+    controllerForTest = {
+      ...controllerMock,
+      mode: "create",
+      taskId: null,
+      editSection: "details",
+      activeDocumentSection: null,
+      isEditingDocument: false,
+      workspaceId: "alpha-1",
+      workspacePicker: workspacePickerFixture({
+        target: { workspaceId: "alpha-1", workspaceName: "Alpha" },
+        selected: alphaWork,
+        choices: [alphaWork, alphaFork],
+        canChange: true,
+      }),
+    };
+    testSpies.push(
+      spyOn(taskDetailsFormModule, "TaskDetailsForm").mockImplementation(() =>
+        createElement("div", null, "Mock task details form"),
+      ),
+    );
+    const rendered = render(
+      createElement(TaskCreateModal, { open: true, onOpenChange: () => {}, tasks: [] }),
+    );
+
+    // The details step keeps the picker, so a closed workspace can be replaced from there. The
+    // title line shows no path; the menu shows the repository of each workspace.
+    const picker = await screen.findByRole("button", { name: "Workspace: Alpha" });
+    expect(screen.queryByText("/work/alpha")).toBeNull();
+    fireEvent.click(picker);
+    expect(await screen.findByRole("option", { name: /\/work\/alpha/ })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /\/forks\/alpha/ })).toBeTruthy();
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("lets the type step pick the workspace while the workflow cannot load", async () => {
+    const picked: string[] = [];
+    let removedImages = 0;
+    const alpha = createWorkspaceRecordFixture({ workspaceId: "alpha", workspaceName: "Alpha" });
+    const createStep = {
+      ...controllerMock,
+      mode: "create" as const,
+      taskId: null,
+      step: "type" as const,
+      isTypeStepVisible: true,
+      editSection: "details" as const,
+      activeDocumentSection: null,
+      isEditingDocument: false,
+      isFormDisabled: true,
+      workspaceId: "alpha",
+      workspacePicker: workspacePickerFixture({
+        target: { workspaceId: "alpha", workspaceName: "Alpha" },
+        selected: alpha,
+        choices: [
+          alpha,
+          createWorkspaceRecordFixture({ workspaceId: "beta", workspaceName: "Beta" }),
+        ],
+        canChange: true,
+        select: (workspaceId) => {
+          picked.push(workspaceId);
+        },
+      }),
+    };
+    controllerForTest = createStep;
+    const rendered = render(
+      createElement(TaskCreateModal, { open: true, onOpenChange: () => {}, tasks: [] }),
+    );
+
+    const picker = await screen.findByRole("button", { name: "Workspace: Alpha" });
+    expect(picker.textContent).toContain("Alpha");
+    expect(picker.closest("fieldset")).toBeNull();
+    fireEvent.click(picker);
+    fireEvent.click(await screen.findByRole("option", { name: /Beta/ }));
+    expect(picked).toEqual(["beta"]);
+
+    controllerForTest = {
+      ...createStep,
+      workspacePicker: {
+        ...createStep.workspacePicker,
+        canChange: false,
+        blockedReason: "Description images belong to this workspace.",
+        removeImages: () => {
+          removedImages += 1;
+        },
+      },
+    };
+    rendered.rerender(
+      createElement(TaskCreateModal, { open: true, onOpenChange: () => {}, tasks: [] }),
+    );
+    const blockedPicker = screen.getByRole("button", { name: "Workspace: Alpha" });
+    expect(blockedPicker.hasAttribute("disabled")).toBe(true);
+    const hint = document.getElementById(blockedPicker.getAttribute("aria-describedby") ?? "");
+    expect(hint?.textContent).toBe("Description images belong to this workspace.");
+    fireEvent.click(screen.getByRole("button", { name: "Remove images" }));
+    expect(removedImages).toBe(1);
+
+    await act(async () => {
+      rendered.unmount();
+    });
+  });
+
+  test("shows a single open workspace as text, without a menu", async () => {
+    const only = createWorkspaceRecordFixture({ workspaceId: "alpha", workspaceName: "Alpha" });
+    controllerForTest = {
+      ...controllerMock,
+      mode: "create",
+      taskId: null,
+      step: "type",
+      isTypeStepVisible: true,
+      editSection: "details",
+      activeDocumentSection: null,
+      isEditingDocument: false,
+      workspacePicker: workspacePickerFixture({
+        target: { workspaceId: "alpha", workspaceName: "Alpha" },
+        selected: only,
+        choices: [only],
+      }),
+    };
+    const rendered = render(
+      createElement(TaskCreateModal, { open: true, onOpenChange: () => {}, tasks: [] }),
+    );
+
+    expect(await screen.findByText("Alpha")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Workspace: Alpha" })).toBeNull();
 
     await act(async () => {
       rendered.unmount();

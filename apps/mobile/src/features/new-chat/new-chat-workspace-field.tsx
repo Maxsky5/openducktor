@@ -2,10 +2,7 @@ import type { WorkspaceRecord } from "@openducktor/contracts";
 import { useRouter } from "expo-router";
 import type { ReactElement } from "react";
 import { useMobileWorkspaces } from "@/composition/workspace-selection";
-import { WorkspaceTile } from "@/features/workspaces/workspace-tile";
-import { ActionMenu } from "@/ui/action-menu";
-import { FormField, SelectTrigger } from "@/ui/form-rows";
-import { haptics } from "@/ui/haptics";
+import { WorkspaceSelectField } from "@/features/workspaces/workspace-select-field";
 
 /**
  * The workspace of the new chat, at the top of the form. The sheet opens on the workspace that
@@ -22,43 +19,12 @@ export function NewChatWorkspaceField({
 }): ReactElement {
   const router = useRouter();
   const { workspaces } = useMobileWorkspaces();
-  const canChange = !disabled && workspaces.length > 1;
-  const trigger = (
-    <SelectTrigger
-      value={workspace.workspaceName}
-      detail={workspace.repoPath}
-      detailIsPath
-      leading={<WorkspaceTile workspace={workspace} size="sm" />}
-      placeholder="Select a workspace"
-      disabled={!canChange}
-      accessibilityLabel="Workspace"
-      accessibilityHint={canChange ? "Shows the open workspaces." : undefined}
-    />
-  );
   return (
-    <FormField label="Workspace">
-      {canChange ? (
-        <ActionMenu
-          title="Workspace"
-          fill
-          items={workspaces.map((entry) => ({
-            id: entry.workspaceId,
-            title: entry.workspaceName,
-            detail: entry.repoPath,
-            detailIsPath: true,
-            checked: entry.workspaceId === workspace.workspaceId,
-          }))}
-          onSelect={(workspaceId) => {
-            if (workspaceId === workspace.workspaceId) return;
-            haptics.selection();
-            router.setParams({ workspaceId });
-          }}
-        >
-          {trigger}
-        </ActionMenu>
-      ) : (
-        trigger
-      )}
-    </FormField>
+    <WorkspaceSelectField
+      workspace={workspace}
+      workspaces={workspaces}
+      canChange={!disabled && workspaces.length > 1}
+      onSelect={(workspaceId) => router.setParams({ workspaceId })}
+    />
   );
 }
