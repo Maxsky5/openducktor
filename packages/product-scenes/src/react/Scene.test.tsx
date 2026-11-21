@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { PageSceneProps } from "./PageScene";
+import { reduceMotion } from "../test-support/reduced-motion";
 import { testObserver } from "../test-support/test-observer";
 
 // The scene modules load GSAP and React DOM, so they load after the browser globals exist. The
@@ -229,17 +230,6 @@ function renderScene(props: PageSceneProps): RenderedScene {
   };
 }
 
-/** Makes the visitor ask for reduced motion. Returns the function that restores the setting. */
-function reduceMotion(): () => void {
-  const [, , , , , { MOTION_QUERY }] = modules;
-  const matchMedia = window.matchMedia;
-  window.matchMedia = (query) =>
-    matchMedia.call(window, query === MOTION_QUERY ? "(prefers-reduced-motion: reduce)" : query);
-  return () => {
-    window.matchMedia = matchMedia;
-  };
-}
-
 let Observer: ReturnType<typeof testObserver>;
 
 /** True while an observer watches `view`, such as the player that waits for the view. */
@@ -327,7 +317,7 @@ describe("PageScene", () => {
 
   test("with reduced motion, the tabs still select a chapter and nothing plays", async () => {
     const [, , , { gsap }] = modules;
-    const restoreMotion = reduceMotion();
+    const motion = reduceMotion(modules[5].MOTION_QUERY);
     const tweensBefore = gsap.globalTimeline.getChildren().length;
     const { container, unmount } = renderScene({ name: "workflow" });
     try {
@@ -344,7 +334,7 @@ describe("PageScene", () => {
       expect(gsap.globalTimeline.getChildren().length).toBe(tweensBefore);
     } finally {
       unmount();
-      restoreMotion();
+      motion.restore();
     }
   });
 
@@ -378,20 +368,20 @@ describe("PageScene", () => {
 
   test("with reduced motion, a loop scene keeps its static frame and loads nothing", async () => {
     const [, , , { gsap }] = modules;
-    const restoreMotion = reduceMotion();
+    const motion = reduceMotion(modules[5].MOTION_QUERY);
     const tweensBefore = gsap.globalTimeline.getChildren().length;
     const { container, unmount } = renderScene({ name: "hero", options: { version: null } });
     try {
       const root = container.querySelector<HTMLElement>('[data-scene="hero"]');
       if (!root) throw new Error("The hero view did not render.");
-      // The effects of the hydration run, and no observer waits for the view.
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      // The hydrated view waits for motion, and no observer waits for the view.
+      await waitFor(motion.waiting);
       expect(watched(root)).toBe(false);
       expect(root.hasAttribute("data-motion")).toBe(false);
       expect(gsap.globalTimeline.getChildren().length).toBe(tweensBefore);
     } finally {
       unmount();
-      restoreMotion();
+      motion.restore();
     }
   });
 });
