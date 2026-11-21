@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
+import { claudeDeniedActionConsent } from "./claude-agent-sdk-tool-denials";
 import { toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
 import {
   claudeHistoryMessagesFixture,
@@ -152,6 +153,35 @@ describe("claude-agent-sdk-history", () => {
       phase: "finish",
       reason: "stop",
     });
+  });
+
+  test("hides the Allow consent that Claude stores as a human prompt", () => {
+    const consent = claudeDeniedActionConsent({
+      toolName: "Bash",
+      input: { command: "git push -f" },
+    });
+    const history = toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "user",
+          uuid: "consent",
+          timestamp: "2026-06-26T11:03:14.000Z",
+          origin: { kind: "human" },
+          message: { role: "user", content: consent ?? "" },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "typed",
+          timestamp: "2026-06-26T11:03:15.000Z",
+          message: { role: "user", content: "Try again." },
+        }),
+      ] satisfies Parameters<typeof toClaudeHistoryMessages>[0],
+      () => "2026-06-26T12:00:00.000Z",
+    );
+
+    expect(history.filter((message) => message.role === "user").map(({ text }) => text)).toEqual([
+      "Try again.",
+    ]);
   });
 
   test("hydrates failed Claude results as session errors and starts the next human clock", () => {

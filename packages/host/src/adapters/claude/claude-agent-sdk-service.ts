@@ -1,3 +1,4 @@
+import type { ApprovalReplyOptions } from "../../ports/agent-session-live-adapter-port";
 import {
   createClaudeRuntimeTranscriptReader,
   type ManagedClaudeTranscriptReader,
@@ -42,7 +43,6 @@ import type {
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { toHostOperationError } from "../../effect/host-errors";
-import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { loadClaudeHistory, loadClaudeRuntimeCatalog } from "./claude-agent-sdk-catalog";
@@ -348,7 +348,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   sendUserMessage(
     input: SendAgentUserMessageInput,
     _runtimeId: string,
-    options?: AgentSessionSendOptions,
+    options?: Parameters<ClaudeAgentSdkService["sendUserMessage"]>[2],
   ) {
     return Effect.gen({ self: this }, function* () {
       const session = yield* fromSync("claudeRuntime.sendUserMessage", () => {
@@ -365,6 +365,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
           emit: this.emit.bind(this),
           onSent: options?.onSent,
           assertCurrent: options?.assertCurrent,
+          hidden: options?.hidden,
         }),
       );
     });
@@ -376,7 +377,10 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     );
   }
 
-  prepareApprovalReply(input: ReplyApprovalInput) {
+  prepareApprovalReply(
+    input: ReplyApprovalInput,
+    denialSource?: ApprovalReplyOptions["denialSource"],
+  ) {
     return fromPromise("claudeRuntime.prepareApprovalReply", async () => {
       const target = parseClaudeTranscriptTarget(input.externalSessionId);
       const session = requireClaudeSession(this.sessionStore, target.sessionId);
@@ -385,11 +389,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
         { ...input, externalSessionId: session.externalSessionId },
         "reply to approval",
       );
-      return prepareClaudeApprovalReply({
-        input,
-        now: this.now,
-        session,
-      });
+      return prepareClaudeApprovalReply({ denialSource, input, now: this.now, session });
     });
   }
 

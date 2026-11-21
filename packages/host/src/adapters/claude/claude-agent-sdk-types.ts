@@ -39,6 +39,7 @@ import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import type { ClaudeNativeActivityState } from "./claude-agent-sdk-activity";
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
 import type { ClaudeWorkspaceFileSearch } from "./claude-agent-sdk-file-search";
+import type { ClaudeToolDenialRecord } from "./claude-agent-sdk-tool-denials";
 
 export type ClaudeMcpBridgeConnectionResolver = (
   repoPath: string,
@@ -102,6 +103,8 @@ export type ClaudeAgentSdkEventEmitter = (
 
 export type PendingApproval = {
   event: Extract<AgentEvent, { type: "approval_required" }>;
+  /** The tool call that waits for the approval. */
+  toolUseId?: string;
   resolve: (result: PermissionResult) => void;
 };
 
@@ -111,6 +114,8 @@ export type PendingQuestion = {
 };
 
 export type ClaudeAcceptedUserMessage = {
+  /** A message that the user did not write, such as an Allow consent. It is never shown. */
+  hidden?: true;
   isManualCompaction?: true;
   messageId: string;
   model?: AgentModelSelection;
@@ -197,6 +202,8 @@ export type ClaudeSession = ClaudeBackgroundToolState &
     toolEndedAtMsByCallId: Map<string, number>;
     toolStartedAtMsByCallId: Map<string, number>;
     todosById: Map<string, AgentSessionTodoItem>;
+    /** The calls of this session and its subagents that a policy denied without asking. */
+    toolDenialsByCallId: Map<string, ClaudeToolDenialRecord>;
     /** Sent user messages that the CLI has not admitted yet, by message UUID. */
     pendingUserMessageAdmissions: Map<string, ClaudePendingUserMessageAdmission>;
     /** Steered messages that no turn has read yet, by message UUID. */

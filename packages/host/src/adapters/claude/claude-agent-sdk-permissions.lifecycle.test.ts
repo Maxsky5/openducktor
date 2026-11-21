@@ -1,6 +1,7 @@
 import { claudeTestRolePolicy } from "../../test-support/workflow-role-policy";
 import { describe, expect, spyOn, test } from "bun:test";
 import type { AgentEvent } from "@openducktor/core";
+import { prepareClaudeApprovalReply } from "./claude-agent-sdk-pending-input";
 import {
   createClaudeCanUseTool,
   createClaudePermissionTestSession as createSession,
@@ -292,5 +293,58 @@ describe("Claude permission request lifecycle", () => {
     });
     expect(events).toEqual([]);
     expect(session.pendingApprovals.size).toBe(0);
+    expect(session.toolDenialsByCallId.get("tool-use-1")).toEqual({
+      denial: {
+        source: "read_only_role",
+        reason: "Tool WebFetch is disabled for read-only OpenDucktor workflow roles.",
+      },
+    });
+  });
+
+  test("marks a host reject for the read-only role on the call, but not a user reject", async () => {
+    const session = createSession("build");
+    const canUseTool = createClaudeCanUseTool({
+      session,
+      rolePolicy: claudeTestRolePolicy(session),
+      now: () => "2026-06-25T12:00:00.000Z",
+      randomId: (() => {
+        let next = 0;
+        return () => `request-${++next}`;
+      })(),
+      emit: () => {},
+    });
+    const ask = (toolUseID: string) =>
+      canUseTool(
+        "Bash",
+        { command: "cat /etc/passwd" },
+        { signal: new AbortController().signal, toolUseID, requestId: `sdk-${toolUseID}` },
+      );
+    const reject = (requestId: string, denialSource?: "read_only_role") =>
+      prepareClaudeApprovalReply({
+        denialSource,
+        input: {
+          externalSessionId: session.externalSessionId,
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          runtimePolicy: { kind: "claude" },
+          workingDirectory: session.input.workingDirectory,
+          requestId,
+          outcome: "reject",
+          message: "Read-only roles cannot run this command.",
+        },
+        now: () => "2026-06-25T12:00:01.000Z",
+        session,
+      }).complete();
+
+    const roleRejected = ask("tool-use-1");
+    reject("request-1", "read_only_role");
+    const userRejected = ask("tool-use-2");
+    reject("request-2");
+    await Promise.all([roleRejected, userRejected]);
+
+    expect(session.toolDenialsByCallId.get("tool-use-1")).toEqual({
+      denial: { source: "read_only_role", reason: "Read-only roles cannot run this command." },
+    });
+    expect(session.toolDenialsByCallId.has("tool-use-2")).toBe(false);
   });
 });

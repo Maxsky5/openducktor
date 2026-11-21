@@ -48,6 +48,7 @@ const rootFields = new Set([
   "retracted_message_uuids",
   "toolUseResult",
   "tool_use_result",
+  "toolDenialKind",
   "error",
   "quotaLimits",
   "apiErrorParams",

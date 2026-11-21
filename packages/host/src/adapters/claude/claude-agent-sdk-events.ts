@@ -25,8 +25,8 @@ import {
   isClaudeSyntheticAssistantMessage,
 } from "./claude-agent-sdk-local-commands";
 import {
-  emitClaudePermissionDeniedToolPart,
   emitClaudeDeferredReplyForkPoint,
+  handleClaudePermissionDeniedMessage,
   handleClaudeResultMessage,
 } from "./claude-agent-sdk-result-events";
 import {
@@ -277,42 +277,7 @@ export const handleClaudeSdkMessage = ({
     return;
   }
   if (message.type === "system" && message.subtype === "permission_denied") {
-    let permissionSession = session;
-    if (message.agent_id) {
-      const subagentSession = findClaudeSubagentSessionByAgentId(session, message.agent_id);
-      if (!subagentSession) {
-        return;
-      }
-      permissionSession = subagentSession;
-    }
-    const input = permissionSession.toolInputsByCallId.get(message.tool_use_id);
-    const permissionMetadata: NonNullable<
-      Parameters<typeof emitClaudePermissionDeniedToolPart>[0]["permission"]["metadata"]
-    > = { source: "permission_denied" };
-    const permission: Parameters<typeof emitClaudePermissionDeniedToolPart>[0]["permission"] = {
-      toolName: message.tool_name,
-      toolUseId: message.tool_use_id,
-      message: message.message,
-      metadata: permissionMetadata,
-    };
-    if (input) {
-      permission.input = input;
-    }
-    if (message.agent_id) {
-      permissionMetadata.agentId = message.agent_id;
-    }
-    if (message.decision_reason_type) {
-      permissionMetadata.decisionReasonType = message.decision_reason_type;
-    }
-    if (message.decision_reason) {
-      permissionMetadata.decisionReason = message.decision_reason;
-    }
-    emitClaudePermissionDeniedToolPart({
-      emit,
-      session: permissionSession,
-      timestamp,
-      permission,
-    });
+    handleClaudePermissionDeniedMessage({ emit, message, session, timestamp });
   }
 };
 

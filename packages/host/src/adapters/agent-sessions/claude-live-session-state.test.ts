@@ -1,3 +1,4 @@
+import { claudeDeniedActionConsent } from "../claude/claude-agent-sdk-tool-denials";
 import { describe, expect, test } from "bun:test";
 import { agentSessionRefKey, type AgentEvent, type AgentSessionSummary } from "@openducktor/core";
 import { createSessionConditions } from "../../application/agent-sessions/agent-message-session-conditions";
@@ -43,6 +44,7 @@ const session: ClaudeSessionContext = {
   pendingQuestions: new Map(),
   pendingUserMessageAdmissions: new Map(),
   unreadSteeredUserMessages: new Map(),
+  toolDenialsByCallId: new Map(),
   pendingUserTurnCount: 0,
   queue: new AsyncInputQueue(),
   runtimeId: "runtime-1",
@@ -1111,5 +1113,105 @@ describe("Claude host live-session state", () => {
       expect(state.release()).toEqual([ref, otherRef]);
       expect(state.listSnapshots()).toEqual([]);
     });
+  });
+
+  const deniedToolPart = (
+    externalSessionId: string,
+    fields: { readonly error: string; readonly denial?: { source: "auto_mode"; reason: string } },
+  ): AgentEvent => ({
+    type: "assistant_part",
+    externalSessionId,
+    timestamp: "2026-11-21T10:00:00.000Z",
+    part: {
+      kind: "tool",
+      messageId: "message-1",
+      partId: "tool-1",
+      callId: "tool-1",
+      tool: "Bash",
+      toolType: "bash",
+      status: "error",
+      ...fields,
+    },
+  });
+
+  const toolDenials = (changes: readonly AgentSessionLiveAdapterChange[]) =>
+    changes.flatMap((change) =>
+      change.type === "transcript_event" &&
+      change.event.type === "assistant_part" &&
+      change.event.part.kind === "tool"
+        ? [change.event.part.denial]
+        : [],
+    );
+
+  test("offers Allow for a main-session auto mode denial and tracks its state", () => {
+    const state = createClaudeLiveSessionState();
+    const denial = { source: "auto_mode" as const, reason: "[Force Push]" };
+    const current: ClaudeSessionContext = {
+      ...session,
+      toolDenialsByCallId: new Map([
+        [
+          "tool-1",
+          {
+            denial,
+            allow: {
+              consent:
+                claudeDeniedActionConsent({
+                  toolName: "Bash",
+                  input: { command: "git push -f" },
+                }) ?? "",
+            },
+          },
+        ],
+      ]),
+    };
+    state.applyControlSummary("/repo", summary);
+    state.applyEvent(current, deniedToolPart("session-1", { error: "Denied.", denial }));
+    expect(state.listSnapshots()[0]?.deniedActions).toEqual([
+      { callId: "tool-1", state: "available" },
+    ]);
+    // A later emission of the call keeps its denial.
+    expect(
+      toolDenials(state.applyEvent(current, deniedToolPart("session-1", { error: "Denied." }))),
+    ).toEqual([denial]);
+
+    expect(state.beginDeniedActionAllow(ref, "tool-1").value).toBe("accepted");
+    expect(state.listSnapshots()[0]?.deniedActions).toEqual([
+      { callId: "tool-1", state: "sending" },
+    ]);
+    expect(state.beginDeniedActionAllow(ref, "tool-1")).toEqual({ value: "sending", changes: [] });
+    state.settleDeniedActionAllow(ref, "tool-1", "The CLI stopped.");
+    expect(state.listSnapshots()[0]?.deniedActions).toEqual([
+      { callId: "tool-1", state: "available", failure: "The CLI stopped." },
+    ]);
+    expect(state.beginDeniedActionAllow(ref, "tool-1").value).toBe("accepted");
+    state.settleDeniedActionAllow(ref, "tool-1");
+    expect(state.listSnapshots()[0]?.deniedActions).toEqual([
+      { callId: "tool-1", state: "allowed" },
+    ]);
+    expect(state.beginDeniedActionAllow(ref, "tool-1").value).toBe("allowed");
+    expect(state.beginDeniedActionAllow(ref, "other-call").value).toBe("missing");
+
+    state.applyEvent(current, {
+      type: "session_finished",
+      externalSessionId: "session-1",
+      timestamp: "2026-11-21T10:01:00.000Z",
+      message: "Claude Agent SDK session stream ended.",
+    });
+    state.applyControlSummary("/repo", summary);
+    expect(state.listSnapshots()[0]?.deniedActions).toBeUndefined();
+  });
+
+  test("shows a subagent denial without Allow", () => {
+    const state = createClaudeLiveSessionState();
+    const denial = { source: "read_only_role" as const, reason: "Tool Bash is disabled." };
+    const current: ClaudeSessionContext = {
+      ...session,
+      toolDenialsByCallId: new Map([["tool-1", { denial }]]),
+    };
+    state.applyControlSummary("/repo", summary);
+    expect(
+      toolDenials(state.applyEvent(current, deniedToolPart("child-1", { error: "Denied." }))),
+    ).toEqual([denial]);
+    expect(state.listSnapshots().every((snapshot) => !snapshot.deniedActions)).toBe(true);
   });
 });

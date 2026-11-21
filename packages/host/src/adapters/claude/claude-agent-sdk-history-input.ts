@@ -16,6 +16,7 @@ import {
 } from "./claude-agent-sdk-local-commands";
 import { createClaudeFinishStepPart } from "./claude-agent-sdk-transcript-parts";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
+import { isClaudeDeniedActionConsent } from "./claude-agent-sdk-tool-denials";
 import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeVisibleHistoryMessage = Extract<
@@ -193,6 +194,10 @@ export const createClaudeHistoryInputProjector = (options: {
       queued = pendingQueueEntry;
     }
     const text = queued?.text ?? command ?? rawText;
+    if (isClaudeDeniedActionConsent(text)) {
+      pendingQueueEntry = null;
+      return handledWithoutMessage;
+    }
     if (text.trim().toLowerCase() === "/compact") {
       const commandTimestamp = queued?.timestamp ?? timestamp;
       pendingQueueEntry = null;

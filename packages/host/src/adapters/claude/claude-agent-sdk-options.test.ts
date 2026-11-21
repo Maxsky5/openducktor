@@ -56,6 +56,7 @@ const createSession = (role: AgentRole = "build"): ClaudeSessionContext => ({
   pendingQuestions: new Map(),
   pendingUserMessageAdmissions: new Map(),
   unreadSteeredUserMessages: new Map(),
+  toolDenialsByCallId: new Map(),
   pendingUserTurnCount: 0,
   queue: new AsyncInputQueue(),
   runtimeId: "claude-runtime-1",

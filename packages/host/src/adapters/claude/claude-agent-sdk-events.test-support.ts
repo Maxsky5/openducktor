@@ -54,4 +54,5 @@ export const createEventTestSession = (
   toolMessageIdsByCallId: new Map<string, string>(),
   toolNamesByCallId: new Map<string, string>(),
   toolStartedAtMsByCallId: new Map<string, number>(),
+  toolDenialsByCallId: new Map(),
 });

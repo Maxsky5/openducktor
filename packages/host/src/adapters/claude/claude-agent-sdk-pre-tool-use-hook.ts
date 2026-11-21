@@ -2,6 +2,7 @@ import type { HookCallback, PreToolUseHookSpecificOutput } from "@anthropic-ai/c
 import { findClaudeSubagentSessionByAgentId } from "./claude-agent-sdk-event-session";
 import { parseClaudePreToolUseIngress } from "./claude-agent-sdk-ingress-schemas";
 import { authorizeClaudeToolUse } from "./claude-agent-sdk-permissions";
+import { recordClaudeToolDenial } from "./claude-agent-sdk-tool-denials";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 import type { WorkflowRolePolicy } from "@openducktor/core";
 
@@ -41,6 +42,11 @@ export const createClaudePreToolUseHook = ({
       toolInput,
     });
     if (authorization.behavior === "deny") {
+      if (authorization.denial) {
+        recordClaudeToolDenial(session, preToolUseInput.tool_use_id, {
+          denial: authorization.denial,
+        });
+      }
       return denyToolUse(authorization.message);
     }
     const inputChanged = authorization.toolInput !== toolInput;

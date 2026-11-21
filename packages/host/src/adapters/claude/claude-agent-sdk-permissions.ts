@@ -1,7 +1,11 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute, relative } from "node:path";
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { CLAUDE_RUNTIME_DESCRIPTOR, claudeToolName } from "@openducktor/contracts";
+import {
+  type AgentToolDenial,
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  claudeToolName,
+} from "@openducktor/contracts";
 import type { AgentEvent, WorkflowRolePolicy } from "@openducktor/core";
 import {
   normalizePathForComparison,
@@ -11,6 +15,7 @@ import {
 } from "@openducktor/path-support";
 import { z } from "zod";
 import { disabledToolReason } from "./claude-tool-availability";
+import { claudeReadOnlyRoleDenial, recordClaudeToolDenial } from "./claude-agent-sdk-tool-denials";
 import {
   claudePendingInputResolutionRoute,
   claudeSubagentPendingInputRoute,
@@ -52,6 +57,8 @@ export type ClaudeToolUseAuthorization =
   | {
       behavior: "deny";
       message: string;
+      /** The tool denial to show, when the read-only workflow role denies the call. */
+      denial?: AgentToolDenial;
     };
 
 type AuthorizeClaudeToolUseInput = {
@@ -233,21 +240,20 @@ export const authorizeClaudeToolUse = ({
 
   const mutation = mutationForTool(toolName, effectiveToolInput);
   if (rolePolicy?.readOnly) {
+    const readOnlyDeny = (message: string): ClaudeToolUseAuthorization => ({
+      behavior: "deny",
+      message,
+      denial: claudeReadOnlyRoleDenial(message),
+    });
     if (
       CLAUDE_RUNTIME_DESCRIPTOR.readOnlyRoleBlockedTools.some(
         (blockedTool) => blockedTool.toLowerCase() === toolName.toLowerCase(),
       )
     ) {
-      return {
-        behavior: "deny",
-        message: `Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`,
-      };
+      return readOnlyDeny(`Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`);
     }
     if (mutation === "mutating") {
-      return {
-        behavior: "deny",
-        message: `Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`,
-      };
+      return readOnlyDeny(`Tool ${toolName} is disabled for read-only OpenDucktor workflow roles.`);
     }
     if (mutation === "unknown") {
       return { behavior: "allow", approval: "interactive", toolInput: effectiveToolInput };
@@ -259,10 +265,9 @@ export const authorizeClaudeToolUse = ({
       canonicalizePath,
     ).then((pathViolation): ClaudeToolUseAuthorization => {
       if (pathViolation) {
-        return {
-          behavior: "deny",
-          message: `Tool ${toolName} attempted to read outside the session working directory: ${pathViolation}`,
-        };
+        return readOnlyDeny(
+          `Tool ${toolName} attempted to read outside the session working directory: ${pathViolation}`,
+        );
       }
       return { behavior: "allow", approval: "automatic", toolInput: effectiveToolInput };
     });
@@ -291,6 +296,9 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
       authorization: ClaudeToolUseAuthorization,
     ): PermissionResult | Promise<PermissionResult> => {
       if (authorization.behavior === "deny") {
+        if (authorization.denial) {
+          recordClaudeToolDenial(session, options.toolUseID, { denial: authorization.denial });
+        }
         return denyReadOnlyPolicy(authorization.message);
       }
       const effectiveToolInput = authorization.toolInput;
@@ -425,6 +433,7 @@ export const createClaudeCanUseTool = (input: CreateClaudeCanUseToolInput): CanU
         options.signal.addEventListener("abort", onAbort, { once: true });
         session.pendingApprovals.set(requestId, {
           event,
+          toolUseId: options.toolUseID,
           resolve: (result) => {
             options.signal.removeEventListener("abort", onAbort);
             resolveResult(withAllowedToolInput(result, effectiveToolInput));

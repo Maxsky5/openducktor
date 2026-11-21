@@ -19,6 +19,7 @@ import {
 } from "./claude-agent-sdk-tool-shapes";
 
 export type ClaudeLiveUserMessage = {
+  hidden?: true;
   isManualCompaction?: true;
   messageId: string;
   model?: AgentModelSelection;
@@ -46,7 +47,11 @@ export const mergeUnmatchedLiveUserMessages = (
   const projectedMessageIds = new Set(history.map((message) => message.messageId));
   const unmatched: AgentSessionHistoryMessage[] = [];
   for (const message of liveUserMessages) {
-    if (message.isManualCompaction || projectedMessageIds.has(message.messageId)) {
+    if (
+      message.hidden ||
+      message.isManualCompaction ||
+      projectedMessageIds.has(message.messageId)
+    ) {
       continue;
     }
     const historyMessage: Extract<AgentSessionHistoryMessage, { role: "user" }> = {

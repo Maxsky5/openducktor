@@ -2,12 +2,14 @@ import {
   type AcceptedAgentInput,
   type AcceptedAgentUserMessage,
   type AgentSessionControlSendInput,
+  type AgentSessionLiveAllowDeniedActionInput,
   acceptedAgentUserMessageSchema,
   goalCommandParts,
 } from "@openducktor/contracts";
 import { GOAL_COMMAND_ACCEPTED } from "@openducktor/core";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import {
+  causeMessage,
   type HostError,
   HostValidationError,
   toHostOperationError,
@@ -32,7 +34,10 @@ import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-age
 import { toClaudeRuntimeUserMessageEvent } from "./claude-live-session-service-inputs";
 import type { createClaudeLiveSessionState } from "./claude-live-session-state";
 
-type SendControls = Pick<AgentSessionSendOptions, "assertCurrent" | "onSent">;
+type SendControls = Pick<AgentSessionSendOptions, "assertCurrent" | "onSent"> & {
+  /** The user did not write the message, so no reader shows it. */
+  readonly hidden?: true;
+};
 type GoalTarget = Omit<AgentSessionControlGoalInput, "command">;
 
 /** The message and goal controls of the Claude live-session adapter. */
@@ -157,7 +162,57 @@ export const createClaudeMessageControls = ({
       return yield* result;
     });
 
+  /**
+   * Allows one call that the auto mode classifier denied. Like Claude Code, it sends a hidden
+   * consent that names the exact call: it steers a running turn or starts a turn. Claude checks
+   * the retry again. The snapshot shows the Allow state on every client.
+   */
+  const allowDeniedAction = (
+    input: AgentSessionLiveAllowDeniedActionInput,
+  ): Effect.Effect<void, HostError> =>
+    runControlMutation(
+      Effect.gen(function* () {
+        const session = yield* requireSessionContext(input.externalSessionId);
+        const allow = session.toolDenialsByCallId.get(input.callId)?.allow;
+        const begun = allow
+          ? yield* commit("claude-live-session.begin-allow", () =>
+              state.beginDeniedActionAllow(input, input.callId),
+            )
+          : "missing";
+        if (begun !== "accepted" || !allow)
+          return yield* new HostValidationError({
+            field: "callId",
+            message:
+              begun === "missing"
+                ? `Call '${input.callId}' has no Allow action. Only an auto mode denial of a running main Claude session can be allowed.`
+                : `Call '${input.callId}' is already ${begun}. Wait for the agent to retry it.`,
+            details: { externalSessionId: input.externalSessionId, callId: input.callId },
+          });
+        const sent = yield* Effect.exit(
+          send(
+            {
+              repoPath: input.repoPath,
+              runtimeKind: input.runtimeKind,
+              workingDirectory: input.workingDirectory,
+              externalSessionId: input.externalSessionId,
+              sessionScope: session.input.sessionScope,
+              parts: [{ kind: "text", text: allow.consent }],
+              delivery: canStartUserTurn(session) ? "new_turn" : "steer",
+            },
+            { hidden: true },
+          ),
+        );
+        const failure = Exit.isFailure(sent) ? causeMessage(sent.cause) : undefined;
+        yield* commit("claude-live-session.settle-allow", () => ({
+          value: undefined,
+          changes: state.settleDeniedActionAllow(input, input.callId, failure),
+        }));
+        yield* sent;
+      }),
+    );
+
   return {
+    allowDeniedAction,
     sendUserMessage: sendAndPublish,
     controlGoal: (
       input: Parameters<AgentSessionControlAdapterPort["controlGoal"]>[0],

@@ -1,3 +1,4 @@
+import { claudeDeniedActionConsent } from "../claude/claude-agent-sdk-tool-denials";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
@@ -108,6 +109,7 @@ const session: ClaudeSessionContext = {
   pendingQuestions: new Map(),
   pendingUserMessageAdmissions: new Map(),
   unreadSteeredUserMessages: new Map(),
+  toolDenialsByCallId: new Map(),
   pendingUserTurnCount: 0,
   queue: new AsyncInputQueue(),
   runtimeId: "runtime-1",
@@ -289,8 +291,10 @@ const createHarness = async (
       runtimeId: string,
       options?: Parameters<ClaudeAgentSdkService["sendUserMessage"]>[2],
     ) => sendUserMessageImpl(input, runtimeId, options),
-    prepareApprovalReply: (input: Parameters<ClaudeAgentSdkService["prepareApprovalReply"]>[0]) =>
-      prepareApprovalReplyImpl(input),
+    prepareApprovalReply: (
+      input: Parameters<ClaudeAgentSdkService["prepareApprovalReply"]>[0],
+      denialSource?: Parameters<ClaudeAgentSdkService["prepareApprovalReply"]>[1],
+    ) => prepareApprovalReplyImpl(input, denialSource),
     prepareQuestionReply: (input: Parameters<ClaudeAgentSdkService["prepareQuestionReply"]>[0]) =>
       prepareQuestionReplyImpl(input),
     updateSessionModel: (input, runtimeId) => updateSessionModelImpl(input, runtimeId),
@@ -2799,5 +2803,131 @@ describe("Claude host live-session adapter goals", () => {
     harness.setSendUserMessage(() => Effect.die("Claude needs no command for an ended goal."));
     await Effect.runPromise(harness.adapter.controlGoal(goalInput({ kind: "clear" })));
     expect(await snapshotGoal()).toBeUndefined();
+  });
+});
+
+describe("Claude host live-session adapter denied calls", () => {
+  const denial = { source: "auto_mode" as const, reason: "[Force Push]" };
+  const deniedActions = async (harness: Awaited<ReturnType<typeof createHarness>>) => {
+    const result = await Effect.runPromise(harness.adapter.readSnapshot(sessionRef));
+    return result.type === "live" ? result.session.deniedActions : undefined;
+  };
+  const denyCall = async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+    session.toolDenialsByCallId.set("tool-1", {
+      denial,
+      allow: {
+        consent:
+          claudeDeniedActionConsent({ toolName: "Bash", input: { command: "git push -f" } }) ?? "",
+      },
+    });
+    harness.eventHub.emit(session, {
+      type: "assistant_part",
+      externalSessionId: "session-1",
+      timestamp: "2026-11-21T10:00:00.000Z",
+      part: {
+        kind: "tool",
+        messageId: "message-1",
+        partId: "tool-1",
+        callId: "tool-1",
+        tool: "Bash",
+        toolType: "bash",
+        status: "error",
+        error: "Denied.",
+        denial,
+      },
+    });
+    // Loading the context flushes the queued events.
+    harness.setLoadSessionContextUsage(() => Effect.succeed(null));
+    await Effect.runPromise(harness.adapter.loadContext({ ...sessionRef }));
+    return harness;
+  };
+
+  afterEach(() => session.toolDenialsByCallId.clear());
+
+  test("sends the hidden consent and marks the call allowed", async () => {
+    const harness = await denyCall();
+    expect(await deniedActions(harness)).toEqual([{ callId: "tool-1", state: "available" }]);
+    const sent: unknown[] = [];
+    let stateWhileSending: unknown;
+    harness.setSendUserMessage((input, _runtimeId, options) =>
+      Effect.promise(async () => {
+        sent.push({ parts: input.parts, delivery: input.delivery, hidden: options?.hidden });
+        stateWhileSending = await deniedActions(harness);
+        return {
+          type: "user_message" as const,
+          externalSessionId: "session-1",
+          timestamp: "2026-11-21T10:00:01.000Z",
+          messageId: "consent-1",
+          message: "",
+          parts: [],
+          state: "read" as const,
+        };
+      }),
+    );
+    harness.changes.splice(0);
+
+    await Effect.runPromise(
+      harness.adapter.allowDeniedAction!({ ...sessionRef, callId: "tool-1" }),
+    );
+
+    expect(sent).toEqual([
+      {
+        parts: [
+          {
+            kind: "text",
+            text: expect.stringContaining(
+              'Permission granted for this exact command only, as one whole string: "git push -f".',
+            ),
+          },
+        ],
+        delivery: "new_turn",
+        hidden: true,
+      },
+    ]);
+    expect(stateWhileSending).toEqual([{ callId: "tool-1", state: "sending" }]);
+    expect(await deniedActions(harness)).toEqual([{ callId: "tool-1", state: "allowed" }]);
+    expect(hasTranscriptEvent("user_message")(harness.changes)).toBe(false);
+    const again = await Effect.runPromise(
+      Effect.result(harness.adapter.allowDeniedAction!({ ...sessionRef, callId: "tool-1" })),
+    );
+    expect(again._tag === "Failure" ? again.failure.message : "").toContain("already allowed");
+    expect(sent).toHaveLength(1);
+  });
+
+  test("keeps Allow with the failure when the consent fails", async () => {
+    const harness = await denyCall();
+    harness.setSendUserMessage(() =>
+      Effect.fail(
+        new HostOperationError({ operation: "test.consent", message: "The CLI stopped." }),
+      ),
+    );
+
+    const result = await Effect.runPromise(
+      Effect.result(harness.adapter.allowDeniedAction!({ ...sessionRef, callId: "tool-1" })),
+    );
+
+    expect(result._tag === "Failure" ? result.failure.message : "").toContain("The CLI stopped.");
+    expect(await deniedActions(harness)).toEqual([
+      {
+        callId: "tool-1",
+        state: "available",
+        failure: expect.stringContaining("The CLI stopped."),
+      },
+    ]);
+  });
+
+  test("refuses a call without an Allow action", async () => {
+    const harness = await createHarness();
+    await Effect.runPromise(harness.adapter.startSession(startInput));
+
+    const result = await Effect.runPromise(
+      Effect.result(harness.adapter.allowDeniedAction!({ ...sessionRef, callId: "tool-9" })),
+    );
+
+    expect(result._tag === "Failure" ? result.failure.message : "").toContain(
+      "has no Allow action",
+    );
   });
 });

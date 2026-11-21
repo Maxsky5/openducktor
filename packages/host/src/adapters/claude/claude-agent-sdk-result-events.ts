@@ -7,6 +7,7 @@ import {
 import {
   type ClaudeBackgroundWorkSession,
   type ClaudeEventSession,
+  findClaudeSubagentSessionByAgentId,
   userTurnIndex,
 } from "./claude-agent-sdk-event-session";
 import { isClaudeForegroundTurnActive } from "./claude-agent-sdk-activity";
@@ -21,7 +22,15 @@ import { createClaudeCompletedToolPart } from "./claude-agent-sdk-transcript-par
 import type { ClaudeToolInput } from "./claude-agent-sdk-types";
 import { claudeReplyDurationMs } from "./claude-agent-sdk-message-timestamp";
 import { disabledToolReason } from "./claude-tool-availability";
-import type { ClaudeSdkResultMessageProjection } from "./claude-agent-sdk-message-projection";
+import type {
+  ClaudeSdkMessageProjection,
+  ClaudeSdkResultMessageProjection,
+} from "./claude-agent-sdk-message-projection";
+import {
+  claudeDeniedActionConsent,
+  claudePermissionDeniedDenial,
+  recordClaudeToolDenial,
+} from "./claude-agent-sdk-tool-denials";
 import { isClaudeSubagentTranscriptTarget } from "./claude-agent-sdk-subagent-transcripts";
 
 type ClaudeResultEventSession = ClaudeBackgroundWorkSession &
@@ -220,6 +229,71 @@ export const emitClaudePermissionDeniedToolPart = ({
     timestamp,
     part: createClaudeCompletedToolPart(completedToolInput),
   });
+};
+
+/**
+ * Shows a call that Claude denied without a prompt as a failed tool. A known policy gives it a
+ * denial, and only a main-session auto mode denial can be allowed: the SDK cannot send a message
+ * to a running subagent.
+ */
+export const handleClaudePermissionDeniedMessage = ({
+  emit,
+  message,
+  session,
+  timestamp,
+}: {
+  emit: (event: AgentEvent) => void;
+  message: Extract<ClaudeSdkMessageProjection, { type: "system"; subtype: "permission_denied" }>;
+  session: ClaudeEventSession;
+  timestamp: string;
+}): void => {
+  let permissionSession = session;
+  if (message.agent_id) {
+    const subagentSession = findClaudeSubagentSessionByAgentId(session, message.agent_id);
+    if (!subagentSession) {
+      return;
+    }
+    permissionSession = subagentSession;
+  }
+  const input = permissionSession.toolInputsByCallId.get(message.tool_use_id);
+  const permissionMetadata: NonNullable<PermissionDeniedToolPartInput["permission"]["metadata"]> = {
+    source: "permission_denied",
+  };
+  const permission: PermissionDeniedToolPartInput["permission"] = {
+    toolName: message.tool_name,
+    toolUseId: message.tool_use_id,
+    message: message.message,
+    metadata: permissionMetadata,
+  };
+  if (input) {
+    permission.input = input;
+  }
+  if (message.agent_id) {
+    permissionMetadata.agentId = message.agent_id;
+  }
+  if (message.decision_reason_type) {
+    permissionMetadata.decisionReasonType = message.decision_reason_type;
+  }
+  if (message.decision_reason) {
+    permissionMetadata.decisionReason = message.decision_reason;
+  }
+  const denial = claudePermissionDeniedDenial({
+    decisionReasonType: message.decision_reason_type,
+    decisionReason: message.decision_reason,
+    message: message.message,
+  });
+  if (denial) {
+    const consent =
+      denial.source === "auto_mode" && !message.agent_id
+        ? claudeDeniedActionConsent({ toolName: message.tool_name, input })
+        : undefined;
+    recordClaudeToolDenial(
+      session,
+      message.tool_use_id,
+      consent === undefined ? { denial } : { denial, allow: { consent } },
+    );
+  }
+  emitClaudePermissionDeniedToolPart({ emit, session: permissionSession, timestamp, permission });
 };
 
 export const emitClaudeDeferredReplyForkPoint = (input: {

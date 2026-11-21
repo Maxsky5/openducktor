@@ -292,6 +292,11 @@ export const consumeClaudeSession = (input: {
 export const sendClaudeUserMessage = async (input: {
   emit: ClaudeAgentSdkEventEmitter;
   messageInput: SendAgentUserMessageInput;
+  /**
+   * The host wrote the message for the user, such as the consent of an Allow action. Claude gets
+   * it as a human message, and no reader shows it as a user message.
+   */
+  hidden?: true | undefined;
   now: () => string;
   randomId: () => string;
   session: ClaudeSession;
@@ -324,6 +329,13 @@ export const sendClaudeUserMessage = async (input: {
     text: message,
     timestamp,
   };
+  if (input.hidden) {
+    // The CLI tells the model that a synthetic message does not come from the user, so a consent
+    // must keep the human origin. `client_composed` keeps its text as written.
+    sdkMessage.origin = { kind: "human" };
+    sdkMessage.client_composed = true;
+    acceptedMessage.hidden = true;
+  }
   if (messageInput.submissionId) acceptedMessage.submissionId = messageInput.submissionId;
   if (!canStartUserTurn(session)) {
     if (messageInput.delivery === "new_turn") {

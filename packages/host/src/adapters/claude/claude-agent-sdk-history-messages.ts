@@ -36,6 +36,8 @@ type ClaudeHistoryEntry = {
   interruptedByShutdown?: boolean;
   toolUseResult?: unknown;
   tool_use_result?: unknown;
+  /** Why Claude refused a tool call, such as `automode-blocked` or `permission-rule`. */
+  toolDenialKind?: unknown;
   retracted_message_uuids?: unknown;
   supersedes?: unknown;
   tasks?: unknown;

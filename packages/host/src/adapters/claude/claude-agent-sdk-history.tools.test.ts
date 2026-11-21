@@ -697,4 +697,56 @@ describe("claude-agent-sdk-history tool projection", () => {
       ],
     });
   });
+
+  const deniedBashHistory = (toolDenialKind: string) =>
+    toClaudeHistoryMessages(
+      [
+        toSessionMessage({
+          type: "assistant",
+          uuid: "assistant-denied",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          message: {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "bash-denied", name: "Bash", input: { command: "git push" } },
+            ],
+          },
+        }),
+        toSessionMessage({
+          type: "user",
+          uuid: "denied-result",
+          session_id: "session-1",
+          parent_tool_use_id: null,
+          toolDenialKind,
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "bash-denied",
+                content: "Permission for this action was denied. Reason: [Force Push].",
+                is_error: true,
+              },
+            ],
+          },
+        }),
+      ],
+      () => "2026-10-21T00:00:00.000Z",
+    )[0]?.parts[0];
+
+  test.each([
+    ["automode-blocked", "auto_mode"],
+    ["permission-rule", "permission_settings"],
+  ])("restores a %s denial as a blocked call", (toolDenialKind, source) => {
+    expect(deniedBashHistory(toolDenialKind)).toMatchObject({
+      callId: "bash-denied",
+      status: "error",
+      denial: { source, reason: "Permission for this action was denied. Reason: [Force Push]." },
+    });
+  });
+
+  test("keeps a user rejection as a plain failed call", () => {
+    expect(deniedBashHistory("user-rejected")).not.toHaveProperty("denial");
+  });
 });
