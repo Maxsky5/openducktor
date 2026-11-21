@@ -8,6 +8,12 @@ import {
   toCodexGuardianAssessmentEvent,
 } from "./codex-guardian-assessment-event";
 
+// Codex runs on the host, so the terminal directory is an absolute path of the host platform.
+const [TERMINAL_DIR, TERMINAL_DIR_URI] =
+  process.platform === "win32"
+    ? ["C:\\repo dir", "file:///C:/repo%20dir"]
+    : ["/repo dir", "file:///repo%20dir"];
+
 const deniedReview = (
   action: CodexAppServerAutoApprovalReviewCompletedParams["action"],
 ): CodexAppServerAutoApprovalReviewCompletedParams => {
@@ -70,13 +76,13 @@ describe("toCodexGuardianAssessmentEvent", () => {
       { type: "execve", source: "unified_exec", program: "/bin/ls", argv: ["ls", "-a"], cwd: "/r" },
     ],
     [
-      { type: "writeStdin", approvalId: "a-1", processId: "p-1", stdin: "y\n", cwd: "/repo dir" },
+      { type: "writeStdin", approvalId: "a-1", processId: "p-1", stdin: "y\n", cwd: TERMINAL_DIR },
       {
         type: "write_stdin",
         approval_id: "a-1",
         process_id: "p-1",
         stdin: "y\n",
-        cwd: "file:///repo%20dir",
+        cwd: TERMINAL_DIR_URI,
       },
     ],
     [

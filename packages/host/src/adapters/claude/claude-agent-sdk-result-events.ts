@@ -197,7 +197,7 @@ export const handleClaudeResultMessage = ({
   });
 };
 
-export const emitClaudePermissionDeniedToolPart = ({
+const emitClaudePermissionDeniedToolPart = ({
   emit,
   permission,
   session,
