@@ -31,17 +31,6 @@ export const requireRecord = (
   return result.data;
 };
 
-export const requireParsedRecord = (
-  result: z.ZodSafeParseResult<CommandInputRecord>,
-  label: string,
-): CommandInputRecord => {
-  if (!result.success) {
-    throw invalidInput(`${label} must be an object.`, label);
-  }
-
-  return result.data;
-};
-
 export const requireString = (result: z.ZodSafeParseResult<string>, label: string): string => {
   if (!result.success || result.data.trim().length === 0) {
     throw invalidInput(`${label} is required.`, label);
@@ -101,11 +90,10 @@ export const parseCommandInput = <Schema extends z.ZodType>(
 };
 
 export const requireNoArgs = (command: string, args: HostCommandArgs): void => {
-  const record =
-    args === undefined
-      ? undefined
-      : requireRecord(commandInputRecordSchema.safeParse(args), `${command} input`);
-  if (record !== undefined && Object.keys(record).length > 0) {
+  if (args === undefined) return;
+
+  requireRecord(commandInputRecordSchema.safeParse(args), `${command} input`);
+  if (Object.keys(args).length > 0) {
     throw new HostValidationError({
       message: `${command} does not accept arguments.`,
       field: "args",

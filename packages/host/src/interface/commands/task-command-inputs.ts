@@ -51,7 +51,7 @@ import {
   type CommandInputRecord,
   type HostCommandArgs,
   parseCommandInput,
-  requireParsedRecord,
+  requireRecord,
 } from "./command-inputs";
 
 const requiredBooleanSchema = z.boolean();
@@ -63,7 +63,7 @@ const readRequiredString = (record: CommandInputRecord, key: string, label: stri
   requireString(commandInputStringSchema.safeParse(record[key]), label);
 
 export const parseRepoPathInput = (input: HostCommandArgs, label: string): RepoPathInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
+  const record = requireRecord(commandInputRecordSchema.safeParse(input), label);
   return {
     workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
@@ -89,7 +89,7 @@ export const parseCloseTaskInput = (input: HostCommandArgs): CloseTaskInput =>
   parseCommandInput(taskCloseInputSchema, input, "task_close");
 
 export const parseTaskIdInput = (input: HostCommandArgs, label: string): TaskIdInput => {
-  const record = requireParsedRecord(commandInputRecordSchema.safeParse(input), label);
+  const record = requireRecord(commandInputRecordSchema.safeParse(input), label);
   return {
     workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
@@ -100,7 +100,7 @@ export const parseTaskIdInput = (input: HostCommandArgs, label: string): TaskIdI
 export const parseListAgentSessionsForTasksInput = (
   input: HostCommandArgs,
 ): ListAgentSessionsForTasksInput => {
-  const record = requireParsedRecord(
+  const record = requireRecord(
     commandInputRecordSchema.safeParse(input),
     "agent_sessions_list_for_tasks input",
   );
@@ -133,7 +133,7 @@ export const parseListAgentSessionsForTasksInput = (
 };
 
 export const parseAgentSessionDeleteInput = (input: HostCommandArgs): AgentSessionDeleteInput => {
-  const record = requireParsedRecord(
+  const record = requireRecord(
     commandInputRecordSchema.safeParse(input),
     "agent_session_delete input",
   );
@@ -148,7 +148,7 @@ export const parseAgentSessionDeleteInput = (input: HostCommandArgs): AgentSessi
 };
 
 export const parsePullRequestUpsertInput = (input: HostCommandArgs): PullRequestUpsertInput => {
-  const record = requireParsedRecord(
+  const record = requireRecord(
     commandInputRecordSchema.safeParse(input),
     "task_pull_request_upsert input",
   );
@@ -163,7 +163,7 @@ export const parsePullRequestUpsertInput = (input: HostCommandArgs): PullRequest
 export const parsePullRequestLinkMergedInput = (
   input: HostCommandArgs,
 ): PullRequestLinkMergedInput => {
-  const record = requireParsedRecord(
+  const record = requireRecord(
     commandInputRecordSchema.safeParse(input),
     "task_pull_request_link_merged input",
   );
@@ -180,7 +180,7 @@ export const parsePullRequestLinkMergedInput = (
 };
 
 export const parseDirectMergeInput = (input: HostCommandArgs): DirectMergeInput => {
-  const record = requireParsedRecord(
+  const record = requireRecord(
     commandInputRecordSchema.safeParse(input),
     "task_direct_merge input",
   );
@@ -193,10 +193,7 @@ export const parseDirectMergeInput = (input: HostCommandArgs): DirectMergeInput 
 };
 
 export const parseCreateTaskInput = (input: HostCommandArgs): CreateTaskUseCaseInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "task_create input",
-  );
+  const record = requireRecord(commandInputRecordSchema.safeParse(input), "task_create input");
   const descriptionAssets = parseDescriptionAssets(
     optionalDescriptionAssetsSchema.safeParse(record.descriptionAssets),
   );
@@ -212,10 +209,7 @@ export const parseCreateTaskInput = (input: HostCommandArgs): CreateTaskUseCaseI
 };
 
 export const parseDeleteTaskInput = (input: HostCommandArgs): DeleteTaskInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "task_delete input",
-  );
+  const record = requireRecord(commandInputRecordSchema.safeParse(input), "task_delete input");
   return {
     workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
@@ -224,10 +218,7 @@ export const parseDeleteTaskInput = (input: HostCommandArgs): DeleteTaskInput =>
 };
 
 export const parseUpdateTaskInput = (input: HostCommandArgs): UpdateTaskInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "task_update input",
-  );
+  const record = requireRecord(commandInputRecordSchema.safeParse(input), "task_update input");
   const patch = parseUpdatePatch(taskUpdatePatchSchema.safeParse(record.patch));
   const descriptionAssets = parseDescriptionAssets(
     optionalDescriptionAssetsSchema.safeParse(record.descriptionAssets),
@@ -251,10 +242,7 @@ export const parseUpdateTaskInput = (input: HostCommandArgs): UpdateTaskInput =>
 };
 
 export const parseApplyTaskEventInput = (input: HostCommandArgs): ApplyTaskEventInput => {
-  const record = requireParsedRecord(
-    commandInputRecordSchema.safeParse(input),
-    "task_apply_event input",
-  );
+  const record = requireRecord(commandInputRecordSchema.safeParse(input), "task_apply_event input");
   return {
     workspaceId: readRequiredString(record, "workspaceId"),
     repoPath: readRequiredString(record, "repoPath"),
@@ -264,7 +252,7 @@ export const parseApplyTaskEventInput = (input: HostCommandArgs): ApplyTaskEvent
 };
 
 export const parseWorkflowArtifactInput = (input: HostCommandArgs): WorkflowArtifactInput => {
-  const record = requireParsedRecord(
+  const record = requireRecord(
     commandInputRecordSchema.safeParse(input),
     "workflow_artifact_get input",
   );
@@ -279,7 +267,7 @@ export const parseWorkflowArtifactInput = (input: HostCommandArgs): WorkflowArti
 export const parseWorkflowArtifactSaveInput = (
   input: HostCommandArgs,
 ): WorkflowArtifactSaveInput => {
-  const record = requireParsedRecord(
+  const record = requireRecord(
     commandInputRecordSchema.safeParse(input),
     "workflow_artifact_save input",
   );
