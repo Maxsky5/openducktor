@@ -30,7 +30,7 @@ export const createAgentRuntimeQueryCommandHandlers = (
     input: AgentRuntimePreviewModelsInput,
   ) => Effect.Effect<AgentRuntimeCatalog, RuntimeQueryError>,
   claudeToolCatalog: ClaudeToolCatalogPort,
-  textGeneration: AgentTextGenerationPort,
+  textGeneration: Pick<AgentTextGenerationPort, "generate">,
 ) =>
   ({
     agent_runtime_generate_text: (args) =>

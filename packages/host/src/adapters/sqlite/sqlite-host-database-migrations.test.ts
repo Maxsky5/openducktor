@@ -217,6 +217,74 @@ test("0002 moves prompt overrides to their owners, Autopilot rules to the built-
   expect(result.foreignKeyViolations).toEqual([]);
 });
 
+test("0004 keeps the prompt layers, accepts a new owner kind, and stores naming models", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "odt-host-migration-"));
+  cleanups.add(() => rm(directory, { recursive: true, force: true }));
+  const databasePath = path.join(directory, "database.sqlite");
+  const initialFolder = await copyMigrationsUpTo(directory, 3);
+
+  const result = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { session } = yield* openSqliteDrizzleConnection({
+          databasePath,
+          configureWal: false,
+          configureHostDatabase: true,
+          config: { schema: hostDatabaseSchema },
+        });
+        const run = (query: string) => session.execute((db) => db.run(sql.raw(query)), "test.run");
+        const read = (query: string) =>
+          session.execute((db) => db.values(sql.raw(query)), "test.read");
+        yield* applyMigrations(session, initialFolder, databasePath, "exact");
+        yield* run(
+          `INSERT INTO workspaces (workspace_id, workspace_name, repo_path, branch_prefix, default_target_branch, closed)
+           VALUES ('ws', 'Workspace', '/repo', 'odt', 'main', 0)`,
+        );
+        yield* run(
+          `INSERT INTO global_prompt_overrides (owner_kind, owner_id, prompt_id, template, base_version, enabled)
+           VALUES ('workflow', 'custom', 'workflow.rules', 'global rules', 2, 1)`,
+        );
+        yield* run(
+          `INSERT INTO workspace_prompt_appends (workspace_id, owner_kind, owner_id, prompt_id, text, enabled)
+           VALUES ('ws', 'role', 'qa', 'instructions', 'workspace qa', 0)`,
+        );
+        yield* ensureSchema(session, databasePath);
+        yield* run(
+          `INSERT INTO global_prompt_appends (owner_kind, owner_id, prompt_id, text, enabled)
+           VALUES ('feature', 'naming', 'branch-name', 'Use Jira keys.', 1)`,
+        );
+        yield* run(
+          `INSERT INTO workspace_naming_models (workspace_id, runtime_kind, provider_id, model_id, variant)
+           VALUES ('ws', 'claude', 'anthropic', 'haiku', NULL)`,
+        );
+        return {
+          globalOverrides: yield* read(
+            "SELECT owner_kind, owner_id, prompt_id, template FROM global_prompt_overrides",
+          ),
+          globalAppends: yield* read(
+            "SELECT owner_kind, owner_id, prompt_id FROM global_prompt_appends",
+          ),
+          workspaceAppends: yield* read(
+            "SELECT workspace_id, owner_kind, owner_id, prompt_id, text, enabled FROM workspace_prompt_appends",
+          ),
+          namingModels: yield* read("SELECT workspace_id, model_id FROM workspace_naming_models"),
+          foreignKeyViolations: yield* read("PRAGMA foreign_key_check"),
+        };
+      }),
+    ),
+  );
+
+  expect(result.globalOverrides).toEqual([
+    ["workflow", "custom", "workflow.rules", "global rules"],
+  ]);
+  expect(result.globalAppends).toEqual([["feature", "naming", "branch-name"]]);
+  expect(result.workspaceAppends).toEqual([
+    ["ws", "role", "qa", "instructions", "workspace qa", 0],
+  ]);
+  expect(result.namingModels).toEqual([["ws", "haiku"]]);
+  expect(result.foreignKeyViolations).toEqual([]);
+});
+
 test("rejects a database whose applied migration differs from the migration files", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "odt-host-migration-"));
   cleanups.add(() => rm(directory, { recursive: true, force: true }));

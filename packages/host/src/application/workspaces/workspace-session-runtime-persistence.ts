@@ -14,6 +14,11 @@ import {
   runtimeTitle,
 } from "../../domain/workspace-sessions/workspace-session-title";
 import {
+  createWorkspaceSessionNaming,
+  type WorkspaceSessionNaming,
+  type WorkspaceSessionNamingDependencies,
+} from "./workspace-session-naming";
+import {
   type HostError,
   HostOperationError,
   HostValidationError,
@@ -62,6 +67,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
   sessionTitleGate,
   updateRuntimeSessionTitle,
   reportRenameFailure,
+  naming,
 }: {
   store: WorkspaceSessionStorePort;
   settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog">;
@@ -71,11 +77,14 @@ export const createWorkspaceSessionRuntimePersistence = ({
   sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
   updateRuntimeSessionTitle: WorkspaceSessionRuntimeTitleUpdater;
   reportRenameFailure: WorkspaceSessionRenameFailureReporter;
+  naming: WorkspaceSessionNamingDependencies;
 }): AgentSessionPersistencePort &
   AgentSessionOperationPolicy & {
     recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<void, HostError>;
     isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
     markTitleSyncPending: (ref: AgentSessionLiveRef) => void;
+    /** Records a chat that this host created, so its first message can name it. */
+    registerCreated: WorkspaceSessionNaming["registerCreated"];
     /** Stops background renames and title syncs before their runtime and store close. */
     shutdown: () => Effect.Effect<void>;
   } => {
@@ -237,6 +246,17 @@ export const createWorkspaceSessionRuntimePersistence = ({
         yield* publishUpdated(known.ref.workspaceId, saved.success);
       }),
     );
+  const chatNaming = createWorkspaceSessionNaming({
+    naming,
+    store,
+    find,
+    publishUpdated,
+    reportRenameFailure,
+    sessionTitleGate,
+    titleSync,
+    renameRuntimeTitle,
+    storeEffect,
+  });
   const recordAcceptedMessage = (
     runtimeRef: ScopedAgentSessionRef,
     message: AcceptedAgentUserMessage,
@@ -244,6 +264,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     Effect.gen(function* () {
       const located = yield* find(runtimeRef);
       if (!located) return;
+      const firstMessageNaming = chatNaming.takeFirstMessageNaming(runtimeRef, located, message);
       yield* sessionTitleGate.run(
         located.ref,
         Effect.gen(function* () {
@@ -256,6 +277,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
           );
         }),
       );
+      // After the shortened title, so a runtime that syncs after the turn waits for it.
+      if (firstMessageNaming) yield* startJob(firstMessageNaming);
     });
   const recordObservedMessage = (
     runtimeRef: AgentSessionLiveRef,
@@ -394,6 +417,8 @@ export const createWorkspaceSessionRuntimePersistence = ({
         };
       }),
     prepareSend: (input) => prepare(input).pipe(Effect.map((prepared) => prepared.input)),
+    prepareDelivery: chatNaming.prepareDelivery,
+    registerCreated: chatNaming.registerCreated,
     validateRef,
     prepareModelUpdate: (input) =>
       Effect.gen(function* () {

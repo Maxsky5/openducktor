@@ -340,6 +340,7 @@ export function SettingsRepositoryContent({
             onClearSelectedRepoAgentDefault={clearSelectedRepoAgentDefault}
             onUpdateSelectedRepoDefaultModel={updateSelectedRepoDefaultModel}
             onClearSelectedRepoDefaultModel={clearSelectedRepoDefaultModel}
+            showNamingModel
           />
         ) : null}
 

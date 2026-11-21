@@ -5,7 +5,7 @@ import {
 } from "../../interface/commands/agent-session-live-command-handlers";
 import { createAgentRuntimeQueryCommandHandlers } from "../../interface/commands/agent-runtime-query-command-handlers";
 import { createClaudeToolCatalogService } from "../../application/runtimes/claude-tool-catalog-service";
-import { createAgentTextGenerationService } from "../../application/runtimes/agent-text-generation-service";
+import type { AgentTextGenerationPort } from "../../ports/agent-text-generation-port";
 import { createModelCatalogPreviewComposition as previewModels } from "./model-catalog-preview-composition";
 import type { createNodeSessionLaunchControls } from "./node-session-launch-controls";
 import type { createNodeMessageDelivery } from "./node-message-delivery";
@@ -26,6 +26,7 @@ export const createNodeWorkflowCommandHandlers = ({
   clientVersion,
   runtimeRegistry,
   adapterRegistry,
+  textGeneration,
   taskAssetStagingService,
   taskWorktreeService,
 }: {
@@ -41,8 +42,8 @@ export const createNodeWorkflowCommandHandlers = ({
   runtimeDefinitionsService: Parameters<typeof previewModels>[2];
   clientVersion: Parameters<typeof previewModels>[3];
   runtimeRegistry: Parameters<typeof createClaudeToolCatalogService>[0]["runtimeRegistry"];
-  adapterRegistry: Parameters<typeof createClaudeToolCatalogService>[0]["adapterRegistry"] &
-    Parameters<typeof createAgentTextGenerationService>[0]["adapterRegistry"];
+  adapterRegistry: Parameters<typeof createClaudeToolCatalogService>[0]["adapterRegistry"];
+  textGeneration: AgentTextGenerationPort;
   taskAssetStagingService: Parameters<typeof createTaskAssetCommandHandlers>[0];
   taskWorktreeService: Parameters<typeof createTaskWorktreeCommandHandlers>[0];
 }) => ({
@@ -53,7 +54,7 @@ export const createNodeWorkflowCommandHandlers = ({
     taskSessions.agentRuntimeQueries,
     previewModels(defaultPorts, git, runtimeDefinitionsService, clientVersion),
     createClaudeToolCatalogService({ runtimeRegistry, adapterRegistry }),
-    createAgentTextGenerationService({ runtimeRegistry, adapterRegistry }),
+    textGeneration,
   ),
   ...createTaskAssetCommandHandlers(taskAssetStagingService),
   ...createTaskCommandHandlers(taskSessions.taskService),

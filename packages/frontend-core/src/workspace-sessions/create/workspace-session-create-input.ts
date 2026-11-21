@@ -8,6 +8,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
+import { worktreeNameReady } from "./workspace-session-worktree-rules";
 
 /** Builds the request for the active location only. Choices of other locations stay out of it. */
 export function buildWorkspaceSessionCreateInput({
@@ -22,6 +23,7 @@ export function buildWorkspaceSessionCreateInput({
   selectedModelAvailable,
   rolesReady,
   availableBranches,
+  hasNamingModel,
 }: {
   workspaceId: string;
   name: string;
@@ -35,6 +37,8 @@ export function buildWorkspaceSessionCreateInput({
   selectedModelAvailable: boolean;
   rolesReady: boolean;
   availableBranches: readonly GitBranch[] | null;
+  /** True when the workspace has a naming model, so a new branch worktree can have a blank name. */
+  hasNamingModel: boolean;
 }): WorkspaceSessionCreateInput | null {
   if (!selection?.runtimeKind || !selectedModelAvailable || !rolesReady || !targetBranch)
     return null;
@@ -50,6 +54,7 @@ export function buildWorkspaceSessionCreateInput({
     case "local_repo_root":
       return { ...common, location };
     case "local_worktree": {
+      if (!worktreeNameReady(worktree, hasNamingModel)) return null;
       const parsed = workspaceSessionWorktreeInputSchema.safeParse(worktree);
       if (!parsed.success) return null;
       if (parsed.data.mode === "from_branch") {

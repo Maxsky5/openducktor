@@ -19,10 +19,22 @@ In a collapsed sidebar, select <Action>+</Action>, then <Action>New session</Act
 | Work location | Where the agent works |
 |---|---|
 | **Current checkout** | In your repository folder, on its current branch. The agent changes the files of your checkout. |
-| **New worktree** | In a new folder, on a new branch or an existing branch. Enter a **Worktree name**. Your checkout does not change. |
+| **New worktree** | In a new folder, on a new branch or an existing branch. Enter a **Worktree name**, or leave it blank when the workspace has a [naming model](#naming-model). Your checkout does not change. |
 | **Existing worktree** | In a worktree that you select. Use it to continue work in the worktree of a task or an earlier workspace session. |
 
 The session compares its changes with the **Target branch**.
+
+### Name work with a model [#naming-model]
+
+When the workspace has a [Naming model](/settings-reference/#repository-agents-naming-model), the model names the work:
+
+- The title of a new session comes from its first message. Until the model answers, the session shows the first words of the message. A title that you set yourself stays.
+- A new worktree with a blank **Worktree name** and no branch name gets a temporary branch, such as `odt/1a2b3c4d`, and a folder with the same digits. When you send the first message, the model names the branch, for example `fix/oauth-login-redirect`, and the agent starts on that branch. The folder keeps its name.
+- A branch name that you type does not change.
+
+If the model does not answer in 15 seconds, the branch comes from the first words of the message, such as `odt/fix-login-redirect-after-oauth`. If the model fails, the same names apply and the session shows the error.
+
+To change how the model names work, edit the [naming prompts](/agent-prompts/#naming).
 
 **New session** has no Goal mode. To give the agent a goal, send `/goal` and the objective in its composer. See [Set a goal with /goal](/coding-sessions/#goal-command).
 

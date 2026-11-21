@@ -166,9 +166,8 @@ export type GitRefTip = {
 };
 /** One reflog entry of a reference. `oid` is the value that the entry set. */
 export type GitReflogEntry = { oid: string; subject: string };
-type GitBranchUpstreamSetup = {
-  createdTrackingRef: string | null;
-};
+/** A tracking ref that OpenDucktor created, with the commit that it wrote. */
+export type OwnedTrackingRef = { ref: string; oid: string };
 /** The branch facts of a repository that tell its default branch. */
 export type GitBranchRefs = {
   remotes: string[];
@@ -209,6 +208,8 @@ export type GitPort = {
   getTrackedUpstreamReference(workingDir: string): Effect.Effect<string | null, GitPortError>;
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;
+  /** The names of the configured remotes, in one Git call. */
+  listRemoteNames(workingDir: string): Effect.Effect<string[], GitPortError>;
   listRemoteEndpoints(workingDir: string): Effect.Effect<GitRemoteEndpoint[], GitPortError>;
   listBranches(workingDir: string): Effect.Effect<GitBranch[], GitPortError>;
   readBranchRefs(repoPath: string): Effect.Effect<GitBranchRefs, GitPortError>;
@@ -272,17 +273,37 @@ export type GitPort = {
     createBranch: boolean,
     startPoint?: string,
   ): Effect.Effect<void, GitPortError>;
+  /**
+   * Sets the upstream of a new branch to the branch of the same name on `upstreamRemote`. With
+   * `requireNewTrackingRef`, an existing tracking ref of that name fails the setup, because the
+   * caller chose the name as free and a remote branch that appeared since then must not become the
+   * upstream.
+   */
   configureBranchUpstream(
     repoPath: string,
     worktreePath: string,
     branch: string,
     upstreamRemote: string,
-  ): Effect.Effect<GitBranchUpstreamSetup, GitPortError>;
-  deleteReference(repoPath: string, reference: string): Effect.Effect<void, GitPortError>;
+    requireNewTrackingRef: boolean,
+  ): Effect.Effect<OwnedTrackingRef | null, GitPortError>;
+  /** Deletes an owned ref only while it still holds the commit that OpenDucktor wrote. */
+  deleteOwnedReference(
+    repoPath: string,
+    owned: OwnedTrackingRef,
+  ): Effect.Effect<void, GitPortError>;
   removeWorktree(
     repoPath: string,
     worktreePath: string,
     force: boolean,
+  ): Effect.Effect<void, GitPortError>;
+  /**
+   * Renames the branch that a worktree has checked out, without force. Fails when the worktree has
+   * another branch checked out or when the new branch exists.
+   */
+  renameCheckedOutBranch(
+    workingDirectory: string,
+    expectedBranch: string,
+    branch: string,
   ): Effect.Effect<void, GitPortError>;
   deleteLocalBranch(
     repoPath: string,
@@ -339,6 +360,8 @@ export type GitPort = {
   fetchRemote(repoPath: string, remote: string): Effect.Effect<string, GitPortError>;
   /** Lists the references that match `for-each-ref` patterns, with their commit and tree. */
   listRefTips(repoPath: string, patterns: string[]): Effect.Effect<GitRefTip[], GitPortError>;
+  /** Lists the full names of the references that match `for-each-ref` patterns, and nothing else. */
+  listRefNames(repoPath: string, patterns: string[]): Effect.Effect<string[], GitPortError>;
   /**
    * The number of commits that `base` does not have, for each ref that the `for-each-ref` patterns
    * match, in one call. A ref that `base` holds has 0. It needs Git 2.41 or later.

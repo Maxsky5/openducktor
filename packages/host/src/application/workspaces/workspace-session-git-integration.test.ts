@@ -184,6 +184,7 @@ describe("Workspace Session commands with real Git and SQLite", () => {
     };
     const store = createSqliteWorkspaceSessionStore(database);
     const dependencies: WorkspaceSessionServiceDependencies = {
+      chatNaming: { registerCreated: () => undefined },
       taskOwnership: database.taskOwnership,
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },

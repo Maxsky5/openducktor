@@ -1,4 +1,4 @@
-import type { RuntimeKind, SettingsRepoConfig } from "@openducktor/contracts";
+import type { NamingModel, RuntimeKind, SettingsRepoConfig } from "@openducktor/contracts";
 import type { AgentModelSelection } from "@openducktor/core";
 import type { RepoSettingsInput } from "../types/session-slices";
 
@@ -14,6 +14,9 @@ export type RepoAgentDefaultDraft = {
 
 export type ModelDefaultDraft = RepoAgentDefaultDraft & { runtimeKind: RuntimeKind };
 
+/** The naming model of a workspace while the user edits it. It has no profile. */
+export type NamingModelDraft = Omit<ModelDefaultDraft, "profileId">;
+
 export type RuntimeBoundModelSelection = AgentModelSelection & { runtimeKind: RuntimeKind };
 
 export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): string => {
@@ -22,6 +25,9 @@ export const repoAgentDefaultRuntimeKindError = (role: RepoAgentDefaultRole): st
 
 const REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR =
   "Default Model runtime kind is required when provider and model are configured.";
+
+export const NAMING_MODEL_RUNTIME_KIND_ERROR =
+  "Naming model runtime kind is required when provider and model are configured.";
 
 export const pickRepoAgentDefault = <T>(
   roleDefault: T | null | undefined,
@@ -45,6 +51,14 @@ const normalizeRepoDefaultModelForSave = (
   entry: RepoAgentDefaultDraft | null | undefined,
 ): RuntimeBoundModelSelection | undefined =>
   prepareModelDefault(entry, REPO_DEFAULT_MODEL_RUNTIME_KIND_ERROR);
+
+/**
+ * The naming model to save: trimmed, without an empty effort, and undefined without a model. The
+ * draft has no profile, so the selection has none.
+ */
+export const normalizeNamingModelForSave = (
+  entry: NamingModelDraft | null | undefined,
+): NamingModel | undefined => prepareModelDefault(entry, NAMING_MODEL_RUNTIME_KIND_ERROR);
 
 export const prepareModelDefaultsForSave = (draft: {
   defaultModel?: RepoAgentDefaultDraft | null | undefined;

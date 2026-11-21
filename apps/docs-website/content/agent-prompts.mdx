@@ -160,7 +160,7 @@ Run the tests before you send build-completed for task {{task.id}}.
 
 To add a placeholder, put the cursor in the text, then select the placeholder in **Insert a placeholder**. The buttons show only the placeholders that the prompt can fill. **Final text** marks each placeholder. It crosses out a placeholder that the prompt cannot fill.
 
-These placeholders work in all prompts:
+These placeholders work in all prompts, except the [naming prompts](#naming):
 
 | Placeholder | Becomes |
 |---|---|
@@ -187,6 +187,15 @@ An override of **Builder Kickoff After Human Changes** must keep `{{humanFeedbac
 **Goal Writer** tells a model how to write the goal of a step in [Goal mode](/coding-sessions/#goal-mode). <Action>Generate goal</Action> in the start dialog sends it to the [Default model](/settings-reference/#repository-agents-default-model) of the repository, with the task material and the default goal.
 
 Goal Writer can fill only the placeholders that work in all prompts. A change applies the next time that you select <Action>Generate goal</Action>.
+
+## Naming [#naming]
+
+The **Naming** section has the prompts of the [Naming model](/settings-reference/#repository-agents-naming-model):
+
+- **Branch name** names the branch of a new task worktree, and of a new workspace session worktree without a name.
+- **Workspace session title** names a new workspace session from its first message.
+
+A naming prompt can fill only `{{workText}}`. It becomes the first message of the session, or the task title and description. An override must keep `{{workText}}`. OpenDucktor asks for the fields that it reads, so a change to a naming prompt cannot break the answer.
 
 ## Keep the workflow working [#keep-it-working]
 

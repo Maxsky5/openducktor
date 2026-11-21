@@ -217,12 +217,23 @@ describe("host-owned Workspace Session lifecycle", () => {
       createdTrackingRef: null as string | null,
       // SAFETY: The fake records each deleted reference.
       deletedReferences: [] as string[],
+      // SAFETY: The fake records each chat that the creation registers for naming.
+      registeredChats: [] as {
+        workspaceId: string;
+        sessionId: string;
+        temporaryBranch: string | null;
+      }[],
     };
     const store = createSqliteWorkspaceSessionStore(database);
     const pendingTitles = new Set<string>();
     const failure = (message: string) =>
       Effect.fail(new HostOperationError({ operation: "test", message }));
     const dependencies: WorkspaceSessionServiceDependencies = {
+      chatNaming: {
+        registerCreated: (ref, temporaryBranch) => {
+          state.registeredChats.push({ ...ref, temporaryBranch });
+        },
+      },
       claudeSessionMetadata: createClaudeSessionMetadataTestDouble(),
       runtimeAdmission: { admit: (_kind, work) => work },
       runForkSourceOperation: (_target, work) => work,
@@ -314,11 +325,13 @@ describe("host-owned Workspace Session lifecycle", () => {
         configureBranchUpstream: (_repo, _directory, _branch, upstreamRemote) =>
           Effect.sync(() => {
             state.upstreamRemote = upstreamRemote;
-            return { createdTrackingRef: state.createdTrackingRef };
+            return state.createdTrackingRef === null
+              ? null
+              : { ref: state.createdTrackingRef, oid: "c0ffee" };
           }),
-        deleteReference: (_repo, reference) =>
+        deleteOwnedReference: (_repo, owned) =>
           Effect.sync(() => {
-            state.deletedReferences.push(reference);
+            state.deletedReferences.push(owned.ref);
           }),
         removeWorktree: (_repo, directory) =>
           Effect.suspend(() => {
@@ -1277,6 +1290,22 @@ describe("host-owned Workspace Session lifecycle", () => {
     ]);
   });
 
+  test("an unnamed worktree plans no upstream step, because the first message sets it", async () => {
+    const h = setup();
+    h.config.namingModel = { runtimeKind: "claude", providerId: "anthropic", modelId: "haiku" };
+    const { snapshots, progress } = recordStartup();
+    await Effect.runPromise(
+      h.service
+        .create({ ...worktreeInput(), worktree: { mode: "from_name", name: "", branchName: null } })
+        .pipe(Effect.provideService(CurrentStartupProgress, progress)),
+    );
+
+    const planned = snapshots.find((snapshot) =>
+      snapshot.steps.some((step) => step.id === "checkout"),
+    );
+    expect(planned?.steps.map((step) => step.id)).toEqual(["checkout", "copies", "action:setup"]);
+  });
+
   test("a rejected worktree directory publishes no setup steps", async () => {
     const h = setup();
     h.paths.add(path.join(database.configDir, "worktrees", "workspace-sessions", "my-feature"));
@@ -1866,7 +1895,58 @@ describe("host-owned Workspace Session lifecycle", () => {
     },
   );
 
-  test.each(["../escape", "/absolute", "bad:name", "", ".hidden"])(
+  test("requires a worktree name when the workspace has no naming model", async () => {
+    const h = setup();
+    const error = await Effect.runPromise(
+      Effect.flip(
+        h.service.create({
+          ...worktreeInput(),
+          worktree: { mode: "from_name", name: "  ", branchName: null },
+        }),
+      ),
+    );
+    expect(hostInvokeFailureFromError(error)).toEqual({
+      kind: "workspace_session_validation",
+      field: "worktree.name",
+    });
+    expect(error.message).toBe(
+      "Enter a worktree name. To leave it blank, select a naming model in the workspace settings.",
+    );
+    expect(h.calls).toEqual([]);
+  });
+
+  test.each([
+    ["no branch name", null, true],
+    ["a typed branch name", "feature/typed", false],
+  ] as const)(
+    "names a blank worktree from the session ID, with %s",
+    async (_case, branchName, temporary) => {
+      const h = setup();
+      h.config.namingModel = { runtimeKind: "claude", providerId: "anthropic", modelId: "haiku" };
+      const { session } = await Effect.runPromise(
+        h.service.create({
+          ...worktreeInput(),
+          worktree: { mode: "from_name", name: "", branchName },
+        }),
+      );
+      const digits = session.id.replace(/-/g, "").slice(0, 8);
+      expect(h.state.worktree).toBe(
+        path.join(database.configDir, "worktrees", "workspace-sessions", digits),
+      );
+      expect(h.state.branch).toBe(branchName ?? `odt/${digits}`);
+      expect(h.state.registeredChats).toEqual([
+        {
+          workspaceId: h.config.workspaceId,
+          sessionId: session.id,
+          temporaryBranch: temporary ? `odt/${digits}` : null,
+        },
+      ]);
+      // The first message sets the upstream of a temporary branch, under its final name.
+      expect(h.state.upstreamRemote).toBe(temporary ? null : "origin");
+    },
+  );
+
+  test.each(["../escape", "/absolute", "bad:name", ".hidden"])(
     "rejects invalid worktree name %s before creating resources",
     async (name) => {
       const h = setup();

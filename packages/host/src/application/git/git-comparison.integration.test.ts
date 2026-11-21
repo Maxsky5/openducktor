@@ -125,7 +125,7 @@ test("keeps an unpublished task worktree usable after fetch prunes its tracking 
       adapter.createWorktree(repo, worktree, "odt/new-task", true, "origin/main"),
     );
     await Effect.runPromise(
-      adapter.configureBranchUpstream(repo, worktree, "odt/new-task", "origin"),
+      adapter.configureBranchUpstream(repo, worktree, "odt/new-task", "origin", false),
     );
     await Effect.runPromise(adapter.fetchRemote(worktree, "origin"));
     await writeFile(path.join(worktree, "base.txt"), "changed\n");

@@ -1058,6 +1058,46 @@ test("requires a safe worktree name and sends an optional custom branch from Adv
   // This flow renders the create dialog and waits for host reads.
 }, 2_500);
 
+test("a naming model lets a new branch worktree keep a blank name", async () => {
+  const requests: WorkspaceSessionCreateInput[] = [];
+  const view = await renderCreation(
+    async (input) => {
+      requests.push(input);
+      throw new Error("Keep form open");
+    },
+    undefined,
+    undefined,
+    {
+      workspaceGetRepoConfig: async () =>
+        repoConfigFixture({
+          workspaceId: "a",
+          workspaceName: "A",
+          branchPrefix: "odt",
+          namingModel: { runtimeKind: "opencode", providerId: "provider", modelId: "model" },
+        }),
+    },
+  );
+  try {
+    await selectModel(view);
+    fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
+    const name = await view.findByLabelText("Worktree name optional", {}, { timeout: 800 });
+    expect(name.getAttribute("value")).toBe("");
+    expect(
+      view.getByText(
+        /Leave the name blank to let OpenDucktor name the branch from your first message\./,
+      ),
+    ).toBeTruthy();
+    expect(view.getByText("New branch: named from your first message")).toBeTruthy();
+    expect(view.queryByText("odt/")).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Create session" }));
+    await waitFor(() => expect(requests).toHaveLength(1), { timeout: 800 });
+    expect(worktreeOf(requests[0])).toEqual({ mode: "from_name", name: "", branchName: null });
+  } finally {
+    view.unmount();
+  }
+  // This flow renders the create dialog and waits for host reads.
+}, 2_500);
+
 test("Existing branch accepts slash-separated worktree names and submits a safe directory name", async () => {
   const requests: WorkspaceSessionCreateInput[] = [];
   const view = await renderCreation(async (input) => {

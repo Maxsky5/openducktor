@@ -1,12 +1,15 @@
 import {
   promptOverrideKey,
   ROLE_INSTRUCTIONS_PROMPT_ID,
+  type PromptOwnerKind,
   type AgentPromptPlaceholder,
   type WorkflowDescriptor,
   type WorkflowIcon,
 } from "@openducktor/contracts";
 import {
   BASE_PROMPT_PLACEHOLDERS,
+  NAMING_PROMPT_PLACEHOLDERS,
+  NAMING_PROMPT_TEMPLATES,
   latestWorkflowRevisions,
   workflowPromptTemplates,
   type CompiledWorkflowCatalog,
@@ -14,16 +17,21 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { workflowCatalogQueryOptions } from "./workflows";
 
-type PromptPurpose = WorkflowDescriptor["templates"][number]["purpose"];
+/** When an agent of a workflow gets a workflow prompt. */
+type WorkflowPromptPurpose = WorkflowDescriptor["templates"][number]["purpose"];
 
 /** A prompt in Settings, with the override key of its owner. */
-export type SettingsPromptTemplate = WorkflowDescriptor["templates"][number] & {
+export type SettingsPromptTemplate = Omit<WorkflowDescriptor["templates"][number], "purpose"> & {
   key: string;
-  /** The role or the workflow that owns the prompt, for example "Builder" or "Spec, Plan, Build". */
+  /** The owner of the prompt, for example "Builder", "Spec, Plan, Build", or "Naming". */
   ownerTitle: string;
   /** When the agent gets the prompt, in plain words, for example "First message to the Builder". */
   usage: string;
-  ownerKind: "role" | "workflow";
+  ownerKind: PromptOwnerKind;
+  /** What a change of the prompt applies to, such as "every task of Spec, Plan, Build". Null for a role. */
+  appliesTo: string | null;
+  /** An example of append instructions for the prompt. */
+  appendExample: string;
   /** The placeholders that OpenDucktor supplies when it builds this prompt. */
   placeholders: readonly AgentPromptPlaceholder[];
 };
@@ -46,6 +54,9 @@ export type SettingsWorkflowPrompts = {
   groups: SettingsPromptGroup[];
 };
 
+/** An example of append instructions for a prompt that an agent gets. */
+const AGENT_APPEND_EXAMPLE = "For example: Run the linter before you finish.";
+
 /** A role of the catalog, for the role chips of workflow prompts. */
 export type SettingsPromptRole = { id: string; label: string; icon: WorkflowIcon | undefined };
 
@@ -53,7 +64,7 @@ export type SettingsPromptRole = { id: string; label: string; icon: WorkflowIcon
 const roleNames = (labels: readonly string[]): string => `the ${labels.join(" or ")} agent`;
 
 /** When the agent gets a workflow prompt, from its purpose and its roles. */
-const workflowPromptUsage = (purpose: PromptPurpose, roles: readonly string[]): string => {
+const workflowPromptUsage = (purpose: WorkflowPromptPurpose, roles: readonly string[]): string => {
   switch (purpose) {
     case "system":
       return "Part of every session in this workflow";
@@ -70,12 +81,26 @@ const workflowPromptUsage = (purpose: PromptPurpose, roles: readonly string[]): 
   }
 };
 
+/** The naming prompts, which OpenDucktor owns. The naming model of a workspace gets them. */
+const namingPromptTemplates = (): SettingsPromptTemplate[] =>
+  NAMING_PROMPT_TEMPLATES.map(({ output: _output, requiredPlaceholders, ...template }) => ({
+    ...template,
+    requiredPlaceholders: [...requiredPlaceholders],
+    roleIds: [],
+    ownerTitle: "Naming",
+    ownerKind: "feature",
+    appliesTo: "every name that the naming model writes",
+    appendExample: "For example: Use at most four words.",
+    usage: "Instructions to the naming model of the workspace",
+    placeholders: NAMING_PROMPT_PLACEHOLDERS,
+  }));
+
 /** The groups of a workflow section, in the order of a session. */
 const WORKFLOW_GROUPS: readonly {
   id: string;
   title: string;
   description: string;
-  purposes: readonly PromptPurpose[];
+  purposes: readonly WorkflowPromptPurpose[];
 }[] = [
   {
     id: "rules",
@@ -104,8 +129,9 @@ const WORKFLOW_GROUPS: readonly {
 ];
 
 /**
- * The prompts of Settings: the instructions of each catalog role, then the prompts of the latest
- * revision of each workflow. An override applies to its owner role or workflow in every revision.
+ * The prompts of Settings: the instructions of each catalog role, the prompts of the latest
+ * revision of each workflow, and the naming prompts. An override applies to its owner role or
+ * workflow in every revision.
  */
 export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
   const roles = catalog.roles.map(({ id, label, icon }): SettingsPromptRole => ({
@@ -119,6 +145,8 @@ export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
       ...systemPrompt,
       ownerTitle: label,
       ownerKind: "role",
+      appliesTo: null,
+      appendExample: AGENT_APPEND_EXAMPLE,
       usage: `Start of every ${label} session, in every workflow`,
       roleIcon: icon,
       id: ROLE_INSTRUCTIONS_PROMPT_ID,
@@ -127,48 +155,52 @@ export const workflowPromptSettings = (catalog: CompiledWorkflowCatalog) => {
         ownerId: id,
         promptId: ROLE_INSTRUCTIONS_PROMPT_ID,
       }),
-      purpose: "system",
       roleIds: [id],
       placeholders: BASE_PROMPT_PLACEHOLDERS,
     }),
   );
-  const workflows = latestWorkflowRevisions([...catalog.workflows.values()]).map(
+  const workflowSections = latestWorkflowRevisions([...catalog.workflows.values()]).map(
     (workflow): SettingsWorkflowPrompts => {
-      const templates = workflowPromptTemplates(workflow).map(
-        (template): SettingsPromptTemplate => {
-          const key = promptOverrideKey({
-            ownerKind: "workflow",
-            ownerId: workflow.reference.id,
-            promptId: template.id,
-          });
-          return {
-            ...template,
-            ownerTitle: workflow.definition.label,
-            ownerKind: "workflow",
-            usage: workflowPromptUsage(
-              template.purpose,
-              template.roleIds.map((role) => roleLabels.get(role) ?? role),
-            ),
-            key,
-            placeholders: workflow.prompts.placeholdersOf(key),
-          };
-        },
-      );
+      const templates = workflowPromptTemplates(workflow).map(({ purpose, ...template }) => {
+        const key = promptOverrideKey({
+          ownerKind: "workflow",
+          ownerId: workflow.reference.id,
+          promptId: template.id,
+        });
+        const setting: SettingsPromptTemplate = {
+          ...template,
+          ownerTitle: workflow.definition.label,
+          ownerKind: "workflow",
+          appliesTo: `every task of ${workflow.definition.label}`,
+          appendExample: AGENT_APPEND_EXAMPLE,
+          usage: workflowPromptUsage(
+            purpose,
+            template.roleIds.map((role) => roleLabels.get(role) ?? role),
+          ),
+          key,
+          placeholders: workflow.prompts.placeholdersOf(key),
+        };
+        return { purpose, setting };
+      });
       return {
         id: workflow.reference.id,
         title: workflow.definition.label,
         groups: WORKFLOW_GROUPS.map(({ purposes, ...group }) => ({
           ...group,
-          templates: templates.filter(({ purpose }) => purposes.includes(purpose)),
+          templates: templates
+            .filter(({ purpose }) => purposes.includes(purpose))
+            .map(({ setting }) => setting),
         })).filter(({ templates: groupTemplates }) => groupTemplates.length > 0),
       };
     },
   );
+  const namingTemplates = namingPromptTemplates();
   const templates: SettingsPromptTemplate[] = [
     ...roleTemplates,
-    ...workflows.flatMap(({ groups }) => groups.flatMap((group) => group.templates)),
+    ...workflowSections.flatMap(({ groups }) => groups.flatMap((group) => group.templates)),
+    ...namingTemplates,
   ];
-  return { roles, roleTemplates, workflows, templates };
+  return { roles, roleTemplates, workflows: workflowSections, namingTemplates, templates };
 };
 export type WorkflowPromptSettings = ReturnType<typeof workflowPromptSettings>;
 export const useWorkflowPromptSettings = () =>

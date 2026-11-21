@@ -19,6 +19,7 @@ import type {
   AgentSessionIdentity,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { workspaceSessionTitle } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
+import { branchNamingNotice } from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-branch-naming";
 import { type ReactElement, useDeferredValue, useMemo } from "react";
 import { useCommandGate, useResuming } from "@/host-session/active-session-context";
 import { useRetryOnReconnect } from "@/host-session/use-retry-on-reconnect";
@@ -119,7 +120,9 @@ export function LiveSessionTranscript({ latestSignal, onOpenSubagent }: SourcePr
     session: presentation.transcriptSession,
     target: transcriptTarget,
     state: transcriptState,
-    notice: readiness.transcriptNotice,
+    notice:
+      readiness.transcriptNotice ??
+      (owner.kind === "chat" ? branchNamingNotice(owner.record, session) : null),
   });
   const runtimePresentation = useRuntimePresentation(identity.runtimeKind);
   const pendingCounts = useMemo(

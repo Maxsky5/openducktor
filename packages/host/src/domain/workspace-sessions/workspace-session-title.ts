@@ -1,6 +1,7 @@
 import {
   WORKSPACE_SESSION_GENERATED_TITLE_LIMIT,
   type AcceptedAgentUserMessage,
+  type AgentSessionUserMessagePart,
   type WorkspaceSession,
 } from "@openducktor/contracts";
 
@@ -25,25 +26,41 @@ export const planRuntimeTitleRename = (
     ? { externalSessionId: session.externalSessionId, title: nextTitle }
     : null;
 
-export const buildWorkspaceSessionTitle = (message: AcceptedAgentUserMessage): string | null => {
-  const text = message.parts
-    .map((part) => {
-      switch (part.kind) {
-        case "text":
-          return part.synthetic ? "" : part.text;
-        case "file_reference":
-          return part.file.name;
-        case "skill_mention":
-          return part.skill.name;
-        case "subagent_reference":
-          return part.subagent.name;
-        case "attachment":
-          return part.attachment.name;
-      }
-    })
-    .join(" ")
-    .trim()
-    .replace(/\s+/g, " ");
+export const buildWorkspaceSessionTitle = (message: AcceptedAgentUserMessage): string | null =>
+  shortenWorkspaceSessionTitle(visibleMessageText(message.parts));
+
+type VisiblePart = AgentSessionUserMessagePart | AcceptedAgentUserMessage["parts"][number];
+
+/** The visible text of one message part. A synthetic text and attachment content stay out. */
+const visiblePartText = (part: VisiblePart): string => {
+  switch (part.kind) {
+    case "text":
+      return "synthetic" in part && part.synthetic ? "" : part.text;
+    case "slash_command":
+      return `/${part.command.trigger}`;
+    case "file_reference":
+      return part.file.name;
+    case "skill_mention":
+      return part.skill.name;
+    case "subagent_reference":
+      return part.subagent.name;
+    case "attachment":
+      return part.attachment.name;
+  }
+};
+
+/**
+ * The visible text of a message, before or after the runtime accepts it: its text and the names
+ * of the items that it references.
+ */
+export const visibleMessageText = (parts: readonly VisiblePart[]): string =>
+  normalizeTitleText(parts.map(visiblePartText).join(" "));
+
+const normalizeTitleText = (text: string): string => text.trim().replace(/\s+/g, " ");
+
+/** The message text cut at `WORKSPACE_SESSION_GENERATED_TITLE_LIMIT` characters, or null. */
+const shortenWorkspaceSessionTitle = (rawText: string): string | null => {
+  const text = normalizeTitleText(rawText);
   if (!text) return null;
   if (text.length <= WORKSPACE_SESSION_GENERATED_TITLE_LIMIT) return text;
   let prefix = "";

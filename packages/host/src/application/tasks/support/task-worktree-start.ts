@@ -11,9 +11,11 @@ import {
   rollbackFailedTaskWorktree,
   type TaskStartRollbackError,
 } from "./task-worktree-rollback";
+import type { OwnedTrackingRef } from "../../../ports/git-port";
 import type { TaskRecord } from "../../../ports/task-repository-ports";
 
 type BuildStartDependencies = ReturnType<typeof requireBuildStartDependencies>;
+type TaskWorktreeStartPoint = Effect.Success<ReturnType<typeof resolveTaskWorktreeStartPoint>>;
 
 export type PreparedTaskWorktree = {
   rollback: () => Effect.Effect<void, TaskStartRollbackError>;
@@ -50,6 +52,35 @@ export const validateExistingGitTaskWorktree = (
     );
   });
 
+/**
+ * Publishes every setup step of a new task worktree, with the naming step first, before the
+ * naming model writes the branch. Returns the start point of the worktree.
+ */
+export const planNewTaskWorktree = (
+  dependencies: Pick<BuildStartDependencies, "gitPort" | "workspaceSettingsService">,
+  repoConfig: RepoConfig,
+  task: TaskRecord,
+  canonicalRepoPath: string,
+  worktreePath: string,
+  namingStep: { id: string; label: string } | null,
+) =>
+  Effect.gen(function* () {
+    const startPoint = yield* resolveTaskWorktreeStartPoint(dependencies, {
+      workspaceId: repoConfig.workspaceId,
+      repoPath: canonicalRepoPath,
+      task,
+    });
+    yield* planWorktreeSetup({
+      label: "Create task worktree",
+      worktreePath,
+      branch: null,
+      namingStep,
+      upstreamRemote: startPoint.upstreamRemote,
+      repoConfig,
+    });
+    return startPoint;
+  });
+
 export const prepareNewTaskWorktree = (
   dependencies: BuildStartDependencies,
   repoConfig: RepoConfig,
@@ -57,12 +88,15 @@ export const prepareNewTaskWorktree = (
   canonicalRepoPath: string,
   worktreeBase: string,
   worktreePath: string,
+  /** A free branch, as `nameTaskBranch` chose it. An existing remote branch of it is a collision. */
   branch: string,
+  /** The start point that `planNewTaskWorktree` resolved. */
+  startPoint: TaskWorktreeStartPoint,
 ) =>
   Effect.gen(function* () {
     yield* dependencies.worktreeFiles.ensureDirectory(worktreeBase);
 
-    let createdTrackingRef: string | null = null;
+    let ownedTrackingRef: OwnedTrackingRef | null = null;
     let createdTaskWorktree = false;
     const actionRun = dependencies.worktreeActions.createRun({ worktreePath, branch });
     const rollback = (): Effect.Effect<void, TaskStartRollbackError> =>
@@ -84,7 +118,7 @@ export const prepareNewTaskWorktree = (
             canonicalRepoPath,
             worktreePath,
             branch,
-            createdTrackingRef,
+            ownedTrackingRef,
             worktreeBase,
           );
           yield* updateStartup((progress) =>
@@ -102,18 +136,6 @@ export const prepareNewTaskWorktree = (
       );
     const setupResult = yield* Effect.result(
       Effect.gen(function* () {
-        const startPoint = yield* resolveTaskWorktreeStartPoint(dependencies, {
-          workspaceId: repoConfig.workspaceId,
-          repoPath: canonicalRepoPath,
-          task,
-        });
-        yield* planWorktreeSetup({
-          label: "Create task worktree",
-          worktreePath,
-          branch,
-          upstreamRemote: startPoint.upstreamRemote,
-          repoConfig,
-        });
         yield* startupStep(
           { id: "checkout", label: "Create task worktree", details: [worktreePath, branch] },
           dependencies.gitPort.createWorktree(
@@ -138,16 +160,25 @@ export const prepareNewTaskWorktree = (
         );
 
         if (startPoint.upstreamRemote) {
-          const upstreamSetup = yield* startupStep(
+          // Uninterruptible until the rollback owns the tracking ref: the setup undoes its own
+          // writes when it fails, and an interruption waits for the setup to finish.
+          yield* startupStep(
             { id: "upstream", label: "Set branch upstream", details: [startPoint.upstreamRemote] },
             dependencies.gitPort.configureBranchUpstream(
               canonicalRepoPath,
               worktreePath,
               branch,
               startPoint.upstreamRemote,
+              true,
             ),
+          ).pipe(
+            Effect.tap((owned) =>
+              Effect.sync(() => {
+                ownedTrackingRef = owned;
+              }),
+            ),
+            Effect.uninterruptible,
           );
-          createdTrackingRef = upstreamSetup.createdTrackingRef;
         }
 
         yield* startupStep(

@@ -4,6 +4,9 @@ import type {
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
   CodexAppServerAccountRateLimitsResponse,
+  CodexAppServerConfigReadParams,
+  CodexAppServerConfigReadResponse,
+  CodexAppServerConfigRequirementsReadResponse,
   CodexAppServerModelListResponse,
   CodexAppServerSkillsListResponse,
   CodexAppServerInitializeParams,
@@ -161,6 +164,8 @@ export type CodexSessionState = {
 
 export type CodexAppServerClient = {
   initialize(params: CodexAppServerInitializeParams): Promise<void>;
+  configRead(params: CodexAppServerConfigReadParams): Promise<CodexAppServerConfigReadResponse>;
+  configRequirementsRead(): Promise<CodexAppServerConfigRequirementsReadResponse>;
   modelList(): Promise<CodexModelListResponse>;
   skillsList(params: CodexSkillsListParams): Promise<CodexAppServerSkillsListResponse>;
   threadStart(params: CodexThreadStartParams): Promise<CodexThreadStartResult>;

@@ -1,7 +1,6 @@
 import { mapTaskMutationProgressErrors } from "../task-error-mapping";
 import { loadTaskSessions } from "../support/task-sessions";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
-import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { workflowArtifactChange } from "../artifact-changes";
 import {
@@ -82,7 +81,7 @@ export const createWorktreeResetEffect = ({
         yield* collectImplementationResetTargets(dependencies, {
           workspaceId: input.workspaceId,
           repoPath: effectiveRepoPath,
-          branchPrefix: repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX,
+          repoConfig,
           managedWorktreeBasePath,
           canonicalWorktree: canonicalSessionState.canonicalExists ? canonicalWorktree : null,
           task: current,

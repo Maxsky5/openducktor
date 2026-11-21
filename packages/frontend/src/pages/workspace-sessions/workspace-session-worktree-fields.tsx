@@ -18,6 +18,8 @@ import {
 type Props = WorktreeInputProps & {
   workspace: ActiveWorkspace;
   branches: UseQueryResult<GitBranch[]>;
+  /** True when the workspace has a naming model, so a new branch worktree can have a blank name. */
+  hasNamingModel: boolean;
 };
 
 const worktreeTabClassName = segmentedControlTriggerClassName({
@@ -33,6 +35,7 @@ export function WorkspaceSessionWorktreeFields({
   disabled,
   error,
   branches,
+  hasNamingModel,
 }: Props): ReactElement {
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
@@ -69,13 +72,20 @@ export function WorkspaceSessionWorktreeFields({
           </p>
         </TabsContent>
       </Tabs>
-      <WorktreeNameField value={value} onChange={onChange} disabled={disabled} error={error} />
+      <WorktreeNameField
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        error={error}
+        hasNamingModel={hasNamingModel}
+      />
       <NewWorktreeBranchFields
         workspace={workspace}
         value={value}
         onChange={onChange}
         disabled={disabled}
         error={error}
+        hasNamingModel={hasNamingModel}
       />
     </div>
   );

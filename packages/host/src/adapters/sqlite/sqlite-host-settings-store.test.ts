@@ -188,6 +188,58 @@ describe("shared host settings", () => {
     });
   });
 
+  test("stores the naming model apart from the role defaults, in one row", async () => {
+    await withDatabase(async ({ session }) => {
+      const config = createDefaultGlobalConfig();
+      const build = { runtimeKind: "codex" as const, providerId: "openai", modelId: "gpt-5" };
+      config.workspaces.one = repoConfigFixture({
+        workspaceId: "one",
+        workspaceName: "One",
+        repoPath: "/one",
+        agentDefaults: { build },
+        namingModel: { runtimeKind: "claude", providerId: "anthropic", modelId: "haiku" },
+      });
+      await Effect.runPromise(
+        session.transaction("test.import", (transaction) =>
+          importHostSharedConfig(
+            transaction,
+            applyTaskWorkflowSettings(config, builtinTaskWorkflows),
+          ),
+        ),
+      );
+      const stored = await Effect.runPromise(readHostSharedConfig(session));
+      expect(stored.workspaces.one?.agentDefaults).toEqual({ build });
+      expect(stored.workspaces.one?.namingModel).toEqual({
+        runtimeKind: "claude",
+        providerId: "anthropic",
+        modelId: "haiku",
+      });
+      const edit = (change: (next: GlobalConfig) => void) =>
+        measureSettingsEdits(session, (current) => {
+          change(current);
+          return current;
+        });
+      expect(
+        await edit((next) => {
+          next.workspaces.one!.namingModel = {
+            runtimeKind: "opencode",
+            providerId: "openai",
+            modelId: "mini",
+            variant: "low",
+          };
+        }),
+      ).toEqual({ requests: 1, rows: 1 });
+      expect(
+        await edit((next) => {
+          delete next.workspaces.one!.namingModel;
+        }),
+      ).toEqual({ requests: 1, rows: 1 });
+      const cleared = await Effect.runPromise(readHostSharedConfig(session));
+      expect(cleared.workspaces.one?.namingModel).toBeUndefined();
+      expect(cleared.workspaces.one?.agentDefaults).toEqual({ build });
+    });
+  });
+
   test("stores role and workflow prompt overrides by owner and reads back their keys", async () => {
     await withDatabase(async ({ session }) => {
       const config = createDefaultGlobalConfig();

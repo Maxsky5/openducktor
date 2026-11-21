@@ -53,6 +53,7 @@ import {
   createWorkspaceSessionService,
 } from "../workspace-session-service";
 import { repoConfigFixture } from "../../../test-support/repo-config-fixture";
+import { createNamingTestDependencies } from "../../../test-support/naming-test-doubles";
 
 type NativeTitleState = { nativeTitle: string | null };
 
@@ -140,6 +141,7 @@ export const createPersistenceHarness = async (
     failSnapshot: false,
     failModel: false,
     failModelSave: false,
+    failTargetSave: false,
     failRestore: false,
     failTitle: false,
     failTitleAfterWrite: false,
@@ -206,7 +208,11 @@ export const createPersistenceHarness = async (
   let updateLiveRuntimeTitle:
     | ((title: string) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>)
     | null = null;
+  const naming = createNamingTestDependencies({
+    settings: { getRepoConfig: () => Effect.sync(() => config) },
+  });
   const workspacePersistence = createWorkspaceSessionRuntimePersistence({
+    naming,
     updateRuntimeSessionTitle: ({ title }) =>
       updateLiveRuntimeTitle
         ? updateLiveRuntimeTitle(title)
@@ -223,6 +229,8 @@ export const createPersistenceHarness = async (
             : input.generatedTitle === null
               ? store.recordAcceptedMessage(input)
               : state.beforeTitleSave.pipe(Effect.andThen(store.recordAcceptedMessage(input))),
+      setExecutionTarget: (input) =>
+        state.failTargetSave ? failure("target save failed") : store.setExecutionTarget(input),
       setSelectedModel: (input) =>
         state.beforeModelSave.pipe(
           Effect.andThen(
@@ -485,6 +493,7 @@ export const createPersistenceHarness = async (
     lifecycle: createTaskSessionLifecycleCoordinator(),
     operationGate,
     sessionTitleGate,
+    chatNaming: { registerCreated: persistence.registerCreated },
     isTitleSyncPending: persistence.isTitleSyncPending,
     markTitleSyncPending: persistence.markTitleSyncPending,
     store: {
@@ -526,6 +535,8 @@ export const createPersistenceHarness = async (
   return {
     operationGate,
     sessionTitleGate,
+    naming,
+    config,
     ref,
     storeRef,
     record,

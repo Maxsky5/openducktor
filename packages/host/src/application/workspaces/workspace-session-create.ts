@@ -1,4 +1,6 @@
+import { automaticWorktreeName } from "@openducktor/contracts";
 import {
+  type RepoConfig,
   type WorkspaceSession,
   type WorkspaceSessionCreateInput,
   type WorkspaceSessionCreateResult,
@@ -13,12 +15,56 @@ import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-st
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import {
   withWorkspaceSessionTarget,
+  type WorkspaceSessionDestination,
   type WorkspaceSessionTargetCreationDependencies,
 } from "./workspace-session-target";
+import { temporaryWorkspaceBranch } from "./workspace-session-branch-rename";
+import type { WorkspaceSessionNaming } from "./workspace-session-naming";
 
 export type WorkspaceSessionCreateDependencies = WorkspaceSessionTargetCreationDependencies & {
   store: Pick<WorkspaceSessionStorePort, "create">;
   settings: Pick<WorkspaceSettingsService, "getRepoConfig" | "listCustomAgentRoles">;
+  chatNaming: Pick<WorkspaceSessionNaming, "registerCreated">;
+};
+
+/**
+ * The destination of a new chat. A new worktree without a name gets the first digits of the
+ * session ID as its folder, and, without a branch name, as its temporary branch. Only a workspace
+ * with a naming model accepts a blank name.
+ */
+const resolveDestination = (
+  input: WorkspaceSessionCreateInput,
+  config: Pick<RepoConfig, "branchPrefix" | "namingModel">,
+  sessionId: string,
+) => {
+  const typed: WorkspaceSessionDestination = input;
+  if (
+    input.location !== "local_worktree" ||
+    input.worktree.mode !== "from_name" ||
+    input.worktree.name !== ""
+  )
+    return Effect.succeed({ destination: typed, temporaryBranch: null });
+  if (!config.namingModel)
+    return Effect.fail(
+      new HostValidationError({
+        field: "worktree.name",
+        message:
+          "Enter a worktree name. To leave it blank, select a naming model in the workspace settings.",
+      }),
+    );
+  const temporaryBranch =
+    input.worktree.branchName === null
+      ? temporaryWorkspaceBranch(config.branchPrefix, sessionId)
+      : null;
+  const destination: WorkspaceSessionDestination = {
+    location: "local_worktree",
+    worktree: {
+      ...input.worktree,
+      name: automaticWorktreeName(sessionId),
+      branchName: input.worktree.branchName ?? temporaryBranch,
+    },
+  };
+  return Effect.succeed({ destination, temporaryBranch });
 };
 
 /** Saves a fresh draft chat in the current checkout, a new worktree, or an existing worktree. */
@@ -59,6 +105,7 @@ export const createWorkspaceSessionCreate =
         );
       }
       const roleSnapshot = role ? { ...role } : null;
+      const { destination, temporaryBranch } = yield* resolveDestination(input, config, sessionId);
       const repoPath = yield* dependencies.git.canonicalizePath(config.repoPath);
       const save = (executionTarget: WorkspaceSessionExecutionTarget) =>
         Effect.gen(function* () {
@@ -91,6 +138,10 @@ export const createWorkspaceSessionCreate =
                 ),
               ),
           );
+          dependencies.chatNaming.registerCreated(
+            { workspaceId: input.workspaceId, sessionId },
+            temporaryBranch,
+          );
           yield* updateStartup((progress) =>
             progress.ownership({ state: "saved", target: { kind: "workspace", record: saved } }),
           );
@@ -100,9 +151,10 @@ export const createWorkspaceSessionCreate =
         dependencies,
         {
           owner: { workspaceId: input.workspaceId, sessionId },
-          destination: input,
+          destination,
           repoConfig: { ...config, repoPath },
           targetBranch: input.targetBranch,
+          deferUpstream: temporaryBranch !== null,
         },
         (executionTarget, retainTarget) =>
           save(executionTarget).pipe(Effect.tap(() => Effect.sync(retainTarget))),

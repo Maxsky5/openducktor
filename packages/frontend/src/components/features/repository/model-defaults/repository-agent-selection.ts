@@ -5,8 +5,11 @@ import {
   resolveModelSelectionForPair,
 } from "@openducktor/core";
 import type { ModelPickerValue } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
-import type { ModelDefaultDraft } from "@openducktor/frontend-core/lib/repo-agent-defaults";
-import type { ensureDraftAgentDefault } from "./model-defaults-model";
+import type {
+  ModelDefaultDraft,
+  RepoAgentDefaultDraft,
+} from "@openducktor/frontend-core/lib/repo-agent-defaults";
+import { ensureDraftAgentDefault } from "./model-defaults-model";
 
 export const resolveRepoAgentDefaultModelPickerSelection = ({
   currentValue,
@@ -53,3 +56,16 @@ export const resolveRepoAgentDefaultModelPickerSelection = ({
     profileId: resolvedPair.selection.profileId ?? "",
   };
 };
+
+/** The model that a picker choice selects, from the current draft, or null for no change. */
+export const selectPickedModel = (
+  current: RepoAgentDefaultDraft | null | undefined,
+  value: ModelPickerValue,
+  targetCatalog: AgentModelCatalog,
+) =>
+  resolveRepoAgentDefaultModelPickerSelection({
+    currentValue: current ? ensureDraftAgentDefault(current) : null,
+    currentRuntimeKind: current?.runtimeKind ?? null,
+    targetCatalog,
+    value,
+  });

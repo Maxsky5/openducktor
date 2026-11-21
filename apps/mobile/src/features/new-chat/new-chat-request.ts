@@ -14,6 +14,7 @@ import {
   type WorkspaceSessionCreateLocation,
 } from "@openducktor/frontend-core/workspace-sessions/create/use-workspace-session-create";
 import {
+  branchNamedByFirstMessage,
   existingBranchError,
   INVALID_BRANCH_NAME,
   localWorktreeBranches,
@@ -21,6 +22,7 @@ import {
   type WorkspaceSessionWorktreeFieldError,
   worktreeDirectoryName,
   worktreeNameError,
+  worktreeNameReady,
 } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-worktree-rules";
 
 /** The state of the model of a new chat. */
@@ -113,6 +115,8 @@ export type NewChatForm = {
   branches: readonly GitBranch[] | null;
   /** The branch prefix of the repository, when its config loaded. */
   branchPrefix: string | undefined;
+  /** True when the workspace has a naming model, so a new branch worktree can have a blank name. */
+  hasNamingModel: boolean;
   /** A worktree field error that the host reported for the last create request. */
   hostError: WorkspaceSessionWorktreeFieldError | null;
   /** The create request of the shared form, which its submit sends. Null while it is not valid. */
@@ -147,8 +151,15 @@ export type NewChatRequest = {
   fieldErrors: NewChatFieldErrors;
   /** Why Create is not available yet, for the hint next to the button. Null when it is. */
   blockedReason: string | null;
-  /** The worktree directory name and branch that the host creates, for the location summary. */
-  worktreeSummary: { directory: string | null; branch: string | null };
+  /**
+   * The worktree directory name and branch that the host creates, for the location summary.
+   * `namedByFirstMessage` is true when the first message names the new branch.
+   */
+  worktreeSummary: {
+    directory: string | null;
+    branch: string | null;
+    namedByFirstMessage: boolean;
+  };
 };
 
 const modelError = (model: NewChatModelState): string | null => {
@@ -197,7 +208,7 @@ const firstBlockedReason = (form: NewChatForm, errors: NewChatFieldErrors): stri
   if (!form.targetBranch)
     return form.targetPending ? "Loading the target branch." : "Choose a target branch.";
   if (form.location === "local_worktree") {
-    if (form.worktree.name.trim().length === 0) return "Enter a worktree name.";
+    if (!worktreeNameReady(form.worktree, form.hasNamingModel)) return "Enter a worktree name.";
     if (form.worktree.mode === "from_branch") {
       if (form.branches === null) return "Loading the branches.";
       if (!form.worktree.branchName) return "Choose a local branch.";
@@ -238,6 +249,12 @@ export const buildNewChatRequest = (form: NewChatForm): NewChatRequest => {
     input,
     fieldErrors,
     blockedReason: input ? null : firstBlockedReason(form, fieldErrors),
-    worktreeSummary: { directory, branch },
+    worktreeSummary: {
+      directory,
+      branch,
+      namedByFirstMessage:
+        form.location === "local_worktree" &&
+        branchNamedByFirstMessage(form.worktree, form.hasNamingModel),
+    },
   };
 };

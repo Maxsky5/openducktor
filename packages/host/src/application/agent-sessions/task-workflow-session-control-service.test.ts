@@ -1,4 +1,5 @@
 import { specPlanBuildReference } from "@openducktor/workflows/test-support";
+import { disabledNamingService } from "../../test-support/naming-test-doubles";
 import { specPlanBuildWorkflow, EMPTY_PROMPT_SETTINGS } from "@openducktor/workflows";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { describe, expect, test } from "bun:test";
@@ -143,6 +144,7 @@ const createAgentSessionCommandService = ({
       validateRef: () => Effect.void,
       prepareResume: (request) => Effect.succeed({ input: request, save: () => Effect.void }),
       prepareForkSource: () => Effect.die(new Error("unexpected fork source read")),
+      prepareDelivery: () => Effect.void,
       prepareSend: (request) => Effect.succeed(request),
       recordAcceptedMessage,
       prepareModelUpdate: (request) =>
@@ -916,6 +918,7 @@ describe("createAgentSessionCommandService", () => {
       taskReader,
       taskLifecycle,
       taskSessionStart: createTaskSessionStartPreparationService({
+        naming: disabledNamingService,
         taskWorkflows: builtinTaskWorkflows,
         taskStore: createTaskStoreTestDouble({
           getTask: () => Effect.succeed(harnessTask({ status: "ready_for_dev" })),
@@ -1062,6 +1065,7 @@ describe("createAgentSessionCommandService", () => {
       taskReader: taskStore,
       taskLifecycle,
       taskSessionStart: createTaskSessionStartPreparationService({
+        naming: disabledNamingService,
         taskWorkflows: builtinTaskWorkflows,
         taskStore,
         gitPort: createBuildStartGitPort({ calls }),

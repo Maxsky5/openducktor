@@ -115,21 +115,15 @@ const getRepoWarnings = ({
 }): string[] => {
   const warnings: string[] = [];
   const availableKinds = new Set(availableRuntimeDefinitions.map(({ kind }) => kind));
-  const defaultModelRuntimeKind = repoConfig.defaultModel?.runtimeKind;
-  if (defaultModelRuntimeKind && !availableKinds.has(defaultModelRuntimeKind)) {
+  const warnIfDisabled = (label: string, runtimeKind: RuntimeKind | undefined) => {
+    if (!runtimeKind || availableKinds.has(runtimeKind)) return;
     warnings.push(
-      `Default Model runtime "${runtimeLabelFor({ runtimeDefinitions: allRuntimeDefinitions, runtimeKind: defaultModelRuntimeKind })}" is disabled.`,
+      `${label} runtime "${runtimeLabelFor({ runtimeDefinitions: allRuntimeDefinitions, runtimeKind })}" is disabled.`,
     );
-  }
-
-  for (const role of Object.keys(repoConfig.agentDefaults)) {
-    const runtimeKind = repoConfig.agentDefaults[role]?.runtimeKind;
-    if (!runtimeKind || availableKinds.has(runtimeKind)) {
-      continue;
-    }
-    warnings.push(
-      `${role} agent runtime "${runtimeLabelFor({ runtimeDefinitions: allRuntimeDefinitions, runtimeKind })}" is disabled.`,
-    );
-  }
+  };
+  warnIfDisabled("Default Model", repoConfig.defaultModel?.runtimeKind);
+  warnIfDisabled("Naming model", repoConfig.namingModel?.runtimeKind);
+  for (const role of Object.keys(repoConfig.agentDefaults))
+    warnIfDisabled(`${role} agent`, repoConfig.agentDefaults[role]?.runtimeKind);
   return warnings;
 };

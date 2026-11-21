@@ -8,7 +8,12 @@ import {
   type NotificationKindSetting,
   type RepoConfig,
 } from "@openducktor/contracts";
-import type { TaskWorkflow } from "@openducktor/workflows";
+import {
+  NAMING_PROMPT_KEYS,
+  namingPromptLayerProblem,
+  type PromptSettingsLayers,
+  type TaskWorkflow,
+} from "@openducktor/workflows";
 import { HostValidationError } from "../effect/host-errors";
 import type { TaskWorkflowResolver } from "../ports/task-workflow-port";
 import type { GlobalSettings } from "../ports/settings-config-port";
@@ -33,6 +38,18 @@ const requireKnownKeys = (
   }
 };
 
+/** Rejects a naming prompt layer with a placeholder that the naming request cannot fill. */
+const requireValidNamingPromptLayers = (
+  layers: PromptSettingsLayers,
+  scope: "global" | "repository",
+  field: string,
+) => {
+  for (const key of NAMING_PROMPT_KEYS) {
+    const problem = namingPromptLayerProblem(key, layers, scope);
+    if (problem !== undefined) invalid(`${field}.${key}`, problem);
+  }
+};
+
 const ids = <Item extends { id: string }>(items: readonly Item[]) => items.map(({ id }) => id);
 
 /** The settings that every task workflow of the host defines. */
@@ -47,7 +64,10 @@ const hostWorkflowIds = (workflows: readonly TaskWorkflow[]) => {
   return {
     roles: new Set(ids(roles)),
     writeRoles: new Set(ids(roles.filter(({ workspaceAccess }) => workspaceAccess === "write"))),
-    templates: new Set(workflows.flatMap(({ prompts }) => prompts.templates.map(({ key }) => key))),
+    templates: new Set([
+      ...workflows.flatMap(({ prompts }) => prompts.templates.map(({ key }) => key)),
+      ...NAMING_PROMPT_KEYS,
+    ]),
     notificationDefaults,
   };
 };
@@ -91,6 +111,11 @@ export const applyGlobalTaskWorkflowSettings = (
     host.templates,
     "globalPromptAppends",
     "prompt",
+  );
+  requireValidNamingPromptLayers(
+    { overrides: config.globalPromptOverrides, appends: config.globalPromptAppends },
+    "global",
+    "globalPromptOverrides",
   );
 
   const notificationKinds = new Set<string>([
@@ -182,6 +207,11 @@ export const validateRepoTaskWorkflowSettings = (
     host.templates,
     `${field}.promptAppends`,
     "prompt",
+  );
+  requireValidNamingPromptLayers(
+    { overrides: workspace.promptOverrides, appends: workspace.promptAppends },
+    "repository",
+    `${field}.promptOverrides`,
   );
   const activeRole = workspace.agentStudioState.activeTask?.role;
   if (activeRole !== undefined && !host.roles.has(activeRole)) {

@@ -79,6 +79,26 @@ test("the first screen lists the role instructions, then each workflow with its 
   }
 });
 
+test("the first screen lists the naming prompts in their own section, not as a workflow", () => {
+  const view = renderPrompts();
+  try {
+    const workflows = within(view.getByRole("region", { name: "Workflows" }));
+    expect(workflows.queryByRole("button", { name: /Naming/ })).toBeNull();
+    const naming = within(view.getByRole("region", { name: "Naming" }));
+    fireEvent.click(naming.getByRole("button", { name: /Branch name/ }));
+    expect(header(view, "Branch name")).toContain(
+      "Your changes apply to every name that the naming model writes, in every repository.",
+    );
+    expect(
+      view.getByRole("textbox", { name: "Append instructions" }).getAttribute("placeholder"),
+    ).toBe("For example: Use at most four words.");
+    back(view, "System prompts");
+    expect(document.activeElement).toBe(row(view, "Branch name"));
+  } finally {
+    view.unmount();
+  }
+});
+
 test("a workflow page lists the prompts of the workflow by when the agent gets them", () => {
   const view = renderPrompts();
   try {

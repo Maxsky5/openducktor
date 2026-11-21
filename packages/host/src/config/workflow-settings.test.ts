@@ -179,3 +179,53 @@ describe("applyTaskWorkflowSettings", () => {
     ).toEqual({ editor: { sandboxMode: "read-only" } });
   });
 });
+
+describe("naming prompt settings", () => {
+  const branchKey = '["feature","naming","branch-name"]';
+
+  test("accepts naming prompt layers with the work text", () => {
+    expect(() =>
+      applyTaskWorkflowSettings(
+        config({
+          globalPromptOverrides: {
+            [branchKey]: { template: "Team rules.\n{{workText}}", baseVersion: 1 },
+          },
+          workspaces: {
+            repo: workspace({
+              promptAppends: { [branchKey]: { text: "Use Jira keys.", enabled: true } },
+            }),
+          },
+        }),
+        reviewWorkflows,
+      ),
+    ).not.toThrow();
+  });
+
+  test.each([
+    ["an unknown placeholder", "{{workText}} {{task.unknown}}", "Unsupported placeholder"],
+    ["a placeholder that naming cannot fill", "{{workText}} {{task.id}}", "cannot fill"],
+    ["no work text", "Team rules.", "Missing required placeholder"],
+  ])("rejects a naming override with %s", (_case, template, problem) => {
+    expect(() =>
+      applyTaskWorkflowSettings(
+        config({ globalPromptOverrides: { [branchKey]: { template, baseVersion: 1 } } }),
+        reviewWorkflows,
+      ),
+    ).toThrow(problem);
+  });
+
+  test("rejects a workspace naming append with an unknown placeholder", () => {
+    expect(() =>
+      applyTaskWorkflowSettings(
+        config({
+          workspaces: {
+            repo: workspace({
+              promptAppends: { [branchKey]: { text: "{{nope}}", enabled: true } },
+            }),
+          },
+        }),
+        reviewWorkflows,
+      ),
+    ).toThrow('The repository append of prompt "Branch name" has a placeholder problem.');
+  });
+});

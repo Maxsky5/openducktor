@@ -21,6 +21,8 @@ import type {
 } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
 import type { CodexAppServerStreamEvent } from "./types";
+import type { CodexAppServerConfigReadResponse } from "@openducktor/contracts";
+
 import {
   CodexAppServerAdapter,
   type CodexAppServerAdapterOptions,
@@ -28,6 +30,11 @@ import {
   type CodexJsonRpcTransport,
 } from "./index";
 import { extractStringField, isPlainObject } from "./codex-app-server-shared";
+
+/** The MCP servers of a Codex configuration, by name. */
+export type CodexConfiguredMcpServers = NonNullable<
+  CodexAppServerConfigReadResponse["config"]["mcp_servers"]
+>;
 
 /** The role policy of the built-in task workflow. */
 export const testWorkflowRolePolicy: WorkflowRolePolicyResolver = ({ role }) => {
@@ -424,6 +431,13 @@ export class RecordingTransport implements CodexJsonRpcTransport {
   beforeSettingsAnswer: (() => Promise<void>) | null = null;
   beforeTurnStartAnswer: (() => Promise<void>) | null = null;
   unsubscribeError: Error | null = null;
+  /** The MCP servers of the effective configuration that `config/read` reports. */
+  configuredMcpServers: CodexConfiguredMcpServers = {};
+  /** The config layers and the managed feature pins that the configuration reads report. */
+  configLayers: NonNullable<CodexAppServerConfigReadResponse["layers"]> = [];
+  featureRequirements: Record<string, boolean> | null = null;
+  allowManagedHooksOnly: boolean | null = null;
+  beforeConfigReadAnswer: (() => Promise<void>) | null = null;
   private turnStartCount = 0;
 
   constructor(
@@ -444,6 +458,19 @@ export class RecordingTransport implements CodexJsonRpcTransport {
           platformFamily: "unix",
           platformOs: "macos",
           userAgent: "codex_cli_rs/0.149.0-test",
+        };
+      case "config/read":
+        await this.beforeConfigReadAnswer?.();
+        return { config: { mcp_servers: this.configuredMcpServers }, layers: this.configLayers };
+      case "configRequirements/read":
+        return {
+          requirements:
+            this.featureRequirements === null && this.allowManagedHooksOnly === null
+              ? null
+              : {
+                  featureRequirements: this.featureRequirements,
+                  allowManagedHooksOnly: this.allowManagedHooksOnly,
+                },
         };
       case "model/list":
         return {

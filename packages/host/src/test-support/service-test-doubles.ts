@@ -20,7 +20,7 @@ import type {
   AgentSessionRuntimeAdapterPort,
 } from "../ports/agent-session-live-adapter-port";
 
-const unexpectedEffectCall = (service: string, method: string) => () =>
+export const unexpectedEffectCall = (service: string, method: string) => () =>
   Effect.die(new Error(`Unexpected ${service} call: ${method}`));
 
 const unexpectedSyncCall = (service: string, method: string): never => {
@@ -78,6 +78,7 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
   readCheckout: unexpectedEffectCall("Git port", "readCheckout"),
   abortConflict: unexpectedEffectCall("Git port", "abortConflict"),
   canonicalizePath: unexpectedEffectCall("Git port", "canonicalizePath"),
+  renameCheckedOutBranch: unexpectedEffectCall("Git port", "renameCheckedOutBranch"),
   changeSelection: unexpectedEffectCall("Git port", "changeSelection"),
   commitAll: unexpectedEffectCall("Git port", "commitAll"),
   commitStaged: unexpectedEffectCall("Git port", "commitStaged"),
@@ -86,9 +87,10 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
   createWorktree: unexpectedEffectCall("Git port", "createWorktree"),
   deleteLocalBranch: unexpectedEffectCall("Git port", "deleteLocalBranch"),
   restoreDeletedBranch: unexpectedEffectCall("Git port", "restoreDeletedBranch"),
-  deleteReference: unexpectedEffectCall("Git port", "deleteReference"),
+  deleteOwnedReference: unexpectedEffectCall("Git port", "deleteOwnedReference"),
   fetchRemote: unexpectedEffectCall("Git port", "fetchRemote"),
   listRefTips: unexpectedEffectCall("Git port", "listRefTips"),
+  listRefNames: unexpectedEffectCall("Git port", "listRefNames"),
   resolveFetchRemotes: unexpectedEffectCall("Git port", "resolveFetchRemotes"),
   countCommitsAhead: unexpectedEffectCall("Git port", "countCommitsAhead"),
   mergeTreeOids: unexpectedEffectCall("Git port", "mergeTreeOids"),
@@ -113,6 +115,7 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
   listFileRegions: unexpectedEffectCall("Git port", "listFileRegions"),
   listFiles: unexpectedEffectCall("Git port", "listFiles"),
   listRemotes: unexpectedEffectCall("Git port", "listRemotes"),
+  listRemoteNames: unexpectedEffectCall("Git port", "listRemoteNames"),
   readBranchRefs: unexpectedEffectCall("Git port", "readBranchRefs"),
   listRemoteEndpoints: unexpectedEffectCall("Git port", "listRemoteEndpoints"),
   listWorktrees: unexpectedEffectCall("Git port", "listWorktrees"),

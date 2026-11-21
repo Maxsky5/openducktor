@@ -12,17 +12,24 @@ import { updateStartup } from "./session-startup-progress";
 export const planWorktreeSetup = (input: {
   label: string;
   worktreePath: string;
-  branch: string;
+  /** Null while the naming model still writes the branch. The checkout step adds it when it runs. */
+  branch: string | null;
+  /**
+   * The step that names the branch before Git creates the worktree. It starts right after the
+   * plan, so the plan shows it as running.
+   */
+  namingStep?: { id: string; label: string } | null;
   upstreamRemote: string | null | undefined;
   repoConfig: Pick<RepoConfig, "worktreeCopyPaths" | "actions">;
 }) =>
   updateStartup((progress) =>
     progress.plan([
+      ...(input.namingStep ? [{ ...input.namingStep, state: "running" as const }] : []),
       {
         id: "checkout",
         label: input.label,
         state: "pending",
-        details: [input.worktreePath, input.branch],
+        details: input.branch === null ? [input.worktreePath] : [input.worktreePath, input.branch],
       },
       ...(input.upstreamRemote
         ? [

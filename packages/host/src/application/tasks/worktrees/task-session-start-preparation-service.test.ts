@@ -1,7 +1,8 @@
 import { builtinTaskWorkflows } from "../../../test-support/task-workflows";
+import { disabledNamingService } from "../../../test-support/naming-test-doubles";
 import { describe, expect, test } from "bun:test";
 import type { GitCurrentBranch, RepoActions } from "@openducktor/contracts";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { z } from "zod";
 import type { GitPort } from "../../../ports/git-port";
 import { createTaskStoreTestDouble } from "../../../test-support/task-store-test-double";
@@ -24,6 +25,7 @@ const worktreePath = "/worktrees/repo/task-1";
 const createService = (gitOverrides: Partial<GitPort>) => {
   const calls: unknown[] = [];
   return createTaskSessionStartPreparationService({
+    naming: disabledNamingService,
     taskWorkflows: builtinTaskWorkflows,
     taskStore: createTaskStoreTestDouble({
       getTask: () => Effect.succeed(task({ status: "human_review" })),
@@ -155,13 +157,18 @@ const actions: RepoActions = {
   defaultActionId: "install",
 };
 
-const createNewWorktreeService = (calls: unknown[], worktreeActions: WorktreeActionRunner) =>
+const createNewWorktreeService = (
+  calls: unknown[],
+  worktreeActions: WorktreeActionRunner,
+  gitOverrides: Partial<GitPort> = {},
+) =>
   createTaskSessionStartPreparationService({
+    naming: disabledNamingService,
     taskWorkflows: builtinTaskWorkflows,
     taskStore: createTaskStoreTestDouble({
       getTask: () => Effect.succeed(task({ status: "ready_for_dev" })),
     }),
-    gitPort: createBuildStartGitPort({ calls }),
+    gitPort: { ...createBuildStartGitPort({ calls }), ...gitOverrides },
     settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
     worktreeActions,
     worktreeFiles: createBuildStartWorktreeFiles(calls),
@@ -238,6 +245,41 @@ describe("task session preparation in a new worktree", () => {
       repoPath: "/repo",
       branch: "odt/task-1-task-1",
       force: true,
+    });
+    // The rollback deletes the tracking ref only while it holds the commit that the setup wrote.
+    expect(calls).toContainEqual({
+      type: "deleteOwnedReference",
+      repoPath: "/repo",
+      ref: "refs/remotes/origin/odt/task-1-task-1",
+      oid: "c0ffee",
+    });
+  });
+
+  test("an interruption during the upstream setup still removes the tracking ref it created", async () => {
+    const calls: unknown[] = [];
+    const setupStarted = Promise.withResolvers<void>();
+    const finishSetup = Promise.withResolvers<void>();
+    const service = createNewWorktreeService(calls, createBuildWorktreeActions(calls), {
+      configureBranchUpstream: () =>
+        Effect.gen(function* () {
+          setupStarted.resolve();
+          yield* Effect.promise(() => finishSetup.promise);
+          return { ref: "refs/remotes/origin/odt/task-1-task-1", oid: "c0ffee" };
+        }),
+    });
+
+    const fiber = Effect.runFork(service.prepare(buildPreparation));
+    await setupStarted.promise;
+    const interrupted = Effect.runPromise(Fiber.interrupt(fiber));
+    finishSetup.resolve();
+    await interrupted;
+
+    expect(callTypes(calls)).not.toContain("copyConfiguredPaths");
+    expect(calls).toContainEqual({
+      type: "deleteOwnedReference",
+      repoPath: "/repo",
+      ref: "refs/remotes/origin/odt/task-1-task-1",
+      oid: "c0ffee",
     });
   });
 

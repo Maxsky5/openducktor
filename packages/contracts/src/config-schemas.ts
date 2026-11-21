@@ -483,6 +483,10 @@ export const agentModelDefaultSchema = z.object({
 });
 export type AgentModelDefault = z.infer<typeof agentModelDefaultSchema>;
 
+/** The model that writes session titles and branch names for a workspace. It has no profile. */
+export const namingModelSchema = agentModelDefaultSchema.omit({ profileId: true });
+export type NamingModel = z.infer<typeof namingModelSchema>;
+
 /** A null value clears the default of a role. */
 const roleRecordSchema = <T extends z.ZodTypeAny>(value: T) =>
   z
@@ -531,6 +535,7 @@ export const repoConfigSchema = z.object({
   tileColor: nullableToOptional(workspaceTileColorSchema),
   repoPath: trimmedRequiredString("Repository path"),
   defaultModel: nullableToOptional(agentModelDefaultSchema),
+  namingModel: nullableToOptional(namingModelSchema),
   worktreeBasePath: nullableToOptional(z.string().min(1)),
   branchPrefix: z.string().min(1).default(DEFAULT_BRANCH_PREFIX),
   defaultTargetBranch: gitTargetBranchSchema,
@@ -550,6 +555,7 @@ export type RepoConfig = z.infer<typeof repoConfigSchema>;
 const persistedRepoConfigSchema = repoConfigSchema
   .safeExtend({
     defaultModel: nullableToOptional(persistedAgentModelDefaultSchema),
+    namingModel: nullableToOptional(namingModelSchema.strict()),
     defaultTargetBranch: gitTargetBranchSchema.strict(),
     git: persistedRepoGitConfigSchema.default({}),
     hooks: repoHooksSchema.strict().default({ beforeWorktreeRemoval: [] }),
@@ -924,6 +930,7 @@ export type SettingsSnapshot = ParsedSettingsSnapshot;
 const workspaceEditableFieldsSchema = settingsRepoConfigSchema.omit({
   workspaceId: true,
   defaultModel: true,
+  namingModel: true,
   promptOverrides: true,
   promptAppends: true,
   agentDefaults: true,
@@ -988,6 +995,7 @@ export const workspaceSettingsPatchSchema = z.strictObject({
   ...settingsFieldsPatchSchema(workspaceEditableFieldsSchema).shape,
   actions: repoActionsSchema.optional(),
   defaultModel: setOrClearSchema(modelDefaultPatchSchema).optional(),
+  namingModel: setOrClearSchema(modelDefaultPatchSchema.omit({ profileId: true })).optional(),
   promptOverrides: promptOverrideEditsSchema.optional(),
   promptAppends: promptAppendEditsSchema.optional(),
   agentDefaults: keyedSettingsEditsSchema(

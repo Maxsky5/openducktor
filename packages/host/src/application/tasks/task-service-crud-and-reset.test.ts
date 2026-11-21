@@ -734,6 +734,88 @@ describe("createTaskService task mutations and reset", () => {
       },
     ]);
   });
+  test("deletes the model-named branch of the task worktree and an older task branch", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      listTasks: () => Effect.succeed([task({ id: "task-1" })]),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
+      deleteTask: () => Effect.succeed(true),
+    };
+    await Effect.runPromise(
+      createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
+        gitPort: createDirectMergeGitPort({
+          calls,
+          branches: {
+            "/repo": [
+              { name: "main", isCurrent: true, isRemote: false, worktreePath: "/repo" },
+              { name: "odt/task-1-old-title", isCurrent: false, isRemote: false },
+              {
+                name: "feat/login-redirect",
+                isCurrent: false,
+                isRemote: false,
+                worktreePath: "/worktrees/repo/task-1",
+              },
+              { name: "fix/other-task", isCurrent: false, isRemote: false },
+            ],
+          },
+        }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
+        taskStore,
+        worktreeOwners: noWorktreeOwners,
+        worktreeFiles: createCleanupWorktreeFiles(calls),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { beforeWorktreeRemoval: [] },
+        }),
+      }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+    );
+    const deleted = (branch: string) =>
+      expect.objectContaining({ type: "deleteLocalBranch", branch });
+    expect(calls).toContainEqual(deleted("feat/login-redirect"));
+    expect(calls).toContainEqual(deleted("odt/task-1-old-title"));
+    expect(calls).not.toContainEqual(deleted("main"));
+    expect(calls).not.toContainEqual(deleted("fix/other-task"));
+  });
+
+  test("never deletes a target branch that looks like a task branch", async () => {
+    const calls: unknown[] = [];
+    const taskStore: TaskStorePort = {
+      listTasks: () =>
+        Effect.succeed([task({ id: "task-1", targetBranch: { branch: "odt/task-1-base" } })]),
+      getTaskMetadata: () => Effect.succeed(metadataWithSessions([])),
+      deleteTask: () => Effect.succeed(true),
+    };
+    await Effect.runPromise(
+      createTaskService({
+        taskWorkflows: builtinTaskWorkflows,
+        gitPort: createDirectMergeGitPort({
+          calls,
+          branches: {
+            "/repo": [
+              { name: "odt/task-1-base", isCurrent: false, isRemote: false },
+              { name: "odt/task-1-work", isCurrent: false, isRemote: false },
+            ],
+          },
+        }),
+        settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
+        taskStore,
+        worktreeOwners: noWorktreeOwners,
+        worktreeFiles: createCleanupWorktreeFiles(calls),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: "repo",
+          repoPath: "/repo",
+          hooks: { beforeWorktreeRemoval: [] },
+        }),
+      }).deleteTask({ workspaceId: "repo", repoPath: "/repo", taskId: "task-1" }),
+    );
+    const deleted = (branch: string) =>
+      expect.objectContaining({ type: "deleteLocalBranch", branch });
+    expect(calls).toContainEqual(deleted("odt/task-1-work"));
+    expect(calls).not.toContainEqual(deleted("odt/task-1-base"));
+  });
+
   test("deletes closed tasks with stranded managed worktree directories", async () => {
     const calls: unknown[] = [];
     const session = createAgentSessionRecord({ workingDirectory: "/worktrees/repo/task-1" });
@@ -1729,7 +1811,7 @@ describe("createTaskService task mutations and reset", () => {
     expect(result.failure.message).toContain("Cleared the session records of the worktree roles.");
     expect(result.failure).toMatchObject({ cause: failure });
   });
-  test("rejects implementation reset when the canonical worktree is not on a task branch", async () => {
+  test("rejects implementation reset when the canonical worktree is on the target branch", async () => {
     const calls: unknown[] = [];
     const taskStore: TaskStorePort = {
       listTasks: () => Effect.succeed([task({ status: "blocked" })]),
@@ -1745,7 +1827,7 @@ describe("createTaskService task mutations and reset", () => {
       gitPort: createDirectMergeGitPort({
         calls,
         currentBranches: {
-          "/worktrees/repo/task-1": { name: "feature/other", detached: false },
+          "/worktrees/repo/task-1": { name: "main", detached: false },
         },
       }),
       settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
@@ -1774,7 +1856,7 @@ describe("createTaskService task mutations and reset", () => {
           eventId: "reset-implementation",
         }),
       ),
-    ).rejects.toThrow("is on branch feature/other, which is not a task branch");
+    ).rejects.toThrow("is on the target branch main");
     expect(calls).toMatchObject([
       { type: "listBranches", workingDir: "/repo" },
       { type: "currentBranch", workingDir: "/worktrees/repo/task-1" },

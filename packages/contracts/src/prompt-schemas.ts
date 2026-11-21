@@ -20,6 +20,7 @@ export const agentPromptPlaceholderValues = [
   "git.targetBranch",
   "git.conflictedFiles",
   "git.conflictOutput",
+  "workText",
 ] as const;
 export const agentPromptPlaceholderSchema = z.enum(agentPromptPlaceholderValues);
 export type AgentPromptPlaceholder = z.infer<typeof agentPromptPlaceholderSchema>;
@@ -95,8 +96,12 @@ export const agentPromptOverrideSchema = z.object({
 });
 export type AgentPromptOverride = z.infer<typeof agentPromptOverrideSchema>;
 
-/** A prompt belongs to one role or one workflow. Its ID is unique only within its owner. */
-export type PromptOwnerKind = "role" | "workflow";
+/**
+ * A prompt belongs to one role, one workflow, or one built-in feature of OpenDucktor, such as
+ * naming. Its ID is unique only within its owner.
+ */
+export const PROMPT_OWNER_KINDS = ["role", "workflow", "feature"] as const;
+export type PromptOwnerKind = (typeof PROMPT_OWNER_KINDS)[number];
 export type PromptOverrideTarget = {
   ownerKind: PromptOwnerKind;
   ownerId: string;
@@ -121,6 +126,16 @@ export const WORKFLOW_PROMPT_IDS = {
   pullRequest: "messages.pull_request",
 } as const;
 
+/**
+ * The prompts that tell the naming model how to name a branch or a workspace session. They belong
+ * to the naming feature, so their owner kind is `feature`.
+ */
+export const NAMING_PROMPT_OWNER_ID = "naming";
+export const NAMING_PROMPT_IDS = {
+  branchName: "branch-name",
+  workspaceSessionTitle: "workspace-session-title",
+} as const;
+
 /** A workflow prompt that a launch action sends as a session message has an ID in this group. */
 export const WORKFLOW_MESSAGE_PROMPT_PREFIX = "messages.";
 
@@ -139,11 +154,7 @@ const promptOverrideKeyTupleSchema = z
     }
   })
   .pipe(
-    z.tuple([
-      z.enum(["role", "workflow"]),
-      agentPromptTemplateIdSchema,
-      agentPromptTemplateIdSchema,
-    ]),
+    z.tuple([z.enum(PROMPT_OWNER_KINDS), agentPromptTemplateIdSchema, agentPromptTemplateIdSchema]),
   );
 
 /** The owner and prompt ID of a settings key, or null when the key has another form. */
@@ -159,10 +170,13 @@ const promptOverrideKeySchema = z
   .string()
   .refine(
     (key) => parsePromptOverrideKey(key) !== null,
-    'Use a prompt override key of the form ["role" | "workflow", ownerId, promptId].',
+    'Use a prompt override key of the form ["role" | "workflow" | "feature", ownerId, promptId].',
   );
 
-/** Keyed by prompt owner and prompt ID. The host checks the keys against its roles and workflows. */
+/**
+ * Keyed by prompt owner and prompt ID. The host checks the keys against its roles, its workflows,
+ * and the prompts of its features.
+ */
 export const repoPromptOverridesSchema = z
   .record(promptOverrideKeySchema, agentPromptOverrideSchema)
   .default({});

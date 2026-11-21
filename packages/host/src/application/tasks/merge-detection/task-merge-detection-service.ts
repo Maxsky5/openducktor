@@ -17,10 +17,10 @@ import type {
   WorkspaceSettingsService,
 } from "../../workspaces/workspace-settings-service";
 import {
-  listTaskBranchTips,
+  listLocalBranchTips,
   readCanonicalManagedWorktreeBase,
   relatedTaskBranchTips,
-  taskBranchRefPattern,
+  taskCheckout,
 } from "../support/task-branch-tips";
 import { checkMovedTasks, type MovedTask } from "./task-merge-batch";
 import {
@@ -183,13 +183,14 @@ export const createTaskMergeDetectionService = ({
         settingsConfig,
         repoConfig,
       );
-      const branchTips = yield* listTaskBranchTips(gitPort, gitRepoPath, repoConfig.branchPrefix);
+      const branchTips = yield* listLocalBranchTips(gitPort, gitRepoPath);
       const directMergeTaskIds = new Set(yield* taskStore.listDirectMergeTaskIds(workspace));
       const pending: PendingCheck[] = [];
       for (const task of candidates) {
+        const checkout = taskCheckout(settingsConfig, worktreeBase, repoConfig, task);
         const plan = planTaskCheck(task, {
-          relatedTips: relatedTaskBranchTips(branchTips, repoConfig.branchPrefix, task.id),
-          taskWorktreePath: settingsConfig.join(worktreeBase, task.id),
+          relatedTips: relatedTaskBranchTips(branchTips, repoConfig.branchPrefix, checkout),
+          taskWorktreePath: checkout.worktreePath,
           defaultTarget: repoConfig.defaultTargetBranch,
           hasPendingDirectMerge: directMergeTaskIds.has(task.id),
           last: last.get(task.id),
@@ -240,7 +241,6 @@ export const createTaskMergeDetectionService = ({
       const checked = yield* checkMovedTasks({
         gitPort,
         gitRepoPath,
-        branchRefPattern: taskBranchRefPattern(repoConfig.branchPrefix),
         moved: toCheck,
         checkedAt,
         withPermit: (effect) => checks.withPermit(effect),

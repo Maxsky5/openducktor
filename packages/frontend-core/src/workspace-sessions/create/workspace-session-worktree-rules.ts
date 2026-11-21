@@ -23,6 +23,34 @@ export const WORKTREE_NAME_RULE =
 
 export const WORKTREE_NAME_MAX_LENGTH = 80;
 
+export const WORKTREE_NAME_OPTIONAL_HINT =
+  "Leave the name blank to let OpenDucktor name the branch from your first message.";
+
+/**
+ * True when the worktree name can stay blank: a worktree on a new branch in a workspace with a
+ * naming model. The host then makes the directory and, without a branch name, names the branch from
+ * the first message.
+ */
+export const worktreeNameOptional = (
+  value: WorkspaceSessionWorktreeInput,
+  hasNamingModel: boolean,
+): boolean => hasNamingModel && value.mode === "from_name";
+
+/** True when the worktree has a name, or when its name can stay blank. */
+export const worktreeNameReady = (
+  value: WorkspaceSessionWorktreeInput,
+  hasNamingModel: boolean,
+): boolean => value.name.trim().length > 0 || worktreeNameOptional(value, hasNamingModel);
+
+/** True when the first message names the new branch: a blank name and no typed branch name. */
+export const branchNamedByFirstMessage = (
+  value: WorkspaceSessionWorktreeInput,
+  hasNamingModel: boolean,
+): boolean =>
+  worktreeNameOptional(value, hasNamingModel) &&
+  value.name.trim().length === 0 &&
+  !value.branchName;
+
 /** Switches between a new branch and an existing branch. The worktree name stays. */
 export const changeWorktreeMode = (
   value: WorkspaceSessionWorktreeInput,

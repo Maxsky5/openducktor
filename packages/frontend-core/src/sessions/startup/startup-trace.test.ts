@@ -489,3 +489,23 @@ test("the active step is the last step that runs or failed", () => {
     ]),
   ).toBe("copies");
 });
+
+test("the planned setup of a new worktree shows while the naming model writes the branch", () => {
+  const rows = startupTraceRows({
+    ...attempt([
+      operation("create", [
+        step("request"),
+        step("naming", { state: "running" }),
+        step("checkout", { state: "pending" }),
+        step("copies", { state: "pending" }),
+      ]),
+    ]),
+    status: running,
+  });
+
+  expect(rows.map(({ id, step }) => [id, step.state])).toEqual([
+    ["create:naming", "running"],
+    ["create:checkout", "pending"],
+    ["attempt:session", "pending"],
+  ]);
+});

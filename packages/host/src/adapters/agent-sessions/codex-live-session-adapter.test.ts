@@ -262,6 +262,9 @@ const createControllerHarness = ({
         generateText: async () => {
           throw new Error("Unexpected text generation");
         },
+        generateJson: async () => {
+          throw new Error("Unexpected JSON generation");
+        },
         resolvePendingApproval: () => {
           throw new Error("unexpected pending approval resolution");
         },

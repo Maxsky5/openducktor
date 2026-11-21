@@ -30,6 +30,10 @@ import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
 import type { AgentGeneratedImageSource } from "@openducktor/core";
 import { CodexGeneratedImageResolver } from "./codex-generated-image-resolver";
 import {
+  agentJsonAnswerMismatch,
+  agentJsonOutputSchema,
+  type AgentJsonGenerationInput,
+  type AgentJsonOutputSchema,
   type AgentTextGenerationInput,
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLivePendingQuestionRequest,
@@ -142,6 +146,7 @@ import {
   resolveCodexSessionScopePolicy,
 } from "./codex-session-scope-policy";
 import { type CodexThreadConfig, resolveCodexThreadConfig } from "./codex-managed-mcp";
+import { codexIsolationProblem, codexTextGenerationConfig } from "./codex-text-generation-config";
 import {
   CodexSubagentLinkState,
   type CodexSubagentRoute,
@@ -1053,14 +1058,75 @@ export class CodexAppServerAdapter
 
   /**
    * One model answer in an ephemeral thread: Codex keeps no session, the sandbox is read-only, no
-   * environment is open, and no approval can come. The thread has no OpenDucktor session, so its
-   * events go only to the answer wait.
+   * environment is open, and no approval can come. The thread turns off each configured MCP
+   * server, hooks, notifications, plugins, apps, and the tool features, so the model cannot reach
+   * a tool or run a command. Managed requirements and legacy managed config layers can undo those
+   * overrides, so the adapter checks them first and starts no thread when they do. The thread has
+   * no OpenDucktor session, so its events go only to the
+   * answer wait. After `signal` aborts, the adapter starts no thread and no turn, and it releases a
+   * thread that it already started.
    */
-  async generateText(runtimeId: string, input: AgentTextGenerationInput): Promise<string> {
+  async generateText(
+    runtimeId: string,
+    input: AgentTextGenerationInput,
+    signal: AbortSignal,
+  ): Promise<string> {
+    return this.answerInIsolatedThread(runtimeId, input, null, signal);
+  }
+
+  /**
+   * One model answer of `answerSchema`, in the same isolated thread as `generateText`. Codex
+   * constrains the final message of the turn to the JSON Schema of `answerSchema`, so the message
+   * is JSON text.
+   */
+  async generateJson<Answer>(
+    runtimeId: string,
+    input: AgentJsonGenerationInput<Answer>,
+    signal: AbortSignal,
+  ): Promise<Answer> {
+    const text = await this.answerInIsolatedThread(
+      runtimeId,
+      input,
+      agentJsonOutputSchema(input.answerSchema),
+      signal,
+    );
+    let value: unknown;
+    try {
+      value = JSON.parse(text);
+    } catch (cause) {
+      throw new Error(
+        `Codex returned an answer that is not JSON, against its output schema: ${text}`,
+        {
+          cause,
+        },
+      );
+    }
+    const answer = input.answerSchema.safeParse(value);
+    if (!answer.success) throw agentJsonAnswerMismatch("Codex", answer.error);
+    return answer.data;
+  }
+
+  private async answerInIsolatedThread(
+    runtimeId: string,
+    input: AgentTextGenerationInput,
+    outputSchema: AgentJsonOutputSchema | null,
+    signal: AbortSignal,
+  ): Promise<string> {
     await this.runtimeEvents.ensureRuntimeEventSubscription(runtimeId);
     const client = this.runtimeClients.clientForRuntime(runtimeId);
-    await this.models.validate(client, runtimeId, input.model);
+    const [, { config, layers }, { requirements }] = await Promise.all([
+      this.models.validate(client, runtimeId, input.model),
+      client.configRead({ cwd: input.repoPath, includeLayers: true }),
+      client.configRequirementsRead(),
+    ]);
     const transport = toTransportModelSelection(input.model);
+    const problem = codexIsolationProblem({
+      featureRequirements: requirements?.featureRequirements,
+      allowManagedHooksOnly: requirements?.allowManagedHooksOnly,
+      layers: layers ?? [],
+    });
+    if (problem !== null) throw new Error(problem);
+    signal.throwIfAborted();
     const { thread } = await client.threadStart({
       cwd: input.repoPath,
       model: transport.model,
@@ -1068,28 +1134,47 @@ export class CodexAppServerAdapter
       approvalPolicy: "never",
       sandbox: "read-only",
       environments: [],
+      config: codexTextGenerationConfig(Object.keys(config.mcp_servers ?? {})),
       developerInstructions: input.instructions,
     });
+    if (signal.aborted) {
+      await client.threadUnsubscribe({ threadId: thread.id }).catch(() => undefined);
+      signal.throwIfAborted();
+    }
     const { textAnswers } = this.runtimeEvents;
     // Wait before the turn request, so no event of the turn comes first. Await both together:
     // the answer can fail while Codex still handles the turn request.
-    const answering = Promise.all([
-      textAnswers.wait(runtimeId, thread.id),
-      client.turnStart({
-        threadId: thread.id,
-        input: [{ type: "text", text: input.prompt, text_elements: [] }],
-        ...transport,
-      }),
-    ]);
+    const answer = textAnswers.wait(runtimeId, thread.id);
+    const turn = client.turnStart({
+      threadId: thread.id,
+      input: [{ type: "text", text: input.prompt, text_elements: [] }],
+      ...transport,
+      outputSchema,
+    });
+    // The host gives up at its deadline, so the turn must stop too, or it keeps using the model.
+    let onAbort: () => void = () => undefined;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(signal.reason);
+    });
+    signal.addEventListener("abort", onAbort, { once: true });
     let text: string;
     try {
-      [text] = await answering;
+      [text] = await Promise.race([Promise.all([answer, turn]), aborted]);
     } catch (cause) {
       textAnswers.forget(runtimeId, thread.id);
-      // The first error is the cause. A failed unsubscribe, for example after a runtime stop,
-      // must not replace it.
+      // The first error is the cause. A failed interrupt or unsubscribe, for example after a
+      // runtime stop, must not replace it.
+      if (signal.aborted) {
+        const started = await turn.catch(() => null);
+        if (started)
+          await client
+            .turnInterrupt({ threadId: thread.id, turnId: started.turn.id })
+            .catch(() => undefined);
+      }
       await client.threadUnsubscribe({ threadId: thread.id }).catch(() => undefined);
       throw cause;
+    } finally {
+      signal.removeEventListener("abort", onAbort);
     }
     textAnswers.forget(runtimeId, thread.id);
     await client.threadUnsubscribe({ threadId: thread.id });

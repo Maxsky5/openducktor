@@ -29,6 +29,13 @@
       "when": 1794161385463,
       "tag": "0003_prompt_appends",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1795187639091,
+      "tag": "0004_naming_models_and_open_prompt_owners",
+      "breakpoints": true
     }
   ]
 }

@@ -4,7 +4,8 @@ import { startupStep } from "../../agent-sessions/session-startup-progress";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { normalizePathForComparison } from "../../../domain/path-comparison";
-import { buildBranchName } from "../../../domain/task";
+import type { NamingService } from "../../naming/naming-service";
+import { nameTaskBranch, taskBranchNamingStep } from "./task-branch-naming";
 import { HostOperationError, HostValidationError } from "../../../effect/host-errors";
 import type { GitPort } from "../../../ports/git-port";
 import type { RuntimeRegistryPort } from "../../../ports/runtime-registry-port";
@@ -25,6 +26,7 @@ import { requireTaskEvent, requireWorkflowRole } from "../support/task-workflow-
 import { resolveRuntimeDescriptorForTaskSession } from "../support/task-worktree-cleanup";
 import { failOperationAfterRollback } from "../support/task-worktree-rollback";
 import {
+  planNewTaskWorktree,
   prepareNewTaskWorktree,
   type PreparedTaskWorktree,
   validateExistingGitTaskWorktree,
@@ -67,6 +69,8 @@ export type TaskSessionStartPreparationDependencies = {
   runtimeRegistry?: RuntimeRegistryPort;
   worktreeFiles?: WorktreeFilePort;
   taskSessionLifecycleCoordinator: TaskSessionLifecycleCoordinator;
+  /** Names the branch of a new task worktree when the workspace has a naming model. */
+  naming: NamingService;
 };
 
 export const createTaskSessionStartPreparationService = ({
@@ -80,6 +84,7 @@ export const createTaskSessionStartPreparationService = ({
   runtimeRegistry,
   worktreeFiles,
   taskSessionLifecycleCoordinator,
+  naming,
 }: TaskSessionStartPreparationDependencies) => {
   return {
     validateTarget(input: TaskSessionStartPreparationInput): Effect.Effect<void, TaskServiceError> {
@@ -211,7 +216,18 @@ export const createTaskSessionStartPreparationService = ({
                     ),
                   );
                 } else {
-                  const branch = buildBranchName(repoConfig.branchPrefix, taskId, task.title);
+                  const startPoint = yield* planNewTaskWorktree(
+                    dependencies,
+                    repoConfig,
+                    task,
+                    canonicalRepoPath,
+                    worktreePath,
+                    taskBranchNamingStep(repoConfig),
+                  );
+                  const branch = yield* nameTaskBranch(
+                    { naming, git: dependencies.gitPort },
+                    { repoConfig, repoPath: canonicalRepoPath, task },
+                  );
                   const newWorktree = yield* prepareNewTaskWorktree(
                     dependencies,
                     repoConfig,
@@ -220,6 +236,7 @@ export const createTaskSessionStartPreparationService = ({
                     worktreeBase,
                     worktreePath,
                     branch,
+                    startPoint,
                   );
                   rollback = () =>
                     Effect.scoped(

@@ -1,6 +1,7 @@
 import { liveSessionRefKey, toLiveSessionRef } from "./live-session-ref";
 import type { AgentTextGenerationPort } from "../../ports/agent-text-generation-port";
 import type { OpencodeSessionRuntimeConnection } from "@openducktor/adapters-opencode-sdk";
+import type { AgentJsonGenerationInput } from "@openducktor/contracts";
 import {
   type AcceptedAgentInput,
   type AgentSessionControlSummary,
@@ -177,8 +178,13 @@ export const createOpenCodeSessionControlAdapter = ({
     textGeneration: {
       generate: (input) =>
         Effect.tryPromise({
-          try: () => connection.generateText(input),
+          try: (signal) => connection.generateText(input, signal),
           catch: (cause) => toHostOperationError(cause, "opencode-live-session.generate-text"),
+        }),
+      generateJson: <Answer>(input: AgentJsonGenerationInput<Answer>) =>
+        Effect.tryPromise({
+          try: (signal) => connection.generateJson(input, signal),
+          catch: (cause) => toHostOperationError(cause, "opencode-live-session.generate-json"),
         }),
     },
     startSession: (input) => {

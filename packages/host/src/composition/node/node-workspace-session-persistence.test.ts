@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { disabledNamingService } from "../../test-support/naming-test-doubles";
 import type { AgentSessionLiveEnvelope, AgentSessionLiveRef } from "@openducktor/contracts";
 import { Effect, Result } from "effect";
 import { createSqliteTaskRepository } from "../../adapters/sqlite/sqlite-task-repository";
@@ -133,7 +134,11 @@ const createHarness = async () => {
   const { persistence } = createNodeWorkspaceSessionPersistence({
     taskStore: database.store,
     store: createSqliteWorkspaceSessionStore(database),
-    settings: { getWorkspaceCatalog: () => Effect.succeed(catalog) },
+    settings: {
+      getWorkspaceCatalog: () => Effect.succeed(catalog),
+      getRepoConfig: () => Effect.die(new Error("unexpected repository settings read")),
+    },
+    naming: disabledNamingService,
     git: createGitPortTestDouble({}),
     eventBus,
     faultLog: () => Effect.void,

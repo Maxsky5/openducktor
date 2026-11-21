@@ -84,6 +84,7 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
     rolesReady: form.roles.isSuccess,
     branches: form.branches.isSuccess ? form.branches.data : null,
     branchPrefix,
+    hasNamingModel: form.hasNamingModel,
     hostError: form.worktreeError,
     input: form.input,
   });

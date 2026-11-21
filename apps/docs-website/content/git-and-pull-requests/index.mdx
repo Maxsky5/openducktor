@@ -10,6 +10,8 @@ Each task works on its own branch. You review the branch, then finish the work w
 
 A worktree is a second folder of your repository. It has the task branch checked out, so your checkout does not change. The first session of the task creates the branch and the worktree.
 
+The task branch is named from the task title, such as `odt/fieldnotes-170l-show-the-notebook-count`. When the workspace has a [Naming model](/settings-reference/#repository-agents-naming-model), the model names it from the task title and description, such as `feat/notebook-count`. When a local or remote branch has the name, OpenDucktor adds `-2`, `-3`, and so on. OpenDucktor finds the task branch by the branch that the task worktree has checked out, so merge detection, close, delete, and reset work with any branch name.
+
 <Diagram name="worktree" />
 
 The target branch is the branch that the work merges into. You choose it when the Builder starts.

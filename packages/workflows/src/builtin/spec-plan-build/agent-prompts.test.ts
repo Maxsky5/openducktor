@@ -8,6 +8,7 @@ import {
   HUMAN_FEEDBACK_PLACEHOLDERS,
 } from "../../task-workflow/task-prompts";
 import { PULL_REQUEST_LAUNCH } from "../../task-workflow/pull-request-launch";
+import { NAMING_PROMPT_PLACEHOLDERS } from "../../naming/naming-prompts";
 import { specPlanBuildWorkflow } from "./workflow";
 import { specPlanBuildPromptKey, rolePromptKey } from "../../../test-support/spec-plan-build";
 
@@ -1161,7 +1162,12 @@ describe("prompts.findLayerProblem", () => {
 describe("placeholder groups", () => {
   test("hold each supported placeholder exactly once", () => {
     expect(
-      [...BASE_PROMPT_PLACEHOLDERS, ...HUMAN_FEEDBACK_PLACEHOLDERS, ...GIT_PLACEHOLDERS].toSorted(),
+      [
+        ...BASE_PROMPT_PLACEHOLDERS,
+        ...HUMAN_FEEDBACK_PLACEHOLDERS,
+        ...GIT_PLACEHOLDERS,
+        ...NAMING_PROMPT_PLACEHOLDERS,
+      ].toSorted(),
     ).toEqual([...agentPromptPlaceholderValues].toSorted());
   });
 

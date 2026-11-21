@@ -197,6 +197,7 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
     .select({
       workspace: schema.workspaces,
       model: schema.workspaceDefaultModels,
+      namingModel: schema.workspaceNamingModels,
       provider: schema.workspaceGitConfig,
       githubConfig: schema.workspaceRepositoryIdentity,
       azureConfig: schema.workspaceAzureConfig,
@@ -242,6 +243,10 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
       eq(schema.workspaceDefaultModels.workspaceId, schema.workspaces.workspaceId),
     )
     .leftJoin(
+      schema.workspaceNamingModels,
+      eq(schema.workspaceNamingModels.workspaceId, schema.workspaces.workspaceId),
+    )
+    .leftJoin(
       schema.workspaceGitConfig,
       eq(schema.workspaceGitConfig.workspaceId, schema.workspaces.workspaceId),
     )
@@ -264,9 +269,11 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
     .where(where);
 
 type WorkspaceRow = Awaited<ReturnType<typeof workspaceQuery>>[number];
+
 const mapWorkspace = ({
   workspace: row,
   model,
+  namingModel,
   provider,
   githubConfig,
   azureConfig,
@@ -344,6 +351,7 @@ const mapWorkspace = ({
             remote: row.defaultTargetRemote ?? undefined,
           },
           defaultModel: model ?? undefined,
+          namingModel: namingModel ?? undefined,
           agentDefaults: collections.agentDefaults,
           hooks: { beforeWorktreeRemoval: collections.commands },
           actions: { items: collections.actions, defaultActionId: row.defaultActionId },

@@ -67,6 +67,7 @@ import { createGitlabConnectionCommandHandlers } from "../../interface/commands/
 import { createBrowserCommandHandlers } from "../../interface/commands/browser-command-handlers";
 import { createNodeHostRuntimeComposition } from "./node-host-runtime-composition";
 import { createNodeTaskAssetServices } from "./node-task-asset-services";
+import { createNodeNaming } from "./node-naming";
 import { createNodeTaskSessionServices } from "./node-task-session-services";
 import { createNodeWorkspaceSessionPersistence } from "./node-workspace-session-persistence";
 import { createNodeWorkspaceSessionServices } from "./node-workspace-session-services";
@@ -132,16 +133,20 @@ export const assembleNodeEffectHostCommandRouter = (
     workspaceSettingsService,
   });
   const { startupSweep, taskAssetReadService, taskAssetStagingService, taskStore } = assets;
+  const { textGeneration, naming } = createNodeNaming(settingsConfig, () => ({
+    runtimeRegistry,
+    adapterRegistry: liveSessionAdapterRegistry,
+  }));
   const workspaceSessions = createNodeWorkspaceSessionPersistence({
     taskStore,
     store: assets.workspaceSessionStore,
     settings: workspaceSettingsService,
+    naming,
     git,
     eventBus,
     faultLog: createLiveSessionFaultLogger(lifecycleLogger),
     updateRuntimeSessionTitle: (input) => agentSessionLiveStateService.updateSessionTitle(input),
   });
-  const workspaceSessionStore = workspaceSessions.store;
   const runtimeDefinitionsService = createHostRuntimeDefinitionsService();
   const messageDelivery = createNodeMessageDelivery({
     eventBus,
@@ -175,7 +180,7 @@ export const assembleNodeEffectHostCommandRouter = (
       messageQueues: messageDelivery,
       persistence: workspaceSessions.persistence,
       withProcessStartAdmission: workspaceAdmissionService.withProcessStartAdmission,
-      store: workspaceSessionStore,
+      store: workspaceSessions.store,
       settings: workspaceSettingsService,
       eventBus,
       lifecycleLogger,
@@ -225,7 +230,7 @@ export const assembleNodeEffectHostCommandRouter = (
     settings: workspaceSettingsService,
     git,
     tasks: taskStore,
-    workspaceSessions: workspaceSessionStore,
+    workspaceSessions: workspaceSessions.store,
     liveSessions: liveSessionAdapterRegistry,
     localAttachments: localAttachmentService,
     eventBus,
@@ -238,10 +243,7 @@ export const assembleNodeEffectHostCommandRouter = (
   const worktreeActions = createWorktreeActionRunner(terminalService);
   const workspaceLifecycleService = createWorkspaceLifecycleService({
     onWorkspaceReopened: (repoPath) => observeWorkflowWorkspace(repoPath),
-    activity: createWorkspaceActivityInspector({
-      agentSessionLiveStateService,
-      terminalService,
-    }),
+    activity: createWorkspaceActivityInspector({ agentSessionLiveStateService, terminalService }),
     admission: workspaceAdmissionService,
     gitPort: git,
     settingsConfig,
@@ -259,6 +261,7 @@ export const assembleNodeEffectHostCommandRouter = (
   });
   const taskSessions = createNodeTaskSessionServices({
     hostInstanceId,
+    naming,
     runtimeAdmission,
     taskServiceInput: {
       terminalService,
@@ -292,9 +295,8 @@ export const assembleNodeEffectHostCommandRouter = (
     remoteFetch,
     canonicalizeRepoPath: (repoPath) => git.canonicalizePath(repoPath),
     agentSessionLiveStateService,
-    repositoryPolicy: workspaceSessions.persistence,
+    workspaceSessions,
     pauseForStop: messageDelivery.pauseForStop,
-    readSessionRootRefs: workspaceSessions.readSessionRootRefs,
     savedSessions: assets,
     claudeSessionMetadata,
     workflowLaunch: {
@@ -314,7 +316,7 @@ export const assembleNodeEffectHostCommandRouter = (
     taskWorkflows,
     tasks: taskService,
     live: agentSessionLiveStateService,
-    workspaceSessions: workspaceSessionStore,
+    workspaceSessions: workspaceSessions.store,
   });
   const automationServices = automation.create({
     autopilot: {
@@ -359,7 +361,6 @@ export const assembleNodeEffectHostCommandRouter = (
     browserTabs: browserService,
     lifecycle: taskSessionLifecycleCoordinator,
     ...workspaceSessions,
-    store: workspaceSessionStore,
     taskOwnership: assets.taskOwnership,
     settings: workspaceSettingsService,
     runtime: runtimeRegistry,
@@ -402,8 +403,7 @@ export const assembleNodeEffectHostCommandRouter = (
     mcpHostBridge: resolvedMcpHostBridge,
     runtimeRegistry,
     initializeRuntimes: hostRuntimeService.initialize,
-    // Deletes GitLab accounts that no workspace links, such as after a cancelled draft. The sweep
-    // logs its failures, so it cannot stop the startup.
+    // Deletes unlinked GitLab accounts. The sweep logs its failures, so it cannot stop the startup.
     startupSweep: () => startupSweep().pipe(Effect.andThen(gitlab.connection.sweep())),
     taskAssetStagingService,
     taskSyncService,
@@ -430,6 +430,7 @@ export const assembleNodeEffectHostCommandRouter = (
       clientVersion,
       runtimeRegistry,
       adapterRegistry: liveSessionAdapterRegistry,
+      textGeneration,
       taskAssetStagingService,
       taskWorktreeService,
     }),

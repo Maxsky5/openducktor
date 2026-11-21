@@ -7,6 +7,8 @@ import {
   newWorktreeBranchState,
   selectExistingBranch,
   WORKTREE_NAME_MAX_LENGTH,
+  WORKTREE_NAME_OPTIONAL_HINT,
+  worktreeNameOptional,
 } from "@openducktor/frontend-core/workspace-sessions/create/workspace-session-worktree-rules";
 import { type ReactElement, useState } from "react";
 import { View } from "react-native";
@@ -56,6 +58,7 @@ export function WorktreeFields({
   disabled: boolean;
 }): ReactElement {
   const { worktree } = form;
+  const nameOptional = worktreeNameOptional(worktree, form.hasNamingModel);
   return (
     <FormPanel>
       <SegmentedControl
@@ -74,6 +77,7 @@ export function WorktreeFields({
       )}
       <TextField
         label="Worktree name"
+        optional={nameOptional}
         value={worktree.name}
         onChangeText={(name) => form.changeWorktree({ ...worktree, name })}
         placeholder="my-feature"
@@ -84,7 +88,11 @@ export function WorktreeFields({
         mono
         editable={!disabled}
         error={request.fieldErrors.worktreeName}
-        hint="Spaces and slashes become hyphens in the directory name."
+        hint={
+          nameOptional
+            ? `Spaces and slashes become hyphens in the directory name. ${WORKTREE_NAME_OPTIONAL_HINT}`
+            : "Spaces and slashes become hyphens in the directory name."
+        }
       />
       {worktree.mode === "from_name" ? (
         <TextField
@@ -117,6 +125,7 @@ export function WorktreeFields({
       <WorktreeSummary
         directory={request.worktreeSummary.directory}
         branch={request.worktreeSummary.branch}
+        namedByFirstMessage={request.worktreeSummary.namedByFirstMessage}
         newBranch={worktree.mode === "from_name"}
       />
     </FormPanel>
@@ -171,13 +180,16 @@ function ExistingBranchField({
 function WorktreeSummary({
   directory,
   branch,
+  namedByFirstMessage,
   newBranch,
 }: {
   directory: string | null;
   branch: string | null;
+  /** True when the first message names the new branch. */
+  namedByFirstMessage: boolean;
   newBranch: boolean;
 }): ReactElement | null {
-  if (!directory && !branch) return null;
+  if (!directory && !branch && !namedByFirstMessage) return null;
   return (
     <View style={styles.summary}>
       {directory ? (
@@ -186,6 +198,11 @@ function WorktreeSummary({
           <Text variant="monoSmall" tone="secondary">
             {directory}
           </Text>
+        </Text>
+      ) : null}
+      {namedByFirstMessage ? (
+        <Text variant="footnote" tone="tertiary">
+          New branch named from your first message
         </Text>
       ) : null}
       {branch ? (

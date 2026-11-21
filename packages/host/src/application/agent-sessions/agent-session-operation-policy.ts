@@ -56,6 +56,11 @@ export type AgentSessionOperationPolicy = {
   >;
   /** Checks the destination and supplies the owned prompt context. */
   prepareSend(input: AgentSessionSendContent): Effect.Effect<AgentSessionSendContent, HostError>;
+  /**
+   * Runs just before the host delivers a new turn, after preflight reads. A chat finalizes the
+   * branch of its unnamed worktree here, so the agent starts on the final branch.
+   */
+  prepareDelivery(input: AgentSessionSendContent): Effect.Effect<void, HostError>;
   recordAcceptedMessage(
     ref: ScopedAgentSessionRef,
     accepted: AcceptedAgentUserMessage,

@@ -45,6 +45,7 @@ export function startupTraceRows(attempt: StartupAttempt): { id: string; step: S
 
 function isSetupStep(step: StartupStep): boolean {
   return (
+    step.id === "naming" ||
     step.id === "checkout" ||
     step.id === "upstream" ||
     (step.id === "copies" && step.details.length > 0) ||

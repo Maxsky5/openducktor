@@ -34,6 +34,17 @@ export { BASE_PROMPT_PLACEHOLDERS, requirePullRequestTarget } from "./task-workf
 export { launchGoalObjective } from "./task-workflow/launch-goal";
 export { goalTaskMaterial } from "./task-workflow/goal-writer";
 export {
+  buildNamingPrompt,
+  chatNamingWorkText,
+  NAMING_PROMPT_KEYS,
+  NAMING_PROMPT_PLACEHOLDERS,
+  NAMING_PROMPT_TEMPLATES,
+  namingPromptLayerProblem,
+  taskNamingWorkText,
+  type NamingAnswer,
+  type NamingKind,
+} from "./naming/naming-prompts";
+export {
   appendAddsText,
   composePromptLayers,
   EMPTY_PROMPT_SETTINGS,

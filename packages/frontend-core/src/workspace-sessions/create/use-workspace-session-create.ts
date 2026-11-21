@@ -96,6 +96,7 @@ export function useWorkspaceSessionCreate({
   );
   const repoConfig = useQuery(repoConfigQueryOptions(workspace.workspaceId));
   const defaultTarget = repoConfig.data?.defaultTargetBranch ?? null;
+  const hasNamingModel = repoConfig.data?.namingModel !== undefined;
   const targetBranch = effectiveWorkspaceSessionTargetBranch(location, picked, defaultTarget);
   const branches = useQuery({ ...repoBranchesQueryOptions(workspace.repoPath), enabled: open });
   const existing = useExistingWorktreeChoice(workspace.workspaceId, open, location);
@@ -240,6 +241,7 @@ export function useWorkspaceSessionCreate({
         selectedModelAvailable: model.selectedModelAvailable,
         rolesReady: roles.isSuccess,
         availableBranches: branches.isSuccess ? branches.data : null,
+        hasNamingModel,
       });
   const submit = (): void => {
     if (input) create.mutate(input);
@@ -294,6 +296,7 @@ export function useWorkspaceSessionCreate({
     selectLocation,
     worktree,
     changeWorktree,
+    hasNamingModel,
     existing,
     selectExistingWorktree,
     targetBranch,

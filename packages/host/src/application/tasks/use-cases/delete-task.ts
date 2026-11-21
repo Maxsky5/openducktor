@@ -1,6 +1,6 @@
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
-import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { collectRelatedTaskBranches } from "../support/task-branch-tips";
 import { HostDependencyError } from "../../../effect/host-errors";
 import { TaskAssetError } from "../../../effect/task-asset-error";
 import { requireDependencies } from "../support/required-task-dependencies";
@@ -13,7 +13,6 @@ import {
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
   collectDeleteWorktreePaths,
-  collectRelatedTaskBranches,
   readTaskSessionRecords,
   runTaskBrowserTabCleanup,
   runTaskLocalCleanup,
@@ -52,7 +51,8 @@ export const createTaskDeleteUseCase = ({
         [taskId],
         "delete tasks",
       );
-      const workflow = taskWorkflows.forTask(yield* taskStore.getTask(input));
+      const task = yield* taskStore.getTask(input);
+      const workflow = taskWorkflows.forTask(task);
 
       const targetTaskIds = [taskId];
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
@@ -82,7 +82,6 @@ export const createTaskDeleteUseCase = ({
         dependencies.settingsConfig,
         repoConfig,
       );
-      const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
       const worktreePaths = yield* collectDeleteWorktreePaths(
         dependencies,
         effectiveRepoPath,
@@ -101,10 +100,10 @@ export const createTaskDeleteUseCase = ({
         },
       );
       const branchNames = yield* collectRelatedTaskBranches(
-        dependencies.gitPort,
+        dependencies,
+        repoConfig,
         effectiveRepoPath,
-        branchPrefix,
-        targetTaskIds,
+        task,
         worktreePaths,
         "delete",
       );

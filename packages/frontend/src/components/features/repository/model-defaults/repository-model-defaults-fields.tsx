@@ -17,6 +17,7 @@ import { buildRepositoryAgentControls } from "./repository-agent-controls";
 import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-selection";
 import { RepositoryDefaultModelBlock } from "./repository-default-model";
 import { RepositoryModelPickerField } from "./repository-model-picker-field";
+import { RepositoryNamingModelBlock } from "./repository-naming-model";
 import {
   ensureDraftAgentDefault,
   resolveRepoAgentDefaultRuntimeKind,
@@ -52,6 +53,8 @@ export type RepositoryModelDefaultsFieldsProps = {
     value: string,
   ) => void;
   onClearSelectedRepoDefaultModel: () => void;
+  /** Shows the naming model. Only the settings show it. */
+  showNamingModel?: boolean;
 };
 
 export function RepositoryModelDefaultsFields({
@@ -70,6 +73,7 @@ export function RepositoryModelDefaultsFields({
   onClearSelectedRepoAgentDefault,
   onUpdateSelectedRepoDefaultModel,
   onClearSelectedRepoDefaultModel,
+  showNamingModel = false,
 }: RepositoryModelDefaultsFieldsProps): ReactElement {
   const { isLoadingRuntimeDefinitions, isLoadingCatalog, isLoadingSettings, isSaving } =
     loadingState;
@@ -97,6 +101,19 @@ export function RepositoryModelDefaultsFields({
         onUpdateSelectedRepoDefaultModel={onUpdateSelectedRepoDefaultModel}
         onClearSelectedRepoDefaultModel={onClearSelectedRepoDefaultModel}
       />
+
+      {showNamingModel ? (
+        <RepositoryNamingModelBlock
+          selectedRepoConfig={selectedRepoConfig}
+          availableRuntimeDefinitions={availableRuntimeDefinitions}
+          catalogResources={catalogResources}
+          favoriteState={favoriteState}
+          loadingState={{ isLoadingSettings, isSaving }}
+          getCatalogForRuntime={getCatalogForRuntime}
+          isCatalogLoadingForRuntime={isCatalogLoadingForRuntime}
+          onUpdateSelectedRepoConfig={onUpdateSelectedRepoConfig}
+        />
+      ) : null}
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">

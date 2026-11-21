@@ -218,7 +218,7 @@ function AppendSection({
         id={id}
         value={append?.text ?? ""}
         rows={4}
-        placeholder="For example: Run the linter before you finish."
+        placeholder={template.appendExample}
         disabled={disabled}
         placeholders={template.placeholders}
         error={error}
@@ -312,13 +312,13 @@ function ReplaceRow({
   );
 }
 
-/** What a change of the prompt affects: its workflow or its role, in one or every repository. */
+/** What a change of the prompt affects, in one or every repository. */
 const changeScope = (template: SettingsPromptTemplate, scope: PromptScope): string => {
   const repositories =
     scope.kind === "repository" ? "in this repository only" : "in every repository";
-  return template.ownerKind === "workflow"
-    ? `Your changes apply to every task of ${template.ownerTitle}, ${repositories}.`
-    : `Your changes apply ${repositories}.`;
+  return template.appliesTo === null
+    ? `Your changes apply ${repositories}.`
+    : `Your changes apply to ${template.appliesTo}, ${repositories}.`;
 };
 
 /** The editor of one prompt: append, override, and the final text preview. */

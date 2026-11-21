@@ -9,6 +9,7 @@ import type {
   AgentSessionReadModelStateContextValue,
 } from "@/types/state-slices";
 import type { projectWorkspaceSessionChatState } from "@openducktor/frontend-core/workspace-sessions/chat/workspace-session-chat-state";
+import type { AgentChatTranscriptNotice } from "@openducktor/frontend-core/sessions/send/agent-chat.types";
 
 export function useWorkspaceSessionTranscript({
   repoPath,
@@ -18,6 +19,7 @@ export function useWorkspaceSessionTranscript({
   runtimeReadiness,
   readModel,
   loadHistory,
+  branchNaming,
 }: {
   repoPath: string;
   state: ReturnType<typeof projectWorkspaceSessionChatState>;
@@ -29,6 +31,8 @@ export function useWorkspaceSessionTranscript({
   runtimeReadiness: RuntimeReadiness;
   readModel: AgentSessionReadModelStateContextValue;
   loadHistory: AgentOperationsContextValue["loadAgentSessionHistory"];
+  /** The notice of a first message that waits while the host names the branch, or null. */
+  branchNaming: AgentChatTranscriptNotice | null;
 }) {
   const identity = state.transcriptTarget;
   const recovery = useFailedTranscriptAction({
@@ -58,6 +62,7 @@ export function useWorkspaceSessionTranscript({
     };
     if (recovery.action) notice.action = recovery.action;
   }
+  notice ??= branchNaming;
   const transcript = resolveAgentChatTranscriptPresentation({
     repoPath,
     sessionKey: state.sessionKey,

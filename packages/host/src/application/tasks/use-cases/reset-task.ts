@@ -1,7 +1,7 @@
 import { loadTaskSessions } from "../support/task-sessions";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
-import { DEFAULT_BRANCH_PREFIX } from "@openducktor/contracts";
 import { Effect } from "effect";
+import { collectRelatedTaskBranches } from "../support/task-branch-tips";
 import { removedArtifactChanges } from "../artifact-changes";
 import { HostDependencyError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
@@ -13,7 +13,6 @@ import {
 } from "../support/task-cleanup-progress";
 import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roots";
 import {
-  collectRelatedTaskBranches,
   collectResetWorktreePaths,
   runTaskLocalCleanup,
   selectWorkflowCleanupSessionRecords,
@@ -79,7 +78,6 @@ export const createTaskFullResetUseCase = ({
         dependencies.settingsConfig,
         repoConfig,
       );
-      const branchPrefix = repoConfig.branchPrefix.trim() || DEFAULT_BRANCH_PREFIX;
       const worktreePaths = yield* collectResetWorktreePaths(
         dependencies,
         effectiveRepoPath,
@@ -99,10 +97,10 @@ export const createTaskFullResetUseCase = ({
         },
       );
       const branchNames = yield* collectRelatedTaskBranches(
-        dependencies.gitPort,
+        dependencies,
+        repoConfig,
         effectiveRepoPath,
-        branchPrefix,
-        [taskId],
+        current,
         worktreePaths,
         "reset task",
       );

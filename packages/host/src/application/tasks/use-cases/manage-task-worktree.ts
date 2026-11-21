@@ -1,14 +1,13 @@
 import { TASK_CLOSED_STATE } from "@openducktor/contracts";
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
 import { Effect } from "effect";
-import { hasCheckableTaskBranch } from "../../../domain/task";
+import { hasCheckableTaskBranch, localBranchName } from "../../../domain/task";
 import { HostValidationError } from "../../../effect/host-errors";
 import { requireDependencies } from "../support/required-task-dependencies";
 import {
   findTaskBranch,
-  listTaskBranchTips,
-  localBranchName,
-  readCanonicalManagedWorktreeBase,
+  listLocalBranchTips,
+  readTaskCheckout,
   relatedTaskBranchTips,
 } from "../support/task-branch-tips";
 import { requireTaskWorktreeDependencies } from "../support/task-cleanup-dependencies";
@@ -41,7 +40,6 @@ export const createTaskWorktreeUseCases = ({
   "getTaskWorktreeCleanupImpact" | "removeTaskWorktree"
 > => ({
   getTaskWorktreeCleanupImpact(input) {
-    const { taskId } = input;
     return Effect.gen(function* () {
       const dependencies = yield* requireDependencies(() =>
         requireTaskWorktreeDependencies(
@@ -61,10 +59,18 @@ export const createTaskWorktreeUseCases = ({
         { concurrency: "unbounded" },
       );
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
+      // Merge detection finds the task branch from the same canonical path.
+      const checkout = yield* readTaskCheckout(
+        dependencies.gitPort,
+        dependencies.settingsConfig,
+        repoConfig,
+        task,
+      );
+      const taskWorktreePath = checkout.worktreePath;
       const relatedTips = relatedTaskBranchTips(
-        yield* listTaskBranchTips(dependencies.gitPort, effectiveRepoPath, repoConfig.branchPrefix),
+        yield* listLocalBranchTips(dependencies.gitPort, effectiveRepoPath),
         repoConfig.branchPrefix,
-        taskId,
+        checkout,
       );
       // Count the same worktrees that a close and a worktree removal remove.
       const worktrees = yield* Effect.forEach(
@@ -89,19 +95,10 @@ export const createTaskWorktreeUseCases = ({
         (sum, worktree) => sum + worktree.changeCount,
         0,
       );
-      // Merge detection finds the task branch from the same canonical path.
-      const taskWorktreePath = dependencies.settingsConfig.join(
-        yield* readCanonicalManagedWorktreeBase(
-          dependencies.gitPort,
-          dependencies.settingsConfig,
-          repoConfig,
-        ),
-        taskId,
-      );
       const taskBranch = findTaskBranch(relatedTips, taskWorktreePath);
       return {
         worktreePaths,
-        branchNames: relatedTips.map(localBranchName).sort(),
+        branchNames: relatedTips.map((tip) => localBranchName(tip.ref)).sort(),
         uncommittedFileCount,
         mergeCandidate:
           taskWorkflows.forTask(task).detectsMerge(task.status) &&
@@ -149,7 +146,7 @@ export const createTaskWorktreeUseCases = ({
         lifecycle: taskSessionLifecycleCoordinator,
         worktreeOwners,
         repoPath: effectiveRepoPath,
-        branchPrefix: repoConfig.branchPrefix,
+        repoConfig,
         workflow,
         task,
         sessions: metadata.agentSessions,

@@ -559,6 +559,13 @@ For the model that each new session uses, see [Which model a session uses](/mode
 - A default on a disabled harness shows a warning with the role ID, such as `build agent runtime "Codex" is disabled.`
 - If the saved model is not available, the session start fails with a message such as `The saved build default or repository Default Model is not available for runtime codex.` Choose another model.
 
+#### Naming model [#repository-agents-naming-model]
+
+- Sets the **Runtime and model** and the **Effort** of the model that names work in this workspace. It has no **Agent profile**.
+- The model writes the title of a new workspace session from its first message. It also names the branch of a new task worktree, and the branch of a new workspace session worktree when you leave **Worktree name** blank. See [Name work with a model](/workspace-sessions/#naming-model).
+- The default is none. Without a naming model, OpenDucktor makes no naming request: titles come from the first message, task branches come from the task title, and **Worktree name** is required. **Clear** removes the naming model.
+- One naming request waits at most 15 seconds. After that time, OpenDucktor uses the names that it uses without a naming model.
+
 ### Repository prompts [#repository-prompts]
 
 - Sets prompt appends and overrides for the selected workspace only. The screens and the controls are the same as in [System prompts](#system-prompts).

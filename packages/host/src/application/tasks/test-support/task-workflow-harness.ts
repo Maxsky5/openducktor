@@ -506,6 +506,9 @@ const createBuildStartGitPort = ({
         return references.has(reference);
       });
     },
+    listRemoteNames() {
+      return Effect.succeed([]);
+    },
     listRemotes() {
       return Effect.sync(() => {
         return [];
@@ -559,12 +562,12 @@ const createBuildStartGitPort = ({
           branch,
           upstreamRemote,
         });
-        return { createdTrackingRef: "refs/remotes/origin/odt/task-1-task-1" };
+        return { ref: "refs/remotes/origin/odt/task-1-task-1", oid: "c0ffee" };
       });
     },
-    deleteReference(repoPath, reference) {
+    deleteOwnedReference(repoPath, owned) {
       return Effect.sync(() => {
-        calls.push({ type: "deleteReference", repoPath, reference });
+        calls.push({ type: "deleteOwnedReference", repoPath, ...owned });
       });
     },
     removeWorktree(repoPath, worktreePath, force) {
@@ -602,6 +605,10 @@ const createBuildStartGitPort = ({
     },
     listRefTips() {
       return Effect.die(new Error("unexpected ref tip list"));
+    },
+    listRefNames() {
+      // No branch exists, as listBranches reports.
+      return Effect.succeed([]);
     },
     resolveFetchRemotes() {
       return Effect.die(new Error("unexpected fetch remote resolution"));
@@ -698,6 +705,9 @@ const createDirectMergeGitPort = ({
     referenceExists() {
       return Effect.succeed(true);
     },
+    listRemoteNames() {
+      return Effect.succeed([]);
+    },
     listRemotes() {
       return Effect.sync(() => {
         return [];
@@ -784,6 +794,13 @@ const createDirectMergeGitPort = ({
     },
     listRefTips() {
       return Effect.die(new Error("unexpected ref tip list"));
+    },
+    listRefNames(workingDir) {
+      return Effect.sync(() =>
+        (branches[workingDir] ?? [])
+          .filter((branch) => !branch.isRemote)
+          .map((branch) => `refs/heads/${branch.name}`),
+      );
     },
     resolveFetchRemotes() {
       return Effect.die(new Error("unexpected fetch remote resolution"));

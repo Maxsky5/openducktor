@@ -1,4 +1,5 @@
 import { allowAllGoalCommands } from "../../test-support/service-test-doubles";
+import { createNamingTestDependencies } from "../../test-support/naming-test-doubles";
 import { workspaceSessionCatalog } from "../../test-support/workspace-session-ownership";
 import { workspaceSessionOwnership } from "../../test-support/workspace-session-ownership";
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
@@ -88,6 +89,7 @@ describe("Workspace Session runtime rename through the real OpenCode live adapte
         ) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>)
       | null = null;
     const persistence = createWorkspaceSessionRuntimePersistence({
+      naming: createNamingTestDependencies(),
       store,
       settings: {
         getWorkspaceCatalog: () =>

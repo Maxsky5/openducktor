@@ -13,6 +13,7 @@ import {
 } from "./sqlite-prompt-layer-rows";
 
 const operation = "hostSettings.workspace";
+
 export const saveWorkspace = (
   session: HostDatabaseSession,
   config: RepoConfig,
@@ -47,6 +48,27 @@ export const saveWorkspace = (
       if (defaultModel)
         yield* session.execute(
           (db) => db.insert(schema.workspaceDefaultModels).values({ workspaceId, ...defaultModel }),
+          operation,
+        );
+    }
+    const namingModel = config.namingModel;
+    if (!jsonValuesEqual(previous?.namingModel, namingModel)) {
+      if (namingModel) {
+        const row = { ...namingModel, variant: namingModel.variant ?? null };
+        yield* session.execute(
+          (db) =>
+            db
+              .insert(schema.workspaceNamingModels)
+              .values({ workspaceId, ...row })
+              .onConflictDoUpdate({ target: schema.workspaceNamingModels.workspaceId, set: row }),
+          operation,
+        );
+      } else
+        yield* session.execute(
+          (db) =>
+            db
+              .delete(schema.workspaceNamingModels)
+              .where(eq(schema.workspaceNamingModels.workspaceId, workspaceId)),
           operation,
         );
     }

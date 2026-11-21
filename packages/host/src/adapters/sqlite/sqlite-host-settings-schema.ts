@@ -1,4 +1,9 @@
-import { REPO_ACTION_ICON_VALUES, type AgentModelDefault } from "@openducktor/contracts";
+import {
+  PROMPT_OWNER_KINDS,
+  REPO_ACTION_ICON_VALUES,
+  type AgentModelDefault,
+  type NamingModel,
+} from "@openducktor/contracts";
 import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
@@ -13,7 +18,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { runtimeSettingsSchema } from "./sqlite-runtime-settings-schema";
-import { globalPromptSchema, PROMPT_OWNER_KINDS } from "./sqlite-global-prompt-schema";
+import { globalPromptSchema } from "./sqlite-global-prompt-schema";
 import { booleanCheck, column, enumCheck } from "./sqlite-schema-sql";
 
 export * from "./sqlite-runtime-settings-schema";
@@ -55,6 +60,18 @@ export const workspaceDefaultModels = sqliteTable("workspace_default_models", {
   modelId: text("model_id").notNull(),
   variant: text("variant"),
   profileId: text("profile_id"),
+});
+
+/** The naming model of a workspace, which writes session titles and branch names. */
+export const workspaceNamingModels = sqliteTable("workspace_naming_models", {
+  workspaceId: text("workspace_id")
+    .primaryKey()
+    .notNull()
+    .references(() => workspaces.workspaceId, { onDelete: "cascade" }),
+  runtimeKind: text("runtime_kind").$type<NamingModel["runtimeKind"]>().notNull(),
+  providerId: text("provider_id").notNull(),
+  modelId: text("model_id").notNull(),
+  variant: text("variant"),
 });
 
 export const workspaceRoleDefaults = sqliteTable(
@@ -153,10 +170,6 @@ export const workspacePromptOverrides = sqliteTable(
     primaryKey({
       columns: [table.workspaceId, table.ownerKind, table.ownerId, table.promptId],
     }),
-    check(
-      "chk_workspace_prompt_overrides_owner_kind",
-      enumCheck(table.ownerKind, PROMPT_OWNER_KINDS),
-    ),
     check("chk_workspace_prompt_overrides_base_version", sql`${column(table.baseVersion)} >= 1`),
     check("chk_workspace_prompt_overrides_enabled", booleanCheck(table.enabled)),
   ],
@@ -178,10 +191,6 @@ export const workspacePromptAppends = sqliteTable(
     primaryKey({
       columns: [table.workspaceId, table.ownerKind, table.ownerId, table.promptId],
     }),
-    check(
-      "chk_workspace_prompt_appends_owner_kind",
-      enumCheck(table.ownerKind, PROMPT_OWNER_KINDS),
-    ),
     check("chk_workspace_prompt_appends_enabled", booleanCheck(table.enabled)),
   ],
 );

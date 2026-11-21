@@ -125,7 +125,7 @@ const createHarness = ({
       listRefTips: (_repoPath: string, patterns: string[]) =>
         Effect.sync(() => {
           gitCalls.push(`listRefTips:${patterns.join(",")}`);
-          return patterns[0]?.startsWith("refs/heads/odt/") ? branchTips : [targetTip];
+          return patterns[0] === "refs/heads/" ? branchTips : [targetTip];
         }),
       countCommitsAhead: (_repoPath: string, base: string, patterns: string[]) =>
         Effect.sync(() => {
@@ -258,9 +258,9 @@ describe("task merge detection service", () => {
     expect(reflogRefs).toEqual([
       ["refs/heads/odt/task-1", "refs/heads/odt/task-2", "refs/heads/odt/task-3"],
     ]);
-    // The count matches the task branches by their prefix, so the command line stays short.
+    // The count names each task branch, because a task branch can have any name.
     expect(harness.gitCalls.filter((call) => call.startsWith("ahead:"))).toEqual([
-      "ahead:target-1:refs/heads/odt/",
+      "ahead:target-1:refs/heads/odt/task-1,refs/heads/odt/task-2,refs/heads/odt/task-3",
     ]);
     // Only the branches that the target does not hold need a tree check.
     expect(treePairs).toEqual([
@@ -533,7 +533,7 @@ describe("task merge detection service", () => {
     const harness = createHarness({
       gitPort: {
         listRefTips: (_repoPath: string, patterns: string[]) =>
-          Effect.succeed(patterns[0]?.startsWith("refs/heads/odt/") ? tips : [target]),
+          Effect.succeed(patterns[0] === "refs/heads/" ? tips : [target]),
       },
     });
     const count = (name: string) => harness.gitCalls.filter((call) => call === name).length;
@@ -595,6 +595,35 @@ describe("task merge detection service", () => {
     });
 
     expect((await runPass(harness)).tasks[0]?.branch).toBe("odt/task-1-new");
+  });
+
+  test("uses a model branch name that the task worktree has checked out", async () => {
+    const harness = createHarness({
+      branchTips: [
+        branchTip("odt/task-1-old-title", "branch-old"),
+        branchTip("feat/login-redirect", "branch-new", "/worktrees/task-1"),
+        branchTip("feat/other-work", "branch-other", "/worktrees/task-2"),
+      ],
+    });
+
+    expect((await runPass(harness)).tasks[0]?.branch).toBe("feat/login-redirect");
+  });
+
+  test("never takes the target branch of a task worktree as the task branch", async () => {
+    const harness = createHarness({
+      branchTips: [branchTip("main", "target-1", "/worktrees/task-1")],
+    });
+
+    expect((await runPass(harness)).tasks).toEqual([]);
+  });
+
+  test("never takes a target branch that looks like a task branch", async () => {
+    const harness = createHarness({
+      tasks: [task({ targetBranch: { branch: "odt/task-1-base" } })],
+      branchTips: [branchTip("odt/task-1-base", "base-1")],
+    });
+
+    expect((await runPass(harness)).tasks).toEqual([]);
   });
 
   test("a pass failure keeps each last result, adds the failure, and fails the pass", async () => {

@@ -394,6 +394,7 @@ export const createAgentSessionCommandService = ({
                   "The running turn ended before steering. Send a new message with current context.",
               });
             const content = yield* policy.prepareSend(ref);
+            if (!steering) yield* policy.prepareDelivery(content);
             const goalCommand = yield* goals.commandOf(content.parts);
             if (goalCommand) return yield* goals.send(content, goalCommand, steering, options);
             const systemPrompt = steering ? undefined : yield* turnPreparation.context(ref);

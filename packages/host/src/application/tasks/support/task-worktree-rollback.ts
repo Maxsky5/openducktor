@@ -1,6 +1,6 @@
 import { Data, Effect } from "effect";
 import { errorMessage, HostOperationError } from "../../../effect/host-errors";
-import type { GitPortError } from "../../../ports/git-port";
+import type { GitPortError, OwnedTrackingRef } from "../../../ports/git-port";
 import type { WorktreeKeptForRunningActionsError } from "../../actions/worktree-action-runner";
 import { removeWorktreeAndFilesystemPath } from "../../git/worktree-removal";
 import type { requireBuildStartDependencies } from "./required-task-dependencies";
@@ -26,7 +26,7 @@ export const rollbackFailedTaskWorktree = (
   repoPath: string,
   worktreePath: string,
   branch: string,
-  createdTrackingRef: string | null,
+  ownedTrackingRef: OwnedTrackingRef | null,
   managedWorktreeBasePath: string,
 ): Effect.Effect<void, TaskWorktreeRollbackError> =>
   Effect.gen(function* () {
@@ -34,11 +34,11 @@ export const rollbackFailedTaskWorktree = (
       description: string;
       run: Effect.Effect<unknown, TaskWorktreeRollbackStepError>;
     }> = [
-      ...(createdTrackingRef
+      ...(ownedTrackingRef
         ? [
             {
-              description: `delete created upstream tracking ref ${createdTrackingRef}`,
-              run: dependencies.gitPort.deleteReference(repoPath, createdTrackingRef),
+              description: `delete created upstream tracking ref ${ownedTrackingRef.ref}`,
+              run: dependencies.gitPort.deleteOwnedReference(repoPath, ownedTrackingRef),
             },
           ]
         : []),
