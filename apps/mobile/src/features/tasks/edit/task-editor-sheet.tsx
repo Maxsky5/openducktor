@@ -295,8 +295,9 @@ export function TaskEditorSheet({
             ) : (
               <EditIntro controller={controller} taskId={task?.id ?? null} />
             )}
-            {/* The dimmed opacity of a save must not move the fields into a new view, because the
-                save closes the sheet next. See the route sheet rules in the README. */}
+            {/* Keep this native view, so the dimmed opacity of a save does not move the fields. A task
+                save then closes the sheet. See react-native-screens#5202 under Design system in the
+                mobile README. */}
             <View collapsable={false} style={[styles.body, isFormDisabled && styles.disabled]}>
               <EditorContent controller={controller} imageContext={imageContext} images={images} />
             </View>
