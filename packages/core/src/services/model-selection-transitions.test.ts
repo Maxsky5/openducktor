@@ -163,7 +163,8 @@ describe("model-selection-state", () => {
         },
         modelKey: "anthropic/claude-sonnet",
         runtimeKind: "opencode",
-        variant: "high",
+        preferredVariant: "high",
+        preferredSpeed: undefined,
       }),
     ).toEqual({
       runtimeKind: "opencode",
@@ -191,7 +192,8 @@ describe("model-selection-state", () => {
         currentSelection: null,
         modelKey: "openai/o3",
         runtimeKind: "opencode",
-        variant: undefined,
+        preferredVariant: undefined,
+        preferredSpeed: undefined,
       }),
     ).toEqual({
       runtimeKind: "opencode",
@@ -207,21 +209,16 @@ describe("model-selection-state", () => {
       ...CATALOG,
       models: [...CATALOG.models, { ...CATALOG.models[0]!, id: "openai/o3", modelId: "o3" }],
     };
-    const high = { ...EXPLICIT_SELECTION, providerId: "openai", modelId: "gpt-5", variant: "high" };
 
-    expect(
-      resolveModelSelectionForModelChange({
-        catalog,
-        currentSelection: high,
-        modelKey: "openai/o3",
-        runtimeKind: "opencode",
-        variant: high.variant,
-      })?.variant,
-    ).toBe("high");
     expect(
       resolveModelSelectionForPair({
         catalog,
-        currentSelection: high,
+        currentSelection: {
+          ...EXPLICIT_SELECTION,
+          providerId: "openai",
+          modelId: "gpt-5",
+          variant: "high",
+        },
         defaultSelection: null,
         selectedModel: null,
         value: { runtimeKind: "opencode", providerId: "openai", modelId: "o3" },
@@ -229,43 +226,51 @@ describe("model-selection-state", () => {
     ).toBe("high");
   });
 
-  test("keeps the effort when the runtime changes and the new model supports it", () => {
-    const codexCatalog: AgentModelCatalog = {
-      runtime: CODEX_RUNTIME_DESCRIPTOR,
-      models: [
-        {
-          id: "openai/gpt-5.5",
-          providerId: "openai",
-          providerName: "OpenAI",
-          modelId: "gpt-5.5",
-          modelName: "GPT-5.5",
-          variants: ["low", "medium", "high"],
-        },
-      ],
-      defaultModelsByProvider: { openai: "gpt-5.5" },
-    };
-    const { variant: _variant, ...selectionWithoutVariant } = EXPLICIT_SELECTION;
-    const resolveVariant = (variant: string | undefined): string | undefined =>
-      resolveModelSelectionForPair({
-        catalog: codexCatalog,
-        currentSelection: variant
-          ? { ...selectionWithoutVariant, variant }
-          : selectionWithoutVariant,
-        defaultSelection: {
-          runtimeKind: "codex",
-          providerId: "openai",
-          modelId: "gpt-5.5",
-          variant: "medium",
-        },
-        selectedModel: null,
-        value: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5.5" },
-      })?.selection.variant;
+  test.each([
+    { source: { variant: "high", speed: "fast" }, expected: { variant: "high", speed: "fast" } },
+    { source: { variant: "max", speed: "turbo" }, expected: { variant: "low" } },
+    // The runtime default ("medium" and "flex") must not replace a missing effort or speed.
+    { source: {}, expected: { variant: "low" } },
+  ])(
+    "keeps the supported effort and speed of $source when the runtime changes",
+    ({ source, expected }) => {
+      const codexCatalog: AgentModelCatalog = {
+        runtime: CODEX_RUNTIME_DESCRIPTOR,
+        models: [
+          {
+            id: "openai/gpt-5.5",
+            providerId: "openai",
+            providerName: "OpenAI",
+            modelId: "gpt-5.5",
+            modelName: "GPT-5.5",
+            variants: ["low", "medium", "high"],
+            speedLevels: [
+              { id: "fast", label: "Fast" },
+              { id: "flex", label: "Flex" },
+            ],
+          },
+        ],
+        defaultModelsByProvider: { openai: "gpt-5.5" },
+      };
+      const { variant: _variant, ...selectionWithoutVariant } = EXPLICIT_SELECTION;
 
-    expect(resolveVariant("high")).toBe("high");
-    expect(resolveVariant("max")).toBe("low");
-    // The runtime default effort ("medium") must not replace a missing effort.
-    expect(resolveVariant(undefined)).toBe("low");
-  });
+      expect(
+        resolveModelSelectionForPair({
+          catalog: codexCatalog,
+          currentSelection: { ...selectionWithoutVariant, ...source },
+          defaultSelection: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5.5",
+            variant: "medium",
+            speed: "flex",
+          },
+          selectedModel: null,
+          value: { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5.5" },
+        })?.selection,
+      ).toEqual({ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5.5", ...expected });
+    },
+  );
 
   test("keeps a speed only on models that support it", () => {
     const catalog: AgentModelCatalog = {
@@ -291,7 +296,8 @@ describe("model-selection-state", () => {
           currentSelection: fast,
           modelKey,
           runtimeKind: "opencode",
-          variant: fast.variant,
+          preferredVariant: fast.variant,
+          preferredSpeed: fast.speed,
         })?.speed,
       ).toBe(modelKey === "openai/gpt-5" ? "fast" : undefined);
     }

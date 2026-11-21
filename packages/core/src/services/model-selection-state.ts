@@ -234,8 +234,9 @@ export const resolveModelSelectionForPair = ({
     currentSelection: runtimeSelection,
     modelKey: `${model.providerId}/${model.modelId}`,
     runtimeKind: value.runtimeKind,
-    // Keep only the effort of the replaced selection, never a runtime default effort.
-    variant: currentSelection?.variant,
+    // Keep only the effort and speed of the replaced selection, never a runtime default.
+    preferredVariant: currentSelection?.variant,
+    preferredSpeed: currentSelection?.speed,
   });
   if (
     !selection ||
@@ -274,19 +275,24 @@ export const resolveModelSelectionForProfileChange = ({
   return { ...currentSelection, profileId: normalizedProfileId };
 };
 
-/** Keeps `variant` when the new model supports it, else uses the first variant of the model. */
+/**
+ * Keeps `preferredVariant` and `preferredSpeed` when the new model supports them.
+ * Otherwise the selection uses the first variant of the model and standard speed.
+ */
 export const resolveModelSelectionForModelChange = ({
   catalog,
   currentSelection,
   modelKey,
   runtimeKind,
-  variant: preferredVariant,
+  preferredVariant,
+  preferredSpeed,
 }: {
   catalog: AgentModelCatalog | null;
   currentSelection: AgentModelSelection | null;
   modelKey: string;
   runtimeKind: RuntimeKind;
-  variant: string | undefined;
+  preferredVariant: string | undefined;
+  preferredSpeed: string | undefined;
 }): AgentModelSelection | null => {
   if (!catalog || (catalog.runtime?.kind && catalog.runtime.kind !== runtimeKind)) {
     return currentSelection;
@@ -315,7 +321,7 @@ export const resolveModelSelectionForModelChange = ({
   if (profileId) {
     selection.profileId = profileId;
   }
-  const speed = normalizeCatalogSpeed(model, currentSelection?.speed);
+  const speed = normalizeCatalogSpeed(model, preferredSpeed);
   if (speed) {
     selection.speed = speed;
   }
