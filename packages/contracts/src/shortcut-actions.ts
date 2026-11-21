@@ -15,6 +15,7 @@ export const BUILTIN_SHORTCUT_ACTION_IDS = [
   "settings",
   "sidebar",
   "diagnostics",
+  "processes",
   "feature-tour",
   "open-repository",
   "reopen-workspace",

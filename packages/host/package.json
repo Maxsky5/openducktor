@@ -31,6 +31,7 @@
     "@openducktor/contracts": "workspace:*",
     "@openducktor/core": "workspace:*",
     "@openducktor/path-support": "workspace:*",
+    "@openducktor/process-native": "workspace:*",
     "@openducktor/runtime-orchestration": "workspace:*",
     "@openducktor/workflows": "workspace:*",
     "@xterm/addon-serialize": "0.14.0",

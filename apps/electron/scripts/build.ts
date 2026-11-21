@@ -7,6 +7,11 @@ import {
   sqliteMigrationCopyPlans,
 } from "@openducktor/host/sqlite-migration-assets";
 import { Effect } from "effect";
+import { processNativeFileName } from "@openducktor/process-native";
+import {
+  copyProcessNativeModules,
+  prepareHostProcessNative,
+} from "@openducktor/process-native/build";
 import { runElectronEffect } from "../src/effect/electron-boundary";
 import {
   ElectronOperationError,
@@ -62,6 +67,27 @@ const runBuildCommandEffect = (
       }),
   });
 
+/**
+ * Builds the native process module of this host, unless a release job supplies it, and copies it
+ * into `dist/native`, which Electron Builder unpacks.
+ */
+export const copyProcessNativeModuleEffect = (): Effect.Effect<void, ElectronOperationError> =>
+  Effect.try({
+    try: () => {
+      prepareHostProcessNative();
+      copyProcessNativeModules({
+        fileNames: [processNativeFileName()],
+        targetDirectory: join(packageRoot, "dist", "native"),
+      });
+    },
+    catch: (cause) =>
+      new ElectronOperationError({
+        operation: "electron.build.copy-process-native",
+        message: errorMessage(cause),
+        cause,
+      }),
+  });
+
 const buildElectronPackageEffect = (): Effect.Effect<void, ElectronOperationErrorAggregate> =>
   Effect.gen(function* () {
     yield* Effect.tryPromise({
@@ -83,6 +109,7 @@ const buildElectronPackageEffect = (): Effect.Effect<void, ElectronOperationErro
       { concurrency: "unbounded" },
     );
     yield* copyElectronSqliteMigrationsEffect();
+    yield* copyProcessNativeModuleEffect();
   });
 
 if (import.meta.main) {

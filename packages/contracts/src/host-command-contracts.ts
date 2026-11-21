@@ -166,6 +166,8 @@ export const HOST_COMMAND_NAMES = [
   "workspace_get_settings_snapshot",
   "workspace_list",
   "workspace_preview_settings_snapshot_runtime",
+  "workspace_process_stop",
+  "workspace_processes_list",
   "workspace_provider_setup_areas",
   "workspace_provider_setup_begin",
   "workspace_provider_setup_cancel_sign_in",

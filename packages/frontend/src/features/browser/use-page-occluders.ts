@@ -20,6 +20,8 @@ const OCCLUDER_SELECTOR = "[data-page-occluder]";
 export const NO_PAGE_OCCLUDERS: readonly PageOccluderBox[] = [];
 
 let occluders: readonly PageOccluderBox[] = NO_PAGE_OCCLUDERS;
+/** The overlay elements of the document. Only a change of the document can change them. */
+let occluderElements: readonly Element[] = [];
 const listeners = new Set<() => void>();
 let observer: MutationObserver | null = null;
 let frame = 0;
@@ -43,12 +45,13 @@ const sameBoxes = (a: readonly PageOccluderBox[], b: readonly PageOccluderBox[])
   });
 
 /**
- * Reads the open overlays that a user can see. A hidden browser surface keeps its portals
- * mounted, and a portal that inherits `visibility: hidden` still has a box that would cover the
- * page of another tab. It runs only when an overlay appears, leaves, or moves.
+ * Measures the overlays that a user can see. A hidden browser surface keeps its portals mounted,
+ * and a portal that inherits `visibility: hidden` still has a box that would cover the page of
+ * another tab. Each frame measures only the known overlay elements, so a large page costs no more
+ * than a small one. A long-lived overlay, such as a floating window, keeps the frames running.
  */
-const refreshOccluders = (): void => {
-  const next = Array.from(document.querySelectorAll(OCCLUDER_SELECTOR))
+const measureOccluders = (): void => {
+  const next = occluderElements
     .filter((element) => element.checkVisibility({ visibilityProperty: true }))
     .map(boxOf);
   if (sameBoxes(occluders, next)) {
@@ -69,10 +72,16 @@ export const refreshPageOccluders = (): void => {
   refreshOccluders();
 };
 
+/** Finds the overlay elements again, after a change of the document, then measures them. */
+const refreshOccluders = (): void => {
+  occluderElements = Array.from(document.querySelectorAll(OCCLUDER_SELECTOR));
+  measureOccluders();
+};
+
 /** Re-measures an open overlay every frame, because animations, scroll, and resize move it. */
 const tickOccluders = (): void => {
   frame = 0;
-  refreshOccluders();
+  measureOccluders();
 };
 
 const startTicking = (): void => {
@@ -129,6 +138,7 @@ const subscribe = (listener: () => void): (() => void) => {
     if (listeners.size === 0) {
       observer?.disconnect();
       observer = null;
+      occluderElements = [];
       if (frame !== 0) {
         cancelAnimationFrame(frame);
         frame = 0;

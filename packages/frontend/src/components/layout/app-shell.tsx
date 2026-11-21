@@ -146,7 +146,9 @@ const WorkspaceAppShell = memo(function WorkspaceAppShell(): ReactElement {
               <BrowserRuntimeProvider>
                 <BrowserTabCoordinator />
                 <div
-                  className="app-shell relative h-screen min-h-screen w-full overflow-hidden"
+                  // Page layers stay inside the shell, so floating windows, sheets, and dialogs cover
+                  // every page, such as the chat composer and its goal row.
+                  className="app-shell relative isolate h-screen min-h-screen w-full overflow-hidden"
                   data-sidebar-state={isSidebarOpen ? "open" : "collapsed"}
                 >
                   <div

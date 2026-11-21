@@ -4,6 +4,7 @@ import path from "node:path";
 import type { SystemOpenInToolId, SystemOpenInToolInfo } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
+  type HostDependencyErrorAggregate,
   HostOperationError,
   type HostOperationErrorAggregate,
   type HostPathAccessErrorAggregate,
@@ -34,6 +35,10 @@ export type CreateOpenInToolsAdapterInput = {
     inputPath: string,
   ) => Effect.Effect<string, HostPathAccessErrorAggregate | HostPathNotFoundErrorAggregate>;
   systemCommands?: Pick<SystemCommandPort, "resolveCommandPath" | "runCommandAllowFailure">;
+  /** Opens a URL through the Windows shell API, which reports a failure. */
+  openUrlOnWindows?: (
+    url: string,
+  ) => Effect.Effect<void, HostDependencyErrorAggregate | HostOperationErrorAggregate>;
 };
 
 type RunOpenInCommand = Pick<SystemCommandPort, "runCommandAllowFailure">["runCommandAllowFailure"];
@@ -96,8 +101,6 @@ const buildOpenExternalUrlCommand = (
       return { program: "open", args: [url] };
     case "linux":
       return { program: "xdg-open", args: [url] };
-    case "win32":
-      return { program: "explorer.exe", args: [url] };
     default:
       throw new HostValidationError({
         message: `Opening external URLs is not supported on ${platform}.`,
@@ -112,6 +115,7 @@ export const createOpenInToolsAdapter = ({
   pathIsDirectory = defaultPathIsDirectory,
   homeDirectory = homedir,
   systemCommands = createSystemCommandRunner({ platform }),
+  openUrlOnWindows,
   realpathFn = (inputPath) =>
     Effect.tryPromise({
       try: () => realpath(inputPath),
@@ -408,6 +412,14 @@ export const createOpenInToolsAdapter = ({
     },
     openExternalUrl(url) {
       return Effect.gen(function* () {
+        // `explorer.exe` exits with code 1 also after it opens the URL, so it cannot report a failure.
+        if (platform === "win32") {
+          if (!openUrlOnWindows)
+            return yield* new HostValidationError({
+              message: "Opening external URLs on Windows needs the native URL opener.",
+            });
+          return yield* openUrlOnWindows(url);
+        }
         const command = yield* Effect.try({
           try: () => buildOpenExternalUrlCommand(platform, url),
           catch: (cause) => toHostOperationError(cause, "openInTools.buildOpenExternalUrlCommand"),

@@ -152,6 +152,7 @@ export { withMaxUtf16Length } from "./string-schemas";
 export * from "./workspace-identity-schemas";
 export * from "./subagent-schemas";
 export * from "./system-open-schemas";
+export * from "./workspace-process-schemas";
 export * from "./task-asset-schemas";
 export * from "./task-merge-status-schemas";
 export * from "./issue-type-schemas";

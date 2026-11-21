@@ -12,6 +12,8 @@ export type ProcessCommandLaunchPlan = {
   env: NodeJS.ProcessEnv;
   windowsHide: boolean;
   windowsVerbatimArguments: boolean;
+  /** True when `cmd.exe` runs a Windows batch launcher, which starts the program as its child. */
+  usesCommandShell: boolean;
 };
 
 const isWindowsCommandScript = (command: string, platform: NodeJS.Platform): boolean =>
@@ -40,6 +42,7 @@ export const createProcessCommandLaunch = (
       env: launchEnv,
       windowsHide: platform === "win32",
       windowsVerbatimArguments: false,
+      usesCommandShell: false,
     };
   }
 
@@ -68,5 +71,6 @@ export const createProcessCommandLaunch = (
     env: commandEnv,
     windowsHide: true,
     windowsVerbatimArguments: true,
+    usesCommandShell: true,
   };
 };

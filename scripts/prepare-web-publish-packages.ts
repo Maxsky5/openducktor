@@ -15,10 +15,17 @@ const packageManifestSchema: z.ZodType<PackageManifest> = z.object({
 const readPackageManifest = (manifestPath: string): PackageManifest =>
   packageManifestSchema.parse(JSON.parse(readFileSync(manifestPath, "utf8")));
 
+// The native process modules of `.github/workflows/build-process-native.yml`.
 const expectedPackageFiles = [
   "dist/cli.js",
   "dist/openducktor-mcp.js",
   "dist/web-shell/index.html",
+  "dist/native/process-native.darwin-arm64.node",
+  "dist/native/process-native.darwin-x64.node",
+  "dist/native/process-native.linux-arm64.node",
+  "dist/native/process-native.linux-x64.node",
+  "dist/native/process-native.win32-arm64.node",
+  "dist/native/process-native.win32-x64.node",
 ] as const;
 
 const version = process.argv[2]?.trim();

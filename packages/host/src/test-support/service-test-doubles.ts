@@ -119,6 +119,8 @@ export const createGitPortTestDouble = <Overrides extends Partial<GitPort>>(
   readBranchRefs: unexpectedEffectCall("Git port", "readBranchRefs"),
   listRemoteEndpoints: unexpectedEffectCall("Git port", "listRemoteEndpoints"),
   listWorktrees: unexpectedEffectCall("Git port", "listWorktrees"),
+  confirmWorktree: unexpectedEffectCall("Git port", "confirmWorktree"),
+  hasGitEntry: unexpectedEffectCall("Git port", "hasGitEntry"),
   mergeBranch: unexpectedEffectCall("Git port", "mergeBranch"),
   pullBranch: unexpectedEffectCall("Git port", "pullBranch"),
   pushBranch: unexpectedEffectCall("Git port", "pushBranch"),

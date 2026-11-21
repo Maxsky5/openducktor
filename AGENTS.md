@@ -50,6 +50,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and command details.
 | `packages/core` | Agent ports, ODT tool name helpers, and shared services |
 | `packages/workflows` | Pure workflow evaluation, built-in rules, role policy, prompts, and presentation metadata |
 | `packages/host` | Effect use cases, task mutations, runtime drivers, and platform adapters |
+| `packages/process-native` | Rust Node-API module that reads live processes and their TCP listeners and stops one process. Read [the Processes guide](docs/processes.md) before you change it |
 | `packages/runtime-orchestration` | Shared runtime lifecycle, registry, and admission rules |
 | `packages/adapters-opencode-sdk` | OpenCode V2 protocol adapter |
 | `packages/adapters-codex-app-server` | Codex app-server protocol adapter |

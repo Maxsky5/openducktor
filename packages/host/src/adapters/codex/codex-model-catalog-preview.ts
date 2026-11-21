@@ -5,7 +5,8 @@ import { parseCodexAppServerRequestResult } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { resolveSavedRuntimeExecutableConfig } from "../../application/runtimes/saved-runtime-executable";
 import { HostOperationError, type HostError, toHostOperationError } from "../../effect/host-errors";
-import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
+import { createRuntimeLaunch } from "../../infrastructure/process/runtime-launch";
+import { resolveCodexNpmShim } from "./codex-npm-shim";
 import {
   type ProcessTreeTerminator,
   shouldStartDetachedProcessGroup,
@@ -16,6 +17,7 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
 import { createCodexAppServerTransport } from "./codex-app-server-transport";
 import type { CodexChildProcess } from "./codex-runtime-cleanup";
+import { trackManagedProcess } from "../../infrastructure/process/managed-processes";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const STOP_TIMEOUT_MS = 3_000;
@@ -58,7 +60,14 @@ export const createCodexModelCatalogPreview =
         toolDiscovery,
       });
       const command = yield* Effect.try({
-        try: () => createProcessCommandLaunch(binary, ["app-server"], readEnv(), process.platform),
+        try: () =>
+          createRuntimeLaunch(
+            binary,
+            ["app-server"],
+            readEnv(),
+            process.platform,
+            resolveCodexNpmShim,
+          ),
         catch: (cause) => toHostOperationError(cause, "codexModelCatalogPreview.command"),
       });
       const cleanup: PreviewCleanup = { failure: null };
@@ -75,6 +84,7 @@ export const createCodexModelCatalogPreview =
                 windowsVerbatimArguments: command.windowsVerbatimArguments,
               });
               child.once("error", handleEarlySpawnError);
+              trackManagedProcess(child, command.managed);
               let closed = false;
               child.once("close", () => {
                 closed = true;

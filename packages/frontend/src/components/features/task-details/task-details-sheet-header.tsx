@@ -1,3 +1,4 @@
+import { TaskServerLinks } from "@/components/features/processes/task-server-links";
 import { ShortcutScope, ShortcutButton } from "@/features/shortcuts/shortcut-controls";
 
 import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
@@ -193,6 +194,7 @@ export function TaskDetailsSheetHeader({
 
       <div className="flex flex-wrap items-start gap-2">
         <TaskHeaderBadges task={task} />
+        <TaskServerLinks taskId={task.id} className="min-h-6" />
         {showDetectPullRequest || showUnlinkPullRequest ? (
           <TaskPullRequestActions
             disabledReason={detectPullRequestDisabledReason}

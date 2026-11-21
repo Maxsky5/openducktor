@@ -151,6 +151,7 @@ export const GROUPS: readonly ShortcutGroup[] = [
       }),
       command("sidebar", "Toggle sidebar", ALWAYS, true, { mac: ["⌃", "B"], pc: ["Ctrl", "B"] }),
       command("diagnostics", "Open diagnostics", NOT_TYPING, true, null),
+      command("processes", "Running processes and ports", NOT_TYPING, true, null),
       command("feature-tour", "Show tour", NOT_TYPING, true, null),
       command("open-repository", "Open repository", NOT_TYPING, true, null),
     ],
@@ -215,7 +216,7 @@ export const FOUND: SearchStep = { term: SEARCH, commands: ["message-fork"] };
 export const SEARCH_STEPS: readonly SearchStep[] = [
   {
     term: "",
-    commands: ["palette", "settings", "sidebar", "diagnostics", "feature-tour", "open-repository"],
+    commands: ["palette", "settings", "sidebar", "diagnostics", "processes", "feature-tour"],
   },
   {
     term: "f",

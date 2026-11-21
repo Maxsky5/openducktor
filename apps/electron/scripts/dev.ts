@@ -23,7 +23,7 @@ import {
   errorMessage,
   toElectronOperationError,
 } from "../src/effect/electron-errors";
-import { copyElectronSqliteMigrationsEffect } from "./build";
+import { copyElectronSqliteMigrationsEffect, copyProcessNativeModuleEffect } from "./build";
 import {
   DEVTOOLS_PORT_RECOVERY_STEP,
   forwardElectronStderr,
@@ -453,6 +453,8 @@ const buildElectronBundlesEffect = (): Effect.Effect<void, ElectronOperationErro
     yield* runStepEffect("Electron main build", ["bun", "run", "build:main"]);
     yield* runStepEffect("Electron preload build", ["bun", "run", "build:preload"]);
     yield* copyElectronSqliteMigrationsEffect();
+    // Cargo rebuilds the native process module only when its source changed.
+    yield* copyProcessNativeModuleEffect();
   });
 
 const resolveElectronDevExecutablePathEffect = (

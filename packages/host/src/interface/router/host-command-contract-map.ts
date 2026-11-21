@@ -39,6 +39,7 @@ import type { createWorkspaceFilesCommandHandlers } from "../commands/workspace-
 import type { createWorkspaceLifecycleCommandHandlers } from "../commands/workspace-lifecycle-command-handlers";
 import type { createWorkspaceSettingsCommandHandlers } from "../commands/workspace-settings-command-handlers";
 import type { createWorkspaceSessionCommandHandlers } from "../commands/workspace-session-command-handlers";
+import type { createWorkspaceProcessCommandHandlers } from "../commands/workspace-process-command-handlers";
 import type { HostCommandName } from "../commands/host-command-registry";
 
 type AllHostCommandHandlers = ReturnType<typeof createWorkflowReadCommandHandlers> &
@@ -78,7 +79,8 @@ type AllHostCommandHandlers = ReturnType<typeof createWorkflowReadCommandHandler
   ReturnType<typeof createRepoActionCommandHandlers> &
   ReturnType<typeof createWorkspaceFilesCommandHandlers> &
   ReturnType<typeof createWorkspaceLifecycleCommandHandlers> &
-  ReturnType<typeof createWorkspaceSettingsCommandHandlers>;
+  ReturnType<typeof createWorkspaceSettingsCommandHandlers> &
+  ReturnType<typeof createWorkspaceProcessCommandHandlers>;
 
 type CompleteHostCommandHandlers<Handlers> =
   Exclude<keyof Handlers, HostCommandName> extends never

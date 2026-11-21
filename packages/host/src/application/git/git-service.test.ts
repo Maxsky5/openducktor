@@ -151,6 +151,12 @@ const createFakeGitPort = ({
     listWorktrees() {
       return Effect.die(new Error("unexpected list worktrees"));
     },
+    confirmWorktree() {
+      return Effect.die(new Error("unexpected worktree confirmation"));
+    },
+    hasGitEntry() {
+      return Effect.die(new Error("unexpected Git entry read"));
+    },
     // Without a rebase in progress, a detached HEAD has no upstream, as in the Git adapter.
     getTrackedUpstreamReference(workingDir) {
       const branch = currentBranches[workingDir] ?? { detached: true };

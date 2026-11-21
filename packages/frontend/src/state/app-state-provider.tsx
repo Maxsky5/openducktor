@@ -19,6 +19,8 @@ import {
   TasksStateContext,
   useActiveWorkspaceContext,
   useRequiredContext,
+  WorkspaceScopeContext,
+  type WorkspaceScopeContextValue,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import {
   ChecksStateContext,
@@ -108,6 +110,13 @@ export const useWorkspaceBranchState = (): WorkspaceBranchStateContextValue =>
 
 export const useWorkspacePresence = (): WorkspacePresenceContextValue =>
   useWorkspacePresenceContext();
+
+/**
+ * The open workspaces and the selected one, without the branch and loading state of
+ * `useWorkspaceState`, so a reader renders again only when the scope changes.
+ */
+export const useWorkspaceScope = (): WorkspaceScopeContextValue =>
+  useRequiredContext(WorkspaceScopeContext, "useWorkspaceScope");
 
 export const useActiveWorkspace = (): ActiveWorkspace | null =>
   useActiveWorkspaceContext().activeWorkspace;

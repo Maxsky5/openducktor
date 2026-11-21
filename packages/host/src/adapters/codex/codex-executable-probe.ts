@@ -7,7 +7,8 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
-import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
+import { createRuntimeLaunch } from "../../infrastructure/process/runtime-launch";
+import { resolveCodexNpmShim } from "./codex-npm-shim";
 import {
   type ProcessTreePlatform,
   type ProcessTreeTerminator,
@@ -33,6 +34,7 @@ import type {
   CodexTransportBaseError,
 } from "./codex-app-server-transport-types";
 import type { CodexChildProcess } from "./codex-runtime-cleanup";
+import { trackManagedProcess } from "../../infrastructure/process/managed-processes";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_STOP_TIMEOUT_MS = 3_000;
@@ -162,7 +164,13 @@ export const createCodexExecutableProbe = ({
       acquire: Effect.gen(function* () {
         const command = yield* Effect.try({
           try: () =>
-            createProcessCommandLaunch(executablePath, ["app-server"], readEnv(), platform),
+            createRuntimeLaunch(
+              executablePath,
+              ["app-server"],
+              readEnv(),
+              platform,
+              resolveCodexNpmShim,
+            ),
           catch: (cause) =>
             toHostOperationError(cause, "codexExecutableProbe.buildCommand", { executablePath }),
         });
@@ -181,6 +189,7 @@ export const createCodexExecutableProbe = ({
         });
         const handleEarlySpawnError = () => undefined;
         child.once("error", handleEarlySpawnError);
+        trackManagedProcess(child, command.managed);
         const pid = child.pid;
         if (!pid || pid <= 0) {
           return yield* Effect.fail(

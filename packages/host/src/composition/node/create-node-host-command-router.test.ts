@@ -23,6 +23,7 @@ import { createBrowserEngineTestDouble } from "../../test-support/browser-engine
 import { createSharedSettingsFixture } from "../../test-support/shared-settings-fixture";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
 import { createDefaultGlobalConfig } from "../../config/global-config";
+import type { ProcessInspectorPort } from "../../ports/process-inspector-port";
 import type { TerminalPtyPort } from "../../ports/terminal-pty-port";
 import type { HostLifecycleLogger } from "../host-lifecycle";
 import { createNodeEffectHostCommandRouter } from "./create-node-effect-host-command-router";
@@ -117,6 +118,14 @@ const terminalPty: TerminalPtyPort = {
   start: () => Effect.die("Terminal PTY is not expected in this composition test."),
 };
 
+const processInspector: ProcessInspectorPort = {
+  listProcesses: () => Effect.die("Process reads are not expected in this composition test."),
+  inspectProcesses: () => Effect.die("Process reads are not expected in this composition test."),
+  stopMode: () => Effect.die("Process reads are not expected in this composition test."),
+  stopProcess: () => Effect.die("Process stops are not expected in this composition test."),
+  readStandardInputs: () => Effect.die("Process reads are not expected in this composition test."),
+};
+
 const createLogger = () => {
   const infos: string[] = [];
   const errors: string[] = [];
@@ -141,6 +150,8 @@ const createFailingRouterInput = (): CreateNodeHostCommandRouterInput => ({
   },
   taskEventPublicationReporter: { report: () => Effect.void },
   terminalPty,
+  processInspector,
+  processNativeDirectory: "/missing-process-native",
   browserEngine,
 });
 
@@ -157,6 +168,8 @@ const createAssemblyFailingRouterInput = (): CreateNodeHostCommandRouterInput =>
   taskEventPublicationReporter: { report: () => Effect.void },
   taskStore: createTaskStoreTestDouble({}),
   terminalPty,
+  processInspector,
+  processNativeDirectory: "/missing-process-native",
   browserEngine,
 });
 
@@ -191,6 +204,8 @@ const createRouter = async (input: {
     runtimeStarter: input.runtimeStarter ?? unusedRuntimeStarter,
     taskStore: createTaskStoreTestDouble({}),
     terminalPty,
+    processInspector,
+    processNativeDirectory: "/missing-process-native",
     browserEngine,
   };
   if (input.runtimeStarter) {
@@ -369,6 +384,8 @@ describe("createNodeEffectHostCommandRouter", () => {
         taskEventPublicationReporter: { report: () => Effect.void },
         taskStore: createTaskStoreTestDouble({ listTasks: () => Effect.succeed([]) }),
         terminalPty,
+        processInspector,
+        processNativeDirectory: "/missing-process-native",
         browserEngine,
       }),
     );
@@ -484,6 +501,8 @@ describe("createNodeEffectHostCommandRouter", () => {
         runtimeDistribution: createRuntimeDistribution(),
         taskEventPublicationReporter: { report: () => Effect.void },
         terminalPty,
+        processInspector,
+        processNativeDirectory: "/missing-process-native",
         browserEngine,
       }).pipe(Effect.result),
     );
@@ -542,6 +561,8 @@ describe("createNodeEffectHostCommandRouter", () => {
         taskEventPublicationReporter: { report: () => Effect.void },
         taskStore: createTaskStoreTestDouble({}),
         terminalPty,
+        processInspector,
+        processNativeDirectory: "/missing-process-native",
         browserEngine,
       }),
     );

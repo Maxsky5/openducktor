@@ -10,6 +10,8 @@ asarUnpack:
   - node_modules/@ff-labs/fff-bin-*/**/*
   - node_modules/ffi-rs/**/*
   - node_modules/@yuuang/**/*
+  # The native process module of the Processes view.
+  - dist/native/**/*
 
 publish:
   provider: github

@@ -10,7 +10,10 @@ import {
   createSourceRuntimeDistribution,
 } from "../runtimes/runtime-distribution";
 import { createToolDiscoveryAdapter } from "../system/tool-discovery";
-import { resolveOpenDucktorMcpCommand } from "./openducktor-mcp-command";
+import {
+  createOpenDucktorMcpLaunchPaths,
+  resolveOpenDucktorMcpCommand,
+} from "./openducktor-mcp-command";
 
 const testIfUnixModeIsAvailable = process.platform === "win32" ? test.skip : test;
 
@@ -282,5 +285,30 @@ describe("resolveOpenDucktorMcpCommand", () => {
     }
     expect(result.failure).toBeInstanceOf(HostValidationError);
     expect(result.failure.message).toBe("Configured bun override is invalid.");
+  });
+});
+
+describe("createOpenDucktorMcpLaunchPaths", () => {
+  test("keeps the first resolved script and reports a failure before that", async () => {
+    const root = await createWorkspaceRoot();
+    let bunAvailable = false;
+    const toolDiscovery = createToolDiscoveryAdapter({
+      systemCommands: {
+        ...createSystemCommands(),
+        resolveCommandPath: (command) =>
+          Effect.succeed(command === "bun" && bunAvailable ? command : null),
+      },
+    });
+    const launchPaths = createOpenDucktorMcpLaunchPaths({
+      runtimeDistribution: createSourceRuntimeDistribution(root),
+      toolDiscovery,
+    });
+
+    await expect(Effect.runPromise(launchPaths)).rejects.toThrow("bun");
+    bunAvailable = true;
+    const script = join(root, "packages", "openducktor-mcp", "src", "index.ts");
+    expect(await Effect.runPromise(launchPaths)).toEqual([script]);
+    bunAvailable = false;
+    expect(await Effect.runPromise(launchPaths)).toEqual([script]);
   });
 });

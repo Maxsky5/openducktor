@@ -219,3 +219,23 @@ export const resolveOpenDucktorMcpCommand = ({
     );
     return [bunExecutable, entrypoint];
   });
+
+/**
+ * The paths that identify an OpenDucktor MCP server among live processes: the last part of its
+ * command, which is the sidecar executable or the MCP script. The command stays the same while
+ * the host runs, so the first resolved value serves every later read. A failed read stays a
+ * failure, because MCP servers that runtimes started earlier can still run.
+ */
+export const createOpenDucktorMcpLaunchPaths = (input: ResolveOpenDucktorMcpCommandInput) => {
+  let resolved: readonly string[] | null = null;
+  return Effect.suspend(() =>
+    resolved
+      ? Effect.succeed(resolved)
+      : resolveOpenDucktorMcpCommand(input).pipe(
+          Effect.map((command) => {
+            resolved = command.slice(-1);
+            return resolved;
+          }),
+        ),
+  );
+};

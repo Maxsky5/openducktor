@@ -49,6 +49,15 @@ export type GitCheckout = {
   commonDirectory: string;
 };
 
+/**
+ * Whether the files of Git prove a listed root as a checkout of a repository. `stale` when the
+ * files name another checkout or repository, and `unreadable` when the host cannot read them.
+ */
+export type GitWorktreeConfirmation =
+  | { kind: "confirmed" }
+  | { kind: "stale" }
+  | { kind: "unreadable"; message: string };
+
 export type GitRemote = {
   name: string;
   url: string;
@@ -205,6 +214,13 @@ export type GitPort = {
     readContext?: GitReadContext,
   ): Effect.Effect<boolean, GitPortError>;
   listWorktrees(repoPath: string): Effect.Effect<GitWorktreeEntry[], GitPortError>;
+  /**
+   * Proves from the files of Git, without a Git process, that a canonical root is a checkout of
+   * the repository with the canonical shared Git directory `commonDirectory`.
+   */
+  confirmWorktree(root: string, commonDirectory: string): Effect.Effect<GitWorktreeConfirmation>;
+  /** True when the folder holds a `.git` entry, which starts a checkout for Git. */
+  hasGitEntry(directory: string): Effect.Effect<boolean, GitPortError>;
   getTrackedUpstreamReference(workingDir: string): Effect.Effect<string | null, GitPortError>;
   referenceExists(workingDir: string, reference: string): Effect.Effect<boolean, GitPortError>;
   listRemotes(workingDir: string): Effect.Effect<GitRemote[], GitPortError>;

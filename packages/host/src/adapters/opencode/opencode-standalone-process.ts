@@ -18,7 +18,8 @@ import {
   HostValidationError,
   toHostOperationError,
 } from "../../effect/host-errors";
-import { createProcessCommandLaunch } from "../../infrastructure/process/process-command-launch";
+import { createRuntimeLaunch } from "../../infrastructure/process/runtime-launch";
+import { resolveOpenCodeNpmShim } from "./opencode-npm-shim";
 import {
   shouldStartDetachedProcessGroup,
   terminateProcessTree,
@@ -34,6 +35,7 @@ import {
   type RuntimeExecutableGuidance,
   runtimeExecutableStartError,
 } from "../runtimes/runtime-executable-guidance";
+import { trackManagedProcess } from "../../infrastructure/process/managed-processes";
 
 const readinessLineSchema = z.object({ url: z.string() });
 
@@ -63,6 +65,8 @@ export const toOpenCodePathError = <Failure>(
         cause,
       })
     : cause;
+
+const OPENCODE_SERVE_ARGUMENTS = ["serve", "--stdio", "--port", "0", "--hostname", "127.0.0.1"];
 
 type StandaloneChild = ChildProcessByStdio<Writable, Readable, Readable>;
 export type OpenCodeStandaloneOptions = {
@@ -101,11 +105,12 @@ export const acquireOpenCodeStandalone = (
       const platform = input.platform ?? process.platform;
       const password = randomBytes(32).toString("base64url");
       const env = { ...(input.readEnv ?? (() => process.env))(), OPENCODE_PASSWORD: password };
-      const launch = createProcessCommandLaunch(
+      const launch = createRuntimeLaunch(
         input.executablePath,
-        ["serve", "--stdio", "--port", "0", "--hostname", "127.0.0.1"],
+        OPENCODE_SERVE_ARGUMENTS,
         env,
         platform,
+        resolveOpenCodeNpmShim,
       );
       const child = (input.spawnProcess ?? spawn)(launch.command, launch.args, {
         cwd: input.workingDirectory,
@@ -196,6 +201,7 @@ export const acquireOpenCodeStandalone = (
         throw new Error("OpenCode started without a process ID. Select an OpenCode V2 executable.");
       }
       const pid = child.pid;
+      trackManagedProcess(child, launch.managed);
       return {
         isClosed: () => closed,
         closeDescription: () => description,

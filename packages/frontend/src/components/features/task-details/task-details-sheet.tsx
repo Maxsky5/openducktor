@@ -39,6 +39,7 @@ import {
 } from "@openducktor/frontend-core/tasks/workflow/task-workflow-actions-context";
 import { useTaskDetailsHistoricalSessions } from "@/features/task-workflow/use-task-details-historical-sessions";
 import { canDetectTaskPullRequest } from "@openducktor/frontend-core/tasks/presentation/task-display";
+import { useOpenTaskProcesses } from "@/components/features/processes/use-open-task-processes";
 
 const EMPTY_TASK_SESSIONS: KanbanTaskSession[] = [];
 
@@ -80,6 +81,10 @@ export function TaskDetailsSheetContent(
   } = props;
   const open = useDialogOpen("TaskDetailsSheetContent", "TaskDetailsSheetFrame");
   const claimDialog = useTaskDetailsSheetClaimDialog();
+  // The sheet closes, so the flyout beside the rail shows the processes of the task first.
+  const openProcesses = useOpenTaskProcesses(activeWorkspace?.workspaceId ?? null, task.id, () =>
+    onOpenChange(false),
+  );
   const taskId = task.id;
   const contextTaskSessions = getContextTaskSessions(workflowActions, taskId);
   const activeSessionContext = getActiveTaskSessionContext(workflowActions, taskId);
@@ -126,6 +131,7 @@ export function TaskDetailsSheetContent(
       ? viewModel.removeWorktreeConfirm.openDialog
       : undefined,
     openDeleteDialog: viewModel.deleteConfirm.openDialog,
+    openProcesses,
   });
 
   return (
@@ -300,6 +306,7 @@ function getTaskDetailsFooterProps({
   runCoreTaskAction,
   openRemoveWorktreeDialog,
   openDeleteDialog,
+  openProcesses,
 }: {
   task: NonNullable<TaskDetailsSheetProps["task"]>;
   onOpenChange: TaskDetailsSheetProps["onOpenChange"];
@@ -313,6 +320,7 @@ function getTaskDetailsFooterProps({
   runCoreTaskAction: TaskDetailsViewModel["runCoreTaskAction"] | undefined;
   openRemoveWorktreeDialog: (() => void) | undefined;
   openDeleteDialog: TaskDetailsViewModel["deleteConfirm"]["openDialog"];
+  openProcesses: (() => void) | undefined;
 }): TaskDetailsSheetFooterProps {
   const footerProps: TaskDetailsSheetFooterProps = {
     task,
@@ -338,6 +346,9 @@ function getTaskDetailsFooterProps({
   }
   if (onDelete) {
     footerProps.onDeleteSelect = openDeleteDialog;
+  }
+  if (openProcesses) {
+    footerProps.onProcessesSelect = openProcesses;
   }
   return footerProps;
 }

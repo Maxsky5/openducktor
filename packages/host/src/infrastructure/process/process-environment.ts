@@ -153,6 +153,21 @@ const setPathEnvironmentValue = (
   env.PATH = value;
 };
 
+/** The environment with `entry` first on the search path, without a second copy of it. */
+export const prependPathEntry = (
+  env: NodeJS.ProcessEnv,
+  entry: string,
+  platform: NodeJS.Platform,
+): NodeJS.ProcessEnv => {
+  const next = { ...env };
+  setPathEnvironmentValue(
+    next,
+    mergePathValues(entry, pathEnvironmentValue(env, platform), pathDelimiterForPlatform(platform)),
+    platform,
+  );
+  return next;
+};
+
 const deletePathEnvironmentValue = (env: NodeJS.ProcessEnv, platform: NodeJS.Platform): void => {
   for (const key of Object.keys(env)) {
     if ((platform === "win32" && isPathKey(key)) || key === "PATH") {

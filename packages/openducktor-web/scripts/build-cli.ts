@@ -4,6 +4,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { markExecutable } from "@openducktor/build-tools";
+import { processNativeFileName } from "@openducktor/process-native";
+import {
+  copyProcessNativeModules,
+  listBuiltProcessNativeFiles,
+  prepareHostProcessNative,
+} from "@openducktor/process-native/build";
 import {
   type SqliteMigrationCopyPlan,
   sqliteMigrationCopyPlans,
@@ -81,6 +87,23 @@ const buildWebCliEffect = (): Effect.Effect<void, WebDependencyError> =>
       copyWebSqliteMigrationsEffect,
       { discard: true },
     );
+    yield* Effect.try({
+      // A release job puts the module of every platform in the source directory first.
+      try: () => {
+        prepareHostProcessNative();
+        copyProcessNativeModules({
+          fileNames: [...new Set([processNativeFileName(), ...listBuiltProcessNativeFiles()])],
+          targetDirectory: join(packageRoot, "dist", "native"),
+        });
+      },
+      catch: (cause) =>
+        new WebDependencyError({
+          dependency: "filesystem",
+          operation: "copy-process-native-modules",
+          message: errorMessage(cause),
+          cause,
+        }),
+    });
     yield* Effect.tryPromise({
       try: async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "openducktor-web-cli-"));

@@ -1,6 +1,7 @@
 import { type ReactElement, type ReactNode, useCallback, useState } from "react";
 import { ArrowUpRightFromSquare } from "lucide-react";
 import { ShortcutText } from "@/features/shortcuts/shortcut-controls";
+import { TaskServerLinks } from "@/components/features/processes/task-server-links";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Button } from "@/components/ui/button";
@@ -139,6 +140,7 @@ export function AgentStudioHeader({
       }
       actions={
         <>
+          <TaskServerLinks taskId={model.taskId} className="shrink-0 flex-nowrap" />
           {model.pullRequest ? (
             <TaskPullRequestLink pullRequest={model.pullRequest} className="shrink-0" />
           ) : null}

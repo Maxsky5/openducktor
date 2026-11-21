@@ -33,11 +33,22 @@ The web package builds the web shell, CLI, and MCP entrypoint in parallel. It bu
 | `node-pty` | External; retain its native terminal dependencies. |
 | `playwright-core` | External; the agent browser tools load it from the installed package at runtime. |
 | `node-mac-permissions` | Retain the optional Electron dependency on macOS. |
+| `@openducktor/process-native` | Copy the `.node` file into `dist/native`. Electron Builder unpacks it from the archive. |
 | Bundled JavaScript libraries | Declare them as build dependencies in the shell package. |
 
 Electron bundles `electron-updater`, `semver`, and `yaml`. The web runner bundles `mime-types`, `undici`, `ws`, and `zod`. These libraries do not need a second copy in the installed package. Electron Builder reads the entrypoint and dependency metadata from `apps/electron/package.json`.
 
 The host owns the Claude Agent SDK dependency, and both host bundles include its JavaScript. The host supplies the selected external Claude executable through `pathToClaudeCodeExecutable`. The web package therefore does not install another SDK copy and its optional Claude binaries. The external Claude installation remains required as described in the [runtime integration guide](runtime-integration-guide.md).
+
+## Native process module
+
+`packages/process-native` builds the Rust module of the Processes view with Cargo. The Electron and web builds compile the module for the host platform first, so `bun run electron:package` and the web build work from a fresh checkout with the Rust toolchain. Cargo skips the work when the build is current. Each shell build then copies the module into its `dist/native` directory, and the host loads it from there on first use.
+
+A release job downloads the modules first and sets `OPENDUCKTOR_PROCESS_NATIVE=prebuilt`. Its shell build then copies the downloaded modules and compiles nothing.
+
+The Electron build copies the module of its own platform. The web build copies every module in `packages/process-native/native`, so a web release contains the modules of all platforms.
+
+`.github/workflows/build-process-native.yml` builds the release modules for macOS, Linux, and Windows on x64 and arm64. Linux builds run in a Debian 11 container, so the modules need only glibc 2.31. The desktop and web release workflows download these modules before they build a shell. `scripts/prepare-web-publish-packages.ts` stops a web release that lacks one of them.
 
 ## Measurements
 

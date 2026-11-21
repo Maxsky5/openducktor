@@ -33,7 +33,7 @@ For a beta, npm packages keep the full prerelease version. The Electron and mobi
 
 The workflow checks that the checked-out repository version matches the selected tag and draft release. It lints, typechecks, and tests the Electron workspace. It builds Linux x64, macOS arm64, macOS x64, and Windows x64 files.
 
-It signs and notarizes macOS files, packages the MCP sidecar, creates updater metadata, and uploads all files to the draft. It merges the two macOS manifests into `latest-mac.yml` or `beta-mac.yml`.
+It downloads the native process module of each platform from `Build Native Process Module`. It signs and notarizes macOS files, packages the MCP sidecar, creates updater metadata, and uploads all files to the draft. It merges the two macOS manifests into `latest-mac.yml` or `beta-mac.yml`.
 
 The package build checks that the selected platform and architecture match the host before it removes old output. It compiles the MCP sidecar for that target. It starts the packaged executable. It completes MCP initialization against a local test bridge. It also checks the packaged Claude file search module.
 
@@ -53,7 +53,7 @@ Public store release stays manual. After the device checks, promote the builds i
 
 `@openducktor/web` starts a loopback TypeScript host, waits for it, serves the built frontend, and stops the host through the protected `/shutdown` route.
 
-`Publish Web Package` builds the standalone package, runs `scripts/prepare-web-publish-packages.ts`, runs `npm publish --dry-run`, checks the npm tag, and publishes the package.
+`Publish Web Package` downloads the native process modules of all platforms, builds the standalone package, runs `scripts/prepare-web-publish-packages.ts`, runs `npm publish --dry-run`, checks the npm tag, and publishes the package.
 
 `bun run browser:dev` uses the same launcher in workspace mode with Vite. A published install contains the frontend and host. It does not need published internal workspace packages.
 

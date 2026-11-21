@@ -6,6 +6,7 @@ import { errorMessage } from "../../../effect/host-errors";
 import type { CdpConnection } from "../cdp/cdp-target-session";
 import { type ChromePipeConnection, createChromePipeConnection } from "./chrome-pipe-connection";
 import { CHROME_FOR_TESTING_DEBIAN_PACKAGES } from "./chrome-for-testing-pin";
+import { trackManagedProcess } from "../../../infrastructure/process/managed-processes";
 
 const START_TIMEOUT_MS = 30_000;
 const STOP_TIMEOUT_MS = 5_000;
@@ -51,6 +52,7 @@ export const launchChromeProcess: ChromeLauncher = (input) =>
       resume(Effect.fail(launchFailure(input.profileDirectory, "", errorMessage(cause), cause)));
       return;
     }
+    trackManagedProcess(child, { kind: "infrastructure" });
     const stderr = createTextTail(STDERR_TAIL_BYTES);
     const exited = createBrowserEndSignal<ChromeProcessExit>();
     let connection: ChromePipeConnection | null = null;

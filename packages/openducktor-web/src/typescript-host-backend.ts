@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { gitProviderFetch } from "./system-trust-store";
 import { createHostCommandLifetime } from "@openducktor/remote-host/host-command-lifetime";
 import {
@@ -694,6 +695,8 @@ export const startTypescriptHostBackendEffect = ({
       },
       runtimeDistribution,
       terminalPty: createNodePtyPort(),
+      // The build copies the native process modules beside the bundle, in `dist/native`.
+      processNativeDirectory: path.join(path.dirname(fileURLToPath(import.meta.url)), "native"),
       browserEngine: ({ configRoot }) =>
         createChromeForTestingBrowserEngine({
           configRoot,

@@ -4,6 +4,7 @@ import type { Options, SpawnedProcess } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
 import type { ClaudeSessionContext } from "./claude-agent-sdk-types";
 import { withTimeout } from "./claude-agent-sdk-utils";
+import { trackManagedProcess } from "../../infrastructure/process/managed-processes";
 
 type ProcessState = {
   closing: boolean;
@@ -40,6 +41,7 @@ export const createClaudeNativeProcessSpawner = (
       windowsHide: true,
     });
     state.process = child;
+    trackManagedProcess(child, { kind: "runtime" });
     const confirmExit = (): void => {
       state.confirmed = true;
       state.resolveExit();
