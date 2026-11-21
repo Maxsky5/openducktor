@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { cssTimeMs } from "./css-time";
 
 /** "instant" shows and hides a dialog without motion, such as a dialog that opens from a key. */
 export type DialogMotion = "animated" | "instant";
@@ -19,10 +20,9 @@ export function useDialogPresence(open: boolean, motion: DialogMotion = "animate
       setMounted(false);
       return;
     }
-    const duration = getComputedStyle(document.documentElement)
-      .getPropertyValue("--modal-close-dur")
-      .trim();
-    const milliseconds = Number.parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000);
+    const milliseconds = cssTimeMs(
+      getComputedStyle(document.documentElement).getPropertyValue("--modal-close-dur"),
+    );
     const timeout = window.setTimeout(() => {
       if (!currentOpen.current) setMounted(false);
     }, milliseconds);
