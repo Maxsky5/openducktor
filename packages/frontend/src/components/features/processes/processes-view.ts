@@ -220,7 +220,7 @@ export const runningCommandCount = (list: WorkspaceProcessList): number =>
   buildGroupViews(list.groups, "").reduce((total, view) => total + view.commands.length, 0);
 
 /** A web port of a task, which a chip on its card or the ports menu of its session opens. */
-export type TaskServerLink = { port: number; url: string; name: string; title: string };
+export type TaskServerLink = { port: number; url: string; name: string };
 
 /** The web ports that run in the worktrees of a task, once each, by port number. */
 export const taskServerLinks = (
@@ -239,7 +239,6 @@ export const taskServerLinks = (
             port: listener.port,
             url,
             name: row.name,
-            title: `Open ${url} · ${row.name}`,
           });
       }
   }

@@ -9,6 +9,8 @@ import { type TaskServerLink, taskServerLinks } from "./processes-view";
 
 const NO_LINKS: TaskServerLink[] = [];
 
+const linkTitle = (link: TaskServerLink): string => `Open ${link.url} · ${link.name}`;
+
 type TaskServerLinksProps = {
   taskId: string | null;
   className?: string;
@@ -73,8 +75,8 @@ function ServerLinkChips({
           key={link.url}
           type="button"
           className="group/chip inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-full border border-border px-2 font-mono text-[11px] leading-none text-status-running-foreground transition-colors hover:border-info-border hover:bg-info-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          title={link.title}
-          aria-label={link.title}
+          title={linkTitle(link)}
+          aria-label={linkTitle(link)}
           // A card opens its task on a click, so the chip keeps the click.
           onClick={(event) => {
             event.stopPropagation();
@@ -129,8 +131,8 @@ function ServerPortsMenu({
               <button
                 type="button"
                 className="group/port flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                title={link.title}
-                aria-label={link.title}
+                title={linkTitle(link)}
+                aria-label={linkTitle(link)}
                 onClick={() => {
                   setOpen(false);
                   target.openUrl(link.url);
