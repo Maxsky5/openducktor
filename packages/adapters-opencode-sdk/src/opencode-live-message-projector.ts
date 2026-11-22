@@ -25,6 +25,8 @@ import { isShellNotice } from "./opencode-shell-projection";
 export class OpenCodeLiveMessageProjector {
   readonly messages = new Map<string, SessionMessageInfo>();
   readonly inbox = new Map<string, SessionInboxInfo>();
+  /** Inputs that arrived in an idle session with no input ahead, so they start the turn. */
+  private readonly startedTurns = new Set<string>();
   private readonly settledText = new Set<string>();
   private readonly settledInput = new Set<string>();
   private readonly retractedIds = new Set<string>();
@@ -101,7 +103,8 @@ export class OpenCodeLiveMessageProjector {
     id: string,
   ): Extract<AgentEvent, { type: "user_message" }> | null {
     const queued = this.inbox.get(id);
-    if (queued?.type === "user") return projectInboxUser(queued);
+    if (queued?.type === "user")
+      return projectInboxUser(queued, this.startedTurns.has(id) ? "read" : "queued");
     const delivered = this.messages.get(id);
     if (delivered?.type !== "user") return null;
     const { id: _id, time, type: _type, ...payload } = delivered;
@@ -175,7 +178,12 @@ export class OpenCodeLiveMessageProjector {
       messageEvents(sessionID, message, this.projectionContext, this.settledInput),
     );
   }
-  apply(event: V2Event): AgentEvent[] {
+  /**
+   * Applies one event. `idle` is true when no native execution runs. An input that arrives then,
+   * with no earlier input waiting, starts the turn, so it shows as read at once. Any other input
+   * stays queued until OpenCode delivers it.
+   */
+  apply(event: V2Event, idle = false): AgentEvent[] {
     if (!("sessionID" in event.data)) return [];
     const sessionID = event.data.sessionID;
     if (sessionID === null) return [];
@@ -189,17 +197,21 @@ export class OpenCodeLiveMessageProjector {
         time: { created },
         ...event.data.item,
       };
+      const startsTurn = idle && this.inbox.size === 0;
       this.inbox.set(item.id, item);
-      return projectVisibleInboxUser(item);
+      if (startsTurn) this.startedTurns.add(item.id);
+      return projectVisibleInboxUser(item, startsTurn ? "read" : "queued");
     }
     if (event.type === "session.inbox.cancelled") {
       this.inbox.delete(event.data.inboxID);
+      this.startedTurns.delete(event.data.inboxID);
       return [{ ...base, type: "transcript_retracted", messageIds: [event.data.inboxID] }];
     }
     if (event.type === "session.inbox.delivered") {
       const item = this.inbox.get(event.data.inboxID);
       if (!item) return [];
       this.inbox.delete(item.id);
+      this.startedTurns.delete(item.id);
       if (item.type === "synthetic")
         return this.recordMessage(sessionID, {
           id: item.id,

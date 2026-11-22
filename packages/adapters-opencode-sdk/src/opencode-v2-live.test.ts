@@ -1289,7 +1289,8 @@ describe("OpenCode V2 live observation", () => {
         await expect(sending).resolves.toMatchObject(
           submission === "compact"
             ? { type: "command_accepted", commandName: "compact" }
-            : { messageId: "msg_kickoff", state: "queued" },
+            : // Nothing runs ahead of the kickoff in an idle session, so it shows as read.
+              { messageId: "msg_kickoff", state: "read" },
         );
         await expect(runtime.connection.resumeSession(sessionInput)).resolves.toMatchObject({
           status: "running",
@@ -1700,7 +1701,8 @@ describe("OpenCode V2 live observation", () => {
         type: "user_message",
         messageId,
         submissionId: "submission-early",
-        state: "queued",
+        // The session was idle and no input waited, so the input starts the turn.
+        state: "read",
       });
     } finally {
       answer.resolve(Response.json({}));
