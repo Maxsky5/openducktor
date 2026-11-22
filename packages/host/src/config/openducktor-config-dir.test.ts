@@ -186,6 +186,9 @@ test.skipIf(process.platform !== "darwin")(
         filesystemAlias: productionRefusal(),
         unicodeAlias: productionRefusal(),
         unicodeCaseAlias: caseInsensitive ? productionRefusal() : null,
+        sigmaCaseAlias: caseInsensitive ? productionRefusal() : null,
+        expandedCaseAlias: caseInsensitive ? productionRefusal() : null,
+        distinctUnicodeName: null,
       });
     } finally {
       await rm(homeDir, { recursive: true, force: true });

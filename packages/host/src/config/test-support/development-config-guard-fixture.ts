@@ -51,6 +51,19 @@ const unicodeAliasResults = filesystemAlias
     }
   : {};
 await rm(productionRoot);
+const caseFoldResults: Record<string, string | null> = {};
+if (filesystemAlias) {
+  const cases = [
+    ["sigmaCaseAlias", "\u03c3", "\u03c2"],
+    ["expandedCaseAlias", "\u00df", "SS"],
+    ["distinctUnicodeName", "\u0131", "I"],
+  ] as const;
+  for (const [key, destination, alternate] of cases) {
+    await symlink(destination, productionRoot, "junction");
+    caseFoldResults[key] = launch(path.join(homeDir, alternate));
+    await rm(productionRoot);
+  }
+}
 await mkdir(productionRoot);
 await mkdir(isolatedRoot);
 await symlink(productionRoot, alias, "junction");
@@ -68,6 +81,7 @@ console.log(
     production: launch(undefined, { scope: "production" }),
     ...beforeCreationAliasResults,
     ...unicodeAliasResults,
+    ...caseFoldResults,
     ...(filesystemAlias && { filesystemAlias: launch(filesystemAlias) }),
   }),
 );

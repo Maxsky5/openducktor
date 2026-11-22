@@ -4,7 +4,7 @@ import path from "node:path";
 import { HostResourceError } from "../effect/host-errors";
 import { resolvePathSymlinkParts } from "../infrastructure/resolve-path-symlinks";
 
-const readVolumeNameRule = `
+const compareVolumeNames = `
 ObjC.import("Foundation");
 
 function getResourceValue(url, key) {
@@ -15,45 +15,78 @@ function getResourceValue(url, key) {
   return value[0];
 }
 
-function run(argv) {
-  const url = $.NSURL.fileURLWithPath(argv[0]);
-  if (argv[1] === "apfs") {
-    ObjC.import("AppKit");
-    const mount = getResourceValue(url, $.NSURLVolumeURLKey);
-    const type = Ref();
-    const workspace = $.NSWorkspace.sharedWorkspace;
-    if (!workspace.getFileSystemInfoForPathIsRemovableIsWritableIsUnmountableDescriptionType(
-      mount.path, null, null, null, null, type
-    )) {
-      throw new Error("Cannot read filesystem type");
-    }
-    const name = ObjC.unwrap(type[0]);
-    if (typeof name !== "string" || name.length === 0) {
-      throw new Error("Invalid filesystem type");
-    }
-    return String(name === "apfs");
+function isApfs(url) {
+  ObjC.import("AppKit");
+  const mount = getResourceValue(url, $.NSURLVolumeURLKey);
+  const type = Ref();
+  const workspace = $.NSWorkspace.sharedWorkspace;
+  if (!workspace.getFileSystemInfoForPathIsRemovableIsWritableIsUnmountableDescriptionType(
+    mount.path, null, null, null, null, type
+  )) {
+    throw new Error("Cannot read filesystem type");
   }
+  const name = ObjC.unwrap(type[0]);
+  if (typeof name !== "string" || name.length === 0) {
+    throw new Error("Invalid filesystem type");
+  }
+  return name === "apfs";
+}
+
+function ignoresCase(url) {
   const caseSensitive = ObjC.unwrap(getResourceValue(url, $.NSURLVolumeSupportsCaseSensitiveNamesKey));
   if (typeof caseSensitive !== "boolean") {
     throw new Error("Invalid volume case sensitivity");
   }
-  return String(!caseSensitive);
+  return !caseSensitive;
+}
+
+function foldName(name, locale) {
+  const folded = $(name).stringByFoldingWithOptionsLocale($.NSCaseInsensitiveSearch, locale);
+  return ObjC.unwrap(folded).normalize("NFC");
+}
+
+function run(argv) {
+  const [existingPath, left, right, nameKind] = argv;
+  const url = $.NSURL.fileURLWithPath(existingPath);
+  if (nameKind === "unicode" && isApfs(url)) {
+    const leftNfc = left.normalize("NFC");
+    const rightNfc = right.normalize("NFC");
+    if (leftNfc === rightNfc) return "true";
+    if (!ignoresCase(url)) return "false";
+    const locale = $.NSLocale.localeWithLocaleIdentifier("en_US_POSIX");
+    return String(foldName(leftNfc, locale) === foldName(rightNfc, locale));
+  }
+  return String(left.toLowerCase() === right.toLowerCase() && ignoresCase(url));
 }
 `;
 
-function checkMacVolume(existingPath: string, rule: "apfs" | "case-insensitive"): boolean {
+function macVolumeNamesMatch(
+  existingPath: string,
+  left: string,
+  right: string,
+  hasUnicode: boolean,
+): boolean {
   try {
     const output = execFileSync(
       "/usr/bin/osascript",
-      ["-l", "JavaScript", "-e", readVolumeNameRule, existingPath, rule],
+      [
+        "-l",
+        "JavaScript",
+        "-e",
+        compareVolumeNames,
+        existingPath,
+        left,
+        right,
+        hasUnicode ? "unicode" : "ascii",
+      ],
       { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 3000 },
     ).trim();
     if (output === "true") return true;
     if (output === "false") return false;
-    throw new Error("macOS returned an invalid volume rule value");
+    throw new Error("macOS returned an invalid filename comparison result");
   } catch (cause) {
     throw new HostResourceError({
-      message: `Cannot check ${rule === "apfs" ? "filesystem type" : "case sensitivity"} for the config directory volume at ${existingPath}. Set OPENDUCKTOR_CONFIG_DIR to a separate directory with a different name.`,
+      message: `Cannot compare names on the config directory volume at ${existingPath}. Set OPENDUCKTOR_CONFIG_DIR to a separate directory with a different name.`,
       resource: "config-directory-volume",
       operation: "openducktor.resolve-config-dir",
       cause,
@@ -82,24 +115,10 @@ export function isSameConfigDirectory(selectedRoot: string, productionRoot: stri
   }
   if (process.platform !== "darwin") return false;
 
-  const sameIgnoringCase = left.toLowerCase() === right.toLowerCase();
-  const leftNfc = left.normalize("NFC");
-  const rightNfc = right.normalize("NFC");
-  const sameAfterNormalization = leftNfc === rightNfc;
-  const sameAfterBoth = leftNfc.toLowerCase() === rightNfc.toLowerCase();
-  if (
-    (!sameIgnoringCase && !sameAfterBoth) ||
-    !isSameExistingPath(production.existingPath, selected.existingPath)
-  ) {
-    return false;
-  }
-
-  const normalizesNames =
-    (sameAfterNormalization || !sameIgnoringCase) &&
-    checkMacVolume(production.existingPath, "apfs");
-  if (sameAfterNormalization && normalizesNames) return true;
+  const hasUnicode = /\P{ASCII}/u.test(left + right);
+  if (!hasUnicode && left.toLowerCase() !== right.toLowerCase()) return false;
   return (
-    (sameIgnoringCase || (sameAfterBoth && normalizesNames)) &&
-    checkMacVolume(production.existingPath, "case-insensitive")
+    isSameExistingPath(production.existingPath, selected.existingPath) &&
+    macVolumeNamesMatch(production.existingPath, left, right, hasUnicode)
   );
 }
