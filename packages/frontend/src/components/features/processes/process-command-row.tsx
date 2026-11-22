@@ -461,12 +461,12 @@ function PortLinks({
   if (listeners.length === 0) return null;
   const shown = listeners.slice(0, VISIBLE_PORTS);
   const rest = listeners.slice(VISIBLE_PORTS);
-  // In a narrow view the ports clip, so Stop after them stays in view. The padding keeps the focus
-  // rings of the ports.
+  // In a narrow view the ports scroll sideways, so Stop after them stays in view. The padding keeps
+  // the focus rings of the ports.
   return (
     <span
       className={cn(
-        "-m-0.5 flex min-w-0 items-center gap-2 overflow-hidden p-0.5 font-mono tabular-nums *:shrink-0",
+        "hide-scrollbar -m-0.5 flex min-w-0 items-center gap-2 overflow-x-auto overscroll-x-contain p-0.5 font-mono tabular-nums *:shrink-0",
         small ? "text-[11px]" : "text-xs",
       )}
     >
