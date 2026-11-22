@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { HostValidationError } from "../effect/host-errors";
 import { runFixtureProcess } from "../test-support/fixture-process";
 import {
@@ -121,20 +122,27 @@ describe("OpenDucktor config directory resolution", () => {
   });
 });
 
+const developmentConfigGuardFixture = new URL(
+  "./test-support/development-config-guard-fixture.ts",
+  import.meta.url,
+);
+const productionRefusal = () =>
+  expect.stringMatching(
+    /refused the production config directory .*\.openducktor\. Set OPENDUCKTOR_CONFIG_DIR.*--allow-production-config/,
+  );
+
 test("development requires acknowledgement for the production config root and its aliases", async () => {
   const homeDir = await mkdtemp(path.join(tmpdir(), "odt-development-config-"));
   try {
     const stdout = await runFixtureProcess({
-      fixtureUrl: new URL("./test-support/development-config-guard-fixture.ts", import.meta.url),
+      fixtureUrl: developmentConfigGuardFixture,
       args: [],
       homeDir,
     });
-    const refusal = expect.stringMatching(
-      /refused the production config directory .*\.openducktor\. Set OPENDUCKTOR_CONFIG_DIR.*--allow-production-config/,
-    );
     expect(JSON.parse(stdout)).toEqual({
-      direct: refusal,
-      alias: refusal,
+      directBeforeCreation: productionRefusal(),
+      direct: productionRefusal(),
+      alias: productionRefusal(),
       acknowledged: null,
       defaultDevelopment: null,
       isolated: null,
@@ -144,3 +152,30 @@ test("development requires acknowledgement for the production config root and it
     await rm(homeDir, { recursive: true, force: true });
   }
 });
+
+// The web CLI runs under Node, which can report both macOS paths for the same directory.
+test.skipIf(process.platform !== "darwin")(
+  "development refuses the macOS Data volume path to the production root under Node",
+  async () => {
+    const homeDir = await mkdtemp("/Users/Shared/odt-development-config-");
+    try {
+      const result = await Bun.build({
+        entrypoints: [fileURLToPath(developmentConfigGuardFixture)],
+        target: "node",
+        outdir: homeDir,
+        naming: "development-config-guard.mjs",
+      });
+      const bundle = result.outputs[0];
+      if (!bundle) throw new Error("The Node config guard fixture bundle is missing.");
+      const stdout = await runFixtureProcess({
+        fixtureUrl: pathToFileURL(bundle.path),
+        executable: "node",
+        args: [`/System/Volumes/Data${homeDir}/.openducktor`],
+        homeDir,
+      });
+      expect(JSON.parse(stdout)).toMatchObject({ filesystemAlias: productionRefusal() });
+    } finally {
+      await rm(homeDir, { recursive: true, force: true });
+    }
+  },
+);

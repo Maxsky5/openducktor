@@ -7,9 +7,10 @@ import {
 } from "../openducktor-config-dir";
 
 const productionRoot = resolveOpenDucktorBaseDir("production", {});
-const alias = path.join(path.dirname(productionRoot), "production-alias");
-await mkdir(productionRoot);
-await symlink(productionRoot, alias, "junction");
+const homeDir = path.dirname(productionRoot);
+const alias = path.join(homeDir, "production-alias");
+const isolatedRoot = path.join(homeDir, ".openducktor-local");
+const [filesystemAlias] = process.argv.slice(2);
 
 const launch = (
   scope: OpenDucktorConfigDirScope,
@@ -24,13 +25,22 @@ const launch = (
   }
 };
 
+const directBeforeCreation = launch("dev", { OPENDUCKTOR_CONFIG_DIR: productionRoot });
+await mkdir(productionRoot);
+await mkdir(isolatedRoot);
+await symlink(productionRoot, alias, "junction");
+
 console.log(
   JSON.stringify({
+    directBeforeCreation,
     direct: launch("dev", { OPENDUCKTOR_CONFIG_DIR: "~/.openducktor" }),
     alias: launch("dev", { OPENDUCKTOR_CONFIG_DIR: alias }),
     acknowledged: launch("dev", { OPENDUCKTOR_CONFIG_DIR: alias }, true),
     defaultDevelopment: launch("dev", {}),
-    isolated: launch("dev", { OPENDUCKTOR_CONFIG_DIR: "~/.openducktor-local" }),
+    isolated: launch("dev", { OPENDUCKTOR_CONFIG_DIR: isolatedRoot }),
     production: launch("production", {}),
+    ...(filesystemAlias && {
+      filesystemAlias: launch("dev", { OPENDUCKTOR_CONFIG_DIR: filesystemAlias }),
+    }),
   }),
 );

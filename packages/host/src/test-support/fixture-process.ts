@@ -4,10 +4,12 @@ export const runFixtureProcess = async ({
   args,
   fixtureUrl,
   homeDir,
+  executable = process.execPath,
 }: {
   args: string[];
   fixtureUrl: URL;
   homeDir: string;
+  executable?: string;
 }): Promise<string> => {
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
@@ -16,7 +18,7 @@ export const runFixtureProcess = async ({
   };
   delete environment.OPENDUCKTOR_CONFIG_DIR;
   const child = Bun.spawn({
-    cmd: [process.execPath, fileURLToPath(fixtureUrl), ...args],
+    cmd: [executable, fileURLToPath(fixtureUrl), ...args],
     env: environment,
     stderr: "pipe",
     stdout: "pipe",
