@@ -31,7 +31,6 @@ import { useCardFocus } from "@/components/features/kanban/use-kanban-card-focus
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
 import { TaskPullRequestLink } from "@/components/features/task-pull-request-link";
 import { TaskSourceIssueLink } from "@/components/features/task-source-issue-link";
-import { TaskServerLinks } from "@/components/features/processes/task-server-links";
 import { TaskIdBadge } from "@/components/features/tasks/task-id-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -121,7 +120,6 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           <TaskMeta task={task} mergedTarget={mergedTarget} />
         )}
         <SessionStatusNotes task={task} taskSessions={taskSessions} />
-        <TaskServerLinks taskId={task.id} className={isCompact ? "mt-1.5" : "mt-2"} />
         {autoCloseFailure ? (
           <p role="status" className="mt-1 break-words text-xs text-warning-muted">
             {autoCloseFailure}

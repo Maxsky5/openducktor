@@ -219,7 +219,7 @@ export const contextRank = (
 export const runningCommandCount = (list: WorkspaceProcessList): number =>
   buildGroupViews(list.groups, "").reduce((total, view) => total + view.commands.length, 0);
 
-/** A web port of a task, which a chip on its card or the ports menu of its session opens. */
+/** A web port of a task, which the ports button of its sheet or its session opens. */
 export type TaskServerLink = { port: number; url: string; name: string };
 
 /** The web ports that run in the worktrees of a task, once each, by port number. */

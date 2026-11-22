@@ -33,7 +33,7 @@ type ProcessesFocus = { workspaceId: string; taskId: string };
 
 /**
  * What a reader can do with the Processes view, and the facts that change only with the workspace
- * or the host. The value stays the same while the view opens, closes, or moves, so a task chip or a
+ * or the host. The value stays the same while the view opens, closes, or moves, so a ports button or a
  * command that only opens the view does not render again.
  */
 export type ProcessesActions = {
@@ -67,7 +67,7 @@ export const PROCESSES_SURFACE = "[data-processes-surface]";
 export const LIVE_REFRESH_MS = 2_000;
 
 /**
- * The rail badge and the port chips read them this often while the view is closed. A command that
+ * The rail badge and the ports buttons read them this often while the view is closed. A command that
  * the user stops leaves the badge within this time.
  */
 const AMBIENT_REFRESH_MS = 5_000;
@@ -182,7 +182,7 @@ export function ProcessesProvider({ children }: PropsWithChildren): ReactElement
 
 /**
  * The one read that refreshes the shared list. Other readers only watch the cache. The open view
- * reads while the app shows. The badge and the chips read only while the app has the focus, and
+ * reads while the app shows. The badge and the ports buttons read only while the app has the focus, and
  * the query reads again at once when the focus comes back.
  */
 const LiveProcessRead = memo(function LiveProcessRead({ open }: { open: boolean }): null {
