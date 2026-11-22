@@ -5,6 +5,7 @@ import { useCssPresence } from "@/components/ui/css-presence";
 import { CssPresenceReveal } from "@/components/ui/css-presence-reveal";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
+import { PortsPopover } from "./ports-popover";
 import { ProcessStopPopover } from "./process-stop-popover";
 import { countLabel, listenerLabel } from "./processes-labels";
 import {
@@ -68,7 +69,7 @@ export function ProcessCommandRow({
     >
       <div
         className={cn(
-          "group/command flex h-8 items-center gap-3 pr-2 transition-[background-color,opacity] duration-150 hover:bg-accent/40 has-[[data-state=open]]:bg-accent/40",
+          "group/command @container/row flex h-8 items-center gap-3 pr-2 transition-[background-color,opacity] duration-150 hover:bg-accent/40 has-[[data-state=open]]:bg-accent/40",
           enterTarget && "bg-accent/40",
           (outdated || stopping) && "opacity-50",
         )}
@@ -122,7 +123,12 @@ export function ProcessCommandRow({
             Stopping…
           </span>
         ) : (
-          <PortLinks listeners={listeners} disabled={outdated} onOpenUrl={onOpenUrl} />
+          <PortLinks
+            listeners={listeners}
+            disabled={outdated}
+            listLabel={`Ports of ${label}`}
+            onOpenUrl={onOpenUrl}
+          />
         )}
         {outdated && !stopping ? (
           <span className="shrink-0 text-xs text-muted-foreground">Out of date</span>
@@ -180,7 +186,7 @@ export function ProcessAppRow({
   const label = `Processes that ${app.name} started`;
   return (
     <li {...presenceProps} className="css-presence process-presence" aria-label={label}>
-      <div className="group/command flex h-8 items-center gap-3 pr-2 transition-colors duration-150 hover:bg-accent/40">
+      <div className="group/command @container/row flex h-8 items-center gap-3 pr-2 transition-colors duration-150 hover:bg-accent/40">
         <button
           type="button"
           className="flex h-full min-w-0 flex-1 items-center gap-2 pl-[34px] text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
@@ -207,7 +213,12 @@ export function ProcessAppRow({
             </span>
           </span>
         </button>
-        <PortLinks listeners={app.listeners} disabled={false} onOpenUrl={onOpenUrl} />
+        <PortLinks
+          listeners={app.listeners}
+          disabled={false}
+          listLabel={`Ports of ${app.name}`}
+          onOpenUrl={onOpenUrl}
+        />
         {/* The processes of an app stop one by one, so this line has no Stop. */}
         <span className="w-6 shrink-0" />
       </div>
@@ -322,7 +333,7 @@ function ProcessMemberLine({
   return (
     <li
       className={cn(
-        "group/member flex h-6 items-center gap-3 pr-2 pl-[44px] hover:bg-accent/40 has-[[data-state=open]]:bg-accent/40",
+        "group/member @container/row flex h-6 items-center gap-3 pr-2 pl-[44px] hover:bg-accent/40 has-[[data-state=open]]:bg-accent/40",
         (stopping || outdated) && "opacity-50",
       )}
       aria-label={`${row.name}, PID ${row.pid}`}
@@ -356,7 +367,7 @@ function ProcessMemberLine({
       {url ? (
         <button
           type="button"
-          className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity group-hover/member:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none pointer-coarse:opacity-100"
+          className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity group-hover/member:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none pointer-coarse:opacity-100 @max-[24rem]/row:hidden"
           aria-label={`Copy ${url}`}
           title={`Copy ${url}`}
           onClick={() => void copyToClipboard(url)}
@@ -372,6 +383,7 @@ function ProcessMemberLine({
         listeners={row.listeners}
         disabled={stopping || outdated}
         small
+        listLabel={`Ports of ${command}`}
         onOpenUrl={onOpenUrl}
       />
       {/* The slot has the width of the Stop of a command, so the ports line up. */}
@@ -445,45 +457,65 @@ function Highlighted({ text, query }: { text: string; query: string }): ReactEle
   return <>{parts}</>;
 }
 
-/** The ports of a command as links that open their URLs. A port without a web page is text. */
+/**
+ * The ports of a command as links that open their URLs. A port without a web page is text. A
+ * narrow row folds the ports into one button with their count, so Stop after them stays in view.
+ */
 function PortLinks({
   listeners,
   disabled,
   small = false,
+  listLabel,
   onOpenUrl,
 }: {
   listeners: readonly WorkspaceProcessListener[];
   disabled: boolean;
   /** The size of the details, where the text is 11px. */
   small?: boolean;
+  /** The name of the folded list. */
+  listLabel: string;
   onOpenUrl: (url: string) => void;
 }): ReactElement | null {
   if (listeners.length === 0) return null;
   const shown = listeners.slice(0, VISIBLE_PORTS);
   const rest = listeners.slice(VISIBLE_PORTS);
-  // In a narrow view the ports scroll sideways, so Stop after them stays in view. The padding keeps
-  // the focus rings of the ports.
   return (
-    <span
-      className={cn(
-        "hide-scrollbar -m-0.5 flex min-w-0 items-center gap-2 overflow-x-auto overscroll-x-contain p-0.5 font-mono tabular-nums *:shrink-0",
-        small ? "text-[11px]" : "text-xs",
-      )}
-    >
-      {shown.map((listener) => (
-        <PortLink
-          key={`${listener.address}:${listener.port}`}
-          listener={listener}
-          disabled={disabled}
-          onOpenUrl={onOpenUrl}
-        />
-      ))}
-      {rest.length > 0 ? (
-        <span className="text-muted-foreground" title={rest.map(listenerLabel).join(", ")}>
-          +{rest.length}
-        </span>
-      ) : null}
-    </span>
+    <>
+      <PortsPopover
+        items={listeners.map((listener) => ({
+          key: `${listener.address}:${listener.port}`,
+          port: listener.port,
+          detail: listenerLabel(listener),
+          url: linkOf(listener),
+          title: portTitle(listener),
+        }))}
+        listLabel={listLabel}
+        disabled={disabled}
+        compact
+        className={cn("hidden @max-[24rem]/row:inline-flex", small && "h-5")}
+        onOpenUrl={onOpenUrl}
+      />
+      <span
+        className={cn(
+          "flex shrink-0 items-center gap-2 font-mono tabular-nums @max-[24rem]/row:hidden",
+          small ? "text-[11px]" : "text-xs",
+        )}
+      >
+        {shown.map((listener) => (
+          <PortLink
+            key={`${listener.address}:${listener.port}`}
+            listener={listener}
+            disabled={disabled}
+            onOpenUrl={onOpenUrl}
+          />
+        ))}
+        {rest.length > 0 ? (
+          <span className="text-muted-foreground" title={rest.map(listenerLabel).join(", ")}>
+            +{rest.length}
+          </span>
+        ) : null}
+      </span>
+    </>
   );
 }
 

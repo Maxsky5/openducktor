@@ -1,10 +1,9 @@
 import type { WorkspaceProcessList } from "@openducktor/contracts";
-import { ArrowUpRight, ChevronDown } from "lucide-react";
-import { type ReactElement, useCallback, useState } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ArrowUpRight } from "lucide-react";
+import { type ReactElement, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useProcessList, useProcessesActions } from "./processes-context";
-import { countLabel } from "./processes-labels";
+import { PortsPopover } from "./ports-popover";
 import { type TaskServerLink, taskServerLinks } from "./processes-view";
 
 const NO_LINKS: TaskServerLink[] = [];
@@ -103,56 +102,18 @@ function ServerPortsMenu({
   className: string | undefined;
 }): ReactElement | null {
   const links = useTaskServerLinks(target);
-  const [open, setOpen] = useState(false);
-  if (links.length === 0) return null;
-  const count = countLabel(links.length, "port", "ports");
-  const label = `${count} running`;
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-2 text-[11px] font-medium text-muted-foreground tabular-nums transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:bg-muted data-[state=open]:text-foreground",
-            className,
-          )}
-          aria-label={label}
-          title={label}
-        >
-          <span className="size-1.5 rounded-full bg-status-running" aria-hidden="true" />
-          {count}
-          <ChevronDown className="-ml-0.5 size-3" aria-hidden="true" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-64" aria-label="Ports of this task">
-        <ul className="flex flex-col">
-          {links.map((link) => (
-            <li key={link.url}>
-              <button
-                type="button"
-                className="group/port flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                title={linkTitle(link)}
-                aria-label={linkTitle(link)}
-                onClick={() => {
-                  setOpen(false);
-                  target.openUrl(link.url);
-                }}
-              >
-                <span className="font-mono text-xs text-status-running-foreground tabular-nums">
-                  :{link.port}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                  {link.name}
-                </span>
-                <ArrowUpRight
-                  className="size-3.5 shrink-0 text-muted-foreground transition-colors group-hover/port:text-foreground"
-                  aria-hidden="true"
-                />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </PopoverContent>
-    </Popover>
+    <PortsPopover
+      items={links.map((link) => ({
+        key: link.url,
+        port: link.port,
+        detail: link.name,
+        url: link.url,
+        title: linkTitle(link),
+      }))}
+      listLabel="Ports of this task"
+      className={className}
+      onOpenUrl={target.openUrl}
+    />
   );
 }
