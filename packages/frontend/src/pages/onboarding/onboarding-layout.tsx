@@ -43,13 +43,43 @@ type OnboardingLayoutProps = {
 
 const themeLabelId = "onboarding-theme-label";
 
+/** The app header outside the workspace shell: brand, host, extra actions, and theme. */
+export function OnboardingHeader({ actions }: { actions?: ReactNode }): ReactElement {
+  const { themePreference, setThemePreference } = useTheme();
+  return (
+    <header className="electron-titlebar-safe-area -mt-5 flex items-center justify-between gap-4 pt-5 pb-5 sm:-mt-7 sm:pt-7">
+      <div className="flex items-center gap-3">
+        <OpenDucktorMark className="size-9" />
+        <div className="flex flex-col">
+          <span className="text-base font-semibold tracking-tight">OpenDucktor</span>
+          {APP_VERSION ? (
+            <span className="text-xs text-muted-foreground">{APP_VERSION}</span>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <HostSwitcher />
+        {actions}
+        <span id={themeLabelId} className="sr-only">
+          Theme
+        </span>
+        <ThemePicker
+          value={themePreference}
+          onValueChange={setThemePreference}
+          triggerAriaLabelledBy={themeLabelId}
+          triggerClassName="w-44"
+        />
+      </div>
+    </header>
+  );
+}
+
 export function OnboardingLayout({
   stage,
   headerActions,
   children,
 }: OnboardingLayoutProps): ReactElement {
   const currentStageIndex = ONBOARDING_STAGES.findIndex((item) => item.id === stage);
-  const { themePreference, setThemePreference } = useTheme();
   const scrollContainerRef = useRef<HTMLElement>(null);
 
   useLayoutEffect(() => {
@@ -71,30 +101,7 @@ export function OnboardingLayout({
         aria-hidden="true"
       />
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1120px] flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-        <header className="electron-titlebar-safe-area -mt-5 flex items-center justify-between gap-4 pt-5 pb-5 sm:-mt-7 sm:pt-7">
-          <div className="flex items-center gap-3">
-            <OpenDucktorMark className="size-9" />
-            <div className="flex flex-col">
-              <span className="text-base font-semibold tracking-tight">OpenDucktor</span>
-              {APP_VERSION ? (
-                <span className="text-xs text-muted-foreground">{APP_VERSION}</span>
-              ) : null}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <HostSwitcher />
-            {headerActions}
-            <span id={themeLabelId} className="sr-only">
-              Theme
-            </span>
-            <ThemePicker
-              value={themePreference}
-              onValueChange={setThemePreference}
-              triggerAriaLabelledBy={themeLabelId}
-              triggerClassName="w-44"
-            />
-          </div>
-        </header>
+        <OnboardingHeader actions={headerActions} />
 
         <nav
           className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-10 sm:py-5"

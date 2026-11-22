@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { lazy, type MouseEvent, type ReactElement, Suspense } from "react";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
-import { SidebarNavigation } from "./sidebar-navigation";
+import { SidebarFooterLinks, SidebarNavigation } from "./sidebar-navigation";
 
 type RoutePath = "/sessions" | "/kanban";
 
@@ -105,6 +105,25 @@ describe("SidebarNavigation", () => {
 
     expect(screen.getAllByRole("link")).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Kanban" }).textContent).toBe(text);
+  });
+
+  test("opens Usage from the footer icon link and marks it as the active page", () => {
+    render(
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <SidebarNavigation />
+        <SidebarFooterLinks />
+        <CurrentRouteProbe />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("link", { name: "Usage" }).textContent).toBe("");
+
+    fireEvent.click(screen.getByRole("link", { name: "Usage" }));
+
+    expect(screen.getByLabelText("Current route").textContent).toBe("/usage");
+    expect(screen.getByRole("link", { name: "Usage" }).className.split(" ")).toContain("bg-accent");
+    expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain(
+      "bg-sidebar-accent",
+    );
   });
 
   test("shows Kanban as selected immediately while declarative routing to Kanban is still suspended", () => {

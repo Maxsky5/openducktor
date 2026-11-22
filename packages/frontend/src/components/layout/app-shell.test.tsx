@@ -516,6 +516,10 @@ function AppShellTestEnvironment({
                                                     path="/onboarding"
                                                     element={<Navigate to="/kanban" replace />}
                                                   />
+                                                  <Route
+                                                    path="/usage"
+                                                    element={<main>Usage</main>}
+                                                  />
                                                 </Route>
                                               </Routes>
                                               {/* `ApplicationOverlays` mounts the tour host. */}
@@ -662,6 +666,30 @@ describe("AppShell", () => {
 
     expect(screen.getByRole("status").textContent).toContain("Loading workspaces");
     expect(screen.queryByText("Kanban")).toBeNull();
+  });
+
+  test("shows host-wide Usage while the workspace list loads or fails", () => {
+    const view = renderAppShellForTest({
+      initialEntry: "/usage",
+      workspacePresence: { isLoadingWorkspaces: true, hasWorkspaces: false },
+    });
+    expect(screen.getByRole("link", { name: "Setup" })).toBeTruthy();
+    expect(screen.getByText("Usage", { selector: "main main" })).toBeTruthy();
+    expect(screen.queryByText("Loading workspaces…")).toBeNull();
+    view.unmount();
+
+    renderAppShellForTest({
+      initialEntry: "/usage",
+      workspacePresence: {
+        hasWorkspaces: false,
+        hasLoadedWorkspaceList: false,
+        workspaceLoadError: new Error("Workspace list unavailable"),
+      },
+    });
+    expect(screen.getByRole("link", { name: "Setup" })).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "OpenDucktor could not load your workspaces" }),
+    ).toBeNull();
   });
 
   test("does not open the repository modal while selecting an existing workspace on startup", async () => {

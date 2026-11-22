@@ -163,6 +163,7 @@ export const createUnavailableShellBridge = (): ShellBridge => ({
   subscribeWorkspaceSessionUpdates: failUnavailable,
   subscribeRuntimeChanges: failUnavailable,
   subscribeTaskMergeStatusUpdates: failUnavailable,
+  subscribeUsageProgress: failUnavailable,
   subscribeBrowserTabEvents: failUnavailable,
   subscribeRunEvents: failUnavailable,
   subscribeAzureDevOpsConnectionUpdates: failUnavailable,

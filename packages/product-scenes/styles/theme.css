@@ -148,6 +148,21 @@
   --speed-fast: var(--color-amber-600);
   --speed-ultrafast: var(--color-violet-600);
 
+  /* usage charts: validated for color vision deficiency against the card surface */
+  --chart-runtime-claude: #e0622b;
+  --chart-runtime-codex: #0a9396;
+  --chart-runtime-opencode: #7c3aed;
+  /*
+   * Token categories, apart from the runtime hues. Cache reads, most of all tokens, take a quiet
+   * blue-gray. The three small types are one blue ramp with steps that full and deficient color
+   * vision tell apart (adjacent ΔE of 17 or more).
+   */
+  --chart-cache-read: #c3cee3;
+  --chart-cache-write: #60a5fa;
+  --chart-input: #2563eb;
+  --chart-output: #1e3a8a;
+  --chart-grid: oklch(0.929 0.013 255.508); /* ~slate-200 */
+
   --icon-agent-plan-base: #f5a742;
   --icon-agent-build-base: #5c9cf5;
 
@@ -284,6 +299,15 @@
   --odt-runtime-accent-claude: #c86649; /* Claude Code orange, dark-theme adjusted */
   --speed-fast: var(--color-amber-400);
   --speed-ultrafast: var(--color-violet-400);
+
+  --chart-runtime-claude: #e0622b;
+  --chart-runtime-codex: #13a3a6;
+  --chart-runtime-opencode: #8b5cf6;
+  --chart-cache-read: #3f4b63;
+  --chart-cache-write: #bfdbfe;
+  --chart-input: #60a5fa;
+  --chart-output: #2563eb;
+  --chart-grid: oklch(0.279 0.041 260.031); /* ~slate-800 */
 
   --icon-agent-plan-base: #f5a742;
   --icon-agent-build-base: #5c9cf5;

@@ -1,5 +1,5 @@
 import { DiagnosticsTrigger } from "@/components/features/diagnostics";
-import { LoaderCircle } from "lucide-react";
+import { ChartSpline, LoaderCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   memo,
@@ -11,13 +11,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import {
   OpenRepositoryModal,
   type OpenRepositoryModalView,
 } from "@/components/features/repository/open-repository-modal";
 import { AgentChatTranscriptCacheProvider } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-cache-provider";
 import { WorkspaceSidebar } from "@/components/layout/sidebar";
+import { USAGE_ROUTE } from "@/components/layout/sidebar/sidebar-navigation";
+import { UsageWithoutWorkspace } from "@/components/layout/usage-without-workspace";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
 import { SessionMenuProvider } from "@/components/layout/sidebar/session-menu-provider";
@@ -210,6 +212,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
     retryWorkspaces,
   } = useWorkspacePresence();
   const isOnboardingRoute = location.pathname === "/onboarding";
+  const isUsageRoute = location.pathname === USAGE_ROUTE;
 
   useEffect(() => {
     if (!isOnboardingRoute) {
@@ -230,6 +233,9 @@ export const AppShell = memo(function AppShell(): ReactElement {
   const retryWorkspaceLoad = useCallback((): void => {
     void retryWorkspaces().catch(() => undefined);
   }, [retryWorkspaces]);
+
+  // Usage reads the history of the host, so it needs no workspace and no workspace list.
+  if (isUsageRoute && !hasWorkspaces) return <UsageWithoutWorkspace />;
 
   if (isLoadingWorkspaces) {
     return (
@@ -266,7 +272,20 @@ export const AppShell = memo(function AppShell(): ReactElement {
       return <Navigate to="/kanban" replace />;
     }
     return (
-      <OnboardingPage onComplete={completeOnboarding} headerActions={<DiagnosticsTrigger />} />
+      <OnboardingPage
+        onComplete={completeOnboarding}
+        headerActions={
+          <>
+            <Button asChild variant="ghost" size="sm">
+              <Link to={USAGE_ROUTE}>
+                <ChartSpline className="size-3.5" aria-hidden="true" />
+                Usage
+              </Link>
+            </Button>
+            <DiagnosticsTrigger />
+          </>
+        }
+      />
     );
   }
 

@@ -24,3 +24,9 @@ export const loadNotFoundPage = createCachedPageLoader(() =>
     default: module.NotFoundPage,
   })),
 );
+
+export const loadUsagePage = createCachedPageLoader(() =>
+  import("./usage/usage-page").then((module) => ({
+    default: module.UsagePage,
+  })),
+);
