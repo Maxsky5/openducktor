@@ -4,8 +4,9 @@ import type {
   AgentSessionLiveRef,
   AgentSessionLiveSnapshot,
 } from "@openducktor/contracts";
-import type { AgentEvent } from "@openducktor/core";
+import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
+import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 
 export const toApproval = (
   event: Extract<AgentEvent, { type: "approval_required" }>,
@@ -100,3 +101,24 @@ const isLinkedChild = (
   child.ref.workingDirectory === parent.ref.workingDirectory &&
   child.parentExternalSessionId === parent.ref.externalSessionId &&
   isClaudeSubagentTranscriptTarget(child.ref.externalSessionId);
+
+export const eventRef = (
+  session: ClaudeSessionContext,
+  event: { readonly externalSessionId: string },
+): AgentSessionLiveRef => ({
+  repoPath: session.input.repoPath,
+  runtimeKind: "claude",
+  workingDirectory: session.input.workingDirectory,
+  externalSessionId: event.externalSessionId,
+});
+
+export const subagentStartedAt = (
+  part: Pick<Extract<AgentStreamPart, { kind: "subagent" }>, "startedAtMs">,
+  fallback: string,
+): string => {
+  if (part.startedAtMs === undefined) {
+    return fallback;
+  }
+  const startedAt = new Date(part.startedAtMs);
+  return Number.isNaN(startedAt.getTime()) ? fallback : startedAt.toISOString();
+};

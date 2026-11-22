@@ -178,6 +178,17 @@ describe("groupToolRuns", () => {
     expect(readToolRunTitle(summary)).toBe("Tools");
   });
 
+  test("never folds a blocked call into a run, so its reason and Allow stay in view", () => {
+    const blocked = toolRow("rm", {
+      status: "error",
+      input: { command: "rm -rf build" },
+      denial: { source: "auto_mode", reason: "Deletes the build output." },
+    });
+    const rows = [shellRow("status"), blocked, shellRow("test")];
+
+    expect(segmentKeys(rows)).toEqual(["row:status:tool-run", "row:rm", "row:test:tool-run"]);
+  });
+
   test("leaves the calls with their own display out of the runs", () => {
     const rows = [
       toolRow("artifact", { tool: "odt_set_task_artifact", toolType: "workflow" }),

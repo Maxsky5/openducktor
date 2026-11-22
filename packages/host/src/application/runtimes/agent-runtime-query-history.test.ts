@@ -16,6 +16,7 @@ import {
 } from "../../test-support/service-test-doubles";
 import { createTaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { createAgentRuntimeQueryService } from "./agent-runtime-query-service";
+import { createDeniedToolPartRecords } from "../agent-sessions/denied-tool-part-records";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
 
 const temporaryRoots: string[] = [];
@@ -147,6 +148,7 @@ const historyHarness = async (
     },
     worktreeReads: createTaskSessionLifecycleCoordinator(),
     worktreeFiles: createWorktreeFileAdapter(),
+    deniedToolParts: createDeniedToolPartRecords(),
   };
   return {
     root,

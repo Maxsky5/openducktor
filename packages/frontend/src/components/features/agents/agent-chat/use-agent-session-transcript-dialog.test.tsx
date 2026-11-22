@@ -203,6 +203,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
         updateAgentSessionModel: async () => undefined,
         replyAgentApproval: async () => undefined,
         answerAgentQuestion: async () => undefined,
+        allowDeniedAction: async () => undefined,
       };
       const wrapper = ({ children }: PropsWithChildren): ReactElement => (
         <ClientConnectionProvider connection={connection}>
@@ -354,6 +355,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       updateAgentSessionModel: async () => undefined,
       replyAgentApproval: async () => undefined,
       answerAgentQuestion: async () => undefined,
+      allowDeniedAction: async () => undefined,
     };
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <ClientConnectionProvider connection={connection}>
@@ -459,6 +461,7 @@ describe("AgentSessionTranscriptDialogHost", () => {
       updateAgentSessionModel: async () => undefined,
       replyAgentApproval: async () => undefined,
       answerAgentQuestion: async () => undefined,
+      allowDeniedAction: async () => undefined,
     };
     const wrapper = ({ children }: PropsWithChildren): ReactElement => (
       <ClientConnectionProvider connection={connection}>

@@ -15,6 +15,7 @@ import {
   agentSessionControlUpdateModelInputSchema,
   agentSessionGoalControlInputSchema,
   type AgentSessionGoalControlInput,
+  agentSessionLiveAllowDeniedActionInputSchema,
   agentSessionLiveAttachInputSchema,
   agentSessionLiveListInputSchema,
   agentSessionLiveLoadContextInputSchema,
@@ -175,6 +176,12 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_live_reply_approval",
       ).pipe(Effect.flatMap(service.replyApproval)),
+    agent_session_live_allow_denied_action: (args) =>
+      parseCommandInput(
+        agentSessionLiveAllowDeniedActionInputSchema,
+        args,
+        "agent_session_live_allow_denied_action",
+      ).pipe(Effect.flatMap(service.allowDeniedAction)),
     agent_session_live_reply_question: (args) =>
       parseCommandInput(
         agentSessionLiveReplyQuestionInputSchema,

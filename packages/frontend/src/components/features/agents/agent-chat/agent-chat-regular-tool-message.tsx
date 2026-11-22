@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { AgentChatFileEditCard } from "./agent-chat-file-edit-card";
 import { QuestionToolAnswers } from "./agent-chat-question-tool-answers";
 import { RegularToolSummary } from "./agent-chat-regular-tool-summary";
+import { ToolDenialNotice } from "./agent-chat-tool-denial";
 import { useToolDetailsRow } from "./agent-chat-tool-details-store";
 import { TOOL_ROW_HOVER, TOOL_ROW_SELECTED } from "./agent-chat-tool-row-states";
 
@@ -25,7 +26,8 @@ type RegularToolMessageProps = {
 
 /**
  * One compact line of a tool call. A press on a call with input, output, or an error shows them
- * in the tool details panel. Question answers and file edit cards show under the line.
+ * in the tool details panel. Question answers, file edit cards, and why a policy blocked the call
+ * show under the line.
  */
 export const RegularToolMessage = ({
   meta,
@@ -71,6 +73,9 @@ export const RegularToolMessage = ({
       ) : (
         summaryRow
       )}
+
+      {/* The notice sits outside the row button, so its Allow button is not nested in it. */}
+      {meta.denial ? <ToolDenialNotice callId={meta.callId} denial={meta.denial} /> : null}
 
       <QuestionToolAnswers meta={meta} />
 

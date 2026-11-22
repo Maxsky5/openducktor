@@ -7,6 +7,7 @@ import type {
   AgentSessionWorkflowScope,
   AgentSessionUsageLimit,
   AgentToolData,
+  AgentToolDenial,
   AgentToolPart,
   FileContent,
   FileDiff,
@@ -52,6 +53,8 @@ export type AgentChatMessageMeta =
       /** @deprecated Use fileDiffs. Kept only for already-persisted transcript messages. */
       fileChanges?: FileDiff[];
       metadata?: AgentToolData;
+      /** A policy denied the call without asking the user. */
+      denial?: AgentToolDenial;
       startedAtMs?: number;
       endedAtMs?: number;
       /** The details that the host cut. `useToolPartDetails` reads the full part. */
@@ -249,6 +252,8 @@ export type AgentSessionState = {
   statusUnavailableReason?: string | null | undefined;
   /** The native goal that the runtime reports. Live only; OpenDucktor stores no goal. */
   goal?: import("@openducktor/contracts").AgentSessionGoal | undefined;
+  /** The Allow state of denied calls that the user can allow. Live only, from the snapshot. */
+  deniedActions?: readonly import("@openducktor/contracts").AgentSessionDeniedAction[] | undefined;
   startedAt: string;
   workingDirectory: string;
   /** Live-only parent link used to project descendant pending input to active ancestors. */

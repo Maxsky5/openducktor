@@ -299,4 +299,138 @@ describe("handleClaudeSdkMessage denied tool events", () => {
     ]);
     expect(session.activity).toBe("idle");
   });
+
+  const modelSelection = (model: string) => ({
+    providerId: "claude",
+    modelId: model,
+    runtimeKind: "claude" as const,
+  });
+
+  const denyBash = (
+    session: ClaudeEventSession,
+    fields: { decision_reason_type?: string; decision_reason?: string; agent_id?: string },
+  ): AgentEvent[] => {
+    const events: AgentEvent[] = [];
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:03.000Z",
+      modelSelection,
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "system",
+        subtype: "permission_denied",
+        uuid: "0c7b3a55-24a3-4cbd-9a43-4c2b6d1c9d10",
+        session_id: "session-1",
+        tool_use_id: "tool-1",
+        tool_name: "Bash",
+        message: "Permission for this action was denied by the auto mode classifier.",
+        ...fields,
+      }),
+    });
+    return events;
+  };
+
+  test("marks a classifier denial as auto mode and offers Allow for the main session", () => {
+    const session = createSession();
+    session.toolDenialsByCallId = new Map();
+    session.toolInputsByCallId.set("tool-1", { command: "git push --force" });
+
+    const events = denyBash(session, {
+      decision_reason_type: "classifier",
+      decision_reason: "[Force Push] The push rewrites shared history.",
+    });
+
+    const denial = {
+      source: "auto_mode" as const,
+      reason: "[Force Push] The push rewrites shared history.",
+    };
+    // The live session state adds the recorded denial to each emission of the call.
+    expect(events).toEqual([
+      expect.objectContaining({
+        part: expect.objectContaining({ callId: "tool-1", status: "error" }),
+      }),
+    ]);
+    expect(session.toolDenialsByCallId.get("tool-1")).toEqual({
+      denial,
+      allow: { consent: expect.stringContaining('as one whole string: "git push --force".') },
+    });
+  });
+
+  test("uses the denial message when the classifier gives no reason", () => {
+    const session = createSession();
+    session.toolDenialsByCallId = new Map();
+
+    denyBash(session, { decision_reason_type: "classifier" });
+
+    expect(session.toolDenialsByCallId.get("tool-1")?.denial).toEqual({
+      source: "auto_mode",
+      reason: "Permission for this action was denied by the auto mode classifier.",
+    });
+  });
+
+  test.each(["rule", "mode", "asyncAgent"])(
+    "marks a %s denial as permission settings without Allow",
+    (decisionReasonType) => {
+      const session = createSession();
+      session.toolDenialsByCallId = new Map();
+
+      const events = denyBash(session, {
+        decision_reason_type: decisionReasonType,
+        decision_reason: "Bash(git push:*) is denied.",
+      });
+
+      const denial = {
+        source: "permission_settings" as const,
+        reason: "Bash(git push:*) is denied.",
+      };
+      expect(events).toEqual([
+        expect.objectContaining({ part: expect.objectContaining({ status: "error" }) }),
+      ]);
+      expect(session.toolDenialsByCallId.get("tool-1")).toEqual({ denial });
+    },
+  );
+
+  test("keeps a denial of another kind as a plain failed tool", () => {
+    const session = createSession();
+    session.toolDenialsByCallId = new Map();
+
+    const events = denyBash(session, { decision_reason_type: "hook" });
+
+    expect(events).toEqual([
+      expect.objectContaining({ part: expect.not.objectContaining({ denial: expect.anything() }) }),
+    ]);
+    expect(session.toolDenialsByCallId.size).toBe(0);
+  });
+
+  test("offers no Allow for a subagent classifier denial", () => {
+    const session = createSession();
+    session.toolDenialsByCallId = new Map();
+    session.subagentTaskIdsByToolUseId.set("agent-call", "agent-1");
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection,
+      emit: () => {},
+      message: claudeSdkMessageFixture({
+        type: "assistant",
+        uuid: "6d20b6bd-01fa-491e-8ad1-57da1660d4e3",
+        session_id: "session-1",
+        parent_tool_use_id: "agent-call",
+        message: {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "tool-1", name: "Bash", input: { command: "ls" } }],
+          stop_reason: "tool_use",
+        },
+      }),
+    });
+
+    denyBash(session, { decision_reason_type: "classifier", agent_id: "agent-1" });
+
+    expect(session.toolDenialsByCallId.get("tool-1")).toEqual({
+      denial: {
+        source: "auto_mode",
+        reason: "Permission for this action was denied by the auto mode classifier.",
+      },
+    });
+  });
 });

@@ -9,6 +9,7 @@ import type {
   ToolContent1,
   V2Event,
 } from "@opencode/client";
+import type { AgentToolDenial } from "@openducktor/contracts";
 import type { AgentEvent, AgentSessionHistoryMessage } from "@openducktor/core";
 import {
   iso,
@@ -27,7 +28,22 @@ export class OpenCodeLiveMessageProjector {
   private readonly settledText = new Set<string>();
   private readonly settledInput = new Set<string>();
   private readonly retractedIds = new Set<string>();
-  private projectionContext = messageProjectionContext(this.messages.values());
+  /** The permission prompts of running calls, by call ID. */
+  private readonly asks = new Map<string, { requestId: string; roleRejected: boolean }>();
+  private readonly denials = new Map<string, AgentToolDenial>();
+  private projectionContext = this.createProjectionContext(this.messages.values());
+
+  /** Records the permission prompt that OpenCode raised for a tool call. */
+  recordApprovalAsk(requestId: string, callId: string): void {
+    // A snapshot read can list a prompt again; keep its role reject.
+    if (this.asks.get(callId)?.requestId === requestId) return;
+    this.asks.set(callId, { requestId, roleRejected: false });
+  }
+
+  /** Records that the host rejects the prompt for the read-only role, not for the user. */
+  recordRoleReject(requestId: string): void {
+    for (const ask of this.asks.values()) if (ask.requestId === requestId) ask.roleRejected = true;
+  }
 
   /**
    * History can lag live events and omit tool progress.
@@ -69,7 +85,11 @@ export class OpenCodeLiveMessageProjector {
       ...context.completedReplies,
       ...this.projectionContext.completedReplies,
     ]);
-    return projectMessages(merged, { ...context, completions, completedReplies }, settledInput);
+    return projectMessages(
+      merged,
+      { ...context, completions, completedReplies, denials: this.denials },
+      settledInput,
+    );
   }
 
   /**
@@ -303,6 +323,7 @@ export class OpenCodeLiveMessageProjector {
             };
             if (event.data.metadata) state.metadata = event.data.metadata;
             tool.state = state;
+            this.asks.delete(tool.id);
           }
           break;
         case "session.tool.failed":
@@ -319,6 +340,7 @@ export class OpenCodeLiveMessageProjector {
             if (event.data.content) state.content = resultContent(event.data.content);
             if (event.data.metadata) state.metadata = event.data.metadata;
             tool.state = state;
+            this.recordDenial(tool.id, event.data.error);
           }
           break;
         case "session.step.ended":
@@ -588,7 +610,26 @@ export class OpenCodeLiveMessageProjector {
   }
 
   private updateProjectionContext() {
-    this.projectionContext = messageProjectionContext(this.messages.values());
+    this.projectionContext = this.createProjectionContext(this.messages.values());
+  }
+
+  private createProjectionContext(messages: Iterable<SessionMessageInfo>) {
+    return { ...messageProjectionContext(messages), denials: this.denials };
+  }
+
+  /**
+   * OpenCode fails a call with `permission.rejected` for a deny rule and for a rejected prompt
+   * with a message. With no prompt, a deny rule denied the call. After a prompt, only a host
+   * reject for the read-only role is a denial; a user reject stays a plain rejected call.
+   */
+  private recordDenial(callId: string, error: SessionMessageToolStateError["error"]): void {
+    const ask = this.asks.get(callId);
+    this.asks.delete(callId);
+    if (error.type !== "permission.rejected") return;
+    if (ask && !ask.roleRejected) return;
+    const denial: AgentToolDenial = { source: ask ? "read_only_role" : "permission_settings" };
+    if (error.message) denial.reason = error.message;
+    this.denials.set(callId, denial);
   }
 
   private recordMessage(sessionID: string, message: SessionMessageInfo): AgentEvent[] {

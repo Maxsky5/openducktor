@@ -25,5 +25,6 @@ export const createAgentOperationsFixture = (
   updateAgentSessionModel: unexpectedOperation("updateAgentSessionModel"),
   replyAgentApproval: unexpectedOperation("replyAgentApproval"),
   answerAgentQuestion: unexpectedOperation("answerAgentQuestion"),
+  allowDeniedAction: unexpectedOperation("allowDeniedAction"),
   ...overrides,
 });

@@ -16,6 +16,7 @@ import {
 } from "./claude-agent-sdk-local-commands";
 import { createClaudeFinishStepPart } from "./claude-agent-sdk-transcript-parts";
 import { isClaudeHumanUserMessage } from "./claude-agent-sdk-user-messages";
+import { isClaudeDeniedActionConsent } from "./claude-agent-sdk-tool-denials";
 import { historyMessageText, readStringProp } from "./claude-agent-sdk-utils";
 
 type ClaudeVisibleHistoryMessage = Extract<
@@ -39,6 +40,8 @@ type ClaudeHistoryInputProjection =
       handled: true;
       manualCompaction?: ManualCompactionInput;
       message?: ClaudeVisibleHistoryMessage;
+      /** A human prompt that history hides, such as an Allow consent. It still starts a turn. */
+      hiddenPrompt?: true;
     };
 
 const commandName = (text: string): string | undefined => text.trim().split(/\s/, 1)[0];
@@ -193,6 +196,10 @@ export const createClaudeHistoryInputProjector = (options: {
       queued = pendingQueueEntry;
     }
     const text = queued?.text ?? command ?? rawText;
+    if (isClaudeDeniedActionConsent(text)) {
+      pendingQueueEntry = null;
+      return { handled: true, hiddenPrompt: true };
+    }
     if (text.trim().toLowerCase() === "/compact") {
       const commandTimestamp = queued?.timestamp ?? timestamp;
       pendingQueueEntry = null;

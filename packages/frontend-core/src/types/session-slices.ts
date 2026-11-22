@@ -138,4 +138,6 @@ export type AgentOperationsContextValue = {
     answers: string[][],
     sessionScope?: AgentSessionScope,
   ) => Promise<void>;
+  /** Allows one call that a policy denied, by its call id in the transcript of the session. */
+  allowDeniedAction: (session: AgentSessionIdentity, callId: string) => Promise<void>;
 };

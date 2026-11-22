@@ -36,7 +36,12 @@ import { createSessionCommandReadiness } from "./session-command-readiness";
 
 type ObservedSessionCommands = Pick<
   AgentSessionLiveStateService,
-  "continueInterruptedTurn" | "loadContext" | "loadSessionDiff" | "replyApproval" | "replyQuestion"
+  | "allowDeniedAction"
+  | "continueInterruptedTurn"
+  | "loadContext"
+  | "loadSessionDiff"
+  | "replyApproval"
+  | "replyQuestion"
 >;
 
 export const createAgentSessionCommandService = ({
@@ -116,6 +121,21 @@ export const createAgentSessionCommandService = ({
     canonicalizeRepoPath,
     policyFor,
   });
+
+  /** Runs a command on a canonical session ref, under the policy of the session root. */
+  const runScopedCommand = <Input extends AgentSessionLiveRef, A>(
+    input: Input,
+    operation: string,
+    run: (ref: Input) => Effect.Effect<A, HostError>,
+  ) =>
+    owner.supervise(
+      Effect.gen(function* () {
+        const repoPath = yield* canonicalizeRepoPath(input.repoPath);
+        const ref = { ...input, repoPath };
+        const root = yield* owner.root(ref);
+        return yield* policyFor(root.sessionScope).run(ref, operation, run(ref));
+      }),
+    );
 
   return {
     ...runtime,
@@ -241,18 +261,9 @@ export const createAgentSessionCommandService = ({
       ),
     replyApproval: approvalPolicy.reply,
     replyQuestion: (input: Parameters<typeof runtime.replyQuestion>[0]) =>
-      owner.supervise(
-        Effect.gen(function* () {
-          const repoPath = yield* canonicalizeRepoPath(input.repoPath);
-          const ref = { ...input, repoPath };
-          const root = yield* owner.root(ref);
-          return yield* policyFor(root.sessionScope).run(
-            ref,
-            "reply to question",
-            runtime.replyQuestion(ref),
-          );
-        }),
-      ),
+      runScopedCommand(input, "reply to question", runtime.replyQuestion),
+    allowDeniedAction: (input: Parameters<typeof runtime.allowDeniedAction>[0]) =>
+      runScopedCommand(input, "allow denied action", runtime.allowDeniedAction),
     stopSession: (
       input: Parameters<typeof runtime.stopSession>[0],
       options?: { onValidated: (ref: AgentSessionLiveRef) => void },

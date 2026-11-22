@@ -20,6 +20,7 @@ import { requireWorkflowRole } from "../tasks/support/task-workflow-events";
 import type { RuntimeDefinitionsService } from "../runtimes/runtime-definitions-service";
 import { resolveRuntimeDescriptor } from "../runtimes/runtime-request-resolution";
 import type { AgentSessionLiveStateService } from "./agent-session-live-state-service";
+import type { ApprovalReplyOptions } from "../../ports/agent-session-live-adapter-port";
 import type { createSessionTurnPreparation } from "./session-turn-preparation";
 import { resolveOwnedSessionRoot } from "./session-owner-resolution";
 import { createHostOperationWorkers } from "../../effect/host-operation-workers";
@@ -189,11 +190,13 @@ export const createHostApprovalPolicy = (deps: {
               outcome,
             };
             if (message !== undefined) replyInput.message = message;
-            yield* deps.live.replyApproval(replyInput, {
+            const replyOptions: ApprovalReplyOptions = {
               onIssued: () => {
                 claim.issued = true;
               },
-            });
+            };
+            if (reject) replyOptions.denialSource = "read_only_role";
+            yield* deps.live.replyApproval(replyInput, replyOptions);
             yield* clearFailure(key);
           });
           const result = yield* Effect.exit(work);

@@ -100,6 +100,8 @@ import {
   isCodexThreadNotLoadedError,
   unsupported,
 } from "./codex-app-server-shared";
+import type { CodexDeniedActionLocator } from "./codex-denied-actions";
+import type { CodexDeniedActionClaim } from "./codex-tool-denials";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
 import { interruptedTurnResumeError } from "@openducktor/core";
 import type { CodexThreadInventory, CodexThreadStatusSnapshot } from "./codex-app-server-threads";
@@ -325,6 +327,18 @@ export class CodexAppServerAdapter
       pendingInput: this.pendingInput,
       asyncQuestions: this.asyncQuestions,
       subagents: this.subagents,
+      deniedActions: {
+        readThreadDirectInput: async (runtimeId, threadId) => {
+          const { thread } = await this.runtimeClients
+            .clientForRuntime(runtimeId)
+            .threadRead({ threadId, includeTurns: false });
+          return thread.canAcceptDirectInput;
+        },
+        clientForRuntime: (runtimeId) => this.runtimeClients.clientForRuntime(runtimeId),
+        ensureSessionState: (input) => this.ensureSessionState(input),
+        startContinuationTurn: (threadId) =>
+          startCodexContinuationTurn(this.turnLifecycleContext(), threadId),
+      },
       readSubagentRole: (runtimeId, childThreadId, scope) =>
         readCodexSubagentRole(
           this.runtimeClients.clientForRuntime(runtimeId),
@@ -1896,6 +1910,15 @@ export class CodexAppServerAdapter
         undefined,
         () => {
           issued = true;
+          // Codex ends the rejected item only after it gets the reply.
+          if (input.denialSource === "read_only_role") {
+            this.runtimeEvents.deniedActions.recordReadOnlyRoleReject(
+              pending.runtimeId,
+              pending.threadId,
+              nativeRequest,
+              input.message,
+            );
+          }
           input.onIssued?.();
         },
       );
@@ -1912,6 +1935,21 @@ export class CodexAppServerAdapter
     if (activeTurn && !activeTurn.isTurnSettled()) {
       void this.runtimeEvents.continueTurnAfterPendingInput(activeTurn);
     }
+  }
+
+  /** Moves an `available` denied action to `sending`, so only one Allow request runs. */
+  claimDeniedAction(input: CodexDeniedActionLocator): CodexDeniedActionClaim {
+    return this.runtimeEvents.deniedActions.claim(input);
+  }
+
+  /** Gives a claimed denied action back when its Allow request did not run. */
+  releaseDeniedActionClaim(input: CodexDeniedActionLocator, failure: string): void {
+    this.runtimeEvents.deniedActions.release(input, failure);
+  }
+
+  /** Sends the user approval of a claimed denied action, and lets an idle thread continue. */
+  allowDeniedAction(input: CodexDeniedActionLocator): Promise<void> {
+    return this.runtimeEvents.deniedActions.allow(input);
   }
 
   async replyQuestion(input: ReplyQuestionInput): Promise<AgentEvent> {
@@ -2151,6 +2189,11 @@ export class CodexAppServerAdapter
     if (goal) {
       snapshot.goal = goal;
     }
+    const deniedActions = this.runtimeEvents.deniedActions.snapshotEntries(
+      session.runtimeId,
+      session.threadId,
+    );
+    if (deniedActions) snapshot.deniedActions = deniedActions;
     // Between goal turns, Codex runs no turn that a message can join.
     if (this.runtimeEvents.isWaitingForGoalTurn(session)) {
       snapshot.foregroundTurnActive = false;
@@ -2204,6 +2247,11 @@ export class CodexAppServerAdapter
     if (parentSession.summary.sessionAssociation.kind === "repository") {
       snapshot.repositoryScope = parentSession.summary.sessionAssociation;
     }
+    const deniedActions = this.runtimeEvents.deniedActions.snapshotEntries(
+      parentSession.runtimeId,
+      route.childExternalSessionId,
+    );
+    if (deniedActions) snapshot.deniedActions = deniedActions;
     return agentSessionLiveSnapshotSchema.parse(snapshot);
   }
 

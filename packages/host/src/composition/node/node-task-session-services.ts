@@ -91,6 +91,7 @@ export const createNodeTaskSessionServices = ({
     "resolveParts" | "messageDelivery"
   > & {
     adapterRegistry: AgentRuntimeQueryDependencies["adapterRegistry"];
+    deniedToolParts: AgentRuntimeQueryDependencies["deniedToolParts"];
   };
   pauseForStop: Parameters<typeof createAgentSessionCommandService>[0]["pauseForStop"];
   /** The saved chats and tasks that own sessions and worktrees. */
@@ -170,6 +171,7 @@ export const createNodeTaskSessionServices = ({
   });
   const agentRuntimeQueries = createAgentRuntimeQueryService({
     adapterRegistry: workflowLaunch.adapterRegistry,
+    deniedToolParts: workflowLaunch.deniedToolParts,
     settingsConfig: taskServiceInput.settingsConfig,
     workspaceSettingsService: taskServiceInput.workspaceSettingsService,
     worktreeFiles: taskServiceInput.worktreeFiles,

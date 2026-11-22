@@ -148,6 +148,16 @@ export const toClaudeHistoryMessages = (
     lastFinalAssistantMessage = null;
     lastFinalAssistantText = undefined;
   };
+  // A human prompt starts the turn clock. Steering keeps the first prompt's start, even before
+  // assistant output. Native history can omit a notification's result and assistant output.
+  const startHumanTurn = (entry: ClaudeHistoryMessage) => {
+    if (lastAssistantMessage && !hasFinalStopStep(lastAssistantMessage)) return;
+    const previous = history.findLast((message) => message.role !== "system");
+    if (lastAssistantMessage || (previous?.role === "assistant" && hasFinalStopStep(previous)))
+      replyStartedAt = undefined;
+    replyStartedAt ??= readStringProp(entry, "timestamp");
+    resetCurrentUserTurnAssistantTracking();
+  };
   const endCurrentTurn = () => {
     replyStartedAt = undefined;
     resetCurrentUserTurnAssistantTracking();
@@ -233,28 +243,22 @@ export const toClaudeHistoryMessages = (
         unclaimedManualCompactionBoundary = false;
         continue;
       }
+      if (projectedInput.hiddenPrompt) {
+        startHumanTurn(entry);
+        continue;
+      }
       const projectedMessage = projectedInput.message;
       if (!projectedMessage) {
         continue;
       }
       if (projectedMessage.role === "user") {
-        // Native history can omit a notification's result and assistant output.
-        const previous = history.findLast((message) => message.role !== "system");
-        history.push(projectedMessage);
+        // The CLI writes this marker when the user stops a turn. The user did not type it.
         if (isClaudeUserStopMessage(entry)) {
           endCurrentTurn();
           continue;
         }
-        // Steering keeps the first prompt's start, even before assistant output.
-        if (!lastAssistantMessage || hasFinalStopStep(lastAssistantMessage)) {
-          if (
-            lastAssistantMessage ||
-            (previous?.role === "assistant" && hasFinalStopStep(previous))
-          )
-            replyStartedAt = undefined;
-          replyStartedAt ??= readStringProp(entry, "timestamp");
-          resetCurrentUserTurnAssistantTracking();
-        }
+        startHumanTurn(entry);
+        history.push(projectedMessage);
         continue;
       }
       history.push(projectedMessage);

@@ -76,6 +76,10 @@ export const isClaudeResultStoppedBySteer = (
     "queued_turn_count" in message ? message.queued_turn_count : undefined,
   ).success;
 
+/** A user reject with `interrupt` ends the turn as `aborted_tools`. */
+export const isClaudeResultStoppedByUserReject = (message: ClaudeResultLike): boolean =>
+  readClaudeResultTerminalReason(message) === "aborted_tools";
+
 export const successfulClaudeResultText = (message: ClaudeResultLike): string | null => {
   if (isFailedClaudeResult(message)) {
     return null;

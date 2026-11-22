@@ -7,18 +7,22 @@ import {
   agentSessionTranscriptEventSchema,
   isAgentSessionTranscriptEventType,
 } from "@openducktor/contracts";
-import type { AgentEvent, AgentSessionSummary, AgentStreamPart } from "@openducktor/core";
+import type { AgentEvent, AgentSessionSummary } from "@openducktor/core";
 import type {
   AgentSessionLiveAdapterChange,
   AgentSessionLiveAdapterMutation,
 } from "../../ports/agent-session-live-adapter-port";
 import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import { createClaudeDeniedActions } from "./claude-live-session-denied-actions";
+import { claudeSessionRef } from "../claude/claude-agent-sdk-utils";
 import { createClaudeGoalProjection } from "./claude-live-session-goals";
 import { activityForSummary } from "./claude-live-session-activity";
 import {
+  eventRef,
   inputActivity,
   sessionTree,
   readParent,
+  subagentStartedAt,
   toApproval,
   toQuestion,
 } from "./claude-live-session-inputs";
@@ -26,30 +30,6 @@ import {
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
 const cloneSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveSnapshot =>
   agentSessionLiveSnapshotSchema.parse(snapshot);
-
-const eventRef = (
-  session: ClaudeSessionContext,
-  event: { readonly externalSessionId: string },
-): AgentSessionLiveRef => ({
-  repoPath: session.input.repoPath,
-  runtimeKind: "claude",
-  workingDirectory: session.input.workingDirectory,
-  externalSessionId: event.externalSessionId,
-});
-
-const rootRef = (session: ClaudeSessionContext): AgentSessionLiveRef =>
-  eventRef(session, { externalSessionId: session.externalSessionId });
-
-const subagentStartedAt = (
-  part: Pick<Extract<AgentStreamPart, { kind: "subagent" }>, "startedAtMs">,
-  fallback: string,
-): string => {
-  if (part.startedAtMs === undefined) {
-    return fallback;
-  }
-  const startedAt = new Date(part.startedAtMs);
-  return Number.isNaN(startedAt.getTime()) ? fallback : startedAt.toISOString();
-};
 
 /** Live projection of every session of one Claude runtime, across all repositories. */
 export const createClaudeLiveSessionState = () => {
@@ -62,9 +42,14 @@ export const createClaudeLiveSessionState = () => {
     string,
     { readonly messageId: string; readonly parentRefKey: string }
   >();
-
   const readSnapshot = (ref: AgentSessionLiveRef): AgentSessionLiveSnapshot | undefined =>
     snapshotsByRef.get(liveSessionRefKey(ref));
+  const deniedActions = createClaudeDeniedActions();
+  /** Commits the current snapshot of a session, when it still has one. */
+  const commitRef = (ref: AgentSessionLiveRef): AgentSessionLiveAdapterChange[] => {
+    const snapshot = readSnapshot(ref);
+    return snapshot ? commitSnapshot(snapshot) : [];
+  };
 
   const commitSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveAdapterChange[] => {
     const changes: AgentSessionLiveAdapterChange[] = [];
@@ -79,7 +64,9 @@ export const createClaudeLiveSessionState = () => {
         snapshotsByRef.values(),
         nativeActivityByRef.get(key),
       );
-      const parsed = cloneSnapshot(goals.project(key, { ...current, activity }));
+      const parsed = cloneSnapshot(
+        deniedActions.project(key, goals.project(key, { ...current, activity })),
+      );
       const previous = snapshotsByRef.get(key);
       snapshotsByRef.set(key, parsed);
       if (!previous || JSON.stringify(previous) !== JSON.stringify(parsed)) {
@@ -129,6 +116,7 @@ export const createClaudeLiveSessionState = () => {
     contextRevisionsByRef.delete(key);
     nativeActivityByRef.delete(key);
     subagentOwnersByRef.delete(key);
+    deniedActions.remove(key);
     if (!snapshotsByRef.delete(key)) {
       return [];
     }
@@ -255,7 +243,7 @@ export const createClaudeLiveSessionState = () => {
       return current ? commitSnapshot(current) : [];
     }
     if (
-      retiredSessionKeys.has(liveSessionRefKey(rootRef(session))) ||
+      retiredSessionKeys.has(liveSessionRefKey(claudeSessionRef(session))) ||
       retiredSessionKeys.has(key)
     ) {
       return [];
@@ -263,7 +251,7 @@ export const createClaudeLiveSessionState = () => {
     if (event.type === "session_context_error") {
       if (event.statusUnavailable) {
         const changes: AgentSessionLiveAdapterChange[] = [];
-        const root = ensureSnapshot(session, rootRef(session), event.timestamp);
+        const root = ensureSnapshot(session, claudeSessionRef(session), event.timestamp);
         const affected = sessionTree(root, snapshotsByRef.values());
         for (const snapshot of affected) {
           const unavailableSnapshot = {
@@ -348,11 +336,13 @@ export const createClaudeLiveSessionState = () => {
     } else if (event.type === "assistant_part") {
       changes.push(...applySubagentPart(session, event));
     }
+    const denied = deniedActions.applyEvent(session, snapshot.ref, event);
+    if (denied.offered) changes.push(...commitSnapshot(readSnapshot(snapshot.ref) ?? snapshot));
 
     if (isAgentSessionTranscriptEventType(event.type)) {
       changes.push({
         type: "transcript_event",
-        event: agentSessionTranscriptEventSchema.parse({ ...event, sessionRef: ref }),
+        event: agentSessionTranscriptEventSchema.parse({ ...denied.event, sessionRef: ref }),
       });
     }
     if (event.type === "transcript_retracted") {
@@ -370,7 +360,7 @@ export const createClaudeLiveSessionState = () => {
       }
     }
     if (event.type === "session_finished") {
-      changes.push(...removeSessionTree(rootRef(session)));
+      changes.push(...removeSessionTree(claudeSessionRef(session)));
     }
     return changes;
   };
@@ -432,8 +422,15 @@ export const createClaudeLiveSessionState = () => {
         ? ({ type: "live", session: cloneSnapshot(snapshot) } as const)
         : ({ type: "missing", ref } as const);
     },
+    beginDeniedActionAllow: (ref: AgentSessionLiveRef, callId: string) => {
+      const value = deniedActions.begin(ref, callId);
+      return { value, changes: value === "accepted" ? commitRef(ref) : [] };
+    },
+    settleDeniedActionAllow: (ref: AgentSessionLiveRef, callId: string, failure?: string) =>
+      deniedActions.settle(ref, callId, failure) ? commitRef(ref) : [],
     release: (): AgentSessionLiveRef[] => {
       const refs = [...snapshotsByRef.values()].map((snapshot) => snapshot.ref);
+      deniedActions.clear();
       snapshotsByRef.clear();
       goals.clear();
       contextRevisionsByRef.clear();

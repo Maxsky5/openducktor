@@ -20,7 +20,7 @@ import type {
   StartAgentSessionInput,
 } from "@openducktor/core";
 import { workflowAgentSessionScope } from "@openducktor/core";
-import type { CodexAppServerStreamEvent } from "./types";
+import type { CodexAppServerStreamEvent, CodexServerRequestResponder } from "./types";
 import type { CodexAppServerConfigReadResponse } from "@openducktor/contracts";
 
 import {
@@ -438,6 +438,8 @@ export class RecordingTransport implements CodexJsonRpcTransport {
   featureRequirements: Record<string, boolean> | null = null;
   allowManagedHooksOnly: boolean | null = null;
   beforeConfigReadAnswer: (() => Promise<void>) | null = null;
+  /** The failure of the next `thread/approveGuardianDeniedAction` requests. */
+  approveGuardianError: Error | null = null;
   private turnStartCount = 0;
 
   constructor(
@@ -522,6 +524,9 @@ export class RecordingTransport implements CodexJsonRpcTransport {
       case "thread/name/set":
       case "thread/compact/start":
       case "turn/interrupt":
+        return {};
+      case "thread/approveGuardianDeniedAction":
+        if (this.approveGuardianError) throw this.approveGuardianError;
         return {};
       case "thread/unsubscribe":
         if (this.unsubscribeError) throw this.unsubscribeError;
@@ -689,9 +694,20 @@ export const createAdapterWithTransport = (
       return undefined;
     },
     subscribeEvents: () => () => {},
-    respondServerRequest: async () => {},
+    respondServerRequest: issueServerRequestReply,
     ...overrides,
   });
+
+/** Like the host transport, a responder reports the reply as issued before it writes it. */
+const issueServerRequestReply: CodexServerRequestResponder = async (
+  _runtimeId,
+  _requestId,
+  _result,
+  _error,
+  onIssued,
+) => {
+  onIssued?.();
+};
 
 export const createHarness = (
   overrides: Partial<CodexAppServerAdapterOptions> = {},
@@ -707,7 +723,7 @@ export const createHarness = (
     transports.set(runtimeId, transport);
     return transport;
   });
-  const respondServerRequest = mock(async () => {});
+  const respondServerRequest = mock(issueServerRequestReply);
 
   const adapter = new CodexAppServerAdapter({
     resolveWorkflowRolePolicy: testWorkflowRolePolicy,

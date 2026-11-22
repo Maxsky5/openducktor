@@ -134,5 +134,6 @@ export const createAgentSessionActions = ({
     updateAgentSessionModel: modelActions.updateAgentSessionModel,
     replyAgentApproval: pendingInputActions.replyAgentApproval,
     answerAgentQuestion: pendingInputActions.answerAgentQuestion,
+    allowDeniedAction: pendingInputActions.allowDeniedAction,
   };
 };

@@ -1,5 +1,6 @@
 import {
   createClaudePendingApprovalResolver,
+  createClaudePendingInputResolver,
   preAdmissionNextActionOverrides,
 } from "./claude-pending-approval-resolution";
 import { createClaudeSessionImportAdapter } from "./claude-session-import";
@@ -15,7 +16,6 @@ import {
   toAgentSessionResumeError,
 } from "../../ports/agent-session-resume-error";
 import { Effect } from "effect";
-import type { ClaudePendingInputResolution } from "../../application/runtimes/claude-agent-sdk-service";
 import {
   requireRuntimeWorkingDirectory,
   type RuntimeWorkingDirectoryInput,
@@ -29,11 +29,9 @@ import { parseAdapterOutput as parseClaudeLiveSessionOutput } from "../../effect
 import type {
   AgentSessionLiveAdapterMutation,
   AgentSessionRuntimeAdapterPort,
-  ApprovalReplyOptions,
 } from "../../ports/agent-session-live-adapter-port";
 import { createClaudeMessageControls } from "./claude-live-session-message-controls";
 import { beginClaudeGoalRestore } from "../claude/claude-agent-sdk-goals";
-import { parseClaudeTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 import type {
   ClaudeRuntimeSessionAdapterPreparer,
@@ -150,50 +148,14 @@ export const createClaudeLiveSessionAdapterPreparer =
 
       const requireSessionContext = createClaudeRequiredSession(sessionStore, runtime.runtimeId);
 
-      const resolvePendingInput = (
-        operation: string,
-        externalSessionId: string,
-        prepare: Effect.Effect<ClaudePendingInputResolution, HostError>,
-        options?: ApprovalReplyOptions,
-      ): Effect.Effect<void, HostError> =>
-        eventCoordinator.runControlMutation(
-          prepare.pipe(
-            Effect.mapError(sessionError(operation, externalSessionId)),
-            Effect.flatMap((resolution) => {
-              const rootExternalSessionId = parseClaudeTranscriptTarget(
-                resolution.event.externalSessionId,
-              ).sessionId;
-              return requireSessionContext(rootExternalSessionId).pipe(
-                Effect.flatMap((session) => {
-                  let rollback = () => {};
-                  return commit(`${operation}.publish`, () => {
-                    const applied = state.applyPendingResolution(session, resolution.event);
-                    rollback = applied.rollback;
-                    return {
-                      value: resolution.complete,
-                      changes: applied.changes,
-                    };
-                  }).pipe(
-                    Effect.tapError(() => Effect.sync(rollback)),
-                    Effect.flatMap((complete) =>
-                      Effect.try({
-                        try: () => {
-                          options?.onIssued?.();
-                          complete();
-                        },
-                        catch: (cause) =>
-                          toHostOperationError(cause, `${operation}.complete`, {
-                            runtimeId: runtime.runtimeId,
-                            externalSessionId,
-                          }),
-                      }),
-                    ),
-                  );
-                }),
-              );
-            }),
-          ),
-        );
+      const resolvePendingInput = createClaudePendingInputResolver({
+        commit,
+        runControlMutation: eventCoordinator.runControlMutation,
+        requireSessionContext,
+        runtimeId: runtime.runtimeId,
+        sessionError,
+        state,
+      });
 
       // A resume or continuation publishes the restored goal before its summary, so a re-attached
       // session never shows a snapshot without its goal. The transcript read runs outside the
@@ -292,7 +254,10 @@ export const createClaudeLiveSessionAdapterPreparer =
               resolvePendingInput(
                 "claude-live-session.reply-approval",
                 input.externalSessionId,
-                service.prepareApprovalReply(toClaudeReplyApprovalInput(input)),
+                service.prepareApprovalReply(
+                  toClaudeReplyApprovalInput(input),
+                  options?.denialSource,
+                ),
                 options,
               ),
             ),
@@ -306,6 +271,10 @@ export const createClaudeLiveSessionAdapterPreparer =
                 service.prepareQuestionReply(toClaudeReplyQuestionInput(input)),
               ),
             ),
+          ),
+        allowDeniedAction: (input) =>
+          requireSessionWorkingDirectory(input, "allow-denied-action").pipe(
+            Effect.andThen(messages.allowDeniedAction(input)),
           ),
         releaseRuntime: () =>
           Effect.suspend(() => {

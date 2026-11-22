@@ -420,6 +420,7 @@ export const createOpenCodeLiveSessionAdapterPreparer = ({
                       onIssued: options?.onIssued,
                     };
                     if (input.message) request.message = input.message;
+                    if (options?.denialSource) request.denialSource = options.denialSource;
                     return prepared.connection.replyApproval(request);
                   },
                   catch: (cause) =>

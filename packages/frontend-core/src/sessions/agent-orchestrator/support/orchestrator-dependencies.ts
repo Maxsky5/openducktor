@@ -13,6 +13,7 @@ export const createAgentOrchestratorDependencies = ({
     agentSessionLiveRead: host.client.agentSessionLiveRead,
     agentSessionLiveReplyApproval: host.client.agentSessionLiveReplyApproval,
     agentSessionLiveReplyQuestion: host.client.agentSessionLiveReplyQuestion,
+    agentSessionLiveAllowDeniedAction: host.client.agentSessionLiveAllowDeniedAction,
     observeAgentSessionLive: host.observeAgentSessionLive,
   },
 });

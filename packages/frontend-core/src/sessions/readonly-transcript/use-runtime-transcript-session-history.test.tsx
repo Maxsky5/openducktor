@@ -83,6 +83,7 @@ const operations = (
   updateAgentSessionModel: async () => undefined,
   replyAgentApproval: async () => undefined,
   answerAgentQuestion: async () => undefined,
+  allowDeniedAction: async () => undefined,
 });
 
 const HistoryOwner = ({ children }: PropsWithChildren) => {

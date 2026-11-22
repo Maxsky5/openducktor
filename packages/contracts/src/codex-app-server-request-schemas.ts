@@ -459,6 +459,8 @@ export const codexAppServerRequestParamsSchemas = {
     origin: threadGoalMutationOriginSchema.nullable().optional(),
   }),
   "thread/unsubscribe": z.strictObject({ threadId: z.string() }),
+  /** `event` is the snake_case core `GuardianAssessmentEvent` of the denied review. */
+  "thread/approveGuardianDeniedAction": z.strictObject({ threadId: z.string(), event: z.json() }),
   /** The settings of turns that Codex starts later, such as goal turns. */
   "thread/settings/update": z.strictObject({
     threadId: z.string(),
@@ -578,6 +580,10 @@ export const codexAppServerClientRequestSchema = z.discriminatedUnion("method", 
   z.strictObject({
     method: z.literal("thread/unsubscribe"),
     params: codexAppServerRequestParamsSchemas["thread/unsubscribe"],
+  }),
+  z.strictObject({
+    method: z.literal("thread/approveGuardianDeniedAction"),
+    params: codexAppServerRequestParamsSchemas["thread/approveGuardianDeniedAction"],
   }),
   z.strictObject({
     method: z.literal("thread/settings/update"),

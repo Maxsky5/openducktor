@@ -1,6 +1,6 @@
 import {
-  getToolLifecyclePhase,
-  type ToolLifecyclePhase,
+  getWorkflowToolPhase,
+  type WorkflowToolPhase,
 } from "@openducktor/frontend-core/sessions/messages/tool-lifecycle";
 import {
   isWorkflowToolActive,
@@ -45,7 +45,7 @@ const CARD_FAMILIES = {
   failed: "destructive",
   cancelled: "cancelled",
   completed: "success",
-} as const satisfies Record<ToolLifecyclePhase, Family>;
+} as const satisfies Record<WorkflowToolPhase, Family>;
 
 /** The family of the status pill of each phase, from the desktop `WORKFLOW_TOOL_APPEARANCE`. */
 const PILL_FAMILIES = {
@@ -55,7 +55,7 @@ const PILL_FAMILIES = {
   failed: "destructive",
   cancelled: "cancelled",
   completed: "pending",
-} as const satisfies Record<ToolLifecyclePhase, Family>;
+} as const satisfies Record<WorkflowToolPhase, Family>;
 
 const familyColors = (theme: AppTheme, family: Family) => {
   const { desktop } = theme;
@@ -136,7 +136,7 @@ export const WorkflowToolRow = memo(function WorkflowToolRow({
   const theme = useAppTheme();
   const { onOpenDocument, openFullView } = useTranscriptRows();
   const openDocument = document ? onOpenDocument : null;
-  const phase = getToolLifecyclePhase(meta);
+  const phase = getWorkflowToolPhase(meta);
   const statusLabel = workflowToolStatusLabel(phase);
   const active = isWorkflowToolActive(phase);
   const { durationMs } = readToolTiming(meta, messageTimestamp);

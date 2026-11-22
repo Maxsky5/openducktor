@@ -30,6 +30,7 @@ const createSession = (overrides: Partial<ClaudeSession> = {}): ClaudeSession =>
   pendingQuestions: new Map(),
   pendingUserMessageAdmissions: new Map(),
   unreadSteeredUserMessages: new Map(),
+  toolDenialsByCallId: new Map(),
   pendingUserTurnCount: 0,
   query: createClaudeQueryFixture({
     close: mock(() => {}),

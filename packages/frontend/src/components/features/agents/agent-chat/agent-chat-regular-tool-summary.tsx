@@ -29,6 +29,7 @@ const TOOL_TEXT_COLORS = {
   executing: "text-foreground",
   completed: "text-foreground",
   failed: "text-destructive-muted",
+  blocked: "text-warning-muted",
   cancelled: "text-cancelled-muted",
 } satisfies Record<ReturnType<typeof getToolLifecyclePhase>, string>;
 

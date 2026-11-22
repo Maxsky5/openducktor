@@ -1,3 +1,4 @@
+import type { AgentToolDenialSource } from "@openducktor/contracts";
 import type { ManagedMcpServerResolver, WorkflowRolePolicyResolver } from "@openducktor/core";
 import type { CodexImageGenerationPreparer } from "./codex-image-generation";
 import type {
@@ -52,6 +53,7 @@ import type {
   CodexAppServerTurnSteerParams,
   CodexAppServerUserInput,
   RuntimeApprovalReplyOutcome,
+  CodexAppServerRequestParamsMap,
 } from "@openducktor/contracts";
 import type {
   AgentEvent,
@@ -97,6 +99,8 @@ export type CodexLiveApprovalReplyInput = CodexLiveSessionLocator & {
   requestId: string;
   outcome: RuntimeApprovalReplyOutcome;
   message?: string;
+  /** The host rejects the request for the read-only role, not for the user. */
+  denialSource?: Extract<AgentToolDenialSource, "read_only_role"> | undefined;
 };
 
 export type CodexLiveQuestionReplyInput = CodexLiveSessionLocator & {
@@ -156,6 +160,11 @@ export type CodexSessionState = {
   workingDirectory: string;
   runtimePolicy: AgentSessionRuntimePolicy;
   preserveNativeSettings?: boolean;
+  /**
+   * Codex takes `turn/start` and approvals from OpenDucktor on this thread. Codex refuses direct
+   * input to a multi-agent v2 child thread. `null`: Codex did not report it.
+   */
+  canAcceptDirectInput?: boolean | null;
   firstTurnHistory?: CodexFirstTurnHistory;
   liveStatus?: {
     classification: AgentSessionActivity;
@@ -186,6 +195,10 @@ export type CodexAppServerClient = {
   ): Promise<CodexAppServerThreadUnsubscribeResult>;
   threadSettingsUpdate(
     params: CodexAppServerThreadSettingsUpdateParams,
+  ): Promise<CodexAppServerThreadSetNameResult>;
+  /** Tells the model that the user approved the action of a denied auto-review. */
+  threadApproveGuardianDeniedAction(
+    params: CodexAppServerRequestParamsMap["thread/approveGuardianDeniedAction"],
   ): Promise<CodexAppServerThreadSetNameResult>;
   turnStart(params: CodexTurnStartParams): Promise<CodexTurnStartResult>;
   turnSteer(params: CodexTurnSteerParams): Promise<CodexAppServerTurnSteerResult>;

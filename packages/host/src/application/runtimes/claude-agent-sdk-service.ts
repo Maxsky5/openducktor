@@ -38,7 +38,10 @@ import type {
   HostOperationErrorAggregate,
   HostValidationErrorAggregate,
 } from "../../effect/host-errors";
-import type { AgentSessionSendOptions } from "../../ports/agent-session-live-adapter-port";
+import type {
+  AgentSessionSendOptions,
+  ApprovalReplyOptions,
+} from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 
 export type ClaudeAgentSdkServiceError = HostOperationErrorAggregate | HostValidationErrorAggregate;
@@ -112,15 +115,19 @@ export type ClaudeAgentSdkService = {
   ): Effect.Effect<AgentSessionTitleUpdateResult, ClaudeAgentSdkServiceError>;
   /**
    * `onSent` runs when a message that starts a turn enters the Claude SDK input queue. A steer
-   * does not call it.
+   * does not call it. `hidden` sends a message that the user did not write, which no reader shows.
    */
   sendUserMessage(
     input: SendAgentUserMessageInput,
     runtimeId: string,
-    options?: Pick<AgentSessionSendOptions, "onSent" | "assertCurrent">,
+    options?: Pick<AgentSessionSendOptions, "onSent" | "assertCurrent"> & {
+      hidden?: true | undefined;
+    },
   ): Effect.Effect<AcceptedAgentUserMessage, ClaudeAgentSdkServiceError>;
+  /** `denialSource` marks a reject that the host sends for the read-only role. */
   prepareApprovalReply(
     input: ReplyApprovalInput,
+    denialSource?: ApprovalReplyOptions["denialSource"],
   ): Effect.Effect<ClaudePendingInputResolution, ClaudeAgentSdkServiceError>;
   resolvePendingApproval(
     input: import("@openducktor/contracts").AgentSessionLiveRef & { requestId: string },

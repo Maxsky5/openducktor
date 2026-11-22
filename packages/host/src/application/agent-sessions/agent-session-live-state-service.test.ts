@@ -2,6 +2,7 @@ import { noMessageQueues } from "../../test-support/message-queue-observer-test-
 import { unexpectedSessionImport } from "../../test-support/session-import-test-doubles";
 import { unexpectedTextGeneration } from "../../test-support/text-generation-test-doubles";
 import { unexpectedRuntimeQueries } from "../../test-support/runtime-query-test-doubles";
+import { createAgentSessionRuntimeAdapterTestDouble } from "../../test-support/service-test-doubles";
 import { AgentSessionLiveRegistration } from "../../ports/agent-session-live-adapter-port";
 import { describe, expect, test } from "bun:test";
 import type {
@@ -2542,4 +2543,43 @@ describe("createAgentSessionLiveStateService", () => {
     );
     await expectMissingRoute(service.loadContext(ref));
   });
+});
+
+test("allow denied action reaches the runtime adapter of the session", async () => {
+  const h = createHarness();
+  const allowed: unknown[] = [];
+  await Effect.runPromise(
+    h.service.registerRuntimeAdapter(
+      createAgentSessionRuntimeAdapterTestDouble(
+        { runtimeId: "codex-runtime", runtimeKind: "codex" },
+        {
+          listSnapshots: () => Effect.succeed([liveSnapshot("thread")]),
+          allowDeniedAction: (input) => Effect.sync(() => void allowed.push(input)),
+        },
+      ),
+    ),
+  );
+  const input = { ...sessionRef("thread"), callId: "call-1" };
+
+  await Effect.runPromise(h.service.allowDeniedAction(input));
+
+  expect(allowed).toEqual([input]);
+});
+
+test("allow denied action fails for a runtime that cannot allow denied calls", async () => {
+  const h = createHarness();
+  await Effect.runPromise(
+    h.service.registerRuntimeAdapter(
+      createAgentSessionRuntimeAdapterTestDouble(
+        { runtimeId: "opencode-runtime", runtimeKind: "opencode" },
+        { listSnapshots: () => Effect.succeed([liveSnapshot("session", "opencode")]) },
+      ),
+    ),
+  );
+
+  const failure = await expectHostFailure(
+    h.service.allowDeniedAction({ ...sessionRef("session", "opencode"), callId: "call-1" }),
+  );
+
+  expect(failure.message).toBe("Runtime 'opencode' cannot allow denied tool calls.");
 });

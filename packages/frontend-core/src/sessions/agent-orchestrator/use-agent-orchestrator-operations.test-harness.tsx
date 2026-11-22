@@ -124,6 +124,7 @@ export const createTestDependencies = (
       agentSessionLiveRead: async (ref) => ({ type: "missing", ref }),
       agentSessionLiveReplyApproval: async () => undefined,
       agentSessionLiveReplyQuestion: async () => undefined,
+      agentSessionLiveAllowDeniedAction: async () => undefined,
       ...liveSessionHostOverrides,
     },
   };

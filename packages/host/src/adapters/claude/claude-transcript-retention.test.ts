@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { retainClaudeTranscriptRecord } from "./claude-transcript-retention";
+import {
+  claudeTranscriptReadModePathSelectors,
+  retainClaudeTranscriptRecord,
+} from "./claude-transcript-retention";
 
 describe("Claude transcript record retention", () => {
   test.each([
@@ -43,6 +46,10 @@ describe("Claude transcript record retention", () => {
     expect(
       retainClaudeTranscriptRecord({ type: "file-history-snapshot", snapshot: "unused" }),
     ).toBeNull();
+  });
+
+  test("reads the denial kind of a tool result in history", () => {
+    expect(claudeTranscriptReadModePathSelectors.history(["toolDenialKind"])).toBe(true);
   });
 
   test("retains queue admission and result records", () => {

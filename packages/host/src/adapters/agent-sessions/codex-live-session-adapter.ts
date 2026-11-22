@@ -46,6 +46,7 @@ import {
 } from "./codex-live-session-acceptance";
 import { toCodexForkRequest, toCodexSendRequest } from "./codex-live-session-inputs";
 import { createCodexLiveSessionProjection } from "./codex-live-session-projection";
+import { createCodexApprovalControls } from "./codex-live-session-approvals";
 import { requireCodexStdioRuntime } from "./codex-live-session-runtime-guards";
 import { toLiveSessionRef } from "./live-session-ref";
 export type {
@@ -309,22 +310,12 @@ export const createCodexLiveSessionAdapterPreparer = ({
               input.externalSessionId,
             ),
           }),
-        replyApproval: (input, options) => {
-          const request: Parameters<typeof controller.replyLiveApproval>[0] = {
-            runtimeId: runtime.runtimeId,
-            externalSessionId: input.externalSessionId,
-            requestId: input.requestId,
-            outcome: input.outcome,
-            onIssued: options?.onIssued,
-          };
-          if (input.message !== undefined) {
-            request.message = input.message;
-          }
-          return Effect.tryPromise({
-            try: () => controller.replyLiveApproval(request),
-            catch: sessionError("codex-live-session.reply-approval", input.externalSessionId),
-          }).pipe(Effect.tap(() => refreshProjection()));
-        },
+        ...createCodexApprovalControls({
+          runtimeId: runtime.runtimeId,
+          controller,
+          refreshProjection,
+          sessionError,
+        }),
         replyQuestion: (input) =>
           input.blocking === false
             ? (input.sessionScope === undefined

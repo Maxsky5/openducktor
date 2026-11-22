@@ -13,6 +13,7 @@ type AgentOrchestratorLiveSessionHostPort = {
   agentSessionLiveRead: HostClient["agentSessionLiveRead"];
   agentSessionLiveReplyApproval: HostClient["agentSessionLiveReplyApproval"];
   agentSessionLiveReplyQuestion: HostClient["agentSessionLiveReplyQuestion"];
+  agentSessionLiveAllowDeniedAction: HostClient["agentSessionLiveAllowDeniedAction"];
   observeAgentSessionLive: (
     input: AgentSessionLiveAttachInput,
     listener: (envelope: AgentSessionLiveEnvelope) => void,

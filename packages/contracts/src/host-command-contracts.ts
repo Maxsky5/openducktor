@@ -13,6 +13,7 @@ export const HOST_COMMAND_NAMES = [
   "agent_session_delete",
   "agent_session_describe_generated_images",
   "agent_session_goal_control",
+  "agent_session_live_allow_denied_action",
   "agent_session_live_attach",
   "agent_session_live_list",
   "agent_session_live_load_context",

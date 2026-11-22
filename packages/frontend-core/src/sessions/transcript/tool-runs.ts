@@ -61,6 +61,8 @@ const ALONE_TOOL_TYPES: ReadonlySet<ToolMeta["toolType"]> = new Set([
 ]);
 
 const readCallKind = (meta: ToolMeta, presentToolCall: PresentToolCall): ToolRunCallKind | null => {
+  // A blocked call shows its reason and its Allow action, so a run never hides it.
+  if (meta.denial) return null;
   if (isShellCommandCall(meta)) return "command";
   const { toolType } = meta;
   if (

@@ -280,6 +280,53 @@ describe("Claude session I/O message delivery", () => {
     expect(session.unreadSteeredUserMessages.size).toBe(0);
   });
 
+  test("sends a hidden consent as a synthetic steer that no reader shows", async () => {
+    const session = runningSession(createNonAdmittingClaudeSession);
+    const pushed: SDKUserMessage[] = [];
+    session.queue.push = (message) => {
+      pushed.push(message);
+    };
+    const events: AgentEvent[] = [];
+
+    const sending = sendClaudeUserMessage({
+      session,
+      emit: (_session, event) => events.push(event),
+      now: () => "2026-06-25T20:00:00.000Z",
+      randomId: () => SENT_MESSAGE_ID,
+      messageInput: messageInput({
+        delivery: "steer",
+        parts: [{ kind: "text", text: "Permission granted" }],
+      }),
+      hidden: true,
+    });
+    await untilAdmissionPending(session);
+    applyClaudeUserMessageSignal({
+      session,
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "user",
+        uuid: SENT_MESSAGE_ID,
+        session_id: "session-1",
+        parent_tool_use_id: null,
+        isReplay: true,
+        message: { role: "user", content: "Permission granted" },
+      }),
+    });
+    await sending;
+
+    // The CLI tells the model that a synthetic message is not from the user, so it stays human.
+    expect(pushed).toEqual([
+      expect.objectContaining({
+        origin: { kind: "human" },
+        client_composed: true,
+        priority: "now",
+      }),
+    ]);
+    expect(pushed[0]).not.toHaveProperty("isSynthetic");
+    expect(events).toEqual([]);
+    expect(session.unreadSteeredUserMessages.size).toBe(0);
+  });
+
   test("returns a message only after the CLI admits it", async () => {
     const session = createNonAdmittingClaudeSession({ activity: "idle", sdkState: "idle" });
     let settled = false;

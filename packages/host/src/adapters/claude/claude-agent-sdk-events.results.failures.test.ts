@@ -60,6 +60,40 @@ describe("handleClaudeSdkMessage failed results", () => {
     ]);
   });
 
+  test("ends a turn that the user stopped with a reject as interrupted, without an error", () => {
+    const events: AgentEvent[] = [];
+    const session = createSession("running");
+    session.pendingUserTurnCount = 1;
+    session.acceptedUserMessages.push(
+      claudeAcceptedUserMessageFixture({ messageId: "user-message-1" }),
+    );
+    session.userRejectStopsTurn = true;
+
+    handleClaudeSdkMessage({
+      session,
+      timestamp: "2026-06-25T20:00:00.000Z",
+      modelSelection: (model) => ({ providerId: "claude", modelId: model, runtimeKind: "claude" }),
+      emit: (event) => events.push(event),
+      message: claudeSdkMessageFixture({
+        type: "result",
+        user_message_uuid: "user-message-1",
+        subtype: "error_during_execution",
+        uuid: "d3f2a4c1-55b6-4c1e-9a6e-7c1d2b3a4e5f",
+        session_id: "session-1",
+        is_error: true,
+        errors: ["[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=tool_use"],
+        terminal_reason: "aborted_tools",
+        usage: { input_tokens: 0, output_tokens: 0 },
+      }),
+    });
+
+    expect(events.map((event) => event.type)).not.toContain("turn_error");
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "session_turn_finished", turnOutcome: "interrupted" }),
+    );
+    expect(session.userRejectStopsTurn).toBeUndefined();
+  });
+
   test("reports failed Claude results and settles the session idle", () => {
     const events: AgentEvent[] = [];
     const session = createSession("running");

@@ -9,9 +9,14 @@ import {
   projectClaudeBackgroundToolUse,
 } from "./claude-agent-sdk-background-tools";
 import { projectClaudeCompletedToolResult } from "./claude-agent-sdk-completed-tool-result";
+import { readText } from "./claude-agent-sdk-utils";
 import type { MutableAssistantHistoryMessage } from "./claude-agent-sdk-history-assistant";
 import { readHistorySessionId } from "./claude-agent-sdk-history-entry";
-import type { ClaudeHistoryMessage } from "./claude-agent-sdk-history-messages";
+import type {
+  ClaudeHistoryConversationMessage,
+  ClaudeHistoryMessage,
+} from "./claude-agent-sdk-history-messages";
+import { claudeHistoryToolDenial } from "./claude-agent-sdk-tool-denials";
 import { readHistoryToolResults } from "./claude-agent-sdk-history-support";
 import {
   emitClaudeAgentToolResultSubagentPart,
@@ -279,7 +284,7 @@ export const projectClaudeHistoryToolResults = ({
   state,
   timestamp,
 }: {
-  entry: SessionMessage;
+  entry: SessionMessage & Pick<ClaudeHistoryConversationMessage, "toolDenialKind">;
   state: ClaudeHistoryToolResultState;
   timestamp: string;
 }): boolean => {
@@ -333,6 +338,11 @@ export const projectClaudeHistoryToolResults = ({
       completedToolInput.startedAtMs = existingPart.startedAtMs;
     }
     const { part: ordinaryCompletedPart } = projectClaudeCompletedToolResult(completedToolInput);
+    // Only an error result can be a denial, so other results skip the parse.
+    const denial = result.isError
+      ? claudeHistoryToolDenial(readText(entry.toolDenialKind), result.text)
+      : undefined;
+    if (denial) ordinaryCompletedPart.denial = denial;
     const completedPart = projectClaudeBackgroundToolResult(
       state,
       result.toolUseId,

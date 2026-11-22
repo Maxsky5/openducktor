@@ -425,6 +425,20 @@ const ToolMessageBody = ({
   sessionWorkingDirectory,
   toolCallPresentation,
 }: ToolMessageBodyProps): ReactElement => {
+  // A blocked call shows one line and the reason of the policy, whatever its tool.
+  if (meta.denial) {
+    return (
+      <RegularToolMessage
+        meta={meta}
+        messageId={message.id}
+        messageContent={message.content}
+        messageTimestamp={message.timestamp}
+        timeLabel={timeLabel}
+        sessionWorkingDirectory={sessionWorkingDirectory}
+        displayName={toolCallPresentation?.displayName ?? meta.tool}
+      />
+    );
+  }
   if (meta.toolType === "computer_use") {
     return (
       <ComputerUseToolMessage
@@ -583,7 +597,7 @@ export const MessageBody = ({
   }
 
   if (meta?.kind === "tool") {
-    if (toolCallPresentation?.kind === "task") {
+    if (toolCallPresentation?.kind === "task" && !meta.denial) {
       return (
         <AgentChatTaskTool
           meta={meta}

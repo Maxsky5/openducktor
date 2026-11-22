@@ -17,6 +17,7 @@ import { StyleSheet } from "react-native-unistyles";
 import { useTranscriptRows } from "../transcript-rows-context";
 import { ToolErrorPreview, ToolLine } from "./row-parts";
 import { QuestionAnswers, ToolFileEdits } from "./tool-details";
+import { ToolDenialNotice } from "./tool-denial";
 
 const PATH_TOOL_TYPES: ReadonlySet<ToolMeta["toolType"]> = new Set(["read", "list", "file_edit"]);
 
@@ -24,14 +25,15 @@ const PATH_TOOL_TYPES: ReadonlySet<ToolMeta["toolType"]> = new Set(["read", "lis
 const toolStateLabel = (phase: ToolLifecyclePhase, running: boolean): string => {
   if (phase === "failed") return ", failed";
   if (phase === "cancelled") return ", cancelled";
+  if (phase === "blocked") return ", blocked";
   return running ? ", running" : "";
 };
 
 /**
  * The desktop `RegularToolMessage`: one compact line with the tool name, its summary, and its
  * timing, and the error preview of a failed call under it. A press opens the input, output, and
- * error of the call in the tool details sheet. Question answers and file edit cards show under
- * the line.
+ * error of the call in the tool details sheet. Question answers, file edit cards, and why a policy
+ * blocked the call show under the line.
  */
 export const ToolCallRow = memo(function ToolCallRow({
   meta,
@@ -76,6 +78,7 @@ export const ToolCallRow = memo(function ToolCallRow({
         accessibilityLabel={`${name}${summary.text.length > 0 ? `: ${summary.text}` : ""}${stateLabel}${errorLabel}`}
       />
       {summary.errorPreview === null ? null : <ToolErrorPreview text={summary.errorPreview} />}
+      {meta.denial ? <ToolDenialNotice callId={meta.callId} denial={meta.denial} /> : null}
       <QuestionAnswers meta={meta} />
       <ToolFileEdits meta={meta} resetKey={rowKey} />
     </View>

@@ -63,6 +63,7 @@ import {
 } from "./codex-subagent-link-state";
 import { createCodexEventMappers } from "./event-mappers";
 import { CodexGoalState } from "./codex-goal-state";
+import { CodexDeniedActions, type CodexDeniedActionsAdapterDeps } from "./codex-denied-actions";
 import { CodexTextAnswers } from "./codex-text-answers";
 import { createActiveCodexTurn, runningTurnOf } from "./codex-turn-lifecycle";
 import type {
@@ -93,6 +94,7 @@ type CodexRuntimeSessionEventsDepsBase = {
     childThreadId: string,
     scope: CodexSubagentScope,
   ): Promise<string | undefined>;
+  deniedActions: CodexDeniedActionsAdapterDeps;
   updateThreadStatus(runtimeId: string, threadId: string, status: CodexThreadStatusSnapshot): void;
 };
 
@@ -215,10 +217,12 @@ export class CodexRuntimeSessionEvents {
   private readonly contextUsage: CodexContextUsageTracker;
   private readonly goalState = new CodexGoalState();
   private readonly liveCommandOutputs = new CodexLiveCommandOutputs((runtimeId, update) =>
-    this.enqueueLiveCommandUpdate(runtimeId, update),
+    this.enqueueLiveUpdate(runtimeId, update),
   );
   /** The answers of text generation threads, which have no session. */
   readonly textAnswers = new CodexTextAnswers();
+  /** The calls that a policy denied in live sessions, and the denials that the user can allow. */
+  readonly deniedActions: CodexDeniedActions;
   /** The goal reads of the adapter. Only Codex goal notifications change a goal. */
   readonly goals: Pick<
     CodexGoalState,
@@ -236,6 +240,23 @@ export class CodexRuntimeSessionEvents {
     );
     this.runtimeEventSubscriptions = new CodexRuntimeEventSubscriptions(deps.subscribeEvents);
     this.contextUsage = new CodexContextUsageTracker();
+    this.deniedActions = new CodexDeniedActions({
+      ...deps.deniedActions,
+      sessions: deps.sessions,
+      subagents: deps.subagents,
+      activeTurnsBySessionId: deps.activeTurnsBySessionId,
+      resolveTargetSession: (runtimeId, threadId) =>
+        this.resolveRuntimeStreamEventSessionOwner(threadId, runtimeId)?.targetSession,
+      emitPart: (session, part, timestamp) =>
+        this.emitSessionEventForSession(session, {
+          type: "assistant_part",
+          externalSessionId: session.threadId,
+          timestamp,
+          part,
+        }),
+      markSnapshotChanged: (runtimeId, threadId) => this.markSnapshotChanged(runtimeId, threadId),
+      enqueueLiveUpdate: (runtimeId, update) => this.enqueueLiveUpdate(runtimeId, update),
+    });
     this.subagentLifecycle = new CodexSubagentLifecycleProjector({
       sessions: deps.sessions,
       subagents: deps.subagents,
@@ -281,6 +302,7 @@ export class CodexRuntimeSessionEvents {
 
   clearRuntime(runtimeId: string): void {
     this.liveCommandOutputs.finishAll(runtimeId);
+    this.deniedActions.clearRuntime(runtimeId);
     this.goalState.clearRuntime(runtimeId);
     this.textAnswers.clearRuntime(runtimeId);
     this.turnMessageIdsByRuntimeId.delete(runtimeId);
@@ -347,18 +369,19 @@ export class CodexRuntimeSessionEvents {
   }
 
   /**
-   * Runs a running output update that a timer started, after the runtime events before it. Its
-   * events reach the host in their own update, as the events of a runtime event do. A runtime
-   * without a generation was cleared, and its commands ended with it.
+   * Runs an update that no runtime event carries, such as running output that a timer started,
+   * after the runtime events before it. Its events reach the host in their own update, as the
+   * events of a runtime event do. A runtime without a generation was cleared, and its sessions
+   * ended with it.
    */
-  private enqueueLiveCommandUpdate(runtimeId: string, update: () => void): void {
+  private enqueueLiveUpdate(runtimeId: string, update: () => void): void {
     const { onRuntimeEventQueueFailure } = this.deps;
     const generation = this.runtimeEventGenerationByRuntimeId.get(runtimeId);
     if (!onRuntimeEventQueueFailure || !generation) return;
     this.enqueueRuntimeWork(
       runtimeId,
       generation,
-      () => this.processLiveCommandUpdate(runtimeId, update),
+      () => this.processLiveUpdate(runtimeId, update),
       onRuntimeEventQueueFailure,
     );
   }
@@ -416,7 +439,7 @@ export class CodexRuntimeSessionEvents {
     }
   }
 
-  private processLiveCommandUpdate(runtimeId: string, update: () => void): Promise<void> {
+  private processLiveUpdate(runtimeId: string, update: () => void): Promise<void> {
     return this.withActiveMutation(runtimeId, async (mutation) => {
       update();
       if (isEmptyMutation(mutation)) return;
@@ -528,12 +551,14 @@ export class CodexRuntimeSessionEvents {
             })
             .map((route) => route.childExternalSessionId);
     this.subagentLifecycle.clearSession(externalSessionId, runtimeId);
+    this.deniedActions.clearThread(runtimeId, externalSessionId);
     if (runtimeId !== undefined) {
       this.clearStartedItemTimestampsForSession(runtimeId, externalSessionId);
       this.liveCommandOutputs.finishAll(runtimeId, externalSessionId);
       for (const threadId of routedDescendantThreadIds) {
         this.liveImages.cancel(runtimeId, threadId);
         this.imageGenerations.clearSession(threadId, runtimeId);
+        this.deniedActions.clearThread(runtimeId, threadId);
         this.clearStartedItemTimestampsForSession(runtimeId, threadId);
         this.liveCommandOutputs.finishAll(runtimeId, threadId);
       }
@@ -1109,6 +1134,14 @@ export class CodexRuntimeSessionEvents {
       throw new Error(event.message);
     }
     if (event.kind === "notification") {
+      if (event.message.method === "item/autoApprovalReview/completed") {
+        await this.deniedActions.applyAutoApprovalReview(
+          owner.targetSession,
+          event.message.params,
+          event.receivedAt,
+        );
+        return;
+      }
       const generation = this.runtimeEventGenerationByRuntimeId.get(event.runtimeId);
       const subagentRead = this.loadDiscoveredSubagentRole(owner, event);
       const subagentRole = subagentRead ? await subagentRead : undefined;
@@ -1536,7 +1569,16 @@ export class CodexRuntimeSessionEvents {
   }
 
   private publishSessionEvent(session: CodexSessionState, event: AgentEvent): AgentEvent {
-    const sessionEvent = this.deps.sessionEvents.publish(session, event);
+    const part =
+      event.type === "assistant_part" && event.part.kind === "tool"
+        ? this.deniedActions.decorate(session.runtimeId, session.threadId, event.part)
+        : undefined;
+    const sessionEvent = this.deps.sessionEvents.publish(
+      session,
+      event.type === "assistant_part" && part !== undefined && part !== event.part
+        ? { ...event, part }
+        : event,
+    );
     if (sessionEvent.type === "user_message" && this.isRetainedSession(session)) {
       let messageIds = this.turnMessageIdsByRuntimeId.get(session.runtimeId);
       if (!messageIds) {

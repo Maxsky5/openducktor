@@ -81,6 +81,7 @@ export const createNonAdmittingClaudeSession = (
   pendingQuestions: new Map(),
   pendingUserMessageAdmissions: new Map(),
   unreadSteeredUserMessages: new Map(),
+  toolDenialsByCallId: new Map(),
   pendingUserTurnCount: 0,
   query: createClaudeQueryFixture({}),
   queue: new AsyncInputQueue<SDKUserMessage>(),

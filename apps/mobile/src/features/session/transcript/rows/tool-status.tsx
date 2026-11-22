@@ -112,11 +112,12 @@ export function ToolStatusLabel({
 
 /**
  * The color of the icon of a call by status, as on desktop. A call that succeeded keeps the color
- * of the other tool icons, so only running, failed, and cancelled calls stand out.
+ * of the other tool icons, so only running, failed, blocked, and cancelled calls stand out.
  */
 const callIconColor = (phase: ToolLifecyclePhase, desktop: AppTheme["desktop"]): string => {
   if (phase === "failed") return desktop.destructiveMuted;
   if (phase === "cancelled") return desktop.cancelledMuted;
+  if (phase === "blocked") return desktop.warningAccent;
   if (phase === "executing") return desktop.statusRunningForeground;
   return desktop.mutedForeground;
 };

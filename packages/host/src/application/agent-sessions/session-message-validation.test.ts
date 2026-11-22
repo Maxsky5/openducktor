@@ -165,6 +165,7 @@ const setup = (
       loadContext: unexpected,
       loadSessionDiff: unexpected,
       replyApproval: unexpected,
+      allowDeniedAction: unexpected,
       replyQuestion: () =>
         Effect.sync(() => {
           order.push("answer");

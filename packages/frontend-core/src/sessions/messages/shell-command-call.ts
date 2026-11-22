@@ -242,6 +242,7 @@ export const EMPTY_SHELL_OUTPUT = {
   executing: "The command is running. No output yet.",
   completed: "The command finished without output.",
   failed: "The command failed without output.",
+  blocked: "A policy blocked the command before it ran.",
   cancelled: "The command stopped before it gave output.",
 } as const satisfies Record<ToolLifecyclePhase, string>;
 

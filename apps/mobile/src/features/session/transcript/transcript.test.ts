@@ -104,6 +104,26 @@ describe("transcript rows", () => {
     expect(rowTypes(model.rows)).toEqual(["user", "tool", "subagent", "notice"]);
   });
 
+  test("shows a blocked call as a tool line, whatever its tool", () => {
+    const blocked = buildMessage("tool", "", {
+      id: "blocked",
+      meta: {
+        kind: "tool",
+        partId: "blocked-part",
+        callId: "blocked",
+        tool: "odt_set_task_artifact",
+        toolType: "workflow",
+        status: "error",
+        denial: { source: "read_only_role", reason: "The planner cannot write artifacts." },
+      },
+    });
+
+    expect(messageRowKind(blocked, presentToolCall)).toMatchObject({
+      kind: "tool",
+      displayName: "Set Artifact",
+    });
+  });
+
   test("dispatch artifact tools and retired workflow tools to workflow cards", () => {
     const toolMessage = (tool: string): AgentChatMessage =>
       buildMessage("tool", "", {

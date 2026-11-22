@@ -19,6 +19,7 @@ import {
   isToolMessageActive,
   isToolMessageFailure,
   type ToolLifecyclePhase,
+  type WorkflowToolPhase,
 } from "./tool-lifecycle";
 import { isShellCommandCall } from "./shell-command-call";
 import { extractPathFromInput } from "./tool-input-utils";
@@ -398,7 +399,7 @@ export const toolResultContentEntries = (content: readonly AgentToolResultConten
   );
 
 /** The status label of a workflow tool row. A completed call shows no label. */
-export const workflowToolStatusLabel = (phase: ToolLifecyclePhase): string | null => {
+export const workflowToolStatusLabel = (phase: WorkflowToolPhase): string | null => {
   switch (phase) {
     case "preparing":
       return "PREPARING";
@@ -424,14 +425,16 @@ export type ToolTiming = { isActive: boolean; durationMs: number | null };
 
 export const readToolTiming = (meta: ToolMeta, messageTimestamp: string): ToolTiming => ({
   isActive: isToolMessageActive(meta),
-  durationMs: getToolDuration(meta, messageTimestamp),
+  // A policy blocked the call before it ran, so it has no run time to show.
+  durationMs: meta.denial ? null : getToolDuration(meta, messageTimestamp),
 });
 
 /** The timing of a regular Tool Call row. A pending call with complete arguments shows no progress. */
 export const readRegularToolTiming = (meta: ToolMeta, messageTimestamp: string): ToolTiming => ({
   isActive:
     isToolMessageActive(meta) && (meta.status !== "pending" || meta.inputStreaming !== false),
-  durationMs: getToolDuration(meta, messageTimestamp),
+  // A policy blocked the call before it ran, so it has no run time to show.
+  durationMs: meta.denial ? null : getToolDuration(meta, messageTimestamp),
 });
 
 const DEFAULT_COMPUTER_USE_ACTION_TITLE = "Computer action";

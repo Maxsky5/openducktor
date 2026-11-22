@@ -74,8 +74,10 @@ const resolveMessageRowKind = (
     case "reasoning":
       return { kind: "reasoning" };
     case "tool": {
-      if (meta.toolType === "computer_use") return { kind: "computer_use", meta };
       const presentation = presentToolCall(meta.tool, meta.displayLabel);
+      // A blocked call shows one line and the reason of the policy, whatever its tool.
+      if (meta.denial) return { kind: "tool", meta, displayName: presentation.displayName };
+      if (meta.toolType === "computer_use") return { kind: "computer_use", meta };
       if (presentation.kind === "task") {
         return { kind: "task_tool", meta, taskTool: presentation.taskTool };
       }

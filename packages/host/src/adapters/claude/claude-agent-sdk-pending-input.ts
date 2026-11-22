@@ -1,14 +1,16 @@
+import type { ApprovalReplyOptions } from "../../ports/agent-session-live-adapter-port";
 import type { AgentEvent, ReplyApprovalInput, ReplyQuestionInput } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
 import {
   claudePendingInputResolutionRoute,
   routeClaudePendingInputEvent,
 } from "./claude-agent-sdk-pending-input-routing";
-import type { ClaudeSession, PendingQuestion } from "./claude-agent-sdk-types";
+import { claudeReadOnlyRoleDenial, recordClaudeToolDenial } from "./claude-agent-sdk-tool-denials";
+import type { ClaudeSessionContext, PendingQuestion } from "./claude-agent-sdk-types";
 
 type ResolveClaudePendingInput = {
   now: () => string;
-  session: ClaudeSession;
+  session: ClaudeSessionContext;
 };
 
 type ClaudePendingInputResolution = {
@@ -17,10 +19,15 @@ type ClaudePendingInputResolution = {
 };
 
 export const prepareClaudeApprovalReply = ({
+  denialSource,
   input,
   now,
   session,
-}: ResolveClaudePendingInput & { input: ReplyApprovalInput }): ClaudePendingInputResolution => {
+}: ResolveClaudePendingInput & {
+  input: ReplyApprovalInput;
+  /** The host rejects the request for the read-only role, not for the user. */
+  denialSource?: ApprovalReplyOptions["denialSource"];
+}): ClaudePendingInputResolution => {
   const pending = session.pendingApprovals.get(input.requestId);
   if (!pending) {
     throw new HostValidationError({
@@ -53,15 +60,24 @@ export const prepareClaudeApprovalReply = ({
     }),
     complete: () => {
       session.pendingApprovals.delete(input.requestId);
-      pending.resolve(
-        input.outcome === "approve_once"
-          ? { behavior: "allow" }
-          : {
-              behavior: "deny",
-              message: input.message ?? "Denied by user.",
-              interrupt: true,
-            },
-      );
+      const message = input.message ?? "Denied by user.";
+      if (input.outcome === "approve_once") {
+        pending.resolve({ behavior: "allow" });
+        return;
+      }
+      if (denialSource) {
+        // The agent reads why the read-only role refused the call and goes on, as it does after
+        // the role denies a call without a prompt.
+        if (pending.toolUseId) {
+          recordClaudeToolDenial(session, pending.toolUseId, {
+            denial: claudeReadOnlyRoleDenial(message),
+          });
+        }
+        pending.resolve({ behavior: "deny", message });
+        return;
+      }
+      session.userRejectStopsTurn = true;
+      pending.resolve({ behavior: "deny", message, interrupt: true });
     },
   };
 };

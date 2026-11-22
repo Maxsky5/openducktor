@@ -22,6 +22,7 @@ import {
   type AgentTranscriptUserMessageDisplayPart,
   type AgentTranscriptModelSelection,
   type AgentNativeFileReference,
+  type AgentToolDenial,
   type AgentToolResultContent,
 } from "@openducktor/contracts";
 import { readOpenCodeGoalKickoffObjective } from "./opencode-goals";
@@ -284,6 +285,8 @@ export type OpenCodeMessageProjectionContext = {
   readonly durations: ReadonlyMap<string, number>;
   readonly completedReplies: ReadonlySet<string>;
   readonly shells: ShellContext;
+  /** The automatic denials of the calls that failed while the projector observed them live. */
+  readonly denials?: ReadonlyMap<string, AgentToolDenial>;
 };
 
 export const completedOpenCodeReplies = (messages: Iterable<SessionMessageInfo>): Set<string> => {
@@ -429,7 +432,11 @@ const projectAssistantContent = (
       .map((item) => item.text)
       .join("\n");
   }
-  if (state.status === "error") tool.error = state.error.message;
+  if (state.status === "error") {
+    tool.error = state.error.message;
+    const denial = context?.denials?.get(content.id);
+    if (denial) tool.denial = denial;
+  }
   if (metadata) tool.metadata = metadata;
   // OpenCode completes a shell call that exits with an error code. Codex and Claude report it as
   // failed, so it fails here too.

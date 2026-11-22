@@ -6,6 +6,7 @@ import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-to
 import type { ClaudeNativeActivityState } from "./claude-agent-sdk-activity";
 import { claudeSubagentExternalSessionId } from "./claude-agent-sdk-subagent-transcripts";
 import type { ClaudeTodoProjection, ClaudeTodoState } from "./claude-agent-sdk-todos";
+import type { ClaudeToolDenialRecord } from "./claude-agent-sdk-tool-denials";
 import type {
   ClaudeAcceptedUserMessage,
   ClaudeManualCompactionState,
@@ -57,6 +58,13 @@ export type ClaudeEventSession = ClaudeBackgroundToolState &
     streamAssistantMessageIdsByBlockIndex: Map<number, string>;
     todoProjection?: ClaudeTodoProjection;
     todosById: ClaudeTodoState;
+    /**
+     * The user rejected an approval prompt, and the CLI ends the turn as `aborted_tools`. That
+     * turn stopped on purpose, so it does not fail.
+     */
+    userRejectStopsTurn?: true;
+    /** The denied calls of the root session and its subagents. Child sessions share the map. */
+    toolDenialsByCallId: Map<string, ClaudeToolDenialRecord>;
     toolEndedAtMsByCallId?: Map<string, number>;
     toolStartedAtMsByCallId: Map<string, number>;
     subagentMessageIdsByTaskId: Map<string, string>;
@@ -323,6 +331,7 @@ const createClaudeSubagentEventSession = (
     toolStartedAtMsByCallId: new Map(),
     subagentMessageIdsByTaskId: new Map(),
     subagentTaskIdsByToolUseId: new Map(),
+    toolDenialsByCallId: session.toolDenialsByCallId,
   };
   if (session.backgroundToolCallIdsSinceSnapshot) {
     childSession.backgroundToolCallIdsSinceSnapshot = new Set();

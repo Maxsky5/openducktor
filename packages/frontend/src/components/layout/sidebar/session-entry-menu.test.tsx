@@ -122,20 +122,19 @@ const chatRecord = (entry: SessionNavigationEntry): WorkspaceSession => {
   return entry.context.session;
 };
 
+const taskMenuEntries = () => {
+  const entry = taskSessionEntry("same-id", { workspace: betaWorkspace });
+  if (entry.target.kind !== "task_session") throw new Error("Expected task identity");
+  entry.target.identity.workingDirectory = "/repos/beta/worktrees/exact";
+  return { entry, other: taskSessionEntry("other") };
+};
+
 test.each(["list", "rail"] as const)(
-  "%s context menu marks only its session and copies the saved task identity without navigation",
+  "%s context menu marks only its session as unread or read",
   async (layout) => {
-    const entry = taskSessionEntry("same-id", { workspace: betaWorkspace });
-    if (entry.target.kind !== "task_session") throw new Error("Expected task identity");
-    entry.target.identity.workingDirectory = "/repos/beta/worktrees/exact";
-    const other = taskSessionEntry("other");
-    const copied: string[] = [];
-    const restoreClipboard = replaceNavigatorClipboard(async (value) => {
-      copied.push(value);
-    });
+    const { entry, other } = taskMenuEntries();
     const view = renderMenu(layout, [entry, other], entry);
     try {
-      const initialAddress = view.getByLabelText("Current address").textContent;
       let menu = await openMenu(view, entry.title);
       expect(menu.queryByRole("menuitem", { name: "Rename session" })).toBeNull();
       expect(menu.queryByRole("menuitem", { name: "Archive session" })).toBeNull();
@@ -148,14 +147,6 @@ test.each(["list", "rail"] as const)(
           name: "Session read",
         }),
       ).toBeTruthy();
-      menu = await openMenu(view, entry.title);
-      fireEvent.click(menu.getByRole("menuitem", { name: "Copy working directory" }));
-      await waitFor(() => expect(copied).toEqual(["/repos/beta/worktrees/exact"]));
-      menu = await openMenu(view, entry.title);
-      fireEvent.click(menu.getByRole("menuitem", { name: "Copy external session ID" }));
-      await waitFor(() => expect(copied).toEqual(["/repos/beta/worktrees/exact", "same-id"]));
-      expect(view.onOpen).not.toHaveBeenCalled();
-      expect(view.getByLabelText("Current address").textContent).toBe(initialAddress);
       fireEvent.click(row);
       expect(within(row).getByRole("img", { name: "Session read" })).toBeTruthy();
       menu = await openMenu(view, entry.title);
@@ -164,6 +155,32 @@ test.each(["list", "rail"] as const)(
       menu = within(await view.findByRole("menu"));
       fireEvent.click(menu.getByRole("menuitem", { name: "Mark as read" }));
       expect(within(row).getByRole("img", { name: "Session read" })).toBeTruthy();
+    } finally {
+      view.unmount();
+      view.client.clear();
+    }
+  },
+);
+
+test.each(["list", "rail"] as const)(
+  "%s context menu copies the saved task identity without navigation",
+  async (layout) => {
+    const { entry, other } = taskMenuEntries();
+    const copied: string[] = [];
+    const restoreClipboard = replaceNavigatorClipboard(async (value) => {
+      copied.push(value);
+    });
+    const view = renderMenu(layout, [entry, other], entry);
+    try {
+      const initialAddress = view.getByLabelText("Current address").textContent;
+      let menu = await openMenu(view, entry.title);
+      fireEvent.click(menu.getByRole("menuitem", { name: "Copy working directory" }));
+      await waitFor(() => expect(copied).toEqual(["/repos/beta/worktrees/exact"]));
+      menu = await openMenu(view, entry.title);
+      fireEvent.click(menu.getByRole("menuitem", { name: "Copy external session ID" }));
+      await waitFor(() => expect(copied).toEqual(["/repos/beta/worktrees/exact", "same-id"]));
+      expect(view.onOpen).not.toHaveBeenCalled();
+      expect(view.getByLabelText("Current address").textContent).toBe(initialAddress);
     } finally {
       view.unmount();
       view.client.clear();

@@ -102,6 +102,7 @@ export const createClaudeAgentSdkSession = async ({
     todosById: new Map(initialTodos.map((todo) => [todo.id, todo])),
     pendingUserMessageAdmissions: new Map(),
     unreadSteeredUserMessages: new Map(),
+    toolDenialsByCallId: new Map(),
     transcriptEnvironment: serviceInput.processEnv ?? process.env,
   };
   if (sessionInput.parentExternalSessionId) {

@@ -209,6 +209,7 @@ export type CodexAppServerRequestResultMap = {
   "thread/goal/clear": CodexAppServerThreadGoalClearResult;
   "thread/settings/update": CodexAppServerThreadSetNameResult;
   "thread/unsubscribe": CodexAppServerThreadUnsubscribeResult;
+  "thread/approveGuardianDeniedAction": CodexAppServerThreadSetNameResult;
   "thread/turns/list": CodexAppServerThreadTurnsListResponse;
   "account/rateLimits/read": CodexAppServerAccountRateLimitsResponse;
   "skills/list": CodexAppServerSkillsListResponse;
@@ -242,6 +243,7 @@ const codexAppServerRequestResultSchemas: CodexAppServerRequestResultSchemaMap =
   "thread/goal/clear": codexAppServerThreadGoalClearResultSchema,
   "thread/settings/update": codexAppServerEmptyResponseSchema,
   "thread/unsubscribe": codexAppServerThreadUnsubscribeResultSchema,
+  "thread/approveGuardianDeniedAction": codexAppServerEmptyResponseSchema,
   "thread/turns/list": codexAppServerThreadTurnsListResponseSchema,
   "account/rateLimits/read": codexAppServerAccountRateLimitsResponseSchema,
   "skills/list": codexAppServerSkillsListResponseSchema,

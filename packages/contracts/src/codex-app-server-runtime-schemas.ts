@@ -1,4 +1,5 @@
 import { codexAppServerAccountRateLimitsUpdatedSchema } from "./codex-app-server-account-schemas";
+import { agentToolDenialRiskLevelSchema } from "./agent-session-event-schemas";
 import { z, type JSONType } from "zod";
 import { codexInt64Schema, codexUint64Schema } from "./codex-app-server-number-schemas";
 import {
@@ -112,6 +113,28 @@ const toolRequestUserInputParamsSchema = z.object({
   threadId: z.string(),
   turnId: z.string(),
 });
+/**
+ * [UNSTABLE] in codex-cli 0.170.0. The schema checks only the fields that the adapter reads, so a
+ * change in other fields does not fail the session. `action` stays JSON.
+ */
+const autoApprovalReviewCompletedParamsSchema = z.object({
+  threadId: z.string(),
+  turnId: z.string(),
+  reviewId: z.string(),
+  startedAtMs: codexInt64Schema,
+  completedAtMs: codexInt64Schema.optional(),
+  targetItemId: z.string().nullable(),
+  review: z.object({
+    status: z.string(),
+    rationale: z.string().nullable().optional(),
+    riskLevel: agentToolDenialRiskLevelSchema.nullable().optional(),
+  }),
+  action: z.object({ type: z.string() }).and(codexAppServerJsonObjectSchema),
+});
+export type CodexAppServerAutoApprovalReviewCompletedParams = z.output<
+  typeof autoApprovalReviewCompletedParamsSchema
+>;
+
 export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUnion("method", [
   notification("skills/changed", z.object({}).strict()),
   notification("account/rateLimits/updated", codexAppServerAccountRateLimitsUpdatedSchema),
@@ -168,6 +191,7 @@ export const codexAppServerConsumedRuntimeNotificationSchema = z.discriminatedUn
   notification("item/reasoning/textDelta", reasoningTextDeltaParamsSchema),
   notification("item/reasoning/summaryTextDelta", reasoningSummaryDeltaParamsSchema),
   notification("item/started", itemLifecycleParamsSchema),
+  notification("item/autoApprovalReview/completed", autoApprovalReviewCompletedParamsSchema),
   notification(
     "item/completed",
     itemLifecycleParamsSchema
@@ -203,6 +227,7 @@ const consumedRuntimeNotificationMethods = new Set([
   "item/reasoning/textDelta",
   "item/reasoning/summaryTextDelta",
   "item/started",
+  "item/autoApprovalReview/completed",
   "item/completed",
   "item/fileChange/patchUpdated",
 ]);

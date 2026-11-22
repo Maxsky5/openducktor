@@ -1096,6 +1096,34 @@ describe("agent session live projection", () => {
     expect(getAgentSession(removed, identity("root"))?.goal).toBeUndefined();
   });
 
+  test("copies the Allow state of denied calls, keeps an equal list, and clears it on removal", () => {
+    const deniedActions = [{ callId: "call-1", state: "available" as const }];
+    const initial = build({ snapshots: [snapshot("root", { deniedActions })] });
+    expect(getAgentSession(initial, identity("root"))?.deniedActions).toEqual(deniedActions);
+
+    const repeated = delta(initial, {
+      type: "session_upsert",
+      session: snapshot("root", { deniedActions: [{ callId: "call-1", state: "available" }] }),
+    });
+    expect(getAgentSession(repeated, identity("root"))?.deniedActions).toBe(
+      getAgentSession(initial, identity("root"))?.deniedActions,
+    );
+
+    const allowed = delta(repeated, {
+      type: "session_upsert",
+      session: snapshot("root", { deniedActions: [{ callId: "call-1", state: "allowed" }] }),
+    });
+    expect(getAgentSession(allowed, identity("root"))?.deniedActions).toEqual([
+      { callId: "call-1", state: "allowed" },
+    ]);
+
+    const stopped = delta(allowed, { type: "session_upsert", session: snapshot("root") });
+    expect(getAgentSession(stopped, identity("root"))?.deniedActions).toBeUndefined();
+
+    const removed = delta(initial, { type: "session_removed", ref: snapshot("root").ref });
+    expect(getAgentSession(removed, identity("root"))?.deniedActions).toBeUndefined();
+  });
+
   test("settles a removed live child without dropping its transcript", () => {
     const initial = build({
       snapshots: [

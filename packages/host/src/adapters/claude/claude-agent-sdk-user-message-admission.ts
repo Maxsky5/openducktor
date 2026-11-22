@@ -101,7 +101,7 @@ export const applyClaudeUserMessageSignal = ({
     signal.kind === "replay" ? session.unreadSteeredUserMessages.get(signal.messageId) : undefined;
   if (steered) {
     session.unreadSteeredUserMessages.delete(signal.messageId);
-    emit(toClaudeUserMessageEvent(session, steered, "read"));
+    if (!steered.hidden) emit(toClaudeUserMessageEvent(session, steered, "read"));
   }
   return true;
 };

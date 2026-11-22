@@ -26,34 +26,41 @@ export const createRuntimeSessionEngagement = () => {
     });
 
   return {
-    /** Records each session that a start, resume, continuation, fork, send, or goal action serves. */
-    trackControls: (adapter: AgentSessionRuntimeAdapterPort): AgentSessionRuntimeAdapterPort => ({
-      ...adapter,
-      startSession: (input) =>
-        adapter
-          .startSession(input)
-          .pipe(Effect.tap((summary) => engage(adapter.binding, summary.externalSessionId))),
-      resumeSession: (input) =>
-        adapter
-          .resumeSession(input)
-          .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
-      continueInterruptedTurn: (input) =>
-        adapter
-          .continueInterruptedTurn(input)
-          .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
-      forkSession: (input) =>
-        adapter
-          .forkSession(input)
-          .pipe(Effect.tap((summary) => engage(adapter.binding, summary.externalSessionId))),
-      sendUserMessage: (input, options) =>
-        adapter
-          .sendUserMessage(input, options)
-          .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
-      controlGoal: (input, options) =>
-        adapter
-          .controlGoal(input, options)
-          .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
-    }),
+    /** Records each session that a start, resume, continuation, fork, send, goal, or Allow action serves. */
+    trackControls: (adapter: AgentSessionRuntimeAdapterPort): AgentSessionRuntimeAdapterPort => {
+      const allow = adapter.allowDeniedAction;
+      return {
+        ...adapter,
+        startSession: (input) =>
+          adapter
+            .startSession(input)
+            .pipe(Effect.tap((summary) => engage(adapter.binding, summary.externalSessionId))),
+        resumeSession: (input) =>
+          adapter
+            .resumeSession(input)
+            .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
+        continueInterruptedTurn: (input) =>
+          adapter
+            .continueInterruptedTurn(input)
+            .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
+        forkSession: (input) =>
+          adapter
+            .forkSession(input)
+            .pipe(Effect.tap((summary) => engage(adapter.binding, summary.externalSessionId))),
+        sendUserMessage: (input, options) =>
+          adapter
+            .sendUserMessage(input, options)
+            .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
+        controlGoal: (input, options) =>
+          adapter
+            .controlGoal(input, options)
+            .pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
+        ...(allow && {
+          allowDeniedAction: (input: Parameters<typeof allow>[0]) =>
+            allow(input).pipe(Effect.tap(() => engage(adapter.binding, input.externalSessionId))),
+        }),
+      };
+    },
     /** Records each session that an approval or question reply serves. */
     trackReplies: (adapter: AgentSessionLiveAdapterPort): AgentSessionLiveAdapterPort => ({
       ...adapter,
