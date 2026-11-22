@@ -145,8 +145,8 @@ export type UsagePeriod = UsageReport["periods"][number];
 const progressCountSchema = z.number().int().nonnegative();
 
 /**
- * The work of the usage index while it reads new history: each runtime's sources, the share of
- * their bytes that it parsed, and the sessions that it found. The host publishes it on
+ * The work of the usage index while it reads new history: for each runtime, the share of its
+ * parse work and the sessions that it read out of the sessions to read. The host publishes it on
  * `openducktor://usage-index-progress` only while a read parses sources.
  */
 export const usageIndexProgressSchema = z.strictObject({
@@ -156,11 +156,14 @@ export const usageIndexProgressSchema = z.strictObject({
   runtimes: z.array(
     z.strictObject({
       runtime: runtimeKindSchema,
-      sources: z.strictObject({ done: progressCountSchema, total: progressCountSchema }),
-      /** Parse work in bytes. A database source has no byte measure and counts 0. */
-      work: z.strictObject({ done: progressCountSchema, total: progressCountSchema }),
-      /** Distinct sessions in the sources that this read parsed. */
-      sessions: progressCountSchema,
+      /** The share of the parse work, from 0 to 1. */
+      progress: z.number().min(0).max(1),
+      done: z.boolean(),
+      /** Sessions whose history the read finished. `total` is null until the read knows it. */
+      sessions: z.strictObject({
+        done: progressCountSchema,
+        total: progressCountSchema.nullable(),
+      }),
     }),
   ),
 });

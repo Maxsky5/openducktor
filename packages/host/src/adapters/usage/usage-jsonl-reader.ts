@@ -31,6 +31,32 @@ const readDigest = async (path: string, offset: number): Promise<string> => {
 export const canResumeJsonl = async (path: string, resume: UsageJsonlResume): Promise<boolean> =>
   (await readDigest(path, resume.offset)) === resume.digest;
 
+/** Reads only up to the first line feed of a file, also of a compressed rollout. */
+export const readFirstJsonlLine = async (
+  path: string,
+  compressed: boolean,
+): Promise<Buffer | null> => {
+  const file = createReadStream(path, { highWaterMark: 64 * 1024 });
+  const source = compressed ? file.pipe(createZstdDecompress()) : file;
+  if (compressed) file.on("error", (cause) => source.destroy(cause));
+  const chunks: Buffer[] = [];
+  try {
+    // SAFETY: A file stream without an encoding and the zstd stream both yield Buffer chunks.
+    for await (const chunk of source as AsyncIterable<Buffer>) {
+      const end = chunk.indexOf(10);
+      if (end >= 0) {
+        chunks.push(chunk.subarray(0, end));
+        return Buffer.concat(chunks);
+      }
+      chunks.push(chunk);
+    }
+    return chunks.length > 0 ? Buffer.concat(chunks) : null;
+  } finally {
+    file.destroy();
+    source.destroy();
+  }
+};
+
 /**
  * Calls `onLine` with the bytes of each complete line from `offset`, so a parser can skip a line
  * before it decodes it. A last line without a line feed is

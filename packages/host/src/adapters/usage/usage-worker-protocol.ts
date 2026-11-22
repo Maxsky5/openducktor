@@ -1,6 +1,7 @@
 import type { MessagePort } from "node:worker_threads";
 import type { RuntimeKind, UsageIndexProgress } from "@openducktor/contracts";
 import type { UsageUnit } from "../../domain/usage/usage-unit";
+import type { OpenCodeProgress } from "./usage-opencode-reader";
 import type {
   UsageReadInput,
   UsageReadResult,
@@ -59,6 +60,8 @@ export type UsageParseRun = {
 
 export type UsageParseReply =
   | { kind: "result"; runId: number; result: UsageParseResult }
+  /** The progress inside one database source. */
+  | { kind: "progress"; runId: number; jobId: number; progress: OpenCodeProgress }
   | { kind: "failed"; runId: number; message: string }
   | { kind: "idle"; runId: number };
 

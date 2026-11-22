@@ -1,5 +1,6 @@
+import path from "node:path";
 import type { RuntimeKind, UsageIndexProgress } from "@openducktor/contracts";
-import type { UsageUnit } from "../../domain/usage/usage-unit";
+import type { OpenCodeProgress } from "./usage-opencode-reader";
 import type { UsageParseJob } from "./usage-worker-protocol";
 
 /** Progress goes out at most this often, and at each phase change. */
@@ -7,13 +8,35 @@ const EMIT_INTERVAL_MS = 250;
 
 type Job = Omit<UsageParseJob, "jobId">;
 
-/** Parse work in bytes. A compressed rollout holds about 10 times its size; a database has none. */
+/** Parse work in bytes. A compressed rollout holds about 10 times its size. */
 const workOf = ({ format, fingerprint }: Job): number =>
-  format === "opencode" ? 0 : format === "jsonl_zst" ? fingerprint.size * 10 : fingerprint.size;
+  format === "jsonl_zst" ? fingerprint.size * 10 : fingerprint.size;
 
 /**
- * Counts the parse work of one read for its progress events. It sends a first event at once, so a
- * client sees the totals before the first source finishes.
+ * The session of a Claude transcript from its path: `<session>.jsonl`, or a subagent file in
+ * `<session>/subagents/`.
+ */
+const claudeSessionOf = (file: string): string => {
+  const folder = path.dirname(file);
+  return path.basename(folder) === "subagents"
+    ? path.basename(path.dirname(folder))
+    : path.basename(file, ".jsonl");
+};
+
+type JobState = {
+  job: Job;
+  finished: boolean;
+  /** The session of a file source, or undefined until it is known. */
+  session: string | undefined;
+  /** The progress inside a database source. */
+  inside: OpenCodeProgress | null;
+};
+
+/**
+ * Counts the parse work of one read for its progress events: for each runtime, the share of its
+ * work, and the sessions whose sources it read out of the sessions to read. A database source
+ * reports its own share and sessions. It sends a first event at once, so a client sees the
+ * runtimes before the first source finishes.
  */
 export const createUsageProgressTracker = (
   jobs: readonly Job[],
@@ -21,59 +44,91 @@ export const createUsageProgressTracker = (
   now: () => number = Date.now,
 ) => {
   const startedAt = new Date(now()).toISOString();
-  const runtimes = new Map<
-    RuntimeKind,
-    { sources: number; doneSources: number; work: number; doneWork: number; sessions: Set<string> }
-  >();
-  const entryOf = (runtime: RuntimeKind) => {
-    let entry = runtimes.get(runtime);
-    if (!entry) {
-      entry = { sources: 0, doneSources: 0, work: 0, doneWork: 0, sessions: new Set() };
-      runtimes.set(runtime, entry);
+  const states: JobState[] = jobs.map((job) => ({
+    job,
+    finished: false,
+    session: job.runtime === "claude" ? claudeSessionOf(job.path) : undefined,
+    inside: null,
+  }));
+  const runtimes = [...new Set(jobs.map((job) => job.runtime))];
+
+  const runtimeProgress = (runtime: RuntimeKind): UsageIndexProgress["runtimes"][number] => {
+    const own = states.filter((state) => state.job.runtime === runtime);
+    let weight = 0;
+    let done = 0;
+    // A file source counts its bytes; a database source counts as one unit of its own share.
+    for (const state of own) {
+      const size = state.job.format === "opencode" ? 1 : workOf(state.job);
+      weight += size;
+      done += size * (state.finished ? 1 : (state.inside?.fraction ?? 0));
     }
-    return entry;
+    const fileSessions = new Map<string, boolean>();
+    let total: number | null = 0;
+    let read = 0;
+    for (const state of own) {
+      if (state.job.format === "opencode") {
+        const sessions = state.inside?.sessions ?? null;
+        if (sessions?.total == null) total = null;
+        else if (total !== null) total += sessions.total;
+        read += state.finished && sessions?.total != null ? sessions.total : (sessions?.done ?? 0);
+      } else if (state.session === undefined) total = null;
+      else
+        fileSessions.set(
+          state.session,
+          (fileSessions.get(state.session) ?? true) && state.finished,
+        );
+    }
+    for (const finished of fileSessions.values()) if (finished) read += 1;
+    return {
+      runtime,
+      progress: weight === 0 ? 1 : done / weight,
+      done: own.every((state) => state.finished),
+      sessions: { done: read, total: total === null ? null : total + fileSessions.size },
+    };
   };
-  for (const job of jobs) {
-    const entry = entryOf(job.runtime);
-    entry.sources += 1;
-    entry.work += workOf(job);
-  }
+
   let sentAt = Number.NEGATIVE_INFINITY;
   let trailing: ReturnType<typeof setTimeout> | null = null;
-  const snapshot = (phase: UsageIndexProgress["phase"]): UsageIndexProgress => ({
-    phase,
-    startedAt,
-    runtimes: [...runtimes].map(([runtime, entry]) => ({
-      runtime,
-      sources: { done: entry.doneSources, total: entry.sources },
-      work: { done: entry.doneWork, total: entry.work },
-      sessions: entry.sessions.size,
-    })),
-  });
-  const sendNow = (phase: UsageIndexProgress["phase"]) => {
+  let phase: UsageIndexProgress["phase"] = "reading";
+  const sendNow = () => {
     if (trailing) clearTimeout(trailing);
     trailing = null;
     sentAt = now();
-    emit(snapshot(phase));
+    emit({ phase, startedAt, runtimes: runtimes.map(runtimeProgress) });
   };
   /** Sends at most once per interval. A skipped update goes out at the end of the interval. */
-  const send = (phase: UsageIndexProgress["phase"], force: boolean) => {
+  const send = () => {
     const wait = sentAt + EMIT_INTERVAL_MS - now();
-    if (force || wait <= 0) sendNow(phase);
-    else trailing ??= setTimeout(() => sendNow(phase), wait);
+    if (wait <= 0) sendNow();
+    else trailing ??= setTimeout(sendNow, wait);
   };
-  send("reading", true);
+  sendNow();
 
   return {
-    /** Counts a parsed source and the sessions of its units. */
-    finished: (job: Job, units: readonly UsageUnit[]) => {
-      const entry = entryOf(job.runtime);
-      entry.doneSources += 1;
-      entry.doneWork += workOf(job);
-      for (const unit of units) entry.sessions.add(unit.session);
-      send("reading", false);
+    /** Names the session of a file source, such as the root thread of a Codex rollout. */
+    sessionOf: (jobIndex: number, session: string) => {
+      const state = states[jobIndex];
+      if (!state) return;
+      state.session = session;
+      send();
+    },
+    /** The progress inside a database source. */
+    inside: (jobIndex: number, progress: OpenCodeProgress) => {
+      const state = states[jobIndex];
+      if (!state) return;
+      state.inside = progress;
+      send();
+    },
+    finished: (jobIndex: number) => {
+      const state = states[jobIndex];
+      if (!state) return;
+      state.finished = true;
+      send();
     },
     /** The parse ended; the rollup of the new units starts. */
-    summarizing: () => send("summarizing", true),
+    summarizing: () => {
+      phase = "summarizing";
+      sendNow();
+    },
   };
 };

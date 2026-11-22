@@ -12,7 +12,11 @@ import {
 import type { UsageSourceIssue } from "../../ports/usage-index-port";
 import { CODEX_USAGE_LINE_FILTER } from "./usage-codex-lines";
 import { canResumeJsonl, readJsonlLines } from "./usage-jsonl-reader";
-import { openCodeParserStateSchema, readOpenCodeUsage } from "./usage-opencode-reader";
+import {
+  type OpenCodeProgress,
+  openCodeParserStateSchema,
+  readOpenCodeUsage,
+} from "./usage-opencode-reader";
 import type { UsageParseJob, UsageParseResult, UsageResumePoint } from "./usage-worker-protocol";
 
 /** Tracks malformed lines and the dates of the requests around them. */
@@ -125,11 +129,12 @@ const parseJsonl = async (
 const parseOpenCode = async (
   job: UsageParseJob,
   continuation: Continuation,
+  onProgress: (progress: OpenCodeProgress) => void,
 ): Promise<UsageParseResult> => {
   const { parserState } = continuation;
   const previous =
     parserState === null ? null : openCodeParserStateSchema.parse(JSON.parse(parserState));
-  const exit = await Effect.runPromiseExit(readOpenCodeUsage(job.path, previous));
+  const exit = await Effect.runPromiseExit(readOpenCodeUsage(job.path, previous, onProgress));
   if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
   const read = exit.value;
   if (read.kind === "unsupported") {
@@ -163,11 +168,15 @@ const isSourceReadError = (cause: Error): boolean =>
  * from its start otherwise. A source that the host cannot read keeps its earlier units and
  * reports why. Any other failure is a fault of the parser and rejects.
  */
-export const parseUsageSource = async (job: UsageParseJob): Promise<UsageParseResult> => {
+export const parseUsageSource = async (
+  job: UsageParseJob,
+  /** Gets the progress inside a database source. A file source reports only its result. */
+  onProgress: (progress: OpenCodeProgress) => void = () => {},
+): Promise<UsageParseResult> => {
   const continuation = continuationOf(job);
   try {
     return job.format === "opencode"
-      ? await parseOpenCode(job, continuation)
+      ? await parseOpenCode(job, continuation, onProgress)
       : await parseJsonl(job, continuation);
   } catch (cause) {
     if (!(cause instanceof Error) || !isSourceReadError(cause)) throw cause;

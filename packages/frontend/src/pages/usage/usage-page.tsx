@@ -315,10 +315,7 @@ function ResultLine({
 const progressText = (state: UsageProgressState | null): string | null => {
   if (!state) return null;
   if (state.progress.phase === "summarizing") return "Building the daily totals…";
-  const fraction = overallFraction(state.progress);
-  return fraction === null
-    ? "Reading new history…"
-    : `Reading new history · ${Math.floor(fraction * 100)}%`;
+  return `Reading new history · ${Math.floor(overallFraction(state.progress) * 100)}%`;
 };
 
 /** Usage of every Claude Code, Codex, and OpenCode session on the selected host. */

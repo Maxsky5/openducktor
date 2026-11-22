@@ -163,6 +163,29 @@ export const initialCodexParserState = (): CodexParserState => ({
 
 type SessionMeta = Extract<CodexRecord, { type: "session_meta" }>["payload"];
 
+/** The root thread of a rollout. `session_id` names it; older subagents repeat their own ID there. */
+const rootOf = (payload: SessionMeta): string | null => {
+  const thread = payload.id ?? null;
+  const sessionId = payload.session_id ?? null;
+  return sessionId !== null && sessionId !== thread
+    ? sessionId
+    : (payload.parent_thread_id ??
+        payload.source?.subagent?.thread_spawn?.parent_thread_id ??
+        thread);
+};
+
+/** The root session of a rollout from its first line, or null when it is not session metadata. */
+export const codexRootOfFirstLine = (line: Buffer): string | null => {
+  let value: unknown;
+  try {
+    value = JSON.parse(line.toString("utf8"));
+  } catch {
+    return null;
+  }
+  const parsed = recordSchema.safeParse(value);
+  return parsed.success && parsed.data.type === "session_meta" ? rootOf(parsed.data.payload) : null;
+};
+
 const readSessionMeta = (state: CodexParserState, payload: SessionMeta) => {
   // A forked subagent can copy the parent's metadata after its own. Only the first one counts.
   if (state.thread !== null) {
@@ -171,14 +194,7 @@ const readSessionMeta = (state: CodexParserState, payload: SessionMeta) => {
     return;
   }
   state.thread = payload.id ?? null;
-  const sessionId = payload.session_id ?? null;
-  // `session_id` names the root thread. Older subagents repeat their own ID there.
-  state.root =
-    sessionId !== null && sessionId !== state.thread
-      ? sessionId
-      : (payload.parent_thread_id ??
-        payload.source?.subagent?.thread_spawn?.parent_thread_id ??
-        state.thread);
+  state.root = rootOf(payload);
   state.provider = payload.model_provider ?? state.provider;
   state.cwd = payload.cwd ?? state.cwd;
   state.recordEra = isRecordEraVersion(payload.cli_version ?? null);

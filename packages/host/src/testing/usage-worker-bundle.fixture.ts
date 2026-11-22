@@ -122,37 +122,15 @@ try {
     codexOnly.byRuntime.map(({ runtime, figure }) => [runtime, figure.tokens.processed]),
     [["codex", 107]],
   );
-  // The read parsed one rollout, so it reported its progress: the totals first, then the rollup.
-  assert.deepEqual(
-    progressEvents.map(({ phase, runtimes }) => [phase, runtimes]),
-    [
-      [
-        "reading",
-        [
-          {
-            runtime: "codex",
-            sources: { done: 0, total: 1 },
-            work: { done: 0, total: progressEvents[0]?.runtimes[0]?.work.total },
-            sessions: 0,
-          },
-        ],
-      ],
-      [
-        "summarizing",
-        [
-          {
-            runtime: "codex",
-            sources: { done: 1, total: 1 },
-            work: {
-              done: progressEvents[0]?.runtimes[0]?.work.total,
-              total: progressEvents[0]?.runtimes[0]?.work.total,
-            },
-            sessions: 1,
-          },
-        ],
-      ],
-    ],
-  );
+  // The read parsed one rollout, so it reported its progress: the runtime first, then the rollup
+  // with the root session that the first line of the rollout names.
+  assert.deepEqual(progressEvents[0]?.runtimes, [
+    { runtime: "codex", progress: 0, done: false, sessions: { done: 0, total: null } },
+  ]);
+  assert.deepEqual(progressEvents.at(-1)?.runtimes, [
+    { runtime: "codex", progress: 1, done: true, sessions: { done: 1, total: 1 } },
+  ]);
+  assert.equal(progressEvents.at(-1)?.phase, "summarizing");
   const report = await Effect.runPromise(
     service.read({
       range: { kind: "custom", start: "2026-03-01", end: "2026-03-03" },

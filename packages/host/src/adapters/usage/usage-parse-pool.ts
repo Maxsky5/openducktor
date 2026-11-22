@@ -1,4 +1,5 @@
 import type { MessagePort } from "node:worker_threads";
+import type { OpenCodeProgress } from "./usage-opencode-reader";
 import type {
   UsageParseJob,
   UsageParseReply,
@@ -33,6 +34,8 @@ export const createUsageParsePool = (parsers: readonly MessagePort[]) => {
       jobs: readonly Omit<UsageParseJob, "jobId">[],
       commit: (job: Omit<UsageParseJob, "jobId">, result: UsageParseResult) => Promise<void>,
       isCancelled: () => boolean,
+      /** Gets the progress inside a database source, by its index in `jobs`. */
+      onProgress: (jobIndex: number, progress: OpenCodeProgress) => void = () => {},
     ): Promise<void> => {
       if (jobs.length === 0) return;
       const runId = nextRunId++;
@@ -67,6 +70,7 @@ export const createUsageParsePool = (parsers: readonly MessagePort[]) => {
                 const onReply = (reply: UsageParseReply) => {
                   if (reply.runId !== runId) return;
                   if (reply.kind === "result") onResult(reply.result);
+                  else if (reply.kind === "progress") onProgress(reply.jobId, reply.progress);
                   else if (reply.kind === "failed") fail(new UsageParserFault(reply.message));
                   else {
                     parser.off("message", onReply);

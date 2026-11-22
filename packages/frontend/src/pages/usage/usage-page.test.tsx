@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, jest, mock, test } from "bun:test";
 import {
   type UsageFigure,
   type UsageReport,
@@ -128,35 +128,42 @@ describe("UsagePage", () => {
     const progress: ProgressChannel = { listener: null };
     renderPage(() => new Promise<UsageReport>(() => {}), progress);
     await waitFor(() => expect(progress.listener).not.toBeNull());
-    const runtime = (runtime: "claude" | "opencode", done: number, total: number) => ({
-      runtime,
-      sources: { done, total },
-      work:
-        runtime === "opencode" ? { done: 0, total: 0 } : { done: done * 100, total: total * 100 },
-      sessions: done * 3,
-    });
-    await act(() =>
-      progress.listener?.({
-        phase: "reading",
-        startedAt: "2026-11-21T10:00:00.000Z",
-        runtimes: [runtime("claude", 2, 4), runtime("opencode", 0, 1)],
-      }),
-    );
+    const runtime = (
+      runtime: "claude" | "opencode",
+      progress: number,
+      done: number,
+      total: number | null,
+    ) => ({ runtime, progress, done: progress === 1, sessions: { done, total } });
+    jest.useFakeTimers();
+    try {
+      await act(() =>
+        progress.listener?.({
+          phase: "reading",
+          startedAt: "2026-11-21T10:00:00.000Z",
+          runtimes: [runtime("claude", 0.5, 2, 4), runtime("opencode", 0.25, 1, null)],
+        }),
+      );
+      // A short read never shows the card: it waits until the read has run for a moment.
+      expect(screen.queryByText("Reading your agent history")).toBeNull();
+      act(() => jest.advanceTimersByTime(1_500));
+    } finally {
+      jest.useRealTimers();
+    }
     expect(screen.getByText("Reading your agent history")).toBeTruthy();
-    expect(screen.getByText("2 of 4 files · 6 sessions found")).toBeTruthy();
-    expect(screen.getByText("Reading the database")).toBeTruthy();
+    expect(screen.getByText("2 of 4 sessions")).toBeTruthy();
+    expect(screen.getByText("1 session read, counting the rest…")).toBeTruthy();
     expect(
       screen.getByRole("progressbar", { name: "Usage history read" }).getAttribute("aria-valuenow"),
-    ).toBe("50");
+    ).toBe("38");
     await act(() =>
       progress.listener?.({
         phase: "summarizing",
         startedAt: "2026-11-21T10:00:00.000Z",
-        runtimes: [runtime("claude", 4, 4), runtime("opencode", 1, 1)],
+        runtimes: [runtime("claude", 1, 4, 4), runtime("opencode", 1, 3, 3)],
       }),
     );
     expect(screen.getByText("Building the daily totals")).toBeTruthy();
-    expect(screen.getByText("15")).toBeTruthy();
+    expect(screen.getByText("of 7")).toBeTruthy();
   });
 
   test("names a rate download problem under Sources", async () => {

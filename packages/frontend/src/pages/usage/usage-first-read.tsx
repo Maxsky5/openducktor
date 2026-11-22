@@ -15,31 +15,28 @@ import type { UsageProgressState } from "./use-usage-progress";
 
 type RuntimeProgress = UsageIndexProgress["runtimes"][number];
 
-/** The parsed share of a runtime, or null when its sources have no byte measure. */
-const fractionOf = ({ sources, work }: RuntimeProgress): number | null => {
-  if (sources.done === sources.total) return 1;
-  return work.total === 0 ? null : work.done / work.total;
+/** The share of all parse work: each runtime counts alike, because their measures differ. */
+export const overallFraction = (progress: UsageIndexProgress): number => {
+  if (progress.phase === "summarizing" || progress.runtimes.length === 0) return 1;
+  const sum = progress.runtimes.reduce((total, runtime) => total + runtime.progress, 0);
+  return sum / progress.runtimes.length;
 };
 
-/**
- * The parsed share of all byte-measured sources, or null when it is unknown. Once only sources
- * without a byte measure, such as a database, are open, the share is unknown again: a full ring
- * would claim that the read is nearly done.
- */
-export const overallFraction = (progress: UsageIndexProgress): number | null => {
-  if (progress.phase === "summarizing") return 1;
+/** The sessions read of all runtimes, with their total once every runtime knows its total. */
+const sessionsOf = (runtimes: readonly RuntimeProgress[]) => {
   let done = 0;
-  let total = 0;
-  let open = false;
-  for (const runtime of progress.runtimes) {
-    done += runtime.work.done;
-    total += runtime.work.total;
-    if (runtime.sources.done < runtime.sources.total) open = true;
+  let total: number | null = 0;
+  for (const { sessions } of runtimes) {
+    done += sessions.done;
+    total = total === null || sessions.total === null ? null : total + sessions.total;
   }
-  if (total === 0 || (open && done >= total)) return null;
-  const fraction = done / total;
-  return open ? Math.min(fraction, 0.99) : fraction;
+  return { done, total };
 };
+
+const sessionsText = ({ done, total }: RuntimeProgress["sessions"]): string =>
+  total === null
+    ? `${formatCountOf(done, "session")} read, counting the rest…`
+    : `${formatCount(done)} of ${formatCountOf(total, "session")}`;
 
 const formatElapsed = (ms: number): string => {
   const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -60,14 +57,14 @@ const RING_RADIUS = 26;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
 /** A ring that fills with the overall share, or turns while the share is unknown. */
-function ProgressRing({ fraction }: { fraction: number | null }): ReactElement {
+function ProgressRing({ fraction }: { fraction: number }): ReactElement {
   return (
     <div
       role="progressbar"
       aria-label="Usage history read"
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}
+      aria-valuenow={Math.round(fraction * 100)}
       className="relative flex size-16 shrink-0 items-center justify-center"
     >
       <svg
@@ -94,18 +91,16 @@ function ProgressRing({ fraction }: { fraction: number | null }): ReactElement {
           strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={RING_LENGTH}
-          strokeDashoffset={RING_LENGTH * (1 - (fraction ?? 0.25))}
+          strokeDashoffset={RING_LENGTH * (1 - fraction)}
           className="stroke-foreground transition-[stroke-dashoffset] duration-500 ease-out"
         />
       </svg>
-      <span className="text-sm font-semibold tabular-nums">
-        {fraction === null ? null : `${Math.floor(fraction * 100)}%`}
-      </span>
+      <span className="text-sm font-semibold tabular-nums">{`${Math.floor(fraction * 100)}%`}</span>
     </div>
   );
 }
 
-/** One runtime: its bar in its series color, its files, and its sessions. */
+/** One runtime: its bar in its series color, its share, and its sessions. */
 function RuntimeRow({
   entry,
   summarizing,
@@ -113,25 +108,20 @@ function RuntimeRow({
   entry: RuntimeProgress;
   summarizing: boolean;
 }): ReactElement {
-  const fraction = fractionOf(entry);
-  const done = entry.sources.done === entry.sources.total;
   const label = USAGE_RUNTIME_LABELS[entry.runtime];
-  const color = USAGE_RUNTIME_COLORS[entry.runtime];
   return (
     <li className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 py-3">
       <AgentRuntimeIcon runtimeKind={entry.runtime} className="size-5" />
       <div className="flex min-w-0 items-baseline justify-between gap-3">
         <span className="text-sm font-medium">{label}</span>
         <span className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-          {done ? (
+          {entry.done ? (
             <>
               <CircleCheck className="size-3.5 text-success-muted" aria-hidden="true" />
               {summarizing ? "Read" : "Done"}
             </>
-          ) : fraction === null ? (
-            "Reading the database"
           ) : (
-            formatShare(fraction)
+            formatShare(entry.progress)
           )}
         </span>
       </div>
@@ -140,32 +130,26 @@ function RuntimeRow({
         aria-label={`${label} history read`}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={fraction === null ? undefined : Math.round(fraction * 100)}
+        aria-valuenow={Math.round(entry.progress * 100)}
         className="col-start-2 h-1.5 overflow-hidden rounded-full bg-muted"
       >
-        {fraction === null ? (
-          // A database has no byte measure: the bar moves until the database is read.
-          <div
-            className="h-full w-1/3 rounded-full motion-safe:animate-[usage-indeterminate_1.6s_ease-in-out_infinite]"
-            style={{ backgroundColor: color }}
-          />
-        ) : (
-          <div
-            className="h-full origin-left rounded-full transition-transform duration-500 ease-out"
-            style={{ backgroundColor: color, transform: `scaleX(${fraction})` }}
-          />
-        )}
+        <div
+          className="h-full origin-left rounded-full transition-transform duration-500 ease-out"
+          style={{
+            backgroundColor: USAGE_RUNTIME_COLORS[entry.runtime],
+            transform: `scaleX(${entry.progress})`,
+          }}
+        />
       </div>
       <p className="col-start-2 text-xs text-muted-foreground tabular-nums">
-        {formatCount(entry.sources.done)} of {formatCountOf(entry.sources.total, "file")} ·{" "}
-        {formatCountOf(entry.sessions, "session")} found
+        {sessionsText(entry.sessions)}
       </p>
     </li>
   );
 }
 
 /**
- * The first read of a large history: the overall share, the sessions found so far, and one row
+ * The first read of a large history: the overall share, the sessions read so far, and one row
  * for each runtime. Later reads parse only new activity and never show it.
  */
 export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactElement {
@@ -174,7 +158,7 @@ export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactE
   const runtimes = USAGE_RUNTIMES.flatMap((runtime) =>
     progress.runtimes.filter((entry) => entry.runtime === runtime),
   );
-  const sessions = runtimes.reduce((sum, entry) => sum + entry.sessions, 0);
+  const sessions = sessionsOf(runtimes);
   return (
     <section
       aria-labelledby="usage-first-read"
@@ -195,9 +179,16 @@ export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactE
       </div>
       <dl className="grid grid-cols-2 gap-4 rounded-lg bg-muted/40 px-4 py-3">
         <div className="flex flex-col gap-0.5">
-          <dt className="text-xs text-muted-foreground">Sessions found</dt>
-          <dd className="text-2xl font-semibold tracking-tight tabular-nums">
-            {formatCount(sessions)}
+          <dt className="text-xs text-muted-foreground">Sessions read</dt>
+          <dd className="flex items-baseline gap-1.5 tabular-nums">
+            <span className="text-2xl font-semibold tracking-tight">
+              {formatCount(sessions.done)}
+            </span>
+            {sessions.total === null ? null : (
+              <span className="text-sm text-muted-foreground">
+                of {formatCount(sessions.total)}
+              </span>
+            )}
           </dd>
         </div>
         <div className="flex flex-col gap-0.5">

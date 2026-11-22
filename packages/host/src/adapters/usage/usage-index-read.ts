@@ -14,8 +14,11 @@ import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { UsageIndexProgress } from "@openducktor/contracts";
 import type { UsageReadInput, UsageReadResult } from "../../ports/usage-index-port";
 import type { UsageIndexSnapshot, UsageIndexStore, UsageIndexWriter } from "./usage-index-store";
+import { codexRootOfFirstLine } from "./usage-codex-records";
 import { createUsageProgressTracker } from "./usage-index-progress";
+import { readFirstJsonlLine } from "./usage-jsonl-reader";
 import type { UsageParsePool } from "./usage-parse-pool";
+import type { UsageParseJob } from "./usage-worker-protocol";
 import { USAGE_RATES_SOURCE, type UsagePricing } from "./usage-rate-catalog";
 import { type Discovery, discoverUsageSources } from "./usage-source-discovery";
 import { resolveUsageRepositories } from "./usage-repositories";
@@ -29,6 +32,30 @@ const runEffect = async <A, E>(effect: Effect.Effect<A, E>): Promise<A> => {
 };
 
 type Synced = { discovery: Discovery; checkedAtMs: number };
+
+/** Reads at most this many rollout heads at once. */
+const HEAD_READS = 8;
+
+/**
+ * Names the root session of each Codex rollout from its first line. A rollout whose first line
+ * cannot be read counts as its own session; its parse reports the problem.
+ */
+const countCodexSessions = async (
+  jobs: readonly Omit<UsageParseJob, "jobId">[],
+  sessionOf: (jobIndex: number, session: string) => void,
+): Promise<void> => {
+  const indexes = jobs.flatMap((job, index) => (job.runtime === "codex" ? [index] : []));
+  let next = 0;
+  const reader = async () => {
+    for (let index = indexes[next++]; index !== undefined; index = indexes[next++]) {
+      const job = jobs[index];
+      if (!job) continue;
+      const line = await readFirstJsonlLine(job.path, job.format === "jsonl_zst").catch(() => null);
+      sessionOf(index, (line && codexRootOfFirstLine(line)) ?? `file:${job.path}`);
+    }
+  };
+  await Promise.all(Array.from({ length: HEAD_READS }, reader));
+};
 
 export type UsageProgressListener = (progress: UsageIndexProgress) => void;
 
@@ -57,6 +84,8 @@ const syncSources = (
     for (const sourceId of plan.removeIds) yield* writer.removeSource(sourceId);
     const progress =
       onProgress && plan.jobs.length > 0 ? createUsageProgressTracker(plan.jobs, onProgress) : null;
+    // The root sessions of Codex rollouts come from their first lines, read beside the parse.
+    const codexSessions = progress ? countCodexSessions(plan.jobs, progress.sessionOf) : null;
     yield* Effect.tryPromise({
       try: () =>
         pool.run(
@@ -74,12 +103,14 @@ const syncSources = (
                   mode: result.mode,
                   units: result.units,
                 })
-                .pipe(Effect.tap(() => Effect.sync(() => progress?.finished(job, result.units)))),
+                .pipe(Effect.tap(() => Effect.sync(() => progress?.finished(result.jobId)))),
             ),
           isCancelled,
+          (jobIndex, inside) => progress?.inside(jobIndex, inside),
         ),
       catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
     });
+    if (codexSessions) yield* Effect.promise(() => codexSessions);
     progress?.summarizing();
     return { discovery, checkedAtMs };
   });

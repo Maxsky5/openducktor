@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { removeTestDirectory } from "../../test-support/temp-directory";
-import { readOpenCodeUsage } from "./usage-opencode-reader";
+import { type OpenCodeProgress, readOpenCodeUsage } from "./usage-opencode-reader";
 
 let directory = "";
 let databasePath = "";
@@ -215,6 +215,36 @@ describe("readOpenCodeUsage", () => {
     const after = await Effect.runPromise(readOpenCodeUsage(databasePath, same.state));
     if (after.kind !== "units") throw new Error("Expected units.");
     expect(after.mode).toBe("replace");
+  });
+
+  test("reports the share of its scan and the root sessions that it passed", async () => {
+    {
+      using database = new Database(databasePath);
+      const insert = database.prepare(
+        "INSERT INTO session_message VALUES (?, 'root', 'user', 0, 1, 1, '{}')",
+      );
+      database.transaction(() => {
+        for (let index = 0; index < 25_000; index++) insert.run(`u${index}`);
+      })();
+    }
+    const events: OpenCodeProgress[] = [];
+    const first = await Effect.runPromise(
+      readOpenCodeUsage(databasePath, null, (progress) => events.push(progress)),
+    );
+    if (first.kind !== "units") throw new Error("Expected units.");
+    // A first read knows its two root sessions at once, and the share only grows.
+    expect(events.every((event) => event.sessions.total === 2)).toBe(true);
+    const fractions = events.map((event) => event.fraction);
+    expect(fractions).toEqual(fractions.toSorted((a, b) => a - b));
+    // The fork ends in the first row window; the root session has rows in the second one too.
+    expect(events.map((event) => event.sessions.done).filter((done) => done > 0)).toEqual([1, 2]);
+    expect(events.at(-1)).toEqual({ fraction: 1, sessions: { done: 2, total: 2 } });
+    // A read that continues from a cursor does not know its sessions.
+    const next: OpenCodeProgress[] = [];
+    await Effect.runPromise(
+      readOpenCodeUsage(databasePath, first.state, (progress) => next.push(progress)),
+    );
+    expect(next.at(-1)).toEqual({ fraction: 1, sessions: { done: 0, total: null } });
   });
 
   test("reports a database without the known tables as unsupported", async () => {

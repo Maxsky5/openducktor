@@ -20,7 +20,14 @@ const work = async (indexPort: MessagePort, run: UsageParseRun) => {
       indexPort.postMessage({
         kind: "result",
         runId: run.runId,
-        result: await parseUsageSource({ ...job, jobId: index }),
+        result: await parseUsageSource({ ...job, jobId: index }, (progress) =>
+          indexPort.postMessage({
+            kind: "progress",
+            runId: run.runId,
+            jobId: index,
+            progress,
+          } satisfies UsageParseReply),
+        ),
       } satisfies UsageParseReply);
     } catch (cause) {
       // The run stops at once: no parser claims a job after a fault.
