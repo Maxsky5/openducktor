@@ -23,7 +23,7 @@ mock.module("@/components/layout/host-connection", () => ({
 const { ProcessesProvider } = await import("./processes-context");
 const { ProcessesFloatingWindow, ProcessesRailButton } = await import("./processes-surfaces");
 const { FloatingWindowLayer } = await import("@/components/ui/floating-window");
-const { TaskServerLinks } = await import("./task-server-links");
+const { TaskServerLinks, TaskServerPortsMenu } = await import("./task-server-links");
 
 const workspace = createWorkspaceRecordFixture({
   workspaceId: "repo",
@@ -137,6 +137,12 @@ const mount = (
               <div role="article" aria-label="Task card" onClick={openCard}>
                 <TaskServerLinks taskId="task-1" />
               </div>
+              <header aria-label="Session of a task with a port">
+                <TaskServerPortsMenu taskId="task-1" />
+              </header>
+              <header aria-label="Session of a task without a port">
+                <TaskServerPortsMenu taskId="task-2" />
+              </header>
               <ProcessesFloatingWindow />
             </ProcessesProvider>
           </FloatingWindowLayer>
@@ -202,6 +208,17 @@ test("shows the task that the user works on first and folds the other workspaces
   const header = within(other).getByRole("button", { name: /Other/ });
   expect(header.getAttribute("aria-expanded")).toBe("false");
   expect(within(other).queryByRole("button", { name: "docker compose up" })).toBeNull();
+});
+
+test("counts the task ports in the session header and opens one from its list", async () => {
+  const { view, openExternalUrl } = mount();
+  const header = view.getByRole("banner", { name: "Session of a task with a port" });
+  fireEvent.click(await within(header).findByRole("button", { name: "1 port running" }));
+  const list = await view.findByRole("dialog", { name: "Ports of this task" });
+  fireEvent.click(within(list).getByRole("button", { name: /^Open http:\/\/127\.0\.0\.1:5173\// }));
+  await waitFor(() => expect(openExternalUrl).toHaveBeenCalledWith("http://127.0.0.1:5173/"));
+  const empty = view.getByRole("banner", { name: "Session of a task without a port" });
+  expect(empty.childElementCount).toBe(0);
 });
 
 test("opens a task port from its chip without opening the card", async () => {

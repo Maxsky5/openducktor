@@ -149,7 +149,8 @@ The user checks the processes while working on something else, so no surface tak
 | Level | Surface | What it shows |
 | --- | --- | --- |
 | Ambient | Badge on the Processes button of the rail | The number of running commands, while the flyout and the window are closed |
-| Ambient | Port chips on the task card, the task sheet, and the Agent Studio header | The web ports of the task. A chip opens its URL. |
+| Ambient | Port chips on the task card and the task sheet | The web ports of the task. A chip opens its URL. |
+| Ambient | Ports button in the Agent Studio header | The number of web ports of the task. A click lists the ports, and each one opens its URL. Without a web port, the button does not show. |
 | Glance | Flyout beside the rail button | The list. The app stays usable. A click outside or Escape closes it. |
 | Detach | Floating window over the app | The same list, until the user closes it or attaches it back to the rail |
 
