@@ -311,6 +311,7 @@ The page does not parse chat text to create a pull request.
 | Renderer session view | `packages/frontend-core/src/sessions/agent-orchestrator/session-read-model/*` | Client projection |
 | Transcript history | Selected runtime history adapter | Runtime adapter |
 | Host execution errors | Effect and tagged errors in `packages/host/src` | Host |
+| Usage figures | Native runtime history, through the derived index `<config-root>/usage-index.sqlite` | Host usage adapter, see [Usage](usage.md) |
 | Client server-read cache | Query modules under `packages/frontend-core/src/queries` | Frontend core |
 
 ## Replaceable boundaries

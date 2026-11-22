@@ -29,6 +29,7 @@ Read [the TanStack Query cache strategy](tanstack-query-cache-strategy.md) befor
 The app uses shadcn semantic tokens with Tailwind CSS v4. Theme tokens are in `packages/theme/src/tokens.css`, which `packages/frontend/src/styles.css` imports. Motion tokens are in `packages/frontend/src/components/ui/motion.css` and `motion.ts`. Dialog motion rules are in `packages/frontend/src/components/ui/dialog.css`.
 
 - Use a component from `packages/frontend/src/components/ui` when one exists.
+- For a choice of a few options, such as a filter or a view, use `ToggleTabs`. For tabs with panels, use `Tabs`. Do not use `SegmentedControlRoot` in new UI.
 - Use semantic tokens for structural UI.
 - Apply semantic tokens with `className` at the use site.
 - Keep base shadcn components free of feature-specific hardcoded colors.
