@@ -54,7 +54,7 @@ describe("taskWorkflowSteps", () => {
     ];
     const [spec, , build] = taskWorkflowSteps(task, groups);
     expect(spec).toMatchObject({ stateLabel: "Done", session: null });
-    expect(build).toMatchObject({ stateLabel: "Needs input", working: false });
+    expect(build).toMatchObject({ stateLabel: "Needs input", liveMark: null });
     expect(build?.session?.externalSessionId).toBe("b-2");
   });
 
@@ -82,7 +82,7 @@ describe("taskWorkflowSteps", () => {
       { role: "spec", roleLabel: "Spec", rows: [row("s-1", "running")] },
     ];
     const [spec] = taskWorkflowSteps(createTaskCardFixture(), groups);
-    expect(spec).toMatchObject({ stateLabel: "In progress", working: true });
+    expect(spec).toMatchObject({ stateLabel: "In progress", liveMark: "spinner" });
   });
 
   test("marks a step whose newest session waits on background tasks", () => {
@@ -91,5 +91,6 @@ describe("taskWorkflowSteps", () => {
     ];
     const [, , build] = taskWorkflowSteps(createTaskCardFixture(), groups);
     expect(build?.state).toMatchObject({ liveSession: "running", waitingOnBackground: true });
+    expect(build?.liveMark).toBe("hourglass");
   });
 });

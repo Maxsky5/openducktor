@@ -89,6 +89,7 @@ describe("buildTaskCardModel", () => {
       roleLabel: "Builder",
       statusLabel: "Waiting input",
       state: "waiting_input",
+      mark: "play-circle",
     });
     expect(model.primary?.appearance).toBe("waiting");
     expect(model.liveSession).toEqual({
@@ -132,6 +133,7 @@ describe("buildTaskCardModel", () => {
       roleLabel: "Builder",
       statusLabel: "Running",
       state: "background",
+      mark: "hourglass",
     });
     expect(model.liveSession).toMatchObject({
       label: "Builder running and waiting on background tasks",

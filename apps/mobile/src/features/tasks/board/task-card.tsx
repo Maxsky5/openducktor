@@ -412,8 +412,11 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: withAlpha(theme.palette.sky500, 0.58),
     boxShadow: `0 0 9px ${withAlpha(theme.palette.sky500, 0.22)}`,
   },
-  // A session that waits on background tasks: a still violet border, with no glow or ray.
-  backgroundFrame: { borderColor: theme.desktop.pendingBorder },
+  // `.kanban-background-card`: the pending ring and its glow, with no ray.
+  backgroundFrame: {
+    borderColor: theme.desktop.pendingBorder,
+    boxShadow: `0 0 0 1px ${withAlpha(theme.desktop.pendingBorder, 0.72)}, 0 0 18px ${withAlpha(theme.desktop.pendingRing, 0.3)}`,
+  },
   // `.kanban-waiting-input-card`: the warning ring and its glow.
   waitingFrame: {
     borderColor: theme.desktop.warningBorder,

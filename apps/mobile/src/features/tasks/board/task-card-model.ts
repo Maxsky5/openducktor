@@ -70,8 +70,13 @@ export type TaskCardPrimary = {
   command: boolean;
   roleIconHint?: WorkflowIcon | undefined;
   disabled: boolean;
-  /** The active session that the primary control opens, with its state label. */
-  activeSession: { roleLabel: string; statusLabel: string; state: TaskCardSessionState } | null;
+  /** The active session that the primary control opens, with its state label and mark. */
+  activeSession: {
+    roleLabel: string;
+    statusLabel: string;
+    state: TaskCardSessionState;
+    mark: IconName;
+  } | null;
 };
 
 type TaskCardMenuItem = {
@@ -134,6 +139,13 @@ const PRIMARY_APPEARANCES = {
   warning: "outline",
 } as const satisfies Record<TaskActionTone, TaskCardPrimaryAppearance>;
 
+/** As on desktop: a play mark, or a still hourglass while the session waits on background tasks. */
+const SESSION_MARKS = {
+  running: "play-circle",
+  waiting_input: "play-circle",
+  background: "hourglass",
+} as const satisfies Record<TaskCardSessionState, IconName>;
+
 const SESSION_APPEARANCES = {
   running: "running",
   waiting_input: "waiting",
@@ -185,6 +197,7 @@ export const buildTaskCardModel = ({
           isWaitingInput: sessionState === "waiting_input",
         }),
         state: sessionState,
+        mark: SESSION_MARKS[sessionState],
       }
     : null;
   const liveSession: TaskCardLiveSession | null =

@@ -124,8 +124,8 @@ export function CardPrimaryAction({
         containerStyle={container}
         style={control}
       >
-        {/* The desktop chip: a play mark in the chip text color in each state. */}
-        <Icon name="play-circle" size={14} colorStyle={foreground} />
+        {/* The desktop chip: its mark in the chip text color. */}
+        <Icon name={session.mark} size={14} colorStyle={foreground} />
         <Text variant="subhead" weight="semibold" style={[styles.label, foreground]}>
           {session.roleLabel}
         </Text>
