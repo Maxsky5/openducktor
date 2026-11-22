@@ -58,6 +58,7 @@ const RUNTIME_NAMES = {
   claude: "Claude Code",
   codex: "Codex",
   opencode: "OpenCode",
+  antigravity: "Antigravity",
 } satisfies Record<RuntimeKind, string>;
 
 /** A stable ID of a text that does not show the text: two 32-bit FNV-1a hashes. */

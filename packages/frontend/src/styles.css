@@ -121,6 +121,7 @@
   --color-chart-runtime-claude: var(--chart-runtime-claude);
   --color-chart-runtime-codex: var(--chart-runtime-codex);
   --color-chart-runtime-opencode: var(--chart-runtime-opencode);
+  --color-chart-runtime-antigravity: var(--chart-runtime-antigravity);
   --color-chart-input: var(--chart-input);
   --color-chart-cache-read: var(--chart-cache-read);
   --color-chart-cache-write: var(--chart-cache-write);

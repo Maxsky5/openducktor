@@ -61,7 +61,7 @@ const statSource = (
   const stats = statOf(file);
   if (stats === null) return null;
   // A database writes to its write-ahead log first, so the log is part of its fingerprint.
-  const log = format === "opencode" ? statOf(`${file}-wal`) : null;
+  const log = format === "opencode" || format === "antigravity" ? statOf(`${file}-wal`) : null;
   return {
     runtime,
     path: file,
@@ -118,6 +118,12 @@ const openCodeFiles = (location: UsageLocations["opencode"], entriesOf: ListFold
     .filter((entry) => entry.isFile() && /^opencode.*\.db$/.test(entry.name))
     .map((entry) => path.join(location.directory, entry.name));
 };
+
+/** `conversations/<cascade>.db`: one database for each conversation and sub-agent. */
+const antigravityFiles = (directory: string, entriesOf: ListFolder): string[] =>
+  entriesOf(directory)
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".db"))
+    .map((entry) => path.join(directory, entry.name));
 
 /**
  * Lists the native history sources of each runtime. A folder or file that cannot be read gives
@@ -181,6 +187,12 @@ export const discoverUsageSources = (
     openCodeFiles(locations.opencode, entries).map((file) => ({
       file,
       format: "opencode" as const,
+    })),
+  );
+  collect("antigravity", (entries) =>
+    antigravityFiles(locations.antigravity, entries).map((file) => ({
+      file,
+      format: "antigravity" as const,
     })),
   );
   return discovery;

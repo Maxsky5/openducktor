@@ -150,7 +150,7 @@ describe("UsagePage", () => {
     );
     // The skeleton stays half a second, then the card fades in.
     expect(await screen.findByText("Finding your agent history")).toBeTruthy();
-    expect(screen.getAllByText("Finding sessions…")).toHaveLength(3);
+    expect(screen.getAllByText("Finding sessions…")).toHaveLength(4);
     await act(() =>
       progress.listener?.({
         phase: "reading",
@@ -163,8 +163,8 @@ describe("UsagePage", () => {
     expect(screen.getByText("Reading your agent history")).toBeTruthy();
     expect(screen.getByText("2 of 4 sessions")).toBeTruthy();
     expect(screen.getByText("1 session read, counting the rest…")).toBeTruthy();
-    // Codex has no history on this host.
-    expect(screen.getByText("No history")).toBeTruthy();
+    // Codex and Antigravity have no history on this host.
+    expect(screen.getAllByText("No history")).toHaveLength(2);
     // The parse is 80% of the ring: (50% + 25%) / 2 of it, before OpenCode knows its sessions.
     expect(
       screen.getByRole("progressbar", { name: "Usage history read" }).getAttribute("aria-valuenow"),
@@ -208,7 +208,7 @@ describe("UsagePage", () => {
       jest.useRealTimers();
     }
     expect(screen.getByText("Reading your agent history")).toBeTruthy();
-    expect(screen.getAllByText("Up to date")).toHaveLength(2);
+    expect(screen.getAllByText("Up to date")).toHaveLength(3);
   });
 
   test("keeps the skeleton half a second, then reveals the result", async () => {

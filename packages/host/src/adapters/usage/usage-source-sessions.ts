@@ -15,6 +15,12 @@ export const claudeSessionOf = (file: string): string => {
     : path.basename(file, ".jsonl");
 };
 
+/**
+ * The conversation of an Antigravity database from its path: `<cascade>.db`. A sub-agent runs in
+ * its own conversation, so the progress counts it as a session.
+ */
+export const antigravitySessionOf = (file: string): string => path.basename(file, ".db");
+
 /** Reads at most this many rollout heads at once. */
 const HEAD_READS = 8;
 

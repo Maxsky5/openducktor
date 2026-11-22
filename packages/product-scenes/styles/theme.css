@@ -153,6 +153,7 @@
   --chart-runtime-claude: #e0622b;
   --chart-runtime-codex: #0a9396;
   --chart-runtime-opencode: #7c3aed;
+  --chart-runtime-antigravity: #1a73e8;
   /*
    * Token categories, apart from the runtime hues. Cache reads, most of all tokens, take a quiet
    * blue-gray. The three small types are one blue ramp with steps that full and deficient color
@@ -305,6 +306,7 @@
   --chart-runtime-claude: #e0622b;
   --chart-runtime-codex: #13a3a6;
   --chart-runtime-opencode: #8b5cf6;
+  --chart-runtime-antigravity: #669df6;
   --chart-cache-read: #3f4b63;
   --chart-cache-write: #bfdbfe;
   --chart-input: #60a5fa;

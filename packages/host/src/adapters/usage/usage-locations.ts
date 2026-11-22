@@ -8,6 +8,8 @@ export type UsageLocations = {
   codex: readonly string[];
   /** The OpenCode data folder, and the database file when `OPENCODE_DB` names one. */
   opencode: { directory: string; databaseFile: string | null };
+  /** The Antigravity CLI conversation folder. The CLI reads no variable that moves it. */
+  antigravity: string;
 };
 
 const setting = (env: NodeJS.ProcessEnv, name: string): string | null => {
@@ -36,5 +38,6 @@ export const resolveUsageLocations = (env: NodeJS.ProcessEnv, homeDir: string): 
           ? null
           : path.resolve(openCodeDirectory, openCodeDatabase),
     },
+    antigravity: path.join(homeDir, ".gemini", "antigravity-cli", "conversations"),
   };
 };

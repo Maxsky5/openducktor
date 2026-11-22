@@ -90,7 +90,7 @@ describe("createUsageReportService", () => {
     );
     expect(reads).toHaveLength(1);
     expect(reads[0]?.range).toEqual({ start: "2026-10-23", end: "2026-11-21" });
-    expect(reads[0]?.runtimes).toEqual(["opencode", "codex", "claude"]);
+    expect(reads[0]?.runtimes).toEqual(["opencode", "codex", "claude", "antigravity"]);
     expect(reads[0]?.workspaces).toEqual([
       {
         workspaceId: "odt",

@@ -29,7 +29,12 @@ const input = (runtimes: readonly RuntimeKind[]): UsageIndexReadInput => ({
   workspaces: [],
   refresh: false,
   separateFolders: [],
-  locations: { claude: "/c", codex: [], opencode: { directory: "/o", databaseFile: null } },
+  locations: {
+    claude: "/c",
+    codex: [],
+    opencode: { directory: "/o", databaseFile: null },
+    antigravity: "/a",
+  },
 });
 
 /** A queue over a fake index that logs its calls. A read of one runtime skips history. */
@@ -97,7 +102,7 @@ describe("createUsageIndexQueue", () => {
     const done = idle();
     queue.read(1, input(knownRuntimeKindValues));
     await done;
-    expect(calls).toEqual(["rates", "read:opencode+codex+claude:first"]);
+    expect(calls).toEqual(["rates", "read:opencode+codex+claude+antigravity:first"]);
     expect(
       replies.map((reply) => (reply.kind === "progress" ? reply.progress.phase : reply.kind)),
     ).toEqual(["preparing", "reading", "result", "idle"]);
@@ -110,7 +115,7 @@ describe("createUsageIndexQueue", () => {
     queue.read(2, input(knownRuntimeKindValues));
     queue.cancel(2);
     await done;
-    expect(calls).toEqual(["rates", "read:opencode+codex+claude:later"]);
+    expect(calls).toEqual(["rates", "read:opencode+codex+claude+antigravity:later"]);
     expect(replies.filter((reply) => reply.kind !== "progress")).toEqual([
       { kind: "result", requestId: 1, result: FIGURES },
       { kind: "cancelled", requestId: 2 },
@@ -141,7 +146,7 @@ describe("createUsageIndexQueue", () => {
       "catchUp:codex",
       "stop",
       "rates",
-      "read:opencode+codex+claude:later",
+      "read:opencode+codex+claude+antigravity:later",
       "rates",
       "catchUp:codex",
     ]);

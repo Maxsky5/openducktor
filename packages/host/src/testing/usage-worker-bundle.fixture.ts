@@ -156,9 +156,14 @@ try {
       ["opencode", 0, 0],
       ["codex", 107, 1],
       ["claude", 100, 1],
+      ["antigravity", 0, 0],
     ],
   );
   assert.equal(report.coverage.find((entry) => entry.runtime === "opencode")?.state, "no_history");
+  assert.equal(
+    report.coverage.find((entry) => entry.runtime === "antigravity")?.state,
+    "no_history",
+  );
   // 40 new input, 60 cache reads, and 7 output tokens at the downloaded rates.
   assert.equal(
     report.byRuntime.find((entry) => entry.runtime === "codex")?.figure.cost.usd,
