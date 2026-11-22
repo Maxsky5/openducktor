@@ -193,8 +193,10 @@ export function TaskDetailsSheetHeader({
       </div>
 
       <div className="flex flex-wrap items-start gap-2">
-        <TaskHeaderBadges task={task} />
-        <TaskServerPortsMenu taskId={task.id} />
+        {/* As tall as the PR buttons, so the badges line up with them. */}
+        <TaskHeaderBadges task={task} className="min-h-8">
+          <TaskServerPortsMenu taskId={task.id} />
+        </TaskHeaderBadges>
         {showDetectPullRequest || showUnlinkPullRequest ? (
           <TaskPullRequestActions
             disabledReason={detectPullRequestDisabledReason}
