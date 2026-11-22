@@ -24,6 +24,7 @@ import {
 import {
   type AntigravityToolState,
   mergeAntigravityToolState,
+  toAntigravityEditPreview,
   toAntigravityToolPart,
 } from "./antigravity-tool-parts";
 
@@ -446,6 +447,13 @@ export class AntigravityTranscript {
       phase: "finish",
       reason: "stop",
     });
+  }
+
+  /** Shows the change of a file edit that waits for approval, when its request shows it. */
+  previewFileEdit(toolCall: ToolCallUpdate): AgentEvent[] {
+    const content = toAntigravityEditPreview(toolCall);
+    if (!content || !this.tools.has(toolCall.toolCallId)) return [];
+    return this.applyTool({ toolCallId: toolCall.toolCallId, content });
   }
 
   private applyTool(update: ToolCall | ToolCallUpdate): AgentEvent[] {

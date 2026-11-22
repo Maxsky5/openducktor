@@ -614,6 +614,72 @@ describe("AntigravitySessionController", () => {
     ).toEqual([]);
   });
 
+  test("shows the change of a file edit that waits for approval, but not of an append", async () => {
+    const harness = await createConnectedController();
+    const { ref } = await startBuildSession(harness);
+    void sendText(harness, ref, "Edit");
+    const prompt = await harness.fake.waitForPrompts(1);
+    type EditInput = {
+      Path: string;
+      Target?: string;
+      Replacement?: string;
+      Content?: string;
+      Append?: boolean;
+    };
+    const ask = async (toolCallId: string, name: string, rawInput: EditInput, oldText?: string) => {
+      const toolCall = {
+        toolCallId,
+        name,
+        kind: "edit" as const,
+        title: "File notes.txt",
+        rawInput,
+      };
+      await prompt.client.notify(methods.client.session.update, {
+        sessionId: ref.externalSessionId,
+        update: { sessionUpdate: "tool_call", status: "in_progress", ...toolCall },
+      });
+      void prompt.client.request(methods.client.session.requestPermission, {
+        sessionId: ref.externalSessionId,
+        toolCall: {
+          ...toolCall,
+          content: [
+            { type: "diff", path: "/repo/notes.txt", newText: "four", ...(oldText && { oldText }) },
+          ],
+        },
+        options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+      });
+      await settle();
+      const part = harness.changes
+        .flatMap((change) => change.events)
+        .findLast(
+          (event) =>
+            event.type === "assistant_part" &&
+            event.part.kind === "tool" &&
+            event.part.callId === toolCallId,
+        );
+      return part?.type === "assistant_part" && part.part.kind === "tool"
+        ? part.part.fileDiffs
+        : null;
+    };
+
+    expect(
+      await ask(
+        "edit-1",
+        "edit_file",
+        { Path: "/repo/notes.txt", Target: "three", Replacement: "four" },
+        "three",
+      ),
+    ).toMatchObject([{ file: "/repo/notes.txt", type: "modified", additions: 1, deletions: 1 }]);
+    // An append request has no earlier text, so it would look like a new file.
+    expect(
+      await ask("append-1", "write_file", {
+        Path: "/repo/notes.txt",
+        Content: "four",
+        Append: true,
+      }),
+    ).toBeUndefined();
+  });
+
   test("stops the exact session and closes its pending approvals", async () => {
     const harness = await createConnectedController();
     const { ref } = await startBuildSession(harness);

@@ -329,6 +329,9 @@ export class AntigravityLiveSession {
       return Promise.resolve(rejectAntigravityPermission(params));
     }
     if (this.approvesRequests) return Promise.resolve(allowAntigravityPermissionOnce(params));
+    // The row of a file edit shows its change while the user decides.
+    const preview = this.transcript.previewFileEdit(params.toolCall);
+    if (preview.length > 0) this.publishInBackground(preview);
     const requestId = randomUUID();
     const { promise, resolve } = Promise.withResolvers<RequestPermissionResponse>();
     this.pendingApprovals.set(requestId, {

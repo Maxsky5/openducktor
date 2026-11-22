@@ -89,6 +89,19 @@ const DISPLAY_LABELS = new Map([
 
 const FILE_TOOL_KINDS: ReadonlySet<ToolKind> = new Set(["read", "edit", "delete", "move"]);
 
+/**
+ * The diff that a permission request of a file edit gives before the edit runs. The request of an
+ * append or an overwrite has no earlier text, so it would show a new file: it gives no preview, and
+ * the row keeps its path until the edit completes with the full diff.
+ */
+export const toAntigravityEditPreview = (toolCall: ToolCallUpdate): ToolCallContent[] | null => {
+  if (toolCall.kind !== "edit") return null;
+  const input = readAntigravityToolInput(toolCall);
+  if (input?.append === true || input?.overwrite === true) return null;
+  const diffs = (toolCall.content ?? []).filter((entry) => entry.type === "diff");
+  return diffs.length > 0 ? diffs : null;
+};
+
 const DECLINED_TOOL_ERROR = "The user or a policy declined this tool call.";
 
 /** Builds the shared tool part of a native tool call. */
