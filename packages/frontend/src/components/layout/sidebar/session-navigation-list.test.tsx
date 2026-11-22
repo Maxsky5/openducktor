@@ -166,6 +166,31 @@ describe("SessionNavigationList", () => {
     }
   });
 
+  test("gives a running row that waits on background tasks a calm still cue", () => {
+    renderList(
+      navigationModel({
+        running: [
+          workspaceSessionEntry("waiting", {
+            status: { kind: "running", waitingOnBackground: true },
+          }),
+        ],
+      }),
+    );
+
+    const row = screen.getByRole("button", { name: /waiting/ });
+    expect(row.getAttribute("aria-label")).toContain("Running and waiting on background tasks");
+    // A running surface in the violet Background colors, not the plain surface of an idle row.
+    expect(row.className).toContain("bg-pending-surface");
+    expect(row.className).not.toContain("bg-sidebar ");
+    expect(row.querySelector(".running-status-dot")).toBeNull();
+    const status = within(row).getByRole("img", {
+      name: "Running and waiting on background tasks",
+    });
+    expect(status.querySelector(".lucide-hourglass")?.getAttribute("class")).toContain(
+      "text-pending-muted",
+    );
+  });
+
   test("gives an attention entry the warning cue instead of the running style", () => {
     const entry = taskSessionEntry("asking", {
       role: "qa",

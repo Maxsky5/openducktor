@@ -18,6 +18,11 @@ import { agentModelInfoParts } from "@openducktor/frontend-core/lib/agent-model-
 import { statusBadgeClassName } from "@/lib/task-status-presentation";
 import { statusLabel } from "@openducktor/frontend-core/tasks/presentation/task-status-presentation";
 import { cn } from "@/lib/utils";
+import {
+  AGENT_SESSION_BACKGROUND_ICON,
+  AGENT_SESSION_BACKGROUND_TEXT_CLASS,
+} from "@/lib/agent-session-background-styles";
+import { AGENT_SESSION_BACKGROUND_DESCRIPTION } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { runtimeDefinitionsQueryOptions } from "@openducktor/frontend-core/queries/runtime";
 import { createHostRuntimeCatalogOperations } from "@openducktor/frontend-core/runtime/runtime-catalog-operations";
 import { workspaceSessionWorkingDirectory } from "@openducktor/frontend-core/sessions/agent-orchestrator/session-read-model/workspace-session-records";
@@ -28,6 +33,7 @@ import type {
 } from "@openducktor/frontend-core/sessions/navigation/session-navigation-read-model";
 import { useWorkspaceActivityProjection } from "@openducktor/frontend-core/workspace-activity/workspace-activity-context";
 import { sessionEntryTimeText } from "@openducktor/frontend-core/sessions/navigation/session-navigation-entry-labels";
+import { isSessionEntryWaitingOnBackground } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import { SessionEntryRuntimeIcon } from "./session-navigation-parts";
 import { SessionPreviewPendingRequests } from "./session-preview-pending-input";
 import { useSessionMenu } from "./session-menu-provider";
@@ -81,6 +87,7 @@ export function SessionPreviewContent({
           <SessionPreviewModelDetails entry={entry} model={details.model} />
           <SessionPreviewCommands entry={entry} />
         </div>
+        {isSessionEntryWaitingOnBackground(entry) ? <SessionPreviewBackgroundStatus /> : null}
         {statusIssue ? (
           <p
             role="alert"
@@ -106,6 +113,16 @@ export function SessionPreviewContent({
         </Button>
       </footer>
     </>
+  );
+}
+
+function SessionPreviewBackgroundStatus(): ReactElement {
+  const BackgroundIcon = AGENT_SESSION_BACKGROUND_ICON;
+  return (
+    <p className={cn("flex items-center gap-1.5 text-xs", AGENT_SESSION_BACKGROUND_TEXT_CLASS)}>
+      <BackgroundIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      {AGENT_SESSION_BACKGROUND_DESCRIPTION}
+    </p>
   );
 }
 

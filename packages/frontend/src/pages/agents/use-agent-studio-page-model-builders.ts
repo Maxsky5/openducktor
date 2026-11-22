@@ -78,6 +78,7 @@ export const buildWorkflowModelContext = ({
         return {
           session: session ? agentSessionIdentityKey(session) : null,
           liveSession: liveSessionByRole[workflowRole] ?? "none",
+          waitingOnBackground: session?.waitingOnBackground ?? false,
         };
       })
     : [];

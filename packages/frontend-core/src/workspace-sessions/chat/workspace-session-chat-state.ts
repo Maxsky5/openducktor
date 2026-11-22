@@ -4,7 +4,8 @@ import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
 import { workspaceSessionTitle } from "../../sessions/agent-orchestrator/session-read-model/workspace-session-records";
 import { canResumeInterruptedTurn } from "../../lib/agent-session-interrupted-turn";
 import {
-  getAgentSessionActivityStateFromSession,
+  getObservedAgentSessionActivityState,
+  isAgentSessionActivityActive,
   isAgentSessionActivityWorking,
   isAgentSessionForegroundActive,
   visibleSessionActivity,
@@ -83,14 +84,7 @@ export function projectWorkspaceSessionChatState({
 }) {
   const observationReady = readModelLoadState.kind === "ready";
   const targetFault = fault?.source === "workspace-target" ? fault : null;
-  // A snapshot already reported this session, so task-record reads must not hide its activity.
-  // Only a live-stream failure makes the reported activity unknown.
-  const liveStreamFailed =
-    readModelLoadState.kind === "failed" && readModelLoadState.source === "live-stream";
-  const activityKnown =
-    observationReady || (!liveStreamFailed && session?.livePresence === "present");
-  const observedActivity =
-    session && activityKnown ? getAgentSessionActivityStateFromSession(session) : null;
+  const observedActivity = getObservedAgentSessionActivityState(readModelLoadState, session);
   const statusUnavailableReason =
     session?.statusUnavailableReason ?? (fault?.statusUnavailable ? fault.message : null);
   const activityState = visibleSessionActivity(observedActivity, statusUnavailableReason);
@@ -123,8 +117,7 @@ export function projectWorkspaceSessionChatState({
     transcriptTarget: identity
       ? { ...identity, sessionScope: { kind: "repository" as const, workspaceId } }
       : null,
-    canStopSession:
-      isAgentSessionActivityWorking(observedActivity) || observedActivity === "waiting_input",
+    canStopSession: isAgentSessionActivityActive(observedActivity),
     observationReady,
     targetFault,
     statusUnavailableReason,

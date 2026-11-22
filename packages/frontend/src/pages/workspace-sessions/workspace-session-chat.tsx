@@ -1,3 +1,4 @@
+import { useSessionBackgroundTasks } from "@openducktor/frontend-core/sessions/background-tasks/use-session-background-tasks";
 import {
   useSessionGoalRow,
   useSessionGoalRowScope,
@@ -266,6 +267,7 @@ export function WorkspaceSessionChat({
     runtimeDescriptor: descriptor,
   });
   const goalRowScope = useSessionGoalRowScope(identity);
+  const backgroundTasks = useSessionBackgroundTasks({ repoPath: workspace.repoPath, identity });
   const pendingSendContext = usePendingSendContext({
     owner: { kind: "workspace_session", workspaceId: workspace.workspaceId, sessionId: record.id },
     workingDirectory: record.executionTarget.workingDirectory,
@@ -337,6 +339,7 @@ export function WorkspaceSessionChat({
       delivery: messageDelivery,
       goalRow,
       goalRowScope,
+      backgroundTasks,
       pendingSend: pendingSendContext,
       draftPersistence,
       picker,

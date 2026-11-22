@@ -3,8 +3,10 @@ import {
   compareActiveAgentSessionActivityState,
   formatAgentSessionActivityStateLabel,
   getAgentSessionActivityState,
+  getAgentSessionActivityStateFromSession,
   isAgentSessionActivityActive,
   isAgentSessionActivityWorking,
+  isAgentSessionWaitingOnBackgroundState,
 } from "./agent-session-activity-state";
 
 describe("agent-session-activity-state", () => {
@@ -31,6 +33,37 @@ describe("agent-session-activity-state", () => {
     expect(getAgentSessionActivityState({ status: "idle", hasPendingInput: false })).toBe("idle");
   });
 
+  test("keeps a running session with no reply Running, in the Background style", () => {
+    const session = {
+      status: "running" as const,
+      foregroundTurnActive: false,
+      backgroundTasks: [
+        {
+          taskId: "shell-1",
+          kind: "command" as const,
+          title: "bun run dev",
+          stop: { allowed: true as const },
+        },
+      ],
+      pendingApprovals: [],
+      pendingQuestions: [],
+    };
+
+    expect(getAgentSessionActivityStateFromSession(session)).toBe("running");
+    expect(isAgentSessionWaitingOnBackgroundState(session)).toBe(true);
+    // A message that the user just sent is a reply, so the session loses the Background style.
+    expect(
+      isAgentSessionWaitingOnBackgroundState({ ...session, pendingUserMessageStartedAt: 1 }),
+    ).toBe(false);
+    expect(isAgentSessionWaitingOnBackgroundState({ ...session, foregroundTurnActive: true })).toBe(
+      false,
+    );
+    // Pending input wins over the Background style.
+    const asking = { ...session, pendingQuestions: [{ requestId: "q", questions: [] }] };
+    expect(getAgentSessionActivityStateFromSession(asking)).toBe("waiting_input");
+    expect(isAgentSessionWaitingOnBackgroundState(asking)).toBe(false);
+  });
+
   test("publishes explicit working and active predicates", () => {
     expect(isAgentSessionActivityWorking("starting")).toBe(true);
     expect(isAgentSessionActivityWorking("running")).toBe(true);
@@ -39,6 +72,7 @@ describe("agent-session-activity-state", () => {
     expect(isAgentSessionActivityActive("starting")).toBe(true);
     expect(isAgentSessionActivityActive("running")).toBe(true);
     expect(isAgentSessionActivityActive("idle")).toBe(false);
+    expect(isAgentSessionActivityActive("running", "Status read failed")).toBe(false);
   });
 
   test("publishes the canonical active-session priority", () => {

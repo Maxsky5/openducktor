@@ -20,7 +20,11 @@ export const taskWorkflowSteps = (
   const newestOf = (role: string) => groups.find((group) => group.role === role)?.rows[0] ?? null;
   return buildWorkflowRail(task, (role) => {
     const newest = newestOf(role);
-    return { session: newest?.identity ?? null, liveSession: newest?.activityState ?? "none" };
+    return {
+      session: newest?.identity ?? null,
+      liveSession: newest?.activityState ?? "none",
+      waitingOnBackground: newest?.waitingOnBackground ?? false,
+    };
   }).map((step) => ({
     ...step,
     working: step.role ? (newestOf(step.role)?.live ?? false) : false,

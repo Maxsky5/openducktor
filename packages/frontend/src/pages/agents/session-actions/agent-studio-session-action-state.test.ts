@@ -21,9 +21,11 @@ const createSummary = (overrides: Partial<AgentSessionSummary> = {}): AgentSessi
   title: "Build session",
   startedAt: "2026-06-17T08:00:00.000Z",
   activityState: "running",
+  waitingOnBackground: false,
   pendingApprovalCount: 0,
   pendingQuestionCount: 0,
   selectedModel: null,
+  livePresence: "present",
   ...overrides,
 });
 

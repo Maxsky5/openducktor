@@ -57,8 +57,8 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
   workflow: {
     workflowRail: buildWorkflowRail(createTaskCardFixture({ id: "task-1" }), (role) =>
       role === "spec"
-        ? { session: specSessionSelectorValue, liveSession: "running" }
-        : { session: null, liveSession: "none" },
+        ? { session: specSessionSelectorValue, liveSession: "running", waitingOnBackground: false }
+        : { session: null, liveSession: "none", waitingOnBackground: false },
     ),
     workflowSessionByRole: {
       spec: {
@@ -68,6 +68,7 @@ const createHookArgs = (overrides: Partial<HookArgs> = {}): HookArgs => ({
         workingDirectory: "/repo/worktree",
         startedAt: "2026-02-22T12:00:00.000Z",
         activityState: "running",
+        waitingOnBackground: false,
         taskId: "task-1",
       },
       planner: null,

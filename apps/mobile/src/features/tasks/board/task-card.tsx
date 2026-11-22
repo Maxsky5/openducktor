@@ -38,7 +38,12 @@ import {
   LiveSessionChip,
 } from "./task-card-actions";
 import { LaneShownContext } from "./lane-shown-context";
-import { buildTaskCardModel, type TaskCardAction, type TaskCardModel } from "./task-card-model";
+import {
+  buildTaskCardModel,
+  type TaskCardAction,
+  type TaskCardModel,
+  type TaskCardSessionState,
+} from "./task-card-model";
 
 export type TaskCardHandlers = {
   onOpenDetails: (task: TaskCardData) => void;
@@ -97,17 +102,24 @@ const menuItems = (model: TaskCardModel): ActionMenuItem[] => [
 const cardFrame = (
   selected: boolean,
   model: TaskCardModel,
-): "selectedFrame" | "runningFrame" | "waitingFrame" | "idleFrame" => {
+): "selectedFrame" | "runningFrame" | "waitingFrame" | "backgroundFrame" | "idleFrame" => {
   if (selected) return "selectedFrame";
   if (!model.liveSession) return "idleFrame";
-  return model.liveSession.waitingInput ? "waitingFrame" : "runningFrame";
+  return LIVE_FRAMES[model.liveSession.state];
 };
+
+const LIVE_FRAMES = {
+  running: "runningFrame",
+  waiting_input: "waitingFrame",
+  background: "backgroundFrame",
+} as const satisfies Record<TaskCardSessionState, string>;
 
 /**
  * A dense board card after the desktop card: the title on up to two lines, the status badges,
  * then a footer with the issue type, the priority, the ID, and the next workflow action as a
  * compact control. The chevron and a long press open the other actions. A live session colors
- * the frame sky, or amber while it waits for input, and takes the place of the next action.
+ * the frame sky, amber while it waits for input, or violet while it waits on background tasks,
+ * and takes the place of the next action.
  */
 export const TaskCard = memo(function TaskCard({
   task,
@@ -146,8 +158,8 @@ export const TaskCard = memo(function TaskCard({
   const items = useMemo(() => menuItems(model), [model]);
   const menuRef = useRef<ActionMenuHandle>(null);
   const copyTaskId = useCopyTaskId();
-  // As on desktop, a light runs around the card while its session works.
-  const running = model.liveSession !== null && !model.liveSession.waitingInput;
+  // As on desktop, a light runs around the card while its session works on a reply.
+  const running = model.liveSession?.state === "running";
   const frame = styles[cardFrame(selected, model)];
 
   const selectMenu = useCallback(
@@ -401,6 +413,8 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: withAlpha(theme.palette.sky500, 0.58),
     boxShadow: `0 0 9px ${withAlpha(theme.palette.sky500, 0.22)}`,
   },
+  // A session that waits on background tasks: a still violet border, with no glow or ray.
+  backgroundFrame: { borderColor: theme.desktop.pendingBorder },
   // `.kanban-waiting-input-card`: the warning ring and its glow.
   waitingFrame: {
     borderColor: theme.desktop.warningBorder,

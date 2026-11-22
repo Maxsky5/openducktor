@@ -59,6 +59,7 @@ const buildWorkflowStateByRole = (params: {
         role,
         workflow,
         liveSession: params.liveSessionByRole[role] ?? "none",
+        waitingOnBackground: false,
       }),
     ]),
   );
@@ -119,24 +120,28 @@ describe("agents-page-session-tabs", () => {
         availability: "available",
         completion: "done",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       planner: {
         tone: "done",
         availability: "available",
         completion: "done",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       build: {
         tone: "blocked",
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       qa: {
         tone: "blocked",
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
     });
   });
@@ -159,6 +164,7 @@ describe("agents-page-session-tabs", () => {
       availability: "optional",
       completion: "not_started",
       liveSession: "none",
+      waitingOnBackground: false,
     });
     expect(states.qa!.availability).toBe("blocked");
   });
@@ -190,7 +196,13 @@ describe("agents-page-session-tabs", () => {
           },
         ]),
       });
-      expect(states.build!).toEqual({ availability: "available", completion, liveSession, tone });
+      expect(states.build!).toEqual({
+        availability: "available",
+        completion,
+        liveSession,
+        tone,
+        waitingOnBackground: false,
+      });
       expect(states.spec!.completion).toBe("done");
     },
   );
@@ -218,6 +230,7 @@ describe("agents-page-session-tabs", () => {
       availability: "blocked",
       completion: "not_started",
       liveSession: "stopped",
+      waitingOnBackground: false,
     });
   });
 
@@ -244,6 +257,7 @@ describe("agents-page-session-tabs", () => {
       availability: "available",
       completion: "in_progress",
       liveSession: "stopped",
+      waitingOnBackground: false,
     });
   });
 
@@ -270,6 +284,7 @@ describe("agents-page-session-tabs", () => {
       availability: "available",
       completion: "in_progress",
       liveSession: "stopped",
+      waitingOnBackground: false,
     });
     expect(states.spec!.tone).toBe("done");
     expect(states.planner!.tone).toBe("done");
@@ -293,6 +308,7 @@ describe("agents-page-session-tabs", () => {
       availability: "available",
       completion: "not_started",
       liveSession: "none",
+      waitingOnBackground: false,
     });
   });
 
@@ -319,6 +335,7 @@ describe("agents-page-session-tabs", () => {
       availability: "available",
       completion: "in_progress",
       liveSession: "running",
+      waitingOnBackground: false,
     });
   });
 
@@ -345,6 +362,7 @@ describe("agents-page-session-tabs", () => {
       availability: "available",
       completion: "in_progress",
       liveSession: "error",
+      waitingOnBackground: false,
     });
   });
 
@@ -372,24 +390,28 @@ describe("agents-page-session-tabs", () => {
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       planner: {
         tone: "in_progress",
         availability: "available",
         completion: "in_progress",
         liveSession: "idle",
+        waitingOnBackground: false,
       },
       build: {
         tone: "blocked",
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       qa: {
         tone: "blocked",
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
     });
   });
@@ -418,24 +440,28 @@ describe("agents-page-session-tabs", () => {
         availability: "available",
         completion: "done",
         liveSession: "running",
+        waitingOnBackground: false,
       },
       planner: {
         tone: "available",
         availability: "available",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       build: {
         tone: "blocked",
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       qa: {
         tone: "blocked",
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
     });
   });
@@ -464,24 +490,28 @@ describe("agents-page-session-tabs", () => {
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       planner: {
         tone: "blocked",
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       build: {
         tone: "blocked",
         availability: "blocked",
         completion: "not_started",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       qa: {
         tone: "blocked",
         availability: "blocked",
         completion: "not_started",
         liveSession: "idle",
+        waitingOnBackground: false,
       },
     });
   });
@@ -524,24 +554,28 @@ describe("agents-page-session-tabs", () => {
         availability: "available",
         completion: "done",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       planner: {
         tone: "done",
         availability: "available",
         completion: "done",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       build: {
         tone: "done",
         availability: "available",
         completion: "done",
         liveSession: "none",
+        waitingOnBackground: false,
       },
       qa: {
         tone: "rejected",
         availability: "blocked",
         completion: "rejected",
         liveSession: "idle",
+        waitingOnBackground: false,
       },
     });
   });
@@ -613,6 +647,7 @@ describe("agents-page-session-tabs", () => {
           availability: "available",
           completion,
           liveSession: activity,
+          waitingOnBackground: false,
         });
         expect(task).toEqual(savedTask);
       },
@@ -671,24 +706,28 @@ describe("agents-page-session-tabs", () => {
         availability: "available",
         completion: "done",
         liveSession: "idle",
+        waitingOnBackground: false,
       },
       planner: {
         tone: "done",
         availability: "available",
         completion: "done",
         liveSession: "idle",
+        waitingOnBackground: false,
       },
       build: {
         tone: "in_progress",
         availability: "available",
         completion: "in_progress",
         liveSession: "stopped",
+        waitingOnBackground: false,
       },
       qa: {
         tone: "done",
         availability: "blocked",
         completion: "done",
         liveSession: "idle",
+        waitingOnBackground: false,
       },
     });
   });

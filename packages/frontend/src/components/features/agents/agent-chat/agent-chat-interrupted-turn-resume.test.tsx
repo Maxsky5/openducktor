@@ -1,4 +1,4 @@
-import { describe, expect, jest, mock, setSystemTime, spyOn, test } from "bun:test";
+import { describe, expect, jest, mock, spyOn, test } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { AgentChatInterruptedTurnResume } from "./agent-chat-interrupted-turn-resume";
@@ -10,9 +10,12 @@ describe("AgentChatInterruptedTurnResume", () => {
   test("counts down to the reported reset without auto-resuming and releases the clock on unmount", () => {
     jest.useFakeTimers();
     const start = Date.parse("2026-10-08T00:24:00.000Z");
-    setSystemTime(start);
+    // The fake clock of Bun still moves with real time, so a slow run would shift the minutes.
+    let now = start;
+    const nowSpy = spyOn(Date, "now").mockImplementation(() => now);
     const advance = (ms: number) =>
       act(() => {
+        now += ms;
         jest.advanceTimersByTime(ms);
       });
     const onResume = mock(() => {});
@@ -48,7 +51,7 @@ describe("AgentChatInterruptedTurnResume", () => {
     } finally {
       rendered?.unmount();
       jest.useRealTimers();
-      setSystemTime();
+      nowSpy.mockRestore();
     }
   });
 

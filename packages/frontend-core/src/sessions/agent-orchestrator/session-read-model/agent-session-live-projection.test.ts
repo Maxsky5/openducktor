@@ -194,6 +194,30 @@ describe("projectSessionSnapshotActivity", () => {
       });
     },
   );
+
+  test("keeps an equal background task list, and takes a changed one", () => {
+    const server = {
+      taskId: "shell-1",
+      kind: "command",
+      title: "bun run dev",
+      stop: { allowed: true },
+    } as const;
+    const tasks = [server];
+    const kept = projectSessionSnapshotActivity(
+      { status: "running", runtimeStatusMessage: null, backgroundTasks: tasks },
+      snapshot("a", { activity: "running", backgroundTasks: [{ ...server }] }),
+    );
+    expect(kept.backgroundTasks).toBe(tasks);
+
+    const renamed = projectSessionSnapshotActivity(
+      { status: "running", runtimeStatusMessage: null, backgroundTasks: tasks },
+      snapshot("a", {
+        activity: "running",
+        backgroundTasks: [{ ...server, title: "bun run dev --port 3001" }],
+      }),
+    );
+    expect(renamed.backgroundTasks?.[0]?.title).toBe("bun run dev --port 3001");
+  });
 });
 
 describe("applyLiveSnapshotsToAddedSessions", () => {

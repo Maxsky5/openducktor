@@ -112,6 +112,7 @@ export const ICONS = {
   hammer: "hammer",
   hand: "hand",
   history: "history",
+  hourglass: "hourglass",
   image: "image",
   "image-plus": "image-plus",
   inbox: "inbox",

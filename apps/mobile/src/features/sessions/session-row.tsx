@@ -2,6 +2,7 @@ import type { WorkflowIcon } from "@openducktor/contracts";
 import { workflowRoleIcon } from "@openducktor/workflows";
 import { useMinuteClockLabel } from "@openducktor/frontend-core/lib/relative-time";
 import { useSessionUnread } from "@openducktor/frontend-core/sessions/navigation/session-read-state";
+import { isSessionEntryWaitingOnBackground } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import {
   sessionEntryShortTime,
   ATTENTION_REASON_LABELS,
@@ -71,7 +72,11 @@ function StatusDot({
 }): ReactElement {
   const theme = useAppTheme();
   const color = sessionEntryDotColor(entry, unread);
-  const running = entry.status.kind === "running" && entry.attention.length === 0;
+  // The Background style of Running stays still, so only a session that writes a reply pulses.
+  const running =
+    entry.status.kind === "running" &&
+    !isSessionEntryWaitingOnBackground(entry) &&
+    entry.attention.length === 0;
   return (
     <View style={styles.dotFrame}>
       {running ? <RunningPulse color={color} /> : null}
@@ -142,19 +147,12 @@ function RowMetadata({
       </View>
     );
   }
-  let issue: ReactElement | null = null;
-  if (entry.fault) {
-    issue = <Icon name="triangle-alert" size={13} colorStyle={styles.warningIssue} />;
-  } else if (entry.status.kind === "settled" && entry.status.failed) {
-    issue = <Icon name="circle-alert" size={13} colorStyle={styles.failedIssue} />;
-  } else if (entry.status.kind === "unavailable") {
-    issue = <Icon name="circle-alert" size={13} colorStyle={styles.unavailableIssue} />;
-  }
+  const mark = rowStatusMark(entry);
   const time = entry.status.kind === "running" ? null : elapsed;
-  if (!issue && !time) return null;
+  if (!mark && !time) return null;
   return (
     <View style={styles.meta}>
-      {issue}
+      {mark}
       {time ? (
         // A start time, not a last activity, shows in italic, as on desktop.
         <Text tabular style={[styles.time, entry.time.kind === "started" ? styles.started : null]}>
@@ -164,6 +162,25 @@ function RowMetadata({
     </View>
   );
 }
+
+/** A still mark: the agent writes no reply, so nothing moves. The row label names the state. */
+function BackgroundMark(): ReactElement {
+  return <Icon name="hourglass" size={13} colorStyle={styles.backgroundMark} />;
+}
+
+/** The problem or Background mark of a row without attention. */
+const rowStatusMark = (entry: SessionNavigationEntry): ReactElement | null => {
+  if (entry.fault) {
+    return <Icon name="triangle-alert" size={13} colorStyle={styles.warningIssue} />;
+  }
+  if (entry.status.kind === "settled" && entry.status.failed) {
+    return <Icon name="circle-alert" size={13} colorStyle={styles.failedIssue} />;
+  }
+  if (entry.status.kind === "unavailable") {
+    return <Icon name="circle-alert" size={13} colorStyle={styles.unavailableIssue} />;
+  }
+  return isSessionEntryWaitingOnBackground(entry) ? <BackgroundMark /> : null;
+};
 
 /** The spinner of a chat that starts. A theme change renders only this spinner again. */
 function StartingSpinner(): ReactElement {
@@ -391,6 +408,7 @@ function RowFailure({
 const SURFACE_STYLES = {
   attention: "attentionSurface",
   running: "runningSurface",
+  background: "backgroundSurface",
   plain: "plainSurface",
 } as const satisfies Record<SessionRowSurface, string>;
 
@@ -413,6 +431,10 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.desktop.infoSurface,
     borderColor: theme.desktop.infoBorder,
   },
+  backgroundSurface: {
+    backgroundColor: theme.desktop.pendingSurface,
+    borderColor: theme.desktop.pendingBorder,
+  },
   plainSurface: {
     backgroundColor: theme.desktop.sidebar,
     borderColor: theme.desktop.sidebarBorder,
@@ -425,6 +447,7 @@ const styles = StyleSheet.create((theme) => ({
   warningIssue: { color: theme.desktop.warningAccent },
   failedIssue: { color: theme.desktop.destructive },
   unavailableIssue: { color: theme.desktop.sidebarMutedForeground },
+  backgroundMark: { color: theme.desktop.pendingMuted },
   commandMark: { color: theme.desktop.statusRunningForeground },
   workspace: {
     ...theme.type.caption1,

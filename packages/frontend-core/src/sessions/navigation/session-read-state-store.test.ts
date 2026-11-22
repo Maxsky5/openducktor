@@ -29,6 +29,7 @@ const facts = (
   overrides: Partial<WorkspaceSessionLiveFacts> = {},
 ): WorkspaceSessionLiveFacts => ({
   activityState,
+  waitingOnBackground: false,
   pendingQuestion: activityState === "waiting_input",
   pendingPermission: false,
   pendingInputs: new Set(),

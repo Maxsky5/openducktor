@@ -25,6 +25,7 @@ const buildComposerConfig = (
   messageQueue: null,
   goalRow: null,
   goalRowScope: null,
+  backgroundTasks: null,
   canStopSession: false,
   isResumingSession: false,
   stopAgentSession: async () => {},

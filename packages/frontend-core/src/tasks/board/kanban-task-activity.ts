@@ -21,6 +21,8 @@ export type ActiveTaskSessionContextByTaskId = Map<string, ActiveTaskSessionCont
 export type KanbanTaskSession = AgentSessionIdentity &
   Pick<AgentSessionSummary, "role" | "statusUnavailableReason" | "activityState"> & {
     startedAt?: AgentSessionState["startedAt"];
+    /** The running session waits on background tasks. Only its style changes. */
+    waitingOnBackground?: boolean;
   };
 
 export const toKanbanTaskSession = (session: AgentSessionSummary): KanbanTaskSession => ({
@@ -28,6 +30,7 @@ export const toKanbanTaskSession = (session: AgentSessionSummary): KanbanTaskSes
   role: session.role,
   startedAt: session.startedAt,
   activityState: session.activityState,
+  waitingOnBackground: session.waitingOnBackground,
   statusUnavailableReason: session.statusUnavailableReason,
 });
 

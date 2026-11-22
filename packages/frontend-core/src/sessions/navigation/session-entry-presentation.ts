@@ -6,13 +6,18 @@ import type { SessionNavigationEntry } from "./session-navigation-read-model";
  * The state of the role or chat icon of a session row: a workflow tone, or muted. Each client
  * maps the tone to its own color.
  */
-export type SessionEntryIconTone = WorkflowStepTone | "muted";
+export type SessionEntryIconTone = WorkflowStepTone | "background" | "muted";
+
+/** A running session that waits on background tasks. It shows the Background style of Running. */
+export const isSessionEntryWaitingOnBackground = (entry: SessionNavigationEntry): boolean =>
+  entry.status.kind === "running" && entry.status.waitingOnBackground === true;
 
 /** Task role icons follow the workflow rail. Known attention always keeps its warning cue. */
 export const sessionEntryIconTone = (entry: SessionNavigationEntry): SessionEntryIconTone => {
   if (entry.attention.length > 0) return "waiting_input";
   if (entry.status.kind === "checking" || entry.status.kind === "unavailable") return "muted";
   if (entry.workflowTone !== null) return entry.workflowTone;
+  if (isSessionEntryWaitingOnBackground(entry)) return "background";
   if (entry.status.kind === "running") return "in_progress";
   if (entry.status.failed) return "failed";
   return "muted";
@@ -32,14 +37,24 @@ export const sessionEntryTitleTone = (
 };
 
 /** The state of the status dot of a session row. */
-export type SessionEntryDotTone = "input_unread" | "input_read" | "running" | "unread" | "read";
+export type SessionEntryDotTone =
+  | "input_unread"
+  | "input_read"
+  | "running"
+  | "background"
+  | "unread"
+  | "read";
 
-/** The dot shows the read state in the input colors when the session needs you, else running. */
+/**
+ * The dot shows the read state in the input colors when the session needs you, else running, in
+ * its Background style while the session waits on background tasks.
+ */
 export const sessionEntryDotTone = (
   entry: SessionNavigationEntry,
   unread: boolean,
 ): SessionEntryDotTone => {
   if (entry.attention.length > 0) return unread ? "input_unread" : "input_read";
+  if (isSessionEntryWaitingOnBackground(entry)) return "background";
   if (entry.status.kind === "running") return "running";
   return unread ? "unread" : "read";
 };

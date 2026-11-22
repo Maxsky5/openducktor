@@ -10,9 +10,13 @@ const row = (id: string, activityState: TaskSessionRow["activityState"]): TaskSe
   runtimeLabel: "OpenCode",
   startedAt: "2026-10-01T08:00:00.000Z",
   statusLabel: "Running",
+  statusDescription: "Running",
   statusTone: "running",
+  statusReason: null,
+  statusIcon: null,
   live: activityState === "running",
   activityState,
+  waitingOnBackground: false,
 });
 
 describe("taskWorkflowSteps", () => {

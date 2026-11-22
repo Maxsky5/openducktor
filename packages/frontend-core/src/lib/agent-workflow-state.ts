@@ -20,11 +20,14 @@ export const buildRoleWorkflowState = ({
   role,
   workflow,
   liveSession,
+  waitingOnBackground,
 }: {
   task: TaskCard | null;
   role: AgentRole;
   workflow: AgentWorkflowState;
   liveSession: WorkflowStepLiveSession;
+  /** The running session waits on background tasks. */
+  waitingOnBackground: boolean;
 }): WorkflowStepPresentation => {
   const availability = workflowAvailability(workflow);
   const active = isActive(liveSession);
@@ -40,6 +43,7 @@ export const buildRoleWorkflowState = ({
     availability,
     completion,
     liveSession,
+    waitingOnBackground: waitingOnBackground && liveSession === "running",
   };
 };
 
@@ -54,6 +58,7 @@ export const buildHumanWorkflowState = (step: {
     completion: step.completed ? "done" : "not_started",
     tone: step.completed ? "done" : availability,
     liveSession: "none",
+    waitingOnBackground: false,
   };
 };
 
@@ -89,6 +94,9 @@ const workflowStepHint = (
   }
   if (attentionVariant === "blocked_task") {
     return "Task is blocked and waiting for user action";
+  }
+  if (entry.state.waitingOnBackground) {
+    return "Session is running and waiting on background tasks";
   }
   if (isWorking(entry.state.liveSession)) {
     return "Step in progress";

@@ -1,4 +1,5 @@
 import type { WorkflowIcon } from "@openducktor/contracts";
+import { AGENT_SESSION_BACKGROUND_DESCRIPTION } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import type { ReactElement } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -10,7 +11,7 @@ import { RoleIcon } from "@/ui/brand-icons";
 import { Icon } from "@/ui/icon";
 import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
-import type { TaskCardLiveSession, TaskCardPrimary } from "./task-card-model";
+import type { TaskCardLiveSession, TaskCardPrimary, TaskCardSessionState } from "./task-card-model";
 
 /** The desktop card control height: `h-8`, between the compact `h-7` and the normal `h-9`. */
 const CONTROL_HEIGHT = 32;
@@ -35,6 +36,7 @@ const CONTROL_STYLES = {
   destructive: "destructiveControl",
   running: "runningControl",
   waiting: "waitingControl",
+  background: "backgroundControl",
 } as const satisfies Record<Appearance, string>;
 
 const foregroundColor = (theme: AppTheme, appearance: Appearance): string =>
@@ -44,22 +46,31 @@ const foregroundColor = (theme: AppTheme, appearance: Appearance): string =>
     destructive: theme.desktop.destructiveForeground,
     running: theme.desktop.infoMuted,
     waiting: theme.desktop.warningMuted,
+    background: theme.desktop.pendingMuted,
   })[appearance];
 
-/** The sky chip of a running session, or the amber chip of a session that waits for input. */
-const liveColors = (theme: AppTheme, waiting: boolean) => {
+/**
+ * The sky chip of a running session, the amber chip of a session that waits for input, or the
+ * violet chip of a session that waits on background tasks.
+ */
+const liveColors = (theme: AppTheme, state: TaskCardSessionState) => {
   const d = theme.desktop;
-  return waiting
-    ? { surface: d.warningSurface, border: d.warningBorder, text: d.warningMuted }
-    : { surface: d.infoSurface, border: d.infoBorder, text: d.infoMuted };
+  switch (state) {
+    case "waiting_input":
+      return { surface: d.warningSurface, border: d.warningBorder, text: d.warningMuted };
+    case "background":
+      return { surface: d.pendingSurface, border: d.pendingBorder, text: d.pendingMuted };
+    case "running":
+      return { surface: d.infoSurface, border: d.infoBorder, text: d.infoMuted };
+  }
 };
 
 /** The plain text styles of an action and of a live chip. Boards render many cards. */
 const foregroundStyles = themeStyleCache((theme, appearance: Appearance) => ({
   color: foregroundColor(theme, appearance),
 }));
-const liveStyles = themeStyleCache((theme, waiting: boolean) => {
-  const colors = liveColors(theme, waiting);
+const liveStyles = themeStyleCache((theme, state: TaskCardSessionState) => {
+  const colors = liveColors(theme, state);
   return {
     chip: { backgroundColor: colors.surface, borderColor: colors.border },
     text: { color: colors.text },
@@ -69,7 +80,8 @@ const liveStyles = themeStyleCache((theme, waiting: boolean) => {
 /**
  * The next workflow action of a card as a compact desktop button: violet for the next step,
  * outlined for other starts, rose for a reset. The control of a live session is the desktop
- * session chip: sky while it runs, amber while it waits for input.
+ * session chip: sky while it runs, amber while it waits for input, violet while it waits on
+ * background tasks.
  */
 export function CardPrimaryAction({
   primary,
@@ -94,7 +106,7 @@ export function CardPrimaryAction({
   const blockedByConnection = useCommandBlocked(primary.command, primary.label);
   const disabled = primary.disabled || blockedByConnection;
   const session = primary.activeSession;
-  if ((appearance === "running" || appearance === "waiting") && session) {
+  if (session) {
     return (
       <Touchable
         feedback="scale"
@@ -103,12 +115,16 @@ export function CardPrimaryAction({
         radius={radius.sm}
         hitSlop={PRIMARY_SLOP}
         accessibilityRole="button"
-        accessibilityLabel={`${primary.label}, ${session.roleLabel} ${session.statusLabel}`}
+        accessibilityLabel={`${primary.label}, ${session.roleLabel} ${
+          session.state === "background"
+            ? AGENT_SESSION_BACKGROUND_DESCRIPTION.toLowerCase()
+            : session.statusLabel
+        }`}
         accessibilityState={{ disabled }}
         containerStyle={container}
         style={control}
       >
-        {/* The desktop chip: a play mark in the chip text color in both states. */}
+        {/* The desktop chip: a play mark in the chip text color in each state. */}
         <Icon name="play-circle" size={14} colorStyle={foreground} />
         <Text variant="subhead" weight="semibold" style={[styles.label, foreground]}>
           {session.roleLabel}
@@ -116,10 +132,7 @@ export function CardPrimaryAction({
         <Text
           variant="caption2"
           weight="medium"
-          style={[
-            styles.status,
-            appearance === "running" ? styles.runningStatus : styles.waitingStatus,
-          ]}
+          style={[styles.status, styles[STATUS_STYLES[session.state]]]}
         >
           {session.statusLabel}
         </Text>
@@ -153,6 +166,12 @@ export function CardPrimaryAction({
   );
 }
 
+const STATUS_STYLES = {
+  running: "runningStatus",
+  waiting_input: "waitingStatus",
+  background: "backgroundStatus",
+} as const satisfies Record<TaskCardSessionState, string>;
+
 /** Why the next action of a card is off, for screen readers. */
 const primaryHint = (sessionMissing: boolean, blockedByConnection: boolean): string | undefined => {
   if (blockedByConnection) return "Available when the host connection is live.";
@@ -185,11 +204,12 @@ export function CardMenuButton({
 
 /**
  * The live session of a card without a session control, such as a task without a next action:
- * a sky chip while it runs, an amber chip while it waits for input.
+ * a sky chip while it runs, an amber chip while it waits for input, and a violet chip with a
+ * still hourglass while it waits on background tasks.
  */
 export function LiveSessionChip({ session }: { session: TaskCardLiveSession }): ReactElement {
-  const waiting = session.waitingInput;
-  const live = liveStyles(useAppTheme(), waiting);
+  const { state } = session;
+  const live = liveStyles(useAppTheme(), state);
   return (
     <View
       accessible
@@ -197,15 +217,11 @@ export function LiveSessionChip({ session }: { session: TaskCardLiveSession }): 
       pointerEvents="none"
       style={[styles.live, live.chip]}
     >
-      <LiveRoleIcon role={session.iconHint} waiting={waiting} />
+      <LiveRoleIcon role={session.iconHint} state={state} />
       <Text variant="caption2" style={[styles.shrink, live.text]}>
         {session.label}
       </Text>
-      {waiting ? (
-        <Icon name="circle-alert" size={12} colorStyle={styles.liveAlert} />
-      ) : (
-        <LiveSpinner />
-      )}
+      <LiveStateMark state={state} />
     </View>
   );
 }
@@ -225,13 +241,25 @@ function ActionRoleIcon({
 /** The role icon of a live session chip. A theme change renders only this icon again. */
 function LiveRoleIcon({
   role,
-  waiting,
+  state,
 }: {
   role?: WorkflowIcon | undefined;
-  waiting: boolean;
+  state: TaskCardSessionState;
 }): ReactElement {
   const theme = useAppTheme();
-  return <RoleIcon hint={role} size={12} color={liveColors(theme, waiting).text} />;
+  return <RoleIcon hint={role} size={12} color={liveColors(theme, state).text} />;
+}
+
+/** The end mark of a live session chip: an alert, a still hourglass, or a spinner. */
+function LiveStateMark({ state }: { state: TaskCardSessionState }): ReactElement {
+  switch (state) {
+    case "waiting_input":
+      return <Icon name="circle-alert" size={12} colorStyle={styles.liveAlert} />;
+    case "background":
+      return <Icon name="hourglass" size={12} colorStyle={styles.liveBackground} />;
+    case "running":
+      return <LiveSpinner />;
+  }
 }
 
 /** The spinner of a running session. A theme change renders only this spinner again. */
@@ -289,10 +317,15 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.desktop.warningSurface,
     borderColor: theme.desktop.warningBorder,
   },
+  backgroundControl: {
+    backgroundColor: theme.desktop.pendingSurface,
+    borderColor: theme.desktop.pendingBorder,
+  },
   label: { flexShrink: 1 },
   status: { flexShrink: 1 },
   runningStatus: { color: theme.desktop.statusRunning },
   waitingStatus: { color: theme.desktop.warningSurfaceForeground },
+  backgroundStatus: { color: theme.desktop.pendingSurfaceForeground },
   menuIcon: { color: theme.desktop.foreground },
   // About the width of "Start Builder", the most common action of a card.
   placeholderAction: {
@@ -331,4 +364,5 @@ const styles = StyleSheet.create((theme) => ({
   },
   liveSpinner: { width: 12, height: 12, transform: [{ scale: 0.6 }] },
   liveAlert: { color: theme.desktop.warningAccent },
+  liveBackground: { color: theme.desktop.pendingAccent },
 }));

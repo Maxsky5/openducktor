@@ -18,6 +18,7 @@ import type {
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { waitFor } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 import { createAgentMessageQueuesStore } from "../../agent-message-queues-store";
 import { createAgentSessionCollection } from "../../agent-session-collection";
 import { createAgentSessionsStore } from "../../agent-sessions-store";
@@ -27,6 +28,9 @@ import { workspaceSessionQueryKeys } from "../../../queries/workspace-sessions";
 import { createAgentMessageQueueSnapshot } from "../../../test-support/agent-message-send-fixture";
 import { createLiveSnapshotEnvelope } from "../../../test-support/agent-session-live-fixture";
 import { createHookHarness } from "../../../test-support/react-hook-harness";
+import { createActiveWorkspaceWrapper } from "../../../test-support/active-workspace-wrapper";
+import { useSessionBackgroundTasks } from "../../background-tasks/use-session-background-tasks";
+import { AgentSessionReadModelStateContext, AgentSessionsContext } from "../../session-contexts";
 import {
   createAgentSessionFixture,
   createSettingsSnapshotFixture,
@@ -38,7 +42,10 @@ import {
   createTestClientConnection,
   createTestHostConnection,
 } from "../../../test-support/test-client-connection";
-import { getAgentSessionActivityStateFromSession } from "../../../lib/agent-session-activity-state";
+import {
+  getAgentSessionActivityStateFromSession,
+  isAgentSessionLiveStateObserved,
+} from "../../../lib/agent-session-activity-state";
 import { canResumeInterruptedTurn } from "../../../lib/agent-session-interrupted-turn";
 import { sessionMessagesToArray } from "../../../test-support/session-message-test-helpers";
 import {
@@ -214,6 +221,7 @@ const createState = (
 
   return {
     callOrder,
+    sessionStore,
     subscribe: sessionStore.subscribe,
     clearSessions: () => sessionStore.setSessionCollection(() => createAgentSessionCollection([])),
     replaceSession: sessionStore.replaceSession,
@@ -2531,6 +2539,181 @@ describe("useRepoSessionReadModel", () => {
       });
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
     } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps the live state unknown through a retry until a new snapshot confirms it", async () => {
+    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [record] }]);
+    const state = createState(
+      (emit, observeIndex) => {
+        if (observeIndex === 1) emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
+      },
+      record,
+      { agentSessionsListForTasks: batchList },
+    );
+    const isObserved = () => {
+      const session = state.getSession();
+      if (!session) throw new Error("The session must stay in the store.");
+      return isAgentSessionLiveStateObserved(
+        state.harness.getLatest().sessionReadModelLoadState,
+        session,
+      );
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(isObserved()).toBe(true);
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      expect(isObserved()).toBe(false);
+
+      // The retry opens a loading window. The session keeps its presence from the failed stream.
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 2);
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "loading");
+      expect(state.getSession()?.livePresence).toBe("present");
+      expect(state.harness.getLatest().sessionReadModelLoadState).toEqual({
+        kind: "loading",
+        workspaceRepoPath: "/repo",
+        liveStreamFailure: expect.stringContaining("The observation stream stopped."),
+      });
+      expect(isObserved()).toBe(false);
+
+      await state.harness.run(() => {
+        state.emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      expect(isObserved()).toBe(true);
+    } finally {
+      await state.harness.unmount();
+    }
+  });
+
+  test("keeps background tasks hidden when a task-record read fails during a live-stream retry", async () => {
+    const backgroundSnapshot = () =>
+      createLiveSnapshotEnvelope({
+        sessions: [
+          snapshot({
+            activity: "running",
+            foregroundTurnActive: false,
+            backgroundTasks: [
+              { taskId: "shell-1", kind: "command", title: "bun run dev", stop: { allowed: true } },
+            ],
+          }),
+        ],
+      });
+    const batchList = mock(async () => [{ taskId: "task-1", agentSessions: [record] }]);
+    const state = createState(
+      (emit, observeIndex) => {
+        // The retry observation withholds its snapshot until the test sends it.
+        if (observeIndex === 1) emit(backgroundSnapshot());
+      },
+      record,
+      { agentSessionsListForTasks: batchList },
+    );
+    const stops: unknown[] = [];
+    const ActiveWorkspace = createActiveWorkspaceWrapper(
+      createTestClientConnection({
+        client: {
+          agentSessionBackgroundTaskStop: async (input) => {
+            stops.push(input);
+          },
+        },
+      }),
+    );
+    const barWrapper = ({ children }: { children?: ReactNode }) =>
+      createElement(
+        ActiveWorkspace,
+        null,
+        createElement(
+          AgentSessionReadModelStateContext,
+          { value: state.harness.getLatest() },
+          createElement(AgentSessionsContext, { value: state.sessionStore }, children),
+        ),
+      );
+    const barProps = {
+      repoPath: "/repo",
+      identity: {
+        externalSessionId: record.externalSessionId,
+        runtimeKind: record.runtimeKind,
+        workingDirectory: record.workingDirectory,
+      },
+    };
+    const bar = createHookHarness(useSessionBackgroundTasks, barProps, { wrapper: barWrapper });
+    const isObserved = () => {
+      const session = state.getSession();
+      if (!session) throw new Error("The session must stay in the store.");
+      return isAgentSessionLiveStateObserved(
+        state.harness.getLatest().sessionReadModelLoadState,
+        session,
+      );
+    };
+
+    try {
+      await state.harness.mount();
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
+      await bar.mount();
+      expect(bar.getLatest()?.rows.map((row) => row.title)).toEqual(["bun run dev"]);
+      const confirmedStop = bar.getLatest()?.onStop;
+      if (!confirmedStop) throw new Error("The bar has a running task.");
+
+      await state.harness.run(() => {
+        state.emit({
+          type: "fault",
+          repoPath: "/repo",
+          message: "The observation stream stopped.",
+        });
+      });
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      expect(isObserved()).toBe(false);
+
+      await state.harness.run(() => state.harness.getLatest().reloadSessionReadModel());
+      await state.harness.waitFor(() => state.observeAgentSessionLive.mock.calls.length === 2);
+
+      // The task-record read fails before the new observation reports its snapshot.
+      await expect(
+        state.queryClient.fetchQuery({
+          queryKey: agentSessionQueryKeys.list(workspaceScope, "task-1"),
+          queryFn: async () => {
+            throw new Error("record read failed");
+          },
+          staleTime: 0,
+          retry: false,
+        }),
+      ).rejects.toThrow("record read failed");
+      await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "failed");
+      // The live-stream failure stays public until a new snapshot confirms the live state.
+      expect(state.harness.getLatest().sessionReadModelLoadState).toMatchObject({
+        kind: "failed",
+        source: "live-stream",
+      });
+      expect(isObserved()).toBe(false);
+      await bar.update(barProps);
+      expect(bar.getLatest()).toBeNull();
+      await bar.run(() => confirmedStop("shell-1"));
+      expect(stops).toEqual([]);
+
+      // A fresh snapshot confirms the live state. The task-record failure then shows.
+      await state.harness.run(() => state.emit(backgroundSnapshot()));
+      await state.harness.waitFor(
+        (value) =>
+          value.sessionReadModelLoadState.kind === "failed" &&
+          value.sessionReadModelLoadState.source === "task-records",
+      );
+      expect(isObserved()).toBe(true);
+      await bar.update(barProps);
+      expect(bar.getLatest()?.rows.map((row) => row.title)).toEqual(["bun run dev"]);
+    } finally {
+      await bar.unmount();
       await state.harness.unmount();
     }
   });

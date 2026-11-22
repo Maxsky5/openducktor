@@ -423,10 +423,12 @@ const createSelectedSessionSummary = ({
   taskId: "task-1",
   role: "build",
   activityState: "idle",
+  waitingOnBackground: false,
   startedAt: "2026-02-20T10:00:00.000Z",
   selectedModel,
   pendingApprovalCount: 0,
   pendingQuestionCount: 0,
+  livePresence: "present",
 });
 
 describe("useAgentStudioChatComposer", () => {

@@ -37,6 +37,8 @@ export type WorkflowRailStep<Session> = WorkflowStepRailState & {
 export type WorkflowRailRoleSession<Session> = {
   session: Session | null;
   liveSession: WorkflowStepLiveSession;
+  /** The running session waits on background tasks. */
+  waitingOnBackground: boolean;
 };
 
 const STATE_LABELS = {
@@ -79,12 +81,13 @@ export const buildWorkflowRail = <Session>(
         attentionVariant: "none",
       };
     }
-    const { session, liveSession } = roleSession(step.roleId);
+    const { session, liveSession, waitingOnBackground } = roleSession(step.roleId);
     const state = buildRoleWorkflowState({
       task,
       role: step.roleId,
       workflow: roleWorkflowForTask(task, step.roleId),
       liveSession,
+      waitingOnBackground,
     });
     return {
       id: step.id,

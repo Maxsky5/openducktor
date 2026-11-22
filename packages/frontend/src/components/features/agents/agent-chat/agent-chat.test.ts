@@ -51,6 +51,7 @@ const buildModel = () => ({
     messageQueue: null,
     goalRow: null,
     goalRowScope: null,
+    backgroundTasks: null,
     draftScope: {
       key: "draft-1",
       persistence: null,

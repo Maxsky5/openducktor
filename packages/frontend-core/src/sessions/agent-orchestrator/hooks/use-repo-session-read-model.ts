@@ -42,6 +42,7 @@ import {
   type AgentSessionReadModelLoadState,
   currentAgentSessionReadModelLoadState,
   failedAgentSessionReadModelLoadState,
+  failedTaskRecordsLoadState,
   loadingAgentSessionReadModelLoadState,
   readyAgentSessionReadModelLoadState,
   unavailableAgentSessionReadModelLoadState,
@@ -164,6 +165,13 @@ const shownCompletionIdsOf = (queryClient: QueryClient): Set<string> => {
   return ids;
 };
 
+type LiveStreamFailure = { readonly repoPath: string; readonly message: string };
+
+const liveStreamFailureOf = (
+  failure: MutableRefObject<LiveStreamFailure | null>,
+  repoPath: string,
+): string | null => (failure.current?.repoPath === repoPath ? failure.current.message : null);
+
 const taskIdsScopeKey = (taskIds: string[]): string =>
   JSON.stringify(normalizeAgentSessionTaskIds(taskIds));
 
@@ -238,14 +246,20 @@ export const useRepoSessionReadModel = ({
   const [sessionReadModelLoadState, setSessionReadModelLoadState] =
     useState<AgentSessionReadModelLoadState>(unavailableAgentSessionReadModelLoadState);
   const [recordRetryResult, setRecordRetryResult] = useState<RecordRetryResult | null>(null);
+  // The last live-stream failure stays until a snapshot confirms the live state again, also
+  // through the loading window of a retry.
+  const [unconfirmedLiveFailure, setUnconfirmedLiveFailure] = useState<LiveStreamFailure | null>(
+    null,
+  );
   const retryIdRef = useRef(0);
   useLayoutEffect(() => {
     retryIdRef.current += 1;
   }, [workspaceId]);
   const taskRecordApplyRef = useRef<TaskRecordApplyState | null>(null);
-  // An unresolved live-stream failure survives task-record recovery so a
-  // durable success cannot report a broken stream as healthy.
-  const liveStreamFailureRef = useRef<string | null>(null);
+  // An unresolved live-stream failure survives task-record results and the restart of the
+  // observation, so neither can report a broken stream as healthy. Only a fresh snapshot of the
+  // same repository clears it.
+  const liveStreamFailureRef = useRef<LiveStreamFailure | null>(null);
   // Marks a loading window created by demoting a stale-scope failure, so its
   // own success can end it without promoting unrelated loading windows.
   const demotedStaleFailureRef = useRef(false);
@@ -332,15 +346,13 @@ export const useRepoSessionReadModel = ({
     },
     [commitSessionCollection],
   );
-  // An unresolved live-stream failure stays the public failure, so a view cannot show the last
-  // live state as current while the stream is down. The task-record failure shows after the
-  // stream recovers.
   const publishTaskRecordFailure = useCallback((repoPath: string, message: string): void => {
-    const liveMessage = liveStreamFailureRef.current;
     setSessionReadModelLoadState(
-      liveMessage
-        ? failedAgentSessionReadModelLoadState(repoPath, liveMessage, "live-stream")
-        : failedAgentSessionReadModelLoadState(repoPath, message, "task-records"),
+      failedTaskRecordsLoadState({
+        workspaceRepoPath: repoPath,
+        message,
+        liveStreamFailure: liveStreamFailureOf(liveStreamFailureRef, repoPath),
+      }),
     );
   }, []);
   const failTaskRecordApply = useCallback(
@@ -426,7 +438,7 @@ export const useRepoSessionReadModel = ({
       `Failed to retry task session records for repo '${repoPath}': ${errorMessage(cause)}`;
     // While the live stream is down, its failure stays public during the retry. A successful
     // retry restarts the observation, which opens the loading window.
-    if (!liveStreamFailureRef.current) {
+    if (!liveStreamFailureOf(liveStreamFailureRef, repoPath)) {
       setSessionReadModelLoadState(loadingAgentSessionReadModelLoadState(repoPath));
     }
     // Query exposes the chat error separately. Wait for its result before the new snapshot,
@@ -508,14 +520,15 @@ export const useRepoSessionReadModel = ({
       clearSessionFaults();
     }
   }, [clearSessionFaults, workspaceRepoPath, workspaceId]);
-  const currentSessionReadModelLoadState = useMemo(
-    () =>
-      currentAgentSessionReadModelLoadState({
-        workspaceRepoPath,
-        state: sessionReadModelLoadState,
-      }),
-    [sessionReadModelLoadState, workspaceRepoPath],
-  );
+  const currentSessionReadModelLoadState = useMemo(() => {
+    const state = currentAgentSessionReadModelLoadState({
+      workspaceRepoPath,
+      state: sessionReadModelLoadState,
+    });
+    return state.kind === "loading" && unconfirmedLiveFailure?.repoPath === state.workspaceRepoPath
+      ? { ...state, liveStreamFailure: unconfirmedLiveFailure.message }
+      : state;
+  }, [sessionReadModelLoadState, unconfirmedLiveFailure, workspaceRepoPath]);
   const taskRecords = useTaskSessionRecords({
     workspaceId,
     repoPath: workspaceRepoPath,
@@ -552,7 +565,7 @@ export const useRepoSessionReadModel = ({
       // own lifecycle.
       const appliedRecords = taskRecordApplyRef.current;
       const staleScopeFailure =
-        !liveStreamFailureRef.current &&
+        !liveStreamFailureOf(liveStreamFailureRef, workspaceRepoPath) &&
         appliedRecords &&
         appliedRecords.repoPath === workspaceRepoPath &&
         appliedRecords.workspaceId === workspaceId &&
@@ -592,7 +605,7 @@ export const useRepoSessionReadModel = ({
     // until the stream itself recovers through a fresh snapshot. A loading
     // window created by a stale-scope or recovered live failure ends with this
     // success.
-    const liveMessage = liveStreamFailureRef.current;
+    const liveMessage = liveStreamFailureOf(liveStreamFailureRef, workspaceRepoPath);
     const staleFailureWasDemoted = demotedStaleFailureRef.current;
     const liveFailureWasRecovered = recoveredLiveFailureRef.current;
     const snapshotAwaitedRecords = snapshotAwaitsRecordsRef.current;
@@ -819,7 +832,8 @@ export const useRepoSessionReadModel = ({
     const failObservation = (message: string): void => {
       if (!isStaleRepoOperation()) {
         markHistories(markSessionHistoriesStale);
-        liveStreamFailureRef.current = message;
+        liveStreamFailureRef.current = { repoPath, message };
+        setUnconfirmedLiveFailure(liveStreamFailureRef.current);
         setSessionReadModelLoadState(
           failedAgentSessionReadModelLoadState(repoPath, message, "live-stream"),
         );
@@ -885,8 +899,9 @@ export const useRepoSessionReadModel = ({
         return;
       }
       // Any fresh authoritative snapshot proves the stream recovered.
-      const recoveredLiveFailure = liveStreamFailureRef.current !== null;
-      liveStreamFailureRef.current = null;
+      const recoveredLiveFailure = liveStreamFailureOf(liveStreamFailureRef, repoPath) !== null;
+      if (recoveredLiveFailure) liveStreamFailureRef.current = null;
+      setUnconfirmedLiveFailure((current) => (current?.repoPath === repoPath ? null : current));
       if (readLoadedWorkflowRecords()) {
         setSessionReadModelLoadState(readyAgentSessionReadModelLoadState(repoPath));
         return;
@@ -1164,7 +1179,6 @@ export const useRepoSessionReadModel = ({
 
     return () => {
       cancelled = true;
-      liveStreamFailureRef.current = null;
       demotedStaleFailureRef.current = false;
       recoveredLiveFailureRef.current = false;
       snapshotAwaitsRecordsRef.current = false;

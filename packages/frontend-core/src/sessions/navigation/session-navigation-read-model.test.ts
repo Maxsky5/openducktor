@@ -57,6 +57,7 @@ const chat = (id: string, overrides: Partial<WorkspaceSession> = {}): WorkspaceS
 
 const facts = (overrides: Partial<WorkspaceSessionLiveFacts> = {}): WorkspaceSessionLiveFacts => ({
   activityState: "idle",
+  waitingOnBackground: false,
   pendingQuestion: false,
   pendingPermission: false,
   pendingInputs: new Set(),
@@ -574,6 +575,26 @@ describe("buildSessionNavigationModel", () => {
       runtimeKind: "codex",
       workflowTone: "waiting_input",
       attention: ["question"],
+    });
+  });
+
+  test("keeps a chat that waits on background tasks in Running, in the Background style", () => {
+    const model = buildSessionNavigationModel(
+      [
+        sources({
+          chats: [chat("waiting")],
+          live: liveReady([
+            [key("native-waiting"), facts({ activityState: "running", waitingOnBackground: true })],
+          ]),
+        }),
+      ],
+      "none",
+    );
+
+    expect(groupsOf(model).running).toEqual(["workspace_session:alpha:waiting"]);
+    expect(model.groups[1]?.entries[0]?.status).toEqual({
+      kind: "running",
+      waitingOnBackground: true,
     });
   });
 

@@ -25,6 +25,11 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { hasLiveSessions } from "./runtime-impact-review";
+import {
+  AGENT_SESSION_BACKGROUND_ICON,
+  AGENT_SESSION_BACKGROUND_SURFACE_CLASS,
+} from "@/lib/agent-session-background-styles";
+import { AGENT_SESSION_BACKGROUND_DESCRIPTION } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 
 /** An executable path change that a settings save applies to one runtime kind. */
 export type RuntimeImpactPathChange = {
@@ -136,7 +141,13 @@ export function RuntimeImpactDialog({
   );
 }
 
-type ActivityBadge = { label: string; variant: "warning" | "secondary" | "danger" };
+type ActivityBadge = {
+  label: string;
+  variant: "warning" | "secondary" | "danger" | "outline";
+  className?: string;
+  icon?: LucideIcon;
+  description?: string;
+};
 
 const ACTIVITY_BADGES = {
   running: { label: "Running", variant: "warning" },
@@ -145,6 +156,18 @@ const ACTIVITY_BADGES = {
   waiting_for_permission: { label: "Waiting for approval", variant: "danger" },
   idle: { label: "Idle", variant: "secondary" },
 } satisfies Record<AgentSessionActivity, ActivityBadge>;
+
+/** A running session that waits on background tasks: Running, in the calmer Background style. */
+const BACKGROUND_BADGE: ActivityBadge = {
+  label: ACTIVITY_BADGES.running.label,
+  variant: "outline",
+  className: AGENT_SESSION_BACKGROUND_SURFACE_CLASS,
+  icon: AGENT_SESSION_BACKGROUND_ICON,
+  description: AGENT_SESSION_BACKGROUND_DESCRIPTION,
+};
+
+const sessionActivityBadge = (session: RuntimeLifecycleSessionImpact): ActivityBadge =>
+  session.waitingOnBackground ? BACKGROUND_BADGE : ACTIVITY_BADGES[session.activity];
 
 function ConfirmButtonIcon({
   isPending,
@@ -158,7 +181,8 @@ function ConfirmButtonIcon({
 }
 
 function SessionRow({ session }: { session: RuntimeLifecycleSessionImpact }): ReactElement {
-  const activity = ACTIVITY_BADGES[session.activity];
+  const activity = sessionActivityBadge(session);
+  const ActivityIcon = activity.icon;
   const isChild = session.parentExternalSessionId !== undefined;
   return (
     <li
@@ -185,7 +209,12 @@ function SessionRow({ session }: { session: RuntimeLifecycleSessionImpact }): Re
           </p>
         ) : null}
       </div>
-      <Badge variant={activity.variant} className="shrink-0">
+      <Badge
+        variant={activity.variant}
+        className={cn("shrink-0 gap-1", activity.className)}
+        title={activity.description}
+      >
+        {ActivityIcon ? <ActivityIcon className="size-3" aria-hidden /> : null}
         {activity.label}
       </Badge>
     </li>

@@ -3,6 +3,7 @@ import { pendingInputIdentity } from "../lib/pending-input-identity";
 import {
   getAgentSessionActivityState,
   isAgentSessionActivityWorking,
+  isAgentSessionWaitingOnBackgroundState,
 } from "../lib/agent-session-activity-state";
 import type { AgentSessionActivityState } from "../types/agent-session-activity";
 import type { AgentSessionTranscriptActivityFacts } from "../sessions/agent-orchestrator/session-read-model/agent-session-live-activity";
@@ -23,6 +24,9 @@ export type WorkspaceActivitySession = AgentSessionTranscriptActivityFacts & {
   executionEpisodeId?: string | undefined;
   /** Why the status of this session is not current, after a failed status read. */
   statusUnavailableReason: string | null;
+  backgroundTasks?: AgentSessionLiveSnapshot["backgroundTasks"];
+  backgroundResultPending?: true | undefined;
+  goal?: AgentSessionLiveSnapshot["goal"];
   /** Small live preview data. This keeps no transcript, messages, or context usage. */
   preview?: Pick<
     AgentSessionLiveSnapshot,
@@ -125,6 +129,8 @@ const isArchivedBranch = (
  */
 export type WorkspaceSessionLiveFacts = {
   activityState: AgentSessionActivityState;
+  /** The running root session waits on background tasks. Only its style changes. */
+  waitingOnBackground: boolean;
   pendingQuestion: boolean;
   pendingPermission: boolean;
   /** Request identities include the owning child and type, so reused IDs stay distinct. */
@@ -178,6 +184,7 @@ const sameLiveFacts = (
   right: WorkspaceSessionLiveFacts,
 ): boolean =>
   left.activityState === right.activityState &&
+  left.waitingOnBackground === right.waitingOnBackground &&
   left.pendingQuestion === right.pendingQuestion &&
   left.pendingPermission === right.pendingPermission &&
   left.fault === right.fault &&
@@ -205,6 +212,7 @@ export const sameWorkspaceSessionLiveState = (
 
 type MutableLiveFacts = {
   status: WorkspaceActivitySession["status"];
+  waitingOnBackground: boolean;
   statusUnavailableReason: string | null;
   pendingQuestion: boolean;
   pendingPermission: boolean;
@@ -220,8 +228,10 @@ export const foldWorkspaceSessionLiveFacts = (
   const owners = new Map<string, MutableLiveFacts>();
   for (const [key, session] of sessions) {
     const ownerKey = resolveWorkspaceSessionOwnerKey(sessions, key);
+    const ownerSession = sessions.get(ownerKey) ?? session;
     const owner = owners.get(ownerKey) ?? {
-      status: sessions.get(ownerKey)?.status ?? session.status,
+      status: ownerSession.status,
+      waitingOnBackground: isAgentSessionWaitingOnBackgroundState(ownerSession),
       statusUnavailableReason: null,
       pendingQuestion: false,
       pendingPermission: false,
@@ -247,11 +257,13 @@ export const foldWorkspaceSessionLiveFacts = (
   for (const [key, owner] of owners) {
     // Members of a parent cycle own each other, so none of them is a root.
     if (resolveWorkspaceSessionOwnerKey(sessions, key) !== key) continue;
+    const activityState = getAgentSessionActivityState({
+      status: owner.status,
+      hasPendingInput: owner.pendingQuestion || owner.pendingPermission,
+    });
     facts.set(key, {
-      activityState: getAgentSessionActivityState({
-        status: owner.status,
-        hasPendingInput: owner.pendingQuestion || owner.pendingPermission,
-      }),
+      activityState,
+      waitingOnBackground: owner.waitingOnBackground && activityState === "running",
       pendingQuestion: owner.pendingQuestion,
       pendingPermission: owner.pendingPermission,
       pendingInputs: owner.pendingInputs,

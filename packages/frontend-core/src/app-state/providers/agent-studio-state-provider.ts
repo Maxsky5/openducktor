@@ -13,8 +13,9 @@ import {
 import { errorMessage } from "../../lib/errors";
 import type { ActiveWorkspace } from "../../types/session-slices";
 import {
+  failedTaskRecordsLoadState,
   loadingAgentSessionReadModelLoadState,
-  failedAgentSessionReadModelLoadState,
+  unresolvedLiveStreamFailure,
 } from "../../types/agent-session-read-model";
 import {
   createAgentMessageQueuesStore,
@@ -188,26 +189,29 @@ function WorkspaceSessionController({
     dependencies,
   });
   const { refetch } = taskQuery;
-  const controller = useMemo(
-    () =>
-      taskQuery.isError
-        ? {
-            ...state,
-            readModelState: {
-              ...state.readModelState,
-              sessionReadModelLoadState: failedAgentSessionReadModelLoadState(
-                workspace.repoPath,
-                `Failed to load workspace tasks: ${errorMessage(taskQuery.error)}`,
-                "task-records",
-              ),
-              reloadSessionReadModel: () => {
-                void refetch();
-              },
-            },
-          }
-        : state,
-    [state, taskQuery.error, taskQuery.isError, refetch, workspace.repoPath],
-  );
+  const controller = useMemo(() => {
+    if (!taskQuery.isError) return state;
+    const { sessionReadModelLoadState: readModelLoadState, reloadSessionReadModel } =
+      state.readModelState;
+    const liveStreamFailure = unresolvedLiveStreamFailure(readModelLoadState);
+    // The read model has its own failure to retry when it failed or its live stream is down.
+    const readModelNeedsReload = readModelLoadState.kind === "failed" || liveStreamFailure !== null;
+    return {
+      ...state,
+      readModelState: {
+        ...state.readModelState,
+        sessionReadModelLoadState: failedTaskRecordsLoadState({
+          workspaceRepoPath: workspace.repoPath,
+          message: `Failed to load workspace tasks: ${errorMessage(taskQuery.error)}`,
+          liveStreamFailure,
+        }),
+        reloadSessionReadModel: () => {
+          void refetch();
+          if (readModelNeedsReload) reloadSessionReadModel();
+        },
+      },
+    };
+  }, [state, taskQuery.error, taskQuery.isError, refetch, workspace.repoPath]);
   useLayoutEffect(() => {
     registry.publish(workspace.repoPath, controller);
   }, [controller, registry, workspace.repoPath]);

@@ -254,6 +254,10 @@ export type AgentSessionState = {
   goal?: import("@openducktor/contracts").AgentSessionGoal | undefined;
   /** The Allow state of denied calls that the user can allow. Live only, from the snapshot. */
   deniedActions?: readonly import("@openducktor/contracts").AgentSessionDeniedAction[] | undefined;
+  /** The running background tasks of this session tree, oldest first. Live only. */
+  backgroundTasks?: import("@openducktor/contracts").AgentSessionLiveSnapshot["backgroundTasks"];
+  /** A background task ended, but its result has not reached the agent yet. Live only. */
+  backgroundResultPending?: true | undefined;
   startedAt: string;
   workingDirectory: string;
   /** Live-only parent link used to project descendant pending input to active ancestors. */

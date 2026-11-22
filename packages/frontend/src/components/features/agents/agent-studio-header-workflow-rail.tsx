@@ -10,7 +10,14 @@ import {
 } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button } from "@/components/ui/button";
-import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import {
+  AGENT_SESSION_BACKGROUND_DESCRIPTION,
+  isAgentSessionActivityWorking,
+} from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import {
+  AGENT_SESSION_BACKGROUND_ICON,
+  AGENT_SESSION_BACKGROUND_TEXT_CLASS,
+} from "@/lib/agent-session-background-styles";
 import {
   AGENT_WORKFLOW_TONE_ICON_CLASSES,
   AGENT_WORKFLOW_TONE_TEXT_CLASSES,
@@ -134,30 +141,69 @@ function WorkflowStepButton({
   );
 }
 
+/** A still mark: the agent writes no reply and waits on its background tasks. */
+function BackgroundMark(): ReactElement {
+  const BackgroundIcon = AGENT_SESSION_BACKGROUND_ICON;
+  return (
+    <BackgroundIcon
+      className={cn("size-3.5", AGENT_SESSION_BACKGROUND_TEXT_CLASS)}
+      role="img"
+      aria-label={AGENT_SESSION_BACKGROUND_DESCRIPTION}
+    />
+  );
+}
+
+/** A running session that waits on background tasks shows the still Background mark. */
+function InProgressMark({ state }: { state: WorkflowRailStep["state"] }): ReactElement {
+  if (state.waitingOnBackground) return <BackgroundMark />;
+  if (state.liveSession !== "none" && isAgentSessionActivityWorking(state.liveSession)) {
+    return <LoaderCircle className="size-3.5 animate-spin" />;
+  }
+  return <CircleDotDashed className="size-3.5" />;
+}
+
+/** The mark of the workflow state of a step. */
+function WorkflowToneMark({ state }: { state: WorkflowRailStep["state"] }): ReactElement | null {
+  switch (state.tone) {
+    case "done":
+      return <Check className="size-3.5 text-success-accent" />;
+    case "in_progress":
+      return <InProgressMark state={state} />;
+    case "available":
+      return <Circle className="size-3" />;
+    case "optional":
+      return <CircleDashed className="size-3" />;
+    case "rejected":
+    case "failed":
+      return <AlertTriangle className="size-3.5" />;
+    default:
+      return null;
+  }
+}
+
+function WorkflowAttentionMark({
+  variant,
+}: {
+  variant: WorkflowRailStep["attentionVariant"];
+}): ReactElement | null {
+  if (variant === "session_waiting_input") return <CircleDashed className="size-3.5" />;
+  if (variant === "blocked_task") return <AlertTriangle className="size-3.5" />;
+  return null;
+}
+
 function WorkflowStepContent({ step }: { step: WorkflowRailStep }): ReactElement {
   const Icon = step.icon;
-  const shouldSpinInProgress =
-    step.state.liveSession !== "none" && isAgentSessionActivityWorking(step.state.liveSession);
-  const attentionVariant = step.attentionVariant;
+  // The workflow state and the session state are separate: a done step, such as a Builder in AI
+  // review, can still wait on background tasks. An in-progress step shows it in place of its mark.
+  const backgroundBesideTone = step.state.waitingOnBackground && step.state.tone !== "in_progress";
 
   return (
     <>
       <Icon className={cn("size-4", AGENT_WORKFLOW_TONE_ICON_CLASSES[step.state.tone])} />
       {step.label}
-      {step.state.tone === "done" ? <Check className="size-3.5 text-success-accent" /> : null}
-      {attentionVariant === "session_waiting_input" ? <CircleDashed className="size-3.5" /> : null}
-      {step.state.tone === "in_progress" && shouldSpinInProgress ? (
-        <LoaderCircle className="size-3.5 animate-spin" />
-      ) : null}
-      {step.state.tone === "in_progress" && !shouldSpinInProgress ? (
-        <CircleDotDashed className="size-3.5" />
-      ) : null}
-      {step.state.tone === "available" ? <Circle className="size-3" /> : null}
-      {step.state.tone === "optional" ? <CircleDashed className="size-3" /> : null}
-      {attentionVariant === "blocked_task" ? <AlertTriangle className="size-3.5" /> : null}
-      {step.state.tone === "rejected" || step.state.tone === "failed" ? (
-        <AlertTriangle className="size-3.5" />
-      ) : null}
+      <WorkflowToneMark state={step.state} />
+      <WorkflowAttentionMark variant={step.attentionVariant} />
+      {backgroundBesideTone ? <BackgroundMark /> : null}
     </>
   );
 }

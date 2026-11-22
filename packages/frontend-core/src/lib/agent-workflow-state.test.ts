@@ -30,6 +30,7 @@ describe("built-in workflow rail state", () => {
         role: "build",
         workflow: task.agentWorkflows.build,
         liveSession: "none",
+        waitingOnBackground: false,
       }),
     ).toMatchObject({ tone: "done", completion: "done" });
     expect(
@@ -38,6 +39,7 @@ describe("built-in workflow rail state", () => {
         role: "qa",
         workflow: task.agentWorkflows.qa,
         liveSession: "none",
+        waitingOnBackground: false,
       }),
     ).toMatchObject({ tone: "rejected", completion: "rejected" });
   });
@@ -45,7 +47,13 @@ describe("built-in workflow rail state", () => {
   test("shows an active QA retry on a blocked task ahead of the saved rejection", () => {
     const task = rejectedTask("blocked");
     const qa = (liveSession: "running" | "idle") =>
-      buildRoleWorkflowState({ task, role: "qa", workflow: task.agentWorkflows.qa, liveSession });
+      buildRoleWorkflowState({
+        task,
+        role: "qa",
+        workflow: task.agentWorkflows.qa,
+        liveSession,
+        waitingOnBackground: false,
+      });
     expect(qa("running")).toMatchObject({ tone: "in_progress", completion: "in_progress" });
     expect(qa("idle")).toMatchObject({ tone: "rejected", completion: "rejected" });
   });
@@ -57,6 +65,7 @@ describe("built-in workflow rail state", () => {
       role: "build",
       workflow: task.agentWorkflows.build,
       liveSession: "stopped",
+      waitingOnBackground: false,
     });
     expect(state.tone).toBe("waiting_input");
     expect(workflowStepRailState({ state, hasSession: false })).toEqual({
@@ -72,12 +81,41 @@ describe("built-in workflow rail state", () => {
         role: "spec",
         workflow: { required: false, canSkip: true, available: true, completed: false },
         liveSession: "none",
+        waitingOnBackground: false,
       }),
     ).toEqual({
       tone: "optional",
       availability: "optional",
       completion: "not_started",
       liveSession: "none",
+      waitingOnBackground: false,
     });
+  });
+
+  test("marks a running step that waits on background tasks, and keeps it in progress", () => {
+    const state = buildRoleWorkflowState({
+      task: null,
+      role: "build",
+      workflow: { required: true, canSkip: false, available: true, completed: false },
+      liveSession: "running",
+      waitingOnBackground: true,
+    });
+    expect(state).toMatchObject({
+      tone: "in_progress",
+      liveSession: "running",
+      waitingOnBackground: true,
+    });
+    expect(workflowStepRailState({ state, hasSession: true }).hint).toBe(
+      "Session is running and waiting on background tasks",
+    );
+    expect(
+      buildRoleWorkflowState({
+        task: null,
+        role: "build",
+        workflow: { required: true, canSkip: false, available: true, completed: false },
+        liveSession: "idle",
+        waitingOnBackground: true,
+      }).waitingOnBackground,
+    ).toBe(false);
   });
 });

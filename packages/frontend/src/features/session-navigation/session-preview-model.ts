@@ -144,6 +144,9 @@ export const previewWorkflow = (
     return {
       session: sessionKey,
       liveSession: sessionKey ? (facts?.get(sessionKey)?.activityState ?? "none") : "none",
+      waitingOnBackground: sessionKey
+        ? (facts?.get(sessionKey)?.waitingOnBackground ?? false)
+        : false,
     };
   });
   const steps = rail.map(toAgentWorkflowStep);

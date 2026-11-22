@@ -79,6 +79,20 @@ describe("session entry presentation", () => {
     expect(sessionEntryDotTone(chatEntry(), false)).toBe("read");
   });
 
+  test("a running session that waits on background tasks shows the Background style", () => {
+    const waiting = chatEntry({ status: { kind: "running", waitingOnBackground: true } });
+    expect(sessionEntryIconTone(waiting)).toBe("background");
+    expect(sessionEntryDotTone(waiting, true)).toBe("background");
+
+    // Attention always wins over the Background style.
+    const asking = chatEntry({
+      attention: ["question"],
+      status: { kind: "running", waitingOnBackground: true },
+    });
+    expect(sessionEntryIconTone(asking)).toBe("waiting_input");
+    expect(sessionEntryDotTone(asking, true)).toBe("input_unread");
+  });
+
   test("the location and terminal context come from the chat or the task session", () => {
     expect(sessionEntryLocation(chatEntry())).toEqual({
       workingDirectory: "/repos/alpha",

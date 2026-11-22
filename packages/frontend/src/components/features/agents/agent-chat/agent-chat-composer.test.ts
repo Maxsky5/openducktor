@@ -31,6 +31,7 @@ const buildModel = () => ({
   messageQueue: null,
   goalRow: null,
   goalRowScope: null,
+  backgroundTasks: null,
   draftScope: {
     key: "draft-1",
     persistence: null,
@@ -538,6 +539,35 @@ describe("AgentChatComposer", () => {
       expect(html.includes("Queued follow-up")).toBe(overrides.messageQueue !== undefined);
     });
   }
+
+  test("shows the background task bar above the composer, and hides it when read-only", () => {
+    const backgroundTasks = {
+      rows: [
+        {
+          taskId: "task-1",
+          kind: "command" as const,
+          kindLabel: "Command",
+          title: "bun test",
+          description: null,
+          stop: { control: { label: "Stop" as const, busy: false }, note: null },
+          confirmation: { title: "Stop this command?", description: "", confirmLabel: "Stop" },
+        },
+      ],
+      onStop: () => {},
+    };
+    const html = renderToStaticMarkup(
+      createElement(AgentChatComposer, { model: { ...buildModel(), backgroundTasks } }),
+    );
+    expect(html).toContain('aria-label="Background tasks"');
+    expect(html).toContain("1 background task");
+
+    const readOnly = renderToStaticMarkup(
+      createElement(AgentChatComposer, {
+        model: { ...buildModel(), backgroundTasks, isReadOnly: true },
+      }),
+    );
+    expect(readOnly).not.toContain('aria-label="Background tasks"');
+  });
 
   test("keeps the editor open while a send waits for the turn to start", () => {
     const html = renderToStaticMarkup(
