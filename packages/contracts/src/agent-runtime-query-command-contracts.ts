@@ -10,6 +10,7 @@ import {
   agentSessionTodosSchema,
 } from "./agent-engine-schemas";
 import { agentFileReferenceSchema, agentToolPartSchema } from "./agent-session-event-schemas";
+import { knownRuntimeKindSchema } from "./runtime-kind-schemas";
 import {
   agentTextGenerationInputSchema,
   agentTextGenerationResultSchema,
@@ -29,7 +30,7 @@ import {
 export const agentRuntimePreviewModelsInputSchema = z
   .object({
     repoPath: z.string().trim().min(1),
-    runtimeKind: z.enum(["claude", "codex", "opencode", "antigravity"]),
+    runtimeKind: knownRuntimeKindSchema,
   })
   .strict();
 export type AgentRuntimePreviewModelsInput = z.infer<typeof agentRuntimePreviewModelsInputSchema>;
