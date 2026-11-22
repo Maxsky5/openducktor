@@ -7,6 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./claude-transcript-worker": "./src/adapters/claude/claude-transcript-worker.ts",
+    "./usage-index-worker": "./src/adapters/usage/usage-index-worker.ts",
+    "./usage-parser-worker": "./src/adapters/usage/usage-parser-worker.ts",
     "./host-database-import-worker": "./src/adapters/sqlite/host-database-import-worker.ts",
     "./sqlite-migration-assets": "./src/adapters/sqlite/sqlite-migration-assets.ts",
     "./generated-image-worker": "./src/adapters/attachments/generated-image-worker.ts",

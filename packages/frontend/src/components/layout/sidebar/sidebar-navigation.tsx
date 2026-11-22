@@ -1,13 +1,14 @@
-import { Columns3 } from "lucide-react";
+import { ChartSpline, Columns3, type LucideIcon } from "lucide-react";
 import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
+import { USAGE_PATH } from "@/pages";
 
 const KANBAN_ROUTE = "/kanban";
 
 type SidebarNavigationState = {
-  isActivated: boolean;
+  activatedRoute: string | null;
   committedLocationKey: string;
 };
 
@@ -21,9 +22,10 @@ const isModifiedEvent = (event: MouseEvent<HTMLAnchorElement>): boolean =>
 
 const shouldActivateSidebarNavigation = (
   currentPathname: string,
+  route: string,
   event: MouseEvent<HTMLAnchorElement>,
 ): boolean => {
-  if (currentPathname === KANBAN_ROUTE || event.defaultPrevented) {
+  if (currentPathname === route || event.defaultPrevented) {
     return false;
   }
 
@@ -32,63 +34,130 @@ const shouldActivateSidebarNavigation = (
   return event.button === 0 && (!target || target === "_self") && !isModifiedEvent(event);
 };
 
-/** The Kanban link. Sessions have their own list, so the sidebar keeps no page links for them. */
-export function SidebarNavigation({
-  compact = false,
+type SidebarPageLink = {
+  route: string;
+  label: string;
+  title: string | undefined;
+  icon: LucideIcon;
+};
+
+/**
+ * Links to pages. A click marks its link as active at once, also while the route loads, and the
+ * optional guard can hold the navigation.
+ */
+function SidebarPageLinks({
+  links,
+  label,
+  iconOnly,
+  className,
+  linkClassName,
+  activeClassName,
   onBeforeNavigate,
-}: SidebarNavigationProps): ReactElement {
+}: {
+  links: readonly SidebarPageLink[];
+  label: string;
+  iconOnly: boolean;
+  className?: string;
+  linkClassName: string;
+  activeClassName: string;
+  onBeforeNavigate: SidebarNavigationProps["onBeforeNavigate"];
+}): ReactElement {
   const location = useLocation();
-  const shortcutTitle = useShortcutTitle("kanban", "Kanban");
   const navigate = useNavigate();
 
   const currentPathname = location.pathname;
   const currentLocationKey = location.key;
   const [navigationState, setNavigationState] = useState<SidebarNavigationState>(() => ({
-    isActivated: false,
+    activatedRoute: null,
     committedLocationKey: currentLocationKey,
   }));
-  let isActivated = navigationState.isActivated;
+  let activatedRoute = navigationState.activatedRoute;
 
   if (navigationState.committedLocationKey !== currentLocationKey) {
     // Reset during render so restored history entries cannot revive stale optimistic feedback.
-    isActivated = false;
-    setNavigationState({ isActivated: false, committedLocationKey: currentLocationKey });
+    activatedRoute = null;
+    setNavigationState({ activatedRoute: null, committedLocationKey: currentLocationKey });
   }
 
-  const activateRoute = (event: MouseEvent<HTMLAnchorElement>): void => {
-    if (!shouldActivateSidebarNavigation(currentPathname, event)) {
+  const activateRoute = (route: string, event: MouseEvent<HTMLAnchorElement>): void => {
+    if (!shouldActivateSidebarNavigation(currentPathname, route, event)) {
       return;
     }
-    setNavigationState({ isActivated: true, committedLocationKey: currentLocationKey });
+    setNavigationState({ activatedRoute: route, committedLocationKey: currentLocationKey });
     if (onBeforeNavigate) {
       event.preventDefault();
       onBeforeNavigate(
-        () => navigate(KANBAN_ROUTE),
-        () => setNavigationState({ isActivated: false, committedLocationKey: currentLocationKey }),
+        () => navigate(route),
+        () =>
+          setNavigationState({ activatedRoute: null, committedLocationKey: currentLocationKey }),
       );
     }
   };
 
   return (
-    <nav aria-label="Pages">
-      <NavLink
-        to={KANBAN_ROUTE}
-        title={shortcutTitle}
-        aria-label="Kanban"
-        onClick={activateRoute}
-        className={({ isActive }) =>
-          cn(
-            "flex h-9 cursor-pointer items-center rounded-md text-sm font-medium",
-            compact ? "size-9 justify-center" : "gap-2 px-3",
-            isActive || isActivated
-              ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-              : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground",
-          )
-        }
-      >
-        <Columns3 className="size-4" />
-        {compact ? null : "Kanban"}
-      </NavLink>
+    <nav aria-label={label} className={className}>
+      {links.map(({ route, label: linkLabel, title, icon: Icon }) => (
+        <NavLink
+          key={route}
+          to={route}
+          title={title}
+          aria-label={linkLabel}
+          onClick={(event) => activateRoute(route, event)}
+          className={({ isActive }) =>
+            cn(
+              "flex cursor-pointer items-center rounded-md text-sm font-medium",
+              linkClassName,
+              (activatedRoute === null ? isActive : activatedRoute === route)
+                ? activeClassName
+                : "text-sidebar-foreground hover:bg-accent hover:text-accent-foreground",
+            )
+          }
+        >
+          <Icon className="size-4" />
+          {iconOnly ? null : linkLabel}
+        </NavLink>
+      ))}
     </nav>
+  );
+}
+
+/** The Kanban link. Sessions have their own list, so the sidebar keeps no page links for them. */
+export function SidebarNavigation({
+  compact = false,
+  onBeforeNavigate,
+}: SidebarNavigationProps): ReactElement {
+  const kanbanTitle = useShortcutTitle("kanban", "Kanban");
+  return (
+    <SidebarPageLinks
+      label="Pages"
+      links={[{ route: KANBAN_ROUTE, label: "Kanban", title: kanbanTitle, icon: Columns3 }]}
+      iconOnly={compact}
+      linkClassName={compact ? "size-9 justify-center" : "h-9 gap-2 px-3"}
+      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+      onBeforeNavigate={onBeforeNavigate}
+    />
+  );
+}
+
+const FOOTER_LINKS: readonly SidebarPageLink[] = [
+  { route: USAGE_PATH, label: "Usage", title: "Usage", icon: ChartSpline },
+];
+
+/** The icon links of the sidebar footer, beside Settings. */
+export function SidebarFooterLinks({
+  compact = false,
+  onBeforeNavigate,
+}: SidebarNavigationProps): ReactElement {
+  return (
+    <SidebarPageLinks
+      label="More pages"
+      links={FOOTER_LINKS}
+      iconOnly
+      className={cn("flex gap-1", compact ? "flex-col" : "items-center")}
+      linkClassName="size-9 justify-center"
+      // A quiet tile beside the icon buttons of the footer.
+      activeClassName="bg-accent text-accent-foreground ring-1 ring-border"
+      onBeforeNavigate={onBeforeNavigate}
+    />
   );
 }

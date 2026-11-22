@@ -24,3 +24,12 @@ export const loadNotFoundPage = createCachedPageLoader(() =>
     default: module.NotFoundPage,
   })),
 );
+
+/** The route of the Usage page. */
+export const USAGE_PATH = "/usage";
+
+export const loadUsagePage = createCachedPageLoader(() =>
+  import("./usage/usage-page").then((module) => ({
+    default: module.UsagePage,
+  })),
+);

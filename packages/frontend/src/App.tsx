@@ -18,13 +18,16 @@ import {
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
 import { AppToaster } from "@/components/layout/app-toaster";
-import { loadNotFoundPage } from "@/pages";
+import { loadNotFoundPage, loadUsagePage, USAGE_PATH } from "@/pages";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { SessionsPage } from "@/pages/sessions/sessions-page";
 import { AppStateProvider } from "@/state";
 import { KanbanBoardLoadingShell } from "./pages/kanban/kanban-board-loading-shell";
+import { UsagePageFrame } from "./pages/usage/usage-layout";
+import { UsageHeaderSkeleton, UsagePageSkeleton } from "./pages/usage/usage-page-skeleton";
 
 const NotFoundPage = lazy(loadNotFoundPage);
+const UsagePage = lazy(loadUsagePage);
 
 type AppRouterMode = "browser" | "hash";
 
@@ -53,6 +56,15 @@ function KanbanRouteFallback(): ReactElement {
         <KanbanBoardLoadingShell label="Loading tasks…" testId="kanban-route-loading-overlay" />
       </section>
     </div>
+  );
+}
+
+function UsageRouteFallback(): ReactElement {
+  return (
+    <UsagePageFrame>
+      <UsageHeaderSkeleton />
+      <UsagePageSkeleton />
+    </UsagePageFrame>
   );
 }
 
@@ -88,6 +100,7 @@ const routes = createRoutesFromElements(
       <Route path="/onboarding" element={<Navigate to="/kanban" replace />} />
       <Route path="/kanban" element={withRouteFallback(<KanbanPage />, <KanbanRouteFallback />)} />
       <Route path="/sessions" element={<SessionsPage />} />
+      <Route path={USAGE_PATH} element={withRouteFallback(<UsagePage />, <UsageRouteFallback />)} />
       <Route
         path="/planner"
         element={<Navigate to="/sessions?kind=task&agent=planner" replace />}

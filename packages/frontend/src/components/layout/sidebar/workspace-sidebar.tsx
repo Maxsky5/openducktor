@@ -40,7 +40,7 @@ import { SessionNavigationList } from "./session-navigation-list";
 import { SessionNavigationRail } from "./session-navigation-rail";
 import { SessionGroupingToggle } from "./session-grouping-toggle";
 import { type SessionNavigationScope, SessionScopeSwitch } from "./session-scope-switch";
-import { SidebarNavigation } from "./sidebar-navigation";
+import { SidebarFooterLinks, SidebarNavigation } from "./sidebar-navigation";
 import { SessionSelectionScope } from "./session-selection-scope";
 
 type WorkspaceSidebarProps = {
@@ -341,10 +341,11 @@ export function WorkspaceSidebar({
             </SessionSelectionScope>
             <div className="flex items-center gap-1 border-t border-sidebar-border p-2">
               <SettingsModal
-                triggerClassName="flex-1 justify-start border-transparent bg-transparent px-3 shadow-none text-sidebar-foreground"
-                triggerSize="default"
+                triggerClassName="size-9 border-transparent bg-transparent text-sidebar-foreground shadow-none"
+                triggerIconOnly
               />
-              <DiagnosticsTrigger className="border-transparent bg-transparent shadow-none" />
+              <SidebarFooterLinks onBeforeNavigate={guardTransition} />
+              <DiagnosticsTrigger className="ml-auto border-transparent bg-transparent shadow-none" />
             </div>
           </>
         ) : (
@@ -399,6 +400,7 @@ export function WorkspaceSidebar({
                 triggerSize="icon"
                 triggerIconOnly
               />
+              <SidebarFooterLinks compact onBeforeNavigate={guardTransition} />
             </div>
           </div>
         )}

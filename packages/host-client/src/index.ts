@@ -10,11 +10,16 @@ import {
   type AutopilotStateReadInput,
   type NotificationOccurrence,
   type SelectedNotification,
+  type UsageReport,
+  type UsageReportReadInput,
+  usageReportReadInputSchema,
+  usageReportSchema,
 } from "@openducktor/contracts";
 
 export {
   BROWSER_EVENT_STREAM_NAME,
   STARTUP_EVENT_STREAM_NAME,
+  USAGE_EVENT_STREAM_NAME,
   hostEventStreamEventName,
   agentSessionLiveEnvelopeRepoPath,
   liveSessionStreamEventName,
@@ -51,6 +56,7 @@ type HostClientApi = {
   notificationPublishAction(occurrence: NotificationOccurrence): Promise<SelectedNotification>;
   autopilotStateRead(input: AutopilotStateReadInput): Promise<AutopilotState>;
   autopilotRecoveryClaim(input: AutopilotRecoveryClaimInput): Promise<AutopilotRecoveryClaimResult>;
+  usageReportRead(input: UsageReportReadInput, signal?: AbortSignal): Promise<UsageReport>;
 } & PublicMethods<HostWorkspaceClient> &
   PublicMethods<HostWorkspaceSessionClient> &
   PublicMethods<HostFilesystemClient> &
@@ -95,6 +101,13 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
         "autopilot_recovery_claim",
         autopilotRecoveryClaimInputSchema.parse(input),
         autopilotRecoveryClaimResultSchema,
+      ),
+    usageReportRead: (input: UsageReportReadInput, signal?: AbortSignal) =>
+      invokeFn(
+        "usage_report_read",
+        usageReportReadInputSchema.parse(input),
+        usageReportSchema,
+        signal ? { signal } : undefined,
       ),
     workspaceSessionExternalList:
       workspaceSessionClient.workspaceSessionExternalList.bind(workspaceSessionClient),

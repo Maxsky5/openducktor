@@ -1,3 +1,4 @@
+import type { RemoteFailure } from "@openducktor/contracts";
 import { RemoteConnectionError, isRemotePairingFailure } from "@openducktor/host-client/remote";
 import { errorMessage } from "./errors";
 
@@ -7,6 +8,8 @@ export type RemoteConnectionFailure = {
   nextAction: string | null;
   /** True when a new pairing code can solve it. */
   pairing: boolean;
+  /** The code of a failure that the remote connection reported, such as `function_unavailable`. */
+  code?: RemoteFailure["code"];
 };
 
 export const describeRemoteConnectionFailure = (cause: unknown): RemoteConnectionFailure => {
@@ -15,6 +18,7 @@ export const describeRemoteConnectionFailure = (cause: unknown): RemoteConnectio
       message: cause.failure.message,
       nextAction: cause.failure.nextAction,
       pairing: isRemotePairingFailure(cause.failure.code),
+      code: cause.failure.code,
     };
   return { message: errorMessage(cause), nextAction: null, pairing: false };
 };

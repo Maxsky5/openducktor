@@ -84,7 +84,8 @@ export const parseCommandInput = <Schema extends z.ZodType>(
   if (parsed.success) return parsed.data;
   throw new HostValidationError({
     field: command,
-    message: `${command} input is invalid: ${parsed.error.message}`,
+    // Readable issues, such as `✖ Unrecognized key: "refresh"`, instead of their JSON.
+    message: `${command} input is invalid: ${z.prettifyError(parsed.error)}`,
     cause: parsed.error,
   });
 };

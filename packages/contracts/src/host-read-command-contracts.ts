@@ -3,7 +3,8 @@ import type { HostCommandName } from "./host-command-contracts";
 /**
  * The host commands that only read host state. A client can send one again after a lost reply,
  * such as after a reconnect, because a second run changes nothing. Never add a command that
- * starts, writes, registers, or refreshes anything.
+ * starts, writes, registers, or refreshes anything. A read can update a derived cache when each
+ * update is atomic and a repeat is safe, as `usage_report_read` does with the usage index.
  */
 export const HOST_READ_COMMAND_NAMES = [
   "agent_runtime_claude_tool_catalog",
@@ -65,6 +66,7 @@ export const HOST_READ_COMMAND_NAMES = [
   "workspace_workflow_get",
   "tasks_list",
   "terminal_list",
+  "usage_report_read",
   "workflow_artifact_get",
   "workspace_catalog_get",
   "workspace_get_azure_devops_connection",

@@ -149,6 +149,7 @@ export const HOST_COMMAND_NAMES = [
   "terminal_prepare_path_input",
   "terminal_restart",
   "terminal_run_action",
+  "usage_report_read",
   "workflow_artifact_get",
   "workflow_artifact_save",
   "workflow_catalog_get",

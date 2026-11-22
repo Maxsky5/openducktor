@@ -100,6 +100,7 @@ export const createDemoHostConnection = (client: HostClient, clock: DemoClock) =
     subscribeWorkspaceSessionUpdates: (listener) => subscribed(workspaceSessions.add(listener)),
     subscribeRuntimeChanges: noEvents,
     subscribeTaskMergeStatusUpdates: noEvents,
+    subscribeUsageProgress: noEvents,
     subscribeBrowserTabEvents: noEvents,
     subscribeRunEvents: noEvents,
     subscribeAzureDevOpsConnectionUpdates: noEvents,

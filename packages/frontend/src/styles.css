@@ -118,6 +118,14 @@
   --color-odt-runtime-accent-opencode: var(--odt-runtime-accent-opencode);
   --color-odt-runtime-accent-codex: var(--odt-runtime-accent-codex);
   --color-odt-runtime-accent-claude: var(--odt-runtime-accent-claude);
+  --color-chart-runtime-claude: var(--chart-runtime-claude);
+  --color-chart-runtime-codex: var(--chart-runtime-codex);
+  --color-chart-runtime-opencode: var(--chart-runtime-opencode);
+  --color-chart-input: var(--chart-input);
+  --color-chart-cache-read: var(--chart-cache-read);
+  --color-chart-cache-write: var(--chart-cache-write);
+  --color-chart-output: var(--chart-output);
+  --color-chart-grid: var(--chart-grid);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -319,6 +327,14 @@ pre {
 @keyframes history-row-leave {
   to {
     opacity: 0;
+  }
+}
+
+/* Usage content that replaces its skeleton fades in. */
+@keyframes usage-enter {
+  from {
+    opacity: 0;
+    translate: 0 4px;
   }
 }
 

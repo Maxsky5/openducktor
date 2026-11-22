@@ -76,6 +76,7 @@ Runtime catalog reads follow these rules:
 | Host runtime and MCP bridge status | Infinite, updated by events |
 | Task merge status | Infinite, updated by events |
 | Task worktree cleanup impact | 0 |
+| Usage report | Infinity, read again by Refresh; reset when the host refuses the authorization or another host instance answers. Reconnect recovery skips it (`skipHostRecovery`) because a cold read can take a minute; the connection reads it again after admission |
 
 The connection owns the workflow catalog and each workspace board in `workflows.ts`. Every task projection resolves its exact workflow ID and revision before it enters the task cache. Recovery reloads the catalog and invalidates board reads. Each workspace reloads its board within its own task recovery, so a failed board does not block the other workspaces. Closing a workspace cancels and removes its board query. Missing definitions or invalid board metadata fail the affected read without a built-in substitution.
 
@@ -106,6 +107,8 @@ The settings snapshot includes the saved Autopilot rules. The `autopilot_setting
 The `openducktor://runtime-changed` event stream owns host runtime status and MCP bridge status after the first read. Merge each event into the cached snapshot by host instance and revision. Do not poll it.
 
 The `openducktor://task-merge-status-updated` event replaces the task merge status entry of its repository. A reconnect with missed events invalidates all entries. Do not poll it.
+
+The `openducktor://usage-index-progress` event stream is live state, not query data. The Usage page keeps the latest event in component state while its read runs, and drops it when the read ends. Do not poll it.
 
 The task worktree cleanup impact reads only while a confirmation or the detail sheet of a closed task is open, so each opening reads current Git state.
 

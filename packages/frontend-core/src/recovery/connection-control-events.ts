@@ -19,6 +19,11 @@ export type ConnectionControlEvent =
       message?: string;
     };
 
+/** True for a control event of the connection, which a listener receives beside its own events. */
+export const isConnectionControlEvent = <Event extends object>(
+  event: Event | ConnectionControlEvent,
+): event is ConnectionControlEvent => "__openducktorConnectionControl" in event;
+
 export type ReconnectionCoverage = {
   hostChanged: boolean;
   missedEventNames: readonly string[];

@@ -1,3 +1,4 @@
+import type { UsageIndexPort } from "../../ports/usage-index-port";
 import type { BrowserService } from "../../application/browser/browser-service-types";
 import type { WorkspaceSettingsError } from "../../application/workspaces/workspace-settings-service";
 import type { NotificationService } from "../../application/notifications/notification-service";
@@ -51,7 +52,7 @@ export const createNodeHostRouterLifecycle = ({
   sessionLaunches,
   azureDevOpsConnection,
   workspaceProviderSetup,
-  imageWorkers,
+  workers,
   lifecycleLogger,
   mcpHostBridge,
   runtimeRegistry,
@@ -78,7 +79,10 @@ export const createNodeHostRouterLifecycle = ({
   workspaceProviderSetup: {
     shutdown(): Effect.Effect<void, import("../../effect/host-errors").HostError>;
   };
-  imageWorkers: Pick<GeneratedImageWorkers, "shutdown">;
+  workers: {
+    imageWorkers: Pick<GeneratedImageWorkers, "shutdown">;
+    usageIndex: Pick<UsageIndexPort, "shutdown">;
+  };
   lifecycleLogger: HostLifecycleLogger;
   mcpHostBridge: McpHostBridgeServer | null | undefined;
   runtimeRegistry: RuntimeRegistryPort;
@@ -168,7 +172,8 @@ export const createNodeHostRouterLifecycle = ({
                 ? [{ label: "Azure DevOps sign-in", run: () => azureDevOpsConnection.shutdown() }]
                 : []),
               { label: "Workspace provider setup", run: () => workspaceProviderSetup.shutdown() },
-              { label: "image workers", run: () => imageWorkers.shutdown },
+              { label: "image workers", run: () => workers.imageWorkers.shutdown },
+              { label: "usage index", run: () => workers.usageIndex.shutdown() },
               createStopTerminalsStep(terminalService),
               createStopBrowserStep(browserService),
               createStopRuntimesStep(runtimeRegistry, lifecycleLogger),

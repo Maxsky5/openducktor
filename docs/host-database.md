@@ -8,6 +8,7 @@ OpenDucktor stores shared workspace data and execution settings in `<config-root
 |---|---|
 | `database.sqlite` | Workspace registration, settings and lifecycle; task data; custom roles; prompt overrides and appends; runtime policies; Git defaults; Autopilot policy; host identity; remote-access settings. |
 | `config.json` | Theme, appearance, chat, Kanban, general UI, notifications, reusable prompts, model favorites, preferred Open In tool, active workspace, order, recent workspaces, and Agent Studio state. |
+| `usage-index.sqlite` | A disposable cache of the native runtime history and the last downloaded API rates for the Usage page. Deleting it costs one rebuild. See [Usage](usage.md#index). |
 | Existing external files | Asset bytes and owner markers, worktrees, browser permissions and saved tabs, MCP discovery, logs, Electron profiles, and keychain secrets. |
 
 The settings adapter composes reads from both stores. Saves contain edited fields. Shared edits commit first; preference edits follow. A preference failure after a shared commit reports the saved shared fields and retains the failed preference edits.

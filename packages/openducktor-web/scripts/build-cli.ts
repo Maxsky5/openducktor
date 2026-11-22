@@ -65,6 +65,8 @@ const CLI_BUILD_COMMAND = [
   "src/cli.ts",
   "src/generated-image-worker.ts",
   "src/claude-transcript-worker.ts",
+  "src/usage-index-worker.ts",
+  "src/usage-parser-worker.ts",
   "src/host-database-import-worker.ts",
 ] as const;
 

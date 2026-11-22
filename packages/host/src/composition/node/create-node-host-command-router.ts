@@ -396,7 +396,7 @@ export const assembleNodeEffectHostCommandRouter = (
     assets,
     azureDevOpsConnection,
     workspaceProviderSetup,
-    imageWorkers: defaultPorts.imageWorkers,
+    workers: defaultPorts,
     shutdownWorkspaceFiles: () =>
       workspaceFiles.dispose().pipe(Effect.andThen(git.releaseReadCaptures())),
     lifecycleLogger,

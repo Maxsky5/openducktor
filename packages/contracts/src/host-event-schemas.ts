@@ -9,6 +9,7 @@ import { browserHostEventSchema } from "./browser-tab-schemas";
 import { azureDevOpsConnectionStateSchema } from "./azure-devops-schemas";
 import { hostRuntimeEventSchema } from "./host-runtime-schemas";
 import { taskMergeStatusSnapshotSchema } from "./task-merge-status-schemas";
+import { usageIndexProgressSchema } from "./usage-schemas";
 import { workspaceSessionSchema } from "./workspace-session-schemas";
 
 export const HOST_EVENT_CHANNELS = [
@@ -21,6 +22,7 @@ export const HOST_EVENT_CHANNELS = [
   "openducktor://runtime-changed",
   "openducktor://browser-event",
   "openducktor://task-merge-status-updated",
+  "openducktor://usage-index-progress",
 ] as const;
 
 export type HostEventChannel = (typeof HOST_EVENT_CHANNELS)[number];
@@ -49,6 +51,10 @@ export const hostEventEnvelopeSchema = z.discriminatedUnion("channel", [
   z.strictObject({
     channel: z.literal("openducktor://task-merge-status-updated"),
     payload: taskMergeStatusSnapshotSchema,
+  }),
+  z.strictObject({
+    channel: z.literal("openducktor://usage-index-progress"),
+    payload: usageIndexProgressSchema,
   }),
   z.strictObject({
     channel: z.literal("openducktor://azure-devops-connection-updated"),
@@ -93,6 +99,8 @@ export type HostEventPayload<Channel extends HostEventChannel> =
 
 export const BROWSER_EVENT_STREAM_NAME = "browser";
 export const STARTUP_EVENT_STREAM_NAME = "startup";
+/** Usage progress has its own replay buffer, so a long first read cannot evict other events. */
+export const USAGE_EVENT_STREAM_NAME = "usage";
 
 export const liveSessionStreamEventName = (repoPath: string): string =>
   `agent-session-live:${JSON.stringify(repoPath)}`;
@@ -134,6 +142,8 @@ export const hostEventStreamEventName = (envelope: HostEventEnvelope): string =>
       return BROWSER_EVENT_STREAM_NAME;
     case "openducktor://session-startup-progress":
       return STARTUP_EVENT_STREAM_NAME;
+    case "openducktor://usage-index-progress":
+      return USAGE_EVENT_STREAM_NAME;
     default:
       return "message";
   }

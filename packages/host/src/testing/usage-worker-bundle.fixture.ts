@@ -1,0 +1,175 @@
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { zstdCompressSync } from "node:zlib";
+import type { UsageIndexProgress } from "@openducktor/contracts";
+import { Effect } from "effect";
+import { createUsageIndexAdapter } from "../adapters/usage/usage-index-adapter";
+import { resolveUsageLocations } from "../adapters/usage/usage-locations";
+import { createUsageReportService } from "../application/usage/usage-report-service";
+
+// The adapter starts the index and parser bundles next to this bundle.
+const root = mkdtempSync(path.join(tmpdir(), "odt-usage-bundle-"));
+// The index worker downloads its rates from this server instead of models.dev.
+const rates = createServer((_, response) => {
+  response.setHeader("content-type", "application/json");
+  response.end(
+    JSON.stringify({
+      openai: { models: { "gpt-6.1-sol": { cost: { input: 2, output: 10, cache_read: 0.1 } } } },
+    }),
+  );
+});
+await new Promise<void>((resolve) => rates.listen(0, "127.0.0.1", resolve));
+const progressEvents: UsageIndexProgress[] = [];
+// SAFETY: a server that listens on a TCP port has an AddressInfo address.
+const ratesAddress = rates.address() as AddressInfo;
+const index = createUsageIndexAdapter({
+  indexPath: path.join(root, "usage-index.sqlite"),
+  locations: () =>
+    resolveUsageLocations(
+      {
+        CLAUDE_CONFIG_DIR: path.join(root, "claude"),
+        CODEX_HOME: path.join(root, "codex"),
+        XDG_DATA_HOME: path.join(root, "data"),
+      },
+      root,
+    ),
+  onProgress: (progress) => progressEvents.push(progress),
+  ratesUrl: `http://127.0.0.1:${ratesAddress.port}/api.json`,
+});
+const lines = (records: unknown[]) =>
+  `${records.map((record) => JSON.stringify(record)).join("\n")}\n`;
+
+try {
+  const project = path.join(root, "claude", "projects", "-repo");
+  mkdirSync(project, { recursive: true });
+  writeFileSync(
+    path.join(project, "session.jsonl"),
+    lines([
+      {
+        type: "assistant",
+        sessionId: "claude-session",
+        timestamp: "2026-03-02T10:00:00.000Z",
+        cwd: "/repo",
+        requestId: "req_1",
+        message: {
+          id: "msg_1",
+          model: "claude-opus-5-5",
+          usage: {
+            input_tokens: 10,
+            cache_read_input_tokens: 20,
+            cache_creation_input_tokens: 30,
+            output_tokens: 40,
+          },
+        },
+      },
+    ]),
+  );
+  const rollouts = path.join(root, "codex", "sessions", "2026", "03", "02");
+  mkdirSync(rollouts, { recursive: true });
+  writeFileSync(
+    path.join(rollouts, "rollout-2026-03-02T10-00-00-thread.jsonl.zst"),
+    zstdCompressSync(
+      lines([
+        {
+          timestamp: "2026-03-02T10:00:00.000Z",
+          type: "session_meta",
+          payload: { id: "thread", cwd: "/repo", model_provider: "openai", cli_version: "0.160.0" },
+        },
+        {
+          timestamp: "2026-03-02T10:00:01.000Z",
+          type: "turn_context",
+          payload: { turn_id: "turn", model: "gpt-6.1-sol", cwd: "/repo" },
+        },
+        {
+          timestamp: "2026-03-02T10:00:02.000Z",
+          type: "token_usage_record",
+          payload: {
+            thread_id: "thread",
+            session_id: "thread",
+            response_id: "resp_1",
+            usage: { input_tokens: 100, cached_input_tokens: 60, output_tokens: 7 },
+          },
+        },
+      ]),
+    ),
+  );
+  const service = createUsageReportService({
+    index,
+    settingsConfig: {
+      readWorkspaceCatalogSnapshot: () =>
+        Effect.succeed({ catalogRevision: 0, workspaces: [], workspaceOrder: [] }),
+      defaultWorktreeBasePath: () => path.join(root, "worktrees"),
+      resolveConfiguredPath: (value) => value,
+      join: path.join,
+    },
+    taskOwnership: { listTaskDirectoriesForWorktreeOwnership: () => Effect.succeed([]) },
+    timeZone: () => "UTC",
+    now: () => Date.parse("2026-03-03T00:00:00.000Z"),
+  });
+  // The first read of an empty index reads all history, also for one runtime. The report still
+  // shows the selected runtime only.
+  const codexOnly = await Effect.runPromise(
+    service.read({
+      range: { kind: "custom", start: "2026-03-01", end: "2026-03-03" },
+      runtime: "codex",
+    }),
+  );
+  assert.deepEqual(
+    codexOnly.byRuntime.map(({ runtime, figure }) => [runtime, figure.tokens.processed]),
+    [["codex", 107]],
+  );
+  // It reported its progress: both runtimes first, then the rollup, with the session that the
+  // transcript path names and the root session that the first line of the rollout names.
+  const byName = (event: UsageIndexProgress | undefined) =>
+    event?.runtimes.toSorted((a, b) => a.runtime.localeCompare(b.runtime));
+  // The empty index tells the clients at once that a first read starts.
+  assert.deepEqual(
+    [progressEvents[0]?.phase, progressEvents[0]?.first, progressEvents[0]?.runtimes],
+    ["preparing", true, []],
+  );
+  assert.deepEqual(byName(progressEvents[1]), [
+    { runtime: "claude", progress: 0, done: false, sessions: { done: 0, total: 1 } },
+    { runtime: "codex", progress: 0, done: false, sessions: { done: 0, total: null } },
+  ]);
+  assert.deepEqual(byName(progressEvents.at(-1)), [
+    { runtime: "claude", progress: 1, done: true, sessions: { done: 1, total: 1 } },
+    { runtime: "codex", progress: 1, done: true, sessions: { done: 1, total: 1 } },
+  ]);
+  assert.equal(progressEvents.at(-1)?.phase, "summarizing");
+  const report = await Effect.runPromise(
+    service.read({
+      range: { kind: "custom", start: "2026-03-01", end: "2026-03-03" },
+      runtime: null,
+    }),
+  );
+  assert.deepEqual(
+    report.byRuntime.map(({ runtime, figure }) => [
+      runtime,
+      figure.tokens.processed,
+      figure.sessions,
+    ]),
+    [
+      ["opencode", 0, 0],
+      ["codex", 107, 1],
+      ["claude", 100, 1],
+    ],
+  );
+  assert.equal(report.coverage.find((entry) => entry.runtime === "opencode")?.state, "no_history");
+  // 40 new input, 60 cache reads, and 7 output tokens at the downloaded rates.
+  assert.equal(
+    report.byRuntime.find((entry) => entry.runtime === "codex")?.figure.cost.usd,
+    0.000156,
+  );
+  assert.equal(report.pricing.issue, null);
+  console.log(
+    `Worker bundle passed: ${process.versions.electron ? "Electron" : process.versions.bun ? "Bun" : "Node"} usage`,
+  );
+} finally {
+  await Effect.runPromise(index.shutdown());
+  rates.close();
+  rmSync(root, { recursive: true, force: true });
+}
