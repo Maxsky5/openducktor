@@ -1,17 +1,31 @@
 import { realpathSync } from "node:fs";
 import path from "node:path";
 
-/** Resolves existing ancestors so paths that have not been created can still be compared. */
-export function resolvePathSymlinks(target: string, tail: string[] = []): string {
-  const fullPath = path.resolve(target);
-  try {
-    return path.join(realpathSync.native(fullPath), ...tail);
-  } catch (cause) {
-    if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
-      throw cause;
+type PathSymlinkParts = {
+  existingPath: string;
+  remainingPath: string;
+};
+
+/** Resolves the nearest existing path and retains the path below it. */
+export function resolvePathSymlinkParts(target: string): PathSymlinkParts {
+  let candidate = path.resolve(target);
+  let remainingPath = "";
+  for (;;) {
+    try {
+      return { existingPath: realpathSync.native(candidate), remainingPath };
+    } catch (cause) {
+      if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
+        throw cause;
+      }
+      const parent = path.dirname(candidate);
+      if (parent === candidate) throw cause;
+      remainingPath = path.join(path.basename(candidate), remainingPath);
+      candidate = parent;
     }
-    const parent = path.dirname(fullPath);
-    if (parent === fullPath) throw cause;
-    return resolvePathSymlinks(parent, [path.basename(fullPath), ...tail]);
   }
+}
+
+export function resolvePathSymlinks(target: string): string {
+  const { existingPath, remainingPath } = resolvePathSymlinkParts(target);
+  return path.join(existingPath, remainingPath);
 }

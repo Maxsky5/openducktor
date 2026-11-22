@@ -8,7 +8,7 @@ import {
   resolveNormalizedUserPath,
 } from "@openducktor/path-support";
 import { HostResourceError, HostValidationError } from "../effect/host-errors";
-import { resolvePathSymlinks } from "../infrastructure/resolve-path-symlinks";
+import { resolvePathSymlinkParts } from "../infrastructure/resolve-path-symlinks";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 export const ALLOW_PRODUCTION_CONFIG_FLAG = "--allow-production-config";
@@ -90,16 +90,13 @@ export const resolveOpenDucktorBaseDir = (
   return path.join(resolveHomeDirectory(), OPENDUCKTOR_CONFIG_DIR_NAMES[scope]);
 };
 
-const isSameConfigRoot = (productionRoot: string, configRoot: string): boolean => {
-  if (path.relative(productionRoot, configRoot) === "") return true;
+const isSameExistingPath = (left: string, right: string): boolean => {
+  if (path.relative(left, right) === "") return true;
 
-  // macOS firmlinks can name the same directory with different resolved paths.
-  const production = statSync(productionRoot, { bigint: true, throwIfNoEntry: false });
-  if (!production) return false;
-  const selected = statSync(configRoot, { bigint: true, throwIfNoEntry: false });
-  return (
-    selected !== undefined && selected.dev === production.dev && selected.ino === production.ino
-  );
+  // macOS firmlinks can name the same existing directory with different resolved paths.
+  const leftStat = statSync(left, { bigint: true });
+  const rightStat = statSync(right, { bigint: true });
+  return leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;
 };
 
 export const assertDevelopmentConfigAllowed = (
@@ -108,9 +105,13 @@ export const assertDevelopmentConfigAllowed = (
   env: NodeJS.ProcessEnv = process.env,
 ): void => {
   if (scope !== "dev" || allowProductionConfig) return;
-  const configRoot = resolvePathSymlinks(resolveOpenDucktorBaseDir(scope, env));
-  const productionRoot = resolvePathSymlinks(resolveOpenDucktorBaseDir("production", {}));
-  if (isSameConfigRoot(productionRoot, configRoot)) {
+  const config = resolvePathSymlinkParts(resolveOpenDucktorBaseDir(scope, env));
+  const production = resolvePathSymlinkParts(resolveOpenDucktorBaseDir("production", {}));
+  if (
+    path.relative(production.remainingPath, config.remainingPath) === "" &&
+    isSameExistingPath(production.existingPath, config.existingPath)
+  ) {
+    const productionRoot = path.join(production.existingPath, production.remainingPath);
     throw new HostValidationError({
       field: OPENDUCKTOR_CONFIG_DIR_ENV,
       message: `Development startup refused the production config directory ${productionRoot}. Set ${OPENDUCKTOR_CONFIG_DIR_ENV} to a separate directory or stop the production host and rerun with ${ALLOW_PRODUCTION_CONFIG_FLAG}.`,

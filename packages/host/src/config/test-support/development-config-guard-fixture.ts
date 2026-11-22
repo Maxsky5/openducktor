@@ -26,6 +26,13 @@ const launch = (
 };
 
 const directBeforeCreation = launch("dev", { OPENDUCKTOR_CONFIG_DIR: productionRoot });
+const filesystemAliasBeforeCreation =
+  filesystemAlias && launch("dev", { OPENDUCKTOR_CONFIG_DIR: filesystemAlias });
+const isolatedBeforeCreation =
+  filesystemAlias &&
+  launch("dev", {
+    OPENDUCKTOR_CONFIG_DIR: path.join(path.dirname(filesystemAlias), "isolated", ".openducktor"),
+  });
 await mkdir(productionRoot);
 await mkdir(isolatedRoot);
 await symlink(productionRoot, alias, "junction");
@@ -40,6 +47,8 @@ console.log(
     isolated: launch("dev", { OPENDUCKTOR_CONFIG_DIR: isolatedRoot }),
     production: launch("production", {}),
     ...(filesystemAlias && {
+      filesystemAliasBeforeCreation,
+      isolatedBeforeCreation,
       filesystemAlias: launch("dev", { OPENDUCKTOR_CONFIG_DIR: filesystemAlias }),
     }),
   }),

@@ -155,7 +155,7 @@ test("development requires acknowledgement for the production config root and it
 
 // The web CLI runs under Node, which can report both macOS paths for the same directory.
 test.skipIf(process.platform !== "darwin")(
-  "development refuses the macOS Data volume path to the production root under Node",
+  "development refuses the macOS Data volume path before and after production root creation",
   async () => {
     const homeDir = await mkdtemp("/Users/Shared/odt-development-config-");
     try {
@@ -173,7 +173,11 @@ test.skipIf(process.platform !== "darwin")(
         args: [`/System/Volumes/Data${homeDir}/.openducktor`],
         homeDir,
       });
-      expect(JSON.parse(stdout)).toMatchObject({ filesystemAlias: productionRefusal() });
+      expect(JSON.parse(stdout)).toMatchObject({
+        filesystemAliasBeforeCreation: productionRefusal(),
+        isolatedBeforeCreation: null,
+        filesystemAlias: productionRefusal(),
+      });
     } finally {
       await rm(homeDir, { recursive: true, force: true });
     }
