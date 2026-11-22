@@ -3,9 +3,9 @@ import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
+import { USAGE_PATH } from "@/pages";
 
 const KANBAN_ROUTE = "/kanban";
-export const USAGE_ROUTE = "/usage";
 
 type SidebarNavigationState = {
   activatedRoute: string | null;
@@ -140,7 +140,7 @@ export function SidebarNavigation({
 }
 
 const FOOTER_LINKS: readonly SidebarPageLink[] = [
-  { route: USAGE_ROUTE, label: "Usage", title: "Usage", icon: ChartSpline },
+  { route: USAGE_PATH, label: "Usage", title: "Usage", icon: ChartSpline },
 ];
 
 /** The icon links of the sidebar footer, beside Settings. */

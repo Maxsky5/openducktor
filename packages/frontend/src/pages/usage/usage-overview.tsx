@@ -8,18 +8,16 @@ import {
   formatShare,
   formatUsd,
   leftOutNote,
+  METRIC_TEXT,
   metricValue,
+  PERIOD_TEXT,
+  shareOf,
+  shownValue,
   USAGE_RUNTIME_LABELS,
   type UsageMetric,
 } from "./usage-format";
 import { IncompleteMark, MetricValue, RuntimeDot } from "./usage-parts";
 import { UsageTrendChart } from "./usage-trend-chart";
-
-const PERIOD_ADJECTIVES = {
-  day: "Daily",
-  week: "Weekly",
-  month: "Monthly",
-} satisfies Record<UsageReport["granularity"], string>;
 
 /** The other metric of a figure, as a short detail: `$1,204` or `59.8B tokens`. */
 const otherMetricText = (figure: UsageFigure, metric: UsageMetric): string | null => {
@@ -29,13 +27,6 @@ const otherMetricText = (figure: UsageFigure, metric: UsageMetric): string | nul
   }
   const cost = metricValue(figure, "cost");
   return cost === null || figure.cost.state === "none" ? null : formatUsd(cost);
-};
-
-const shareOf = (figure: UsageFigure, totals: UsageFigure, metric: UsageMetric) => {
-  const value = metricValue(figure, metric);
-  const total = metricValue(totals, metric);
-  if (value === null || total === null || total === 0) return null;
-  return formatShare(value / total);
 };
 
 function RuntimeRow({
@@ -49,7 +40,8 @@ function RuntimeRow({
   totals: UsageFigure;
   metric: UsageMetric;
 }): ReactElement {
-  const share = shareOf(figure, totals, metric);
+  const shareValue = shareOf(figure, shownValue(totals, metric), metric);
+  const share = shareValue === null ? null : formatShare(shareValue);
   const other = otherMetricText(figure, metric);
   return (
     <li className="flex flex-col gap-1">
@@ -73,10 +65,7 @@ function RuntimeRow({
           <span className="whitespace-nowrap">
             {share}
             {/* Only the wide single column has room for the noun. */}
-            <span className="hidden @4xl:inline">
-              {" "}
-              of {metric === "tokens" ? "tokens" : "cost"}
-            </span>
+            <span className="hidden @4xl:inline"> of {METRIC_TEXT[metric].noun}</span>
             {other ? " ·" : null}
           </span>
         ) : null}
@@ -99,7 +88,8 @@ export function UsageOverview({
   const { totals } = report;
   const summary = [formatCountOf(totals.sessions, "session"), otherMetricText(totals, metric)];
   const note = leftOutNote(totals, metric);
-  const chartTitle = `${PERIOD_ADJECTIVES[report.granularity]} ${metric === "tokens" ? "processed tokens" : "estimated cost"}`;
+  const figures = new Map(report.byRuntime.map((row) => [row.runtime, row.figure]));
+  const chartTitle = `${PERIOD_TEXT[report.granularity].adjective} ${METRIC_TEXT[metric].trend}`;
   return (
     <section
       aria-label="Overview"
@@ -108,7 +98,7 @@ export function UsageOverview({
       <div className="flex min-w-0 flex-col gap-7">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-muted-foreground">
-            {metric === "tokens" ? "Processed tokens" : "Estimated API cost"}
+            {METRIC_TEXT[metric].headline}
           </span>
           <div className="flex items-center gap-2">
             <span className="text-5xl font-semibold tracking-tight tabular-nums">
@@ -127,7 +117,7 @@ export function UsageOverview({
           className="grid grid-cols-1 gap-x-8 gap-y-4 @3xl:grid-cols-3 @4xl:grid-cols-1"
         >
           {runtimes.map((runtime) => {
-            const figure = report.byRuntime.find((row) => row.runtime === runtime)?.figure;
+            const figure = figures.get(runtime);
             return figure ? (
               <RuntimeRow
                 key={runtime}

@@ -18,7 +18,6 @@ import {
 } from "@/components/features/repository/open-repository-modal";
 import { AgentChatTranscriptCacheProvider } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-cache-provider";
 import { WorkspaceSidebar } from "@/components/layout/sidebar";
-import { USAGE_ROUTE } from "@/components/layout/sidebar/sidebar-navigation";
 import { UsageWithoutWorkspace } from "@/components/layout/usage-without-workspace";
 import { WorkspaceRail } from "@/components/layout/workspace-rail";
 import { useWorkspacePreviewTransitionGuard } from "@/components/layout/workspace-preview-transition-guard";
@@ -36,6 +35,7 @@ import { SessionReadStateProvider } from "@openducktor/frontend-core/sessions/na
 import { useFeatureTour } from "@/features/feature-tour/feature-tour-context";
 import { preloadFeatureTourDialog } from "@/features/feature-tour/feature-tour-dialog-loader";
 import { documentVisibility } from "@/features/session-navigation/document-visibility";
+import { USAGE_PATH } from "@/pages";
 import { OnboardingPage } from "@/pages/onboarding/onboarding-page";
 import {
   useActiveWorkspace,
@@ -212,7 +212,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
     retryWorkspaces,
   } = useWorkspacePresence();
   const isOnboardingRoute = location.pathname === "/onboarding";
-  const isUsageRoute = location.pathname === USAGE_ROUTE;
+  const isUsageRoute = location.pathname === USAGE_PATH;
 
   useEffect(() => {
     if (!isOnboardingRoute) {
@@ -279,7 +279,7 @@ export const AppShell = memo(function AppShell(): ReactElement {
         headerActions={
           <>
             <Button asChild variant="ghost" size="sm">
-              <Link to={USAGE_ROUTE}>
+              <Link to={USAGE_PATH}>
                 <ChartSpline className="size-3.5" aria-hidden="true" />
                 Usage
               </Link>

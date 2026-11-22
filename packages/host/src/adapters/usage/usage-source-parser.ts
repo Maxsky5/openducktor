@@ -9,15 +9,16 @@ import {
   createCodexRolloutParser,
   initialCodexParserState,
 } from "./usage-codex-records";
-import type { UsageSourceIssue } from "../../ports/usage-index-port";
+import type { UsageSourceIssue } from "../../domain/usage/usage-report";
 import { CODEX_USAGE_LINE_FILTER } from "./usage-codex-lines";
 import { canResumeJsonl, readJsonlLines } from "./usage-jsonl-reader";
-import {
-  type OpenCodeProgress,
-  openCodeParserStateSchema,
-  readOpenCodeUsage,
-} from "./usage-opencode-reader";
-import type { UsageParseJob, UsageParseResult, UsageResumePoint } from "./usage-worker-protocol";
+import { openCodeParserStateSchema, readOpenCodeUsage } from "./usage-opencode-reader";
+import type {
+  OpenCodeProgress,
+  UsageParseJob,
+  UsageParseResult,
+  UsageResumePoint,
+} from "./usage-worker-protocol";
 
 /** Tracks malformed lines and the dates of the requests around them. */
 const createMalformedTracker = () => {
@@ -115,7 +116,6 @@ const parseJsonl = async (
   const finished = codex?.finish() ?? { units: [], provisional: false };
   collect(finished.units);
   return {
-    jobId: job.jobId,
     mode: resume ? "append" : "replace",
     units,
     // A provisional request can get its counts later, so the next read starts again from the
@@ -140,7 +140,6 @@ const parseOpenCode = async (
   if (read.kind === "unsupported") {
     // Earlier units stay. A newer OpenDucktor can read the new format.
     return {
-      jobId: job.jobId,
       mode: "append",
       units: [],
       resume: null,
@@ -149,7 +148,6 @@ const parseOpenCode = async (
     };
   }
   return {
-    jobId: job.jobId,
     mode: read.mode,
     units: read.units,
     resume: null,
@@ -181,7 +179,6 @@ export const parseUsageSource = async (
   } catch (cause) {
     if (!(cause instanceof Error) || !isSourceReadError(cause)) throw cause;
     return {
-      jobId: job.jobId,
       mode: "append",
       units: [],
       resume: continuation.resume,

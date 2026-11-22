@@ -18,14 +18,13 @@ import { errorMessage } from "../lib/errors";
 import {
   CONNECTION_RECONNECTED_EVENT_KIND,
   connectionStreamWarningEvent,
-  type ConnectionControlEvent,
+  isConnectionControlEvent,
 } from "../recovery/connection-control-events";
 import type { HostConnection } from "./host-connection";
 import {
   createLocalHostChannel,
   type LocalHostChannel,
   type LocalHostChannelDependencies,
-  type LocalHostChannelEvent,
   type LocalHostChannelListener,
 } from "./local-host-channel";
 
@@ -63,9 +62,6 @@ export type LocalHostConnectionOptions = Pick<
   LocalHostChannelDependencies,
   "prepare" | "openSocket"
 >;
-
-const isControlEvent = (event: LocalHostChannelEvent): event is ConnectionControlEvent =>
-  "__openducktorConnectionControl" in event;
 
 /**
  * Serves the commands and event streams of the shell's own host over one host channel. The
@@ -156,25 +152,28 @@ export const createLocalHostConnection = ({
     subscribeRunEvents: (listener) =>
       // Control events report reconnects, so a listener can read the state that it missed.
       subscribeReady(RUN_EVENT_CHANNEL, (event) => {
-        if (isControlEvent(event)) return listener(event);
+        if (isConnectionControlEvent(event)) return listener(event);
         if (event.channel === RUN_EVENT_CHANNEL) return listener(event.payload);
       }),
     subscribeAzureDevOpsConnectionUpdates: (listener) =>
       subscribeReady(AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL, (event) => {
-        if (!isControlEvent(event) && event.channel === AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL)
+        if (
+          !isConnectionControlEvent(event) &&
+          event.channel === AZURE_DEVOPS_CONNECTION_EVENT_CHANNEL
+        )
           listener(event.payload);
       }),
     subscribeWorkspaceProviderSetupUpdates: (listener) =>
       subscribeReady("openducktor://workspace-provider-setup-updated", (event) => {
         if (
-          !isControlEvent(event) &&
+          !isConnectionControlEvent(event) &&
           event.channel === "openducktor://workspace-provider-setup-updated"
         )
           listener(event.payload);
       }),
     subscribeWorkspaceSessionUpdates: (listener) =>
       subscribeReady("openducktor://workspace-session-updated", (event) => {
-        if (isControlEvent(event)) return listener(event);
+        if (isConnectionControlEvent(event)) return listener(event);
         if (event.channel === "openducktor://workspace-session-updated")
           return listener(event.payload);
       }),
@@ -182,26 +181,29 @@ export const createLocalHostConnection = ({
       subscribeReady(
         "openducktor://session-startup-progress",
         (event) => {
-          if (isControlEvent(event) || event.channel === "openducktor://session-startup-progress")
+          if (
+            isConnectionControlEvent(event) ||
+            event.channel === "openducktor://session-startup-progress"
+          )
             return listener(event);
         },
         STARTUP_EVENT_STREAM_NAME,
       ),
     subscribeRuntimeChanges: (listener) =>
       subscribeReady(RUNTIME_CHANGED_EVENT_CHANNEL, (event) => {
-        if (isControlEvent(event)) return listener(event);
+        if (isConnectionControlEvent(event)) return listener(event);
         if (event.channel === RUNTIME_CHANGED_EVENT_CHANNEL) return listener(event.payload);
       }),
     subscribeTaskMergeStatusUpdates: (listener) =>
       subscribeReady(TASK_MERGE_STATUS_EVENT_CHANNEL, (event) => {
-        if (isControlEvent(event)) return listener(event);
+        if (isConnectionControlEvent(event)) return listener(event);
         if (event.channel === TASK_MERGE_STATUS_EVENT_CHANNEL) return listener(event.payload);
       }),
     subscribeUsageProgress: (listener) =>
       subscribeReady(
         "openducktor://usage-index-progress",
         (event) => {
-          if (isControlEvent(event)) return listener(event);
+          if (isConnectionControlEvent(event)) return listener(event);
           if (event.channel === "openducktor://usage-index-progress")
             return listener(event.payload);
         },
@@ -211,7 +213,7 @@ export const createLocalHostConnection = ({
       subscribeReady(
         BROWSER_EVENT_CHANNEL,
         (event) => {
-          if (isControlEvent(event)) return listener(event);
+          if (isConnectionControlEvent(event)) return listener(event);
           if (event.channel === BROWSER_EVENT_CHANNEL) return listener(event.payload);
         },
         BROWSER_EVENT_STREAM_NAME,
@@ -242,7 +244,7 @@ export const createLocalHostConnection = ({
       const unsubscribe = await subscribeReady(
         AGENT_SESSION_LIVE_EVENT_CHANNEL,
         (event) => {
-          if (isControlEvent(event)) {
+          if (isConnectionControlEvent(event)) {
             if (event.kind === CONNECTION_RECONNECTED_EVENT_KIND && event.missedEvents) reattach();
             return;
           }

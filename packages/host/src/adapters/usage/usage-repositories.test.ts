@@ -3,7 +3,11 @@ import { chmod, mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { removeTestDirectory } from "../../test-support/temp-directory";
-import { resolveUsageRepositories } from "./usage-repositories";
+import { createUsageRepositoryResolver } from "./usage-repositories";
+
+/** Resolves folders with caches for one call. */
+const resolveUsageRepositories = (folders: readonly string[], known: readonly string[]) =>
+  createUsageRepositoryResolver()(folders, known);
 
 let root = "";
 
@@ -24,7 +28,7 @@ const repositoryWithWorktree = async (repository: string, worktree: string) => {
   await writeFile(path.join(worktree, ".git"), `gitdir: ${gitDir}\n`);
 };
 
-describe("resolveUsageRepositories", () => {
+describe("createUsageRepositoryResolver", () => {
   test("reads the main repository of a folder, a linked worktree, and a folder inside them", async () => {
     const app = path.join(root, "code", "app");
     const worktree = path.join(root, "tool", "worktrees", "app", "task-1");

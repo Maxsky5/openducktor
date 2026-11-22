@@ -1,5 +1,5 @@
 import { Bell, Check, Cpu, FolderGit2, Route } from "lucide-react";
-import { type ReactElement, type ReactNode, useLayoutEffect, useRef } from "react";
+import { type ReactElement, type ReactNode, type Ref, useLayoutEffect, useRef } from "react";
 import { OpenDucktorMark } from "@/components/layout/openducktor-mark";
 import { ThemePicker } from "@/components/layout/theme-picker";
 import { useTheme } from "@/components/layout/theme-provider";
@@ -44,7 +44,7 @@ type OnboardingLayoutProps = {
 const themeLabelId = "onboarding-theme-label";
 
 /** The app header outside the workspace shell: brand, host, extra actions, and theme. */
-export function OnboardingHeader({ actions }: { actions?: ReactNode }): ReactElement {
+function OnboardingHeader({ actions }: { actions?: ReactNode }): ReactElement {
   const { themePreference, setThemePreference } = useTheme();
   return (
     <header className="electron-titlebar-safe-area -mt-5 flex items-center justify-between gap-4 pt-5 pb-5 sm:-mt-7 sm:pt-7">
@@ -74,6 +74,49 @@ export function OnboardingHeader({ actions }: { actions?: ReactNode }): ReactEle
   );
 }
 
+/**
+ * The frame of a page outside the workspace shell: the scroll area, the native title bar surface,
+ * and the app header above the content.
+ */
+export function OnboardingFrame({
+  ref,
+  stage,
+  headerActions,
+  className,
+  children,
+}: {
+  ref?: Ref<HTMLElement>;
+  /** The onboarding stage, which resets the scroll position when it changes. */
+  stage?: OnboardingStage;
+  headerActions?: ReactNode;
+  /** The width of the content column. */
+  className: string;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <main
+      ref={ref}
+      data-stage={stage}
+      className="onboarding-shell h-[100dvh] min-h-0 overflow-y-auto bg-background text-foreground"
+    >
+      <div
+        className="electron-native-controls-surface fixed inset-x-0 top-0 z-10 w-full"
+        data-onboarding-native-titlebar=""
+        aria-hidden="true"
+      />
+      <div
+        className={cn(
+          "mx-auto flex min-h-[100dvh] w-full flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8",
+          className,
+        )}
+      >
+        <OnboardingHeader actions={headerActions} />
+        {children}
+      </div>
+    </main>
+  );
+}
+
 export function OnboardingLayout({
   stage,
   headerActions,
@@ -90,80 +133,72 @@ export function OnboardingLayout({
   }, [stage]);
 
   return (
-    <main
+    <OnboardingFrame
       ref={scrollContainerRef}
-      data-stage={stage}
-      className="onboarding-shell h-[100dvh] min-h-0 overflow-y-auto bg-background text-foreground"
+      stage={stage}
+      headerActions={headerActions}
+      className="max-w-[1120px]"
     >
-      <div
-        className="electron-native-controls-surface fixed inset-x-0 top-0 z-10 w-full"
-        data-onboarding-native-titlebar=""
-        aria-hidden="true"
-      />
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1120px] flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
-        <OnboardingHeader actions={headerActions} />
+      <nav
+        className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-10 sm:py-5"
+        aria-label="Onboarding progress"
+        data-orientation="horizontal"
+      >
+        <ol className="grid grid-cols-4">
+          {ONBOARDING_STAGES.map((item, index) => {
+            const complete = index < currentStageIndex;
+            const current = index === currentStageIndex;
+            const Icon = item.icon;
+            return (
+              <li
+                key={item.id}
+                aria-current={current ? "step" : undefined}
+                className="relative min-w-0 text-center"
+              >
+                {index < ONBOARDING_STAGES.length - 1 ? (
+                  <span
+                    data-progress-connector=""
+                    className={cn(
+                      "absolute top-5 left-1/2 h-px w-full",
+                      index < currentStageIndex ? "bg-primary" : "bg-border",
+                    )}
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <div className="relative flex min-w-0 flex-col items-center">
+                  <span
+                    className={cn(
+                      "z-10 flex size-10 shrink-0 items-center justify-center rounded-full border bg-card ring-4 ring-card",
+                      complete && "border-primary bg-primary text-primary-foreground",
+                      current && "border-primary bg-primary text-primary-foreground shadow-sm",
+                      !complete && !current && "border-input bg-card text-muted-foreground",
+                    )}
+                  >
+                    {complete ? (
+                      <Check className="size-4" aria-hidden="true" />
+                    ) : (
+                      <Icon className="size-4" aria-hidden="true" />
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-2.5 block max-w-full truncate px-1 text-xs font-semibold sm:text-sm",
+                      current ? "text-foreground" : "text-muted-foreground",
+                      complete && "text-foreground",
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
 
-        <nav
-          className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm sm:px-10 sm:py-5"
-          aria-label="Onboarding progress"
-          data-orientation="horizontal"
-        >
-          <ol className="grid grid-cols-4">
-            {ONBOARDING_STAGES.map((item, index) => {
-              const complete = index < currentStageIndex;
-              const current = index === currentStageIndex;
-              const Icon = item.icon;
-              return (
-                <li
-                  key={item.id}
-                  aria-current={current ? "step" : undefined}
-                  className="relative min-w-0 text-center"
-                >
-                  {index < ONBOARDING_STAGES.length - 1 ? (
-                    <span
-                      data-progress-connector=""
-                      className={cn(
-                        "absolute top-5 left-1/2 h-px w-full",
-                        index < currentStageIndex ? "bg-primary" : "bg-border",
-                      )}
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                  <div className="relative flex min-w-0 flex-col items-center">
-                    <span
-                      className={cn(
-                        "z-10 flex size-10 shrink-0 items-center justify-center rounded-full border bg-card ring-4 ring-card",
-                        complete && "border-primary bg-primary text-primary-foreground",
-                        current && "border-primary bg-primary text-primary-foreground shadow-sm",
-                        !complete && !current && "border-input bg-card text-muted-foreground",
-                      )}
-                    >
-                      {complete ? (
-                        <Check className="size-4" aria-hidden="true" />
-                      ) : (
-                        <Icon className="size-4" aria-hidden="true" />
-                      )}
-                    </span>
-                    <span
-                      className={cn(
-                        "mt-2.5 block max-w-full truncate px-1 text-xs font-semibold sm:text-sm",
-                        current ? "text-foreground" : "text-muted-foreground",
-                        complete && "text-foreground",
-                      )}
-                    >
-                      {item.label}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
-
-        <section className="min-w-0 flex-1 pb-6 pt-5" aria-live="polite">
-          <div className="onboarding-stage-content">{children}</div>
-        </section>
-      </div>
-    </main>
+      <section className="min-w-0 flex-1 pb-6 pt-5" aria-live="polite">
+        <div className="onboarding-stage-content">{children}</div>
+      </section>
+    </OnboardingFrame>
   );
 }

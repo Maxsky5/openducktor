@@ -3,7 +3,7 @@ import path from "node:path";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { pathStartsWith } from "@openducktor/path-support";
 import { isPathNotFoundError } from "../../effect/host-errors";
-import type { UsageLocations, UsageReadResult } from "../../ports/usage-index-port";
+import type { UsageLocations } from "./usage-locations";
 import type { UsageSourceFingerprint, UsageSourceFormat } from "./usage-worker-protocol";
 
 export type DiskSource = {
@@ -16,10 +16,18 @@ export type DiskSource = {
 export type Discovery = {
   sources: DiskSource[];
   withoutHistory: RuntimeKind[];
-  locationIssues: UsageReadResult["locationIssues"];
+  /** Runtimes with a folder or file that the host could not read. */
+  unreadableRuntimes: RuntimeKind[];
   /** Folders and files that the host could not read. Their stored sources stay. */
   unreadablePaths: string[];
 };
+
+/** Parse work in bytes. A compressed rollout holds about 10 times its size. */
+export const usageSourceWork = ({
+  format,
+  fingerprint,
+}: Pick<DiskSource, "format" | "fingerprint">): number =>
+  format === "jsonl_zst" ? fingerprint.size * 10 : fingerprint.size;
 
 /** Lists a folder for a walk. A folder that cannot be read has no entries in it. */
 type ListFolder = (directory: string) => Dirent[];
@@ -122,7 +130,7 @@ export const discoverUsageSources = (
   const discovery: Discovery = {
     sources: [],
     withoutHistory: [],
-    locationIssues: [],
+    unreadableRuntimes: [],
     unreadablePaths: [],
   };
   /** Keeps the readable sources of a runtime when some of its folders or files cannot be read. */
@@ -154,7 +162,7 @@ export const discoverUsageSources = (
       found++;
     }
     if (unreadable.length > 0) {
-      discovery.locationIssues.push({ runtime, code: "unreadable" });
+      discovery.unreadableRuntimes.push(runtime);
       discovery.unreadablePaths.push(...unreadable);
     } else if (found === 0) discovery.withoutHistory.push(runtime);
   };

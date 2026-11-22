@@ -20,7 +20,8 @@ const work = async (indexPort: MessagePort, run: UsageParseRun) => {
       indexPort.postMessage({
         kind: "result",
         runId: run.runId,
-        result: await parseUsageSource({ ...job, jobId: index }, (progress) =>
+        jobId: index,
+        result: await parseUsageSource(job, (progress) =>
           indexPort.postMessage({
             kind: "progress",
             runId: run.runId,

@@ -18,7 +18,7 @@ import {
   WorkspacePreviewTransitionGuardProvider,
 } from "@/components/layout/workspace-preview-transition-guard";
 import { AppToaster } from "@/components/layout/app-toaster";
-import { loadNotFoundPage, loadUsagePage } from "@/pages";
+import { loadNotFoundPage, loadUsagePage, USAGE_PATH } from "@/pages";
 import { KanbanPage } from "@/pages/kanban/kanban-page";
 import { SessionsPage } from "@/pages/sessions/sessions-page";
 import { AppStateProvider } from "@/state";
@@ -100,7 +100,7 @@ const routes = createRoutesFromElements(
       <Route path="/onboarding" element={<Navigate to="/kanban" replace />} />
       <Route path="/kanban" element={withRouteFallback(<KanbanPage />, <KanbanRouteFallback />)} />
       <Route path="/sessions" element={<SessionsPage />} />
-      <Route path="/usage" element={withRouteFallback(<UsagePage />, <UsageRouteFallback />)} />
+      <Route path={USAGE_PATH} element={withRouteFallback(<UsagePage />, <UsageRouteFallback />)} />
       <Route
         path="/planner"
         element={<Navigate to="/sessions?kind=task&agent=planner" replace />}

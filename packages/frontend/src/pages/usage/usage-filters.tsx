@@ -1,13 +1,25 @@
-import type { RuntimeKind, UsageRangeInput } from "@openducktor/contracts";
+import {
+  USAGE_FIRST_DATE,
+  USAGE_LAST_DATE,
+  type RuntimeKind,
+  type UsageRangeInput,
+} from "@openducktor/contracts";
 import { ChevronDown, Layers, RefreshCw } from "lucide-react";
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { Input } from "@/components/ui/input";
 import { ToggleTabs, ToggleTabsItem } from "@/components/ui/toggle-tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { USAGE_RUNTIME_LABELS, USAGE_RUNTIMES, type UsageMetric } from "./usage-format";
+import {
+  formatDate,
+  METRIC_TEXT,
+  USAGE_RUNTIME_LABELS,
+  USAGE_RUNTIMES,
+  type UsageMetric,
+} from "./usage-format";
 
 export type RangeKind = UsageRangeInput["kind"];
 
@@ -107,6 +119,79 @@ export function RangeTabs({
   );
 }
 
+/** The dates of a custom range. It checks them before it applies them. */
+export function CustomRangeForm({
+  initial,
+  onApply,
+}: {
+  initial: { start: string; end: string };
+  onApply: (range: UsageRangeInput) => void;
+}): ReactElement {
+  const [start, setStart] = useState(initial.start);
+  const [end, setEnd] = useState(initial.end);
+  const [problem, setProblem] = useState<string | null>(null);
+  const submit = (event: { preventDefault(): void }) => {
+    event.preventDefault();
+    if (!start || !end) {
+      setProblem("Enter a start date and an end date.");
+      return;
+    }
+    if ([start, end].some((date) => date < USAGE_FIRST_DATE || date > USAGE_LAST_DATE)) {
+      setProblem(
+        `Use dates from ${formatDate(USAGE_FIRST_DATE)} to ${formatDate(USAGE_LAST_DATE)}.`,
+      );
+      return;
+    }
+    if (end < start) {
+      setProblem("The end date must be on or after the start date.");
+      return;
+    }
+    setProblem(null);
+    onApply({ kind: "custom", start, end });
+  };
+  return (
+    // A narrow window puts both dates side by side and Apply under them.
+    <form
+      onSubmit={submit}
+      className="grid grid-cols-2 items-end gap-2 @md:flex @md:flex-wrap"
+      noValidate
+    >
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        From
+        <Input
+          type="date"
+          value={start}
+          min={USAGE_FIRST_DATE}
+          max={USAGE_LAST_DATE}
+          onChange={(event) => setStart(event.target.value)}
+          className="h-9 w-full @md:w-40"
+          aria-invalid={problem !== null}
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+        To
+        <Input
+          type="date"
+          value={end}
+          min={USAGE_FIRST_DATE}
+          max={USAGE_LAST_DATE}
+          onChange={(event) => setEnd(event.target.value)}
+          className="h-9 w-full @md:w-40"
+          aria-invalid={problem !== null}
+        />
+      </label>
+      <Button type="submit" variant="secondary" className="col-span-2 h-9 @md:col-span-1">
+        Apply
+      </Button>
+      {problem ? (
+        <p role="alert" className="col-span-2 basis-full text-xs text-destructive-muted">
+          {problem}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 export function MetricTabs({
   metric,
   onMetric,
@@ -116,8 +201,8 @@ export function MetricTabs({
 }): ReactElement {
   return (
     <ToggleTabs aria-label="Metric" value={metric} onValueChange={onMetric}>
-      <ToggleTabsItem value="tokens">Tokens</ToggleTabsItem>
-      <ToggleTabsItem value="cost">Cost</ToggleTabsItem>
+      <ToggleTabsItem value="tokens">{METRIC_TEXT.tokens.label}</ToggleTabsItem>
+      <ToggleTabsItem value="cost">{METRIC_TEXT.cost.label}</ToggleTabsItem>
     </ToggleTabs>
   );
 }

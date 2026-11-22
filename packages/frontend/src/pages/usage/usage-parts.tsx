@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   formatMetric,
   formatTableMetric,
+  GAP_TEXT,
   missingReason,
   shownValue,
   USAGE_RUNTIME_COLORS,
@@ -37,15 +38,21 @@ export function Explained({
   );
 }
 
-const INCOMPLETE_TEXT =
-  "Some history of this range could not be read, so this value can be higher.";
-
 /** A warning mark for a figure that unread history can make too low. */
 export function IncompleteMark({ figure }: { figure: UsageFigure }): ReactElement | null {
   if (figure.complete) return null;
   return (
-    <Explained text={INCOMPLETE_TEXT} className="inline-flex text-warning-muted">
+    <Explained text={GAP_TEXT.unread.long} className="inline-flex text-warning-muted">
       <TriangleAlert className="size-3.5" aria-hidden="true" />
+    </Explained>
+  );
+}
+
+/** A dash for a value that is missing. It gives its reason on hover and keyboard focus. */
+export function MissingValue({ reason }: { reason: string }): ReactElement {
+  return (
+    <Explained text={reason} className="text-muted-foreground">
+      —
     </Explained>
   );
 }
@@ -62,13 +69,7 @@ export function MetricValue({
   exact?: boolean;
 }): ReactElement {
   const value = shownValue(figure, metric);
-  const reason = missingReason(figure, metric);
-  if (value === null)
-    return (
-      <Explained text={reason ?? ""} className="text-muted-foreground">
-        —
-      </Explained>
-    );
+  if (value === null) return <MissingValue reason={missingReason(figure, metric) ?? ""} />;
   return <>{exact ? formatTableMetric(value, metric) : formatMetric(value, metric)}</>;
 }
 

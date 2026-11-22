@@ -5,7 +5,6 @@ import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import {
   openSqliteDatabase,
   type SqliteDatabase,
-  type SqliteStatement,
   type SqliteValue,
 } from "../../infrastructure/sqlite/sqlite-driver";
 import {
@@ -15,9 +14,11 @@ import {
   type MessageTable as ScanTable,
   readRows,
   rootsOf,
+  scopedStatement,
   sessionEnds,
   type TableScan,
 } from "./usage-opencode-scan";
+import type { OpenCodeProgress } from "./usage-worker-protocol";
 
 /**
  * What a read saw of one message table: its newest update, its last row ID, and a digest of the
@@ -37,16 +38,6 @@ export const openCodeParserStateSchema = z.object({
   v1: tableStateSchema.nullable(),
 });
 export type OpenCodeParserState = z.infer<typeof openCodeParserStateSchema>;
-
-/**
- * The progress of a read: the share of the scanned row IDs, and the root sessions whose rows the
- * scan passed. A read that continues from a cursor does not know its sessions, so their total is
- * null.
- */
-export type OpenCodeProgress = {
-  fraction: number;
-  sessions: { done: number; total: number | null };
-};
 
 export type OpenCodeRead =
   | { kind: "units"; units: UsageUnit[]; state: OpenCodeParserState; mode: "replace" | "append" }
@@ -302,44 +293,39 @@ const firstRead = (
     const sessions = yield* sessionEnds(database, tables);
     const work = Math.max(1, sumOf(lastRowIds));
     const digests = tables.map(() => createIdentityDigest(-1));
-    const statements: SqliteStatement[] = [];
-    try {
-      for (const table of tables)
-        statements.push(
-          yield* database.prepare(
-            `${identityColumns(table.name)} WHERE rowid > ? AND rowid <= ? ORDER BY rowid`,
-          ),
-        );
-      const rows = yield* readRows(
+    const statements = yield* Effect.forEach(tables, (table) =>
+      scopedStatement(
         database,
-        tables.map((table, index) => ({
-          sql: table.sql,
-          cursor: FULL_READ,
-          lastRowId: lastRowIds[index] ?? 0,
-        })),
-        (positions) =>
-          onProgress({
-            fraction: Math.min(1, sumOf(positions) / work),
-            sessions: { done: sessions.doneAt(positions), total: sessions.total },
-          }),
-        (index, start, end) =>
-          Effect.gen(function* () {
-            const statement = statements[index];
-            if (statement) digests[index]?.add(yield* statement.values(start, end));
-          }),
-      );
-      const states = digests.map((digest, index): TableRead => {
-        const { all, mark } = digest.result();
-        return {
-          state: { mark, lastRowId: lastRowIds[index] ?? 0, digest: all },
-          cursor: FULL_READ,
-        };
-      });
-      return { states, rows, replace: true };
-    } finally {
-      for (const statement of statements) yield* statement.close().pipe(Effect.ignore);
-    }
-  });
+        `${identityColumns(table.name)} WHERE rowid > ? AND rowid <= ? ORDER BY rowid`,
+      ),
+    );
+    const rows = yield* readRows(
+      database,
+      tables.map((table, index) => ({
+        sql: table.sql,
+        cursor: FULL_READ,
+        lastRowId: lastRowIds[index] ?? 0,
+      })),
+      (positions) =>
+        onProgress({
+          fraction: Math.min(1, sumOf(positions) / work),
+          sessions: { done: sessions.doneAt(positions), total: sessions.total },
+        }),
+      (index, start, end) =>
+        Effect.gen(function* () {
+          const statement = statements[index];
+          if (statement) digests[index]?.add(yield* statement.values(start, end));
+        }),
+    );
+    const states = digests.map((digest, index): TableRead => {
+      const { all, mark } = digest.result();
+      return {
+        state: { mark, lastRowId: lastRowIds[index] ?? 0, digest: all },
+        cursor: FULL_READ,
+      };
+    });
+    return { states, rows, replace: true };
+  }).pipe(Effect.scoped);
 
 /**
  * A later read: it digests each table first, to find a deletion, then reads the changed rows, or

@@ -38,7 +38,6 @@ const jobOf = async (
 ): Promise<UsageParseJob> => {
   const { size, mtimeMs } = await stat(file);
   return {
-    jobId: 0,
     runtime: "claude",
     path: file,
     format: "jsonl",

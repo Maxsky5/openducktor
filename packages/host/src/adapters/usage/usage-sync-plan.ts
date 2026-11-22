@@ -1,21 +1,17 @@
 import type { RuntimeKind } from "@openducktor/contracts";
 import type { UsageSourceRow } from "./usage-index-sources";
-import { type DiskSource, isInsideAny } from "./usage-source-discovery";
+import { type DiskSource, isInsideAny, usageSourceWork } from "./usage-source-discovery";
 import type { UsageParseJob } from "./usage-worker-protocol";
 
 /** The stored sources that leave the index, and the sources to parse, largest first. */
 export type UsageSyncPlan = {
   removeIds: number[];
-  jobs: Omit<UsageParseJob, "jobId">[];
+  jobs: UsageParseJob[];
 };
 
-/** The OpenCode database is one long job. A compressed rollout holds about 10 times its size. */
-const weightOf = ({ format, fingerprint }: DiskSource): number =>
-  format === "opencode"
-    ? Number.POSITIVE_INFINITY
-    : format === "jsonl_zst"
-      ? fingerprint.size * 10
-      : fingerprint.size;
+/** The OpenCode database is one long job. */
+const weightOf = (source: DiskSource): number =>
+  source.format === "opencode" ? Number.POSITIVE_INFINITY : usageSourceWork(source);
 
 const sameFingerprint = (source: DiskSource, stored: UsageSourceRow): boolean =>
   source.fingerprint.size === stored.fingerprint.size &&

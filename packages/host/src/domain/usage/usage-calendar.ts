@@ -1,4 +1,4 @@
-import type { RuntimeKind, UsageGranularity } from "@openducktor/contracts";
+import type { RuntimeKind, UsageGranularity, UsageRangeInput } from "@openducktor/contracts";
 
 /** A calendar date, `YYYY-MM-DD`. */
 export type UsageDate = string;
@@ -107,10 +107,17 @@ export const createUsageCalendar = (timeZone: string): UsageCalendar => {
   return calendar;
 };
 
-/** The host time zone. */
-export const hostTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
-
 export type UsagePeriodBounds = { start: UsageDate; end: UsageDate };
+
+/** A recent range ends today and counts today. */
+const RECENT_RANGE_DAYS = { last_7_days: 7, last_30_days: 30, last_90_days: 90 } as const;
+
+/** The dates that a range selection reads. A null start reads all history. */
+export const usageReadRange = (range: UsageRangeInput, today: UsageDate) => {
+  if (range.kind === "custom") return { start: range.start, end: range.end };
+  if (range.kind === "all_time") return { start: null, end: today };
+  return { start: addDays(today, 1 - RECENT_RANGE_DAYS[range.kind]), end: today };
+};
 
 /** Days up to 92 days, ISO weeks up to 371 days, and calendar months for longer ranges. */
 export const usageGranularity = (start: UsageDate, end: UsageDate): UsageGranularity => {
@@ -156,11 +163,29 @@ export const usagePeriods = (
 };
 
 /** `All time` starts at the earliest activity of the runtimes, or at its end without activity. */
-export const firstActivityDate = (
+const firstActivityDate = (
   earliest: Partial<Record<RuntimeKind, UsageDate>>,
   runtimes: readonly RuntimeKind[],
   end: UsageDate,
 ): UsageDate => {
   const first = runtimes.flatMap((runtime) => earliest[runtime] ?? []).sort()[0];
   return first !== undefined && first < end ? first : end;
+};
+
+/**
+ * The dates, granularity, and periods of a report. A range without a start starts at the
+ * earliest activity of its runtimes in `earliest`.
+ */
+export const usageReportPeriods = (
+  range: { start: UsageDate | null; end: UsageDate },
+  earliest: Partial<Record<RuntimeKind, UsageDate>>,
+  runtimes: readonly RuntimeKind[],
+) => {
+  const start = range.start ?? firstActivityDate(earliest, runtimes, range.end);
+  const granularity = usageGranularity(start, range.end);
+  return {
+    range: { start, end: range.end },
+    granularity,
+    periods: usagePeriods(start, range.end, granularity),
+  };
 };

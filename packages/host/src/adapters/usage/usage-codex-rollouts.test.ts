@@ -12,7 +12,6 @@ const read = async (name: string) => {
   const file = path.join(import.meta.dir, "fixtures", `codex-${name}.jsonl`);
   const { size, mtimeMs } = await stat(file);
   const { units, issue } = await parseUsageSource({
-    jobId: 0,
     runtime: "codex",
     path: file,
     format: "jsonl",

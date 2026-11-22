@@ -2,9 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
 import { createZstdDecompress } from "node:zlib";
-
-/** Where a later read of a growing JSONL file continues. */
-export type UsageJsonlResume = { offset: number; digest: string };
+import type { UsageResumePoint } from "./usage-worker-protocol";
 
 /** True for a line that the parser reads. It runs on every line, so it must stay cheap. */
 export type UsageLineFilter = (line: Buffer) => boolean;
@@ -28,7 +26,7 @@ const readDigest = async (path: string, offset: number): Promise<string> => {
 };
 
 /** True when a resume can continue: the file still has the bytes that the last read saw. */
-export const canResumeJsonl = async (path: string, resume: UsageJsonlResume): Promise<boolean> =>
+export const canResumeJsonl = async (path: string, resume: UsageResumePoint): Promise<boolean> =>
   (await readDigest(path, resume.offset)) === resume.digest;
 
 /** Reads only up to the first line feed of a file, also of a compressed rollout. */
@@ -67,7 +65,7 @@ export const readJsonlLines = async (
   path: string,
   input: { offset: number; compressed: boolean; filter: UsageLineFilter },
   onLine: (line: Buffer) => void,
-): Promise<UsageJsonlResume | null> => {
+): Promise<UsageResumePoint | null> => {
   const file = createReadStream(path, {
     start: input.compressed ? 0 : input.offset,
     highWaterMark: CHUNK_BYTES,

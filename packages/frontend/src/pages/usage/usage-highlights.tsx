@@ -1,4 +1,4 @@
-import type { UsageFigure, UsageReport } from "@openducktor/contracts";
+import type { UsageReport } from "@openducktor/contracts";
 import { CalendarCheck, DatabaseZap, Flame, Info, Users, type LucideIcon } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -8,44 +8,14 @@ import {
   formatCountOf,
   formatMetric,
   formatShare,
-  metricValue,
-  missingReason,
-  PERIOD_NOUNS,
+  PERIOD_TEXT,
   periodName,
-  shownValue,
   USAGE_RUNTIME_COLORS,
   USAGE_RUNTIMES,
   type UsageMetric,
 } from "./usage-format";
-import { Explained, SectionHeading } from "./usage-parts";
-
-const PERIOD_ADJECTIVES = {
-  day: "Daily",
-  week: "Weekly",
-  month: "Monthly",
-} satisfies Record<UsageReport["granularity"], string>;
-
-type Period = UsageReport["periods"][number];
-
-/** What a value derived from a figure leaves out, or null when the figure covers all usage. */
-const leftOut = (figure: UsageFigure, metric: UsageMetric): string | null => {
-  if (metric === "cost" && figure.cost.state === "partial")
-    return "This value leaves out unpriced usage.";
-  if (metric === "tokens" && figure.unmeasured > 0)
-    return "This value leaves out requests without token counts.";
-  if (!figure.complete) return "This value leaves out history that could not be read.";
-  return null;
-};
-
-/** The sum of the known values of a period in a metric. */
-const periodValue = (period: Period, metric: UsageMetric): number =>
-  period.runtimes.reduce((sum, entry) => sum + (metricValue(entry.figure, metric) ?? 0), 0);
-
-const dash = (reason: string) => (
-  <Explained text={reason} className="text-muted-foreground">
-    —
-  </Explained>
-);
+import { Explained, MissingValue, SectionHeading } from "./usage-parts";
+import { type UsageHighlights as Highlights, usageHighlights } from "./usage-report";
 
 /** One tile: an icon and a label, the value, a small chart, and a detail line. */
 function HighlightTile({
@@ -169,87 +139,63 @@ function SessionMix({ byRuntime }: { byRuntime: UsageReport["byRuntime"] }): Rea
   );
 }
 
-type TileProps = { report: UsageReport; metric: UsageMetric; values: readonly number[] };
+type TileProps = { report: UsageReport; metric: UsageMetric; highlights: Highlights };
 
 /** The share of input-side tokens that came from the cache. */
-function CacheHitTile({ report }: TileProps): ReactElement {
-  const { input, cacheRead, cacheWrite } = report.totals.tokens;
-  const inputSide = input + cacheRead + cacheWrite;
-  const missing = missingReason(report.totals, "tokens");
-  const hitRate = missing === null && inputSide > 0 ? cacheRead / inputSide : null;
+function CacheHitTile({ highlights }: TileProps): ReactElement {
+  const { rate, missing, cacheRead, inputSide, note } = highlights.cacheHit;
   return (
     <HighlightTile
       icon={DatabaseZap}
       label="Cache hit rate"
-      value={
-        hitRate === null ? dash(missing ?? "No input tokens in this range.") : formatShare(hitRate)
-      }
-      note={leftOut(report.totals, "tokens")}
-      chart={<Meter share={hitRate ?? 0} />}
+      value={rate === null ? <MissingValue reason={missing} /> : formatShare(rate)}
+      note={note}
+      chart={<Meter share={rate ?? 0} />}
       detail={`${formatCompactCount(cacheRead)} of ${formatCompactCount(inputSide)} input tokens from cache`}
     />
   );
 }
 
-/** The index of the period with the largest value, or -1 without a value. */
-const busiestIndex = (values: readonly number[]): number =>
-  values.reduce(
-    (best, value, index) => (value > 0 && (best < 0 || value > (values[best] ?? 0)) ? index : best),
-    -1,
-  );
-
-function BusiestTile({ report, metric, values }: TileProps): ReactElement {
-  const noun = PERIOD_NOUNS[report.granularity];
-  const busiest = busiestIndex(values);
-  const period = report.periods[busiest];
+function BusiestTile({ report, metric, highlights }: TileProps): ReactElement {
+  const { value, missing, period, index } = highlights.busiest;
+  const noun = PERIOD_TEXT[report.granularity].noun;
   return (
     <HighlightTile
       icon={Flame}
       label={`Busiest ${noun}`}
-      value={period ? formatMetric(values[busiest] ?? 0, metric) : dash(`No ${noun} with a value.`)}
-      note={leftOut(report.totals, metric)}
-      chart={<PeriodColumns values={values} busiest={busiest} />}
+      value={value === null ? <MissingValue reason={missing} /> : formatMetric(value, metric)}
+      note={highlights.note}
+      chart={<PeriodColumns values={highlights.values} busiest={index} />}
       detail={period ? periodName(period, report.granularity) : `No ${noun} with a value`}
     />
   );
 }
 
-function AverageTile({ report, metric, values }: TileProps): ReactElement {
-  const noun = PERIOD_NOUNS[report.granularity];
-  const active = values.map((value) => value > 0);
-  const activeCount = active.filter(Boolean).length;
-  const total = shownValue(report.totals, metric);
+function AverageTile({ report, metric, highlights }: TileProps): ReactElement {
+  const { noun, adjective } = PERIOD_TEXT[report.granularity];
+  const { value, missing, activeCount } = highlights.average;
   return (
     <HighlightTile
       icon={CalendarCheck}
-      label={`${PERIOD_ADJECTIVES[report.granularity]} average`}
-      value={
-        total === null || activeCount === 0
-          ? dash(missingReason(report.totals, metric) ?? `No ${noun} with a value.`)
-          : formatMetric(total / Math.max(1, values.length), metric)
-      }
-      note={leftOut(report.totals, metric)}
-      chart={<ActivityStrip active={active} />}
-      detail={`${formatCount(activeCount)} of ${formatCountOf(values.length, noun)} active`}
+      label={`${adjective} average`}
+      value={value === null ? <MissingValue reason={missing} /> : formatMetric(value, metric)}
+      note={highlights.note}
+      chart={<ActivityStrip active={highlights.values.map((entry) => entry > 0)} />}
+      detail={`${formatCount(activeCount)} of ${formatCountOf(highlights.values.length, noun)} active`}
     />
   );
 }
 
-function PerSessionTile({ report, metric }: TileProps): ReactElement {
-  const { totals } = report;
-  const total = shownValue(totals, metric);
+function PerSessionTile({ report, metric, highlights }: TileProps): ReactElement {
+  const { value, missing, sessions } = highlights.perSession;
   return (
     <HighlightTile
       icon={Users}
       label="Per session"
-      value={
-        total === null || totals.sessions === 0
-          ? dash(missingReason(totals, metric) ?? "No sessions in this range.")
-          : formatMetric(total / totals.sessions, metric)
-      }
-      note={leftOut(totals, metric)}
+      value={value === null ? <MissingValue reason={missing} /> : formatMetric(value, metric)}
+      note={highlights.note}
       chart={<SessionMix byRuntime={report.byRuntime} />}
-      detail={`Over ${formatCountOf(totals.sessions, "active session")}`}
+      detail={`Over ${formatCountOf(sessions, "active session")}`}
     />
   );
 }
@@ -262,11 +208,7 @@ export function UsageHighlights({
   report: UsageReport;
   metric: UsageMetric;
 }): ReactElement {
-  const tile = {
-    report,
-    metric,
-    values: report.periods.map((period) => periodValue(period, metric)),
-  };
+  const tile = { report, metric, highlights: usageHighlights(report, metric) };
   return (
     <section aria-labelledby="usage-highlights" className="flex flex-col gap-3">
       <SectionHeading id="usage-highlights" title="Highlights" />

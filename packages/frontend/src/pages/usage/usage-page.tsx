@@ -1,49 +1,31 @@
-import {
-  USAGE_FIRST_DATE,
-  USAGE_LAST_DATE,
-  type RuntimeKind,
-  type UsageRangeInput,
-  type UsageReport,
-} from "@openducktor/contracts";
+import type { RuntimeKind, UsageRangeInput, UsageReport } from "@openducktor/contracts";
 import { describeRemoteConnectionFailure } from "@openducktor/frontend-core/lib/remote-connection-failure";
-import { usageReportQueryOptions } from "@openducktor/frontend-core/queries/usage";
-import { RemoteConnectionError } from "@openducktor/host-client/remote";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { LoaderCircle, ServerOff, TriangleAlert } from "lucide-react";
 import { memo, type ReactElement, type ReactNode, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { UsageBreakdown } from "./usage-breakdown";
 import { UsageCoverage } from "./usage-coverage";
 import { UsageFirstRead } from "./usage-first-read";
 import {
+  CustomRangeForm,
   MetricTabs,
   RangeTabs,
   type RangeKind,
   RefreshButton,
   RuntimeFilter,
 } from "./usage-filters";
-import {
-  formatDate,
-  formatRange,
-  formatTime,
-  reportRuntimes,
-  USAGE_RUNTIME_LABELS,
-  type UsageMetric,
-} from "./usage-format";
+import { formatRange, formatTime, reportRuntimes, type UsageMetric } from "./usage-format";
 import { UsagePageFrame } from "./usage-layout";
 import { UsageHighlights } from "./usage-highlights";
 import { UsageOverview } from "./usage-overview";
 import { UsagePageSkeleton } from "./usage-page-skeleton";
+import { emptyStateOf, hasActivity } from "./usage-report";
 import { UsageTokenTypes } from "./usage-token-types";
 import { useSkeletonHold } from "./use-skeleton-hold";
-import { type UsageProgressState, useUsageProgress } from "./use-usage-progress";
-
-/** A host without Usage refuses the command it does not know. */
-const isUsageUnavailable = (error: Error | null): boolean =>
-  error instanceof RemoteConnectionError && error.failure.code === "function_unavailable";
+import type { UsageProgressState } from "./use-usage-progress";
+import { type UsageReportState, useUsageReport } from "./use-usage-report";
 
 /** The reason of a failed read and, when the host gives one, what to do next. */
 const errorText = (error: Error | null): string => {
@@ -51,78 +33,6 @@ const errorText = (error: Error | null): string => {
   const { message, nextAction } = describeRemoteConnectionFailure(error);
   return nextAction ? `${message} ${nextAction}` : message;
 };
-
-function CustomRangeForm({
-  initial,
-  onApply,
-}: {
-  initial: { start: string; end: string };
-  onApply: (range: UsageRangeInput) => void;
-}): ReactElement {
-  const [start, setStart] = useState(initial.start);
-  const [end, setEnd] = useState(initial.end);
-  const [problem, setProblem] = useState<string | null>(null);
-  const submit = (event: { preventDefault(): void }) => {
-    event.preventDefault();
-    if (!start || !end) {
-      setProblem("Enter a start date and an end date.");
-      return;
-    }
-    if ([start, end].some((date) => date < USAGE_FIRST_DATE || date > USAGE_LAST_DATE)) {
-      setProblem(
-        `Use dates from ${formatDate(USAGE_FIRST_DATE)} to ${formatDate(USAGE_LAST_DATE)}.`,
-      );
-      return;
-    }
-    if (end < start) {
-      setProblem("The end date must be on or after the start date.");
-      return;
-    }
-    setProblem(null);
-    onApply({ kind: "custom", start, end });
-  };
-  return (
-    // A narrow window puts both dates side by side and Apply under them.
-    <form
-      onSubmit={submit}
-      className="grid grid-cols-2 items-end gap-2 @md:flex @md:flex-wrap"
-      noValidate
-    >
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-        From
-        <Input
-          type="date"
-          value={start}
-          min={USAGE_FIRST_DATE}
-          max={USAGE_LAST_DATE}
-          onChange={(event) => setStart(event.target.value)}
-          className="h-9 w-full @md:w-40"
-          aria-invalid={problem !== null}
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-        To
-        <Input
-          type="date"
-          value={end}
-          min={USAGE_FIRST_DATE}
-          max={USAGE_LAST_DATE}
-          onChange={(event) => setEnd(event.target.value)}
-          className="h-9 w-full @md:w-40"
-          aria-invalid={problem !== null}
-        />
-      </label>
-      <Button type="submit" variant="secondary" className="col-span-2 h-9 @md:col-span-1">
-        Apply
-      </Button>
-      {problem ? (
-        <p role="alert" className="col-span-2 basis-full text-xs text-destructive-muted">
-          {problem}
-        </p>
-      ) : null}
-    </form>
-  );
-}
 
 function UsageMessage({
   icon,
@@ -151,34 +61,6 @@ function UsageMessage({
     </div>
   );
 }
-
-/** Why a report shows no activity: no history, history that could not be read, or a quiet range. */
-type EmptyState = { title: string; text: string };
-
-const emptyStateOf = (report: UsageReport): EmptyState => {
-  if (report.coverage.some((entry) => entry.state === "partial"))
-    return {
-      title: "No readable activity in this range",
-      text: "Some history could not be read, so activity can be missing. Sources names the problem.",
-    };
-  if (report.coverage.every((entry) => entry.state === "no_history")) {
-    const [only] = report.coverage;
-    // A runtime filter returns the coverage of that runtime only.
-    if (only && report.coverage.length === 1)
-      return {
-        title: `No ${USAGE_RUNTIME_LABELS[only.runtime]} history on this host`,
-        text: `This host has no recorded ${USAGE_RUNTIME_LABELS[only.runtime]} sessions. Select another runtime.`,
-      };
-    return {
-      title: "No runtime history on this host",
-      text: "This host has no recorded Claude Code, Codex, or OpenCode sessions.",
-    };
-  }
-  return { title: "No activity in this range", text: "Select another date range or runtime." };
-};
-
-const hasActivity = (report: UsageReport): boolean =>
-  report.totals.sessions > 0 || report.totals.tokens.processed > 0 || report.totals.unmeasured > 0;
 
 /**
  * The report sections. A fetch that only changes the fetch state of the page does not render them
@@ -248,18 +130,13 @@ function Reveal({ children }: { children: ReactNode }): ReactElement {
 }
 
 function UsageResult({
-  report,
-  error,
-  progress,
+  state,
   metric,
-  onRetry,
 }: {
-  report: UsageReport | undefined;
-  error: Error | null;
-  progress: UsageProgressState | null;
+  state: UsageReportState;
   metric: UsageMetric;
-  onRetry: () => void;
 }): ReactElement {
+  const { report, error, progress } = state;
   // Without data, the skeleton shows at once and stays for at least half a second.
   const skeleton = useSkeletonHold(report === undefined && error === null && progress === null);
   if (skeleton) return <UsagePageSkeleton />;
@@ -269,7 +146,7 @@ function UsageResult({
         <UsageReportView report={report} metric={metric} />
       </Reveal>
     );
-  if (isUsageUnavailable(error))
+  if (state.unavailable)
     return (
       <Reveal key="unavailable">
         <UsageMessage icon={<ServerOff className="size-5" />} title="This host does not have Usage">
@@ -284,7 +161,7 @@ function UsageResult({
           icon={<TriangleAlert className="size-5" />}
           title="Usage could not be read"
           action={
-            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+            <Button type="button" variant="outline" size="sm" onClick={state.refetch}>
               Retry
             </Button>
           }
@@ -340,7 +217,7 @@ function ResultLine({
 /** A short line of the parse work while a shown result waits for new history. */
 const progressText = (state: UsageProgressState | null): string | null => {
   if (!state) return null;
-  if (state.progress.phase === "summarizing") return "Building the daily totals…";
+  if (state.summarizing) return "Building the daily totals…";
   return `Reading new history · ${Math.floor(state.share * 100)}%`;
 };
 
@@ -350,17 +227,8 @@ export function UsagePage(): ReactElement {
   const [rangeKind, setRangeKind] = useState<RangeKind>("last_30_days");
   const [runtime, setRuntime] = useState<RuntimeKind | null>(null);
   const [metric, setMetric] = useState<UsageMetric>("tokens");
-  // A new selection keeps the shown result, marked as loading, until its own result arrives,
-  // so the page never falls back to the skeleton between two results.
-  const query = useQuery({
-    ...usageReportQueryOptions({ range, runtime }),
-    placeholderData: keepPreviousData,
-  });
-  const loadingSelection = query.isPlaceholderData && query.isFetching;
-  // A failed read of a new selection shows its error, not the result of another selection.
-  const report = query.isPlaceholderData && !query.isFetching ? undefined : query.data;
-  const progress = useUsageProgress(query.isFetching);
-  const refetch = () => void query.refetch();
+  const usage = useUsageReport({ range, runtime });
+  const { report, loadingSelection, fetching } = usage;
   const chooseRange = (kind: RangeKind) => {
     setRangeKind(kind);
     if (kind !== "custom") setRange({ kind });
@@ -381,7 +249,7 @@ export function UsagePage(): ReactElement {
           <ResultLine
             report={report}
             loading={loadingSelection}
-            progress={progress}
+            progress={usage.progress}
             updatedText={updatedText}
           />
         </div>
@@ -389,10 +257,10 @@ export function UsagePage(): ReactElement {
           <RangeTabs rangeKind={rangeKind} onRangeKind={chooseRange} />
           <MetricTabs metric={metric} onMetric={setMetric} />
           <RefreshButton
-            fetching={query.isFetching}
-            disabled={query.isFetching || (!report && isUsageUnavailable(query.error))}
+            fetching={fetching}
+            disabled={fetching || (!report && usage.unavailable)}
             updatedText={updatedText}
-            onRefresh={refetch}
+            onRefresh={usage.refetch}
           />
         </div>
       </header>
@@ -401,8 +269,8 @@ export function UsagePage(): ReactElement {
         // applied range when the user opens it.
         <CustomRangeForm initial={customRangeOf(range, report)} onApply={setRange} />
       ) : null}
-      {report && query.isError ? (
-        <StaleResultAlert report={report} error={query.error} onRetry={refetch} />
+      {report && usage.error ? (
+        <StaleResultAlert report={report} error={usage.error} onRetry={usage.refetch} />
       ) : null}
       {/* The previous result dims while the next one loads. The delay keeps a fast read from
           flashing. */}
@@ -413,13 +281,7 @@ export function UsagePage(): ReactElement {
           loadingSelection ? "pointer-events-none opacity-50 delay-150" : "opacity-100",
         )}
       >
-        <UsageResult
-          report={report}
-          error={query.error}
-          progress={progress}
-          metric={metric}
-          onRetry={refetch}
-        />
+        <UsageResult state={usage} metric={metric} />
       </div>
     </UsagePageFrame>
   );

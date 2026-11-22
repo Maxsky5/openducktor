@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createUsagePricer, type UsageRates } from "./usage-pricing";
+import {
+  createUsagePricer,
+  type UsageCatalog,
+  type UsageRates,
+  usageRateCatalogOf,
+} from "./usage-pricing";
 
 const rates = (input: number): UsageRates => ({
   input,
@@ -37,5 +42,103 @@ describe("createUsagePricer", () => {
     expect(pricer.stepsFor("openai", "gpt-6.2-sol", "default")?.[0]?.rates.input).toBe(2);
     expect(pricer.stepsFor("anthropic", "claude-opus-5-5", "fast")?.[0]?.rates.input).toBe(8);
     expect(pricer.stepsFor("openai", "gpt-6.2-sol", "priority")).toBeNull();
+  });
+});
+
+/** An excerpt of the models.dev catalog. */
+const CATALOG: UsageCatalog = {
+  openai: {
+    models: {
+      "gpt-6.2-sol": {
+        cost: {
+          input: 2,
+          output: 10,
+          cache_read: 0.1,
+          cache_write: 2.5,
+          tiers: [
+            { input: 4, output: 15, cache_read: 0.2, tier: { type: "context", size: 272_000 } },
+          ],
+          context_over_200k: { input: 4, output: 15 },
+        },
+        experimental: {
+          modes: {
+            fast: {
+              cost: { input: 4, output: 20, cache_read: 0.2, cache_write: 5 },
+              provider: { body: { service_tier: "priority" } },
+            },
+            // A mode without its own cost.
+            pro: { provider: { body: {} } },
+          },
+        },
+      },
+      "text-embedding-3-small": {},
+    },
+  },
+  anthropic: {
+    models: {
+      "claude-opus-5-5": {
+        cost: { input: 4, output: 20, cache_read: 0.2, cache_write: 5 },
+        experimental: {
+          modes: {
+            fast: {
+              cost: { input: 8, output: 40 },
+              provider: { body: { speed: "fast" } },
+            },
+          },
+        },
+      },
+    },
+  },
+  opencode: { models: { "tidepool-alpha-free": { cost: { input: 0, output: 0 } } } },
+};
+
+describe("usageRateCatalogOf", () => {
+  const pricer = usageRateCatalogOf(CATALOG);
+
+  test("reads base rates, prompt size steps, and the tiers that modes set", () => {
+    expect(pricer.openai?.["gpt-6.2-sol"]).toEqual({
+      base: [
+        {
+          minPrompt: 0,
+          rates: { input: 2, output: 10, cacheRead: 0.1, cacheWrite5m: 2.5, cacheWrite1h: 4 },
+        },
+        {
+          minPrompt: 272_000,
+          rates: { input: 4, output: 15, cacheRead: 0.2, cacheWrite5m: 2.5, cacheWrite1h: 8 },
+        },
+      ],
+      tiers: {
+        priority: [
+          {
+            minPrompt: 0,
+            rates: { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 },
+          },
+        ],
+      },
+    });
+    expect(pricer.anthropic?.["claude-opus-5-5"]?.tiers.fast?.[0]?.rates).toEqual({
+      input: 8,
+      output: 40,
+      cacheRead: 0.2,
+      cacheWrite5m: 5,
+      cacheWrite1h: 16,
+    });
+  });
+
+  test("prices the model ID that OpenCode gives each mode", () => {
+    expect(pricer.openai?.["gpt-6.2-sol-fast"]?.base[0]?.rates.input).toBe(4);
+    expect(pricer.anthropic?.["claude-opus-5-5-fast"]?.base[0]?.rates.output).toBe(40);
+    expect(pricer.openai?.["gpt-6.2-sol-pro"]).toBeUndefined();
+  });
+
+  test("bills cache traffic as input without cache rates, and skips models without a cost", () => {
+    expect(pricer.opencode?.["tidepool-alpha-free"]?.base[0]?.rates).toEqual({
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite5m: 0,
+      cacheWrite1h: 0,
+    });
+    expect(pricer.openai?.["text-embedding-3-small"]).toBeUndefined();
   });
 });

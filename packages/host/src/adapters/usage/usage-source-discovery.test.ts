@@ -40,7 +40,7 @@ describe("discoverUsageSources", () => {
       expect(discovery.sources.map((source) => [source.runtime, source.path])).toEqual([
         ["codex", rollout],
       ]);
-      expect(discovery.locationIssues).toEqual([{ runtime: "codex", code: "unreadable" }]);
+      expect(discovery.unreadableRuntimes).toEqual(["codex"]);
       expect(discovery.unreadablePaths).toEqual([archived]);
       expect(discovery.withoutHistory).toEqual(["claude", "opencode"]);
     },

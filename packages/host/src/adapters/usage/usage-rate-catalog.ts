@@ -2,11 +2,9 @@ import { Effect } from "effect";
 import { z } from "zod";
 import {
   createUsagePricer,
-  type UsageModelRates,
   type UsagePricer,
   type UsageRateCatalog,
-  type UsageRates,
-  type UsageRateStep,
+  usageRateCatalogOf,
 } from "../../domain/usage/usage-pricing";
 import { errorMessage, type HostOperationErrorAggregate } from "../../effect/host-errors";
 
@@ -36,8 +34,8 @@ export type UsagePricing = {
   pricer: UsagePricer;
   /** When the host downloaded the rates, or null without rates. */
   updatedAtMs: number | null;
-  /** Why the rates are missing or out of date, with the action that fixes it. */
-  issue: string | null;
+  /** Why the last download failed, while the rates are missing or out of date. */
+  failure: string | null;
 };
 
 const cost = z.object({
@@ -46,7 +44,6 @@ const cost = z.object({
   cache_read: z.number().nonnegative().optional(),
   cache_write: z.number().nonnegative().optional(),
 });
-type Cost = z.output<typeof cost>;
 
 const modelSchema = z.object({
   cost: cost
@@ -64,7 +61,6 @@ const modelSchema = z.object({
           z.string(),
           z.object({
             cost: cost.optional(),
-            // The request body of the mode: OpenAI `service_tier` or Anthropic `speed`.
             provider: z
               .object({
                 body: z
@@ -87,70 +83,9 @@ const catalogSchema = z.record(
   z.object({ models: z.record(z.string(), modelSchema).optional() }),
 );
 
-/**
- * The rates of a catalog cost over the rates it refines. A missing cache rate means that the
- * provider bills cache traffic as input. The catalog lists only the 5-minute cache write rate;
- * a 1-hour cache write costs twice the input rate, as Anthropic publishes. Only Claude records
- * 1-hour cache writes.
- */
-const ratesOf = (value: Cost, over: UsageRates | null): UsageRates | null => {
-  const input = value.input ?? over?.input;
-  const output = value.output ?? over?.output;
-  if (input === undefined || output === undefined) return null;
-  return {
-    input,
-    output,
-    cacheRead: value.cache_read ?? over?.cacheRead ?? input,
-    cacheWrite5m: value.cache_write ?? over?.cacheWrite5m ?? input,
-    cacheWrite1h: 2 * input,
-  };
-};
-
-/** The base steps: the base rates, then each prompt size tier above them. */
-const baseSteps = (value: NonNullable<z.output<typeof modelSchema>["cost"]>) => {
-  const base = ratesOf(value, null);
-  if (!base) return null;
-  const steps: UsageRateStep[] = [{ minPrompt: 0, rates: base }];
-  const tiers = value.tiers?.filter((tier) => tier.tier.type === "context" && tier.tier.size);
-  const larger = tiers?.length
-    ? tiers.map((tier) => ({ size: tier.tier.size ?? 0, cost: tier }))
-    : value.context_over_200k
-      ? [{ size: 200_000, cost: value.context_over_200k }]
-      : [];
-  for (const { size, cost: tier } of larger.toSorted((a, b) => a.size - b.size)) {
-    const rates = ratesOf(tier, base);
-    if (rates) steps.push({ minPrompt: size, rates });
-  }
-  return steps;
-};
-
-/**
- * Turns the JSON text of a models.dev catalog into the rates of each provider and model. A mode
- * that sets a service tier, OpenAI `service_tier` or Anthropic `speed`, gives the rates of the
- * requests that record that tier. OpenCode records a request in a mode as the model
- * `<model>-<mode>`, so that ID gets the rates of the mode.
- */
-export const parseUsageRateCatalog = (text: string): UsageRateCatalog => {
-  const catalog: Record<string, Record<string, UsageModelRates>> = {};
-  for (const [provider, entry] of Object.entries(catalogSchema.parse(JSON.parse(text)))) {
-    for (const [model, info] of Object.entries(entry.models ?? {})) {
-      const base = info.cost ? baseSteps(info.cost) : null;
-      if (!base) continue;
-      const tiers: Record<string, UsageRateStep[]> = {};
-      catalog[provider] ??= {};
-      for (const [name, mode] of Object.entries(info.experimental?.modes ?? {})) {
-        const rates = mode.cost ? ratesOf(mode.cost, base[0]!.rates) : null;
-        if (!rates) continue;
-        const tier = mode.provider?.body?.service_tier ?? mode.provider?.body?.speed;
-        if (tier) tiers[tier] = [{ minPrompt: 0, rates }];
-        // OpenCode offers each mode as its own model, `<model>-<mode>`, and records that ID.
-        catalog[provider][`${model}-${name}`] ??= { base: [{ minPrompt: 0, rates }], tiers: {} };
-      }
-      catalog[provider][model] = { base, tiers };
-    }
-  }
-  return catalog;
-};
+/** Turns the JSON text of a models.dev catalog into the rates of each provider and model. */
+export const parseUsageRateCatalog = (text: string): UsageRateCatalog =>
+  usageRateCatalogOf(catalogSchema.parse(JSON.parse(text)));
 
 /** The text of a catalog with its rates. It throws when the text is not a catalog. */
 const parsedDocument = (document: string) => ({
@@ -179,9 +114,7 @@ export const createUsageRateCatalog = (
   const pricing = (): UsagePricing => ({
     pricer: current?.pricer ?? EMPTY_PRICER,
     updatedAtMs: current?.fetchedAtMs ?? null,
-    issue: failure
-      ? `Usage could not ${current ? "update" : "load"} the API rates from ${USAGE_RATES_SOURCE}: ${failure.message} Check the network access of the host, then refresh.`
-      : null,
+    failure: failure?.message ?? null,
   });
 
   const loadStored = Effect.gen(function* () {

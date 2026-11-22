@@ -9,102 +9,10 @@ import {
 
 /** An excerpt of the models.dev catalog in its published shape. */
 const CATALOG = {
-  openai: {
-    id: "openai",
-    models: {
-      "gpt-6.2-sol": {
-        id: "gpt-6.2-sol",
-        cost: {
-          input: 2,
-          output: 10,
-          cache_read: 0.1,
-          cache_write: 2.5,
-          tiers: [
-            { input: 4, output: 15, cache_read: 0.2, tier: { type: "context", size: 272_000 } },
-          ],
-          context_over_200k: { input: 4, output: 15 },
-        },
-        experimental: {
-          modes: {
-            fast: {
-              cost: { input: 4, output: 20, cache_read: 0.2, cache_write: 5 },
-              provider: { body: { service_tier: "priority" } },
-            },
-            pro: { provider: { body: { reasoning: { mode: "pro" } } } },
-          },
-        },
-      },
-      "text-embedding-3-small": { id: "text-embedding-3-small" },
-    },
-  },
-  anthropic: {
-    models: {
-      "claude-opus-5-5": {
-        cost: { input: 4, output: 20, cache_read: 0.2, cache_write: 5 },
-        experimental: {
-          modes: {
-            fast: {
-              cost: { input: 8, output: 40 },
-              provider: { body: { speed: "fast" }, headers: { "anthropic-beta": "fast" } },
-            },
-          },
-        },
-      },
-    },
-  },
-  opencode: { models: { "tidepool-alpha-free": { cost: { input: 0, output: 0 } } } },
+  openai: { models: { "gpt-6.2-sol": { cost: { input: 2, output: 10, cache_read: 0.1 } } } },
 };
 
 describe("parseUsageRateCatalog", () => {
-  const pricer = parseUsageRateCatalog(JSON.stringify(CATALOG));
-
-  test("reads base rates, prompt size steps, and the tiers that modes set", () => {
-    expect(pricer.openai?.["gpt-6.2-sol"]).toEqual({
-      base: [
-        {
-          minPrompt: 0,
-          rates: { input: 2, output: 10, cacheRead: 0.1, cacheWrite5m: 2.5, cacheWrite1h: 4 },
-        },
-        {
-          minPrompt: 272_000,
-          rates: { input: 4, output: 15, cacheRead: 0.2, cacheWrite5m: 2.5, cacheWrite1h: 8 },
-        },
-      ],
-      tiers: {
-        priority: [
-          {
-            minPrompt: 0,
-            rates: { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 },
-          },
-        ],
-      },
-    });
-    expect(pricer.anthropic?.["claude-opus-5-5"]?.tiers.fast?.[0]?.rates).toEqual({
-      input: 8,
-      output: 40,
-      cacheRead: 0.2,
-      cacheWrite5m: 5,
-      cacheWrite1h: 16,
-    });
-  });
-
-  test("prices the model ID that OpenCode gives each mode", () => {
-    expect(pricer.openai?.["gpt-6.2-sol-fast"]?.base[0]?.rates.input).toBe(4);
-    expect(pricer.anthropic?.["claude-opus-5-5-fast"]?.base[0]?.rates.output).toBe(40);
-    expect(pricer.openai?.["gpt-6.2-sol-pro"]).toBeUndefined();
-  });
-
-  test("bills cache traffic as input without cache rates, and skips models without a cost", () => {
-    expect(pricer.opencode?.["tidepool-alpha-free"]?.base[0]?.rates).toEqual({
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite5m: 0,
-      cacheWrite1h: 0,
-    });
-    expect(pricer.openai?.["text-embedding-3-small"]).toBeUndefined();
-  });
-
   test("rejects a catalog in another shape", () => {
     expect(() =>
       parseUsageRateCatalog(
@@ -173,7 +81,7 @@ describe("createUsageRateCatalog", () => {
       createUsageRateCatalog(storage, server.url, () => 1_000 + DAY).current(),
     );
     expect(server.etags).toEqual(['"v1"']);
-    expect(pricing).toMatchObject({ updatedAtMs: 1_000 + DAY, issue: null });
+    expect(pricing).toMatchObject({ updatedAtMs: 1_000 + DAY, failure: null });
     expect(stored()?.fetchedAtMs).toBe(1_000 + DAY);
   });
 
@@ -196,9 +104,7 @@ describe("createUsageRateCatalog", () => {
     const catalog = createUsageRateCatalog(storage, server.url, () => now);
     const failed = await Effect.runPromise(catalog.current());
     expect(failed.updatedAtMs).toBe(1_000);
-    expect(failed.issue).toBe(
-      "Usage could not update the API rates from models.dev: The server answered 503. Check the network access of the host, then refresh.",
-    );
+    expect(failed.failure).toBe("The server answered 503.");
     expect(failed.pricer.stepsFor("openai", "gpt-6.2-sol", null)).not.toBeNull();
     now += 60_000;
     await Effect.runPromise(catalog.current());
@@ -207,7 +113,7 @@ describe("createUsageRateCatalog", () => {
     now += 5 * 60_000;
     const recovered = await Effect.runPromise(catalog.current());
     expect(server.etags).toHaveLength(2);
-    expect(recovered).toMatchObject({ updatedAtMs: now, issue: null });
+    expect(recovered).toMatchObject({ updatedAtMs: now, failure: null });
   });
 
   test("prices nothing when no copy and no download exist", async () => {
@@ -217,7 +123,7 @@ describe("createUsageRateCatalog", () => {
       createUsageRateCatalog(storage, server.url, () => 1).current(),
     );
     expect(pricing.updatedAtMs).toBeNull();
-    expect(pricing.issue).toStartWith("Usage could not load the API rates from models.dev:");
+    expect(pricing.failure).toBe("The server answered 500.");
     expect(pricing.pricer.stepsFor("openai", "gpt-6.2-sol", null)).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { UsageIndexProgress } from "@openducktor/contracts";
-import { carryProgress, shownProgress } from "./use-usage-progress";
+import { carryProgress, isSummarizing, shownProgress } from "./usage-progress";
 
 type Runtime = UsageIndexProgress["runtimes"][number];
 
@@ -60,5 +60,23 @@ describe("usage progress across reads", () => {
     const only = event("2026-11-22T10:00:00.000Z", [runtime("claude", 0.5, 2, 4)]);
     const carried = carryProgress(carryProgress(null, only), only);
     expect(shownProgress(carried)).toEqual(only);
+  });
+});
+
+describe("isSummarizing", () => {
+  test("starts once every runtime is done, also before the phase changes", () => {
+    const reading = event("2026-11-22T10:00:00.000Z", [
+      runtime("claude", 1, 4, 4),
+      runtime("codex", 0.5, 1, 2),
+    ]);
+    expect(isSummarizing(reading)).toBe(false);
+    expect(
+      isSummarizing({
+        ...reading,
+        runtimes: [runtime("claude", 1, 4, 4), runtime("codex", 1, 2, 2)],
+      }),
+    ).toBe(true);
+    expect(isSummarizing({ ...reading, phase: "summarizing" })).toBe(true);
+    expect(isSummarizing({ ...reading, phase: "preparing", runtimes: [] })).toBe(false);
   });
 });

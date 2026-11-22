@@ -1,4 +1,4 @@
-import type { RuntimeKind, UsageFigure, UsageReport } from "@openducktor/contracts";
+import type { RuntimeKind, UsageFigure, UsagePeriod, UsageReport } from "@openducktor/contracts";
 import { ChevronDown } from "lucide-react";
 import { type ReactElement, type ReactNode, useState } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
@@ -6,14 +6,20 @@ import { Button } from "@/components/ui/button";
 import { ToggleTabs, ToggleTabsItem } from "@/components/ui/toggle-tabs";
 import { cn } from "@/lib/utils";
 import {
+  endsToday,
+  type FigureGap,
   formatCount,
   formatCountOf,
   formatShare,
-  endsToday,
   formatTableMetric,
-  metricValue,
-  periodName,
+  METRIC_TEXT,
+  PERIOD_TEXT,
+  partialTotalText,
+  type PeriodTotal,
+  periodTotal,
   providerName,
+  periodName,
+  shareOf,
   shownValue,
   USAGE_RUNTIME_LABELS,
   type UsageMetric,
@@ -21,12 +27,6 @@ import {
 import { Explained, IncompleteMark, MetricValue, SectionHeading } from "./usage-parts";
 
 type BreakdownView = "model" | "project" | "period";
-
-const PERIOD_LABELS = {
-  day: "Day",
-  week: "Week",
-  month: "Month",
-} satisfies Record<UsageReport["granularity"], string>;
 
 /** Rows shown before Show all. */
 const COLLAPSED_ROWS = 10;
@@ -86,7 +86,7 @@ function RankedTable({
 }): ReactElement {
   const ranked = rows.toSorted(byValue(metric));
   const { shown, toggle } = useCollapsedRows(ranked);
-  const total = metricValue(totals, metric);
+  const total = shownValue(totals, metric);
   const top = ranked[0] ? (shownValue(ranked[0].figure, metric) ?? 0) : 0;
   return (
     <>
@@ -103,20 +103,20 @@ function RankedTable({
               Sessions
             </th>
             <th scope="col" className={cn(NUMBER_HEAD, "hidden @xl:table-cell")}>
-              % of {metric === "tokens" ? "tokens" : "cost"}
+              % of {METRIC_TEXT[metric].noun}
             </th>
             <th scope="col" className={cn(NUMBER_HEAD, metricColumn("cost", metric))}>
-              Cost
+              {METRIC_TEXT.cost.label}
             </th>
             <th scope="col" className={cn(NUMBER_HEAD, metricColumn("tokens", metric))}>
-              Tokens
+              {METRIC_TEXT.tokens.label}
             </th>
           </tr>
         </thead>
         <tbody>
           {shown.map((row, index) => {
             const value = shownValue(row.figure, metric);
-            const share = value === null || !total ? null : value / total;
+            const share = shareOf(row.figure, total, metric);
             const barShare = top > 0 && value ? value / top : 0;
             const shareText = share === null ? "—" : formatShare(share);
             return (
@@ -192,43 +192,85 @@ function RankedTable({
   );
 }
 
-/** The known total of figures, and whether a figure had no value or left part out. */
-const sumOf = (figures: readonly UsageFigure[], metric: UsageMetric) => {
-  let total = 0;
-  let partial = false;
-  for (const figure of figures) {
-    const value = shownValue(figure, metric);
-    if (value === null) partial = true;
-    else total += value;
-    if (!figure.complete) partial = true;
-  }
-  return { total, partial };
-};
-
+/** The known total of a period. A partial total has a mark that explains what it leaves out. */
 function SumCell({
-  figures,
+  total,
   metric,
   className,
 }: {
-  figures: readonly UsageFigure[];
+  total: PeriodTotal;
   metric: UsageMetric;
   className?: string;
 }): ReactElement {
-  const { total, partial } = sumOf(figures, metric);
   return (
     <td className={cn(CELL, "relative text-right", className)}>
-      {partial ? (
-        <Explained text="Total of the known values. Some values are missing or partial.">
-          {formatTableMetric(total, metric)}
+      {total.partial ? (
+        <Explained text={partialTotalText(total.gaps)}>
+          {formatTableMetric(total.value, metric)}
           {/* The mark sits in the cell padding, so the digits of the column line up. */}
           <span className="absolute right-1 text-muted-foreground">*</span>
         </Explained>
       ) : (
-        formatTableMetric(total, metric)
+        formatTableMetric(total.value, metric)
       )}
     </td>
   );
 }
+
+/** One period row: its name, each runtime's value, the total, and the total of the other metric. */
+function PeriodRow({
+  period,
+  label,
+  runtimes,
+  metric,
+}: {
+  period: UsagePeriod;
+  label: ReactNode;
+  runtimes: readonly RuntimeKind[];
+  metric: UsageMetric;
+}): ReactElement {
+  const total = periodTotal(period, runtimes, metric);
+  return (
+    <tr className="border-b border-border/60 hover:bg-muted/40">
+      <td className={cn(CELL, "whitespace-nowrap")}>{label}</td>
+      {total.parts.map(({ runtime, figure }) => (
+        <td
+          key={runtime}
+          className={cn(CELL, "hidden text-right text-muted-foreground @2xl:table-cell")}
+        >
+          {figure ? (
+            <MetricValue figure={figure} metric={metric} exact />
+          ) : (
+            formatTableMetric(0, metric)
+          )}
+        </td>
+      ))}
+      <SumCell total={total} metric={metric} className="font-medium" />
+      <SumCell
+        total={periodTotal(period, runtimes, otherMetric(metric))}
+        metric={otherMetric(metric)}
+        className="text-muted-foreground"
+      />
+    </tr>
+  );
+}
+
+const otherMetric = (metric: UsageMetric): UsageMetric => (metric === "tokens" ? "cost" : "tokens");
+
+/** What the partial totals of the periods leave out, over both metric columns. */
+const partialGapsOf = (
+  periods: readonly UsagePeriod[],
+  runtimes: readonly RuntimeKind[],
+  metric: UsageMetric,
+): Set<FigureGap> => {
+  const gaps = new Set<FigureGap>();
+  for (const period of periods)
+    for (const column of [metric, otherMetric(metric)]) {
+      const total = periodTotal(period, runtimes, column);
+      if (total.partial) for (const gap of total.gaps) gaps.add(gap);
+    }
+  return gaps;
+};
 
 /** One row per period, newest first, with each runtime's value. */
 function PeriodTable({
@@ -244,15 +286,8 @@ function PeriodTable({
   const inProgress = endsToday(report);
   const periods = report.periods.toReversed();
   const { shown, toggle } = useCollapsedRows(periods);
-  const other: UsageMetric = metric === "tokens" ? "cost" : "tokens";
-  const periodLabel = PERIOD_LABELS[report.granularity];
-  const anyPartial = periods.some(
-    (period) =>
-      sumOf(
-        period.runtimes.map((entry) => entry.figure),
-        metric,
-      ).partial,
-  );
+  const periodLabel = PERIOD_TEXT[report.granularity].label;
+  const gaps = partialGapsOf(periods, runtimes, metric);
   return (
     <>
       <table className="w-full table-fixed text-sm">
@@ -277,53 +312,32 @@ function PeriodTable({
               Total
             </th>
             <th scope="col" className={NUMBER_HEAD}>
-              {other === "tokens" ? "Tokens" : "Cost"}
+              {METRIC_TEXT[otherMetric(metric)].label}
             </th>
           </tr>
         </thead>
         <tbody>
-          {shown.map((period) => {
-            const figures = period.runtimes.map((entry) => entry.figure);
-            return (
-              <tr key={period.start} className="border-b border-border/60 hover:bg-muted/40">
-                <td className={cn(CELL, "whitespace-nowrap")}>
+          {shown.map((period) => (
+            <PeriodRow
+              key={period.start}
+              period={period}
+              label={
+                <>
                   {periodName(period, report.granularity)}
                   {inProgress && period.start === lastStart ? (
                     <span className="ml-1.5 text-xs text-muted-foreground">so far</span>
                   ) : null}
-                </td>
-                {runtimes.map((runtime) => {
-                  const figure = period.runtimes.find((entry) => entry.runtime === runtime)?.figure;
-                  return (
-                    <td
-                      key={runtime}
-                      className={cn(
-                        CELL,
-                        "hidden text-right text-muted-foreground @2xl:table-cell",
-                      )}
-                    >
-                      {figure ? (
-                        <MetricValue figure={figure} metric={metric} exact />
-                      ) : (
-                        formatTableMetric(0, metric)
-                      )}
-                    </td>
-                  );
-                })}
-                <SumCell figures={figures} metric={metric} className="font-medium" />
-                <SumCell figures={figures} metric={other} className="text-muted-foreground" />
-              </tr>
-            );
-          })}
+                </>
+              }
+              runtimes={runtimes}
+              metric={metric}
+            />
+          ))}
         </tbody>
       </table>
       {toggle}
-      {anyPartial ? (
-        <p className="px-3 pt-2 text-xs text-muted-foreground">
-          * Leaves out{" "}
-          {metric === "tokens" ? "requests without token counts" : "usage without a published rate"}{" "}
-          (—) and history that could not be read.
-        </p>
+      {gaps.size > 0 ? (
+        <p className="px-3 pt-2 text-xs text-muted-foreground">* {partialTotalText(gaps)}</p>
       ) : null}
     </>
   );
@@ -340,7 +354,7 @@ const modelRows = (report: UsageReport): RankedRow[] =>
 const projectRows = (report: UsageReport): RankedRow[] =>
   report.byProject.map((row) => ({
     id: row.id,
-    name: row.label ?? "Unknown project",
+    name: row.label,
     detail: null,
     figure: row.figure,
   }));
@@ -391,7 +405,7 @@ export function UsageBreakdown({
           >
             <ToggleTabsItem value="model">Model</ToggleTabsItem>
             <ToggleTabsItem value="project">Project</ToggleTabsItem>
-            <ToggleTabsItem value="period">{PERIOD_LABELS[report.granularity]}</ToggleTabsItem>
+            <ToggleTabsItem value="period">{PERIOD_TEXT[report.granularity].label}</ToggleTabsItem>
           </ToggleTabs>
         }
       />

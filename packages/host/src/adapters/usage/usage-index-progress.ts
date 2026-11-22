@@ -1,30 +1,25 @@
-import path from "node:path";
 import type { RuntimeKind, UsageIndexProgress } from "@openducktor/contracts";
-import type { OpenCodeProgress } from "./usage-opencode-reader";
-import type { UsageParseJob } from "./usage-worker-protocol";
+import { usageSourceWork } from "./usage-source-discovery";
+import { claudeSessionOf } from "./usage-source-sessions";
+import type { OpenCodeProgress, UsageParseJob } from "./usage-worker-protocol";
 
 /** Progress goes out at most this often, and at each phase change. */
 const EMIT_INTERVAL_MS = 250;
 
-type Job = Omit<UsageParseJob, "jobId">;
-
-/** Parse work in bytes. A compressed rollout holds about 10 times its size. */
-const workOf = ({ format, fingerprint }: Job): number =>
-  format === "jsonl_zst" ? fingerprint.size * 10 : fingerprint.size;
-
 /**
- * The session of a Claude transcript from its path: `<session>.jsonl`, or a subagent file in
- * `<session>/subagents/`.
+ * The first event of a first read. It goes out before the rates and the history search, so a
+ * client shows the first read at once.
  */
-const claudeSessionOf = (file: string): string => {
-  const folder = path.dirname(file);
-  return path.basename(folder) === "subagents"
-    ? path.basename(path.dirname(folder))
-    : path.basename(file, ".jsonl");
-};
+export const usagePreparingProgress = (now: () => number = Date.now): UsageIndexProgress => ({
+  phase: "preparing",
+  first: true,
+  summarized: 0,
+  startedAt: new Date(now()).toISOString(),
+  runtimes: [],
+});
 
 type JobState = {
-  job: Job;
+  job: UsageParseJob;
   finished: boolean;
   /** The session of a file source, or undefined until it is known. */
   session: string | undefined;
@@ -39,7 +34,7 @@ type JobState = {
  * runtimes before the first source finishes.
  */
 export const createUsageProgressTracker = (
-  jobs: readonly Job[],
+  jobs: readonly UsageParseJob[],
   first: boolean,
   emit: (progress: UsageIndexProgress) => void,
   now: () => number = Date.now,
@@ -59,7 +54,7 @@ export const createUsageProgressTracker = (
     let done = 0;
     // A file source counts its bytes; a database source counts as one unit of its own share.
     for (const state of own) {
-      const size = state.job.format === "opencode" ? 1 : workOf(state.job);
+      const size = state.job.format === "opencode" ? 1 : usageSourceWork(state.job);
       weight += size;
       done += size * (state.finished ? 1 : (state.inside?.fraction ?? 0));
     }

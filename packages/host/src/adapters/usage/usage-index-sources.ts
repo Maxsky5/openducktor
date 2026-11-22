@@ -3,13 +3,14 @@ import type { RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { USAGE_SLOT_MS } from "../../domain/usage/usage-calendar";
 import type { UsageUnit } from "../../domain/usage/usage-unit";
-import type { UsageSourceIssue } from "../../ports/usage-index-port";
+import type { UsageSourceIssue } from "../../domain/usage/usage-report";
 import type { createUsageNameCache } from "./usage-index-names";
 import {
   type IndexQueries,
   issueCodeOf,
   nullableNum,
   num,
+  placeholderRows,
   runtimeOf,
   str,
 } from "./usage-index-rows";
@@ -20,7 +21,23 @@ import type {
 } from "./usage-worker-protocol";
 import type { SqliteValue } from "../../infrastructure/sqlite/sqlite-driver";
 
-const UNIT_COLUMNS = 14;
+/** The columns of a unit insert, in the order of its parameters. */
+const UNIT_COLUMNS = [
+  "source_id",
+  "unit_key",
+  "runtime",
+  "occurred_at_ms",
+  "session_id",
+  "provider_id",
+  "model_id",
+  "project_id",
+  "tier_id",
+  "input",
+  "cache_read",
+  "cache_write_5m",
+  "cache_write_1h",
+  "output",
+];
 const UNITS_PER_INSERT = 500;
 
 /** A source in the index, with what its last read kept. */
@@ -115,13 +132,9 @@ export const createUsageSourceWriter = (
           );
           keys.push(key);
         }
-        const rows = Array.from(
-          { length: batch.length },
-          () => `(${Array.from({ length: UNIT_COLUMNS }, () => "?").join(", ")})`,
-        ).join(", ");
         // A request can span several lines of one source, and a resumed read can add lines.
         yield* run(
-          `INSERT INTO unit VALUES ${rows} ON CONFLICT (source_id, unit_key, session_id) DO UPDATE SET
+          `INSERT INTO unit (${UNIT_COLUMNS.join(", ")}) VALUES ${placeholderRows(batch.length, UNIT_COLUMNS.length)} ON CONFLICT (source_id, unit_key, session_id) DO UPDATE SET
             input = coalesce(max(input, excluded.input), input, excluded.input),
             cache_read = coalesce(max(cache_read, excluded.cache_read), cache_read, excluded.cache_read),
             cache_write_5m = coalesce(max(cache_write_5m, excluded.cache_write_5m), cache_write_5m, excluded.cache_write_5m),
@@ -131,7 +144,7 @@ export const createUsageSourceWriter = (
         );
         if (!changes.rebuild)
           yield* run(
-            `INSERT OR IGNORE INTO touched VALUES ${batch.map(() => "(?)").join(", ")}`,
+            `INSERT OR IGNORE INTO touched (unit_key) VALUES ${placeholderRows(batch.length, 1)}`,
             ...keys,
           );
       }
@@ -142,7 +155,7 @@ export const createUsageSourceWriter = (
     Effect.gen(function* () {
       if (!changes.rebuild) {
         yield* run(
-          "INSERT OR IGNORE INTO touched SELECT unit_key FROM unit WHERE source_id = ?",
+          "INSERT OR IGNORE INTO touched (unit_key) SELECT unit_key FROM unit WHERE source_id = ?",
           sourceId,
         );
         const rows = yield* values(

@@ -3,9 +3,11 @@ import { MessageChannel, type MessagePort, Worker } from "node:worker_threads";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import { siblingWorkerUrl } from "../../infrastructure/sibling-worker-url";
-import type { UsageIndexPort, UsageReadResult } from "../../ports/usage-index-port";
-import { USAGE_RATES_URL } from "./usage-rate-catalog";
 import type { UsageIndexProgress } from "@openducktor/contracts";
+import type { UsageIndexFigures } from "../../domain/usage/usage-report";
+import type { UsageIndexPort } from "../../ports/usage-index-port";
+import type { UsageLocations } from "./usage-locations";
+import { USAGE_RATES_URL } from "./usage-rate-catalog";
 import type { UsageIndexReply, UsageIndexRequest } from "./usage-worker-protocol";
 
 const indexWorkerUrl = siblingWorkerUrl(import.meta.url, "usage-index-worker");
@@ -22,7 +24,7 @@ const IDLE_MS = 5 * 60_000;
 
 type Threads = { index: Worker; parsers: Worker[] };
 type Pending = {
-  resolve: (result: UsageReadResult) => void;
+  resolve: (result: UsageIndexFigures) => void;
   reject: (error: HostOperationError) => void;
 };
 
@@ -35,14 +37,17 @@ const threadFailure = (cause: unknown) =>
 
 /**
  * Runs the usage index on worker threads. The threads start with the first read and stop
- * together a minute after the worker reports that it is idle.
+ * together 5 minutes after the worker reports that it is idle.
  */
 export const createUsageIndexAdapter = ({
   indexPath,
+  locations,
   onProgress,
   ratesUrl = USAGE_RATES_URL,
 }: {
   indexPath: string;
+  /** The history folders of each runtime at the time of a read. */
+  locations: () => UsageLocations;
   /** Gets the parse progress of each read that reads new history. */
   onProgress: (progress: UsageIndexProgress) => void;
   /** The rate catalog to download. Tests serve their own. */
@@ -129,7 +134,7 @@ export const createUsageIndexAdapter = ({
   };
 
   const read: UsageIndexPort["read"] = (input) =>
-    Effect.callback<UsageReadResult, HostOperationError>((resume) => {
+    Effect.callback<UsageIndexFigures, HostOperationError>((resume) => {
       if (idleTimer) clearTimeout(idleTimer);
       idleTimer = null;
       let current: Threads;
@@ -146,7 +151,11 @@ export const createUsageIndexAdapter = ({
         resolve: (result) => resume(Effect.succeed(result)),
         reject: (error) => resume(Effect.fail(error)),
       });
-      current.index.postMessage({ kind: "read", requestId, input } satisfies UsageIndexRequest);
+      current.index.postMessage({
+        kind: "read",
+        requestId,
+        input: { ...input, locations: locations() },
+      } satisfies UsageIndexRequest);
       // A canceled request stops dispatching new sources. Sources in progress still commit.
       return Effect.sync(() => {
         if (!pending.delete(requestId)) return;

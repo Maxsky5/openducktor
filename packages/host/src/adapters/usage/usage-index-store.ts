@@ -1,5 +1,4 @@
 import { chmod } from "node:fs/promises";
-import type { RuntimeKind } from "@openducktor/contracts";
 import { Cause, Effect } from "effect";
 import {
   addDays,
@@ -8,19 +7,11 @@ import {
   type UsageDate,
 } from "../../domain/usage/usage-calendar";
 import type { UsagePricer } from "../../domain/usage/usage-pricing";
-import type { UsageIssueRow } from "../../ports/usage-index-port";
 import { type HostOperationErrorAggregate, HostOperationError } from "../../effect/host-errors";
 import { createUsageNameCache } from "./usage-index-names";
 import { createUsagePriceTable } from "./usage-index-prices";
-import {
-  aggregateUsage,
-  issueCodeOf,
-  nullableNum,
-  num,
-  runtimeOf,
-  str,
-  type UsageAggregateInput,
-} from "./usage-index-rows";
+import { nullableNum, num, placeholderRows, str } from "./usage-index-rows";
+import { createUsageIndexSnapshot, type UsageIndexSnapshot } from "./usage-index-snapshot";
 import {
   USAGE_INDEX_DROP_TABLES,
   USAGE_INDEX_DROP_UNIT_INDEXES,
@@ -51,20 +42,10 @@ export type UsageIndexWriter = {
   removeSource: (sourceId: number) => Effect.Effect<void, HostOperationErrorAggregate>;
 };
 
-/** Reads the figures of the index after its rollup is up to date. */
-export type UsageIndexSnapshot = {
-  /** The earliest activity date of each runtime with activity. */
-  earliestDates: () => Effect.Effect<
-    Partial<Record<RuntimeKind, UsageDate>>,
-    HostOperationErrorAggregate
-  >;
-  issues: () => Effect.Effect<UsageIssueRow[], HostOperationErrorAggregate>;
-  aggregate: (input: UsageAggregateInput) => ReturnType<typeof aggregateUsage>;
-};
-
 /** Days of one batch of a full rollup. */
 const ROLLUP_BATCH_DAYS = 31;
 
+/** The index file cannot open. */
 const storageError = (cause: unknown) =>
   new HostOperationError({
     operation: "usage.index.open",
@@ -72,6 +53,30 @@ const storageError = (cause: unknown) =>
       "OpenDucktor cannot open its usage index. Delete usage-index.sqlite in the OpenDucktor config folder, then retry.",
     cause,
   });
+
+/** A statement of the open index failed, such as a write on a full disk. */
+const updateError = (cause: HostOperationErrorAggregate) =>
+  new HostOperationError({
+    operation: "usage.index.update",
+    message: `OpenDucktor cannot update its usage index: ${cause.message} Check the free disk space and access to the OpenDucktor config folder, then retry.`,
+    cause,
+  });
+
+const execOn = (database: SqliteDatabase, sql: string) =>
+  database.exec(sql).pipe(Effect.mapError(updateError));
+
+/** The options of one read of the index. */
+export type UsageIndexReadOptions<S, A, SyncError, ReportError> = {
+  calendar: UsageCalendar;
+  /** Prices the rollup. */
+  pricer: UsagePricer;
+  /** Brings the sources into the index. */
+  sync: (writer: UsageIndexWriter) => Effect.Effect<S, SyncError>;
+  /** Reads the figures after the rollup. */
+  report: (snapshot: UsageIndexSnapshot, synced: S) => Effect.Effect<A, ReportError>;
+  /** Gets the share of a full rollup that is built. */
+  onRollup?: (fraction: number) => void;
+};
 
 export type UsageIndexStore = ReturnType<typeof createUsageIndexStore>;
 
@@ -118,14 +123,9 @@ export const createUsageIndexStore = (path: string) => {
      * write lock.
      */
     read: <S, A, SyncError, ReportError>(
-      calendar: UsageCalendar,
-      pricer: UsagePricer,
-      sync: (writer: UsageIndexWriter) => Effect.Effect<S, SyncError>,
-      report: (snapshot: UsageIndexSnapshot, synced: S) => Effect.Effect<A, ReportError>,
-      /** Gets the share of a full rollup that is built. */
-      onRollup: (fraction: number) => void = () => {},
+      options: UsageIndexReadOptions<S, A, SyncError, ReportError>,
     ): Effect.Effect<A, HostOperationErrorAggregate | SyncError | ReportError> =>
-      withConnection((current) => current.read(calendar, pricer, sync, report, onRollup)),
+      withConnection((current) => current.read(options)),
 
     /** The stored rate catalog. */
     rates,
@@ -148,7 +148,8 @@ const openConnection = (path: string): Effect.Effect<Connection, HostOperationEr
   Effect.gen(function* () {
     const database = yield* openSqliteDatabase(path).pipe(Effect.mapError(storageError));
     yield* Effect.tryPromise({ try: () => chmod(path, 0o600), catch: storageError });
-    yield* database.exec(
+    yield* execOn(
+      database,
       // A first read writes one large transaction; the limit shrinks the log after it.
       "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -65536; PRAGMA journal_size_limit = 67108864;",
     );
@@ -157,7 +158,7 @@ const openConnection = (path: string): Effect.Effect<Connection, HostOperationEr
     yield* prepareFormat(database).pipe(
       Effect.tapError(() => database.close().pipe(Effect.ignore)),
     );
-    yield* database.exec(USAGE_INDEX_TEMP_TABLES);
+    yield* execOn(database, USAGE_INDEX_TEMP_TABLES);
     const opened = createConnection(database);
     yield* opened.syncNames();
     return opened;
@@ -166,17 +167,18 @@ const openConnection = (path: string): Effect.Effect<Connection, HostOperationEr
 /** Creates the tables, or resets them when the stored format differs. */
 const prepareFormat = (database: SqliteDatabase) =>
   Effect.gen(function* () {
-    yield* database.exec("BEGIN IMMEDIATE");
+    yield* execOn(database, "BEGIN IMMEDIATE");
     const version = yield* database.prepare("PRAGMA user_version").pipe(
       Effect.flatMap((statement) => statement.values()),
       Effect.mapError(storageError),
     );
-    yield* database.exec(
+    yield* execOn(
+      database,
       num(version[0]?.[0]) === USAGE_INDEX_FORMAT_VERSION
         ? USAGE_INDEX_SCHEMA
         : `${USAGE_INDEX_DROP_TABLES} ${USAGE_INDEX_SCHEMA} PRAGMA user_version = ${USAGE_INDEX_FORMAT_VERSION};`,
     );
-    yield* database.exec("COMMIT");
+    yield* execOn(database, "COMMIT");
   });
 
 type Connection = ReturnType<typeof createConnection>;
@@ -191,10 +193,18 @@ const createConnection = (database: SqliteDatabase) => {
       statements.set(sql, statement);
       return statement;
     });
+  // Each statement maps its failure to the message of the index, so callers forward it.
   const run = (sql: string, ...params: SqliteValue[]) =>
-    prepared(sql).pipe(Effect.flatMap((statement) => statement.run(...params)));
+    prepared(sql).pipe(
+      Effect.flatMap((statement) => statement.run(...params)),
+      Effect.mapError(updateError),
+    );
   const values = (sql: string, ...params: SqliteValue[]) =>
-    prepared(sql).pipe(Effect.flatMap((statement) => statement.values(...params)));
+    prepared(sql).pipe(
+      Effect.flatMap((statement) => statement.values(...params)),
+      Effect.mapError(updateError),
+    );
+  const exec = (sql: string) => execOn(database, sql);
   const names = createUsageNameCache({ values, run });
   const prices = createUsagePriceTable({ run }, names);
   const { applySource, dropUnits, sources } = createUsageSourceWriter({ values, run }, names);
@@ -206,7 +216,7 @@ const createConnection = (database: SqliteDatabase) => {
       for (let start = 0; start < list.length; start += 300) {
         const batch = list.slice(start, start + 300);
         yield* run(
-          `INSERT OR IGNORE INTO target VALUES ${batch.map(() => "(?, ?, ?)").join(", ")}`,
+          `INSERT OR IGNORE INTO target (start_ms, end_ms, local_date) VALUES ${placeholderRows(batch.length, 3)}`,
           ...batch.flatMap((date) => [
             calendar.startOf(date),
             calendar.startOf(addDays(date, 1)),
@@ -277,36 +287,14 @@ const createConnection = (database: SqliteDatabase) => {
         yield* recomputeTargets(calendar, dates);
       }
       yield* run("DELETE FROM touched");
-      yield* run("INSERT OR REPLACE INTO meta VALUES ('timeZone', ?)", calendar.timeZone);
-      yield* run("INSERT OR REPLACE INTO meta VALUES ('priceDigest', ?)", priceDigest);
+      yield* run(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES ('timeZone', ?)",
+        calendar.timeZone,
+      );
+      yield* run("INSERT OR REPLACE INTO meta (key, value) VALUES ('priceDigest', ?)", priceDigest);
     });
 
-  const snapshot: UsageIndexSnapshot = {
-    earliestDates: () =>
-      Effect.gen(function* () {
-        const dates: Partial<Record<RuntimeKind, UsageDate>> = {};
-        for (const row of yield* values(
-          "SELECT runtime, MIN(local_date) FROM day GROUP BY runtime",
-        ))
-          dates[runtimeOf(row[0])] = str(row[1]);
-        return dates;
-      }),
-
-    issues: () =>
-      Effect.gen(function* () {
-        const rows = yield* values(
-          "SELECT runtime, issue_code, issue_first_ms, issue_last_ms FROM source WHERE issue_code IS NOT NULL",
-        );
-        return rows.map((row): UsageIssueRow => ({
-          runtime: runtimeOf(row[0]),
-          code: issueCodeOf(row[1]),
-          firstAtMs: nullableNum(row[2]),
-          lastAtMs: nullableNum(row[3]),
-        }));
-      }),
-
-    aggregate: (input) => aggregateUsage({ values, run }, input),
-  };
+  const snapshot = createUsageIndexSnapshot({ values, run });
 
   return {
     /** Reads the stored names. */
@@ -341,15 +329,15 @@ const createConnection = (database: SqliteDatabase) => {
         Effect.asVoid,
       ),
 
-    read: <S, A, SyncError, ReportError>(
-      calendar: UsageCalendar,
-      pricer: UsagePricer,
-      sync: (writer: UsageIndexWriter) => Effect.Effect<S, SyncError>,
-      report: (snapshot: UsageIndexSnapshot, synced: S) => Effect.Effect<A, ReportError>,
-      onRollup: (fraction: number) => void,
-    ) =>
+    read: <S, A, SyncError, ReportError>({
+      calendar,
+      pricer,
+      sync,
+      report,
+      onRollup = () => {},
+    }: UsageIndexReadOptions<S, A, SyncError, ReportError>) =>
       Effect.gen(function* () {
-        yield* database.exec("BEGIN IMMEDIATE");
+        yield* exec("BEGIN IMMEDIATE");
         const empty = (yield* values("SELECT 1 FROM unit LIMIT 1")).length === 0;
         // The rates of the names before this read. New names only price new units.
         yield* names.sync();
@@ -360,7 +348,7 @@ const createConnection = (database: SqliteDatabase) => {
         };
         // Index updates make up most of the insert time of a first read. Building the indexes
         // after the last insert is much faster. The rollup and the next reads use them.
-        if (empty) yield* database.exec(USAGE_INDEX_DROP_UNIT_INDEXES);
+        if (empty) yield* exec(USAGE_INDEX_DROP_UNIT_INDEXES);
         const synced = yield* sync({
           sources,
           applySource: (update) => applySource(changes, update),
@@ -370,16 +358,17 @@ const createConnection = (database: SqliteDatabase) => {
               Effect.asVoid,
             ),
         });
-        if (empty) yield* database.exec(USAGE_INDEX_UNIT_INDEXES);
+        if (empty) yield* exec(USAGE_INDEX_UNIT_INDEXES);
         yield* refreshRollup(changes, calendar, pricer, onRollup);
         const result = yield* report(snapshot, synced);
-        yield* database.exec("COMMIT");
+        yield* exec("COMMIT");
         return result;
       }),
 
     close: () =>
       Effect.gen(function* () {
-        for (const statement of statements.values()) yield* statement.close();
+        for (const statement of statements.values())
+          yield* statement.close().pipe(Effect.mapError(updateError));
         statements.clear();
         yield* database.close();
       }),

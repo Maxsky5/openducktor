@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   addDays,
   createUsageCalendar,
-  firstActivityDate,
   usageGranularity,
   usagePeriods,
+  usageReadRange,
+  usageReportPeriods,
 } from "./usage-calendar";
 
 describe("createUsageCalendar", () => {
@@ -68,11 +69,37 @@ describe("calendar arithmetic", () => {
   });
 });
 
-describe("firstActivityDate", () => {
-  test("uses the earliest activity of the selected runtimes", () => {
+describe("usageReadRange", () => {
+  test("ends a recent range today and counts today", () => {
+    expect(usageReadRange({ kind: "last_7_days" }, "2026-11-21")).toEqual({
+      start: "2026-11-15",
+      end: "2026-11-21",
+    });
+    expect(usageReadRange({ kind: "last_90_days" }, "2026-11-21").start).toBe("2026-08-24");
+    expect(usageReadRange({ kind: "all_time" }, "2026-11-21")).toEqual({
+      start: null,
+      end: "2026-11-21",
+    });
+  });
+});
+
+describe("usageReportPeriods", () => {
+  test("starts All time at the earliest activity of the selected runtimes", () => {
     const earliest = { claude: "2026-09-19", codex: "2026-03-16" };
-    expect(firstActivityDate(earliest, ["claude"], "2026-11-21")).toBe("2026-09-19");
-    expect(firstActivityDate(earliest, ["claude", "codex"], "2026-11-21")).toBe("2026-03-16");
-    expect(firstActivityDate(earliest, ["opencode"], "2026-11-21")).toBe("2026-11-21");
+    const startOf = (runtimes: ("claude" | "codex" | "opencode")[]) =>
+      usageReportPeriods({ start: null, end: "2026-11-21" }, earliest, runtimes).range.start;
+    expect(startOf(["claude"])).toBe("2026-09-19");
+    expect(startOf(["claude", "codex"])).toBe("2026-03-16");
+    expect(startOf(["opencode"])).toBe("2026-11-21");
+  });
+
+  test("keeps a fixed start and splits the range by its granularity", () => {
+    const report = usageReportPeriods({ start: "2026-11-02", end: "2026-11-04" }, {}, ["claude"]);
+    expect(report.granularity).toBe("day");
+    expect(report.periods.map((period) => period.start)).toEqual([
+      "2026-11-02",
+      "2026-11-03",
+      "2026-11-04",
+    ]);
   });
 });

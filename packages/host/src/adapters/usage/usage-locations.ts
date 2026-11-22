@@ -1,5 +1,14 @@
 import path from "node:path";
-import type { UsageLocations } from "../../ports/usage-index-port";
+
+/** The native history folders of each runtime. */
+export type UsageLocations = {
+  /** The Claude Code `projects` folder. */
+  claude: string;
+  /** The Codex `sessions` and `archived_sessions` folders. */
+  codex: readonly string[];
+  /** The OpenCode data folder, and the database file when `OPENCODE_DB` names one. */
+  opencode: { directory: string; databaseFile: string | null };
+};
 
 const setting = (env: NodeJS.ProcessEnv, name: string): string | null => {
   const value = env[name]?.trim();

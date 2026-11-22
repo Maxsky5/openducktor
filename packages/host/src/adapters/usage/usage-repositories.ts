@@ -106,11 +106,10 @@ const nearestExisting = (folder: string): string => {
  *   or `openducktor.feat-x`, it belongs to that repository.
  *
  * Other folders stay their own projects.
- */
-/**
- * Resolves folders to repositories. It keeps what it learned from the disk for its own life, so a
- * report of another range reads git data only for folders that it has not seen. The index worker
- * keeps one for the life of its threads.
+ *
+ * The resolver keeps what it learned from the disk for its own life, so a report of another range
+ * reads git data only for folders that it has not seen. The index worker keeps one for the life of
+ * its threads.
  */
 export const createUsageRepositoryResolver = () => {
   const around = new Map<string, string | null>();
@@ -119,12 +118,6 @@ export const createUsageRepositoryResolver = () => {
   return (folders: readonly string[], knownRepositories: readonly string[]) =>
     resolveRepositories(folders, knownRepositories, { around, nearest, containers });
 };
-
-/** Resolves folders to repositories with caches for one call. */
-export const resolveUsageRepositories = (
-  folders: readonly string[],
-  knownRepositories: readonly string[],
-): UsageRepositories => createUsageRepositoryResolver()(folders, knownRepositories);
 
 const resolveRepositories = (
   folders: readonly string[],

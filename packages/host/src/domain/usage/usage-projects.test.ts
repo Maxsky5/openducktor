@@ -130,7 +130,7 @@ describe("usageProjectLabels", () => {
       b: "personal/app",
       c: "site",
       w: "OpenDucktor",
-      unknown: null,
+      unknown: "Unknown project",
     });
   });
 
@@ -168,7 +168,7 @@ describe("usageProjectLabels", () => {
       "workspace:2": "API (3)",
       "workspace:3": "API (2)",
       "workspace:4": "Unknown project (2)",
-      unknown: null,
+      unknown: "Unknown project",
     });
   });
 });

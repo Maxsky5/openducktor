@@ -2,17 +2,19 @@ import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
-import type {
-  SqliteDatabase,
-  SqliteStatement,
-  SqliteValue,
-} from "../../infrastructure/sqlite/sqlite-driver";
+import type { SqliteDatabase, SqliteValue } from "../../infrastructure/sqlite/sqlite-driver";
 
 /** The root session of each session of a session table, through `parent_id`. */
 export const rootsOf = (table: string) => `root(id, root_id) AS (
   SELECT id, id FROM ${table} WHERE parent_id IS NULL
   UNION ALL SELECT s.id, r.root_id FROM ${table} s JOIN root r ON s.parent_id = r.id
 )`;
+
+/** A statement that closes when its scope closes. */
+export const scopedStatement = (database: SqliteDatabase, sql: string) =>
+  Effect.acquireRelease(database.prepare(sql), (statement) =>
+    statement.close().pipe(Effect.ignore),
+  );
 
 /** Row IDs of one window. Windows keep each scan in row ID order and let it report progress. */
 const WINDOW_ROWS = 5_000;
@@ -44,40 +46,36 @@ export const readRows = (
   Effect.gen(function* () {
     const rows: SqliteValue[][] = [];
     const positions = scans.map(() => 0);
-    const statements: SqliteStatement[] = [];
-    try {
-      for (const scan of scans)
-        statements.push(yield* database.prepare(`${scan.sql} AND m.rowid > ? AND m.rowid <= ?`));
-      for (;;) {
-        let next = -1;
-        for (const [index, scan] of scans.entries()) {
-          const position = positions[index] ?? 0;
-          if (position >= scan.lastRowId) continue;
-          const share = position / scan.lastRowId;
-          const best = scans[next];
-          if (next < 0 || (best && share < (positions[next] ?? 0) / best.lastRowId)) next = index;
-        }
-        const scan = scans[next];
-        const statement = statements[next];
-        if (!scan || !statement) break;
-        const start = positions[next] ?? 0;
-        const end = Math.min(start + WINDOW_ROWS, scan.lastRowId);
-        yield* beforeWindow(next, start, end);
-        for (const row of yield* statement.values(
-          scan.cursor.mark,
-          scan.cursor.afterRowId,
-          start,
-          end,
-        ))
-          rows.push(row);
-        positions[next] = end;
-        onWindow(positions);
+    const statements = yield* Effect.forEach(scans, (scan) =>
+      scopedStatement(database, `${scan.sql} AND m.rowid > ? AND m.rowid <= ?`),
+    );
+    for (;;) {
+      let next = -1;
+      for (const [index, scan] of scans.entries()) {
+        const position = positions[index] ?? 0;
+        if (position >= scan.lastRowId) continue;
+        const share = position / scan.lastRowId;
+        const best = scans[next];
+        if (next < 0 || (best && share < (positions[next] ?? 0) / best.lastRowId)) next = index;
       }
-    } finally {
-      for (const statement of statements) yield* statement.close().pipe(Effect.ignore);
+      const scan = scans[next];
+      const statement = statements[next];
+      if (!scan || !statement) break;
+      const start = positions[next] ?? 0;
+      const end = Math.min(start + WINDOW_ROWS, scan.lastRowId);
+      yield* beforeWindow(next, start, end);
+      for (const row of yield* statement.values(
+        scan.cursor.mark,
+        scan.cursor.afterRowId,
+        start,
+        end,
+      ))
+        rows.push(row);
+      positions[next] = end;
+      onWindow(positions);
     }
     return rows;
-  });
+  }).pipe(Effect.scoped);
 
 const lastRowSchema = z.tuple([z.string(), z.number()]);
 

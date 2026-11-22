@@ -16,11 +16,8 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import type { NodeTaskAssetServices } from "./node-task-asset-services";
 import { createOpenDucktorMcpLaunchPaths } from "../../adapters/mcp/openducktor-mcp-command";
-import { resolveUsageLocations } from "../../adapters/usage/usage-locations";
 import { createUsageReportService } from "../../application/usage/usage-report-service";
 import { createUsageCommandHandlers } from "../../interface/commands/usage-command-handlers";
-import { homedir } from "node:os";
-import { hostTimeZone } from "../../domain/usage/usage-calendar";
 
 /**
  * The commands of the local tools: the file system, Git, Open in, the system checks, the
@@ -97,8 +94,8 @@ export const createNodeLocalToolCommandHandlers = ({
       index: usageIndex,
       settingsConfig,
       taskOwnership: assets.taskOwnership,
-      locations: () => resolveUsageLocations(userEnvironment.current().environment, homedir()),
-      timeZone: hostTimeZone,
+      // The host time zone dates the activity.
+      timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
       now: Date.now,
     }),
   ),

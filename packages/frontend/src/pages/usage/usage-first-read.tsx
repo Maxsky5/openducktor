@@ -141,14 +141,12 @@ function RuntimeRow({
  * for each runtime. Later reads parse only new activity and never show it.
  */
 export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactElement {
-  const { progress, seenSinceMs } = state;
+  const { progress, seenSinceMs, summarizing } = state;
   const preparing = progress.phase === "preparing";
-  // Once every runtime is read, what is left is the rollup into daily totals.
-  const summarizing =
-    !preparing && progress.runtimes.length > 0 && progress.runtimes.every((entry) => entry.done);
   // Every runtime keeps its row, so the card keeps its size from the first event on.
+  const entries = new Map(progress.runtimes.map((entry) => [entry.runtime, entry]));
   const rows = USAGE_RUNTIMES.map((runtime) => {
-    const entry = progress.runtimes.find((candidate) => candidate.runtime === runtime);
+    const entry = entries.get(runtime);
     if (entry) return { entry, note: undefined };
     return {
       entry: {

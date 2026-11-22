@@ -12,15 +12,18 @@ import { curveMonotoneX } from "d3-shape";
 import { type ReactElement, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   dateOf,
-  formatCountOf,
   formatAxisDate,
   formatAxisMetric,
   formatMetric,
   formatShare,
-  missingReason,
-  PERIOD_NOUNS,
+  GAP_TEXT,
+  labelDates,
+  METRIC_TEXT,
+  type PeriodPart,
+  PERIOD_TEXT,
   periodName,
-  shownValue,
+  periodTotal,
+  shareOf,
   USAGE_RUNTIME_COLORS,
   USAGE_RUNTIME_LABELS,
   type UsageMetric,
@@ -36,30 +39,6 @@ const NARROW_MARGIN = { ...MARGIN, left: 44 };
 /** The number of date labels that fit a plot of a width. */
 const labelCountFor = (width: number): number =>
   width < 360 ? 3 : width < 560 ? 4 : width < 800 ? 5 : 7;
-
-/**
- * Label dates in equal steps back from the last period, plus the first period. The first period
- * takes the place of a label closer than half a step, so no two labels crowd.
- */
-export const labelDates = (
-  periods: readonly UsagePeriod[],
-  count: number,
-  granularity: UsageGranularity,
-): Date[] => {
-  const last = periods.length - 1;
-  if (last < 0) return [];
-  const even = Math.max(1, Math.ceil(last / Math.max(1, count - 1)));
-  // Days step in whole weeks once a step passes a few days, so labels fall on one weekday.
-  const step = granularity === "day" && even > 3 ? 7 * Math.max(1, Math.round(even / 7)) : even;
-  const indexes: number[] = [];
-  for (let index = last; index > 0; index -= step) indexes.unshift(index);
-  if (indexes.length > 0 && (indexes[0] ?? 0) < step / 2) indexes.shift();
-  indexes.unshift(0);
-  return indexes.flatMap((index) => {
-    const period = periods[index];
-    return period ? [dateOf(period.start)] : [];
-  });
-};
 
 /** The width of an element, measured before the first paint and on each resize. */
 const useWidth = () => {
@@ -84,7 +63,7 @@ const useWidth = () => {
  */
 type StackRow = { index: number; date: Date; low: number; high: number };
 
-/** The total of one period. `partial` marks a total that unread history can make too low. */
+/** The total of one period. `partial` marks a total that can be higher: see `periodTotal`. */
 type TotalRow = { index: number; date: Date; value: number; partial: boolean };
 
 /** The bands of the runtimes, stacked in runtime order, and the total of each period. */
@@ -96,19 +75,22 @@ const stackOf = (
   const bands = new Map<RuntimeKind, StackRow[]>(runtimes.map((runtime) => [runtime, []]));
   const totals: TotalRow[] = periods.map((period, index) => {
     const date = dateOf(period.start);
-    let value = 0;
-    let partial = false;
-    const figures = new Map(period.runtimes.map((entry) => [entry.runtime, entry.figure]));
-    for (const runtime of runtimes) {
-      const figure = figures.get(runtime);
-      const shown = figure ? (shownValue(figure, metric) ?? 0) : 0;
-      if (figure && !figure.complete) partial = true;
-      bands.get(runtime)?.push({ index, date, low: value, high: value + shown });
-      value += shown;
+    const total = periodTotal(period, runtimes, metric);
+    let low = 0;
+    for (const part of total.parts) {
+      const high = low + (part.value ?? 0);
+      bands.get(part.runtime)?.push({ index, date, low, high });
+      low = high;
     }
-    return { index, date, value, partial };
+    return { index, date, value: total.value, partial: total.partial };
   });
   return { bands, totals };
+};
+
+/** The share of a runtime in the total of its period. A runtime without usage has a zero share. */
+const partShare = (part: PeriodPart, total: number, metric: UsageMetric): number | null => {
+  if (part.figure) return shareOf(part.figure, total, metric);
+  return total > 0 ? 0 : null;
 };
 
 /** The values of one period for the tooltip, with their total and what they leave out. */
@@ -125,31 +107,7 @@ function TrendTooltip({
   metric: UsageMetric;
   inProgress: boolean;
 }): ReactElement {
-  let total = 0;
-  let unmeasured = 0;
-  let unpriced = false;
-  let unread = false;
-  const reasons = new Set<string>();
-  const rows = runtimes.map((runtime) => {
-    const figure = period.runtimes.find((entry) => entry.runtime === runtime)?.figure;
-    const value = figure ? shownValue(figure, metric) : 0;
-    if (value !== null) total += value;
-    if (figure) {
-      const reason = value === null ? missingReason(figure, metric) : null;
-      if (reason) reasons.add(reason);
-      else if (metric === "tokens")
-        unmeasured += figure.tokens.processed > 0 ? figure.unmeasured : 0;
-      else if (figure.cost.state === "partial") unpriced = true;
-      if (!figure.complete) unread = true;
-    }
-    return { runtime, value };
-  });
-  const notes = [
-    ...reasons,
-    unmeasured > 0 ? `${formatCountOf(unmeasured, "request")} without token counts` : null,
-    unpriced ? "Some usage has no rate" : null,
-    unread ? "Some history could not be read" : null,
-  ].filter((note): note is string => note !== null);
+  const total = periodTotal(period, runtimes, metric);
   return (
     // A custom tooltip body owns its surface.
     <div className="flex min-w-48 flex-col gap-1.5 rounded-lg border border-border bg-popover/95 px-3 py-2.5 backdrop-blur-sm text-xs text-popover-foreground shadow-lg">
@@ -163,26 +121,34 @@ function TrendTooltip({
             <span className="h-0.5 w-2.5 rounded-full bg-foreground" aria-hidden="true" />
             Total
           </span>
-          <span className="text-sm font-semibold tabular-nums">{formatMetric(total, metric)}</span>
+          <span className="text-sm font-semibold tabular-nums">
+            {formatMetric(total.value, metric)}
+          </span>
         </div>
       ) : null}
-      {rows.map(({ runtime, value }) => (
-        <div key={runtime} className="flex items-center gap-2">
-          <RuntimeDot runtime={runtime} />
-          <span className="min-w-0 flex-1 truncate text-muted-foreground">
-            {USAGE_RUNTIME_LABELS[runtime]}
-          </span>
-          {runtimes.length > 1 && value !== null && total > 0 ? (
-            <span className="text-muted-foreground tabular-nums">{formatShare(value / total)}</span>
-          ) : null}
-          <span className="min-w-14 text-right font-medium tabular-nums">
-            {value === null ? "—" : formatMetric(value, metric)}
-          </span>
-        </div>
-      ))}
-      {notes.map((note) => (
-        <span key={note} className="text-[11px] text-muted-foreground">
-          {note}
+      {total.parts.map((part) => {
+        const { runtime, value } = part;
+        const share = runtimes.length > 1 ? partShare(part, total.value, metric) : null;
+        return (
+          <div key={runtime} className="flex items-center gap-2">
+            <RuntimeDot runtime={runtime} />
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {USAGE_RUNTIME_LABELS[runtime]}
+            </span>
+            {share === null ? null : (
+              <span className="text-muted-foreground tabular-nums">{formatShare(share)}</span>
+            )}
+            {/* The tooltip follows the pointer, so a dash cannot explain itself on hover. The
+                notes below give its reason. */}
+            <span className="min-w-14 text-right font-medium tabular-nums">
+              {value === null ? "—" : formatMetric(value, metric)}
+            </span>
+          </div>
+        );
+      })}
+      {total.gaps.map((gap) => (
+        <span key={gap} className="text-[11px] text-muted-foreground">
+          {GAP_TEXT[gap].short}
         </span>
       ))}
     </div>
@@ -275,7 +241,7 @@ export function UsageTrendChart({
             strokeWidth: 1.75,
           }),
         ),
-        // A total with unread history shows an open point: it can be higher.
+        // A partial total shows an open point: it can be higher.
         decorative(
           dot(
             totals.filter((row) => row.partial && row.index !== last),
@@ -381,7 +347,7 @@ export function UsageTrendChart({
       <Chart
         definition={definition}
         height={CHART_HEIGHT}
-        ariaLabel={`${metric === "tokens" ? "Tokens" : "Estimated cost"} per ${PERIOD_NOUNS[granularity]}: total and runtimes`}
+        ariaLabel={`${PERIOD_TEXT[granularity].adjective} ${METRIC_TEXT[metric].trend}: total and runtimes`}
         renderTooltipBody={renderTooltipBody}
       />
     </div>

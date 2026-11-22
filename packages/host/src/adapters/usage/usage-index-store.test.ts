@@ -8,12 +8,9 @@ import { createUsageCalendar, usagePeriods } from "../../domain/usage/usage-cale
 import { createUsagePricer, type UsagePricer } from "../../domain/usage/usage-pricing";
 import type { UsageUnit } from "../../domain/usage/usage-unit";
 import { removeTestDirectory } from "../../test-support/temp-directory";
+import type { UsageIndexSnapshot, UsageSnapshotScope } from "./usage-index-snapshot";
 import type { UsageSourceUpdate } from "./usage-index-sources";
-import {
-  createUsageIndexStore,
-  type UsageIndexSnapshot,
-  type UsageIndexStore,
-} from "./usage-index-store";
+import { createUsageIndexStore, type UsageIndexStore } from "./usage-index-store";
 
 let directory = "";
 let store: UsageIndexStore;
@@ -61,63 +58,61 @@ const indexPath = () => path.join(directory, "usage-index.sqlite");
 /** One read that commits the sources. */
 const write = (...updates: UsageSourceUpdate[]) =>
   Effect.runPromise(
-    store.read(
-      utc,
+    store.read({
+      calendar: utc,
       pricer,
-      (writer) => Effect.forEach(updates, writer.applySource, { discard: true }),
-      () => Effect.void,
-    ),
+      sync: (writer) => Effect.forEach(updates, writer.applySource, { discard: true }),
+      report: () => Effect.void,
+    }),
   );
 
 /** One read without source changes. */
 const snapshotOf = <A, E>(
   read: (snapshot: UsageIndexSnapshot) => Effect.Effect<A, E>,
   calendar = utc,
-) => Effect.runPromise(store.read(calendar, pricer, () => Effect.void, read));
+  rates = pricer,
+) =>
+  Effect.runPromise(store.read({ calendar, pricer: rates, sync: () => Effect.void, report: read }));
+
+/** Sums the scope in one period, with each recorded folder as its own project group. */
+const aggregateOf = (snapshot: UsageIndexSnapshot, scope: UsageSnapshotScope) =>
+  snapshot.projectFolders(scope).pipe(
+    Effect.flatMap((folders) =>
+      snapshot.aggregate({
+        ...scope,
+        periods: [{ start: scope.start, end: scope.end }],
+        projectGroups: folders.map(({ projectId, folder }) => ({
+          projectId,
+          group: folder ?? "unknown",
+        })),
+      }),
+    ),
+  );
 
 /** The cost of November after a read with other rates. */
 const costWith = async (rates: UsagePricer) => {
-  const result = await Effect.runPromise(
-    store.read(
-      utc,
-      rates,
-      () => Effect.void,
-      (snapshot) =>
-        snapshot.aggregate({
-          start: "2026-11-01",
-          end: "2026-11-30",
-          runtimes: ["claude"],
-          periods: [{ start: "2026-11-01", end: "2026-11-30" }],
-          groupProjects: (projects) => projects.map((project) => project ?? "unknown"),
-        }),
-    ),
+  const result = await snapshotOf(
+    (snapshot) =>
+      aggregateOf(snapshot, { start: "2026-11-01", end: "2026-11-30", runtimes: ["claude"] }),
+    utc,
+    rates,
   );
   return result.byRuntime[0]?.costUsd;
 };
 
 const report = (calendar = utc, start = "2026-11-01", end = "2026-11-30") =>
-  snapshotOf(
-    (snapshot) =>
-      snapshot.aggregate({
-        start,
-        end,
-        runtimes: ["claude"],
-        periods: [{ start, end }],
-        groupProjects: (projects) => projects.map((project) => project ?? "unknown"),
-      }),
-    calendar,
-  );
+  snapshotOf((snapshot) => aggregateOf(snapshot, { start, end, runtimes: ["claude"] }), calendar);
 
 const issues = () => snapshotOf((snapshot) => snapshot.issues());
 
 const sources = (target = store) =>
   Effect.runPromise(
-    target.read(
-      utc,
+    target.read({
+      calendar: utc,
       pricer,
-      (writer) => writer.sources(),
-      (_, rows) => Effect.succeed(rows),
-    ),
+      sync: (writer) => writer.sources(),
+      report: (_, rows) => Effect.succeed(rows),
+    }),
   );
 
 beforeEach(async () => {
@@ -176,7 +171,7 @@ describe("usage index store", () => {
     const malformed = { code: "malformed_records" as const, firstAtMs: 10, lastAtMs: 20 };
     await write({ ...source("/p/a.jsonl", []), issue: malformed });
     await write(source("/p/a.jsonl", [unit()], "append"));
-    expect(await issues()).toEqual([{ runtime: "claude", ...malformed }]);
+    expect(await issues()).toEqual([{ runtime: "claude", scope: "source", ...malformed }]);
     await write(source("/p/a.jsonl", [unit()]));
     expect(await issues()).toEqual([]);
   });
@@ -215,13 +210,13 @@ describe("usage index store", () => {
       unit({ identity: `d${day}`, occurredAtMs: Date.UTC(2026, 9, 1 + day, 12) }),
     );
     await Effect.runPromise(
-      store.read(
-        utc,
+      store.read({
+        calendar: utc,
         pricer,
-        (writer) => writer.applySource(source("/p/a.jsonl", days)),
-        () => Effect.void,
-        (share) => shares.push(share),
-      ),
+        sync: (writer) => writer.applySource(source("/p/a.jsonl", days)),
+        report: () => Effect.void,
+        onRollup: (share) => shares.push(share),
+      }),
     );
     expect(shares).toEqual([31 / 40, 1]);
     const result = await report(utc, "2026-10-01", "2026-11-30");
@@ -256,12 +251,12 @@ describe("usage index store", () => {
     const [stored] = await sources();
     if (!stored) throw new Error("Expected a source.");
     await Effect.runPromise(
-      store.read(
-        utc,
+      store.read({
+        calendar: utc,
         pricer,
-        (writer) => writer.removeSource(stored.id),
-        () => Effect.void,
-      ),
+        sync: (writer) => writer.removeSource(stored.id),
+        report: () => Effect.void,
+      }),
     );
     expect((await report()).byRuntime).toEqual([]);
   });
@@ -282,25 +277,25 @@ describe("usage index store", () => {
       await sources(other);
       // A failed read leaves nothing behind, and the next read of its store opens again.
       const failed = await Effect.runPromiseExit(
-        other.read(
-          utc,
+        other.read({
+          calendar: utc,
           pricer,
-          (writer) =>
+          sync: (writer) =>
             writer
               .applySource(source("/p/lost.jsonl", [unit({ identity: "x", session: "lost" })]))
               .pipe(Effect.andThen(Effect.fail("stopped"))),
-          () => Effect.void,
-        ),
+          report: () => Effect.void,
+        }),
       );
       expect(failed._tag).toBe("Failure");
       // A complete read commits its sources and their rollup together.
       await Effect.runPromise(
-        other.read(
-          utc,
+        other.read({
+          calendar: utc,
           pricer,
-          (writer) => writer.applySource(source("/p/other.jsonl", [unit()])),
-          () => Effect.void,
-        ),
+          sync: (writer) => writer.applySource(source("/p/other.jsonl", [unit()])),
+          report: () => Effect.void,
+        }),
       );
       const result = await report();
       expect(result.byModel.map((row) => [row.provider, row.model, row.costUsd])).toEqual([
@@ -322,7 +317,7 @@ describe("usage index store", () => {
         end: USAGE_LAST_DATE,
         runtimes: ["claude", "codex", "opencode"],
         periods,
-        groupProjects: (projects) => projects.map((project) => project ?? "unknown"),
+        projectGroups: [],
       }),
     );
     expect(result.periods).toEqual([expect.objectContaining({ period: 322, input: 1_000_000 })]);

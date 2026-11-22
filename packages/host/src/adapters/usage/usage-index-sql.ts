@@ -108,7 +108,8 @@ CREATE TEMP TABLE IF NOT EXISTS report_period (idx INTEGER PRIMARY KEY, start TE
  * counts as activity of its own session.
  */
 export const USAGE_INDEX_ROLLUP_SQL = `
-INSERT INTO day
+INSERT INTO day (local_date, runtime, session_id, provider_id, model_id, project_id,
+  input, cache_read, cache_write, output, unmeasured, unpriced_tokens, cost_usd)
 WITH keys AS (
   SELECT DISTINCT u.unit_key FROM target t
   CROSS JOIN unit u INDEXED BY unit_by_time

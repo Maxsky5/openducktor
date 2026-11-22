@@ -137,7 +137,8 @@ export const usageReportSchema = z.strictObject({
   byProject: z.array(
     z.strictObject({
       id: z.string().min(1),
-      label: z.string().min(1).nullable(),
+      /** A workspace name, a short folder label, or `Unknown project` without a folder. */
+      label: z.string().min(1),
       figure: usageFigureSchema,
     }),
   ),

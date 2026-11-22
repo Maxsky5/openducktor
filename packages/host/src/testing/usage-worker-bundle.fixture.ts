@@ -28,6 +28,15 @@ const progressEvents: UsageIndexProgress[] = [];
 const ratesAddress = rates.address() as AddressInfo;
 const index = createUsageIndexAdapter({
   indexPath: path.join(root, "usage-index.sqlite"),
+  locations: () =>
+    resolveUsageLocations(
+      {
+        CLAUDE_CONFIG_DIR: path.join(root, "claude"),
+        CODEX_HOME: path.join(root, "codex"),
+        XDG_DATA_HOME: path.join(root, "data"),
+      },
+      root,
+    ),
   onProgress: (progress) => progressEvents.push(progress),
   ratesUrl: `http://127.0.0.1:${ratesAddress.port}/api.json`,
 });
@@ -98,15 +107,6 @@ try {
       join: path.join,
     },
     taskOwnership: { listTaskDirectoriesForWorktreeOwnership: () => Effect.succeed([]) },
-    locations: () =>
-      resolveUsageLocations(
-        {
-          CLAUDE_CONFIG_DIR: path.join(root, "claude"),
-          CODEX_HOME: path.join(root, "codex"),
-          XDG_DATA_HOME: path.join(root, "data"),
-        },
-        root,
-      ),
     timeZone: () => "UTC",
     now: () => Date.parse("2026-03-03T00:00:00.000Z"),
   });

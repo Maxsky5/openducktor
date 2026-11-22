@@ -1,6 +1,8 @@
 import type { HostEventBusPort } from "../../events/host-event-bus";
+import { homedir } from "node:os";
 import path from "node:path";
 import { createUsageIndexAdapter } from "../../adapters/usage/usage-index-adapter";
+import { resolveUsageLocations } from "../../adapters/usage/usage-locations";
 import type { UsageIndexPort } from "../../ports/usage-index-port";
 import { createGeneratedImageFileAdapter } from "../../adapters/attachments/generated-image-file-adapter";
 import type { GeneratedImageWorkers } from "../../adapters/attachments/generated-image-worker-client";
@@ -214,6 +216,8 @@ export const createNodeHostDefaultPorts = (
           imageWorkers,
           usageIndex: createUsageIndexAdapter({
             indexPath: path.join(configDir.root, "usage-index.sqlite"),
+            // The history folders come from the environment of the login shell at each read.
+            locations: () => resolveUsageLocations(readEnv(), homedir()),
             onProgress: (payload) =>
               input.eventBus?.publish({ channel: "openducktor://usage-index-progress", payload }),
           }),

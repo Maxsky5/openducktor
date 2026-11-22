@@ -25,9 +25,9 @@ flowchart TD
 | Module | Path | Owns |
 |---|---|---|
 | Contract | `packages/contracts/src/usage-schemas.ts` | Command input and report schemas |
-| Domain | `packages/host/src/domain/usage` | Calendar, periods, rate matching, figures, project rules, and workspace folder ownership |
-| Service | `packages/host/src/application/usage` | Range, coverage, labels, figure assembly |
-| Adapter | `packages/host/src/adapters/usage` | Threads, parsers, index, rollup. One read (`usage-index-read.ts`) plans the source changes (`usage-sync-plan.ts`), parses on the parser threads (`usage-parse-pool.ts`), and reads the figures in one transaction of the index (`usage-index-store.ts`). The parser (`usage-source-parser.ts`) decides where the read of a source starts. The Codex reader has its line kinds (`usage-codex-lines.ts`), token math (`usage-codex-tokens.ts`), response tracker (`usage-codex-responses.ts`), and record parser (`usage-codex-records.ts`) |
+| Domain | `packages/host/src/domain/usage` | Calendar, ranges, periods, catalog rates and rate matching, figures, project rules, and workspace folder ownership. `usage-report.ts` builds the report from the figures of one index read: completeness, coverage messages, the rate message, model grouping, and project labels |
+| Service | `packages/host/src/application/usage` | Reads the workspace folders and the index, then calls `usageReport` |
+| Adapter | `packages/host/src/adapters/usage` | Threads, parsers, index, rollup. The index worker (`usage-index-worker.ts`) only passes messages to its request queue (`usage-index-queue.ts`), which runs reads in order and the catch-up between them. The reader (`usage-index-read.ts`) plans the source changes (`usage-sync-plan.ts`), parses on the parser threads (`usage-parse-pool.ts`), and reads the figures in one transaction of the index (`usage-index-store.ts`) with the queries of `usage-index-snapshot.ts`. `usage-source-sessions.ts` names the session of a source for the progress. The parser (`usage-source-parser.ts`) decides where the read of a source starts. The Codex reader has its line kinds (`usage-codex-lines.ts`), token math (`usage-codex-tokens.ts`), response tracker (`usage-codex-responses.ts`), and record parser (`usage-codex-records.ts`) |
 | Query | `packages/frontend-core/src/queries/usage.ts` | Query key and cache |
 | Page | `packages/frontend/src/pages/usage` | Filters, overview with the trend chart, tokens by type, breakdown table, sources |
 
@@ -36,8 +36,8 @@ flowchart TD
 - The host thread starts the threads at the first read. They stop together 5 minutes after the index worker reports that it is idle.
 - A read checks the sources only when the caller asks for a refresh, or when no check of the last 5 minutes covers its runtimes and range. Otherwise it answers from the index with that check, so a new range or runtime reads in 40 to 120 ms. The page asks for a refresh when it reads a selection that already has a result, such as Refresh. A check stats every source and digests a changed OpenCode database, which takes from 0.1 s to about 1 s.
 - The index worker keeps the git data of the recorded folders for the life of its threads, so a report of another range reads git data only for folders that it has not seen.
-- A read of an empty index sends a `preparing` progress event before it loads the rates and searches the history, so a client can show the first read at once. Every progress event says with `first` whether it belongs to a first read.
-- The index worker owns the index connection, the source check, the commits, the rollup, and the report queries.
+- The queue decides once, before the rates load, whether a read is a first read: the index holds no source. A first read sends a `preparing` progress event before it loads the rates and searches the history, so a client can show the first read at once. Every progress event says with `first` whether it belongs to a first read.
+- The index worker owns the index connection, the source check, the commits, the rollup, and the report queries. The host thread adds the history folders of the login shell environment to each read.
 - Up to 4 parser threads read sources, and at most half of the cores. They claim jobs through a shared counter, so they never wait for a commit.
 - The largest sources start first. The OpenCode database is one long job.
 - A canceled read stops new jobs. Jobs in progress finish and commit.
@@ -53,7 +53,7 @@ flowchart TD
 | Codex | `<codex-home>/sessions/**` and `<codex-home>/archived_sessions/**`, `.jsonl` and `.jsonl.zst` | `CODEX_HOME`, else `~/.codex` |
 | OpenCode | `<data-home>/opencode/opencode*.db` | `XDG_DATA_HOME`, else `~/.local/share`; `OPENCODE_DB` names one file |
 
-The service reads the variables from the environment of the login shell. Parsers open native history read-only. They never write or migrate it.
+The usage index adapter reads the variables from the environment of the login shell at each read. Parsers open native history read-only. They never write or migrate it.
 
 A folder or file that the host cannot read gives an `unreadable` issue for its runtime. The readable sources of that runtime stay in the report, and the index keeps the stored sources under the unreadable paths until the host can read them again.
 
@@ -114,11 +114,11 @@ A unit is one model request. Copies of one request share a unit identity.
 
 ## Rates
 
-The costs use the API rates of [models.dev](https://models.dev), the public rate catalog that OpenCode also uses. Its provider and model IDs match the IDs that the runtimes record. `packages/host/src/adapters/usage/usage-rate-catalog.ts` downloads and reads it. `packages/host/src/domain/usage/usage-pricing.ts` matches a request to its rates.
+The costs use the API rates of [models.dev](https://models.dev), the public rate catalog that OpenCode also uses. Its provider and model IDs match the IDs that the runtimes record. `packages/host/src/adapters/usage/usage-rate-catalog.ts` downloads, validates, and stores it. `packages/host/src/domain/usage/usage-pricing.ts` turns the catalog costs into rates and matches a request to its rates.
 
 - The index worker downloads `https://models.dev/api.json` when its stored copy is a day old. It sends the stored ETag, so an unchanged catalog does not download again. The request sends no usage data.
 - The `rate_catalog` table keeps the rates of the last download and its time. A read with a recent copy uses no network.
-- A failed download keeps the stored rates, and the report names the failure. The worker tries again after five minutes. Without a stored copy, the costs show a dash and the report tells the user to check the network access of the host.
+- A failed download keeps the stored rates, and the report names the failure. The worker tries again after five minutes. Without a stored copy, the costs show a dash and the report tells the user to check the network access of the host. The adapter returns the failure reason; `usage-report.ts` writes the message.
 - A rate matches an exact provider and model ID, or the snapshot ID without its `-YYYYMMDD` or `-YYYY-MM-DD` date suffix. Matching never guesses by similarity.
 - The `standard` and `default` service tiers, and requests without a tier, use the base rates. A catalog mode that sets a `service_tier` or `speed`, such as OpenAI `priority` or Anthropic `fast`, gives the rates of that tier. Other tiers stay unpriced.
 - OpenCode offers each catalog mode as its own model, `<model>-<mode>`, such as `gpt-6.1-sol-fast`. That model ID gets the rates of the mode.
@@ -160,11 +160,11 @@ stateDiagram-v2
 - A source with an unchanged fingerprint is skipped. The fingerprint of the OpenCode database includes its write-ahead log file, because a write changes the log before the database file.
 - A `.jsonl` file that grew continues from its resume offset when the bytes before that offset did not change. An unterminated last line waits for a later read.
 - A changed OpenCode database reads rows updated at or after the last `time_updated` mark, and rows added after the last row ID. A fork copies messages with their old update time, so only the row ID shows them. All reads of the database come from one native read transaction. Each read also digests the row ID and message ID of every row up to the last row ID that it saw. It reads these identities in batches of 10,000 rows, so the memory stays bounded on a large database. A message ID never repeats, so any deletion or replacement of an earlier row changes the digest, also when SQLite gives a deleted row ID to a new row. Then the database is read again in full. Another database file at the same path starts again from nothing.
-- One worker request runs in one write transaction: it removes deleted sources, commits each parsed source with its fingerprint, recomputes the rollup of the dates of every copy of the changed units, and reads the figures, names, and issues. A stop or a failure rolls all of it back, so the index never holds committed sources without their rollup. After a failure the worker closes its connection, which ends any open transaction, and the next read opens a new connection with fresh name and price caches. The read fails with its original cause. Another host that shares the index waits for the write lock.
+- One worker request runs in one write transaction: it removes deleted sources, commits each parsed source with its fingerprint, recomputes the rollup of the dates of every copy of the changed units, and reads the figures, names, and issues. Between the queries, the reader reads git data to group the recorded folders into projects. A stop or a failure rolls all of it back, so the index never holds committed sources without their rollup. After a failure the worker closes its connection, which ends any open transaction, and the next read opens a new connection with fresh name and price caches. The read fails with its original cause. A failed statement of the index gives the message that tells the user to check the free disk space and the access to the config folder. Another host that shares the index waits for the write lock.
 - A different time zone or rate digest rebuilds the whole rollup. So does a read that starts with an empty unit table. That read also drops the two unit lookup indexes and builds them again after its last insert, which is about 5 times faster for 1 million units.
 - Names come from the `name` table in that transaction. Before writes and rollups, each connection reads names that another host added and prices them.
 - A canceled read still commits the sources that its parsers finished, with their rollup.
-- Reports read only the `day` table and the source issues.
+- Reports read only the `day` table and the source issues. The periods sum in SQL, because sessions are distinct inside a period and do not add up from days.
 
 ## Coverage
 
@@ -172,10 +172,10 @@ stateDiagram-v2
 - A source that the host cannot read, records that are not JSON, usage records of a known type in an unknown shape, or an OpenCode database without the known tables give an issue. Usage keeps the earlier units of that source.
 - A source that the host could not read is read again from its first line at each check, so issues of its earlier bytes come back.
 - `USAGE_INDEX_FORMAT_VERSION` also covers the parser state in the `source` table. A parser change that the old state cannot follow bumps it, and the index rebuilds from the native history.
-- An issue covers the dates between the requests around it. An issue without known dates covers every date.
+- An issue covers the dates between the requests around it. An issue without known dates covers every date. A folder or file of a runtime that the host cannot read gives a location issue without dates.
 - A figure is incomplete when an issue of its runtimes covers its dates. The page marks it and shows a gap for an incomplete zero.
 - The total names the usage that it leaves out: "N requests without token counts" for requests that Codex, Claude Code, or OpenCode recorded without counts, and "N% of tokens unpriced" for tokens without a published rate. The chart tooltip names them for each period.
-- An incomplete value has a warning mark. The trend chart draws an open point on a day with unread history.
+- An incomplete value has a warning mark. The trend chart draws an open point on a period whose total leaves out a missing value or unread history.
 - A missing value shows a dash. Its hover and focus text gives the reason: requests without token counts, usage without a published rate, or a zero that coverage cannot confirm. A day total that leaves out a missing or partial value has an asterisk.
 - Tokens by type uses one blue ramp, apart from the runtime colors, in the same order in both themes.
 - A parser fault that is not a read failure fails the read with its message.
@@ -189,6 +189,7 @@ stateDiagram-v2
 - Highlights is one card of four tiles: the cache hit rate (cache reads over all input-side tokens) with a meter, the busiest period with one column for each period, the average per period with a strip of active periods, and the value per session with the sessions of each runtime. A tile whose value leaves out usage has an info mark that names what it leaves out.
 - A first read shows its progress card at once, from its `preparing` event: the page has nothing else to show. A later read that parses new history shows its progress once it has run for 1.5 s, so a short read never flashes it. Before the first result, the page shows one card: the overall share, the sessions read out of the sessions to read, the elapsed time, and one row for each runtime with its share and its sessions. Every runtime keeps its row from the first event on, so the card keeps its size: `Finding sessions…` while the history search runs, then `No history` for a runtime without history, or `Up to date` in a later read. The parse makes up 80% of the ring and the daily totals 20%, as measured on the reference machine; in the parse, each runtime weighs as much as its sessions to read. The ring never goes back. When a read follows a canceled one, the card adds the new read to what the earlier read finished, and a runtime that an earlier read finished stays done. With a shown result, the header line shows the share instead. While the query has no data, the page shows the skeleton at once and keeps it for at least 500 ms, also when the answer comes sooner, so it never flashes. What replaces it, the report, the progress card, or an error, fades in over 320 ms.
 - A new selection keeps the shown result, dimmed after 150 ms, with a loading line in the header, until its own result arrives. A fast read never flashes, and a failed read shows its error, not the result of another selection.
+- `usage-format.ts` owns the rules that every view shares. `periodTotal` adds the shown values of a period. A missing value or unread history makes the total partial: the chart draws an open point, and the period table adds an asterisk. `shareOf` gives no share to a missing value or an unconfirmed zero. `figureGaps` names what a value leaves out, and `GAP_TEXT` gives the words of each gap.
 - The breakdown table shows models, projects, or periods. Models and projects rank by the selected metric and show their share of it; periods show each runtime, newest first.
 - The page lays out by its own width with container queries, so an open sidebar gives it the narrow layout.
 
@@ -207,6 +208,7 @@ A repository of a workspace shows as that workspace. A path that the host cannot
 - Workspaces can share one worktree folder. Then each workspace owns `<folder>/<task ID>` and the session folders below the shared folder of its own tasks, in any task or workspace state. A folder that two workspaces claim, such as an imported task ID that repeats, or that no workspace claims, stays a separate project. This also holds when the shared folder lies inside a repository, or is the repository folder itself: the shared folder and each disputed folder are explicit boundaries that win over an equal workspace root, and only a claim with one owner below them goes to a workspace.
 - Other folders stay as recorded. The label is the last folder name, plus the fewest parent names that tell same-named projects apart. A label never has the first folder name, such as a drive, so it never shows a full path.
 - Projects that still have the same label, such as two workspaces with the same name, get the lowest free number, such as ` (2)`, in the order of their keys. A number never repeats a label that another project has, or `Unknown project`.
+- Activity without a recorded folder has the label `Unknown project`.
 - Project and model IDs are hashes. No path leaves the host.
 
 ## Performance

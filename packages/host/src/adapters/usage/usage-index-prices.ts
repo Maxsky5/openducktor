@@ -3,9 +3,21 @@ import { Effect } from "effect";
 import type { UsagePricer } from "../../domain/usage/usage-pricing";
 import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type { createUsageNameCache } from "./usage-index-names";
-import type { IndexQueries } from "./usage-index-rows";
+import { type IndexQueries, placeholderRows } from "./usage-index-rows";
 
-const COLUMNS = 9;
+/** The columns of a price insert, in the order of its parameters. */
+const PRICE_COLUMNS = [
+  "provider_id",
+  "model_id",
+  "tier_id",
+  "min_prompt",
+  "input",
+  "cache_read",
+  "cache_write_5m",
+  "cache_write_1h",
+  "output",
+];
+const COLUMNS = PRICE_COLUMNS.length;
 /** Rows per insert, within the SQL parameter limit. */
 const BATCH = 100;
 
@@ -50,9 +62,8 @@ export const createUsagePriceTable = (
         yield* run("DELETE FROM price");
         for (let start = 0; start < rows.length; start += BATCH * COLUMNS) {
           const batch = rows.slice(start, start + BATCH * COLUMNS);
-          const row = `(${Array.from({ length: COLUMNS }, () => "?").join(", ")})`;
           yield* run(
-            `INSERT INTO price VALUES ${Array.from({ length: batch.length / COLUMNS }, () => row).join(", ")}`,
+            `INSERT INTO price (${PRICE_COLUMNS.join(", ")}) VALUES ${placeholderRows(batch.length / COLUMNS, COLUMNS)}`,
             ...batch,
           );
         }

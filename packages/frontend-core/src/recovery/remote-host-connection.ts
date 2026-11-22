@@ -144,12 +144,9 @@ export const createRemoteHostConnection = ({
       context.hostChanged ||
       (context.previousHostInstanceId !== null && context.hostReplay.hostChanged);
     // Another host instance at the same endpoint has its own history. Its Usage results go
-    // before any recovery step that can fail.
-    const usageCleared =
-      hostChanged ||
-      (context.previousHostInstanceId !== null &&
-        context.previousHostInstanceId !== context.host.hostInstanceId);
-    if (usageCleared) void clearUsageReports(queryClient);
+    // before any recovery step that can fail. `context.hostChanged` covers a new instance ID, and
+    // it stays set until a synchronization succeeds, so a retry clears them too.
+    if (hostChanged) void clearUsageReports(queryClient);
     if (queryClient.getQueryData(workflowQueryKeys.catalog))
       await refreshWorkflowMetadata(queryClient);
     // State owners must apply stream snapshots before current-state reads.
@@ -178,7 +175,7 @@ export const createRemoteHostConnection = ({
       });
       context.signal.throwIfAborted();
       // A reset report reads again by itself; a kept one reads again after admission.
-      if (!usageCleared) refreshUsageReports(queryClient);
+      if (!hostChanged) refreshUsageReports(queryClient);
     }
   };
   const remote = createRemoteHostClient(

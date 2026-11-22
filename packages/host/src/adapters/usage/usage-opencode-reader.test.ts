@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { removeTestDirectory } from "../../test-support/temp-directory";
-import { type OpenCodeProgress, readOpenCodeUsage } from "./usage-opencode-reader";
+import { readOpenCodeUsage } from "./usage-opencode-reader";
+import type { OpenCodeProgress } from "./usage-worker-protocol";
 
 let directory = "";
 let databasePath = "";
