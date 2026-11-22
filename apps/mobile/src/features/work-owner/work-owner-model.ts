@@ -126,8 +126,10 @@ export const findChatRecord = (
   records: readonly WorkspaceSession[] | undefined,
   identity: AgentSessionIdentityLike,
 ): WorkspaceSession | null =>
-  records?.find((record) =>
-    matchesAgentSessionIdentity(workspaceSessionIdentity(record), identity),
+  records?.find(
+    (record) =>
+      matchesAgentSessionIdentity(workspaceSessionIdentity(record), identity) ||
+      record.handoff?.links.some(({ from }) => matchesAgentSessionIdentity(from, identity)),
   ) ?? null;
 
 /** Finds the workspace and saved chat of a chat owner. */

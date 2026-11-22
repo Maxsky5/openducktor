@@ -52,17 +52,23 @@ export const createAgentActivitySnapshot = ({
   collection,
   previous,
   workspaceRepoPath,
+  pendingHandoffMembers,
 }: {
   collection: AgentSessionCollection;
   previous: AgentActivitySessionsSnapshot;
   workspaceRepoPath: string | null;
+  pendingHandoffMembers?: ReadonlySet<string>;
 }): AgentActivitySessionsSnapshot => {
   const previousSummaryByIdentity = new Map(
     previous.sessions.map((summary) => [agentSessionIdentityKey(summary), summary]),
   );
   const sessions = listAgentSessions(collection).sort(newestFirst);
   const nextActivitySessions = sessions.flatMap((session): AgentSessionSummary[] => {
-    if (!isWorkflowAgentSession(session) || session.liveParentExternalSessionId !== undefined) {
+    if (
+      !isWorkflowAgentSession(session) ||
+      session.liveParentExternalSessionId !== undefined ||
+      pendingHandoffMembers?.has(agentSessionIdentityKey(session))
+    ) {
       return [];
     }
     const nextSummary = toAgentSessionSummary(session);

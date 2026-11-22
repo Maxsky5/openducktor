@@ -25,7 +25,7 @@ import { publishClaudeBackgroundTasks } from "./claude-agent-sdk-background-task
 import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
-import { isClaudeMessageUuid, toClaudeMessageFromParts } from "./claude-agent-sdk-messages";
+import { isClaudeMessageUuid } from "./claude-agent-sdk-messages";
 import {
   ClaudeSessionError,
   isClaudeSessionClosing,
@@ -36,7 +36,10 @@ import {
   assertClaudeSessionProfileUnchanged,
   toClaudeFlagSettings,
 } from "./claude-agent-sdk-session-model";
-import { toClaudeDisplayParts, toClaudeUserMessageEvent } from "./claude-agent-sdk-session-shape";
+import {
+  prepareClaudeUserSubmission,
+  toClaudeUserMessageEvent,
+} from "./claude-agent-sdk-session-shape";
 import { isClaudeSessionStopped } from "./claude-agent-sdk-session-store";
 import { canStartUserTurn } from "./claude-agent-sdk-turn-policy";
 import type {
@@ -55,7 +58,7 @@ import {
   waitForUserMessageAdmission,
 } from "./claude-agent-sdk-user-message-admission";
 import { isClaudeWakeUserMessage } from "./claude-agent-sdk-user-messages";
-import { modelSelection, textFromContentBlocks } from "./claude-agent-sdk-utils";
+import { modelSelection } from "./claude-agent-sdk-utils";
 
 export const applyClaudeSessionModel = async (
   session: ClaudeSession,
@@ -316,7 +319,7 @@ export const sendClaudeUserMessage = async (input: {
     classifySystemSlashCommandInvocation(messageInput.parts).kind === "manual_session_compaction";
   assertAcceptingMessages(session);
   const timestamp = now();
-  const messageId = randomId();
+  const messageId = messageInput.handoff?.admissionId ?? randomId();
   if (!isClaudeMessageUuid(messageId)) {
     throw new HostValidationError({
       field: "randomId",
@@ -324,19 +327,15 @@ export const sendClaudeUserMessage = async (input: {
       details: { messageId },
     });
   }
-  const sdkMessage = await toClaudeMessageFromParts(messageInput.parts);
-  const message = textFromContentBlocks(sdkMessage.message.content);
+  const { sdkMessage, acceptedMessage } = await prepareClaudeUserSubmission(
+    messageInput,
+    messageId,
+    timestamp,
+  );
   assertAcceptingMessages(session);
-  const displayParts = toClaudeDisplayParts(messageInput.parts);
   sdkMessage.uuid = messageId;
   sdkMessage.session_id = session.externalSessionId;
   sdkMessage.timestamp = timestamp;
-  const acceptedMessage: ClaudeAcceptedUserMessage = {
-    messageId,
-    parts: displayParts,
-    text: message,
-    timestamp,
-  };
   if (input.hidden) {
     // The CLI tells the model that a synthetic message does not come from the user, so a consent
     // must keep the human origin. `client_composed` keeps its text as written.

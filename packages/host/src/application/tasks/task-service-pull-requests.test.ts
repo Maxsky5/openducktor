@@ -12,6 +12,7 @@ import type { GitPort } from "../../ports/git-port";
 import type { SystemCommandPort } from "../../ports/system-command-port";
 import { createGitProviderResolver } from "../git/git-provider-resolver";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
+import { createRuntimeTaskActivityGuard } from "./runtime-task-activity-guard";
 import type { CreateTaskServiceInput } from "./task-service";
 import {
   createAgentSessionRecord,
@@ -23,6 +24,7 @@ import {
   createPullRequestDetectSystemCommands,
   createPullRequestSyncSystemCommands,
   createPullRequestUpsertSystemCommands,
+  createRuntimeRegistryPort,
   createSystemCommandPort,
   createTaskService,
   createTaskServiceWithMutationProgress,
@@ -38,6 +40,7 @@ import {
 /** A guard that sees no live session and records which task sessions the closure releases. */
 const createReleasingActivityGuard = (calls: unknown[]): TaskActivityGuardPort => ({
   countLiveSessions: () => Effect.die(new Error("unexpected live session count")),
+  ensureNoUnresolvedHandoff: () => Effect.void,
   cleanupTaskSessions: (input) =>
     Effect.sync(() => {
       calls.push({
@@ -2018,6 +2021,149 @@ describe("createTaskService pull requests", () => {
       }
     });
   }
+  test.each([
+    ["retry with detached checkout", true, false],
+    ["link and keep checkout", false, false],
+    ["sync and remove checkout", false, true],
+  ] as const)(
+    "preserves task resources during an unresolved handoff on %s",
+    async (_intent, detached, sync) => {
+      const ref = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
+      const worktreePath = "/worktrees/repo/task-1";
+      const merged = {
+        ...pullRequest(),
+        number: 42,
+        url: "https://github.com/openai/openducktor/pull/42",
+      };
+      let linked: ReturnType<typeof task>["pullRequest"] = sync
+        ? { ...merged, state: "open", mergedAt: undefined }
+        : merged;
+      const { taskWorkflows, fields, role } = syncWorkflows["a workflow without merge events"];
+      let current = task(fields);
+      const source = createAgentSessionRecord({ role, workingDirectory: worktreePath });
+      const settingsConfig = createBuildSettingsConfig(new Set([ref.repoPath, worktreePath]));
+      const cleanup: string[] = [];
+      let unresolved = true;
+      const gitPort = createDirectMergeGitPort({
+        calls: [],
+        currentBranches: {
+          [worktreePath]: detached ? { detached: true } : { name: "odt/task-1", detached: false },
+        },
+        branches: {
+          [ref.repoPath]: [
+            { name: "main", isCurrent: true, isRemote: false },
+            { name: "odt/task-1", isCurrent: false, isRemote: false },
+          ],
+        },
+        ancestorResults: { "/repo|odt/task-1|main": true },
+      });
+      const service = createGithubTaskService({
+        taskWorkflows,
+        gitPort: extendGitPort(gitPort, {
+          removeWorktree: () =>
+            Effect.sync(() => {
+              cleanup.push("remove worktree");
+            }),
+          deleteLocalBranch: () =>
+            Effect.sync(() => {
+              cleanup.push("delete branch");
+            }),
+        }),
+        settingsConfig,
+        systemCommands: createPullRequestSyncSystemCommands({
+          calls: [],
+          payload: githubPullResponsePayload({
+            number: merged.number,
+            state: "closed",
+            mergedAt: "2026-05-10T11:00:00.000Z",
+            updatedAt: "2026-05-10T11:00:00.000Z",
+          }),
+        }),
+        taskActivityGuard: createRuntimeTaskActivityGuard({
+          settingsConfig,
+          hasUnresolvedTaskHandoff: ({ workspaceId, taskId }) =>
+            unresolved && workspaceId === ref.workspaceId && taskId === ref.taskId,
+          readSessionRootRefs: () => Effect.succeed([]),
+          sessionService: {
+            list: () => Effect.succeed([]),
+            releaseSession: () => Effect.void,
+            stopSession: () => Effect.void,
+          },
+          runtimeRegistry: createRuntimeRegistryPort({
+            probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
+          }),
+        }),
+        taskStore: {
+          getTask: () => Effect.succeed(current),
+          getTaskMetadata: () =>
+            Effect.succeed({
+              artifacts: {},
+              agentSessions: [source],
+              pullRequest: linked,
+            }),
+          listPullRequestSyncCandidates: () =>
+            Effect.succeed(
+              linked ? [{ id: ref.taskId, status: current.status, pullRequest: linked }] : [],
+            ),
+          setPullRequest: ({ pullRequest }) =>
+            Effect.sync(() => {
+              linked = pullRequest ?? undefined;
+              return true;
+            }),
+          transitionTask: ({ status }) =>
+            Effect.sync(() => {
+              current = { ...current, status };
+              return current;
+            }),
+        },
+        terminalService: {
+          acquireTaskCleanup: () =>
+            Effect.sync(() => {
+              cleanup.push("close terminals");
+              return { closedTerminalIds: [] };
+            }),
+        },
+        taskWorktreeService: createDirectMergeTaskWorktreeService(worktreePath),
+        worktreeOwners: noWorktreeOwners,
+        worktreeFiles: createBuildStartWorktreeFiles([]),
+        workspaceSettingsService: createBuildWorkspaceSettingsService({
+          workspaceId: ref.workspaceId,
+          repoPath: ref.repoPath,
+          hooks: { beforeWorktreeRemoval: [] },
+          git: {
+            provider: {
+              id: "github",
+              enabled: true,
+              repository: { host: "github.com", owner: "openai", name: "openducktor" },
+              autoDetected: false,
+            },
+          },
+        }),
+      });
+      const run = () =>
+        sync
+          ? Effect.runPromise(service.repoPullRequestSync(ref))
+          : Effect.runPromise(
+              service.linkMergedPullRequest({
+                ...ref,
+                removeWorktree: detached,
+                pullRequest: merged,
+              }),
+            );
+
+      await expect(run()).rejects.toThrow("Use Check delivery");
+      expect(current.status).toBe(fields.status);
+      expect(cleanup).toEqual([]);
+
+      unresolved = false;
+      await run();
+      expect(current.status).toBe("closed");
+      expect(cleanup).toEqual(
+        sync ? ["close terminals", "remove worktree", "delete branch"] : ["close terminals"],
+      );
+    },
+  );
+
   test("closes the other merged tasks when one merged task cannot close", async () => {
     const calls: unknown[] = [];
     const linkedPullRequest = {

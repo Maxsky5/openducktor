@@ -20,6 +20,7 @@ import {
 import { createNotificationFrameRelay } from "../recovery/notification-frame-relay";
 import {
   openHostChannel,
+  requireHostInvocationEpoch,
   type HostChannelCursors,
   type HostChannelHandlers,
   type HostChannelReplay,
@@ -29,7 +30,7 @@ import {
 } from "@openducktor/host-client/channel";
 import { waitWithAbort, type RemoteSocketConnection } from "@openducktor/host-client/remote";
 import { errorMessage } from "../lib/errors";
-import { hostEventStreamEventName } from "@openducktor/host-client";
+import { hostEventStreamEventName, type InvokeOptions } from "@openducktor/host-client";
 import type { JSONType } from "zod";
 
 export type LocalHostChannelEvent = HostEventEnvelope | ConnectionControlEvent;
@@ -53,6 +54,7 @@ export type LocalHostChannel = {
   readonly ready: Promise<void>;
   /** The warning of the current connection failure, or null while the channel is connected. */
   readConnectionWarning(): string | null;
+  readHostEpoch(): string | null;
   addListener(registration: LocalHostChannelRegistration): () => void;
   /**
    * Delivers notification frames. A subscriber that joins an open channel gets an `attached` frame
@@ -67,7 +69,7 @@ export type LocalHostChannel = {
    * Sends one request when the channel is open. A closed channel connects once at once, and a
    * failed attempt rejects the request.
    */
-  request(request: HostChannelRequest, signal?: AbortSignal): Promise<JSONType>;
+  request(request: HostChannelRequest, options?: InvokeOptions): Promise<JSONType>;
   /**
    * Creates a task lease. After a reconnect, the channel attaches the lease again and the host
    * replays unacknowledged frames. A lease that the host lost reports `onTerminalFailure`.
@@ -429,6 +431,7 @@ export const createLocalHostChannel = ({
   return {
     ready,
     readConnectionWarning: () => connectionWarning,
+    readHostEpoch: () => cursors.hostEvents?.hostEpoch ?? null,
     addListener(registration) {
       let registrations = listeners.get(registration.eventName);
       if (!registrations) {
@@ -453,8 +456,11 @@ export const createLocalHostChannel = ({
         releaseIfUnused();
       };
     },
-    request: (request, signal) =>
-      withOpen(({ session }) => session.request(request, signal), signal),
+    request: (request, options) =>
+      withOpen(({ session, hostEpoch }) => {
+        requireHostInvocationEpoch(options?.expectedHostEpoch, hostEpoch);
+        return session.request(request, options?.signal);
+      }, options?.signal),
     subscribeTaskEvents: (input, onFrame, onTerminalFailure) =>
       withOpen(async (opened) => {
         const record: TaskRecord = { onFrame, onTerminalFailure };

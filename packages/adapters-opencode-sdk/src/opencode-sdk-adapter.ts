@@ -666,9 +666,10 @@ export class OpencodeSdkAdapter {
       await this.hooks.restoreMcp(input);
       if (input.delivery !== "steer") await this.putRootInstructions(input, binding);
       this.assertCurrent(input, generation);
-      const encoded = buildOpenCodePromptText(
-        input.parts.filter((part) => part.kind !== "slash_command"),
-      );
+      const parts = input.parts.filter((part) => part.kind !== "slash_command");
+      if (input.handoff?.historyPrefix)
+        parts.unshift({ kind: "text", text: input.handoff.historyPrefix });
+      const encoded = buildOpenCodePromptText(parts);
       const files = [
         ...encoded.fileReferences.map((reference) => ({
           uri: pathToFileURL(resolve(input.workingDirectory, reference.file.path)).href,
@@ -731,7 +732,7 @@ export class OpencodeSdkAdapter {
       this.assertCurrent(input, generation);
       options?.signal?.throwIfAborted();
       // The host names the message, so a later live event can settle a send without an answer.
-      const messageId = createOpenCodeMessageId();
+      const messageId = input.handoff?.admissionId ?? createOpenCodeMessageId();
       const sending = this.client.session.prompt({
         ...payload,
         id: messageId,

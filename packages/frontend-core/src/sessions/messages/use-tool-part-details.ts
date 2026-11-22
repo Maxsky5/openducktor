@@ -44,7 +44,12 @@ export const useToolPartDetails = (meta: ToolMeta, read: boolean): ToolPartDetai
     error,
     refetch,
   } = useQuery({
-    ...sessionToolPartQueryOptions(session, meta, readSessionToolPart, queryClient),
+    ...sessionToolPartQueryOptions(
+      { ...session, ...meta.sourceSession },
+      meta,
+      readSessionToolPart,
+      queryClient,
+    ),
     enabled: read,
   });
   const merged = useMemo(() => (part ? withFullDetails(meta, part) : meta), [meta, part]);

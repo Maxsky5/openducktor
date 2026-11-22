@@ -25,7 +25,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
   subagentPendingApprovalCount = 0,
   subagentPendingQuestionCount = 0,
 }: AgentChatMessageCardProps): ReactElement | null {
-  const sessionRuntimeKind = runtimePresentation.runtimeKind;
+  const sessionRuntimeKind = message.sourceRuntimeKind ?? runtimePresentation.runtimeKind;
   const sessionWorkingDirectory = sessionIdentity?.workingDirectory ?? null;
   const toolCallPresentation =
     message.meta?.kind === "tool"
@@ -63,7 +63,7 @@ export const AgentChatMessageCard = memo(function AgentChatMessageCard({
       />
       <MessageBody
         message={message}
-        modelCatalog={modelCatalog}
+        modelCatalog={sessionRuntimeKind === runtimePresentation.runtimeKind ? modelCatalog : null}
         sessionRuntimeKind={sessionRuntimeKind}
         parentSession={sessionIdentity}
         assistantAccentColor={vm.assistantAccentColor}

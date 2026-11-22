@@ -21,6 +21,7 @@ import {
   readTaskColumnNullability,
 } from "./sqlite-task-store-test-support";
 import { openHostDatabaseConnection } from "./sqlite-host-database-connection";
+import { createSqliteRuntimeHandoffStore } from "./sqlite-runtime-handoffs";
 
 const cleanups = new Set<() => Promise<void>>();
 
@@ -39,6 +40,86 @@ afterEach(async () => {
 });
 
 describe("createSqliteTaskRepository SQLite integration", () => {
+  test("keeps the task handoff chain on its first session and protects linked records", async () => {
+    const { contextProvider, databasePath, store, scope } = await createRepositoryHarness();
+    const taskId = "fairnest-handoff";
+    const first = {
+      runtimeKind: "codex",
+      externalSessionId: "codex-first",
+      workingDirectory: scope.repoPath,
+    } as const;
+    const second = { ...first, runtimeKind: "claude", externalSessionId: "claude-second" } as const;
+    const third = { ...first, externalSessionId: "codex-third" };
+    const role = "build";
+    const startedAt = "2026-06-10T10:00:00.000Z";
+    const otherTaskId = "fairnest-other";
+    const agentSessionsJson = JSON.stringify([{ ...first, role, startedAt, selectedModel: null }]);
+    await Effect.runPromise(store.diagnoseRepoStore(scope));
+    insertRawTask({ databasePath, taskId, agentSessionsJson });
+    insertRawTask({ databasePath, taskId: otherTaskId, agentSessionsJson });
+    const handoffs = createSqliteRuntimeHandoffStore(contextProvider);
+    const base = {
+      chat: { ...scope, kind: "task_session", taskId, first, role } as const,
+      contextPrefix: null,
+    };
+    const firstLink = {
+      from: first,
+      to: second,
+      firstMessageId: "message-1",
+      partialHistory: false,
+    };
+    const secondLink = {
+      from: second,
+      to: third,
+      firstMessageId: "message-2",
+      partialHistory: false,
+    };
+    await Effect.runPromise(
+      handoffs.commit({
+        ...base,
+        link: firstLink,
+        acceptedAt: Date.parse(startedAt) + 1,
+        model: { providerId: "claude", modelId: "sonnet", runtimeKind: "claude" },
+      }),
+    );
+    await Effect.runPromise(
+      handoffs.commit({
+        ...base,
+        link: secondLink,
+        acceptedAt: Date.parse(startedAt) + 2,
+        model: { providerId: "codex", modelId: "gpt", runtimeKind: "codex" },
+      }),
+    );
+    const records = (await Effect.runPromise(store.getTaskMetadata({ ...scope, taskId })))
+      .agentSessions;
+    expect(records.map(({ externalSessionId }) => externalSessionId).sort()).toEqual([
+      "claude-second",
+      "codex-first",
+      "codex-third",
+    ]);
+    expect(
+      records.find(({ externalSessionId }) => externalSessionId === first.externalSessionId)
+        ?.handoff,
+    ).toEqual({
+      links: [firstLink, secondLink],
+    });
+    const other = await Effect.runPromise(store.getTaskMetadata({ ...scope, taskId: otherTaskId }));
+    expect(other.agentSessions).toEqual([{ ...first, role, startedAt, selectedModel: null }]);
+    const deletion = await Effect.runPromise(
+      Effect.result(
+        store.deleteAgentSession({
+          ...scope,
+          taskId,
+          identity: second,
+        }),
+      ),
+    );
+    expect(deletion._tag).toBe("Failure");
+    expect(
+      (await Effect.runPromise(store.getTaskMetadata({ ...scope, taskId }))).agentSessions,
+    ).toEqual(records);
+  });
+
   test("disables disk sync only on disposable fixture connections", async () => {
     const harness = await createRepositoryHarness();
     const settingsQuery = sql`
@@ -102,6 +183,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
       expect.arrayContaining([
         "__drizzle_migrations",
         "agent_session_turns",
+        "runtime_handoffs",
         "task_artifacts",
         "task_assets",
         "tasks",
@@ -111,6 +193,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(tableNames).not.toContain("task_store_schema_migrations");
     expect(tableNames).not.toContain("task_documents");
     expect(readDrizzleMigrationRows(databasePath)).toEqual([
+      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
@@ -135,7 +218,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
 
     expect(results).toEqual(Array.from({ length: 8 }, () => []));
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(8);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(9);
   });
 
   test("enforces the approved task asset registry shape and cascades task deletion", async () => {

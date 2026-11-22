@@ -19,7 +19,11 @@ import type {
   AgentSessionState,
 } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useLocalSearchParams } from "expo-router";
-import { type ReactElement, useCallback, useMemo } from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
+import {
+  useHandoffModelRuntimes,
+  useHandoffSelection,
+} from "@openducktor/frontend-core/sessions/send/runtime-handoff";
 import { ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useMobileWorkspaces } from "@/composition/workspace-selection";
@@ -37,7 +41,6 @@ import { Callout } from "@/ui/callout";
 
 const TITLE = "Message options";
 const NO_RUNTIMES: readonly ModelPickerRuntime[] = [];
-const LOCK_REASON = "An existing session cannot change its runtime.";
 
 /**
  * The agent, model, effort, and speed of an open session, as the desktop composer controls in a
@@ -67,7 +70,11 @@ export function ComposerOptionsSheet(): ReactElement {
   }
   return (
     <SheetScreen title={TITLE} closeLabel="Done" draggable>
-      <SessionOptions repoPath={workspace.repoPath} identity={route.route.identity} />
+      <SessionOptions
+        repoPath={workspace.repoPath}
+        identity={route.route.identity}
+        readOnly={route.route.readOnly}
+      />
     </SheetScreen>
   );
 }
@@ -84,12 +91,69 @@ const selectOptionsFacts = (session: AgentSessionState | null): OptionsFacts =>
 
 const noDraftSelection = (): void => {};
 
-function SessionOptions({
+function useSessionModelField({
   repoPath,
-  identity: routeIdentity,
+  identity,
+  readOnly,
+  runtime,
+  selection,
+  refreshCatalog,
+  handleSelectModelPair,
 }: {
   repoPath: string;
   identity: AgentSessionIdentity;
+  readOnly: boolean;
+  runtime: ModelPickerRuntime | null;
+  selection: OptionsFacts["selectedModel"];
+  refreshCatalog: () => void;
+  handleSelectModelPair: ReturnType<typeof useModelSelectionActions>["handleSelectModelPair"];
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const handoff = useHandoffSelection(repoPath, readOnly ? null : identity);
+  const destinations = useHandoffModelRuntimes({
+    repoPath,
+    identity: readOnly ? null : identity,
+    open: pickerOpen,
+  });
+  const runtimeKind = identity.runtimeKind;
+  const chooseModel = useCallback(
+    (value: ModelPickerValue) => {
+      if (value.runtimeKind !== runtimeKind) {
+        const target = destinations.find(value);
+        if (target) handoff.choose(value, target);
+        return;
+      }
+      if (!handoff.clear()) return;
+      const target = selectableModelPickerCatalog(runtime?.resource);
+      if (target) handleSelectModelPair(value, target);
+    },
+    [destinations, handleSelectModelPair, handoff, runtime, runtimeKind],
+  );
+
+  const runtimeLabel = RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].label;
+  return {
+    runtimes: [...(runtime ? [runtime] : NO_RUNTIMES), ...destinations.runtimes],
+    fallbackRuntimeKind: runtimeKind,
+    selection: handoff.selection?.model ?? selection,
+    hint: handoff.selection
+      ? `${runtimeLabel} to ${RUNTIME_DESCRIPTORS_BY_KIND[handoff.selection.model.runtimeKind].label}. Send shares earlier messages and selected chat activity.`
+      : `Runtime: ${runtimeLabel}. Model changes apply to the next turn.`,
+    onOpen: () => {
+      setPickerOpen(true);
+      refreshCatalog();
+    },
+    onChoose: chooseModel,
+  };
+}
+
+function SessionOptions({
+  repoPath,
+  identity: routeIdentity,
+  readOnly,
+}: {
+  repoPath: string;
+  identity: AgentSessionIdentity;
+  readOnly: boolean;
 }): ReactElement {
   const identity = useStableAgentSessionIdentity(routeIdentity);
   const gate = useCommandGate();
@@ -156,16 +220,15 @@ function SessionOptions({
       }),
     };
   }, [catalog, catalogQuery.error, catalogQuery.isLoading, descriptor, retry]);
-  const { handleSelectModelPair } = actions;
-  const chooseModel = useCallback(
-    (value: ModelPickerValue) => {
-      const target = selectableModelPickerCatalog(runtime?.resource);
-      if (target) handleSelectModelPair(value, target);
-    },
-    [handleSelectModelPair, runtime],
-  );
-
-  const runtimeLabel = RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].label;
+  const modelField = useSessionModelField({
+    repoPath,
+    identity: routeIdentity,
+    readOnly,
+    runtime,
+    selection,
+    refreshCatalog,
+    handleSelectModelPair: actions.handleSelectModelPair,
+  });
   const supportsProfiles = descriptor?.capabilities.optionalSurfaces.supportsProfiles ?? false;
 
   const modelName = modelSummary(runtime ? [runtime] : NO_RUNTIMES, selection, runtimeKind).title;
@@ -202,17 +265,11 @@ function SessionOptions({
             </FormField>
           ) : null}
           <ModelField
-            runtimes={runtime ? [runtime] : NO_RUNTIMES}
+            {...modelField}
             favorites={favorites}
-            lock={{ runtimeKind, reason: LOCK_REASON }}
-            selection={selection}
-            fallbackRuntimeKind={runtimeKind}
             placeholder={catalogQuery.isLoading ? "Loading models…" : "Model"}
             disabled={disabled}
             pickerDisabled={disabled}
-            hint={`Runtime: ${runtimeLabel}. ${LOCK_REASON} Changes apply to the next turn.`}
-            onOpen={refreshCatalog}
-            onChoose={chooseModel}
           />
           <EffortField
             effort={{

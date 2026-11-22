@@ -96,6 +96,8 @@ While a recorded local merge waits for its publication, the host rejects every w
 
 Cleanup releases the live state of the task sessions before it removes the task worktree. A later runtime read then does not report the removed worktree as a session fault, so Delete can run on the closed task.
 
+The host refuses task-session cleanup while a runtime handoff is unresolved. Use Check delivery in the task's Agent Studio chat, then retry the cleanup action.
+
 ## Approval modal
 
 The approval modal offers Direct Merge, Pull Request, and Close Task. Pull Request needs a provider that supports pull requests. A pull request keeps the task state. Close Task runs `task_close`, so it merges no code and changes no pull request.
@@ -148,6 +150,8 @@ The global setting `git.removeWorktreeOnClose` sets whether a close removes the 
 Each user close command takes a required `removeWorktree` value: `task_close`, `task_direct_merge`, `task_direct_merge_complete`, and `task_pull_request_link_merged`. Its confirmation starts from the task value, else the setting. The choice applies to that close only. Pull request sync has no confirmation, so it uses the task value, else the setting.
 
 A confirmed close removes the task worktree, the session worktrees, and the related local branches. Pull request sync removes only the worktree of the source branch and that branch, and uncommitted files make that close fail. A close that keeps the worktree still stops task terminals.
+
+An unresolved runtime handoff blocks task closure, direct merge, and Remove Worktree before they stop sessions or terminals or change Git state. Use Check delivery in the task's Agent Studio chat, then retry the action.
 
 ## Remove worktree
 

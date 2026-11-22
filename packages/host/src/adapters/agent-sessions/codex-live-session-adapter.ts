@@ -221,57 +221,70 @@ export const createCodexLiveSessionAdapterPreparer = ({
         listSnapshots: projection.listSnapshots,
         readSnapshot: projection.readSnapshot,
         loadContext: (input) =>
-          Effect.gen(function* () {
-            const hasSnapshot = projection.hasSnapshot(input);
-            const usage = hasSnapshot
-              ? yield* Effect.tryPromise({
-                  try: () =>
-                    controller.loadLiveSessionContextUsage({
-                      runtimeId: runtime.runtimeId,
-                      externalSessionId: input.externalSessionId,
-                    }),
-                  catch: sessionError("codex-live-session.load-context", input.externalSessionId),
-                })
-              : yield* Effect.gen(function* () {
-                  const sessionScope = input.sessionScope;
-                  if (sessionScope === undefined) {
-                    return yield* Effect.fail(
-                      new HostValidationError({
-                        field: "sessionScope",
-                        message:
-                          "Loading an unloaded Codex session context requires session scope.",
-                        details: {
+          input.handoffModelId
+            ? Effect.tryPromise({
+                try: async () => {
+                  const contextWindow = input.handoffModelId
+                    ? await controller.loadHandoffContextWindow?.(input, input.handoffModelId)
+                    : undefined;
+                  return contextWindow ? { totalTokens: 0, contextWindow } : null;
+                },
+                catch: sessionError("codex-live-session.handoff-context", input.externalSessionId),
+              })
+            : Effect.gen(function* () {
+                const hasSnapshot = projection.hasSnapshot(input);
+                const usage = hasSnapshot
+                  ? yield* Effect.tryPromise({
+                      try: () =>
+                        controller.loadLiveSessionContextUsage({
                           runtimeId: runtime.runtimeId,
                           externalSessionId: input.externalSessionId,
-                        },
-                      }),
-                    );
-                  }
-                  const policy = yield* resolveRuntimePolicy({ ...input, sessionScope });
-                  return yield* Effect.tryPromise({
-                    try: () =>
-                      controller.loadSessionContextUsage({
-                        repoPath: input.repoPath,
-                        runtimeKind: "codex",
-                        workingDirectory: input.workingDirectory,
-                        externalSessionId: input.externalSessionId,
-                        sessionScope,
-                        runtimePolicy: { kind: "codex", policy },
-                      }),
-                    catch: sessionError(
-                      "codex-live-session.load-persisted-context",
-                      input.externalSessionId,
-                    ),
-                  });
-                });
-            const normalized = yield* parseCodexLiveSessionOutput(
-              agentSessionLiveLoadContextResultSchema,
-              usage,
-              "codex-live-session.normalize-context",
-            );
-            yield* refreshProjection();
-            return normalized;
-          }),
+                        }),
+                      catch: sessionError(
+                        "codex-live-session.load-context",
+                        input.externalSessionId,
+                      ),
+                    })
+                  : yield* Effect.gen(function* () {
+                      const sessionScope = input.sessionScope;
+                      if (sessionScope === undefined) {
+                        return yield* Effect.fail(
+                          new HostValidationError({
+                            field: "sessionScope",
+                            message:
+                              "Loading an unloaded Codex session context requires session scope.",
+                            details: {
+                              runtimeId: runtime.runtimeId,
+                              externalSessionId: input.externalSessionId,
+                            },
+                          }),
+                        );
+                      }
+                      const policy = yield* resolveRuntimePolicy({ ...input, sessionScope });
+                      return yield* Effect.tryPromise({
+                        try: () =>
+                          controller.loadSessionContextUsage({
+                            repoPath: input.repoPath,
+                            runtimeKind: "codex",
+                            workingDirectory: input.workingDirectory,
+                            externalSessionId: input.externalSessionId,
+                            sessionScope,
+                            runtimePolicy: { kind: "codex", policy },
+                          }),
+                        catch: sessionError(
+                          "codex-live-session.load-persisted-context",
+                          input.externalSessionId,
+                        ),
+                      });
+                    });
+                const normalized = yield* parseCodexLiveSessionOutput(
+                  agentSessionLiveLoadContextResultSchema,
+                  usage,
+                  "codex-live-session.normalize-context",
+                );
+                yield* refreshProjection();
+                return normalized;
+              }),
         loadSessionDiff: (input) => {
           const request: Parameters<typeof controller.loadSessionDiff>[0] = {
             repoPath: input.repoPath,

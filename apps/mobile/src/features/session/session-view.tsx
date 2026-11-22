@@ -1,4 +1,4 @@
-import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { useRouter } from "expo-router";
 import { type ComponentRef, memo, type ReactElement, useCallback, useRef, useState } from "react";
 import { ScrollView, TextInput, useWindowDimensions, View } from "react-native";
@@ -52,8 +52,12 @@ export const SessionView = memo(function SessionView(): ReactElement {
   const [availableHeight, setAvailableHeight] = useState(0);
   const { workspaceId } = workspace;
   const openSubagent = useCallback(
-    (identity: AgentSessionIdentity) =>
-      router.push(routes.session({ ...sessionParams(workspaceId, identity), readOnly: "1" })),
+    ({ sessionScope, ...identity }: AgentSessionTranscriptTarget) => {
+      const params = sessionParams(workspaceId, identity);
+      params.readOnly = "1";
+      if (sessionScope) params.transcriptScope = JSON.stringify(sessionScope);
+      router.push(routes.session(params));
+    },
     [router, workspaceId],
   );
   const onSent = latestSignal.emit;

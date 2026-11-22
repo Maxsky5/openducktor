@@ -66,15 +66,11 @@ export const TaskSessionsSection = memo(function TaskSessionsSection({
               row={row}
               iconHint={group.iconHint}
               started={formatElapsedAgo(now - Date.parse(row.startedAt))}
-              onPress={() =>
-                router.push(
-                  routes.session({
-                    ...sessionParams(workspaceId, row.identity),
-                    title: taskTitle,
-                    task: "1",
-                  }),
-                )
-              }
+              onPress={() => {
+                const params = sessionParams(workspaceId, row.identity);
+                if (row.historical) params.pinSession = "1";
+                router.push(routes.session({ ...params, title: taskTitle, task: "1" }));
+              }}
             />
           )),
         )}

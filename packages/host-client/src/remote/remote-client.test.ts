@@ -194,6 +194,41 @@ const runtimeEvent: HostEventEnvelope = {
   payload: { type: "runtime_impact_changed", runtimeKinds: ["opencode"] },
 };
 
+test("does not invoke a handoff when the remote channel opens on a replacement host", async () => {
+  const f = fixture();
+  const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
+  const connecting = remote.connect();
+  try {
+    const refusal = await remote.client
+      .agentChatHandoffSend(
+        {
+          chat: {
+            kind: "workspace_session",
+            workspaceId: "workspace",
+            repoPath: "/repo",
+            sessionId: "chat",
+          },
+          expectedActive: {
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+            externalSessionId: "source",
+          },
+          destination: { runtimeKind: "codex", providerId: "openai", modelId: "gpt" },
+          submissionId: "send",
+          parts: [{ kind: "text", text: "hello" }],
+        },
+        { expectedHostEpoch: "previous-host" },
+      )
+      .catch((cause: unknown) => cause);
+    await connecting;
+    expect(refusal).toMatchObject({ message: expect.stringContaining("host changed") });
+    expect(f.channel.requests.filter(({ method }) => method === "invoke")).toEqual([]);
+    expect(remote.readState().status).toBe("connected");
+  } finally {
+    await remote.disconnect();
+  }
+});
+
 test("applies a finite synchronization barrier and canonicalizes manual addresses", async () => {
   const f = fixture();
   const syncing = latch<void>();

@@ -57,6 +57,13 @@
       "when": 1795606340870,
       "tag": "0007_workspace_default_model_speed",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1795635031748,
+      "tag": "0008_runtime_handoffs",
+      "breakpoints": true
     }
   ]
 }

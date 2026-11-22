@@ -51,6 +51,7 @@ export type RuntimeModelCatalogQueryResource = RuntimeModelCatalogResource & {
 
 type CatalogQueryScope = {
   repoPath: string | null;
+  workingDirectory?: string | undefined;
   runtimeKinds: readonly RuntimeKind[];
   enabledRuntimeKinds: readonly RuntimeKind[];
 };
@@ -75,6 +76,7 @@ const sourceQueryOptions = (
   repoPath: string,
   runtimeKind: RuntimeKind,
   source: LiveCatalogSource | PreviewCatalogSource,
+  workingDirectory = repoPath,
 ) => {
   if (source.loadPreviewModels) {
     return catalogQueryOptions(
@@ -88,7 +90,7 @@ const sourceQueryOptions = (
     );
   }
   return runtimeCatalogQueryOptions(
-    { repoPath, runtimeKind, workingDirectory: repoPath },
+    { repoPath, runtimeKind, workingDirectory },
     source.loadRuntimeCatalog,
   );
 };
@@ -170,7 +172,7 @@ export function useRuntimeModelCatalogQuery({
 }
 
 export function useRuntimeModelCatalogs(args: UseRuntimeModelCatalogsArgs) {
-  const { repoPath, runtimeKinds, enabledRuntimeKinds } = args;
+  const { repoPath, workingDirectory, runtimeKinds, enabledRuntimeKinds } = args;
   const runtimeStatus = useHostRuntimeStatusContext();
   const source = useMemo<LiveCatalogSource | PreviewCatalogSource>(() => {
     if (args.loadPreviewModels) {
@@ -196,7 +198,7 @@ export function useRuntimeModelCatalogs(args: UseRuntimeModelCatalogsArgs) {
     queries: uniqueRuntimeKinds.map((runtimeKind, index) => {
       return {
         ...(repoPath
-          ? sourceQueryOptions(repoPath, runtimeKind, source)
+          ? sourceQueryOptions(repoPath, runtimeKind, source, workingDirectory)
           : skippedSourceQueryOptions(runtimeKind, source)),
         enabled:
           hasRepoPath &&
@@ -220,7 +222,10 @@ export function useRuntimeModelCatalogs(args: UseRuntimeModelCatalogsArgs) {
           if (repoPath === null) {
             throw new Error("A repository path is required to retry the model catalog.");
           }
-          await retryCatalogRead(queryClient, sourceQueryOptions(repoPath, runtimeKind, source));
+          await retryCatalogRead(
+            queryClient,
+            sourceQueryOptions(repoPath, runtimeKind, source, workingDirectory),
+          );
         };
         return {
           runtimeKind,
@@ -241,6 +246,7 @@ export function useRuntimeModelCatalogs(args: UseRuntimeModelCatalogsArgs) {
       repoPath,
       source,
       uniqueRuntimeKinds,
+      workingDirectory,
     ],
   );
 

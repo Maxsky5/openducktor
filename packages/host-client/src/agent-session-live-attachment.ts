@@ -8,7 +8,7 @@ import {
 type AgentSessionLiveAttachment = {
   accept: (envelope: AgentSessionLiveEnvelope) => void;
   /** Installs a host snapshot, then delivers the changes it does not cover. */
-  install: (snapshot: AgentSessionLiveSnapshotEnvelope) => void;
+  install: (snapshot: AgentSessionLiveSnapshotEnvelope, hostEpoch?: string | null) => void;
   /**
    * Holds new changes, as when the connection drops. A reconnect then decides: `resume` after a
    * replay that has every missed change of the repository, `restart` after a gap.
@@ -67,7 +67,7 @@ export const createAgentSessionLiveAttachment = (
       }
       deliver(envelope);
     },
-    install: (snapshot) => {
+    install: (snapshot, hostEpoch) => {
       if (snapshot.sequence === undefined) {
         throw new Error(
           `The live-session snapshot of '${repoPath}' has no host sequence. Restart the host.`,
@@ -84,6 +84,7 @@ export const createAgentSessionLiveAttachment = (
         isConnectionSnapshot: true,
       };
       if (historyReplayGap) connected.historyReplayGap = true;
+      if (hostEpoch) connected.hostEpoch = hostEpoch;
       listener(connected);
       historyReplayGap = false;
       for (const envelope of buffered) deliver(envelope);

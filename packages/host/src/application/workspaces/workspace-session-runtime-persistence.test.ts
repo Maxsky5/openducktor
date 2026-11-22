@@ -858,6 +858,7 @@ describe("Workspace Session persistence through the shared command module", () =
       },
       lifecycle: createTaskSessionLifecycleCoordinator(),
       operationGate: h.operationGate,
+      hasUnresolvedHandoff: () => false,
       sessionTitleGate: h.sessionTitleGate,
       isTitleSyncPending: h.persistence.isTitleSyncPending,
       markTitleSyncPending: h.persistence.markTitleSyncPending,

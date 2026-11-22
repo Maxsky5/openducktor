@@ -556,6 +556,7 @@ describe("task worktree cleanup", () => {
     const reads: Fiber.Fiber<number>[] = [];
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.die(new Error("unexpected live session count")),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: (input) =>
         Effect.sync(() => {
           calls.push({

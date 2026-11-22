@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentImageGenerationPart, AgentSessionLiveRef } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+  type AgentImageGenerationPart,
+  type AgentSessionLiveRef,
+} from "@openducktor/contracts";
 import {
   imageGenerationFailureText,
   imageGenerationStatusLabel,
@@ -14,6 +19,7 @@ const ref: AgentSessionLiveRef = {
 };
 
 const OUTPUT = { revision: "r1" };
+const runtimes = [CODEX_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR];
 
 const part = (overrides: Partial<AgentImageGenerationPart>): AgentImageGenerationPart => ({
   kind: "image_generation",
@@ -36,7 +42,11 @@ describe("image generation model", () => {
 
   test("plans a metadata read for a saved image without output", () => {
     expect(
-      resolveGeneratedImagePreviewPlan(part({ savedPath: "/tmp/a.png", turnId: "t1" }), ref, true),
+      resolveGeneratedImagePreviewPlan(
+        part({ savedPath: "/tmp/a.png", turnId: "t1" }),
+        ref,
+        runtimes,
+      ),
     ).toEqual({
       kind: "metadata",
       ref,
@@ -46,7 +56,7 @@ describe("image generation model", () => {
   });
 
   test("plans a revision read for an image with output", () => {
-    expect(resolveGeneratedImagePreviewPlan(part({ output: OUTPUT }), ref, true)).toEqual({
+    expect(resolveGeneratedImagePreviewPlan(part({ output: OUTPUT }), ref, runtimes)).toEqual({
       kind: "revision",
       ref,
       itemId: "item-1",
@@ -55,7 +65,10 @@ describe("image generation model", () => {
   });
 
   test("reports a runtime without image previews", () => {
-    expect(resolveGeneratedImagePreviewPlan(part({}), ref, false).kind).toBe("unsupported");
+    expect(
+      resolveGeneratedImagePreviewPlan(part({}), { ...ref, runtimeKind: "opencode" }, runtimes)
+        .kind,
+    ).toBe("unsupported");
   });
 
   test("gives the next steps of a failure", () => {

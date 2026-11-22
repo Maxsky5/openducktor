@@ -66,6 +66,13 @@ const GENERIC_ATTACHMENT_DEFAULT_NAME = "pasted-attachment";
 
 export const CHAT_ATTACHMENT_ACCEPT = "image/*,audio/*,video/*,.pdf,application/pdf";
 
+export const CHAT_ATTACHMENT_PICKER_TYPES = {
+  image: "image/*",
+  audio: "audio/*",
+  video: "video/*",
+  pdf: "application/pdf",
+} satisfies Record<AgentAttachmentKind, string>;
+
 const readFileExtension = (name: string): string => {
   const lastDot = name.lastIndexOf(".");
   return lastDot >= 0 ? name.slice(lastDot).toLowerCase() : "";

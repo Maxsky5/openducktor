@@ -224,6 +224,9 @@ export const codexTurnItemsFromThreadRead = (
   });
 };
 
+export const codexUserMessageId = (item: Extract<CodexTimedThreadItem, { type: "userMessage" }>) =>
+  item.clientId?.startsWith("odt-handoff-") ? item.clientId : item.id;
+
 export const toHistoryMessage = (
   item: CodexTimedThreadItem | undefined,
   model?: AgentModelSelection,
@@ -244,7 +247,7 @@ export const toHistoryMessage = (
       return null;
     }
     const historyMessage: import("@openducktor/core").AgentSessionHistoryMessage = {
-      messageId,
+      messageId: codexUserMessageId(item),
       role: "user",
       timestamp: messageTimestamp,
       text,

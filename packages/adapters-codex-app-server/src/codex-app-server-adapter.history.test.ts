@@ -133,6 +133,72 @@ const historyErrorTransport = (
 };
 
 describe("CodexAppServerAdapter history loading", () => {
+  test("preserves the exact handoff input while the first rollout is still in memory", async () => {
+    const runtimeStream = createRuntimeStreamSubscription();
+    const { adapter } = createHarness({ subscribeEvents: runtimeStream.subscribeEvents });
+    const admissionId = "odt-handoff-first-turn";
+    const historyPrefix = 'Prior context.\nUser: "Résumé."\n\n';
+    try {
+      await adapter.startSession(codexStartSessionInput());
+      const ref = codexSessionRef();
+      await adapter.sendUserMessage(
+        codexUserMessageInput({
+          ...ref,
+          parts: [{ kind: "text", text: "Continue." }],
+          handoff: { admissionId, historyPrefix },
+        }),
+      );
+      const history = await adapter.loadSessionHistory(ref);
+      expect(history.filter(({ role }) => role === "user")).toEqual([
+        expect.objectContaining({ messageId: admissionId, text: historyPrefix + "Continue." }),
+      ]);
+    } finally {
+      adapter.releaseRuntime("runtime-live");
+    }
+  });
+
+  test("keeps the handoff admission ID when reading a saved turn", async () => {
+    const base = new RecordingTransport("runtime-live", false);
+    const externalSessionId = "thread-idle";
+    const clientId = "odt-handoff-admission";
+    const thread = {
+      id: externalSessionId,
+      cwd: "/repo",
+      turns: [
+        {
+          id: "turn",
+          status: "completed" as const,
+          items: [
+            codexUserMessageItemFixture({
+              id: "native-message-id",
+              clientId,
+              content: [{ type: "text", text: "Prior context.\n\nContinue.", text_elements: [] }],
+            }),
+          ],
+        },
+      ],
+    };
+    const adapter = createAdapterWithTransport({
+      request: async (request) => {
+        if (request.method === "thread/read") return paginatedThreadReadResponse(thread);
+        if (request.method === "thread/turns/list") return paginatedTurnsListResponse(thread);
+        return base.request(request);
+      },
+    });
+    try {
+      const history = await adapter.loadSessionHistory(codexSessionRuntimeRef(externalSessionId));
+      expect(history).toEqual([
+        expect.objectContaining({
+          role: "user",
+          messageId: clientId,
+          text: "Prior context.\n\nContinue.",
+        }),
+      ]);
+    } finally {
+      adapter.releaseRuntime("runtime-live");
+    }
+  });
+
   test("native history keeps the running turn model after a next-turn model change", async () => {
     const base = new RecordingTransport("runtime-live", false);
     const active = codexTurnFixture({

@@ -193,6 +193,8 @@ describe("live sessions across a reconnect", () => {
     const controls: unknown[] = [];
     try {
       await connection.waitForAdmission();
+      const hostEpoch = connection.remote.readState().host?.hostInstanceId;
+      expect(hostEpoch).toBeString();
       const stopProgress = await connection.subscribeStartupProgress((event) => {
         controls.push(event);
       });
@@ -229,6 +231,7 @@ describe("live sessions across a reconnect", () => {
                 messageQueues: [],
                 sequence: 1,
                 isConnectionSnapshot: true,
+                hostEpoch,
               },
               transcriptEvent("before", 2),
               transcriptEvent("missed", 3),
@@ -242,6 +245,7 @@ describe("live sessions across a reconnect", () => {
                 messageQueues: [],
                 sequence: 1,
                 isConnectionSnapshot: true,
+                hostEpoch,
               },
               transcriptEvent("before", 2),
               {
@@ -252,6 +256,7 @@ describe("live sessions across a reconnect", () => {
                 sequence: 2,
                 isConnectionSnapshot: true,
                 historyReplayGap: true,
+                hostEpoch,
               },
               transcriptEvent("after", 4),
             ],

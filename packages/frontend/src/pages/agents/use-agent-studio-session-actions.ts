@@ -15,6 +15,7 @@ import type {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import { useCallback } from "react";
+import { useAgentStudioRuntimeHandoff } from "./session-actions/use-agent-studio-runtime-handoff";
 import type { SessionStartModalModel } from "@openducktor/frontend-core/sessions/start/session-start-modal-model";
 import { hasSettledLatestTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import {
@@ -201,6 +202,14 @@ export function useAgentStudioSessionActions({
   } = useAgentStudioSessionStartFlow(sessionStartInput);
 
   const stableSelectedSessionIdentity = useStableAgentSessionIdentity(selectedSessionIdentity);
+  const handoff = useAgentStudioRuntimeHandoff(
+    activeWorkspaceId && workspaceRepoPath
+      ? { workspaceId: activeWorkspaceId, repoPath: workspaceRepoPath, taskId, role }
+      : null,
+    stableSelectedSessionIdentity,
+    selectedSession.handoffSource,
+    selectAgentStudioSelection,
+  );
   const sendTarget = useAgentStudioSendTarget({
     workspaceId: activeWorkspaceId,
     taskId,
@@ -232,6 +241,7 @@ export function useAgentStudioSessionActions({
     draftRules: { reusablePrompts, supportsAttachments },
     sendAgentMessage,
     target: sendTarget,
+    handoff,
   });
 
   const isSessionWorking = sessionState.isSessionWorking;

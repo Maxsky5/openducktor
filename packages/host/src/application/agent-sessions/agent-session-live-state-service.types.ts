@@ -61,6 +61,7 @@ export type AgentSessionLiveStateService = {
     expectedRuntimeId?: string,
   ) => Effect.Effect<StartupPreparedHandoff, HostError>;
   readonly readStartedRoots: (repoPath: string) => AgentSessionAuthorizedRoot[];
+  readonly hasHandoffBlocker: (ref: AgentSessionLiveRef) => boolean;
   readonly resolvePendingApproval: (
     input: Parameters<AgentSessionLiveAdapterPort["resolvePendingApproval"]>[0],
   ) => Effect.Effect<
@@ -192,6 +193,9 @@ export type CreateAgentSessionLiveStateServiceInput = {
   ) => void;
   /** Feeds each live change to the host workflow observers: approvals, operations, and auto-resume. */
   readonly observeWorkflowInput?: (envelope: AgentSessionLiveEnvelope) => void;
+  readonly projectLiveEnvelope?: (
+    envelope: AgentSessionLiveEnvelope,
+  ) => Effect.Effect<AgentSessionLiveEnvelope, HostError>;
   readonly coordinator?: LiveStateCoordinator;
   readonly messageQueues: AgentMessageQueueObserver;
   /** Runs after a runtime adapter registers and restores its sessions. It must not block. */

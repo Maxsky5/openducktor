@@ -102,6 +102,7 @@ export const createTaskCloseUseCase = ({
           : { worktreePaths: noRemovedWorktrees, branchNames: [] };
         if (hasWorkflowSessions && taskActivityGuard) {
           const { stoppedSessionCount } = yield* taskActivityGuard.cleanupTaskSessions({
+            workspaceId: input.workspaceId,
             repoPath: effectiveRepoPath,
             taskSessions: [
               {
@@ -140,6 +141,7 @@ export const createTaskCloseUseCase = ({
           operation: "close task",
           repoPath: effectiveRepoPath,
           taskId,
+          taskActivityGuard,
           taskSessionLifecycleCoordinator,
           taskStore,
           decide: coreTaskTransition(taskWorkflows, "close"),

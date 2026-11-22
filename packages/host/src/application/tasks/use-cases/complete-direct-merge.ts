@@ -66,6 +66,12 @@ export const createTaskCompleteDirectMergeUseCase = ({
         yield* completionState.publish(state);
         return enrichTask(workflow, current);
       }
+      if (taskActivityGuard) {
+        yield* taskActivityGuard.ensureNoUnresolvedHandoff({
+          workspaceId: input.workspaceId,
+          taskId,
+        });
+      }
       if (metadata.agentSessions.length) {
         if (!taskActivityGuard)
           return yield* new HostDependencyError({

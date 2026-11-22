@@ -68,6 +68,9 @@ const codexAppServerThreadResumeResultSchema = codexAppServerThreadLaunchResultS
 const codexAppServerConfigReadResponseSchema = z.object({
   config: z.object({
     mcp_servers: z.record(z.string(), z.unknown()).nullable().optional(),
+    model_provider: z.string().nullable().optional(),
+    model_context_window: z.number().int().positive().nullable().optional(),
+    model_auto_compact_token_limit: z.number().int().positive().nullable().optional(),
   }),
   /** The configuration layers, with `includeLayers`. `name.type` names the source of a layer. */
   layers: z

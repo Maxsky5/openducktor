@@ -1,5 +1,9 @@
-import { agentSessionRecordSchema, type AgentSessionRecord } from "@openducktor/contracts";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import {
+  agentSessionRecordSchema,
+  chatHandoffReadSchema,
+  type AgentSessionRecord,
+} from "@openducktor/contracts";
+import { and, asc, desc, eq, getTableColumns, inArray } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { Effect } from "effect";
 import { sqliteBatches, sqliteValues } from "./sqlite-parameters";
@@ -7,6 +11,8 @@ import { normalizeLabels } from "../../domain/task/task-labels";
 import { parseAgentSessionStartedAt } from "../../domain/agent-session-records";
 import { validateWithSchema } from "./sqlite-task-store-validation";
 import { SqliteTaskStoreDataError } from "./sqlite-task-store-errors";
+import { taskHandoffLinksSql } from "./sqlite-runtime-handoffs";
+import { selectedModelColumns } from "./sqlite-session-model-columns";
 import {
   taskLabels,
   taskSessions,
@@ -19,15 +25,6 @@ export const taskRelationScope = (
   workspaceId: string,
   taskId: string,
 ) => and(eq(table.workspaceId, workspaceId), eq(table.taskId, taskId));
-
-export const selectedModelColumns = (model: AgentSessionRecord["selectedModel"]) => ({
-  modelRuntimeKind: model?.runtimeKind ?? null,
-  modelProviderId: model?.providerId ?? null,
-  modelId: model?.modelId ?? null,
-  modelVariant: model?.variant ?? null,
-  modelProfileId: model?.profileId ?? null,
-  modelSpeed: model?.speed ?? null,
-});
 
 export const readTaskLabels = (session: HostDatabaseSession, workspaceId: string, taskId: string) =>
   session
@@ -81,7 +78,7 @@ export const readTaskSessionsWithPositions = (
     const rows = yield* session.execute(
       (db) =>
         db
-          .select()
+          .select({ ...getTableColumns(taskSessions), handoffLinks: taskHandoffLinksSql })
           .from(taskSessions)
           .where(taskRelationScope(taskSessions, workspaceId, taskId))
           .orderBy(desc(taskSessions.startedAt), asc(taskSessions.position)),
@@ -124,7 +121,7 @@ export const readTaskSessionsForTasks = (
     const rows = yield* session.execute(
       (db) =>
         db
-          .select()
+          .select({ ...getTableColumns(taskSessions), handoffLinks: taskHandoffLinksSql })
           .from(taskSessions)
           .where(
             and(
@@ -208,7 +205,7 @@ const taskSessionToRow = (
     };
   });
 
-const taskSessionFromRow = (row: TaskSessionRow) =>
+const taskSessionFromRow = (row: TaskSessionRow & { handoffLinks: string }) =>
   Effect.gen(function* () {
     if (!Number.isInteger(row.startedAt) || Math.abs(row.startedAt) > 8640000000000000)
       return yield* new SqliteTaskStoreDataError({
@@ -240,6 +237,16 @@ const taskSessionFromRow = (row: TaskSessionRow) =>
         externalSessionId: row.externalSessionId,
       },
     );
+    const handoff = yield* Effect.try({
+      try: () => chatHandoffReadSchema.parse({ links: JSON.parse(row.handoffLinks) }),
+      catch: (cause) =>
+        new SqliteTaskStoreDataError({
+          field: "handoff",
+          message: "Stored task handoff links are invalid. Restore a valid database backup.",
+          cause,
+        }),
+    });
+    if (handoff.links.length) record.handoff = handoff;
     return {
       ...record,
       externalSessionId: row.externalSessionId,

@@ -73,6 +73,7 @@ export type AgentChatThreadModel = {
 };
 
 export type AgentChatComposerModel = {
+  handoff?: import("@openducktor/frontend-core/sessions/send/agent-chat.types").AgentChatSend["handoff"];
   displayedSessionKey: string | null;
   isInteractionEnabled: boolean;
   isReadOnly: boolean;

@@ -47,6 +47,7 @@ const service = () =>
     settingsConfig: createBuildSettingsConfig(new Set([harness.repoPath]), harness.repoPath),
     taskActivityGuard: {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: () =>
         Effect.promise(async () => {
           await options.onSessionCleanup?.();

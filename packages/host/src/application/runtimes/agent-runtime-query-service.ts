@@ -1,4 +1,5 @@
 import type {
+  AgentMessageTarget,
   RepoRuntimeRef,
   RuntimeDescriptor,
   RuntimeInstanceSummary,
@@ -31,6 +32,7 @@ import {
 } from "./runtime-history-working-directory";
 import { runtimeQueryError, type RuntimeQueryError } from "../../ports/runtime-query-error";
 import type { DeniedToolPartRecords } from "../agent-sessions/denied-tool-part-records";
+import type { HostError } from "../../effect/host-errors";
 
 export type AgentRuntimeQueryDependencies = RuntimeHistoryWorkingDirectoryDependencies & {
   adapterRegistry: AgentSessionLiveAdapterRegistryPort;
@@ -41,9 +43,20 @@ export type AgentRuntimeQueryDependencies = RuntimeHistoryWorkingDirectoryDepend
   worktreeReads: Pick<TaskSessionLifecycleCoordinator, "runWorktreeRead">;
   /** The live denials that runtime history does not keep. */
   deniedToolParts: Pick<DeniedToolPartRecords, "apply">;
+  isAcceptedHandoffMember?: Parameters<typeof requireSessionScope>[4];
+  isStagedHandoffMember?: ((ref: AgentMessageTarget) => boolean) | undefined;
+  projectHandoffHistory?: (
+    input: Parameters<AgentRuntimeQueryPort["loadSessionHistory"]>[0],
+    history: import("@openducktor/contracts").AgentSessionHistoryMessage[],
+  ) => Effect.Effect<import("@openducktor/contracts").AgentSessionHistoryMessage[], HostError>;
 };
 
 type QueryMethod = keyof NativeAgentRuntimeQueries;
+type LoadSessionHistory = AgentRuntimeQueryPort["loadSessionHistory"];
+type StagedHandoffHistoryInput = Parameters<LoadSessionHistory>[0] & AgentMessageTarget;
+type AgentRuntimeQueryService = AgentRuntimeQueryPort & {
+  loadStagedHandoffHistory: (input: StagedHandoffHistoryInput) => ReturnType<LoadSessionHistory>;
+};
 
 /**
  * Hold the worktree read guard until the query finishes and the host checks its runtime binding again.
@@ -51,7 +64,7 @@ type QueryMethod = keyof NativeAgentRuntimeQueries;
  */
 export const createAgentRuntimeQueryService = (
   dependencies: AgentRuntimeQueryDependencies,
-): AgentRuntimeQueryPort => {
+): AgentRuntimeQueryService => {
   const read = <Input extends QueryInput, Result>(
     method: QueryMethod,
     input: Input,
@@ -60,6 +73,7 @@ export const createAgentRuntimeQueryService = (
       input: Input,
       runtime: RuntimeInstanceSummary,
     ) => Effect.Effect<Result, RuntimeQueryError>,
+    authorize?: (input: Input) => Effect.Effect<void, RuntimeQueryError>,
   ): Effect.Effect<Result, RuntimeQueryError> =>
     Effect.gen(function* () {
       const repoPath = yield* resolveRepoPath(dependencies.gitPort, input.repoPath).pipe(
@@ -93,6 +107,7 @@ export const createAgentRuntimeQueryService = (
           }).pipe(
             Effect.as(false),
             Effect.catchTag("HostOperationError", (cause) =>
+              !authorize &&
               readsSavedSession(method) &&
               input.sessionScope?.kind === "workflow" &&
               hasNestedNodeErrorCode(cause, "ENOENT")
@@ -110,7 +125,15 @@ export const createAgentRuntimeQueryService = (
               `${runtime.descriptor.label} does not support this read.`,
             );
           }
-          yield* requireSessionScope(dependencies.taskReader, adapter, request, method);
+          yield* authorize
+            ? authorize(request)
+            : requireSessionScope(
+                dependencies.taskReader,
+                adapter,
+                request,
+                method,
+                dependencies.isAcceptedHandoffMember,
+              );
           if (readsRemovedWorktree) {
             yield* requireManagedHistoryDirectory(dependencies, {
               sessionScope: input.sessionScope,
@@ -179,7 +202,40 @@ export const createAgentRuntimeQueryService = (
               runtime.descriptor.capabilities.history.exposesCompletionState,
             ),
           ),
+          Effect.flatMap((history) => {
+            if (!dependencies.projectHandoffHistory) return Effect.succeed(history);
+            return dependencies
+              .projectHandoffHistory(request, history)
+              .pipe(
+                Effect.mapError((cause) =>
+                  runtimeQueryError(
+                    "loadSessionHistory",
+                    request,
+                    "scope_mismatch",
+                    "Cannot verify the runtime handoff context. Reload this session's history.",
+                    cause,
+                  ),
+                ),
+              );
+          }),
         ),
+      ),
+    loadStagedHandoffHistory: (input) =>
+      read(
+        "loadSessionHistory",
+        input,
+        (queries, request) => queries.loadSessionHistory(request),
+        (request) =>
+          dependencies.isStagedHandoffMember?.(request)
+            ? Effect.void
+            : Effect.fail(
+                runtimeQueryError(
+                  "loadSessionHistory",
+                  request,
+                  "scope_mismatch",
+                  "The staged handoff session is unavailable. Reopen the chat and check delivery again.",
+                ),
+              ),
       ),
     loadSessionTodos: (input) =>
       read("loadSessionTodos", input, (queries, request) => queries.loadSessionTodos(request)),

@@ -31,6 +31,7 @@ import {
   HostChannelProtocolError,
   HostChannelRequestError,
   openHostChannel,
+  requireHostInvocationEpoch,
   type HostChannelCursors,
   type HostChannelLoss,
   type HostChannelReplay,
@@ -39,6 +40,7 @@ import {
 import {
   readBytes,
   RemoteConnectionError,
+  RemoteRefusalError,
   RemoteReplyTooLargeError,
   remoteError,
   type RemoteTransport,
@@ -624,6 +626,7 @@ export const createRemoteHostClient = (
       else if ((!admission || channel?.generation !== generation) && pending)
         await waitForCaller(pending, callerSignal);
       const { generation: current } = currentConnection();
+      requireHostInvocationEpoch(options?.expectedHostEpoch, state.host?.hostInstanceId);
       // Replies have a size limit, so a history read asks a host that can do it for compact history.
       const body = command === LOAD_HISTORY_COMMAND && compactHistory ? compact(args) : args;
       let payload: JSONType;
@@ -949,7 +952,6 @@ const invalidFrame = (): RemoteConnectionError =>
     "The host channel sent an invalid protocol frame.",
     "Update the host or correct proxy WebSocket routing, then retry.",
   );
-class RemoteRefusalError extends RemoteConnectionError {}
 /** Throws the remote error of a failed channel request that is no command. */
 const throwChannelRequestError = (cause: unknown): never => {
   if (cause instanceof HostChannelProtocolError) throw invalidFrame();

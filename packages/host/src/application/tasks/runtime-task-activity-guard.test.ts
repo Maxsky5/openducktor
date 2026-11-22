@@ -8,7 +8,7 @@ import { createRuntimeTaskActivityGuard as createEffectRuntimeTaskActivityGuard 
 const createRuntimeTaskActivityGuard = (
   input: Omit<
     Parameters<typeof createEffectRuntimeTaskActivityGuard>[0],
-    "sessionService" | "settingsConfig" | "readSessionRootRefs"
+    "sessionService" | "settingsConfig" | "readSessionRootRefs" | "hasUnresolvedTaskHandoff"
   > & {
     sessionService?: Pick<AgentSessionLiveStateService, "list" | "releaseSession"> &
       Partial<Pick<AgentSessionLiveStateService, "stopSession">>;
@@ -20,6 +20,7 @@ const createRuntimeTaskActivityGuard = (
 ) =>
   createEffectRuntimeTaskActivityGuard({
     ...input,
+    hasUnresolvedTaskHandoff: () => false,
     readSessionRootRefs:
       input.readSessionRootRefs ??
       (() =>
@@ -195,6 +196,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     expect(
       await Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -243,6 +245,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -312,6 +315,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -353,6 +357,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -371,6 +376,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [
             {
@@ -400,6 +406,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -423,6 +430,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -449,6 +457,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -475,6 +484,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -503,6 +513,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -521,6 +532,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     await expect(
       Effect.runPromise(
         guard.cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [{ taskId: "task-1", sessions: [session()] }],
         }),
@@ -573,6 +585,7 @@ describe("createRuntimeTaskActivityGuard", () => {
     const error = await Effect.runPromise(
       guard
         .cleanupTaskSessions({
+          workspaceId: "repo",
           repoPath: "/repo",
           taskSessions: [
             {

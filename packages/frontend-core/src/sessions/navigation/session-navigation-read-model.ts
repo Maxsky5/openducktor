@@ -331,6 +331,14 @@ const taskEntries = (
     if (!taskHasSessionPage(task)) continue;
     const read = sources.taskSessions.get(task.id);
     if (read?.status !== "ready") continue;
+    const previousMembers = new Set(
+      read.data.flatMap(
+        (record) => record.handoff?.links.map(({ from }) => agentSessionIdentityKey(from)) ?? [],
+      ),
+    );
+    const activeRecords = read.data.filter(
+      (record) => !previousMembers.has(agentSessionIdentityKey(record)),
+    );
     const isBlocked = taskNeedsInput(task);
     if (read.data.length === 0) {
       // Only a current empty read proves that the task has no saved session.
@@ -357,7 +365,7 @@ const taskEntries = (
     }
     const hasActiveSession =
       live.kind === "ready" &&
-      read.data.some((record) => {
+      activeRecords.some((record) => {
         const { facts, statusFailure } = sessionLiveFactsOf(live, toAgentSessionIdentity(record));
         return (
           facts !== null &&
@@ -365,10 +373,11 @@ const taskEntries = (
           isAgentSessionActivityActive(facts.activityState)
         );
       });
-    const blockedRecord = isBlocked && !hasActiveSession ? latestStartedRecord(read.data) : null;
+    const blockedRecord =
+      isBlocked && !hasActiveSession ? latestStartedRecord(activeRecords) : null;
     let latest: SessionNavigationEntry | null = null;
     let needsInput = false;
-    for (const record of read.data) {
+    for (const record of activeRecords) {
       const identity = toAgentSessionIdentity(record);
       const liveFacts = sessionLiveFactsOf(live, identity);
       const { facts } = liveFacts;

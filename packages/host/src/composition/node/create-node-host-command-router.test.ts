@@ -6,6 +6,9 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  agentChatHandoffResultSchema,
+  type AgentChatRef,
+  type HandoffLink,
   type HostEventEnvelope,
   hostRuntimeSnapshotSchema,
   mcpBridgeDiscoveryFileSchema,
@@ -35,6 +38,14 @@ import type {
 } from "./node-host-command-router-types";
 import { createLiveSessionFaultLogger } from "./node-host-lifecycle-logger";
 import { repoConfigFixture } from "../../test-support/repo-config-fixture";
+import { openHostDatabaseTestConnection } from "../../adapters/sqlite/sqlite-task-store-test-support";
+import { createSqliteHostDatabaseManager } from "../../adapters/sqlite/sqlite-task-repository-context";
+import { builtinTaskWorkflows } from "../../test-support/task-workflows";
+import { createSqliteWorkspaceSessionStore } from "../../adapters/sqlite/sqlite-workspace-session-store";
+import { createSqliteRuntimeHandoffStore } from "../../adapters/sqlite/sqlite-runtime-handoffs";
+import { handoffChatKey } from "../../application/agent-sessions/runtime-handoff-result";
+import { nativeHandoffAdmission } from "./native-handoff-admission";
+import { workspaceSessionOwnership } from "../../test-support/workspace-session-ownership";
 
 const createRuntimeDistribution = () =>
   createSourceRuntimeDistribution(path.resolve(import.meta.dir, "../../../../.."));
@@ -224,6 +235,119 @@ const createRouter = async (input: {
 };
 
 describe("createNodeEffectHostCommandRouter", () => {
+  test("Check confirms a committed handoff after archive removes the chat worktree", async () => {
+    const repoPath = await realpath(await mkdtemp(path.join(tmpdir(), "odt-archived-handoff-")));
+    const configRoot = path.join(repoPath, "config");
+    const workspace = { workspaceId: "workspace", repoPath };
+    const config = createDefaultGlobalConfig();
+    config.workspaces[workspace.workspaceId] = repoConfigFixture(workspace);
+    const fixture = await createSharedSettingsFixture({
+      configPath: path.join(configRoot, "config.json"),
+      config,
+    });
+    await fixture.cleanup();
+    const manager = createSqliteHostDatabaseManager({
+      configDir: configRoot,
+      taskWorkflows: builtinTaskWorkflows,
+      openConnection: openHostDatabaseTestConnection,
+    });
+    const store = createSqliteWorkspaceSessionStore({
+      contextProvider: manager.withDatabase,
+      workspacesProvider: manager.readWorkspaces,
+    });
+    routerDirectories.push(repoPath);
+    const chat = {
+      ...workspace,
+      kind: "workspace_session",
+      sessionId: "chat",
+    } satisfies AgentChatRef;
+    const submissionId = "saved-send";
+    const worktree = {
+      kind: "local_worktree",
+      workingDirectory: path.join(repoPath, "removed"),
+      branchName: "feature/chat",
+      worktreeState: "present",
+    } as const;
+    const from = {
+      runtimeKind: "opencode",
+      workingDirectory: worktree.workingDirectory,
+      externalSessionId: "source",
+    } as const;
+    const to = { ...from, runtimeKind: "codex", externalSessionId: "destination" } as const;
+    const link: HandoffLink = {
+      from,
+      to,
+      firstMessageId: nativeHandoffAdmission.create(
+        "codex",
+        JSON.stringify([handoffChatKey(chat), submissionId]),
+      ),
+      partialHistory: false,
+    };
+    try {
+      await Effect.runPromise(
+        store.create({
+          ...workspace,
+          ownershipScope: workspaceSessionOwnership(workspace),
+          session: {
+            id: chat.sessionId,
+            runtimeKind: from.runtimeKind,
+            externalSessionId: from.externalSessionId,
+            executionTarget: worktree,
+            roleSnapshot: null,
+            selectedModel: null,
+            generatedTitle: null,
+            manualTitle: null,
+            targetBranch: null,
+            createdAt: 1,
+            updatedAt: 1,
+            archivedAt: null,
+          },
+        }),
+      );
+      await Effect.runPromise(
+        createSqliteRuntimeHandoffStore(manager.withDatabase).commit({
+          chat,
+          link,
+          model: { runtimeKind: "codex", providerId: "openai", modelId: "gpt" },
+          contextPrefix: null,
+          acceptedAt: 2,
+        }),
+      );
+      await Effect.runPromise(
+        store.archive({
+          ...workspace,
+          sessionId: chat.sessionId,
+          archivedAt: 3,
+          executionTarget: { ...worktree, worktreeState: "removed" },
+        }),
+      );
+    } finally {
+      await Effect.runPromise(manager.dispose());
+    }
+    const router = await createRouter({ configRoot, logger: createLogger().logger });
+    try {
+      const checked = agentChatHandoffResultSchema.parse(
+        await Effect.runPromise(router.invoke("agent_chat_handoff_check", { chat, submissionId })),
+      );
+      expect(checked.handoff).toMatchObject({ committed: true, acceptedLink: link });
+      const refused = await Effect.runPromise(
+        router.invoke("agent_chat_handoff_send", {
+          chat,
+          submissionId: "new-send",
+          expectedActive: to,
+          destination: { runtimeKind: "opencode", providerId: "openrouter", modelId: "gpt" },
+          parts: [{ kind: "text", text: "do not send" }],
+        }),
+      );
+      expect(refused).toMatchObject({
+        nativeOutcome: "not_issued",
+        failure: { message: expect.stringContaining("selected chat is unavailable") },
+      });
+    } finally {
+      await Effect.runPromise(router.dispose());
+    }
+  });
+
   test("backs up settings and finishes preference migration before startup returns", async () => {
     const configRoot = await mkdtemp(path.join(tmpdir(), "odt-startup-settings-"));
     const configPath = path.join(configRoot, "config.json");

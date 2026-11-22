@@ -1,4 +1,8 @@
-import type { AgentSessionScope, RepoRuntimeRef } from "@openducktor/contracts";
+import type {
+  AgentSessionLiveRef,
+  AgentSessionScope,
+  RepoRuntimeRef,
+} from "@openducktor/contracts";
 import { agentSessionRefsEqual } from "@openducktor/core";
 import { Effect } from "effect";
 import type { AgentSessionLiveAdapterPort } from "../../ports/agent-session-live-adapter-port";
@@ -20,6 +24,7 @@ export const requireSessionScope = (
   adapter: AgentSessionLiveAdapterPort,
   input: QueryInput,
   operation: string,
+  isAcceptedHandoffMember?: (ref: AgentSessionLiveRef, scope: AgentSessionScope) => boolean,
 ): Effect.Effect<void, RuntimeQueryError> =>
   Effect.gen(function* () {
     if (input.externalSessionId === undefined || input.workingDirectory === undefined) return;
@@ -51,6 +56,7 @@ export const requireSessionScope = (
     }
     if (input.sessionScope?.kind !== "workflow") return;
     const scope = input.sessionScope;
+    if (isAcceptedHandoffMember?.(ref, scope)) return;
     const metadata = yield* taskReader
       .getTaskMetadata({
         workspaceId: scope.workspaceId,

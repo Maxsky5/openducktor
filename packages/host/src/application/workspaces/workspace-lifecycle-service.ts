@@ -76,6 +76,7 @@ export type WorkspaceLifecycleService = {
 
 type CreateWorkspaceLifecycleServiceInput = {
   activity: WorkspaceActivityPort;
+  hasUnresolvedHandoff: (workspaceId: string) => boolean;
   admission: Pick<
     WorkspaceAdmissionService,
     | "blockWorkspace"
@@ -107,6 +108,7 @@ const blockingActivityMessage = (blockers: WorkspaceActivityBlocker[]): string =
 
 export const createWorkspaceLifecycleService = ({
   activity,
+  hasUnresolvedHandoff,
   admission,
   gitPort,
   settingsConfig,
@@ -196,6 +198,12 @@ export const createWorkspaceLifecycleService = ({
     repoConfig: RepoConfig,
   ) =>
     Effect.gen(function* () {
+      if (hasUnresolvedHandoff(input.workspaceId)) {
+        return yield* new HostValidationError({
+          field: "workspaceId",
+          message: "Use Check delivery in the affected chat before removing this workspace.",
+        });
+      }
       yield* assertNoBlockingActivity(repoConfig.repoPath);
       const startedRecord = yield* workspaceSettingsService.beginWorkspaceRemoval({
         workspaceId: input.workspaceId,

@@ -1,10 +1,12 @@
-import { createElement, type PropsWithChildren, type ReactElement, useState } from "react";
+import { createElement, type PropsWithChildren, type ReactElement, use, useState } from "react";
+import { createAgentSessionsStore } from "../sessions/agent-sessions-store";
 import {
   type AgentMessageQueuesStore,
   createAgentMessageQueuesStore,
 } from "../sessions/agent-message-queues-store";
 import {
   AgentMessageQueuesContext,
+  AgentSessionsContext,
   AgentOperationsContext,
   HostRuntimeStatusContext,
 } from "../sessions/session-contexts";
@@ -31,10 +33,12 @@ export function AgentChatSendProviders({
   queues,
   children,
 }: AgentChatSendProvidersProps): ReactElement {
+  const existingSessions = use(AgentSessionsContext);
   const [defaults] = useState(() => ({
     operations: createAgentOperationsFixture(),
     runtimeStatus: createHostRuntimeStatusContextValue(),
     queues: createAgentMessageQueuesStore(),
+    sessions: createAgentSessionsStore(null),
   }));
   return createElement(
     AgentOperationsContext,
@@ -42,7 +46,15 @@ export function AgentChatSendProviders({
     createElement(
       HostRuntimeStatusContext,
       { value: runtimeStatus ?? defaults.runtimeStatus },
-      createElement(AgentMessageQueuesContext, { value: queues ?? defaults.queues }, children),
+      createElement(
+        AgentMessageQueuesContext,
+        { value: queues ?? defaults.queues },
+        createElement(
+          AgentSessionsContext,
+          { value: existingSessions ?? defaults.sessions },
+          children,
+        ),
+      ),
     ),
   );
 }

@@ -300,6 +300,25 @@ type CodexSendOptions = {
 export type CodexGoalControlInput = SessionRef &
   AgentWorkStartOptions & { readonly command: AgentSessionGoalCommand };
 
+// Conservative bounds from the native model catalog, clamped by the effective configuration.
+const CODEX_HANDOFF_CONTEXT_WINDOWS: ReadonlyMap<string, number> = new Map([
+  ["gpt-6.2-sol", 500_000],
+  ["gpt-6.2-astra", 272_000],
+  ["gpt-6.1-terra", 500_000],
+  ["gpt-6.1-sol", 500_000],
+  ["gpt-6-astra", 272_000],
+  ["gpt-6-sol", 272_000],
+  ["gpt-6-luna", 272_000],
+  ["gpt-5.6-sol", 272_000],
+  ["gpt-5.6-terra", 272_000],
+  ["gpt-5.6-luna", 272_000],
+  ["gpt-5.5", 272_000],
+  ["gpt-5.4", 272_000],
+  ["gpt-5.3-codex", 272_000],
+  ["gpt-5.2-codex", 272_000],
+  ["gpt-5.2", 272_000],
+]);
+
 export class CodexAppServerAdapter
   implements AgentCatalogPort, AgentSessionPort, AgentWorkspaceInspectionPort
 {
@@ -1272,6 +1291,7 @@ export class CodexAppServerAdapter
       resolvedQuestionRequestIds,
       submissionId: input.submissionId,
     });
+    if (input.handoff) acceptedUserMessage.messageId = input.handoff.admissionId;
     if (systemInvocation.kind === "manual_session_compaction") {
       // Compaction is its own native operation, so it never joins running work.
       if (runningTurnOf(this.activeTurnsBySessionId, session.threadId)) {
@@ -1294,6 +1314,7 @@ export class CodexAppServerAdapter
     if (options.onSent) context.onSent = options.onSent;
     context.assertCurrent = options.assertCurrent ?? input.workStartGuard?.assertCurrent;
     context.systemPrompt = input.delivery === "new_turn" ? input.systemPrompt : undefined;
+    context.handoff = input.handoff;
     const accepted = await sendCodexUserMessage(
       context,
       input.externalSessionId,
@@ -1411,6 +1432,22 @@ export class CodexAppServerAdapter
             ),
           }
         : message,
+    );
+  }
+
+  async loadHandoffContextWindow(input: SessionRef, modelId: string): Promise<number | undefined> {
+    const { client } = await this.runtimeClients.resolve(input, "read handoff context limit");
+    const { config } = await client.configRead({ cwd: input.workingDirectory });
+    const known =
+      !config.model_provider || config.model_provider === "openai"
+        ? CODEX_HANDOFF_CONTEXT_WINDOWS.get(modelId)
+        : undefined;
+    const contextWindow = config.model_context_window ?? known;
+    if (contextWindow === undefined) return undefined;
+    return Math.min(
+      contextWindow,
+      known ?? contextWindow,
+      config.model_auto_compact_token_limit ?? contextWindow,
     );
   }
 

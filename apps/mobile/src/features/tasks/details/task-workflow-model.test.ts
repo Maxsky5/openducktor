@@ -21,6 +21,7 @@ const row = (
   live: activityState === "running",
   activityState,
   waitingOnBackground,
+  historical: false,
 });
 
 describe("taskWorkflowSteps", () => {

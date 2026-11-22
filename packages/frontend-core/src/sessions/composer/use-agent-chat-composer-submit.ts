@@ -23,6 +23,7 @@ export type ComposerSubmitModel = {
   draftScope: { key: string };
   steerBlockedReason: string | null;
   runningTurnModel: AgentModelCatalog["models"][number] | null;
+  handoff?: AgentChatSend["handoff"];
 };
 
 type DraftState = Pick<
@@ -88,7 +89,9 @@ export function useAgentChatComposerSubmit({
   return useCallback(
     async (mode: AgentMessageSubmitMode): Promise<void> => {
       if (!settingsReadyRef.current) return;
-      const steersTurn = steersRunningTurn(mode, hasForegroundTurn(modelRef.current));
+      const handoff = modelRef.current.handoff;
+      const isHandoff = handoff?.selection !== undefined;
+      const steersTurn = !isHandoff && steersRunningTurn(mode, hasForegroundTurn(modelRef.current));
       if (steersTurn ? sendInputBlockedRef.current : defaultSendDisabledRef.current) {
         return;
       }
@@ -108,10 +111,12 @@ export function useAgentChatComposerSubmit({
       }
       sendingDraftRef.current = submittedDraft;
       const submittedSnapshot = createSubmittedDraftSnapshot(submittedDraft);
-      clearSubmittedDraft(submittedSnapshot);
-      setDisplayedDraft(createEmptyComposerDraft());
-      onDraftReplaced();
-      onSettledInScope();
+      if (!isHandoff) {
+        clearSubmittedDraft(submittedSnapshot);
+        setDisplayedDraft(createEmptyComposerDraft());
+        onDraftReplaced();
+        onSettledInScope();
+      }
       const isSameScope = (): boolean => modelRef.current.draftScope.key === submittedSnapshot.key;
       const reportSendFailure = (error: Error) => {
         reportError(
@@ -125,9 +130,29 @@ export function useAgentChatComposerSubmit({
       };
       try {
         const result = await submitDraft(submittedDraft, mode);
+        if (isHandoff) {
+          const settleDraft = (committed: boolean) => {
+            if (!committed) return;
+            clearSubmittedDraft(submittedSnapshot);
+            if (isSameScope() && draftRef.current === submittedDraft) {
+              setDisplayedDraft(createEmptyComposerDraft());
+              onDraftReplaced();
+              onSettledInScope();
+            }
+            handoff.releaseLocalDraft();
+          };
+          if (result !== true && result !== false) {
+            if (result.kind === "handoff_pending")
+              void result.settled.then(settleDraft).catch(reportSendFailure);
+            else reportSendFailure(result.error);
+          } else settleDraft(result);
+          return;
+        }
         if (result !== true && result !== false) {
-          restoreSubmittedDraft(submittedSnapshot, result);
-          reportSendFailure(result.error);
+          if (result.kind === "recover_draft") {
+            restoreSubmittedDraft(submittedSnapshot, result);
+            reportSendFailure(result.error);
+          }
           return;
         }
         if (!result) {
@@ -141,7 +166,7 @@ export function useAgentChatComposerSubmit({
         if (isSameScope()) onSettledInScope();
       } catch (error) {
         reportSendFailure(error instanceof Error ? error : new Error(String(error)));
-        restoreSubmittedDraft(submittedSnapshot);
+        if (!isHandoff) restoreSubmittedDraft(submittedSnapshot);
         if (isSameScope()) {
           onDraftReplaced();
           onSettledInScope();

@@ -36,6 +36,7 @@ type NodeBrowserServiceInput = {
   tasks: Pick<TaskReader, "getTask">;
   workspaceSessions: Pick<WorkspaceSessionStorePort, "get" | "listRuntimeOwners">;
   liveSessions: CreateManagedCallerResolverInput["liveSessions"];
+  stagedOwners?: CreateManagedCallerResolverInput["stagedOwners"];
   localAttachments: Pick<LocalAttachmentService, "stage">;
   eventBus: HostEventBusPort | undefined;
   lifecycleLogger: HostLifecycleLogger;
@@ -53,6 +54,7 @@ export const createNodeBrowser = (input: NodeBrowserServiceInput): NodeBrowser =
     workspaceSettings: input.settings,
     workspaceSessions: input.workspaceSessions,
     liveSessions: input.liveSessions,
+    stagedOwners: input.stagedOwners,
   });
   return {
     browserService: createNodeBrowserService(input),

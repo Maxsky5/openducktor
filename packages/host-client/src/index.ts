@@ -40,7 +40,7 @@ import { HostBrowserClient } from "./browser-client";
 import { HostWorkflowLibraryClient } from "./workflow-library-client";
 
 export { HostInvokeError } from "./invoke-utils";
-export type { InvokeFn } from "./invoke-utils";
+export type { InvokeFn, InvokeOptions } from "./invoke-utils";
 export { HostTerminalClientError } from "./terminal-client";
 export { HostBrowserClientError } from "./browser-client";
 
@@ -330,6 +330,9 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentSessionLiveClient.agentSessionControlResume.bind(agentSessionLiveClient),
     agentSessionMessageSubmit:
       agentSessionLiveClient.agentSessionMessageSubmit.bind(agentSessionLiveClient),
+    agentChatHandoffSend: agentSessionLiveClient.agentChatHandoffSend.bind(agentSessionLiveClient),
+    agentChatHandoffCheck:
+      agentSessionLiveClient.agentChatHandoffCheck.bind(agentSessionLiveClient),
     agentSessionMessageQueueManage:
       agentSessionLiveClient.agentSessionMessageQueueManage.bind(agentSessionLiveClient),
     agentSessionControlStart:

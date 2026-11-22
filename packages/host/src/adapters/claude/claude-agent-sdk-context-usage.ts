@@ -53,12 +53,15 @@ const waitBeforeNextContextUsageRefresh = async (): Promise<void> => {
   await new Promise<void>((resolve) => setTimeout(resolve, CONTEXT_USAGE_REFRESH_MIN_INTERVAL_MS));
 };
 
-export const readClaudeContextUsageFromQuery = async (sdkQuery: {
-  getContextUsage(): Promise<ClaudeContextUsageResponse>;
-}): Promise<{ usedTokens: number; maxTokens: number } | null> => {
+export const readClaudeContextUsageFromQuery = async (
+  sdkQuery: {
+    getContextUsage(options?: { detail: "summary" }): Promise<ClaudeContextUsageResponse>;
+  },
+  detail?: "summary",
+): Promise<{ usedTokens: number; maxTokens: number } | null> => {
   const contextUsage = contextUsageFromClaudeControlResponse(
     await withTimeout(
-      sdkQuery.getContextUsage(),
+      detail ? sdkQuery.getContextUsage({ detail }) : sdkQuery.getContextUsage(),
       CLAUDE_CONTEXT_USAGE_TIMEOUT_MS,
       "Claude Agent SDK context usage read timed out.",
     ),
@@ -240,7 +243,7 @@ export const loadClaudeSessionContextUsage = ({
             runtimeId: session.runtimeId,
           });
         }
-        const usage = await readClaudeContextUsageFromQuery(session.query);
+        const usage = await readClaudeContextUsageFromQuery(session.query, input.contextDetail);
         return usage ? { totalTokens: usage.usedTokens, contextWindow: usage.maxTokens } : null;
       });
     }

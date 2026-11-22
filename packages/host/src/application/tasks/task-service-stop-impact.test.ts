@@ -55,6 +55,7 @@ const makeGuard = (
       };
     });
   },
+  ensureNoUnresolvedHandoff: () => Effect.void,
   cleanupTaskSessions() {
     return Effect.fail(new HostOperationError({ operation: "test", message: "unexpected stop" }));
   },

@@ -116,6 +116,7 @@ export const releaseMergedTaskSessions = (
       });
     }
     yield* dependencies.taskActivityGuard.cleanupTaskSessions({
+      workspaceId,
       repoPath: yield* dependencies.gitPort.canonicalizePath(repoPath),
       taskSessions: [{ taskId, sessions: workflowSessions }],
     });

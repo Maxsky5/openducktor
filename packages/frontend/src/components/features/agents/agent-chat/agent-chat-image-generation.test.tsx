@@ -3,10 +3,13 @@ import { EventEmitter, once } from "node:events";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
+  OPENCODE_RUNTIME_DESCRIPTOR,
   type AgentGeneratedImageReadInput,
   type AgentGeneratedImageReadResult,
   type AgentImageGenerationPart,
+  type AgentSessionLiveRef,
 } from "@openducktor/contracts";
+import type { AgentImageGenerationMessageMeta } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { QueryClient, QueryClientProvider, notifyManager } from "@tanstack/react-query";
 import { mergeAgentImageGeneration } from "@openducktor/core";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -151,7 +154,7 @@ const definitions = (supported: boolean): RuntimeDefinitionsContextValue => {
     },
   };
   return {
-    runtimeDefinitions: [descriptor],
+    runtimeDefinitions: [descriptor, OPENCODE_RUNTIME_DESCRIPTOR],
     availableRuntimeDefinitions: [descriptor],
     agentRuntimes: DEFAULT_AGENT_RUNTIMES,
     isLoadingRuntimeDefinitions: false,
@@ -200,8 +203,9 @@ const operations = (
 const harness = (
   read = mock(async (input: AgentGeneratedImageReadInput) => payload(input)),
   supported = true,
-  initialPart = part,
+  initialPart: AgentImageGenerationMessageMeta = part,
   describe?: AgentOperationsContextValue["describeGeneratedImages"],
+  initialRef: AgentSessionLiveRef = ref,
 ) => {
   const client = new QueryClient();
   queryClients.add(client);
@@ -217,12 +221,15 @@ const harness = (
       </RuntimeDefinitionsContext.Provider>
     </QueryClientProvider>
   );
-  const content = (sessionRef = ref, imagePart = part) => (
+  const content = (
+    sessionRef: AgentSessionLiveRef = ref,
+    imagePart: AgentImageGenerationMessageMeta = part,
+  ) => (
     <AgentChatImageSessionContext.Provider value={sessionRef}>
       <AgentChatImageGeneration part={imagePart} />
     </AgentChatImageSessionContext.Provider>
   );
-  const view = render(content(ref, initialPart), { wrapper: Wrapper });
+  const view = render(content(initialRef, initialPart), { wrapper: Wrapper });
   return { client, read, view, content };
 };
 const waitForImage = async (index = 0): Promise<HTMLImageElement> => {
@@ -539,6 +546,24 @@ test("unsupported runtime and completed output without a source never read bytes
   const second = harness(undefined, true, withoutOutput);
   expect(second.read).not.toHaveBeenCalled();
   expect(screen.getByText(/runtime did not report image output/)).toBeTruthy();
+});
+
+test("loads a completed earlier image from Codex after a handoff to OpenCode", async () => {
+  const { read } = harness(undefined, true, { ...part, sourceSession: ref }, undefined, {
+    ...ref,
+    externalSessionId: "active-opencode",
+    runtimeKind: "opencode",
+  });
+  await loadImage();
+  expect(screen.getByRole("img", { name: "A yellow duck" })).toBeTruthy();
+  expect(read).toHaveBeenCalledWith(
+    expect.objectContaining({
+      ref,
+      itemId: part.itemId,
+      turnId: "turn",
+      revision: "output-v2",
+    }),
+  );
 });
 
 test("history without media removes the preview, releases its URL, and stops obsolete reads", async () => {

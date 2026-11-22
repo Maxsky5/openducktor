@@ -79,6 +79,7 @@ type UseAgentChatSendArgs = {
   draftRules: Pick<AgentChatSendDraftInput, "reusablePrompts" | "supportsAttachments">;
   sendAgentMessage: AgentOperationsContextValue["sendAgentMessage"];
   target: AgentChatSendTarget;
+  handoff?: AgentChatSend["handoff"];
 };
 
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = [];
@@ -100,6 +101,7 @@ export function useAgentChatSend({
   draftRules: { reusablePrompts, supportsAttachments },
   sendAgentMessage,
   target,
+  handoff,
 }: UseAgentChatSendArgs): AgentChatSend {
   const { stageAttachment } = useClientConnection();
   const stageSendAttachment = useMemo(
@@ -173,8 +175,12 @@ export function useAgentChatSend({
   const hasActiveForegroundTurn = hasForegroundTurn({ foregroundTurnActive, isSessionWorking });
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft, mode: AgentMessageSubmitMode) => {
-      const steersTurn = steersRunningTurn(mode, hasActiveForegroundTurn);
-      if (!target.canSend({ steersRunningTurn: steersTurn }) || isWaitingInput) {
+      const steersTurn = !handoff?.selection && steersRunningTurn(mode, hasActiveForegroundTurn);
+      if (
+        !target.canSend({ steersRunningTurn: steersTurn }) ||
+        isWaitingInput ||
+        handoff?.blocked
+      ) {
         return false;
       }
       const isCurrentRecipient = target.capture();
@@ -185,11 +191,14 @@ export function useAgentChatSend({
           draft: promoteTypedGoalCommand(draft, runtimeDescriptor, runtimeVersion),
           reusablePrompts,
           // A steer joins the running turn, so the model of that turn checks the content.
-          modelDescriptor: steersTurn ? runningTurnModel : selectedModelDescriptor,
-          supportsAttachments,
+          modelDescriptor:
+            handoff?.selection?.descriptor ??
+            (steersTurn ? runningTurnModel : selectedModelDescriptor),
+          supportsAttachments: handoff?.selection?.supportsAttachments ?? supportsAttachments,
           stageAttachment: stageSendAttachment,
         });
         if (!parts || !isCurrentRecipient()) return false;
+        if (handoff?.selection) return await handoff.send(parts);
         // Without a session, the target refuses a system command with its own reason.
         if (identity) assertGoalCommandAllowed(parts, runtimeDescriptor, runtimeVersion);
         const resolved = await target.resolve(parts, { steersRunningTurn: steersTurn });
@@ -228,11 +237,16 @@ export function useAgentChatSend({
       stageSendAttachment,
       supportsAttachments,
       target,
+      handoff,
     ],
   );
 
   const isSending = target.activity.isActive(target.activityKey);
-  const canSend = target.canSend({ steersRunningTurn: hasActiveForegroundTurn });
+  const canSend =
+    !handoff?.blocked &&
+    target.canSend({
+      steersRunningTurn: !handoff?.selection && hasActiveForegroundTurn,
+    });
   // Chats spread this into memoized composer models, so it changes only with its values.
   return useMemo(
     () => ({
@@ -242,7 +256,8 @@ export function useAgentChatSend({
       isSending,
       canSend,
       onSend,
+      handoff,
     }),
-    [canSend, isSending, messageQueue, onSend, runningTurnModel, steerBlockedReason],
+    [canSend, isSending, messageQueue, onSend, runningTurnModel, steerBlockedReason, handoff],
   );
 }

@@ -157,6 +157,33 @@ describe("readLocalHostErrorPayload", () => {
 });
 
 describe("local host client", () => {
+  test("does not invoke a handoff when the local channel opens on a replacement host", async () => {
+    const setup = setupHost();
+    const { localHostConnection: host } = await loadLocalHostTransport();
+    const refusal = await host.client
+      .agentChatHandoffSend(
+        {
+          chat: {
+            kind: "workspace_session",
+            workspaceId: "workspace",
+            repoPath: "/repo",
+            sessionId: "chat",
+          },
+          expectedActive: {
+            runtimeKind: "opencode",
+            workingDirectory: "/repo",
+            externalSessionId: "source",
+          },
+          destination: { runtimeKind: "codex", providerId: "openai", modelId: "gpt" },
+          submissionId: "send",
+          parts: [{ kind: "text", text: "hello" }],
+        },
+        { expectedHostEpoch: "previous-host" },
+      )
+      .catch((cause: unknown) => cause);
+    expect(refusal).toMatchObject({ message: expect.stringContaining("host changed") });
+    expect(setup.host().requests.filter(({ method }) => method === "invoke")).toEqual([]);
+  });
   test("rejects local host session failures with a typed web host request error", async () => {
     const { ensureLocalHostSession } = await loadLocalHostTransport();
     globalThis.fetch = createFetchFixture(
@@ -369,7 +396,7 @@ describe("local host event subscriptions", () => {
     await waitFor(() => listener.mock.calls.length === 2, "the observed live event");
 
     expect(listener.mock.calls.map(([envelope]) => envelope)).toEqual([
-      { ...liveSnapshot("/repo", 0), isConnectionSnapshot: true },
+      { ...liveSnapshot("/repo", 0), isConnectionSnapshot: true, hostEpoch: "fake-host-epoch" },
       liveSnapshot("/repo", 2),
     ]);
     stop();
@@ -478,6 +505,7 @@ describe("local host event subscriptions", () => {
         ...liveSnapshot("/repo", 20),
         isConnectionSnapshot: true,
         historyReplayGap: true,
+        hostEpoch: "fake-host-epoch",
       });
     } finally {
       stop();

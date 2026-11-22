@@ -15,6 +15,8 @@ export type AgentChatTranscriptSession = AgentSessionIdentity & {
   messages: SessionMessagesState;
   pendingQuestions: AgentQuestionRequest[];
   skillReferences?: readonly AgentSkillReference[];
+  /** A handoff transcript can show its earlier segments when the active history read fails. */
+  hasEarlierHandoffSegments?: true;
 };
 
 type AgentChatTranscriptPresentationBase = {

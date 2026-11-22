@@ -19,7 +19,7 @@ import {
 } from "@openducktor/contracts";
 import type { JSONType } from "zod";
 import { HostInvokeError } from "./invoke-utils";
-import type { RemoteSocketConnection } from "./remote/transport";
+import { RemoteRefusalError, type RemoteSocketConnection } from "./remote/transport";
 
 /** The host answered a request without a result. */
 export class HostChannelRequestError extends Error {
@@ -28,6 +28,27 @@ export class HostChannelRequestError extends Error {
     this.name = "HostChannelRequestError";
   }
 }
+
+class HostInvocationEpochError extends Error {
+  constructor() {
+    super("The host changed before this request could start. Review the saved session and retry.");
+  }
+}
+
+export const requireHostInvocationEpoch = (
+  expected: string | undefined,
+  actual: string | undefined,
+): void => {
+  if (expected !== undefined && actual !== expected) throw new HostInvocationEpochError();
+};
+
+/** Recognizes refusals that prove an invocation did not run. */
+export const isHostInvocationRefused = (cause: unknown): cause is Error =>
+  cause instanceof HostInvocationEpochError ||
+  cause instanceof RemoteRefusalError ||
+  (cause instanceof HostInvokeError &&
+    cause.cause instanceof HostChannelRequestError &&
+    cause.cause.error.kind === "refused");
 
 /** The host sent a frame that this client cannot read. The channel cannot continue. */
 export class HostChannelProtocolError extends Error {
@@ -375,6 +396,7 @@ export type OpenHostChannelOptions = {
 export type OpenedHostChannel = {
   session: HostChannelSession;
   replay: HostChannelReplay;
+  hostEpoch: string;
 };
 
 const scheduleTimeout = (callback: () => void, delayMs: number): (() => void) => {
@@ -461,5 +483,9 @@ export const openHostChannel = async ({
       cause: opened.error,
     });
   cursors.hostEvents = { hostEpoch: opened.data.hostEpoch, hostEventId: opened.data.hostEventId };
-  return { session, replay: { hostChanged: opened.data.hostChanged, gaps: opened.data.gaps } };
+  return {
+    session,
+    hostEpoch: opened.data.hostEpoch,
+    replay: { hostChanged: opened.data.hostChanged, gaps: opened.data.gaps },
+  };
 };

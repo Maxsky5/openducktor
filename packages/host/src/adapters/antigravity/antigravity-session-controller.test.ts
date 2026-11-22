@@ -9,6 +9,8 @@ import {
 } from "@agentclientprotocol/sdk/unstable";
 import { type AgentSessionScope, slashCommandCatalogSchema } from "@openducktor/contracts";
 import { AgentSessionMessageRefusedError, AgentSessionTurnActiveError } from "@openducktor/core";
+import { createHash } from "node:crypto";
+import { prepareRuntimeHandoffHistory } from "../../application/agent-sessions/runtime-handoff-history";
 import { createConnectedController } from "./antigravity-test-agent.test-support";
 
 type Harness = Awaited<ReturnType<typeof createConnectedController>>;
@@ -67,6 +69,30 @@ const lastSnapshot = (harness: Harness) =>
   harness.changes.flatMap((change) => change.snapshots).at(-1);
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const admissionId = "odt-handoff-60604490-3781-4ee6-90f2-49c915fbb5b7";
+const handoffParts = [{ kind: "text", text: "Continue." }] as const;
+
+const sendHandoff = (
+  harness: Harness,
+  ref: Awaited<ReturnType<typeof startBuildSession>>["ref"],
+) => {
+  const history = prepareRuntimeHandoffHistory({
+    segments: [],
+    parts: handoffParts,
+    contextWindow: 1000,
+    usedTokens: 0,
+    antigravityAdmissionId: admissionId,
+    digest: (bytes) => createHash("sha256").update(bytes).digest("hex"),
+  });
+  if (!history?.prefix) throw new Error("Expected a handoff frame.");
+  return harness.controller.sendUserMessage({
+    ...ref,
+    parts: [...handoffParts],
+    delivery: "new_turn",
+    handoff: { admissionId, historyPrefix: history.prefix },
+  });
+};
 
 describe("AntigravitySessionController", () => {
   test("starts a session in its directory with the role tools, caller binding, and instructions", async () => {
@@ -139,6 +165,45 @@ describe("AntigravitySessionController", () => {
     const reply = (await harness.controller.loadHistory(ref)).at(-1);
     expect(reply).toMatchObject({ role: "assistant", model: { modelId: "gemini-3.8-flash" } });
     expect(reply?.role === "assistant" ? reply.durationMs : null).toBeGreaterThanOrEqual(0);
+  });
+
+  test("confirms the handoff on native turn evidence and keeps its message ID on replay", async () => {
+    const harness = await createConnectedController();
+    const { ref } = await startBuildSession(harness);
+    const sent = sendHandoff(harness, ref);
+    const prompt = await harness.fake.waitForPrompts(1);
+    expect(userMessages(harness)).toEqual([]);
+    const [content] = prompt.params.prompt;
+    if (content?.type !== "text") throw new Error("Expected a single framed text block.");
+    expect(prompt.params.prompt).toHaveLength(1);
+    expect(content.text).toContain(admissionId);
+    expect(content.text).toEndWith("Continue.");
+
+    await prompt.client.notify(methods.client.session.update, {
+      sessionId: ref.externalSessionId,
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Ready." } },
+    });
+    expect(await sent).toMatchObject({ messageId: admissionId, state: "read" });
+    prompt.respond({ stopReason: "end_turn" });
+    await settle();
+
+    await harness.controller.releaseSession(ref);
+    harness.fake.replays.set(ref.externalSessionId, [
+      { sessionUpdate: "user_message_chunk", content },
+    ]);
+    const replay = await harness.controller.loadHistory(ref);
+    expect(replay).toMatchObject([{ role: "user", messageId: admissionId, text: content.text }]);
+  });
+
+  test("an Antigravity prompt refusal before admission leaves no handoff message", async () => {
+    const harness = await createConnectedController();
+    const { ref } = await startBuildSession(harness);
+    const sent = sendHandoff(harness, ref).catch((cause: unknown) => cause);
+    const prompt = await harness.fake.waitForPrompts(1);
+    prompt.respond(RequestError.invalidParams(undefined, "Bad prompt"));
+    expect(await sent).toBeInstanceOf(AgentSessionMessageRefusedError);
+    expect(userMessages(harness)).toEqual([]);
+    expect(harness.controller.hasRunningTurn(ref.externalSessionId)).toBe(false);
   });
 
   test("reads the requested tail of the history, after the instructions", async () => {

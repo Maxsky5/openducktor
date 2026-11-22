@@ -232,6 +232,8 @@ export const agentSessionLiveSnapshotEnvelopeSchema = z
     /** Every auto-resume of a usage-limit stop that the host plans or runs in the repository. */
     usageLimitAutoResumes: z.array(usageLimitAutoResumeSchema).optional(),
     isConnectionSnapshot: z.boolean().optional(),
+    /** The transport attaches the epoch of the host that supplied this connection snapshot. */
+    hostEpoch: z.string().min(1).optional(),
     /** The transport replaced a baseline after a replay gap or host change. */
     historyReplayGap: z.boolean().optional(),
     sequence: liveStateSequenceSchema.optional(),
@@ -395,7 +397,7 @@ export const agentSessionLiveLoadContextInputSchema = agentSessionLiveRefSchema
   .strict();
 export type AgentSessionLiveLoadContextInput = z.infer<
   typeof agentSessionLiveLoadContextInputSchema
->;
+> & { handoffModelId?: string | undefined };
 
 export const agentSessionLiveLoadContextResultSchema = agentSessionContextUsageSchema.nullable();
 export type AgentSessionLiveLoadContextResult = z.infer<

@@ -156,6 +156,7 @@ export const createTaskLinkMergedPullRequestUseCase = ({
             repoPath,
             decide: coreTaskTransition(taskWorkflows, "close"),
             taskId,
+            taskActivityGuard,
             taskSessionLifecycleCoordinator,
             taskStore,
           });

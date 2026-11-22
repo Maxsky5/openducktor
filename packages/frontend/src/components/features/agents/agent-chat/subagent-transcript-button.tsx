@@ -39,7 +39,7 @@ export function SubagentTranscriptButton({
   const transcriptDialog = useOptionalAgentSessionTranscriptDialog();
   const openTranscript = onOpenTranscript ?? transcriptDialog?.openSessionTranscript;
   const transcriptTarget = toSubagentTranscriptTarget({
-    externalSessionId: meta.externalSessionId,
+    ...meta,
     parentSession,
   });
 

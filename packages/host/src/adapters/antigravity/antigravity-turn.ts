@@ -4,6 +4,7 @@ import type {
   AgentSessionLiveRef,
   AgentSessionTranscriptEvent,
   AgentTurnOutcome,
+  NativeHandoffInput,
 } from "@openducktor/contracts";
 import { isManualSessionCompactionSlashCommand } from "@openducktor/contracts";
 import {
@@ -13,6 +14,7 @@ import {
   AgentSessionMessageRefusedError,
   AgentSessionTurnActiveError,
   type AgentUserMessagePart,
+  type AgentWorkStartOptions,
 } from "@openducktor/core";
 import type { AntigravityAgentConnection } from "./antigravity-agent-connection";
 import type { AntigravityBackgroundCommands } from "./antigravity-background-commands";
@@ -23,23 +25,18 @@ import type { AntigravitySessionModel } from "./antigravity-session-model";
 import { ANTIGRAVITY_COMPACTED_MESSAGE } from "./antigravity-compaction";
 import type { AntigravityTranscript } from "./antigravity-transcript";
 
-export type AntigravitySendInput = {
+export type AntigravitySendInput = AgentWorkStartOptions & {
   readonly parts: AgentUserMessagePart[];
   readonly delivery: "new_turn" | "steer";
   readonly submissionId?: string | undefined;
   readonly resolvedQuestionRequestIds?: readonly string[] | undefined;
-  readonly workStartGuard?: { assertCurrent(): void } | undefined;
-  readonly onWorkIssued?: (() => void) | undefined;
-  readonly onWorkAccepted?: (() => void) | undefined;
+  readonly handoff?: NativeHandoffInput | undefined;
 };
 
 const toError = (cause: unknown): Error =>
   cause instanceof Error ? cause : new Error(String(cause));
 
-/**
- * One `session/prompt` that carries one user message. The message enters the transcript only when
- * the runtime admits it, so a refused message changes no transcript state.
- */
+/** One prompt. The transcript records it only when it counts as accepted. */
 type AntigravityPromptRecord = {
   /** The ID that the message most likely gets, and of its pending row when it has one. */
   readonly pendingMessageId: string;
@@ -143,14 +140,7 @@ export class AntigravityTurns {
     return this.turn !== null;
   }
 
-  /**
-   * Sends one message. A new turn fails while a turn runs, and a steer joins the running turn as a
-   * second `session/prompt`. A message that starts a turn counts as accepted when its prompt is
-   * sent: nothing runs ahead of it, and a failed prompt ends the turn with its error. A steer shows
-   * at once as a `pending` row, which no reader treats as accepted. It enters the transcript and
-   * counts as accepted at turn content or a runtime request while it is the oldest open prompt, or
-   * at its own prompt answer.
-   */
+  /** Ordinary new turns accept at send. Handoffs and steers need turn content or the prompt answer. */
   async send(input: AntigravitySendInput): Promise<AcceptedAgentUserMessage> {
     const sessionId = this.context.ref.externalSessionId;
     if (input.delivery === "new_turn" && this.turn)
@@ -165,9 +155,12 @@ export class AntigravityTurns {
         ),
       );
     }
+    const parts = input.handoff?.historyPrefix
+      ? [{ kind: "text" as const, text: input.handoff.historyPrefix }, ...input.parts]
+      : input.parts;
     let prompt: ReturnType<typeof encodeAntigravityPrompt>;
     try {
-      prompt = encodeAntigravityPrompt(input.parts, this.context.ref.workingDirectory);
+      prompt = encodeAntigravityPrompt(parts, this.context.ref.workingDirectory);
     } catch (cause) {
       throw new AgentSessionMessageRefusedError(toError(cause));
     }
@@ -187,11 +180,12 @@ export class AntigravityTurns {
     };
     this.turn = turn;
     const acceptance = Promise.withResolvers<AcceptedAgentUserMessage>();
-    const message = toAntigravityUserMessage(input.parts);
+    const message = toAntigravityUserMessage(parts);
     const model = this.context.model.selection;
     // The row takes the ID that admission will most likely give, so the read message replaces it.
     const unadmittedAhead = turn.prompts.filter((entry) => !entry.accepted).length;
-    const pendingMessageId = this.context.transcript.nextUserMessageId(unadmittedAhead);
+    const pendingMessageId =
+      input.handoff?.admissionId ?? this.context.transcript.nextUserMessageId(unadmittedAhead);
     // The pending row is live display only, so history does not list it and a stale history read
     // cannot restore it after a retraction.
     const pending: Extract<AgentEvent, { type: "user_message" }> = {
@@ -215,6 +209,7 @@ export class AntigravityTurns {
           message,
           model,
           sentAt,
+          messageId: input.handoff?.admissionId,
         });
         if (input.submissionId) userMessage.submissionId = input.submissionId;
         if (input.resolvedQuestionRequestIds?.length) {
@@ -258,7 +253,7 @@ export class AntigravityTurns {
       (response) => this.onPromptResponse(turn, record, response),
       (cause: unknown) => this.onPromptError(turn, record, cause),
     );
-    if (startsTurn) admitPrompt(record);
+    if (startsTurn && !input.handoff) admitPrompt(record);
     const userMessage = await acceptance.promise;
     input.onWorkAccepted?.();
     return userMessage;

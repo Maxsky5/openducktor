@@ -341,7 +341,13 @@ export const createAntigravityLiveSessionAdapterPreparer =
           Effect.sync(() => sessions.resolveCallerBinding(callerBindingId)),
         listSnapshots: () => Effect.sync(() => projection.listSnapshots()),
         readSnapshot: (ref) => Effect.sync(() => projection.readSnapshot(ref)),
-        loadContext: (input) => Effect.sync(() => sessions.find(input)?.contextUsage ?? null),
+        loadContext: (input) =>
+          Effect.suspend(() => {
+            const session = sessions.find(input);
+            return input.handoffModelId && session
+              ? session.waitForHandoffContext()
+              : Effect.succeed(session?.contextUsage ?? null);
+          }),
         resolvePendingApproval: (input) =>
           Effect.try({
             try: () => {
@@ -429,6 +435,7 @@ export const createAntigravityLiveSessionAdapterPreparer =
                 ...toSendControls(input, options),
                 parts: input.parts.map(toAgentUserMessagePart),
                 delivery: input.delivery,
+                handoff: input.handoff,
                 resolvedQuestionRequestIds: input.resolvedQuestionRequestIds,
               }),
             catch: (cause) =>

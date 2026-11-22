@@ -22,7 +22,10 @@ import {
 } from "@openducktor/contracts";
 import { Clock, Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
-import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import type {
+  WorkspaceSessionStorePort,
+  WorkspaceSessionStoreRef,
+} from "../../ports/workspace-session-store-port";
 import type { TerminalService } from "../terminals/terminal-service";
 import { runtimeTitleWithManualTitle } from "../../domain/workspace-sessions/workspace-session-title";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
@@ -61,6 +64,7 @@ export type WorkspaceSessionServiceDependencies = WorkspaceSessionTargetDependen
   WorkspaceSessionRestoreDependencies & {
     lifecycle: TaskSessionLifecycleCoordinator;
     operationGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
+    hasUnresolvedHandoff: (ref: WorkspaceSessionStoreRef) => boolean;
     sessionTitleGate: ReturnType<typeof createWorkspaceSessionOperationGate>;
     isTitleSyncPending: (ref: AgentSessionLiveRef) => boolean;
     store: WorkspaceSessionStorePort;
@@ -270,6 +274,12 @@ export const createWorkspaceSessionService = (
           Effect.gen(function* () {
             const { ref, session } = yield* recordFor(input);
             if (session.archivedAt !== null) return session;
+            if (dependencies.hasUnresolvedHandoff(ref))
+              return yield* new HostValidationError({
+                field: "handoff",
+                message:
+                  "Use Check delivery to settle the runtime handoff, then retry Archive session.",
+              });
             let target = session.executionTarget;
             let worktreePath = target.workingDirectory;
             if (input.removeWorktree) {

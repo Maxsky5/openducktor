@@ -133,6 +133,64 @@ export const taskSessions = sqliteTable(
   ],
 );
 
+export const runtimeHandoffs = sqliteTable(
+  "runtime_handoffs",
+  {
+    workspaceId: text("workspace_id").notNull(),
+    workspaceSessionId: text("workspace_session_id"),
+    taskId: text("task_id"),
+    taskRole: text("task_role"),
+    firstRuntime: text("first_runtime"),
+    firstSessionId: text("first_session_id"),
+    workingDirectory: text("working_directory").notNull(),
+    ordinal: integer("ordinal").notNull(),
+    sourceRuntime: text("source_runtime").notNull(),
+    sourceSessionId: text("source_session_id").notNull(),
+    targetRuntime: text("target_runtime").notNull(),
+    targetSessionId: text("target_session_id").notNull(),
+    firstMessageId: text("first_message_id").notNull(),
+    partialHistory: integer("partial_history", { mode: "boolean" }).notNull(),
+    contextPrefix: text("context_prefix", { mode: "json" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.targetRuntime, table.targetSessionId] }),
+    foreignKey({
+      columns: [table.workspaceId, table.workspaceSessionId],
+      foreignColumns: [workspaceSessions.workspaceId, workspaceSessions.id],
+    }).onDelete("cascade"),
+    taskForeignKey(table),
+    uniqueIndex("idx_runtime_handoffs_workspace_chat").on(
+      table.workspaceId,
+      table.workspaceSessionId,
+      table.ordinal,
+    ),
+    uniqueIndex("idx_runtime_handoffs_task_chat").on(
+      table.workspaceId,
+      table.taskId,
+      table.taskRole,
+      table.firstRuntime,
+      table.firstSessionId,
+      table.workingDirectory,
+      table.ordinal,
+    ),
+    index("idx_runtime_handoffs_source").on(
+      table.workspaceId,
+      table.sourceRuntime,
+      table.sourceSessionId,
+    ),
+    check(
+      "chk_runtime_handoffs_owner",
+      sql`(${column(table.workspaceSessionId)} is not null and ${column(table.taskId)} is null and ${column(table.taskRole)} is null and ${column(table.firstRuntime)} is null and ${column(table.firstSessionId)} is null) or (${column(table.workspaceSessionId)} is null and ${column(table.taskId)} is not null and ${column(table.taskRole)} is not null and ${column(table.firstRuntime)} is not null and ${column(table.firstSessionId)} is not null)`,
+    ),
+    check("chk_runtime_handoffs_ordinal", sql`${column(table.ordinal)} >= 0`),
+    check(
+      "chk_runtime_handoffs_runtime",
+      sql`${column(table.sourceRuntime)} <> ${column(table.targetRuntime)}`,
+    ),
+    check("chk_runtime_handoffs_partial", booleanCheck(table.partialHistory)),
+  ],
+);
+
 export const taskPullRequests = sqliteTable(
   "task_pull_requests",
   {
@@ -295,6 +353,7 @@ export const hostDatabaseSchema = {
   tasks,
   taskLabels,
   taskSessions,
+  runtimeHandoffs,
   taskPullRequests,
   taskDirectMerges,
   taskIssueLinks,

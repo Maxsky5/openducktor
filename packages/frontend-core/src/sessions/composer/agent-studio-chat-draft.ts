@@ -63,5 +63,6 @@ export const createAgentStudioChatDraftPersistence = ({
     readVersion: () => drafts.readVersion(identity),
     clear: (options) => drafts.clear(identity, options),
     flush: () => drafts.flush(identity),
+    subscribeCleared: (onClear) => drafts.subscribeCleared(identity, onClear),
   };
 };

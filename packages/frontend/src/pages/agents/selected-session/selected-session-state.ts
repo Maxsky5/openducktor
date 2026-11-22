@@ -9,6 +9,7 @@ import type { SelectedSessionRuntimeData } from "@openducktor/frontend-core/type
 
 export type AgentStudioSelectedSessionState = {
   identity: AgentSessionIdentity | null;
+  handoffSource?: AgentSessionIdentity | undefined;
   activityState: AgentSessionActivityState | null;
   selectedModel: AgentSessionState["selectedModel"];
   loadedSession: AgentSessionState | null;

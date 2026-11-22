@@ -29,8 +29,10 @@ export const createLiveWorkflowObservations = () => {
     accept: (envelope: OperationEnvelope) => {
       if (envelope.type === "session_operation_updated") {
         const observation = envelope.observation;
-        const key = `${agentSessionRefKey(observation.ref)}\u0000${observation.kind}\u0000${observation.submissionId ?? ""}`;
+        const id = observation.kind === "handoff" ? "current" : (observation.submissionId ?? "");
+        const key = `${agentSessionRefKey(observation.ref)}\u0000${observation.kind}\u0000${id}`;
         if (
+          observation.kind !== "handoff" &&
           !observation.pending &&
           !observation.failure &&
           observation.nativeOutcome !== "uncertain"
@@ -75,6 +77,10 @@ export const createLiveWorkflowObservations = () => {
         (value) => value.ref.repoPath === repoPath,
       ),
     }),
+    hasScheduledAutoResume: (key: string) => {
+      const entry = autoResumes.get(key);
+      return entry !== undefined && entry.state !== "failed";
+    },
     /** Retains the auto-resume entry of a session. Returns false when it did not change. */
     autoResume: (ref: AgentSessionLiveRef, autoResume: UsageLimitAutoResume | null): boolean => {
       const key = agentSessionRefKey(ref);

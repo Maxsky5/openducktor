@@ -28,6 +28,11 @@ import {
   agentMessageQueueManageResultSchema,
   agentMessageSubmitInputSchema,
   agentMessageSubmitResultSchema,
+  agentChatHandoffCheckSchema,
+  agentChatHandoffResultSchema,
+  agentChatHandoffSendSchema,
+  type AgentChatHandoffCheckInput,
+  type AgentChatHandoffSendInput,
 } from "@openducktor/contracts";
 import {
   type AgentRepositorySessionStartInput,
@@ -85,7 +90,7 @@ import {
   agentWorkflowSessionForkInputSchema,
   agentWorkflowSessionForkResultSchema,
 } from "@openducktor/contracts";
-import type { InvokeFn } from "./invoke-utils";
+import type { InvokeFn, InvokeOptions } from "./invoke-utils";
 import { arrayResultSchema, voidResultSchema } from "./invoke-utils";
 
 export class HostAgentSessionLiveClient {
@@ -190,6 +195,24 @@ export class HostAgentSessionLiveClient {
       "agent_session_message_queue_manage",
       agentMessageQueueManageInputSchema.parse(input),
       agentMessageQueueManageResultSchema,
+    );
+  }
+
+  async agentChatHandoffSend(input: AgentChatHandoffSendInput, options?: InvokeOptions) {
+    return this.invokeFn(
+      "agent_chat_handoff_send",
+      agentChatHandoffSendSchema.parse(input),
+      agentChatHandoffResultSchema,
+      options,
+    );
+  }
+
+  async agentChatHandoffCheck(input: AgentChatHandoffCheckInput, options?: InvokeOptions) {
+    return this.invokeFn(
+      "agent_chat_handoff_check",
+      agentChatHandoffCheckSchema.parse(input),
+      agentChatHandoffResultSchema,
+      options,
     );
   }
 

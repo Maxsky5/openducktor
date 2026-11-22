@@ -199,7 +199,11 @@ const useTaskSessionMenus = ({
     (key: string) => {
       if (key === currentKey) return;
       const row = groups.flatMap((group) => group.rows).find((entry) => entry.key === key);
-      if (row) router.setParams(switchedSessionParams(workspaceId, row.identity));
+      if (row)
+        router.setParams({
+          ...switchedSessionParams(workspaceId, row.identity),
+          pinSession: row.historical ? "1" : undefined,
+        });
     },
     [currentKey, groups, router, workspaceId],
   );

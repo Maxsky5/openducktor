@@ -50,13 +50,21 @@ describe("SubagentTranscriptButton", () => {
     });
   });
 
-  test("marks runtime-backed subagent transcript requests as subagent sessions", () => {
+  test("opens a historical subagent on the runtime and scope of its native segment", () => {
     const onOpenTranscript = mock(() => {});
+    const sessionScope = {
+      kind: "workflow",
+      workspaceId: "workspace",
+      taskId: "task",
+      role: "build",
+    } as const;
 
     render(
       <SubagentTranscriptButton
-        parentSession={parentSession}
-        meta={createSubagentMeta()}
+        parentSession={{ runtimeKind: "codex", workingDirectory: "/repo-b" }}
+        meta={createSubagentMeta({
+          sourceSession: { ...parentSession, externalSessionId: "previous", sessionScope },
+        })}
         onOpenTranscript={onOpenTranscript}
       />,
     );
@@ -68,6 +76,7 @@ describe("SubagentTranscriptButton", () => {
         externalSessionId: "session-child-1",
         runtimeKind,
         workingDirectory: "/repo-a",
+        sessionScope,
       },
       title: "Subagent activity",
       description: "View what this subagent did.",

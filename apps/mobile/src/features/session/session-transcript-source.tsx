@@ -11,6 +11,7 @@ import {
 import { useAgentSession } from "@openducktor/frontend-core/sessions/session-store-hooks";
 import { resolveAgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-presentation";
 import { toAgentChatTranscriptSession } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-session";
+import type { AgentSessionTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/agent-session-transcript-target";
 import { useAgentChatPresentation } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-presentation";
 import { useFailedTranscriptAction } from "@openducktor/frontend-core/sessions/transcript/use-failed-transcript-action";
 import type {
@@ -35,7 +36,7 @@ const NO_COUNTS: Readonly<Record<string, number>> = Object.freeze({});
 
 type SourceProps = {
   latestSignal: JumpToLatestSignal;
-  onOpenSubagent: (identity: AgentSessionIdentity) => void;
+  onOpenSubagent: (target: AgentSessionTranscriptTarget) => void;
 };
 
 /** A notice action that waits for the host connection. */
@@ -88,8 +89,25 @@ export function LiveSessionTranscript({ latestSignal, onOpenSubagent }: SourcePr
     return chatTitle ? { ...transcriptSession, title: chatTitle } : transcriptSession;
   }, [chatTitle, session]);
   const skills = useSessionSkills();
-  const presentation = useAgentChatPresentation({
+  const taskHandoff = useTaskRuntimeHandoff(
+    owner.kind === "task"
+      ? {
+          repoPath,
+          workspaceId: target.workspace.workspaceId,
+          taskId: owner.taskId,
+          role: owner.role,
+        }
+      : null,
+    identity,
+  );
+  const handoffTranscript = useRuntimeHandoffTranscript({
     session: baseSession,
+    repoPath,
+    scope: sessionScope,
+    links: owner.kind === "chat" ? owner.record.handoff?.links : taskHandoff?.links,
+  });
+  const presentation = useAgentChatPresentation({
+    session: handoffTranscript,
     sessionIdentity: identity,
     pendingApprovals: session?.pendingApprovals ?? NO_APPROVALS,
     pendingQuestions: session?.pendingQuestions ?? NO_QUESTIONS,
@@ -234,3 +252,5 @@ export function ReadOnlySessionTranscript({
     />
   );
 }
+import { useRuntimeHandoffTranscript } from "@openducktor/frontend-core/sessions/transcript/use-runtime-handoff-transcript";
+import { useTaskRuntimeHandoff } from "@openducktor/frontend-core/sessions/send/use-task-runtime-handoff";

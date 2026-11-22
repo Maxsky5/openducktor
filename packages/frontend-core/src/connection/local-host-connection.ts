@@ -92,7 +92,7 @@ export const createLocalHostConnection = ({
     const signal = options?.signal;
     try {
       return resultSchema.parse(
-        await current().request({ method: "invoke", command, args: args ?? {} }, signal),
+        await current().request({ method: "invoke", command, args: args ?? {} }, options),
       );
     } catch (cause) {
       // The caller stopped waiting. The host interrupts a read and keeps other work.
@@ -231,8 +231,9 @@ export const createLocalHostConnection = ({
       let attachGeneration = 0;
       const attachment = createAgentSessionLiveAttachment(input.repoPath, listener);
       const attach = async (generation: number): Promise<void> => {
+        const hostEpoch = current().readHostEpoch();
         const snapshot = await client.agentSessionLiveAttach(input);
-        if (!closed && generation === attachGeneration) attachment.install(snapshot);
+        if (!closed && generation === attachGeneration) attachment.install(snapshot, hostEpoch);
       };
       // A complete replay keeps the current state. Missed events need a new host snapshot.
       const reattach = (): void => {

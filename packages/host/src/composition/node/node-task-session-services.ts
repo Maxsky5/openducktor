@@ -34,6 +34,9 @@ import {
 import { createSessionTurnPreparation } from "../../application/agent-sessions/session-turn-preparation";
 import { createHostApprovalPolicy } from "../../application/agent-sessions/host-approval-policy";
 import { createHostOperationWorkers } from "../../effect/host-operation-workers";
+import { composeRuntimeHandoff, digestHandoffPrefix } from "./node-runtime-handoff";
+import { projectSavedHandoffHistory } from "../../application/agent-sessions/runtime-handoff-history";
+import type { WorkspaceSessionUpdatedPublisher } from "../../application/workspaces/workspace-session-persistence-callbacks";
 
 type TaskServiceInput = Omit<
   Parameters<typeof createTaskServiceWithMutationProgress>[0],
@@ -62,7 +65,11 @@ export const createNodeTaskSessionServices = ({
   agentSessionLiveStateService,
   canonicalizeRepoPath,
   runtimeAdmission,
-  workspaceSessions: { persistence: repositoryPolicy, readSessionRootRefs: readSavedRoots },
+  workspaceSessions: {
+    persistence: repositoryPolicy,
+    readSessionRootRefs: readSavedRoots,
+    publishUpdated,
+  },
   naming,
   workflowLaunch,
   pauseForStop,
@@ -88,6 +95,7 @@ export const createNodeTaskSessionServices = ({
   /** The workspace session composition. */
   workspaceSessions: {
     persistence: AgentSessionOperationPolicy;
+    publishUpdated: WorkspaceSessionUpdatedPublisher;
     readSessionRootRefs: Parameters<
       typeof createAgentSessionCommandService
     >[0]["readSessionRootRefs"];
@@ -104,7 +112,11 @@ export const createNodeTaskSessionServices = ({
   /** The saved chats and tasks that own sessions and worktrees. */
   savedSessions: Pick<
     NodeTaskAssetServices,
-    "workspaceSessionStore" | "taskOwnership" | "agentSessionTurnStore"
+    | "workspaceSessionStore"
+    | "taskOwnership"
+    | "runtimeHandoffs"
+    | "taskStore"
+    | "agentSessionTurnStore"
   >;
   claudeSessionMetadata: ClaudeSessionMetadataPort;
 }) => {
@@ -137,6 +149,8 @@ export const createNodeTaskSessionServices = ({
       }),
     taskActivityGuard: createRuntimeTaskActivityGuard({
       runtimeRegistry: taskServiceInput.runtimeRegistry,
+      hasUnresolvedTaskHandoff: (ref) =>
+        agentSessionCommandService.handoff?.hasUnresolvedTaskHandoff(ref) === true,
       sessionService: agentSessionLiveStateService,
       settingsConfig: taskServiceInput.settingsConfig,
       readSessionRootRefs,
@@ -179,6 +193,19 @@ export const createNodeTaskSessionServices = ({
     ...taskServiceInput,
     naming,
   });
+  const readHandoffPrefix: Parameters<typeof composeRuntimeHandoff>[0]["readPrefix"] = (
+    input,
+    candidate,
+  ) =>
+    Effect.gen(function* () {
+      const workspaceId =
+        input.sessionScope?.workspaceId ??
+        (yield* taskServiceInput.workspaceSettingsService.listWorkspaces()).find(
+          (workspace) => workspace.repoPath === input.repoPath,
+        )?.workspaceId;
+      if (!workspaceId) return null;
+      return yield* savedSessions.runtimeHandoffs.prefix({ ...input, workspaceId, candidate });
+    }).pipe(Effect.mapError((cause) => toHostOperationError(cause, "handoff.read-prefix")));
   const agentRuntimeQueries = createAgentRuntimeQueryService({
     adapterRegistry: workflowLaunch.adapterRegistry,
     deniedToolParts: workflowLaunch.deniedToolParts,
@@ -190,6 +217,21 @@ export const createNodeTaskSessionServices = ({
     taskReader: taskServiceInput.taskStore,
     runtimeRegistry: taskServiceInput.runtimeRegistry,
     worktreeReads: taskServiceInput.taskSessionLifecycleCoordinator,
+    isAcceptedHandoffMember: (ref, scope): boolean =>
+      agentSessionCommandService.handoff?.acceptedDestination(ref, scope) != null,
+    isStagedHandoffMember: (ref): boolean =>
+      agentSessionCommandService.handoff?.isStagedHandoffMember(ref) === true,
+    projectHandoffHistory: (input, history) => {
+      const staged = agentSessionCommandService.handoff?.acceptedDestination(input, undefined);
+      return projectSavedHandoffHistory(
+        history,
+        (candidate) =>
+          !candidate && staged?.receipt
+            ? Effect.succeed({ firstMessageId: staged.firstMessageId, receipt: staged.receipt })
+            : readHandoffPrefix(input, candidate),
+        digestHandoffPrefix,
+      ).pipe(Effect.mapError((cause) => toHostOperationError(cause, "handoff.read-prefix")));
+    },
   });
   const turnPreparation = createSessionTurnPreparation({
     settings: taskServiceInput.workspaceSettingsService,
@@ -241,8 +283,40 @@ export const createNodeTaskSessionServices = ({
     taskLifecycle: taskServiceInput.taskSessionLifecycleCoordinator,
     taskSessionStart,
     prepareRolePolicy,
+    createHandoff: composeRuntimeHandoff({
+      assets: savedSessions,
+      taskWorkflows: taskServiceInput.taskWorkflows,
+      resolveWorkflowRolePolicy,
+      prepareRolePolicy,
+      settingsConfig: taskServiceInput.settingsConfig,
+      runtimeStatus: taskServiceInput.runtimeRegistry.status,
+      runtime: agentSessionLiveStateService,
+      queries: agentRuntimeQueries,
+      resolveParts: workflowLaunch.resolveParts,
+      worktreeReads: taskServiceInput.taskSessionLifecycleCoordinator,
+      readPrefix: readHandoffPrefix,
+      taskPrompt: turnPreparation.context,
+      publishWorkspace: publishUpdated,
+      publishTask: (chat, agentSessions) => {
+        const active = agentSessions
+          .find(
+            (record) =>
+              record.role === chat.role &&
+              record.runtimeKind === chat.first.runtimeKind &&
+              record.workingDirectory === chat.first.workingDirectory &&
+              record.externalSessionId === chat.first.externalSessionId,
+          )
+          ?.handoff?.links.at(-1)?.to;
+        if (!active) return Effect.void;
+        return agentSessionLiveStateService.publishTaskSessionRecords(
+          { ...active, repoPath: chat.repoPath },
+          { workspaceId: chat.workspaceId, taskId: chat.taskId, agentSessions },
+        );
+      },
+    }),
   };
-  const agentSessionCommandService = {
+  const agentSessionCommandService: typeof agentSessionLiveStateService &
+    ReturnType<typeof createAgentSessionCommandService> = {
     ...agentSessionLiveStateService,
     ...createAgentSessionCommandService({
       ...commandDeps,

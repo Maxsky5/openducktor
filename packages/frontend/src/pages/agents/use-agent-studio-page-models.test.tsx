@@ -1,4 +1,5 @@
 import type { AgentChatSurfaceModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import { AgentChatSendProviders } from "@openducktor/frontend-core/test-support/agent-chat-send-providers";
 import { MemoryRouter } from "react-router";
 import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
 import { createAgentChatSendFixture } from "@openducktor/frontend-core/test-support/agent-chat-send-fixture";
@@ -391,7 +392,11 @@ const createHookHarness = (initialProps: HookArgs) => {
           createElement(
             AgentSessionsContext.Provider,
             { value: store },
-            createElement(MemoryRouter, null, children),
+            createElement(
+              MemoryRouter,
+              null,
+              createElement(AgentChatSendProviders, null, children),
+            ),
           ),
         ),
       ),

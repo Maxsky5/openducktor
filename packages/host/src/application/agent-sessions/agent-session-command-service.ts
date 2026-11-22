@@ -33,6 +33,7 @@ import { startupStep, completeStartupSession } from "./session-startup-progress"
 import type { SessionGoalRules } from "./session-goal-rules";
 import { createSessionGoalCommands } from "./session-goal-commands";
 import { createSessionCommandReadiness } from "./session-command-readiness";
+import type { RuntimeHandoffFactory } from "./runtime-handoff-command";
 
 type ObservedSessionCommands = Pick<
   AgentSessionLiveStateService,
@@ -52,6 +53,7 @@ export const createAgentSessionCommandService = ({
   readSessionRootRefs,
   approvalPolicy,
   goalRules,
+  createHandoff,
   ...dependencies
 }: Omit<Parameters<typeof createTaskWorkflowSessionPolicy>[0], "resolveRoot"> & {
   repositoryPolicy: AgentSessionOperationPolicy;
@@ -65,6 +67,7 @@ export const createAgentSessionCommandService = ({
     "reply"
   >;
   goalRules: SessionGoalRules;
+  createHandoff?: RuntimeHandoffFactory;
   runtime: Parameters<typeof createTaskWorkflowSessionPolicy>[0]["runtime"] &
     ObservedSessionCommands &
     Pick<
@@ -89,7 +92,10 @@ export const createAgentSessionCommandService = ({
   });
   const policyFor = (scope: AgentSessionScope) =>
     scope.kind === "workflow" ? workflow.forScope(scope) : repositoryPolicy;
-  const owner = createSessionOperationOwner({
+  const handoff = createHandoff?.(creation, policyFor, (target, work) =>
+    owner.withRootLock(target, work),
+  );
+  const owner: ReturnType<typeof createSessionOperationOwner> = createSessionOperationOwner({
     resolveRoot: (ref) =>
       Effect.gen(function* () {
         const roots = yield* readSessionRootRefs(ref.repoPath);
@@ -99,6 +105,7 @@ export const createAgentSessionCommandService = ({
     policyFor: (target) => policyFor(target.sessionScope),
     publish: runtime.publishOperation,
     retain: runtime.retainOperation,
+    guardWork: handoff?.guardWork,
   });
   const { readAvailableSession, checkPending, requireReadySession } =
     createSessionCommandReadiness(runtime);
@@ -140,6 +147,7 @@ export const createAgentSessionCommandService = ({
 
   return {
     ...runtime,
+    handoff,
     runMessageOperation: <A, E>(
       input: AgentMessageTarget,
       effect: Effect.Effect<A, E>,
@@ -151,9 +159,12 @@ export const createAgentSessionCommandService = ({
           return yield* owner.run({ ...input, repoPath }, "submission", effect, submissionId);
         }),
       ),
-    shutdownOperations: owner.shutdown,
+    shutdownOperations: () => Effect.andThen(handoff?.shutdown() ?? Effect.void, owner.shutdown()),
     observeOperation: (envelope: import("@openducktor/contracts").AgentSessionLiveEnvelope) =>
-      Effect.sync(() => observeModelUpdate(envelope)).pipe(
+      Effect.sync(() => {
+        observeModelUpdate(envelope);
+        handoff?.observe(envelope);
+      }).pipe(
         Effect.andThen(
           Effect.forEach(
             envelope.type === "snapshot"

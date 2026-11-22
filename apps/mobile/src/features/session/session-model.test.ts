@@ -52,17 +52,30 @@ const LOADING: AgentSessionReadModelLoadState = { kind: "loading", workspaceRepo
 
 describe("readSessionRoute", () => {
   test("reads the identity and the view flags", () => {
+    const transcriptScope = {
+      kind: "workflow",
+      workspaceId: "ws-1",
+      taskId: "task",
+      role: "build",
+    } as const;
     const result = readSessionRoute({
       workspaceId: "ws-1",
       externalSessionId: "ext-1",
       runtimeKind: "opencode",
       workingDirectory: "/repo",
       readOnly: "1",
+      transcriptScope: JSON.stringify(transcriptScope),
       focus: "pending-input",
     });
     expect(result).toEqual({
       ok: true,
-      route: { workspaceId: "ws-1", identity, readOnly: true, focusPendingInput: true },
+      route: {
+        workspaceId: "ws-1",
+        identity,
+        readOnly: true,
+        transcriptScope,
+        focusPendingInput: true,
+      },
     });
   });
 

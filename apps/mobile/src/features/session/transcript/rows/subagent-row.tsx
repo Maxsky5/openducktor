@@ -1,5 +1,5 @@
 import type { SubagentMeta } from "@openducktor/frontend-core/sessions/messages/agent-chat-message-card-model.types";
-import { toSubagentSessionIdentity } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
+import { toSubagentTranscriptTarget } from "@openducktor/frontend-core/sessions/transcript/subagent-session-key";
 import { memo, type ReactElement, useCallback, useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -30,14 +30,14 @@ export const SubagentRow = memo(function SubagentRow({
 }): ReactElement {
   const theme = useAppTheme();
   const { parentSession, onOpenSubagent } = useTranscriptRows();
-  const identity = useMemo(
-    () => toSubagentSessionIdentity({ externalSessionId: meta.externalSessionId, parentSession }),
-    [meta.externalSessionId, parentSession],
+  const target = useMemo(
+    () => toSubagentTranscriptTarget({ ...meta, parentSession }),
+    [meta, parentSession],
   );
   const open = useCallback(() => {
-    if (identity) onOpenSubagent(identity);
-  }, [identity, onOpenSubagent]);
-  const subagent = describeSubagent(meta, identity, pendingCount);
+    if (target) onOpenSubagent(target);
+  }, [target, onOpenSubagent]);
+  const subagent = describeSubagent(meta, target, pendingCount);
   const pill = subagentPillColors(theme, subagent.tone);
   return (
     <View style={styles.card}>
@@ -87,7 +87,7 @@ export const SubagentRow = memo(function SubagentRow({
           ) : null}
         </View>
       </View>
-      {identity ? (
+      {target ? (
         <Touchable
           feedback="scale"
           radius={theme.radius.md}

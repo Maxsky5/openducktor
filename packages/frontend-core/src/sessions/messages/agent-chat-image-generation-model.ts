@@ -1,4 +1,9 @@
-import type { AgentImageGenerationPart, AgentSessionLiveRef } from "@openducktor/contracts";
+import type {
+  AgentImageGenerationPart,
+  AgentSessionLiveRef,
+  RuntimeDescriptor,
+} from "@openducktor/contracts";
+import type { AgentImageGenerationMessageMeta } from "../../types/agent-orchestrator";
 
 /** The status label of an image generation row. */
 export const imageGenerationStatusLabel = (part: AgentImageGenerationPart): string => {
@@ -72,10 +77,15 @@ export type GeneratedImagePreviewPlan =
     };
 
 export const resolveGeneratedImagePreviewPlan = (
-  part: AgentImageGenerationPart,
-  sessionRef: AgentSessionLiveRef,
-  supportsImageGeneration: boolean,
+  part: AgentImageGenerationMessageMeta,
+  activeSessionRef: AgentSessionLiveRef | null,
+  runtimes: readonly RuntimeDescriptor[],
 ): GeneratedImagePreviewPlan => {
+  const sessionRef = part.sourceSession ?? activeSessionRef;
+  if (!sessionRef) return { kind: "unavailable", message: IMAGE_GENERATION_MISSING_SESSION_TEXT };
+  const supportsImageGeneration =
+    runtimes.find((runtime) => runtime.kind === sessionRef.runtimeKind)?.capabilities
+      .optionalSurfaces.supportsImageGeneration === true;
   if (!supportsImageGeneration) {
     return { kind: "unsupported", message: IMAGE_GENERATION_UNSUPPORTED_TEXT };
   }

@@ -497,6 +497,7 @@ export const createPersistenceHarness = async (
     },
     lifecycle: createTaskSessionLifecycleCoordinator(),
     operationGate,
+    hasUnresolvedHandoff: () => false,
     sessionTitleGate,
     chatNaming: { registerCreated: persistence.registerCreated },
     isTitleSyncPending: persistence.isTitleSyncPending,

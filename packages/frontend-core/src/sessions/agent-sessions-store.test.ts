@@ -2,6 +2,68 @@ import { describe, expect, test } from "bun:test";
 import { createAgentSessionFixture } from "../test-support/shared-test-fixtures";
 import { createAgentSessionsStore } from "./agent-sessions-store";
 
+test("keeps a staged task destination visible in chat while navigation uses the saved source", () => {
+  const store = createAgentSessionsStore("/repo");
+  const first = {
+    externalSessionId: "source",
+    runtimeKind: "opencode",
+    workingDirectory: "/repo",
+  } as const;
+  const to = { ...first, externalSessionId: "dest", runtimeKind: "codex" } as const;
+  const scope = { workspaceId: "workspace", taskId: "task", role: "build" } as const;
+  store.replaceSession(
+    createAgentSessionFixture({
+      ...first,
+      sessionAssociation: { kind: "workflow", ...scope },
+    }),
+  );
+  store.applyLiveSessionEnvelope({
+    type: "session_upsert",
+    session: {
+      ref: { ...to, repoPath: "/repo" },
+      title: "Builder",
+      activity: "idle",
+      startedAt: "2026-01-01T00:00:00Z",
+      pendingApprovals: [],
+      pendingQuestions: [],
+      contextUsage: null,
+    },
+  });
+  store.setSessionCollection((current) => current);
+  expect(store.getSessionSnapshot(to)).toBeNull();
+  store.applyLiveSessionEnvelope({
+    type: "session_operation_updated",
+    observation: {
+      kind: "handoff",
+      ref: { ...first, repoPath: "/repo" },
+      submissionId: "handoff",
+      pending: false,
+      nativeOutcome: "accepted",
+      handoff: {
+        chat: { ...scope, kind: "task_session", repoPath: "/repo", first },
+        destination: { runtimeKind: "codex", providerId: "openai", modelId: "model" },
+        expectedActive: first,
+        acceptedLink: { from: first, to, firstMessageId: "dest-message", partialHistory: false },
+      },
+    },
+  });
+  store.setSessionCollection((current) => current);
+  expect(store.getSessionSnapshot(to)?.sessionAssociation).toEqual({ kind: "workflow", ...scope });
+  expect(store.getHandoffOperation(to)?.submissionId).toBe("handoff");
+  expect(
+    store.getActivitySnapshot().sessions.map(({ externalSessionId }) => externalSessionId),
+  ).toEqual([first.externalSessionId]);
+  store.applyLiveSessionEnvelope({
+    type: "snapshot",
+    isConnectionSnapshot: true,
+    repoPath: "/repo",
+    sessions: [],
+    messageQueues: [],
+  });
+  store.setSessionCollection((current) => current);
+  expect(store.getSessionSnapshot(to)).toBeNull();
+});
+
 const sessionWithApproval = (externalSessionId: string) =>
   createAgentSessionFixture({
     externalSessionId,

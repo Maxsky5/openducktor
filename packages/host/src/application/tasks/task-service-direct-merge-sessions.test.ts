@@ -3,7 +3,7 @@ import { noWorktreeOwners } from "../../test-support/service-test-doubles";
 import { Deferred, Effect, Fiber } from "effect";
 import type { GitPort } from "../../ports/git-port";
 import type { TaskActivityGuardPort } from "../../ports/task-activity-guard-port";
-import { HostOperationError } from "../../effect/host-errors";
+import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import {
   createAgentSessionRecord,
@@ -39,7 +39,13 @@ const createHarness = (
     output: "merged",
   }),
   publish = true,
-  recording: Effect.Effect<void> = Effect.void,
+  {
+    recording = Effect.void,
+    ensureNoUnresolvedHandoff = () => Effect.void,
+  }: {
+    recording?: Effect.Effect<void>;
+    ensureNoUnresolvedHandoff?: TaskActivityGuardPort["ensureNoUnresolvedHandoff"];
+  } = {},
 ) => {
   const calls: unknown[] = [];
   const coordinator = createTaskSessionLifecycleCoordinator();
@@ -49,6 +55,7 @@ const createHarness = (
     taskSessionLifecycleCoordinator: coordinator,
     taskActivityGuard: {
       countLiveSessions,
+      ensureNoUnresolvedHandoff,
       // Completion stops nothing: it checked that no session runs. It releases the idle ones.
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 0 }),
     },
@@ -129,6 +136,19 @@ const createHarness = (
 };
 
 describe("direct merge session guard", () => {
+  test("refuses to apply a direct merge before an unresolved handoff settles", async () => {
+    const handoffFailure = new HostValidationError({ message: "Use Check delivery" });
+    const harness = createHarness(() => Effect.succeed({ liveSessionCount: 0 }), undefined, false, {
+      ensureNoUnresolvedHandoff: () => Effect.fail(handoffFailure),
+    });
+
+    expect(
+      await Effect.runPromise(Effect.flip(harness.service.directMerge(harness.mergeInput))),
+    ).toBe(handoffFailure);
+    expect(harness.calls).not.toContain("merge");
+    expect(harness.calls).not.toContain("record");
+  });
+
   test("commits the confirmed native merge record when shutdown interrupts its settlement", async () => {
     const recording = Deferred.makeUnsafe<void>();
     const release = Deferred.makeUnsafe<void>();
@@ -136,7 +156,11 @@ describe("direct merge session guard", () => {
       () => Effect.succeed({ liveSessionCount: 0 }),
       Effect.succeed({ outcome: "merged", output: "merged" }),
       true,
-      Deferred.succeed(recording, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      {
+        recording: Deferred.succeed(recording, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+        ),
+      },
     );
     const worker = Effect.runFork(harness.service.directMerge(harness.mergeInput));
     await Effect.runPromise(Deferred.await(recording));

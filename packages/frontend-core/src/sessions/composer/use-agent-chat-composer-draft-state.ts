@@ -113,6 +113,19 @@ export function useAgentChatComposerDraftState({
     setState(nextState);
   }, [nextKey, nextPersistence]);
 
+  useLayoutEffect(
+    () =>
+      nextPersistence?.subscribeCleared?.(() => {
+        const current = latestStateRef.current;
+        if (current.key !== nextKey || current.persistence?.targetKey !== nextPersistence.targetKey)
+          return;
+        const cleared = { ...current, draft: createEmptyComposerDraft() };
+        latestStateRef.current = cleared;
+        setState(cleared);
+      }),
+    [nextKey, nextPersistence],
+  );
+
   useEffect(() => {
     const flushDraft = (): void => {
       const persistence = latestStateRef.current.persistence;

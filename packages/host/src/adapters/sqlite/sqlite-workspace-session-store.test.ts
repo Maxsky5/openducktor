@@ -3,9 +3,10 @@ import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { createAgentSessionRecord } from "../../ports/task-store-port-contract.test-support";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import type { WorkspaceSession } from "@openducktor/contracts";
+import type { AgentSessionHistoryMessage, WorkspaceSession } from "@openducktor/contracts";
 import { Effect } from "effect";
 import {
   createSqliteHostDatabaseManager,
@@ -18,7 +19,12 @@ import {
   openHostDatabaseTestConnection,
 } from "./sqlite-task-store-test-support";
 import { createSqliteWorkspaceSessionStore } from "./sqlite-workspace-session-store";
+import { createSqliteRuntimeHandoffStore } from "./sqlite-runtime-handoffs";
 import { createWorkspaceAdmissionService } from "../../application/workspaces/workspace-admission-service";
+import {
+  prepareRuntimeHandoffHistory,
+  projectSavedHandoffHistory,
+} from "../../application/agent-sessions/runtime-handoff-history";
 import { workspaces } from "./sqlite-host-settings-schema";
 
 const makeSession = (id = "one", updatedAt = 1): WorkspaceSession => ({
@@ -55,6 +61,107 @@ describe("SQLite Workspace Session store", () => {
   };
   const ref = (sessionId = "one") => ({ ...scope(), sessionId });
   const store = () => createSqliteWorkspaceSessionStore(harness);
+
+  test("commits a handoff link and active binding together and rolls back a stale source", async () => {
+    const repository = store();
+    const session = { ...makeSession(), manualTitle: "Review the patch" };
+    await Effect.runPromise(repository.create({ ...scope(), session }));
+    const handoffs = createSqliteRuntimeHandoffStore(harness.contextProvider);
+    const from = {
+      runtimeKind: "codex" as const,
+      externalSessionId: "runtime-one",
+      workingDirectory: session.executionTarget.workingDirectory,
+    };
+    const to = { ...from, runtimeKind: "claude" as const, externalSessionId: "claude-target" };
+    const userMessage = (messageId: string, text: string): AgentSessionHistoryMessage => ({
+      role: "user",
+      state: "read",
+      messageId,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      text,
+      parts: [],
+      displayParts: [],
+    });
+    const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+    const prepared = prepareRuntimeHandoffHistory({
+      segments: [{ messages: [userMessage("first", "Review the patch.")], knownOmissions: false }],
+      contextWindow: 8_000,
+      usedTokens: 0,
+      parts: [{ kind: "text", text: "Continue." }],
+      digest,
+    });
+    if (!prepared?.prefix || !prepared.receipt) throw new Error("Expected imported context");
+    const input = {
+      chat: { ...harness.scope, kind: "workspace_session" as const, sessionId: session.id },
+      link: { from, to, firstMessageId: "first-turn", partialHistory: true },
+      model: { runtimeKind: "claude" as const, providerId: "claude", modelId: "opus" },
+      acceptedAt: 2,
+      contextPrefix: prepared.receipt,
+    };
+    const stale = await Effect.runPromise(
+      Effect.result(
+        handoffs.commit({
+          ...input,
+          link: { ...input.link, from: { ...from, externalSessionId: "stale-source" } },
+        }),
+      ),
+    );
+    expect(stale._tag).toBe("Failure");
+    expect(await Effect.runPromise(repository.get(ref()))).toEqual(session);
+    expect(await Effect.runPromise(handoffs.prefix({ ...harness.scope, ...to }))).toBeNull();
+
+    await Effect.runPromise(handoffs.commit(input));
+    const reopened = await Effect.runPromise(store().get(ref()));
+    expect(reopened).toMatchObject({
+      id: session.id,
+      manualTitle: session.manualTitle,
+      runtimeKind: "claude",
+      externalSessionId: to.externalSessionId,
+      selectedModel: input.model,
+      handoff: { links: [input.link] },
+    });
+    const original = userMessage(input.link.firstMessageId, `${prepared.prefix}Continue.`);
+    const destinationHistory = await Effect.runPromise(
+      projectSavedHandoffHistory(
+        [original],
+        (candidate) => handoffs.prefix({ ...harness.scope, ...to, candidate }),
+        digest,
+      ),
+    );
+    expect(destinationHistory).toEqual([{ ...original, text: "Continue." }]);
+
+    const fork = { ...to, workingDirectory: "/repo/fork", externalSessionId: "fork" };
+    const copied = userMessage("fork-message", `${prepared.prefix}Continue.`);
+    const forged = userMessage(
+      "unmatched",
+      copied.text.replace("Review the patch.", "Other history."),
+    );
+    const history = await Effect.runPromise(
+      projectSavedHandoffHistory(
+        [copied, forged],
+        (candidate) => handoffs.prefix({ ...harness.scope, ...fork, candidate }),
+        digest,
+      ),
+    );
+    expect(history).toEqual([{ ...copied, text: "Continue." }, forged]);
+    expect(
+      await Effect.runPromise(
+        repository.listRuntimeOwners({
+          ...harness.scope,
+          filter: { runtimeKind: from.runtimeKind, externalSessionIds: [from.externalSessionId] },
+        }),
+      ),
+    ).toEqual([
+      {
+        workspaceId: harness.workspaceId,
+        kind: "workspace",
+        sessionId: session.id,
+        runtimeKind: from.runtimeKind,
+        externalSessionId: from.externalSessionId,
+        archived: false,
+      },
+    ]);
+  });
 
   test("ownership reads include archived history beyond the UI limit after a closed root disappears", async () => {
     const repoPath = path.join(harness.configDir, "owner-repo");

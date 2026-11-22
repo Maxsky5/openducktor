@@ -5,11 +5,22 @@ import { runtimeReadinessTargetForRuntime } from "@openducktor/frontend-core/lib
 import { useRuntimeReadiness } from "@openducktor/frontend-core/lib/use-runtime-readiness";
 import { useStableAgentSessionIdentity } from "@openducktor/frontend-core/lib/use-stable-agent-session-identity";
 import { workspaceSessionListQueryOptions } from "@openducktor/frontend-core/queries/workspace-sessions";
-import { useAgentSessionReadModelStateContext } from "@openducktor/frontend-core/sessions/session-contexts";
+import {
+  useAgentSessionReadModelStateContext,
+  useAgentSessionsContext,
+} from "@openducktor/frontend-core/sessions/session-contexts";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
 import type { AgentSessionState } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { useQuery } from "@tanstack/react-query";
-import { Stack, useFocusEffect } from "expo-router";
-import { type ReactElement, useCallback, useMemo } from "react";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { type ReactElement, useCallback, useEffect, useMemo } from "react";
+import { switchedSessionParams } from "@/navigation/routes";
+import {
+  projectAcceptedWorkspaceChat,
+  subscribeHandoffCommit,
+  useRuntimeHandoff,
+} from "@openducktor/frontend-core/sessions/send/runtime-handoff";
+import { useTaskRuntimeHandoff } from "@openducktor/frontend-core/sessions/send/use-task-runtime-handoff";
 import { useMobileWorkspaces } from "@/composition/workspace-selection";
 import { findChatRecord } from "@/features/work-owner/work-owner-model";
 import { useRepoTask } from "@/features/work-owner/use-repo-task";
@@ -192,28 +203,93 @@ function SessionTargetResolver({
 }): ReactElement {
   const identity = useStableAgentSessionIdentity(route.identity);
   if (!identity) throw new Error("The session route always names a session identity.");
-  const { readOnly } = route;
+  const { readOnly, transcriptScope } = route;
+  const router = useRouter();
+  const chatRef = useMemo(
+    () => ({ workspaceId: workspace.workspaceId, repoPath: workspace.repoPath }),
+    [workspace],
+  );
   const { resolution, retry } = useSessionOwnerResolution({
     identity,
     readOnly,
     workspaceId: workspace.workspaceId,
   });
   const workOwner = useResolvedWorkOwner(resolution, workspace.workspaceId, identity);
+  const owner = resolution.status === "ready" ? resolution.owner : null;
+  const taskHandoff = useTaskRuntimeHandoff(
+    owner?.kind === "task" ? { ...chatRef, taskId: owner.taskId, role: owner.role } : null,
+    identity,
+  );
+  const handoff = useRuntimeHandoff(
+    owner?.kind === "chat"
+      ? { ...chatRef, kind: "workspace_session", sessionId: owner.record.id }
+      : (taskHandoff?.chat ?? null),
+    identity,
+  );
+  const historical =
+    owner?.kind === "chat"
+      ? owner.record.handoff?.links.some(
+          ({ from }) => agentSessionIdentityKey(from) === agentSessionIdentityKey(identity),
+        )
+      : taskHandoff &&
+        agentSessionIdentityKey(taskHandoff.savedActive) !== agentSessionIdentityKey(identity);
+  const followsHandoff = !readOnly && !route.pinSession;
+  const connection = useClientConnection();
+  const sessions = useAgentSessionsContext();
+  useEffect(() => {
+    if (!followsHandoff) return;
+    return subscribeHandoffCommit(connection, sessions, workspace.repoPath, identity, ({ to }) =>
+      router.setParams(switchedSessionParams(workspace.workspaceId, to)),
+    );
+  }, [
+    connection,
+    followsHandoff,
+    identity,
+    router,
+    sessions,
+    workspace.repoPath,
+    workspace.workspaceId,
+  ]);
+  const { acceptedModel, waitingForLocalDraft } = handoff;
+  const acceptedLink = followsHandoff && !handoff.committedLink ? handoff.acceptedLink : undefined;
+  const displayIdentity = acceptedLink?.to ?? identity;
 
   const target = useMemo<SessionTarget | null>(() => {
     if (resolution.status !== "ready") return null;
     return {
       workspace,
       repoPath: workspace.repoPath,
-      identity,
-      sessionKey: agentSessionIdentityKey(identity),
-      readOnly,
-      owner: resolution.owner,
+      identity: displayIdentity,
+      sessionKey: agentSessionIdentityKey(displayIdentity),
+      readOnly: readOnly || (Boolean(historical) && !acceptedLink && !waitingForLocalDraft),
+      owner:
+        resolution.owner.kind === "chat"
+          ? {
+              ...resolution.owner,
+              record: projectAcceptedWorkspaceChat(
+                resolution.owner.record,
+                acceptedLink,
+                acceptedModel,
+              ),
+            }
+          : resolution.owner,
+      handoffSource: acceptedLink?.from,
       sessionAssociation: resolution.sessionAssociation,
-      sessionScope: resolution.sessionScope,
+      sessionScope: transcriptScope ?? resolution.sessionScope,
       workOwner,
     };
-  }, [identity, readOnly, resolution, workOwner, workspace]);
+  }, [
+    acceptedLink,
+    acceptedModel,
+    displayIdentity,
+    historical,
+    readOnly,
+    resolution,
+    transcriptScope,
+    waitingForLocalDraft,
+    workOwner,
+    workspace,
+  ]);
 
   if (!target) return <SessionResolutionState resolution={resolution} onRetry={retry} />;
   // A switch to another session of the task keeps this screen, so the view of each session starts

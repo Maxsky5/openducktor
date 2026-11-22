@@ -2,6 +2,8 @@ import { AGENT_RUNTIME_QUERY_HOST_COMMAND_NAMES } from "./agent-runtime-query-co
 import { z } from "zod";
 
 export const HOST_COMMAND_NAMES = [
+  "agent_chat_handoff_check",
+  "agent_chat_handoff_send",
   ...AGENT_RUNTIME_QUERY_HOST_COMMAND_NAMES,
   "agent_session_background_task_stop",
   "agent_session_begin_generated_image_batch",

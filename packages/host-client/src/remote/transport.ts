@@ -29,6 +29,9 @@ export class RemoteConnectionError extends Error {
     this.name = "RemoteConnectionError";
   }
 }
+/** The host refused a request before running it. */
+export class RemoteRefusalError extends RemoteConnectionError {}
+
 /** This client refused a reply that is larger than its limit. The connection is sound. */
 export class RemoteReplyTooLargeError extends RemoteConnectionError {
   constructor(limit: number) {

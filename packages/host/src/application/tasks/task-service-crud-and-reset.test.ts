@@ -9,11 +9,13 @@ import { createTaskDeleteUseCase } from "./use-cases/delete-task";
 import { createTaskSessionLifecycleCoordinator } from "./worktrees/task-session-lifecycle-coordinator";
 import { TaskMutationProgressFailure } from "./task-mutation-progress-failure";
 import { createTaskStoreTestDouble } from "../../test-support/task-store-test-double";
+import { createRuntimeTaskActivityGuard } from "./runtime-task-activity-guard";
 import {
   createAgentSessionRecord,
   createBuildSettingsConfig,
   createBuildWorkspaceSettingsService,
   createDirectMergeGitPort,
+  createRuntimeRegistryPort,
   createTaskService,
   createTaskServiceWithMutationProgress,
   type TaskActivityGuardPort,
@@ -114,6 +116,108 @@ const createCleanupTaskServiceInput = (taskStore: TaskStorePort) => ({
   }),
 });
 describe("createTaskService task mutations and reset", () => {
+  test.each(["resetTask", "deleteTask"] as const)(
+    "%s protects the checkout until a handoff settles",
+    async (action) => {
+      const ref = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
+      const workingDirectory = "/worktrees/repo/task-1";
+      const source = createAgentSessionRecord({ workingDirectory, externalSessionId: "source" });
+      const destination = createAgentSessionRecord({
+        workingDirectory,
+        runtimeKind: "codex",
+        externalSessionId: "destination",
+      });
+      const sessions = [source];
+      const cleanup: string[] = [];
+      const probes: string[] = [];
+      let unresolved = true;
+      const taskStore = createResetTaskStore(sessions, {
+        clearAgentSessionsByRoles: () =>
+          Effect.sync(() => {
+            cleanup.push("clear sessions");
+            return true;
+          }),
+        deleteTask: () =>
+          Effect.sync(() => {
+            cleanup.push("delete task");
+            return true;
+          }),
+      });
+      const settingsConfig = createBuildSettingsConfig(new Set([ref.repoPath, workingDirectory]));
+      const git = createDirectMergeGitPort({
+        calls: [],
+        branches: {
+          [ref.repoPath]: [
+            {
+              name: "odt/task-1",
+              isCurrent: false,
+              isRemote: false,
+              worktreePath: workingDirectory,
+            },
+          ],
+        },
+      });
+      const taskActivityGuard = createRuntimeTaskActivityGuard({
+        settingsConfig,
+        hasUnresolvedTaskHandoff: ({ workspaceId, taskId }) =>
+          unresolved && workspaceId === ref.workspaceId && taskId === ref.taskId,
+        readSessionRootRefs: () => Effect.succeed([]),
+        sessionService: {
+          list: () => Effect.succeed([]),
+          releaseSession: () => Effect.void,
+          stopSession: () => Effect.void,
+        },
+        runtimeRegistry: createRuntimeRegistryPort({
+          probeSessionStatus: ({ externalSessionId }) =>
+            Effect.sync(() => {
+              probes.push(externalSessionId);
+              return {
+                supported: true,
+                hasLiveSession: externalSessionId === destination.externalSessionId,
+              };
+            }),
+          stopSession: ({ externalSessionId }) =>
+            Effect.sync(() => {
+              cleanup.push(`stop ${externalSessionId}`);
+            }),
+        }),
+      });
+      const service = createTaskService({
+        ...createCleanupTaskServiceInput(taskStore),
+        settingsConfig,
+        taskActivityGuard,
+        worktreeOwners: noWorktreeOwners,
+        worktreeFiles: createCleanupWorktreeFiles([]),
+        gitPort: {
+          ...git,
+          removeWorktree: () =>
+            Effect.sync(() => {
+              cleanup.push("remove worktree");
+            }),
+        },
+      });
+
+      const runCleanup = () =>
+        action === "resetTask"
+          ? service.resetTask(ref).pipe(Effect.asVoid)
+          : service.deleteTask(ref).pipe(Effect.asVoid);
+      await expect(Effect.runPromise(runCleanup())).rejects.toThrow("Use Check delivery");
+      expect(probes).toEqual([]);
+      expect(cleanup).toEqual([]);
+
+      // Settlement saves the destination before task cleanup can resume.
+      sessions.push(destination);
+      unresolved = false;
+      await Effect.runPromise(runCleanup());
+      expect(probes).toEqual(["source", "destination"]);
+      expect(cleanup).toEqual([
+        "stop destination",
+        "remove worktree",
+        action === "resetTask" ? "clear sessions" : "delete task",
+      ]);
+    },
+  );
+
   test.each([false, true])(
     "captures artifact removals once for task reset, partial failure=%s",
     async (partialFailure) => {
@@ -654,6 +758,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -898,6 +1003,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -989,6 +1095,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions(input) {
         return Effect.sync(() => {
           calls.push({ type: "activityGuard", input });
@@ -1155,6 +1262,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: () =>
         Effect.fail(
           new HostOperationError({ operation: "test.stop", message: "runtime stop failed" }),
@@ -1183,6 +1291,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
     };
 
@@ -1347,6 +1456,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -1603,6 +1713,7 @@ describe("createTaskService task mutations and reset", () => {
     };
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions(input) {
         return Effect.tryPromise({
           try: async () => {
@@ -1716,6 +1827,7 @@ describe("createTaskService task mutations and reset", () => {
     });
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: () =>
         Effect.fail(
           new HostOperationError({ operation: "test.stop", message: "runtime stop failed" }),
@@ -1742,6 +1854,7 @@ describe("createTaskService task mutations and reset", () => {
     });
     const taskActivityGuard: TaskActivityGuardPort = {
       countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      ensureNoUnresolvedHandoff: () => Effect.void,
       cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
     };
 
@@ -1777,6 +1890,7 @@ describe("createTaskService task mutations and reset", () => {
       settingsConfig: createBuildSettingsConfig(new Set(["/repo"])),
       taskActivityGuard: {
         countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+        ensureNoUnresolvedHandoff: () => Effect.void,
         cleanupTaskSessions: () => Effect.succeed({ stoppedSessionCount: 2 }),
       },
       taskStore,
@@ -1833,6 +1947,7 @@ describe("createTaskService task mutations and reset", () => {
       settingsConfig: createBuildSettingsConfig(new Set(["/repo", "/worktrees/repo/task-1"])),
       taskActivityGuard: {
         countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+        ensureNoUnresolvedHandoff: () => Effect.void,
         cleanupTaskSessions: () =>
           Effect.sync(() => {
             calls.push({ type: "cleanupTaskSessions" });

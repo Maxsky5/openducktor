@@ -21,6 +21,7 @@ import { GOAL_SLASH_COMMAND, slashCommandDescriptorSchema } from "./slash-comman
 import { subagentDescriptorSchema } from "./subagent-schemas";
 import { WORKSPACE_SESSION_MANUAL_TITLE_LIMIT } from "./workspace-session-limits";
 import { agentSessionRecordSchema } from "./session-schemas";
+import type { NativeHandoffInput } from "./agent-chat-handoff-schemas";
 
 export {
   agentSessionControlSummarySchema,
@@ -225,7 +226,9 @@ export const agentSessionControlSendInputSchema = agentSessionLiveRefSchema
   })
   .strict()
   .superRefine(refineAgentSessionUserMessageParts);
-export type AgentSessionControlSendInput = z.infer<typeof agentSessionControlSendInputSchema>;
+export type AgentSessionControlSendInput = z.infer<typeof agentSessionControlSendInputSchema> & {
+  handoff?: NativeHandoffInput | undefined;
+};
 
 export const agentSessionModelSettingsSchema = z
   .object({

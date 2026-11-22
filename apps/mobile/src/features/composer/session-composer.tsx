@@ -26,6 +26,7 @@ import { BorderRay } from "@/ui/border-ray";
 import { useBottomEdgePadding } from "@/ui/keyboard-inset-view";
 import { blurFocusedField } from "@/ui/keyboard-dismiss";
 import { Text } from "@/ui/text";
+import { Callout } from "@/ui/callout";
 import { useCompactHeight } from "@/ui/use-wide-layout";
 import { useSessionSelector } from "@/features/session/use-session-selector";
 import { withAlpha } from "@/theme/color-alpha";
@@ -129,13 +130,25 @@ function SessionComposerView({
   const { trigger, suggestions, pickSuggestion } = useComposerTrigger(composer, focused);
 
   const support = composer.promptInput.support;
-  const pickers = useMemo(
+  const sourceAttachmentSupport = composer.selectedModelDescriptor?.attachmentSupport;
+  const queuePickers = useMemo(
     () =>
       resolveAttachmentPickers({
         runtimeSupportsAttachments: support.supportsAttachments,
-        support: composer.selectedModelDescriptor?.attachmentSupport,
+        support: sourceAttachmentSupport,
       }),
-    [composer.selectedModelDescriptor?.attachmentSupport, support.supportsAttachments],
+    [sourceAttachmentSupport, support.supportsAttachments],
+  );
+  const handoffSelected = delivery.handoff?.selection !== undefined;
+  const pickers = useMemo(
+    () =>
+      handoffSelected
+        ? resolveAttachmentPickers({
+            runtimeSupportsAttachments: policy.supportsAttachments,
+            support: policy.attachmentSupport,
+          })
+        : queuePickers,
+    [handoffSelected, policy.attachmentSupport, policy.supportsAttachments, queuePickers],
   );
   const attachmentPickers = useAttachmentPickers({
     pickers,
@@ -218,8 +231,8 @@ function SessionComposerView({
             model={delivery.messageQueue}
             steerContext={steerContext}
             commandsOpen={gateOpen && composer.canInteract}
-            pickers={pickers}
-            attachmentSupport={composer.selectedModelDescriptor?.attachmentSupport}
+            pickers={queuePickers}
+            attachmentSupport={sourceAttachmentSupport}
           />
         ) : null}
         <BackgroundTaskBar
@@ -237,6 +250,7 @@ function SessionComposerView({
             />
           ) : null}
           {delivery.messageQueue ? <QueuePauseNotice model={delivery.messageQueue} /> : null}
+          <HandoffNotice notice={delivery.handoff?.notice} />
           {pendingComments ? (
             <PendingCommentsNotice
               comments={pendingComments}
@@ -278,6 +292,29 @@ function SessionComposerView({
         </View>
       </View>
     </Animated.View>
+  );
+}
+
+function HandoffNotice({
+  notice,
+}: {
+  notice: NonNullable<SessionComposerModel["delivery"]["handoff"]>["notice"] | undefined;
+}): ReactElement | null {
+  if (!notice) return null;
+  return (
+    <Callout
+      tone="info"
+      size="sm"
+      title={notice.title}
+      message={notice.details}
+      action={
+        notice.check ? (
+          <ComposerTextButton label="Check delivery" variant="outline" onPress={notice.check} />
+        ) : notice.cancel ? (
+          <ComposerTextButton label="Cancel handoff" variant="ghost" onPress={notice.cancel} />
+        ) : undefined
+      }
+    />
   );
 }
 

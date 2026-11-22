@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { AgentImageGenerationPart, AgentSessionLiveRef } from "@openducktor/contracts";
+import type { AgentImageGenerationMessageMeta } from "@openducktor/frontend-core/types/agent-orchestrator";
 import { ChevronDown, ImageIcon, LoaderCircle, TextAlignStart, TriangleAlert } from "lucide-react";
 import { type ReactElement, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +35,7 @@ import {
   resolveGeneratedImagePreviewPlan,
 } from "@openducktor/frontend-core/sessions/messages/agent-chat-image-generation-model";
 
-type AgentChatImageGenerationProps = { part: AgentImageGenerationPart };
+type AgentChatImageGenerationProps = { part: AgentImageGenerationMessageMeta };
 
 type ImagePreviewProps = {
   alt: string;
@@ -43,7 +44,8 @@ type ImagePreviewProps = {
 };
 
 export function AgentChatImageGeneration({ part }: AgentChatImageGenerationProps): ReactElement {
-  const sessionRef = useContext(AgentChatImageSessionContext);
+  const activeSessionRef = useContext(AgentChatImageSessionContext);
+  const sessionRef = part.sourceSession ?? activeSessionRef;
   return (
     <div
       className={cn(
@@ -236,14 +238,11 @@ function CompletedImage({
   part,
   sessionRef,
 }: {
-  part: AgentImageGenerationPart;
+  part: AgentImageGenerationMessageMeta;
   sessionRef: AgentSessionLiveRef;
 }): ReactElement {
   const { runtimeDefinitions } = useRuntimeDefinitionsContext();
-  const supported =
-    runtimeDefinitions.find((runtime) => runtime.kind === sessionRef.runtimeKind)?.capabilities
-      .optionalSurfaces.supportsImageGeneration === true;
-  const plan = resolveGeneratedImagePreviewPlan(part, sessionRef, supported);
+  const plan = resolveGeneratedImagePreviewPlan(part, sessionRef, runtimeDefinitions);
   const alt = generatedImageAlt(part);
   if (plan.kind === "unsupported" || plan.kind === "unavailable")
     return (

@@ -1,6 +1,7 @@
 import { assertRuntimeOwnershipScope } from "./sqlite-runtime-ownership-scope";
 import { listRuntimeSessionOwners } from "./sqlite-runtime-session-owners";
 import { type AgentSessionRecord, type TaskAgentSessions } from "@openducktor/contracts";
+import { agentSessionRefKey } from "@openducktor/core";
 import { and, eq, inArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { sqliteValues } from "./sqlite-parameters";
@@ -13,7 +14,6 @@ import {
   readTaskSessionsForTasks,
   readTaskSessionsWithPositions,
   replaceTaskSessions,
-  selectedModelColumns,
   taskRelationScope,
 } from "./sqlite-task-relations";
 import { requireTaskRow } from "./sqlite-task-queries";
@@ -22,7 +22,24 @@ import {
   type SqliteTaskStoreReadError,
   type SqliteTaskStoreWriteError,
 } from "./sqlite-task-store-errors";
-import { type HostDatabaseSession, taskSessions, tasks } from "./sqlite-host-database-schema";
+import {
+  type HostDatabaseSession,
+  runtimeHandoffs,
+  taskSessions,
+  tasks,
+} from "./sqlite-host-database-schema";
+import { selectedModelColumns } from "./sqlite-session-model-columns";
+
+const handoffMembers = (records: AgentSessionRecord[], repoPath: string) =>
+  new Set(
+    records.flatMap(
+      ({ handoff }) =>
+        handoff?.links.flatMap(({ from, to }) => [
+          agentSessionRefKey({ ...from, repoPath }),
+          agentSessionRefKey({ ...to, repoPath }),
+        ]) ?? [],
+    ),
+  );
 
 const compactAgentSessionForStorage = (
   session: AgentSessionRecord,
@@ -171,6 +188,18 @@ export const clearAgentSessionsByRoles = (
     }
     const sessions = yield* readTaskSessionsWithPositions(session, workspaceId, row.id);
     const matches = sessions.filter(({ record }) => roleSet.has(record.role.trim()));
+    yield* session.execute(
+      (db) =>
+        db
+          .delete(runtimeHandoffs)
+          .where(
+            and(
+              taskRelationScope(runtimeHandoffs, workspaceId, input.taskId),
+              inArray(runtimeHandoffs.taskRole, sqliteValues([...roleSet])),
+            ),
+          ),
+      "sqliteTaskRepository.clearAgentSessionsByRoles.deleteHandoffs",
+    );
     if (matches.length > 0)
       yield* session.execute(
         (db) =>
@@ -208,6 +237,7 @@ export const upsertAgentSession = (
     const compactSession = yield* compactAgentSessionForStorage(input.session);
     const row = yield* requireTaskRow(session, workspaceId, input.taskId, input.repoPath);
     const sessions = yield* readTaskSessions(session, workspaceId, row.id);
+    const linked = handoffMembers(sessions, input.repoPath);
     const existingIndex = sessions.findIndex((entry) =>
       hasSameAgentSessionIdentity(entry, compactSession),
     );
@@ -255,7 +285,10 @@ export const upsertAgentSession = (
     }
     const nextSessions = sessions
       .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
-      .slice(0, 100);
+      .filter(
+        (record, index) =>
+          index < 100 || linked.has(agentSessionRefKey({ ...record, repoPath: input.repoPath })),
+      );
     yield* replaceTaskSessions(session, workspaceId, input.taskId, nextSessions);
     yield* session.execute(
       (db) =>
@@ -339,6 +372,17 @@ export const deleteAgentSession = (
     if (matches.length === 0) {
       return true;
     }
+    if (
+      handoffMembers(
+        sessions.map(({ record }) => record),
+        input.repoPath,
+      ).has(agentSessionRefKey({ ...input.identity, repoPath: input.repoPath }))
+    )
+      return yield* new SqliteTaskStoreDataError({
+        field: "externalSessionId",
+        message:
+          "This runtime session belongs to a handoff chat. Clear the role's sessions to remove its full history.",
+      });
     yield* session.execute(
       (db) =>
         db

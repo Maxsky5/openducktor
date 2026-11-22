@@ -49,6 +49,44 @@ const summary = (
 });
 
 describe("groupTaskSessions", () => {
+  test("opens the current handoff member as a live chat and earlier members as history", () => {
+    const previous = record("b-previous", "build", "2026-10-01T08:00:00.000Z");
+    const next = {
+      ...record("b-next", "build", "2026-10-01T09:00:00.000Z"),
+      runtimeKind: "codex",
+    } as const;
+    const { externalSessionId, runtimeKind, workingDirectory } = previous;
+    const groups = groupTaskSessions(
+      createTaskCardFixture({ id: "TASK-1" }),
+      [
+        {
+          ...previous,
+          handoff: {
+            links: [
+              {
+                from: { externalSessionId, runtimeKind, workingDirectory },
+                to: {
+                  externalSessionId: next.externalSessionId,
+                  runtimeKind: next.runtimeKind,
+                  workingDirectory: next.workingDirectory,
+                },
+                firstMessageId: "first-send",
+                partialHistory: false,
+              },
+            ],
+          },
+        },
+        next,
+      ],
+      [],
+      "ws-1",
+    );
+    expect(groups[0]?.rows.map((row) => [row.identity.externalSessionId, row.historical])).toEqual([
+      ["b-next", false],
+      ["b-previous", true],
+    ]);
+  });
+
   test("groups sessions by Workflow Role in workflow order, newest first", () => {
     const groups = groupTaskSessions(
       createTaskCardFixture({ id: "TASK-1" }),
