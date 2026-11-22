@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { type PortItem, PortsPopover } from "./ports-popover";
 
 const items: PortItem[] = [
@@ -32,6 +32,17 @@ test("moves between the web ports with the arrow keys", async () => {
   // A port without a web page is text.
   expect(list.textContent).toContain(":5432");
   expect(view.queryByRole("button", { name: /5432/ })).toBeNull();
+});
+
+test("enters the ports from the list with the arrow keys", async () => {
+  const { view, list } = await openList();
+  const ports = within(list).getByRole("list");
+  list.focus();
+  fireEvent.keyDown(ports, { key: "ArrowUp" });
+  expect(document.activeElement).toBe(view.getByRole("button", { name: "Open :8080" }));
+  list.focus();
+  fireEvent.keyDown(ports, { key: "ArrowDown" });
+  expect(document.activeElement).toBe(view.getByRole("button", { name: "Open :5173" }));
 });
 
 test("opens a port and closes the list", async () => {

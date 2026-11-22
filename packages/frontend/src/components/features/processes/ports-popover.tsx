@@ -69,7 +69,7 @@ export function PortsPopover({
       <PopoverContent
         portalContainer={portalContainer}
         align="end"
-        className="w-64"
+        className="max-h-(--radix-popover-content-available-height) w-64 overflow-y-auto"
         aria-label={listLabel}
       >
         <ul className="flex flex-col" onKeyDown={moveWithArrows}>
@@ -109,7 +109,7 @@ function PortButton({
   return (
     <button
       type="button"
-      className="group/port flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+      className="group/port flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       title={item.title}
       aria-label={item.title}
       onClick={() => onOpen(url)}
@@ -144,10 +144,11 @@ const moveWithArrows = (event: KeyboardEvent<HTMLUListElement>) => {
   if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
   const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button")];
   const at = buttons.findIndex((button) => button === document.activeElement);
-  const down = event.key === "ArrowDown";
+  const step = event.key === "ArrowDown" ? 1 : -1;
+  let next: HTMLButtonElement | undefined;
   // From outside the buttons, ArrowDown goes to the first one and ArrowUp to the last one.
-  const nextIndex = at === -1 ? (down ? 0 : -1) : at + (down ? 1 : -1);
-  const next = buttons.at(nextIndex % buttons.length);
+  if (at === -1) next = step === 1 ? buttons[0] : buttons.at(-1);
+  else next = buttons.at((at + step) % buttons.length);
   if (!next) return;
   event.preventDefault();
   next.focus();
