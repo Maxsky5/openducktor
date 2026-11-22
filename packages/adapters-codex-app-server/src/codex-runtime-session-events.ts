@@ -36,7 +36,10 @@ import {
   expectCodexUserMessageEcho,
   handleCodexPendingNotifications,
 } from "./codex-app-server-streaming";
-import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
+import {
+  codexSessionRuntimeActivity,
+  type CodexThreadStatusSnapshot,
+} from "./codex-app-server-threads";
 import type { CodexTokenUsageTotals } from "./codex-app-server-transcript";
 import { CodexContextUsageTracker } from "./codex-context-usage-tracker";
 import type { CodexAsyncQuestionState } from "./codex-async-questions";
@@ -64,6 +67,7 @@ import {
 import { createCodexEventMappers } from "./event-mappers";
 import { CodexGoalState } from "./codex-goal-state";
 import { CodexDeniedActions, type CodexDeniedActionsAdapterDeps } from "./codex-denied-actions";
+import { CodexBackgroundTerminals } from "./codex-background-terminals";
 import { CodexTextAnswers } from "./codex-text-answers";
 import { createActiveCodexTurn, runningTurnOf } from "./codex-turn-lifecycle";
 import type {
@@ -223,6 +227,8 @@ export class CodexRuntimeSessionEvents {
   readonly textAnswers = new CodexTextAnswers();
   /** The calls that a policy denied in live sessions, and the denials that the user can allow. */
   readonly deniedActions: CodexDeniedActions;
+  /** The background terminals that this adapter saw start live, per runtime. */
+  private readonly backgroundTerminalsByRuntimeId = new Map<string, CodexBackgroundTerminals>();
   /** The goal reads of the adapter. Only Codex goal notifications change a goal. */
   readonly goals: Pick<
     CodexGoalState,
@@ -303,6 +309,10 @@ export class CodexRuntimeSessionEvents {
   clearRuntime(runtimeId: string): void {
     this.liveCommandOutputs.finishAll(runtimeId);
     this.deniedActions.clearRuntime(runtimeId);
+    this.backgroundTerminalsByRuntimeId
+      .get(runtimeId)
+      ?.close(new Error(`OpenDucktor released the Codex runtime '${runtimeId}'.`));
+    this.backgroundTerminalsByRuntimeId.delete(runtimeId);
     this.goalState.clearRuntime(runtimeId);
     this.textAnswers.clearRuntime(runtimeId);
     this.turnMessageIdsByRuntimeId.delete(runtimeId);
@@ -393,19 +403,37 @@ export class CodexRuntimeSessionEvents {
     work: () => Promise<void>,
     onRuntimeEventQueueFailure: CodexRuntimeEventQueueFailureHandler,
   ): void {
+    void this.appendRuntimeWork(
+      runtimeId,
+      () => {
+        if (this.runtimeEventGenerationByRuntimeId.get(runtimeId) !== generation) {
+          return;
+        }
+        return work();
+      },
+      onRuntimeEventQueueFailure,
+    );
+  }
+
+  /**
+   * Runs `work` after the runtime events that the adapter already received, and before the events
+   * that it receives later. The caller gets the result or the failure of `work`.
+   */
+  inRuntimeEventOrder<T>(runtimeId: string, work: () => T): Promise<T> {
+    return this.appendRuntimeWork(runtimeId, work, () => undefined);
+  }
+
+  /** Appends `work` to the queue of the runtime. `onFailure` runs before the next work starts. */
+  private appendRuntimeWork<T>(
+    runtimeId: string,
+    work: () => T | Promise<T>,
+    onFailure: CodexRuntimeEventQueueFailureHandler,
+  ): Promise<T> {
     const previous = this.runtimeEventProcessingByRuntimeId.get(runtimeId) ?? Promise.resolve();
-    const processing = previous.then(() => {
-      if (this.runtimeEventGenerationByRuntimeId.get(runtimeId) !== generation) {
-        return;
-      }
-      return work();
-    });
+    const processing = previous.then(work);
     const cleanup = processing.then(
       () => undefined,
-      (error) => {
-        onRuntimeEventQueueFailure({ runtimeId, error });
-        return undefined;
-      },
+      (error) => onFailure({ runtimeId, error }),
     );
     this.runtimeEventProcessingByRuntimeId.set(runtimeId, cleanup);
     void cleanup.then(() => {
@@ -413,6 +441,7 @@ export class CodexRuntimeSessionEvents {
         this.runtimeEventProcessingByRuntimeId.delete(runtimeId);
       }
     });
+    return processing;
   }
 
   /**
@@ -462,6 +491,7 @@ export class CodexRuntimeSessionEvents {
           await this.processRuntimeStreamEventForSession(owner, event);
         }
       } catch (error) {
+        this.loseCommandEndsOfFailedNotification(event, this.errorMessage(error));
         if (!this.runtimeStreamEventCanDeliver(event.runtimeId, generation, owner)) {
           return;
         }
@@ -512,6 +542,23 @@ export class CodexRuntimeSessionEvents {
     });
   }
 
+  /**
+   * A notification that the adapter cannot apply can be the end of a command that Stop session
+   * waits for. A notification without a thread ends no command, but an invalid one can.
+   */
+  private loseCommandEndsOfFailedNotification(
+    event: CodexRuntimeStreamEvent,
+    reason: string,
+  ): void {
+    const threadId = threadIdFromRuntimeStreamEvent(event);
+    const isLostNotification =
+      event.kind === "notification"
+        ? threadId !== null
+        : event.kind === "fault" && event.sourceKind === "notification";
+    if (!isLostNotification) return;
+    this.backgroundTerminalsByRuntimeId.get(event.runtimeId)?.loseThreadEvents(threadId, reason);
+  }
+
   latestTodos(externalSessionId: string): AgentSessionTodoItem[] | undefined {
     return this.latestTodosBySessionId.get(externalSessionId);
   }
@@ -553,6 +600,7 @@ export class CodexRuntimeSessionEvents {
     this.subagentLifecycle.clearSession(externalSessionId, runtimeId);
     this.deniedActions.clearThread(runtimeId, externalSessionId);
     if (runtimeId !== undefined) {
+      const ancestorIds = this.threadAndAncestorIds(runtimeId, externalSessionId).slice(1);
       this.clearStartedItemTimestampsForSession(runtimeId, externalSessionId);
       this.liveCommandOutputs.finishAll(runtimeId, externalSessionId);
       for (const threadId of routedDescendantThreadIds) {
@@ -562,6 +610,13 @@ export class CodexRuntimeSessionEvents {
         this.clearStartedItemTimestampsForSession(runtimeId, threadId);
         this.liveCommandOutputs.finishAll(runtimeId, threadId);
       }
+      // The ancestors cannot confirm the end of the unresolved work of the released threads.
+      const lost = this.backgroundTerminals(runtimeId).releaseThreads(
+        [externalSessionId, ...routedDescendantThreadIds],
+        ancestorIds[0],
+      );
+      if (lost)
+        for (const ancestorId of ancestorIds) this.markSnapshotChanged(runtimeId, ancestorId);
     }
     this.clearHandledStreamRequestKeys(externalSessionId, runtimeId);
     this.syntheticUserMessageEchoesByThreadId.delete(externalSessionId);
@@ -618,6 +673,136 @@ export class CodexRuntimeSessionEvents {
 
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void {
     this.deps.pendingInput.bindActiveTurn(externalSessionId, activeTurn);
+  }
+
+  /** The background terminals of the runtime. */
+  backgroundTerminals(runtimeId: string): CodexBackgroundTerminals {
+    let terminals = this.backgroundTerminalsByRuntimeId.get(runtimeId);
+    if (!terminals) {
+      terminals = new CodexBackgroundTerminals(
+        (threadId) => new Set(this.treeThreadIds(runtimeId, threadId)),
+      );
+      this.backgroundTerminalsByRuntimeId.set(runtimeId, terminals);
+    }
+    return terminals;
+  }
+
+  /** The reply of the thread ended, and only background terminals of its tree keep it running. */
+  isWaitingOnBackground(runtimeId: string, threadId: string): boolean {
+    return (
+      this.backgroundTerminals(runtimeId).isHeld(threadId) &&
+      runningTurnOf(this.deps.activeTurnsBySessionId, threadId) === null &&
+      this.hasBackgroundWork(runtimeId, threadId)
+    );
+  }
+
+  /** Tells if a background terminal of the thread tree runs. */
+  hasBackgroundWork(runtimeId: string, threadId: string): boolean {
+    return this.backgroundTerminals(runtimeId).hasBackgroundTerminals(threadId);
+  }
+
+  private treeThreadIds(runtimeId: string, threadId: string): string[] {
+    return [
+      threadId,
+      ...this.deps.subagents
+        .descendantRoutesForParent(threadId, runtimeId, () => true)
+        .map((route) => route.childExternalSessionId),
+    ];
+  }
+
+  /** The thread and the threads above it, nearest first. */
+  private threadAndAncestorIds(runtimeId: string, threadId: string): string[] {
+    const threadIds = [threadId];
+    let route = this.deps.subagents.routeForChild(threadId, runtimeId);
+    while (route && !threadIds.includes(route.parentExternalSessionId)) {
+      threadIds.push(route.parentExternalSessionId);
+      route = this.deps.subagents.routeForChild(route.parentExternalSessionId, runtimeId);
+    }
+    return threadIds;
+  }
+
+  /** Ancestor snapshots list the background terminals of their descendants. */
+  private markBackgroundTerminalsChanged(runtimeId: string, threadId: string): void {
+    for (const id of this.threadAndAncestorIds(runtimeId, threadId)) {
+      this.markSnapshotChanged(runtimeId, id);
+    }
+  }
+
+  private endTurnCommands(session: CodexSessionState, turnId?: string): void {
+    const { runtimeId, threadId } = session;
+    const terminals = this.backgroundTerminals(runtimeId);
+    if (!terminals.markTurnEnded(threadId, turnId)) return;
+    this.markBackgroundTerminalsChanged(runtimeId, threadId);
+    // An ancestor whose reply already ended now waits on the new terminal. The thread itself and
+    // an ancestor that still replies decide at the end of their reply.
+    for (const ancestorId of this.threadAndAncestorIds(runtimeId, threadId).slice(1)) {
+      if (terminals.isHeld(ancestorId)) continue;
+      if (!this.hasEndedReply(runtimeId, ancestorId)) continue;
+      terminals.hold(ancestorId);
+      const ancestor = this.deps.sessions.get(ancestorId);
+      if (ancestor?.runtimeId === runtimeId) {
+        this.setSessionLiveStatus(ancestor, { classification: "running" });
+      }
+    }
+  }
+
+  /** Tells if the thread runs no reply and waits for no goal turn. */
+  private hasEndedReply(runtimeId: string, threadId: string): boolean {
+    if (runningTurnOf(this.deps.activeTurnsBySessionId, threadId)) return false;
+    const session = this.deps.sessions.get(threadId);
+    if (session?.runtimeId === runtimeId) {
+      return !this.isWaitingForGoalTurn(session) && codexSessionRuntimeActivity(session) === "idle";
+    }
+    const childStatus = this.deps.subagents.statusForChild(threadId, runtimeId);
+    return childStatus !== "pending" && childStatus !== "running";
+  }
+
+  /**
+   * The session ended its reply. It stays running, held, while background terminals of its tree
+   * run. Else it becomes idle. Each idle path calls this, so no path skips the hold.
+   */
+  settleIdle(session: CodexSessionState): "held" | "idle" {
+    if (this.hasBackgroundWork(session.runtimeId, session.threadId)) {
+      this.backgroundTerminals(session.runtimeId).hold(session.threadId);
+      this.setSessionLiveStatus(session, { classification: "running" });
+      return "held";
+    }
+    this.setSessionLiveStatus(session, { classification: "idle" });
+    return "idle";
+  }
+
+  private startForegroundTurn(session: CodexSessionState, turnId: string): void {
+    if (this.backgroundTerminals(session.runtimeId).startTurn(session.threadId, turnId)) {
+      this.markSnapshotChanged(session.runtimeId, session.threadId);
+    }
+  }
+
+  /** Each session that the ended terminal held running goes idle when no terminal holds it. */
+  private endBackgroundTerminal(session: CodexSessionState, timestamp: string): void {
+    const { runtimeId } = session;
+    const terminals = this.backgroundTerminals(runtimeId);
+    for (const threadId of this.threadAndAncestorIds(runtimeId, session.threadId)) {
+      this.markSnapshotChanged(runtimeId, threadId);
+      if (
+        !terminals.isHeld(threadId) ||
+        runningTurnOf(this.deps.activeTurnsBySessionId, threadId) !== null ||
+        terminals.backgroundTerminals(threadId).length > 0
+      ) {
+        continue;
+      }
+      terminals.unhold(threadId);
+      const target =
+        threadId === session.threadId
+          ? session
+          : this.resolveRuntimeStreamEventSessionOwner(threadId, runtimeId)?.targetSession;
+      if (!target || this.isWaitingForGoalTurn(target)) continue;
+      this.setSessionLiveStatus(target, { classification: "idle" });
+      this.emitSessionEventForSession(target, {
+        type: "session_idle",
+        externalSessionId: threadId,
+        timestamp,
+      });
+    }
   }
 
   /** The session has no running turn and waits for the goal turn that Codex starts by itself. */
@@ -690,7 +875,7 @@ export class CodexRuntimeSessionEvents {
     const session = this.deps.sessions.get(threadId);
     if (!session || session.runtimeId !== runtimeId) return;
     if (runningTurnOf(this.deps.activeTurnsBySessionId, threadId)) return;
-    this.setSessionLiveStatus(session, { classification: "idle" });
+    if (this.settleIdle(session) === "held") return;
     this.publishSessionEvent(session, {
       type: "session_idle",
       externalSessionId: threadId,
@@ -1315,6 +1500,14 @@ export class CodexRuntimeSessionEvents {
       observeTurnStarted: (session, turnId, startedAtMs) =>
         this.observeTurnStarted(session, turnId, startedAtMs),
       takeTurnMessageIds: (session) => this.takeTurnMessageIds(session),
+      backgroundTerminals: (runtimeId) => this.backgroundTerminals(runtimeId),
+      endTurnCommands: (session, turnId) => this.endTurnCommands(session, turnId),
+      settleIdle: (session) => this.settleIdle(session),
+      hasBackgroundWork: (runtimeId, threadId) => this.hasBackgroundWork(runtimeId, threadId),
+      startForegroundTurn: (session, turnId) => this.startForegroundTurn(session, turnId),
+      isSupersededTurn: (session, turnId) =>
+        this.backgroundTerminals(session.runtimeId).isSupersededTurn(session.threadId, turnId),
+      endBackgroundTerminal: (session, timestamp) => this.endBackgroundTerminal(session, timestamp),
       failUnlinkedSubagentSpawns: (parentThreadId, runtimeId, error) =>
         this.deps.subagents.failUnlinkedSpawnsForParent(parentThreadId, runtimeId, error),
     };

@@ -129,6 +129,24 @@ export const openCodeSessionTreeRefs = (
   return refs;
 };
 
+/** The live ancestors of the session, from its parent up. */
+export const openCodeSessionAncestors = (
+  sessions: Iterable<OpenCodeLiveSession>,
+  session: OpenCodeLiveSession,
+): OpenCodeLiveSession[] => {
+  const all = [...sessions];
+  const ancestors: OpenCodeLiveSession[] = [];
+  let parentId = session.snapshot.parentExternalSessionId;
+  while (parentId !== undefined) {
+    const id = parentId;
+    const parent = all.find((candidate) => candidate.snapshot.ref.externalSessionId === id);
+    if (!parent || parent === session || ancestors.includes(parent)) break;
+    ancestors.push(parent);
+    parentId = parent.snapshot.parentExternalSessionId;
+  }
+  return ancestors;
+};
+
 export const openCodeLiveSnapshotsEqual = (
   left: AgentSessionLiveSnapshot,
   right: AgentSessionLiveSnapshot,
@@ -192,9 +210,15 @@ export const parseOpenCodeLiveSnapshot = (
   });
 };
 
+/**
+ * The activity of the reply. A reply that ends while background work remains reports
+ * `session_turn_finished`, or a status with no foreground turn. The background work of the
+ * snapshot then keeps the session running.
+ */
 export const openCodeActivityFromEvent = (event: AgentEvent): AgentSessionActivity | null => {
   if (
     event.type === "session_idle" ||
+    event.type === "session_turn_finished" ||
     event.type === "session_error" ||
     event.type === "session_finished"
   ) {
@@ -204,7 +228,7 @@ export const openCodeActivityFromEvent = (event: AgentEvent): AgentSessionActivi
     return null;
   }
   if (event.status.type === "busy") {
-    return "running";
+    return event.foregroundTurnActive === false ? "idle" : "running";
   }
   return event.status.type === "retry" ? "retrying" : "idle";
 };

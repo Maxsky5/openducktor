@@ -148,7 +148,9 @@ const createHarness = async (loseModelResponse = false) => {
     connection: {
       ...prepared.connection,
       sendUserMessage: (input, options) => controller.sendUserMessage(input, options),
-      stopSession: (input) => controller.stopSession(input),
+      stopSession: async (input) => {
+        await controller.stopSession(input);
+      },
       updateSessionModel: (input) => controller.updateSessionModel(input),
     },
     state: createOpenCodeLiveSessionState({

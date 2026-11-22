@@ -169,6 +169,13 @@ const codexAppServerThreadBackgroundTerminalsTerminateResultSchema = z.object({
 export type CodexAppServerThreadBackgroundTerminalsTerminateResult = z.output<
   typeof codexAppServerThreadBackgroundTerminalsTerminateResultSchema
 >;
+const codexAppServerThreadBackgroundTerminalsListResultSchema = z.object({
+  data: z.array(z.object({ itemId: z.string(), processId: z.string(), command: z.string() })),
+  nextCursor: z.string().nullable(),
+});
+export type CodexAppServerThreadBackgroundTerminalsListResult = z.output<
+  typeof codexAppServerThreadBackgroundTerminalsListResultSchema
+>;
 export type CodexAppServerThreadGoalClearResult = z.output<
   typeof codexAppServerThreadGoalClearResultSchema
 >;
@@ -218,6 +225,7 @@ export type CodexAppServerRequestResultMap = {
   "thread/approveGuardianDeniedAction": CodexAppServerThreadSetNameResult;
   "thread/backgroundTerminals/terminate": CodexAppServerThreadBackgroundTerminalsTerminateResult;
   "thread/backgroundTerminals/clean": CodexAppServerThreadSetNameResult;
+  "thread/backgroundTerminals/list": CodexAppServerThreadBackgroundTerminalsListResult;
   "thread/turns/list": CodexAppServerThreadTurnsListResponse;
   "account/rateLimits/read": CodexAppServerAccountRateLimitsResponse;
   "skills/list": CodexAppServerSkillsListResponse;
@@ -255,6 +263,7 @@ const codexAppServerRequestResultSchemas: CodexAppServerRequestResultSchemaMap =
   "thread/backgroundTerminals/terminate":
     codexAppServerThreadBackgroundTerminalsTerminateResultSchema,
   "thread/backgroundTerminals/clean": codexAppServerEmptyResponseSchema,
+  "thread/backgroundTerminals/list": codexAppServerThreadBackgroundTerminalsListResultSchema,
   "thread/turns/list": codexAppServerThreadTurnsListResponseSchema,
   "account/rateLimits/read": codexAppServerAccountRateLimitsResponseSchema,
   "skills/list": codexAppServerSkillsListResponseSchema,

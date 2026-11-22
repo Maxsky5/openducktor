@@ -65,6 +65,7 @@ export const createAgentSessionRuntimeAdapterTestDouble = <
   sendUserMessage: unexpectedEffectCall("live session adapter", "sendUserMessage"),
   startSession: unexpectedEffectCall("live session adapter", "startSession"),
   stopSession: unexpectedEffectCall("live session adapter", "stopSession"),
+  stopBackgroundTask: unexpectedEffectCall("live session adapter", "stopBackgroundTask"),
   updateSessionModel: unexpectedEffectCall("live session adapter", "updateSessionModel"),
   updateSessionTitle: unexpectedEffectCall("live session adapter", "updateSessionTitle"),
   ...overrides,

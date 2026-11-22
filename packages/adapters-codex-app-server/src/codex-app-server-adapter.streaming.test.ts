@@ -989,6 +989,88 @@ describe("CodexAppServerAdapter streaming", () => {
     }
   });
 
+  test("binds a new turn only to its own evidence when the previous turn ends during its request", async () => {
+    const threadId = "thread/start-runtime-live";
+    const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();
+    const { adapter, transports } = createHarness({ subscribeEvents });
+    await adapter.startSession(codexStartSessionInput());
+    const events: AgentEvent[] = [];
+    const unsubscribe = await adapter.subscribeEvents(codexSessionRuntimeRef(threadId), (event) =>
+      events.push(event),
+    );
+    const transport = transports.get("runtime-live");
+    if (!transport) throw new Error("Expected the runtime transport.");
+    const emit = async (message: Parameters<typeof emitNotification>[0]) => {
+      emitNotification(message);
+      await flushCodexAdapterWork();
+    };
+    const emitTurn = (method: "turn/started" | "turn/completed", id: string) =>
+      emit({
+        method,
+        params: {
+          threadId,
+          turn: codexTurnFixture({
+            id,
+            items: [],
+            status: method === "turn/started" ? "inProgress" : "completed",
+          }),
+        },
+      });
+    const emitThreadIdle = () =>
+      emit({ method: "thread/status/changed", params: { threadId, status: { type: "idle" } } });
+    const idleCount = () => events.filter(({ type }) => type === "session_idle").length;
+    const sessionActivity = () =>
+      adapter
+        .listLiveSessionSnapshots("runtime-live")
+        .find(({ ref }) => ref.externalSessionId === threadId)?.activity;
+    const send = (text: string, delivery: "steer" | "new_turn" = "new_turn") =>
+      adapter.sendUserMessage(
+        codexUserMessageInput({
+          externalSessionId: threadId,
+          parts: [{ kind: "text", text }],
+          delivery,
+        }),
+      );
+
+    try {
+      transport.turnStartAnswer = async () => ({
+        turn: codexTurnFixture({ id: "turn-1", items: [], status: "inProgress" }),
+      });
+      await send("First");
+      await emitTurn("turn/started", "turn-1");
+      // Codex reports the idle thread before the turn end, so the first turn settles early.
+      await emitThreadIdle();
+      expect(idleCount()).toBe(1);
+
+      const answer = createDeferred<CodexAppServerTurnStartResult>();
+      transport.turnStartAnswer = () => answer.promise;
+      const second = send("Second");
+      await flushCodexAdapterWork();
+      // The end of the first turn arrives before the start of the second turn.
+      await emitTurn("turn/completed", "turn-1");
+      expect(idleCount()).toBe(1);
+      expect(sessionActivity()).toBe("running");
+
+      await emitTurn("turn/started", "turn-2");
+      answer.resolve({ turn: codexTurnFixture({ id: "turn-2", items: [], status: "inProgress" }) });
+      await second;
+
+      await send("Also check prod", "steer");
+      expect(transport.calls.findLast(({ method }) => method === "turn/steer")?.params).toEqual(
+        expect.objectContaining({ expectedTurnId: "turn-2" }),
+      );
+      expect(idleCount()).toBe(1);
+      expect(sessionActivity()).toBe("running");
+
+      await emitThreadIdle();
+      await emitTurn("turn/completed", "turn-2");
+      expect(idleCount()).toBeGreaterThan(1);
+      expect(sessionActivity()).toBe("idle");
+    } finally {
+      unsubscribe();
+    }
+  });
+
   test("ends an interrupted turn with an interrupted outcome", async () => {
     const ref = codexSessionRuntimeRef();
     const { subscribeEvents, emitNotification } = createRuntimeStreamSubscription();

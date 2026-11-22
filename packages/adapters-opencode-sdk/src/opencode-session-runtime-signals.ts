@@ -1,5 +1,9 @@
 import type { AgentSessionGoal, RuntimeOperationFailure } from "@openducktor/contracts";
-import type { AgentEvent, AgentModelSelection } from "@openducktor/core";
+import type {
+  AgentEvent,
+  AgentModelSelection,
+  AgentSessionBackgroundWork,
+} from "@openducktor/core";
 import type { OpencodeRuntimeSnapshotSource } from "./live-session-snapshots";
 
 export type OpencodeSessionContextUsage = {
@@ -24,6 +28,11 @@ export type OpencodeSessionRuntimeSignal =
       readonly externalSessionId: string;
       readonly goal: AgentSessionGoal | null;
     }
+  | ({
+      /** The background work of the session tree changed. */
+      readonly type: "background_updated";
+      readonly externalSessionId: string;
+    } & AgentSessionBackgroundWork)
   | { readonly type: "session_source"; readonly source: OpencodeRuntimeSnapshotSource }
   | { readonly type: "session_removed"; readonly externalSessionId: string }
   | { readonly type: "observation_reset" }
@@ -35,6 +44,12 @@ export type OpencodeSessionRuntimeSignal =
       readonly message: string;
       readonly runtimeOperationFailure?: RuntimeOperationFailure;
       readonly statusUnavailable?: true;
+      /**
+       * The adapter could not read a background task item, so it cannot tell which background
+       * tasks the session has. The status stays unavailable until the session or the runtime is
+       * released.
+       */
+      readonly backgroundTrackingLost?: true;
     }
   | {
       readonly type: "fault";

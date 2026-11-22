@@ -161,6 +161,7 @@ export type AgentSessionLiveStateService = {
     input: AgentSessionControlUpdateTitleInput,
   ) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>;
   readonly stopSession: (input: AgentSessionControlStopInput) => Effect.Effect<void, HostError>;
+  readonly stopBackgroundTask: AgentSessionControlAdapterPort["stopBackgroundTask"];
   readonly releaseSession: (
     input: AgentSessionControlReleaseInput,
   ) => Effect.Effect<void, HostError>;

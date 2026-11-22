@@ -9,7 +9,7 @@ import type {
   PreparedRuntimeLiveSessionAdapter,
   RuntimeLiveSessionLifecyclePort,
 } from "../../ports/runtime-live-session-lifecycle-port";
-import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
+import type { ClaudeSessionContext, ClaudeSessionStore } from "../claude/claude-agent-sdk-types";
 import type { ClaudeAgentSdkEventHub } from "./claude-live-session-event-hub";
 
 export type PreparedClaudeLiveSessionAdapter = Omit<
@@ -63,6 +63,6 @@ export type CreateClaudeLiveSessionAdapterPreparerInput = {
   readonly sessionStore: {
     get(externalSessionId: string): ClaudeSessionContext | undefined;
     isLatest(session: ClaudeSessionContext): boolean;
-  };
+  } & Pick<ClaudeSessionStore, "stopBackgroundTask">;
   readonly workingDirectoryDependencies: RuntimeWorkingDirectoryDependencies;
 };

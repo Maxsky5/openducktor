@@ -468,6 +468,11 @@ export const codexAppServerRequestParamsSchemas = {
   }),
   /** Stops every background terminal of a thread. Experimental API. */
   "thread/backgroundTerminals/clean": z.strictObject({ threadId: z.string() }),
+  /** Lists the running background terminals of a thread, one page at a time. Experimental API. */
+  "thread/backgroundTerminals/list": z.strictObject({
+    threadId: z.string(),
+    cursor: z.string().nullable().optional(),
+  }),
   /** The settings of turns that Codex starts later, such as goal turns. */
   "thread/settings/update": z.strictObject({
     threadId: z.string(),
@@ -601,6 +606,10 @@ export const codexAppServerClientRequestSchema = z.discriminatedUnion("method", 
     params: codexAppServerRequestParamsSchemas["thread/backgroundTerminals/clean"],
   }),
   z.strictObject({
+    method: z.literal("thread/backgroundTerminals/list"),
+    params: codexAppServerRequestParamsSchemas["thread/backgroundTerminals/list"],
+  }),
+  z.strictObject({
     method: z.literal("thread/settings/update"),
     params: codexAppServerRequestParamsSchemas["thread/settings/update"],
   }),
@@ -682,6 +691,8 @@ export type CodexAppServerThreadBackgroundTerminalsTerminateParams =
   CodexAppServerRequestParamsMap["thread/backgroundTerminals/terminate"];
 export type CodexAppServerThreadBackgroundTerminalsCleanParams =
   CodexAppServerRequestParamsMap["thread/backgroundTerminals/clean"];
+export type CodexAppServerThreadBackgroundTerminalsListParams =
+  CodexAppServerRequestParamsMap["thread/backgroundTerminals/list"];
 export type CodexAppServerThreadSettingsUpdateParams =
   CodexAppServerRequestParamsMap["thread/settings/update"];
 export type CodexAppServerThreadGoalStatus = z.output<typeof codexAppServerThreadGoalStatusSchema>;

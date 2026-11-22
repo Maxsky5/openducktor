@@ -1,5 +1,8 @@
-import type { AgentToolDenialSource } from "@openducktor/contracts";
-import type { AgentSessionScope } from "@openducktor/contracts";
+import type {
+  AgentSessionBackgroundTaskStopInput,
+  AgentSessionScope,
+  AgentToolDenialSource,
+} from "@openducktor/contracts";
 import {
   AgentSessionMessageAcceptanceUnknownError,
   AgentSessionMessageRefusedError,
@@ -15,6 +18,7 @@ import {
   type AgentSessionAuthorizedRoot,
 } from "@openducktor/contracts";
 import type {
+  AgentEvent,
   ManagedMcpServerResolver,
   AgentCatalogPort,
   AgentSessionHistoryPort,
@@ -41,6 +45,7 @@ import {
   readOpenCodeGoalChange,
 } from "./opencode-goals";
 import { installOpenCodePolicy } from "./opencode-permissions";
+import { createOpenCodeBackgroundSession } from "./opencode-background-session";
 import {
   permissionDecision,
   projectApproval,
@@ -100,10 +105,11 @@ export type OpencodeSessionRuntimeConnection = Pick<
   | "sendUserMessage"
   | "updateSessionModel"
   | "updateSessionTitle"
-  | "stopSession"
   | "generateText"
   | "generateJson"
 > & {
+  /** Interrupts the conversation and stops the background work of its session tree. */
+  stopSession: (ref: SessionRef) => Promise<void>;
   releaseSession: (ref: SessionRef) => Promise<void>;
   /** Runs one native goal action. */
   controlGoal: (
@@ -117,6 +123,11 @@ export type OpencodeSessionRuntimeConnection = Pick<
   loadContextUsage: (ref: SessionRef) => Promise<OpencodeSessionContextUsage | null>;
   replyApproval: (input: OpencodeNativeApprovalReply) => Promise<void>;
   replyQuestion: (input: OpencodeNativeQuestionReply) => Promise<void>;
+  /**
+   * Stops one background task of the session tree of the ref. A task that does not run there
+   * gives success with no native call.
+   */
+  stopBackgroundTask: (input: AgentSessionBackgroundTaskStopInput) => Promise<void>;
 };
 export type PreparedOpencodeSessionRuntime = {
   readonly sessionImport: RuntimeSessionImportPort;
@@ -201,23 +212,26 @@ export const createPrepareOpencodeSessionRuntime =
       if (turns.size === 0) awaitingTurns.delete(turn.ref.externalSessionId);
       return true;
     };
-    const reportActivity = (ref: SessionRef): void =>
-      emit({
-        type: "session_event",
+    const reportActivity = (ref: SessionRef): void => {
+      const working =
+        nativeRunning.has(ref.externalSessionId) || awaitingTurns.has(ref.externalSessionId);
+      const event: Extract<AgentEvent, { type: "session_status" }> = {
+        type: "session_status",
         externalSessionId: ref.externalSessionId,
-        event: {
-          type: "session_status",
-          externalSessionId: ref.externalSessionId,
-          timestamp: iso(Date.now()),
-          status:
-            nativeRunning.has(ref.externalSessionId) || awaitingTurns.has(ref.externalSessionId)
-              ? { type: "busy", message: null }
-              : { type: "idle" },
-        },
-      });
+        timestamp: iso(Date.now()),
+        status: working ? { type: "busy", message: null } : { type: "idle" },
+      };
+      // Background work keeps the session running after its reply ends.
+      if (background.hasWork(ref.externalSessionId)) {
+        event.status = { type: "busy", message: null };
+        event.foregroundTurnActive = working;
+      }
+      emit({ type: "session_event", externalSessionId: ref.externalSessionId, event });
+    };
     const fail = (cause: unknown) => {
       if (released || failure) return;
       failure = cause instanceof Error ? cause : new Error(String(cause));
+      background.close(failure);
       controller.close();
       const fault = {
         type: "fault" as const,
@@ -393,6 +407,12 @@ export const createPrepareOpencodeSessionRuntime =
         if (!projectors.has(binding.detail.id))
           projectors.set(binding.detail.id, new OpenCodeLiveMessageProjector());
       },
+    });
+    const background = createOpenCodeBackgroundSession({
+      client: controller.client,
+      parentOf: (sessionID) => controller.bindings.get(sessionID)?.detail.parentID,
+      emit,
+      isReplying: (sessionID) => nativeRunning.has(sessionID) || awaitingTurns.has(sessionID),
     });
     abort.signal.addEventListener("abort", () => controller.close(), { once: true });
     if (abort.signal.aborted) controller.close();
@@ -798,12 +818,16 @@ export const createPrepareOpencodeSessionRuntime =
         timestamp: iso("created" in event ? event.created : Date.now()),
       };
       if (event.type === "session.deleted") {
+        // OpenCode removes the child sessions with the session and cancels their jobs. A loss on
+        // the session covers only work of that removed tree, so the ancestors drop it too.
+        const reportRemoval = background.removeSession(externalSessionId, base.timestamp);
         controller.bindings.delete(externalSessionId);
         projectors.delete(externalSessionId);
         awaitingTurns.delete(externalSessionId);
         nativeRunning.delete(externalSessionId);
         sequence.delete(externalSessionId);
         emit({ type: "session_removed", externalSessionId });
+        reportRemoval();
         return;
       }
       if (event.type === "permission.asked") {
@@ -872,11 +896,14 @@ export const createPrepareOpencodeSessionRuntime =
       if (event.type === "session.revert.staged") binding.detail.revert = event.data.revert;
       if (event.type === "session.revert.cleared" || event.type === "session.revert.committed")
         delete binding.detail.revert;
-      for (const projected of projector.apply(event)) {
+      for (let projected of projector.apply(event)) {
         if (projected.type === "session_status" && projected.status.type !== "idle") {
           nativeRunning.add(externalSessionId);
+          background.replyStarted(externalSessionId);
           for (const turn of awaitingTurns.get(externalSessionId) ?? [])
             if (turn.submitted && turn.customCommand) settleTurn(turn);
+          if (background.hasWork(externalSessionId))
+            projected = { ...projected, foregroundTurnActive: true };
         }
         if (
           projected.type === "session_idle" ||
@@ -891,6 +918,14 @@ export const createPrepareOpencodeSessionRuntime =
             for (const turn of awaitingTurns.get(externalSessionId) ?? [])
               if (turn.submitted && turn.customCommand) settleTurn(turn);
           if (awaitingTurns.has(externalSessionId)) continue;
+          if (background.hasWork(externalSessionId)) {
+            emit({
+              type: "session_event",
+              externalSessionId,
+              event: background.replyEnd(projected, event.id),
+            });
+            continue;
+          }
         }
         if (projected.type === "session_error" || projected.type === "session_finished") {
           awaitingTurns.delete(externalSessionId);
@@ -899,6 +934,50 @@ export const createPrepareOpencodeSessionRuntime =
         emit({ type: "session_event", externalSessionId, event: projected });
       }
       if (inputSettled && !nativeRunning.has(externalSessionId)) reportActivity(binding.ref);
+      if (
+        event.type === "session.execution.succeeded" ||
+        event.type === "session.execution.failed" ||
+        event.type === "session.execution.interrupted"
+      )
+        background.executionEnded(externalSessionId);
+      try {
+        // Only a call whose result says that its job still runs can start a background task.
+        if (event.type === "session.tool.success" && event.data.metadata?.status === "running") {
+          const message = projector.messages.get(event.data.assistantMessageID);
+          const part =
+            message?.type === "assistant"
+              ? message.content.find((item) => item.type === "tool" && item.id === event.data.id)
+              : undefined;
+          if (part?.type === "tool")
+            background.startCall(
+              externalSessionId,
+              binding.ref.workingDirectory,
+              part,
+              base.timestamp,
+            );
+        }
+        if (event.type === "session.inbox.enqueued") {
+          const item = projector.inbox.get(event.data.inboxID);
+          if (item) background.notice(externalSessionId, item, base.timestamp);
+        }
+        if (event.type === "session.inbox.delivered" || event.type === "session.inbox.cancelled")
+          background.settle(
+            externalSessionId,
+            event.data.inboxID,
+            event.type === "session.inbox.delivered",
+            base.timestamp,
+          );
+      } catch (cause) {
+        const lost = cause instanceof Error ? cause : new Error(String(cause));
+        background.lose(externalSessionId, lost);
+        emit({
+          type: "session_fault",
+          externalSessionId,
+          message: lost.message,
+          statusUnavailable: true,
+          backgroundTrackingLost: true,
+        });
+      }
       if (
         event.type === "session.step.ended" ||
         event.type === "session.step.failed" ||
@@ -1176,16 +1255,40 @@ export const createPrepareOpencodeSessionRuntime =
           agentSessionRefsEqual(turn.ref, ref),
         );
         cancelPendingSends(ref);
-        await controller.stopSession(ref);
-        let stopped = false;
-        for (const turn of turns) stopped = settleTurn(turn) || stopped;
-        if (stopped) {
-          nativeRunning.delete(ref.externalSessionId);
-          reportActivity(ref);
-        }
+        await background.stopTree(ref, async () => {
+          // The end event of the stopped reply can arrive before the interrupt answer.
+          const end = background.watchExecutionEnd(ref.externalSessionId);
+          let interrupted: boolean;
+          try {
+            interrupted = await controller.stopSession(ref);
+          } catch (cause) {
+            end.stop();
+            throw cause;
+          }
+          let stopped = false;
+          for (const turn of turns) stopped = settleTurn(turn) || stopped;
+          if (stopped) {
+            nativeRunning.delete(ref.externalSessionId);
+            reportActivity(ref);
+          }
+          await background.waitForInterruptedExecution(ref, end, interrupted);
+        });
+      },
+      stopBackgroundTask: async ({ taskId, ...ref }) => {
+        const binding = controller.bindings.get(ref.externalSessionId);
+        if (!binding || !agentSessionRefsEqual(binding.ref, ref)) return;
+        await background.stopTask(ref, taskId);
       },
       releaseSession: async (ref) => {
+        // The released bindings no longer name their parent, so read the ancestors first.
+        const ancestors = background.chain(ref.externalSessionId).slice(1);
         const releasedRefs = await controller.releaseSession(ref);
+        const observed = ancestors.filter((sessionID) => controller.bindings.has(sessionID));
+        // The ancestors cannot confirm the end of the unresolved work of the released tree.
+        background.release(
+          releasedRefs.map((releasedRef) => releasedRef.externalSessionId),
+          observed,
+        );
         for (const releasedRef of releasedRefs) {
           cancelPendingSends(releasedRef);
           projectors.delete(releasedRef.externalSessionId);
@@ -1337,6 +1440,7 @@ export const createPrepareOpencodeSessionRuntime =
           );
         pendingSends.clear();
         attachTails.clear();
+        background.close(new Error("The OpenCode runtime was released."));
         controller.close();
         abort.abort();
         input.signal?.removeEventListener("abort", abortFromHost);

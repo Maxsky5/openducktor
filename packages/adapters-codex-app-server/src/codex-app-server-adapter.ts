@@ -13,7 +13,10 @@ import {
 } from "@openducktor/core";
 import { listCodexSessionMetadataPage, getCodexSessionMetadata } from "./codex-session-metadata";
 import type { RuntimeSessionImportSource } from "@openducktor/core";
-import { codexSubAgentSourceMetadata } from "./codex-app-server-threads";
+import {
+  codexSessionRuntimeActivity,
+  codexSubAgentSourceMetadata,
+} from "./codex-app-server-threads";
 import {
   AgentRuntimeQueryError,
   AgentSessionTurnActiveError,
@@ -24,6 +27,8 @@ import type {
   AgentGeneratedImageBatch,
   AgentGeneratedImageBatchInput,
   AgentGeneratedImageDescribeInput,
+  AgentSessionBackgroundTask,
+  AgentSessionBackgroundTaskStopInput,
   AgentSessionControlUpdateTitleInput,
 } from "@openducktor/contracts";
 import type { AgentGeneratedImageReadInput } from "@openducktor/contracts";
@@ -103,7 +108,11 @@ import {
 import type { CodexDeniedActionLocator } from "./codex-denied-actions";
 import type { CodexDeniedActionClaim } from "./codex-tool-denials";
 import { createCodexAcceptedUserMessage } from "./codex-app-server-streaming";
-import { interruptedTurnResumeError } from "@openducktor/core";
+import {
+  BACKGROUND_STOP_ROUNDS,
+  interruptedTurnResumeError,
+  stopBackgroundWork,
+} from "@openducktor/core";
 import type { CodexThreadInventory, CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import { codexTodosFromThreadRead } from "./codex-app-server-transcript";
 import { CodexContextUsageLoader } from "./codex-context-usage-loader";
@@ -193,6 +202,16 @@ import type {
   CodexThreadForkParams,
 } from "./types";
 import { readCodexSubagentRole } from "./codex-subagent-role";
+import {
+  cleanCodexBackgroundTerminals,
+  stopCodexBackgroundTerminal,
+} from "./codex-background-terminal-control";
+import {
+  codexBackgroundTaskId,
+  codexBackgroundTerminalStop,
+  codexCommandList,
+  codexStopSessionReleasedError,
+} from "./codex-background-terminals";
 
 const codexContinuationFailed = (
   externalSessionId: string,
@@ -2157,11 +2176,7 @@ export class CodexAppServerAdapter
       ...this.pendingInput.pendingQuestionsForSession(session.threadId, session.runtimeId),
       ...this.asyncQuestions.pendingForSession(session.runtimeId, session.threadId),
     ].map(toLivePendingQuestion);
-    const runtimeActivity =
-      session.liveStatus?.classification ??
-      (session.summary.status === "running" || session.summary.status === "starting"
-        ? "running"
-        : "idle");
+    const runtimeActivity = codexSessionRuntimeActivity(session);
     const route = this.subagents.routeForChild(session.threadId, session.runtimeId);
     const snapshot: AgentSessionLiveSnapshot = {
       ref: codexSessionRef(session),
@@ -2194,11 +2209,37 @@ export class CodexAppServerAdapter
       session.threadId,
     );
     if (deniedActions) snapshot.deniedActions = deniedActions;
-    // Between goal turns, Codex runs no turn that a message can join.
-    if (this.runtimeEvents.isWaitingForGoalTurn(session)) {
+    // Between goal turns, and while only background terminals run, Codex runs no turn that a
+    // message can join.
+    if (
+      this.runtimeEvents.isWaitingForGoalTurn(session) ||
+      this.runtimeEvents.isWaitingOnBackground(session.runtimeId, session.threadId)
+    ) {
       snapshot.foregroundTurnActive = false;
     }
+    this.applyBackgroundWork(snapshot, session.runtimeId, session.threadId);
     return agentSessionLiveSnapshotSchema.parse(snapshot);
+  }
+
+  /** Adds the background terminals of the thread tree, and a tracking loss, to a snapshot. */
+  private applyBackgroundWork(
+    snapshot: AgentSessionLiveSnapshot,
+    runtimeId: string,
+    threadId: string,
+  ): void {
+    const terminals = this.runtimeEvents.backgroundTerminals(runtimeId);
+    const tasks = terminals.backgroundTerminals(threadId);
+    if (tasks.length > 0) {
+      const stop = codexBackgroundTerminalStop(this.options.readRuntimeVersion?.() ?? null);
+      snapshot.backgroundTasks = tasks.map((terminal): AgentSessionBackgroundTask => ({
+        taskId: codexBackgroundTaskId(terminal),
+        kind: "command",
+        title: terminal.command,
+        stop,
+      }));
+    }
+    const lost = terminals.lostIn(threadId);
+    if (lost) snapshot.statusUnavailableReason = lost.message;
   }
 
   private toRoutedChildLiveSessionSnapshot(
@@ -2226,7 +2267,11 @@ export class CodexAppServerAdapter
       route.childExternalSessionId,
       parentSession.runtimeId,
     );
-    const isRunning = childStatus === "pending" || childStatus === "running";
+    const waitsOnBackground = this.runtimeEvents.isWaitingOnBackground(
+      parentSession.runtimeId,
+      route.childExternalSessionId,
+    );
+    const isRunning = childStatus === "pending" || childStatus === "running" || waitsOnBackground;
     const snapshot: AgentSessionLiveSnapshot = {
       ref: {
         ...codexSessionRef(parentSession),
@@ -2252,6 +2297,8 @@ export class CodexAppServerAdapter
       route.childExternalSessionId,
     );
     if (deniedActions) snapshot.deniedActions = deniedActions;
+    if (waitsOnBackground) snapshot.foregroundTurnActive = false;
+    this.applyBackgroundWork(snapshot, parentSession.runtimeId, route.childExternalSessionId);
     return agentSessionLiveSnapshotSchema.parse(snapshot);
   }
 
@@ -2362,7 +2409,78 @@ export class CodexAppServerAdapter
       );
     }
 
-    this.releaseSessionTree(session);
+    // `turn/interrupt` keeps background terminals, so Stop also ends them before the release.
+    // Codex answers `clean` before the commands end, so each round waits for their late
+    // `item/completed`. A command end can arrive in one batch with a child command start, so each
+    // read runs in event order and first checks that the session is still retained.
+    const { runtimeId, threadId } = session;
+    const terminals = this.runtimeEvents.backgroundTerminals(runtimeId);
+    await stopBackgroundWork(terminals, threadId, {
+      inEventOrder: (read) => {
+        const known = this.runtimeEvents.backgroundTerminals(runtimeId).tasksIn(threadId);
+        return this.runtimeEvents.inRuntimeEventOrder(runtimeId, () => {
+          if (this.localSessions.get(threadId) !== session) {
+            throw codexStopSessionReleasedError(known);
+          }
+          return read();
+        });
+      },
+      stop: (commands) => {
+        const commandEnds = terminals.watchCommandEnds(commands);
+        return async () => {
+          try {
+            await cleanCodexBackgroundTerminals(this.runtimeClients.clientForRuntime(runtimeId), [
+              ...new Set(commands.map((command) => command.threadId)),
+            ]);
+          } catch (error) {
+            commandEnds.cancel();
+            throw error;
+          }
+          await commandEnds.confirmed();
+        };
+      },
+      tooMany: (commands) =>
+        new Error(
+          `The Codex session started background commands again after ${BACKGROUND_STOP_ROUNDS} stop rounds: ${codexCommandList(commands)}. The session keeps them. Stop the subagents or the commands that still run, then stop the session again.`,
+        ),
+      idle: () => this.releaseSessionTree(session),
+    });
+  }
+
+  /** Stops one background terminal of the session tree of the ref. */
+  async stopBackgroundTask(input: AgentSessionBackgroundTaskStopInput): Promise<void> {
+    const owner = findRetainedSessionOwner({
+      sessions: this.localSessions,
+      subagents: this.subagents,
+      runtimeId: this.options.runtime.runtimeId,
+      threadId: input.externalSessionId,
+    });
+    if (
+      !owner ||
+      !agentSessionRefsEqual(
+        { ...codexSessionRef(owner.retainedSession), externalSessionId: input.externalSessionId },
+        input,
+      )
+    ) {
+      throw new Error(
+        `The Codex session '${input.externalSessionId}' is not attached, so OpenDucktor cannot stop its background task. Reopen the chat.`,
+      );
+    }
+    const { runtimeId } = owner.retainedSession;
+    const terminals = this.runtimeEvents.backgroundTerminals(runtimeId);
+    // After a tracking loss the adapter cannot tell which commands of the tree still run.
+    const lost = terminals.lostIn(input.externalSessionId);
+    if (lost) throw lost;
+    const terminal = terminals
+      .backgroundTerminals(input.externalSessionId)
+      .find((candidate) => codexBackgroundTaskId(candidate) === input.taskId);
+    if (!terminal) return;
+    const stop = codexBackgroundTerminalStop(this.options.readRuntimeVersion?.() ?? null);
+    if (!stop.allowed) throw new Error(stop.reason);
+    // Only a command end that Codex reports turns a failed request into success.
+    await terminals.stopTask(terminal, () =>
+      stopCodexBackgroundTerminal(this.runtimeClients.clientForRuntime(runtimeId), terminal),
+    );
   }
 
   private releaseSessionTree(session: CodexSessionState): void {
@@ -2436,6 +2554,7 @@ export class CodexAppServerAdapter
         this.runtimeEvents.bindPendingInputToActiveTurn(externalSessionId, activeTurn),
       setSessionLiveStatus: (session, liveStatus) =>
         this.runtimeEvents.setSessionLiveStatus(session, liveStatus),
+      settleIdle: (session) => this.runtimeEvents.settleIdle(session),
       expectUserMessageEcho: (event, sourceParts) =>
         this.runtimeEvents.expectUserMessageEcho(event, sourceParts),
       emitUserMessage: (event) => this.runtimeEvents.emitUserMessage(event),

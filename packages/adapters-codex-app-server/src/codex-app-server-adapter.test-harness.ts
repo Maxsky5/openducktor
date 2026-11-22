@@ -430,7 +430,22 @@ export class RecordingTransport implements CodexJsonRpcTransport {
   beforeGoalAnswer: (() => Promise<void>) | null = null;
   beforeSettingsAnswer: (() => Promise<void>) | null = null;
   beforeTurnStartAnswer: (() => Promise<void>) | null = null;
+  /** The answer of each next `turn/start`, in place of `turnStartDeferred`. */
+  turnStartAnswer: (() => Promise<CodexAppServerTurnStartResult>) | null = null;
   unsubscribeError: Error | null = null;
+  /** The answer of `thread/backgroundTerminals/terminate`. */
+  terminateBackgroundTerminal: () => Promise<{ terminated: boolean }> = async () => ({
+    terminated: true,
+  });
+  /** The answer of `thread/backgroundTerminals/list` for the cursor of the request. */
+  listBackgroundTerminals: (cursor: string | null) => Promise<{
+    data: Array<{ itemId: string; processId: string; command: string }>;
+    nextCursor: string | null;
+  }> = async () => ({ data: [], nextCursor: null });
+  /** The failure of `thread/backgroundTerminals/clean`, like a JSON-RPC error answer of Codex. */
+  cleanBackgroundTerminalsError: Error | null = null;
+  /** Runs before `thread/backgroundTerminals/clean` answers. */
+  beforeCleanAnswer: (() => Promise<void>) | null = null;
   /** The MCP servers of the effective configuration that `config/read` reports. */
   configuredMcpServers: CodexConfiguredMcpServers = {};
   /** The config layers and the managed feature pins that the configuration reads report. */
@@ -528,6 +543,14 @@ export class RecordingTransport implements CodexJsonRpcTransport {
       case "thread/approveGuardianDeniedAction":
         if (this.approveGuardianError) throw this.approveGuardianError;
         return {};
+      case "thread/backgroundTerminals/terminate":
+        return this.terminateBackgroundTerminal();
+      case "thread/backgroundTerminals/list":
+        return this.listBackgroundTerminals(params.cursor ?? null);
+      case "thread/backgroundTerminals/clean":
+        await this.beforeCleanAnswer?.();
+        if (this.cleanBackgroundTerminalsError) throw this.cleanBackgroundTerminalsError;
+        return {};
       case "thread/unsubscribe":
         if (this.unsubscribeError) throw this.unsubscribeError;
         return { status: "unsubscribed" };
@@ -554,6 +577,7 @@ export class RecordingTransport implements CodexJsonRpcTransport {
             throw new Error("Invalid request: missing field `type`");
           }
         }
+        if (this.turnStartAnswer) return this.turnStartAnswer();
         const deferred = await this.turnStartDeferred.promise;
         if (deferred !== null) {
           return deferred;

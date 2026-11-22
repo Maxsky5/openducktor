@@ -493,6 +493,58 @@ The host owns the message queue. A runtime is eligible when its adapter can refu
 | OpenCode | `session.prompt` with `delivery: "queue"` | `session.prompt` with `delivery: "steer"` | Request answer | `session.execution.*` events |
 | Claude | SDK user message | SDK user message with priority `now` | `command_lifecycle` frame or replay echo | SDK result |
 
+### Background tasks
+
+An agent can start work that continues after its reply ends: a background shell command, a background subagent, or a background terminal. The session stays busy while this work runs.
+
+- The live snapshot lists the running background tasks of the session and of its descendant sessions in `backgroundTasks`, oldest first. No field means no task runs.
+- `backgroundResultPending` is set when a task ended but its result has not reached the agent yet. It stays until the runtime confirms delivery or its process ends.
+- `taskId` is an opaque adapter handle for one run of a task, unique in the root session tree. A task that runs again, such as a resumed Claude task or a continued OpenCode subagent, gets a new handle, so a stale Stop cannot reach the new run. Keep native IDs inside the adapter.
+- A task that the runtime cannot stop has `stop.allowed: false` and the reason that the client shows.
+- Only tasks that the current adapter observed live count. Tasks of an earlier runtime process never show.
+- Adapters report task changes from their live stream only. Do not poll or read a task list.
+- The OpenCode and Codex adapters keep their background work in `BackgroundWorkLedger` of `packages/core`. It owns the wait, loss, release, and Stop round rules below. The adapters add only native parsing and protocol steps.
+- A task-end notice can arrive before its start. The adapter keeps it, and a late start makes its undelivered result pending without adding a running task.
+- When an adapter cannot read a background task item of a known source, it sets `statusUnavailableReason` on the session. Later idle or status events do not clear it, because they cannot prove which tasks run. A release of the session or the runtime clears it.
+- When OpenDucktor releases a session with unresolved work, the nearest observed ancestor loses tracking of it. Unresolved work is a running task, an undelivered task result, or a tracking loss that the session already holds. The ancestor tree shows `statusUnavailableReason` with the reasons, and every Stop on that tree fails with them until the ancestor or the runtime is released. A root release or a runtime end drops the loss with the tree.
+- Stop reports success only on proof that each task it observed ended. A stop error for one task is ignored only after a confirmed end of that task.
+
+`isAgentSessionWaitingOnBackground` in `packages/core` is the one rule for the Background style. It holds when the status is current, `activity` is `running`, `foregroundTurnActive` is `false`, no active goal drives the work, and a task runs or a result is pending. The session stays Running everywhere: `activity` stays `running`, so archive consent, release guards, Stop session, and every client count, group, and rank treat it as running. Only its style changes.
+
+#### Turn protocol
+
+- A reply that ends with no background work emits `session_idle` with `turnOutcome`.
+- A reply that ends while background work remains emits `session_turn_finished` with the same `turnOutcome`. The snapshot keeps `activity: "running"` with `foregroundTurnActive: false`.
+- While background work remains, the adapter emits no idle signal: no `session_idle` and no idle `session_status`. Both end the client state and send the "agent finished" notification.
+- When the last task ends and no result is pending, the adapter emits `session_idle` without `turnOutcome`. The notification then fires once.
+- A new reply, from the user or from a task result, sets `foregroundTurnActive: true`. New-turn admission reads only the foreground turn, so a Background session accepts `new_turn` at once.
+
+| Runtime | Task start | Task end | Result delivered | Stop one task |
+|---|---|---|---|---|
+| Claude | Registered nonambient background run | Terminal `task_updated`, `task_notification`, or snapshot removal | Later native Idle or process exit | `query.stopTask(task_id)` |
+| OpenCode | Running `shell` tool with `shellID`; running `subagent` tool with child `sessionID` | `shell` or `subagent` notice in the session inbox | `session.inbox.delivered` | `shell.remove`; `session.interrupt` on the child |
+| Codex | `commandExecution` still `inProgress` at its `turn/completed` | Late `item/completed` of that item | No pending state | `thread/backgroundTerminals/terminate`, Codex `0.140.0` or later |
+
+#### Stop one task
+
+The `agent_session_background_task_stop` command calls `stopBackgroundTask` on the control adapter of the session.
+
+- The adapter looks up `taskId` only in the session tree of the ref. A task that does not run there gives success with no runtime call.
+- The adapter resolves when the runtime accepts the stop. The task leaves the snapshot when the runtime reports its end.
+- A native failure while the task still runs fails with a typed `HostError` and the runtime reason. A failure for a task that already ended gives success. The host does not retry.
+- Claude: a run that ends as `stopped` or `killed` after the host requested its stop adds no pending delivery. The session therefore leaves the Background state without a later native Idle.
+- Codex below `0.140.0`, or with an unknown version, reports `stop.allowed: false`.
+- OpenCode: `shell.remove` ends an agent background shell as `error`, delivers its notice to the session inbox, and wakes the session, so the agent replies. `shell.remove` has no option that skips the notice or the wake, so OpenDucktor keeps this runtime behavior.
+- Codex: a command that waited for an approval or an auto-review starts with no `processId`, and Codex sends no later start with it. Stop then reads `thread/backgroundTerminals/list` of the thread once and takes the `processId` of the item. A command that the list does not show fails the stop.
+
+#### Stop session
+
+- Claude closes the query. The process exit ends all tasks.
+- OpenCode root `session.interrupt` does not cancel background jobs. Stop session starts watching the tree before it interrupts the root. It stops each task of the tree, and interrupts each session that takes a task notice, also a session that took one before Stop began, then waits for the end event of that execution. It cancels each undelivered notice and waits for its `delivered` or `cancelled` event, then checks the tree again. Tasks that started during cleanup are stopped in the next round, for at most 3 rounds. A tree that does not settle fails Stop session and keeps its tasks listed. An unreadable task item fails the cleanup waits of its session with the reason, and Stop session fails while any session of the tree has lost its task tracking.
+- Codex `turn/interrupt` keeps background terminals. Stop session sends `thread/backgroundTerminals/clean` for each thread of the tree with a running command. `clean` returns before the processes exit, so Stop session watches, from before `clean`, for the late `item/completed` of each command. It then checks the tree again, in the order of the runtime events, and cleans commands that started meanwhile, for at most 3 rounds. The last check and the release run as one step on the runtime event queue. A release, an unreadable event of the thread, no confirmation within 10 seconds, or a tree that does not settle fails Stop session, and the unconfirmed terminals stay listed.
+- Codex emits session Idle only when the current foreground turn and all background terminals have ended. A `turn/completed` of an older turn does not end a newer turn.
+- A failed step fails Stop session with the runtime reason. The tasks that still run stay in the list, so the session does not show Idle.
+
 ## Import existing runtime sessions
 
 Implement `RuntimeSessionImportPort` to scan existing root conversations in bounded batches. Keep native cursors inside the adapter. Scanning must not read a transcript, send a prompt, or add a session to live state.
@@ -508,6 +560,7 @@ Only an explicit import can claim a native root. The host checks repository or r
 | Schemas | `packages/contracts/src/agent-runtime-schemas.ts`, `packages/contracts/src/agent-engine-schemas.ts` |
 | Live-session port | `packages/host/src/ports/agent-session-live-adapter-port.ts` |
 | Live-session adapters | `packages/host/src/adapters/agent-sessions` |
+| Background work tracker and Stop rounds | `packages/core/src/services/background-work-ledger.ts` |
 | Runtime orchestration | `packages/runtime-orchestration/src` |
 | Runtime drivers | `packages/host/src/adapters/runtimes/runtime-drivers.ts` |
 | Native adapters | `packages/adapters-opencode-sdk/src`, `packages/adapters-codex-app-server/src`, `packages/host/src/adapters/claude` |

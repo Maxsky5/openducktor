@@ -72,6 +72,7 @@ type ControlCall = {
       | "model"
       | "title"
       | "stop"
+      | "stopTask"
       | "release"
       | "goal"
       | "generate"
@@ -87,6 +88,7 @@ type ControlCall = {
         model: "updateSessionModel";
         title: "updateSessionTitle";
         stop: "stopSession";
+        stopTask: "stopBackgroundTask";
         release: "releaseSession";
         goal: "controlGoal";
         generate: "generateText";
@@ -102,6 +104,7 @@ type ControlCall = {
   | "model"
   | "title"
   | "stop"
+  | "stopTask"
   | "release"
   | "goal"
   | "generate"];
@@ -126,6 +129,7 @@ export const createRuntimeHarness = (
     readonly sendUserMessageBarrier?: Promise<void>;
     readonly onSendUserMessage?: () => void;
     readonly sessionFailures?: OpencodeRuntimeSnapshotFailure[];
+    readonly stopBackgroundTaskError?: Error;
     readonly sessionSources?: OpencodeRuntimeSnapshotSource[];
     readonly readSessionSources?: OpencodeSessionRuntimeConnection["readSessionSources"];
     /** Replaces the native runtime release after it records the call. */
@@ -239,6 +243,10 @@ export const createRuntimeHarness = (
     },
     stopSession: async (input) => {
       controlCalls.push({ operation: "stop", input });
+    },
+    stopBackgroundTask: async (input) => {
+      controlCalls.push({ operation: "stopTask", input });
+      if (options.stopBackgroundTaskError) throw options.stopBackgroundTaskError;
     },
     releaseSession: async (input) => {
       controlCalls.push({ operation: "release", input });

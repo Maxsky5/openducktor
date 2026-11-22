@@ -39,7 +39,7 @@ describe("consumeClaudeSession continuation", () => {
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
     await consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       now: () => "2026-11-17T22:11:00.000Z",
       emit: (_session, event) => events.push(event),
@@ -167,7 +167,7 @@ describe("sendClaudeUserMessage", () => {
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
     await consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       now: () => "2026-10-24T15:40:30.000Z",
       emit: (_session, event) => events.push(event),
@@ -233,7 +233,7 @@ describe("sendClaudeUserMessage", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       sessionStore.set(session);
       await consumeClaudeSession({
-        emitGoal: () => {},
+        emitLive: () => {},
         session,
         now: () => "2026-10-24T15:18:12.943Z",
         emit: (_session, event) => events.push(event),
@@ -282,7 +282,7 @@ describe("sendClaudeUserMessage", () => {
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
     await consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
@@ -338,7 +338,7 @@ describe("sendClaudeUserMessage", () => {
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
     await consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
@@ -394,7 +394,7 @@ describe("sendClaudeUserMessage", () => {
       const sessionStore = createClaudeAgentSdkSessionStore();
       sessionStore.set(session);
       await consumeClaudeSession({
-        emitGoal: () => {},
+        emitLive: () => {},
         session,
         now: () => "2026-06-25T20:01:00.000Z",
         emit: (_session, event) => events.push(event),
@@ -447,7 +447,7 @@ describe("sendClaudeUserMessage", () => {
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
     const consumePromise = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),
@@ -501,7 +501,7 @@ describe("sendClaudeUserMessage", () => {
     const sessionStore = createClaudeAgentSdkSessionStore();
     sessionStore.set(session);
     await consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       now: () => "2026-06-25T20:01:00.000Z",
       emit: (_session, event) => events.push(event),

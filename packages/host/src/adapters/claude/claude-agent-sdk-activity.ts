@@ -12,12 +12,20 @@ type TaskEvent = Extract<
   { subtype: "task_started" | "task_progress" | "task_updated" | "task_notification" }
 >;
 
-type ClaudeNativeTaskRun = {
+export type ClaudeNativeTaskRun = {
   runId: string;
+  /** Orders runs by their start. */
+  order: number;
   ambient: boolean;
   background: boolean;
   ended: boolean;
   listed: boolean;
+  /** The fields of the latest `background_tasks_changed` entry of the run. */
+  listing?: TaskSnapshot["tasks"][number];
+  /** The tool call that started the run, from `task_started`. */
+  toolUseId?: string;
+  /** The host asked Claude to stop the run. */
+  stopRequested?: boolean;
 };
 
 export type ClaudeNativeActivityState = {
@@ -25,6 +33,8 @@ export type ClaudeNativeActivityState = {
   nativeTaskRuns?: Map<string, ClaudeNativeTaskRun>;
   nativeBackgroundTasks?: Map<string, ClaudeNativeTaskRun>;
   nativePendingDeliveries?: Set<ClaudeNativeTaskRun>;
+  /** The background task state that the adapter last published for the session tree. */
+  publishedBackgroundTasks?: string;
   foregroundTurnActive?: boolean;
   foregroundMessageIds?: Set<string>;
   nativeCommandStates?: Map<string, "queued" | "started" | "terminal" | "result">;
@@ -71,10 +81,14 @@ export const isClaudeForegroundTurnActive = (
   (session.activeSdkUserTurnCount ?? 0) > 0 ||
   (session.pendingUserTurnCount ?? 0) > 0;
 
+/** A run of the task list that keeps the session Running. */
+export const isClaudeRunningBackgroundRun = (run: ClaudeNativeTaskRun): boolean =>
+  !run.ambient && !run.ended && run.background;
+
 export const hasClaudeNativeBackgroundActivity = (session: ClaudeNativeActivityState): boolean => {
   if ((session.nativePendingDeliveries?.size ?? 0) > 0) return true;
   for (const run of session.nativeBackgroundTasks?.values() ?? []) {
-    if (!run.ambient && !run.ended && run.background) return true;
+    if (isClaudeRunningBackgroundRun(run)) return true;
   }
   return false;
 };
@@ -86,6 +100,7 @@ export const clearClaudeNativeActivity = (session: ClaudeNativeActivityState): v
   session.foregroundMessageIds?.clear();
   session.nativeCommandStates?.clear();
   session.nativeSubmittedMessageIds?.clear();
+  delete session.publishedBackgroundTasks;
   session.foregroundTurnActive = false;
 };
 
@@ -109,6 +124,7 @@ export const updateBackgroundTasks = (
     const run = taskRun(session, task.task_id, task.run_id, false);
     if (!run) continue;
     run.listed = true;
+    run.listing = task;
     run.ambient = task.ambient === true;
     if (run.ambient) session.nativePendingDeliveries?.delete(run);
     if (!run.ended) {
@@ -143,6 +159,7 @@ export const acceptTaskEvent = (
   )
     return false;
   if (message.subtype === "task_started") {
+    if (message.tool_use_id) run.toolUseId = message.tool_use_id;
     if (!run.listed) run.ambient = message.ambient === true || message.skip_transcript === true;
     if (run.ambient) session.nativePendingDeliveries?.delete(run);
   } else if (message.subtype === "task_updated") {
@@ -151,16 +168,18 @@ export const acceptTaskEvent = (
       message.patch.status === "failed" ||
       message.patch.status === "killed"
     )
-      endRun(session, run);
+      endRun(session, run, message.patch.status === "killed");
   } else if (message.subtype === "task_notification") {
     if (message.ambient || message.skip_transcript) {
       run.ambient = true;
       session.nativePendingDeliveries?.delete(run);
     }
-    endRun(session, run);
+    endRun(session, run, message.status === "stopped");
   }
   return true;
 };
+
+let nextRunOrder = 0;
 
 const taskRun = (
   session: ClaudeNativeActivityState,
@@ -181,6 +200,7 @@ const taskRun = (
   if (known?.runId === runId) return known;
   const run: ClaudeNativeTaskRun = {
     runId,
+    order: nextRunOrder++,
     ambient: false,
     background: false,
     ended: false,
@@ -191,7 +211,21 @@ const taskRun = (
   return run;
 };
 
-const endRun = (session: ClaudeNativeActivityState, run: ClaudeNativeTaskRun): void => {
+/**
+ * A run that ends as stopped after the host asked for its stop gives the agent no result to wait
+ * for, so the session can go idle without a native Idle. The stop status can arrive after the run
+ * left the task list.
+ */
+const endRun = (
+  session: ClaudeNativeActivityState,
+  run: ClaudeNativeTaskRun,
+  stopped = false,
+): void => {
+  if (stopped && run.stopRequested) {
+    session.nativePendingDeliveries?.delete(run);
+    run.ended = true;
+    return;
+  }
   if (run.ended) return;
   if (!run.ambient && run.background) {
     session.nativePendingDeliveries ??= new Set();

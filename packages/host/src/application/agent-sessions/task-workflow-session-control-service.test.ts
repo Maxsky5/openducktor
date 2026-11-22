@@ -303,6 +303,7 @@ const createModelUpdateService = ({
       forkSession: () => Effect.die(new Error("unexpected fork")),
       sendUserMessage: unexpectedSend,
       updateSessionModel: updateRuntimeModel,
+      stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
       stopSession: () => Effect.die(new Error("unexpected stop")),
       releaseSession: () => Effect.die(new Error("unexpected release")),
     },
@@ -341,6 +342,7 @@ const createReplyForkHarness = (
       }),
     sendUserMessage: unexpectedSend,
     updateSessionModel: unexpectedSend,
+    stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
     stopSession: (ref) =>
       Effect.sync(() => {
         calls.push(`stop:${ref.externalSessionId}`);
@@ -529,6 +531,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -597,6 +600,7 @@ describe("createAgentSessionCommandService", () => {
               calls.push("runtime-returned");
               return summary;
             }),
+          stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
           stopSession: (ref) =>
             Effect.gen(function* () {
               expect(ref.externalSessionId).toBe(summary.externalSessionId);
@@ -711,6 +715,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -786,6 +791,7 @@ describe("createAgentSessionCommandService", () => {
           forkSession: () => Effect.die(new Error("unexpected fork")),
           sendUserMessage: unexpectedSend,
           updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
           stopSession: () => Effect.sync(() => calls.push("stop-runtime")),
           releaseSession: () =>
             Effect.sync(() => {
@@ -852,6 +858,7 @@ describe("createAgentSessionCommandService", () => {
           forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
           sendUserMessage: unexpectedSend,
           updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
           stopSession: (ref) =>
             Effect.sync(() => {
               calls.push(`stop:${ref.externalSessionId}`);
@@ -949,6 +956,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1017,6 +1025,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () =>
           Effect.sync(() => calls.push("stop-runtime")).pipe(
             Effect.andThen(
@@ -1157,6 +1166,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1215,6 +1225,7 @@ describe("createAgentSessionCommandService", () => {
           forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
           sendUserMessage: unexpectedSend,
           updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
           stopSession: () => Effect.die(new Error("unexpected stop")),
           releaseSession: () => Effect.die(new Error("unexpected release")),
         },
@@ -1281,6 +1292,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1332,6 +1344,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1380,6 +1393,7 @@ describe("createAgentSessionCommandService", () => {
           }),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1423,6 +1437,7 @@ describe("createAgentSessionCommandService", () => {
           }),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1467,6 +1482,7 @@ describe("createAgentSessionCommandService", () => {
             return acceptedUserMessage;
           }),
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1539,6 +1555,7 @@ describe("createAgentSessionCommandService", () => {
               return { type: "command_accepted" as const, commandName: "goal" };
             }),
           updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+          stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
           stopSession: () => Effect.void,
           releaseSession: () => Effect.die(new Error("unexpected release")),
         },
@@ -1691,6 +1708,7 @@ describe("createAgentSessionCommandService", () => {
             return acceptedUserMessage;
           }),
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1734,6 +1752,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: () => Effect.die(new Error("unexpected send")),
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: (input) =>
           Effect.sync(() => void order.push(`stop:${input.externalSessionId}`)),
         releaseSession: () => Effect.die(new Error("unexpected release")),
@@ -1774,6 +1793,7 @@ describe("createAgentSessionCommandService", () => {
             return acceptedUserMessage;
           }),
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1808,6 +1828,7 @@ describe("createAgentSessionCommandService", () => {
             return acceptedUserMessage;
           }),
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -1863,6 +1884,7 @@ describe("createAgentSessionCommandService", () => {
               calls.push("runtime");
               runtimeInputs.push(input);
             }),
+          stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
           stopSession: () => Effect.die(new Error("unexpected stop")),
           releaseSession: () => Effect.die(new Error("unexpected release")),
         },
@@ -2108,6 +2130,7 @@ describe("createAgentSessionCommandService", () => {
           Effect.sync(() => {
             runtimeCalls += 1;
           }),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -2151,6 +2174,7 @@ describe("createAgentSessionCommandService", () => {
           Effect.sync(() => {
             runtimeCalls += 1;
           }),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -2203,6 +2227,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.die(new Error("unexpected fork")),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -2255,6 +2280,7 @@ describe("createAgentSessionCommandService", () => {
           }),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -2303,6 +2329,7 @@ describe("createAgentSessionCommandService", () => {
         forkSession: () => Effect.succeed({ ...summary, externalSessionId: "fork-1" }),
         sendUserMessage: unexpectedSend,
         updateSessionModel: () => Effect.die(new Error("unexpected model update")),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },
@@ -2362,6 +2389,7 @@ describe("createAgentSessionCommandService", () => {
             ),
             Effect.asVoid,
           ),
+        stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
         stopSession: () => Effect.die(new Error("unexpected stop")),
         releaseSession: () => Effect.die(new Error("unexpected release")),
       },

@@ -42,6 +42,7 @@ type ObservedSessionCommands = Pick<
   | "loadSessionDiff"
   | "replyApproval"
   | "replyQuestion"
+  | "stopBackgroundTask"
 >;
 
 export const createAgentSessionCommandService = ({
@@ -287,6 +288,8 @@ export const createAgentSessionCommandService = ({
           );
         }),
       ),
+    stopBackgroundTask: (input: Parameters<typeof runtime.stopBackgroundTask>[0]) =>
+      runScopedCommand(input, "stop background task", runtime.stopBackgroundTask),
     releaseSession: (input: Parameters<typeof runtime.releaseSession>[0]) =>
       repositoryPolicy.run(input, "release session", runtime.releaseSession(input)),
     resumeSession: (

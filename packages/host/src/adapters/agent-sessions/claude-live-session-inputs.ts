@@ -8,7 +8,7 @@ import type { AgentEvent, AgentStreamPart } from "@openducktor/core";
 import { isClaudeSubagentTranscriptTarget } from "../claude/claude-agent-sdk-subagent-transcripts";
 import type { ClaudeSessionContext } from "../claude/claude-agent-sdk-types";
 
-export const toApproval = (
+const toApproval = (
   event: Extract<AgentEvent, { type: "approval_required" }>,
 ): AgentSessionLivePendingApprovalRequest => {
   const request: AgentSessionLivePendingApprovalRequest = {
@@ -29,7 +29,7 @@ export const toApproval = (
   return request;
 };
 
-export const toQuestion = (
+const toQuestion = (
   event: Extract<AgentEvent, { type: "question_required" }>,
 ): AgentSessionLivePendingQuestionRequest => {
   const request: AgentSessionLivePendingQuestionRequest = {
@@ -40,6 +40,53 @@ export const toQuestion = (
   if (event.canCancel !== undefined) request.canCancel = event.canCancel;
   if (event.unsupportedReason !== undefined) request.unsupportedReason = event.unsupportedReason;
   return request;
+};
+
+export type ClaudePendingEvent = Extract<
+  AgentEvent,
+  { type: "approval_required" | "approval_resolved" | "question_required" | "question_resolved" }
+>;
+
+/** The snapshot with the request of the event added, or with the resolved request removed. */
+export const withPendingEvent = (
+  snapshot: AgentSessionLiveSnapshot,
+  event: ClaudePendingEvent,
+): AgentSessionLiveSnapshot => {
+  if (event.type === "approval_required") {
+    const request = toApproval(event);
+    return {
+      ...snapshot,
+      pendingApprovals: [
+        ...snapshot.pendingApprovals.filter(
+          (candidate) => candidate.requestId !== request.requestId,
+        ),
+        request,
+      ],
+    };
+  }
+  if (event.type === "question_required") {
+    const request = toQuestion(event);
+    return {
+      ...snapshot,
+      pendingQuestions: [
+        ...snapshot.pendingQuestions.filter(
+          (candidate) => candidate.requestId !== request.requestId,
+        ),
+        request,
+      ],
+    };
+  }
+  return {
+    ...snapshot,
+    pendingApprovals:
+      event.type === "approval_resolved"
+        ? snapshot.pendingApprovals.filter((candidate) => candidate.requestId !== event.requestId)
+        : snapshot.pendingApprovals,
+    pendingQuestions:
+      event.type === "question_resolved"
+        ? snapshot.pendingQuestions.filter((candidate) => candidate.requestId !== event.requestId)
+        : snapshot.pendingQuestions,
+  };
 };
 
 export const readParent = (

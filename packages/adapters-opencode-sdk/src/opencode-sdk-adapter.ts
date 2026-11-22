@@ -846,11 +846,13 @@ export class OpencodeSdkAdapter {
     return { status: "renamed", summary: this.summary(binding) };
   }
 
-  async stopSession(input: SessionRef): Promise<void> {
+  /** Interrupts the conversation. Returns whether OpenCode stopped a running execution. */
+  async stopSession(input: SessionRef): Promise<boolean> {
     this.generations.set(input.externalSessionId, this.generation(input.externalSessionId) + 1);
     await this.readSession(input, "interrupt the conversation");
-    await nativeRequest(input, "interrupt the conversation", async () => {
-      await this.client.session.interrupt({ sessionID: input.externalSessionId });
+    return nativeRequest(input, "interrupt the conversation", async () => {
+      const result = await this.client.session.interrupt({ sessionID: input.externalSessionId });
+      return result.interrupted === true;
     });
   }
   async releaseSession(input: SessionRef): Promise<SessionRef[]> {

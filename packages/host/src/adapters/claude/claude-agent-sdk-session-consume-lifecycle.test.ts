@@ -40,7 +40,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const session = createClaudeSession({ query: open.query });
     sessionStore.set(session);
     const consumption = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       emit,
@@ -73,6 +73,44 @@ describe("consumeClaudeSession lifecycle", () => {
     expect(session.query.close).toHaveBeenCalledTimes(1);
   });
 
+  test("publishes the background task list after each task frame and clears it on exit", async () => {
+    const tasks = (list: { task_id: string }[]) =>
+      claudeSdkMessageFixture({
+        type: "system",
+        subtype: "background_tasks_changed",
+        tasks: list.map((task) => ({ ...task, task_type: "local_bash", description: "Dev" })),
+      });
+    const sessionStore = createClaudeAgentSdkSessionStore();
+    const session = createClaudeSession({
+      query: claudeQueryWithMessages([tasks([{ task_id: "dev" }]), tasks([{ task_id: "dev" }])]),
+    });
+    sessionStore.set(session);
+    const published: unknown[] = [];
+    await consumeClaudeSession({
+      emitLive: (_session, event) => {
+        if (event.type === "session_background_tasks_updated") published.push(event.sessions);
+      },
+      session,
+      sessionStore,
+      emit: () => {},
+      now: () => "2026-11-21T10:00:00.000Z",
+      onBackgroundFailure: ignoreClaudeBackgroundFailure,
+    });
+
+    expect(published).toEqual([
+      [
+        {
+          externalSessionId: "session-1",
+          resultPending: false,
+          tasks: [
+            { taskId: "dev:run:dev", kind: "command", title: "Dev", stop: { allowed: true } },
+          ],
+        },
+      ],
+    ]);
+    expect(session.publishedBackgroundTasks).toBeUndefined();
+  });
+
   test("runtime shutdown joins a consumer already removed from the registry", async () => {
     const returning = Promise.withResolvers<void>();
     const returned = Promise.withResolvers<void>();
@@ -86,7 +124,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const session = createClaudeSession({ query });
     sessionStore.set(session);
     const consumption = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       emit: () => {},
@@ -131,7 +169,7 @@ describe("consumeClaudeSession lifecycle", () => {
     const sessionStore = createClaudeAgentSdkSessionStore({ emit });
     const consume = (target: typeof session) =>
       consumeClaudeSession({
-        emitGoal: () => {},
+        emitLive: () => {},
         session: target,
         sessionStore,
         emit,
@@ -166,7 +204,7 @@ describe("consumeClaudeSession lifecycle", () => {
       sessionStore.set(session);
 
       const failure = await consumeClaudeSession({
-        emitGoal: () => {},
+        emitLive: () => {},
         session,
         sessionStore,
         now: () => "2026-06-25T20:00:00.000Z",
@@ -221,7 +259,7 @@ describe("consumeClaudeSession lifecycle", () => {
     });
     sessionStore.set(session);
     const consumption = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -275,7 +313,7 @@ describe("consumeClaudeSession lifecycle", () => {
     });
     sessionStore.set(session);
     const failure = await consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -323,7 +361,7 @@ describe("consumeClaudeSession lifecycle", () => {
     };
     sessionStore.set(session);
     const consumption = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -378,7 +416,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     const consumePromise = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -452,7 +490,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     const consumePromise = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",
@@ -482,7 +520,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     await consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -513,7 +551,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     const consumption = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:00.000Z",
@@ -611,7 +649,7 @@ describe("consumeClaudeSession lifecycle", () => {
     sessionStore.set(session);
 
     const consumePromise = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",
@@ -682,7 +720,7 @@ describe("consumeClaudeSession lifecycle", () => {
     };
 
     await consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore,
       now: () => "2026-06-25T20:00:02.000Z",

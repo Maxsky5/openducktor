@@ -45,6 +45,7 @@ import {
 import { createClaudeLiveSessionEventCoordinator } from "./claude-live-session-event-coordinator";
 import {
   requireClaudePolicy,
+  stopClaudeBackgroundTask,
   toClaudeContinueInput,
   toClaudeForkInput,
   toClaudeLoadContextInput,
@@ -445,6 +446,7 @@ export const createClaudeLiveSessionAdapterPreparer =
                 ),
               ),
           ),
+        stopBackgroundTask: stopClaudeBackgroundTask(sessionStore),
         releaseSession: (input) =>
           runClosure(
             "claude-live-session.remove-released-session",

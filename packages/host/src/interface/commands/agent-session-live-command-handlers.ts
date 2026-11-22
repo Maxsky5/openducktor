@@ -12,6 +12,7 @@ import {
   agentSessionControlReleaseInputSchema,
   agentSessionResumeIntentSchema,
   agentSessionControlStopInputSchema,
+  agentSessionBackgroundTaskStopInputSchema,
   agentSessionControlUpdateModelInputSchema,
   agentSessionGoalControlInputSchema,
   type AgentSessionGoalControlInput,
@@ -116,6 +117,12 @@ export const createAgentSessionLiveCommandHandlers = (
         args,
         "agent_session_control_stop",
       ).pipe(Effect.flatMap(service.stopSession)),
+    agent_session_background_task_stop: (args) =>
+      parseCommandInput(
+        agentSessionBackgroundTaskStopInputSchema,
+        args,
+        "agent_session_background_task_stop",
+      ).pipe(Effect.flatMap(service.stopBackgroundTask)),
     agent_session_goal_control: (args) =>
       parseCommandInput(
         agentSessionGoalControlInputSchema,

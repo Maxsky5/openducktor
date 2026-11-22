@@ -8,6 +8,7 @@ import type {
   CodexAppServerThreadStatus,
 } from "@openducktor/contracts";
 import type {
+  CodexSessionState,
   CodexThreadForkResult,
   CodexThreadResumeResult,
   CodexThreadStartResult,
@@ -121,6 +122,15 @@ export const codexThreadStatusSnapshot = (
   }
   return { classification: "running" };
 };
+
+/** The activity of the session that Codex reported last. */
+export const codexSessionRuntimeActivity = (
+  session: Pick<CodexSessionState, "liveStatus" | "summary">,
+): CodexThreadStatusSnapshot["classification"] =>
+  session.liveStatus?.classification ??
+  (session.summary.status === "running" || session.summary.status === "starting"
+    ? "running"
+    : "idle");
 
 const codexThreadSnapshot = (thread: CodexAppServerThread): CodexThreadSnapshot => {
   const subAgentSource = codexSubAgentSourceMetadata(thread.source);

@@ -18,7 +18,11 @@ import type {
   ClaudePendingInputResolution,
 } from "../../application/runtimes/claude-agent-sdk-service";
 import type { RuntimeWorkingDirectoryDependencies } from "../../application/runtimes/runtime-working-directory";
-import { HostOperationError, toHostOperationError } from "../../effect/host-errors";
+import {
+  HostOperationError,
+  HostValidationError,
+  toHostOperationError,
+} from "../../effect/host-errors";
 import { hostInvokeFailureFromError } from "../../interface/router/host-invoke-failure";
 import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
@@ -213,6 +217,7 @@ const createHarness = async (
   sessionStore: Parameters<typeof createClaudeLiveSessionAdapterPreparer>[0]["sessionStore"] = {
     get: (externalSessionId) => sessionsById.get(externalSessionId),
     isLatest: (candidate) => sessionsById.get(candidate.externalSessionId) === candidate,
+    stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
   },
 ) => {
   const changes: AgentSessionLiveAdapterChange[] = [];
@@ -469,7 +474,7 @@ describe("Claude host live-session adapter", () => {
     await sent.promise;
     expect(current.pendingUserMessageAdmissions.size).toBe(1);
     await consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       emit: harness.eventHub.emit,
       now: () => "2026-10-23T00:00:01.000Z",
       onBackgroundFailure: ignoreClaudeBackgroundFailure,
@@ -553,7 +558,7 @@ describe("Claude host live-session adapter", () => {
       await entered.promise;
       try {
         await consumeClaudeSession({
-          emitGoal: () => {},
+          emitLive: () => {},
           emit: harness.eventHub.emit,
           now: () => "2026-10-24T16:00:00.000Z",
           onBackgroundFailure: ignoreClaudeBackgroundFailure,
@@ -777,6 +782,30 @@ describe("Claude host live-session adapter", () => {
       runtimePolicy: { kind: "claude" },
       systemPrompt: "Build",
     });
+  });
+
+  test("stops a background task through the session store of a Claude runtime only", async () => {
+    const stopped: unknown[] = [];
+    const harness = await createHarness(workingDirectoryDependencies, {
+      get: (externalSessionId) => sessionsById.get(externalSessionId),
+      isLatest: () => true,
+      stopBackgroundTask: (input) => Effect.sync(() => void stopped.push(input)),
+    });
+    const input = {
+      repoPath: "/repo",
+      runtimeKind: "claude" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      taskId: "dev",
+    };
+
+    await Effect.runPromise(harness.adapter.stopBackgroundTask(input));
+    const error = await Effect.runPromise(
+      Effect.flip(harness.adapter.stopBackgroundTask({ ...input, runtimeKind: "codex" })),
+    );
+
+    expect(stopped).toEqual([input]);
+    expect(error).toBeInstanceOf(HostValidationError);
   });
 
   test("maps a native continuation identity mismatch to the typed resume failure", async () => {
@@ -2573,6 +2602,7 @@ describe("Claude host live-session adapter goals", () => {
       get: (externalSessionId) =>
         externalSessionId === goalSession.externalSessionId ? goalSession : undefined,
       isLatest: (candidate) => candidate === goalSession,
+      stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
     });
     harness.setStartSession(() => Effect.succeed(summary));
     harness.setLoadSessionContextUsage(() => Effect.succeed(null));

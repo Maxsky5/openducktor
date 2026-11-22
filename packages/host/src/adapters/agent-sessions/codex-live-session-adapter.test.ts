@@ -209,6 +209,7 @@ type ControllerHarnessOptions = {
   sessionDiffs?: FileDiff[];
   continueInterruptedTurnError?: Error;
   pauseGoalForStopError?: Error;
+  stopBackgroundTaskError?: Error;
 };
 
 type CodexGoalControlCall = Parameters<CodexSessionController["controlGoal"]>[0];
@@ -237,6 +238,7 @@ const createControllerHarness = ({
   sessionDiffs = [],
   continueInterruptedTurnError,
   pauseGoalForStopError,
+  stopBackgroundTaskError,
 }: ControllerHarnessOptions = {}) => {
   let options: CodexAppServerAdapterOptions | null = null;
   let snapshots = initialSnapshots;
@@ -267,6 +269,8 @@ const createControllerHarness = ({
   };
   const goalPausesForStop: SessionRef[] = [];
   const goalInputs = { controls: goalControls, pausesForStop: goalPausesForStop };
+  const backgroundTaskStops: Array<Parameters<CodexSessionController["stopBackgroundTask"]>[0]> =
+    [];
   const controlSummary = {
     externalSessionId: "thread-1",
     runtimeKind: "codex" as const,
@@ -497,6 +501,16 @@ const createControllerHarness = ({
         stopSession: async () => {
           snapshots = [];
         },
+        stopBackgroundTask: async (
+          input: Parameters<CodexSessionController["stopBackgroundTask"]>[0],
+        ) => {
+          backgroundTaskStops.push(input);
+          if (stopBackgroundTaskError) throw stopBackgroundTaskError;
+          snapshots = snapshots.map((snapshot) => {
+            const { backgroundTasks: _tasks, ...rest } = snapshot;
+            return rest;
+          });
+        },
         releaseSession: async (input: Parameters<CodexAppServerAdapter["releaseSession"]>[0]) => {
           snapshots = snapshots.filter(
             (snapshot) => snapshot.ref.externalSessionId !== input.externalSessionId,
@@ -516,6 +530,7 @@ const createControllerHarness = ({
     sessionDiffLoads,
     controlInputs,
     goalInputs,
+    backgroundTaskStops,
     sendOptions,
     approvalReplies,
     deniedActions,
@@ -543,6 +558,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const filesystem = createFilesystemAdapter();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch: createCodexDirectoryMatcher({
           canonicalize: (path) => {
@@ -652,6 +668,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       let snapshots: AgentSessionLiveSnapshot[] = [];
       const prepared = await Effect.runPromise(
         createCodexLiveSessionAdapterPreparer({
+          readRuntimeVersion: () => "0.171.0",
           resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           directoriesMatch,
           resolveMcpServerConfig,
@@ -709,6 +726,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const resolvedRepos: string[] = [];
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig: (repoPath) =>
@@ -749,6 +767,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const listings: unknown[] = [];
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -786,6 +805,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const histories: CodexAppServerAdapterOptions["questionHistory"][] = [];
     const prepare = createCodexLiveSessionAdapterPreparer({
+      readRuntimeVersion: () => "0.171.0",
       resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
       directoriesMatch,
       resolveMcpServerConfig,
@@ -830,6 +850,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ initialSnapshots: [initial, idle] });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -933,6 +954,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ sessionDiffs });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -994,6 +1016,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1056,6 +1079,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const prepare = (harness: ReturnType<typeof createControllerHarness>) =>
       Effect.runPromise(
         createCodexLiveSessionAdapterPreparer({
+          readRuntimeVersion: () => "0.171.0",
           resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           directoriesMatch,
           resolveMcpServerConfig,
@@ -1092,6 +1116,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1128,10 +1153,62 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     expect(snapshot?.goal).toEqual({ objective: "Ship the release", status: "active" });
   });
 
+  test("stops one background task through the controller and reports a Codex failure", async () => {
+    const backgroundTask = {
+      taskId: "thread-1:dev",
+      kind: "command" as const,
+      title: "bun run dev",
+      stop: { allowed: true as const },
+    };
+    const prepare = (harness: ReturnType<typeof createControllerHarness>) =>
+      Effect.runPromise(
+        createCodexLiveSessionAdapterPreparer({
+          readRuntimeVersion: () => "0.171.0",
+          resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
+          directoriesMatch,
+          resolveMcpServerConfig,
+          prepareImageGenerations: async () => {
+            throw new Error("Unexpected image preparation");
+          },
+          liveSessionLifecycle: createLifecycle([]),
+          codexAppServer,
+          onBackgroundFailure: noBackgroundFailure,
+          resolveRuntimePolicy,
+          createController: harness.createController,
+        })(runtime),
+      );
+    const input = { ...ref, taskId: backgroundTask.taskId };
+
+    const harness = createControllerHarness({
+      initialSnapshots: [{ ...liveSnapshot(), backgroundTasks: [backgroundTask] }],
+    });
+    const prepared = await prepare(harness);
+    await Effect.runPromise(prepared.adapter.stopBackgroundTask(input));
+    expect(harness.backgroundTaskStops).toEqual([input]);
+    const [snapshot] = await Effect.runPromise(prepared.adapter.listSnapshots());
+    expect(snapshot).not.toHaveProperty("backgroundTasks");
+
+    const failing = createControllerHarness({
+      initialSnapshots: [{ ...liveSnapshot(), backgroundTasks: [backgroundTask] }],
+      stopBackgroundTaskError: new Error(
+        "Codex did not stop the background command 'bun run dev'. The command still runs.",
+      ),
+    });
+    const failingAdapter = await prepare(failing);
+    const failure = await Effect.runPromise(
+      Effect.flip(failingAdapter.adapter.stopBackgroundTask(input)),
+    );
+    expect(failure._tag).toBe("HostOperationError");
+    expect(failure.message).toBe(
+      "Codex did not stop the background command 'bun run dev'. The command still runs.",
+    );
+  });
+
   test("retains acceptance when the live projection cannot publish", async () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1185,6 +1262,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1252,6 +1330,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     };
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1327,6 +1406,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
       const harness = createControllerHarness();
       const prepared = await Effect.runPromise(
         createCodexLiveSessionAdapterPreparer({
+          readRuntimeVersion: () => "0.171.0",
           resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           directoriesMatch,
           resolveMcpServerConfig,
@@ -1378,6 +1458,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1468,6 +1549,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1504,6 +1586,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const policyScopes: AgentSessionScope[] = [];
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1556,6 +1639,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1605,6 +1689,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1642,6 +1727,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1695,6 +1781,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1752,6 +1839,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ initialSnapshots: snapshots });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1795,6 +1883,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1855,6 +1944,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1915,6 +2005,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     } satisfies RuntimeLiveSessionLifecyclePort;
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -1961,6 +2052,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -2039,6 +2131,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -2076,6 +2169,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness();
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -2137,6 +2231,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -2174,6 +2269,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     };
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -2232,6 +2328,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -2273,6 +2370,7 @@ describe("createCodexLiveSessionAdapterPreparer", () => {
     const harness = createControllerHarness({ initialSnapshots: [] });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -2327,6 +2425,7 @@ for (const action of ["stop", "release", "runtime"] as const) {
     });
     const prepared = await Effect.runPromise(
       createCodexLiveSessionAdapterPreparer({
+        readRuntimeVersion: () => "0.171.0",
         resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
         directoriesMatch,
         resolveMcpServerConfig,
@@ -2390,6 +2489,7 @@ for (const action of ["stop", "release"] as const) {
       const lifecycle = createLifecycle(changes);
       const prepared = await Effect.runPromise(
         createCodexLiveSessionAdapterPreparer({
+          readRuntimeVersion: () => "0.171.0",
           resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
           directoriesMatch,
           resolveMcpServerConfig,
@@ -2462,6 +2562,7 @@ test("interrupting an image read aborts the controller's preparation signal", as
   const harness = createControllerHarness();
   const prepared = await Effect.runPromise(
     createCodexLiveSessionAdapterPreparer({
+      readRuntimeVersion: () => "0.171.0",
       resolveWorkflowRolePolicy: builtinWorkflowRolePolicy,
       directoriesMatch,
       resolveMcpServerConfig,
@@ -2513,6 +2614,7 @@ describe("Codex denied action Allow", () => {
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
+        readRuntimeVersion: () => "0.171.0",
         createController: harness.createController,
       })(runtime),
     );
@@ -2597,6 +2699,7 @@ describe("Codex denied action Allow", () => {
         codexAppServer,
         onBackgroundFailure: noBackgroundFailure,
         resolveRuntimePolicy,
+        readRuntimeVersion: () => "0.171.0",
         createController: harness.createController,
       })(runtime),
     );

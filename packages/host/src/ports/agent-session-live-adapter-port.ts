@@ -9,6 +9,7 @@ import type {
   AgentGeneratedImageDescribeResult,
   RuntimeOperationFailure,
   AcceptedAgentInput,
+  AgentSessionBackgroundTaskStopInput,
   AgentSessionContextUsage,
   AgentSessionControlForkInput,
   AgentSessionControlReleaseInput,
@@ -243,6 +244,14 @@ export type AgentSessionControlAdapterPort = {
     input: AgentSessionControlUpdateTitleInput,
   ) => Effect.Effect<AgentSessionTitleUpdateOutcome, HostError>;
   readonly stopSession: (input: AgentSessionControlStopInput) => Effect.Effect<void, HostError>;
+  /**
+   * Stops one background task of the session tree of the ref. A task that does not run in that
+   * tree gives success with no runtime call. It resolves when the runtime accepts the stop. The
+   * task leaves the snapshot when the runtime reports its end.
+   */
+  readonly stopBackgroundTask: (
+    input: AgentSessionBackgroundTaskStopInput,
+  ) => Effect.Effect<void, HostError>;
   readonly releaseSession: (
     input: AgentSessionControlReleaseInput,
   ) => Effect.Effect<void, HostError>;

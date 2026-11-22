@@ -115,6 +115,7 @@ const titleControlAdapter = (
   controlGoal: () => Effect.die(new Error("unexpected goal action")),
   updateSessionTitle: updateTitle,
   stopSession: () => Effect.die(new Error("unexpected stop")),
+  stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
   releaseSession: () => Effect.die(new Error("unexpected release")),
 });
 
@@ -2231,6 +2232,7 @@ describe("createAgentSessionLiveStateService", () => {
       controlGoal: () => Effect.die(new Error("unexpected goal action")),
       updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
       stopSession: () => Effect.die(new Error("unexpected stop")),
+      stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
       releaseSession: () => Effect.die(new Error("unexpected release")),
     } satisfies AgentSessionRuntimeAdapterPort;
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
@@ -2288,6 +2290,7 @@ describe("createAgentSessionLiveStateService", () => {
       controlGoal: () => Effect.die(new Error("unexpected goal action")),
       updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
       stopSession: () => Effect.die(new Error("unexpected stop")),
+      stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
       releaseSession: () => Effect.die(new Error("unexpected release")),
     } satisfies AgentSessionRuntimeAdapterPort;
     await Effect.runPromise(service.registerRuntimeAdapter(adapter));
@@ -2413,6 +2416,7 @@ describe("createAgentSessionLiveStateService", () => {
           calls.push({ operation: "title", input });
           return { status: "renamed" as const };
         }),
+      stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
       stopSession: (input) =>
         Effect.sync(() => {
           calls.push({ operation: "stop", input });

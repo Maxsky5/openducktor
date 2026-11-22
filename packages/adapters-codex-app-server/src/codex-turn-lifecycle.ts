@@ -11,10 +11,7 @@ import {
 } from "@openducktor/core";
 import type { ActiveCodexTurn } from "./codex-app-server-shared";
 import { CodexMessageAcceptedError } from "./codex-message-accepted-error";
-import {
-  type CodexThreadStatusSnapshot,
-  codexThreadStatusSnapshot,
-} from "./codex-app-server-threads";
+import type { CodexThreadStatusSnapshot } from "./codex-app-server-threads";
 import type { CodexExpectedEcho } from "./codex-app-server-streaming";
 import type { CodexSessionLookup } from "./codex-local-session-state";
 import {
@@ -40,6 +37,8 @@ export type CodexTurnLifecycleContext = {
   bindActiveTurnId(activeTurn: ActiveCodexTurn, turnId: string, startedAtMs?: number): void;
   bindPendingInputToActiveTurn(externalSessionId: string, activeTurn: ActiveCodexTurn): void;
   setSessionLiveStatus(session: CodexSessionState, liveStatus: CodexThreadStatusSnapshot): void;
+  /** Makes the session idle, or holds it running while background terminals of its tree run. */
+  settleIdle(session: CodexSessionState): "held" | "idle";
   expectUserMessageEcho(
     event: AcceptedAgentUserMessage,
     input: CodexUserInput[],
@@ -458,9 +457,7 @@ const requireRetainedTurnSession = (
 };
 
 const markSessionIdle = (context: CodexTurnLifecycleContext, session: CodexSessionState): void => {
-  if (sessionIsRetained(context, session)) {
-    context.setSessionLiveStatus(session, codexThreadStatusSnapshot("idle"));
-  }
+  if (sessionIsRetained(context, session)) context.settleIdle(session);
 };
 
 const NO_EXPECTED_ECHO: CodexExpectedEcho = {
