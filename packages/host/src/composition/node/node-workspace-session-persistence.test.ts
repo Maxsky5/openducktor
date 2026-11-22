@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createMemoryAgentSessionTurnStore } from "../../ports/agent-session-turn-store.test-support";
 import { disabledNamingService } from "../../test-support/naming-test-doubles";
 import type { AgentSessionLiveEnvelope, AgentSessionLiveRef } from "@openducktor/contracts";
 import { Effect, Result } from "effect";
@@ -133,7 +134,10 @@ const createHarness = async () => {
   });
   const { persistence } = createNodeWorkspaceSessionPersistence({
     taskStore: database.store,
-    store: createSqliteWorkspaceSessionStore(database),
+    stores: {
+      workspaceSessionStore: createSqliteWorkspaceSessionStore(database),
+      agentSessionTurnStore: createMemoryAgentSessionTurnStore().store,
+    },
     settings: {
       getWorkspaceCatalog: () => Effect.succeed(catalog),
       getRepoConfig: () => Effect.die(new Error("unexpected repository settings read")),

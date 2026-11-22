@@ -6,6 +6,7 @@ export default defineConfig({
   schema: [
     "./src/adapters/sqlite/sqlite-host-database-schema.ts",
     "./src/adapters/sqlite/sqlite-workspace-session-schema.ts",
+    "./src/adapters/sqlite/sqlite-agent-session-turn-schema.ts",
     "./src/adapters/sqlite/sqlite-host-settings-schema.ts",
     "./src/adapters/sqlite/sqlite-runtime-settings-schema.ts",
     "./src/adapters/sqlite/sqlite-global-prompt-schema.ts",

@@ -1,4 +1,8 @@
 import { Effect } from "effect";
+import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import type { AgentSessionLiveEnvelope, AgentSessionLiveRef } from "@openducktor/contracts";
+import { createAgentSessionTurnRecorder } from "../../application/agent-sessions/agent-session-turn-recorder";
+import type { AgentSessionTurnStorePort } from "../../ports/agent-session-turn-store-port";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
@@ -25,17 +29,27 @@ export const createNodeWorkspaceSessionPersistence = ({
   eventBus,
   faultLog,
   taskStore,
-  store,
+  stores: { workspaceSessionStore: store, agentSessionTurnStore: sessionTurns },
   naming,
   ...dependencies
 }: Omit<
   Parameters<typeof createWorkspaceSessionRuntimePersistence>[0],
-  "publishUpdated" | "operationGate" | "sessionTitleGate" | "reportRenameFailure" | "naming"
+  | "publishUpdated"
+  | "operationGate"
+  | "sessionTitleGate"
+  | "reportRenameFailure"
+  | "naming"
+  | "store"
 > & {
   naming: NamingService;
   eventBus: HostEventBusPort | undefined;
   faultLog: AgentSessionLiveFaultLogger;
   taskStore: Pick<TaskStorePort, "recordAgentSessionActivity">;
+  /** The saved Workspace Sessions and the turns of every runtime session. */
+  stores: {
+    workspaceSessionStore: WorkspaceSessionStorePort;
+    agentSessionTurnStore: AgentSessionTurnStorePort;
+  };
   settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog" | "getRepoConfig">;
 }) => {
   const readSessionRootRefs = createLiveSessionRootRefsReader({
@@ -100,32 +114,41 @@ export const createNodeWorkspaceSessionPersistence = ({
       git: dependencies.git,
     },
   });
+  // Saved sessions can receive activity after their task closes.
+  const readOpenWorkspace = (ref: AgentSessionLiveRef) =>
+    dependencies.settings.getWorkspaceCatalog().pipe(
+      Effect.map((catalog) => {
+        const workspace = catalog.openWorkspaces.find(
+          (candidate) =>
+            normalizePathForComparison(candidate.repoPath) ===
+            normalizePathForComparison(ref.repoPath),
+        );
+        return workspace ? { workspaceId: workspace.workspaceId, repoPath: ref.repoPath } : null;
+      }),
+    );
+  const activityPersistence = createAgentSessionActivityPersistence({
+    tasks: taskStore,
+    readTaskWorkspace: readOpenWorkspace,
+    workspace: workspacePersistence,
+    publishTaskRecords: (scope, records) =>
+      Effect.try({
+        try: () =>
+          publishLiveEnvelope({ type: "task_session_records_updated", ...scope, ...records }),
+        catch: (cause) => toHostOperationError(cause, "agent-session.persist-activity.publish"),
+      }),
+  });
+  const turnRecorder = createAgentSessionTurnRecorder({
+    store: sessionTurns,
+    readWorkspaceId: (ref) =>
+      readOpenWorkspace(ref).pipe(Effect.map((scope) => scope?.workspaceId ?? null)),
+  });
   const persistence = {
     ...workspacePersistence,
-    ...createAgentSessionActivityPersistence({
-      tasks: taskStore,
-      // Saved sessions can receive activity after their task closes.
-      readTaskWorkspace: (ref) =>
-        dependencies.settings.getWorkspaceCatalog().pipe(
-          Effect.map((catalog) => {
-            const workspace = catalog.openWorkspaces.find(
-              (candidate) =>
-                normalizePathForComparison(candidate.repoPath) ===
-                normalizePathForComparison(ref.repoPath),
-            );
-            return workspace
-              ? { workspaceId: workspace.workspaceId, repoPath: ref.repoPath }
-              : null;
-          }),
-        ),
-      workspace: workspacePersistence,
-      publishTaskRecords: (scope, records) =>
-        Effect.try({
-          try: () =>
-            publishLiveEnvelope({ type: "task_session_records_updated", ...scope, ...records }),
-          catch: (cause) => toHostOperationError(cause, "agent-session.persist-activity.publish"),
-        }),
-    }),
+    ...activityPersistence,
+    observe: (envelope: AgentSessionLiveEnvelope, provenance?: "baseline" | "live") =>
+      activityPersistence
+        .observe(envelope, provenance)
+        .pipe(Effect.andThen(turnRecorder.observe(envelope, provenance))),
   };
   return {
     persistence,
