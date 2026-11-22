@@ -95,6 +95,8 @@ export {
   validateDevelopmentInstanceId,
 } from "./config/development-instance";
 export {
+  ALLOW_PRODUCTION_CONFIG_FLAG,
+  assertDevelopmentConfigAllowed,
   type OpenDucktorConfigDirScope,
   resolveOpenDucktorBaseDir,
 } from "./config/openducktor-config-dir";

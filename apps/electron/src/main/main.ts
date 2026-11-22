@@ -22,6 +22,8 @@ import {
 } from "@openducktor/contracts";
 import { OPEN_DUCKTOR_STARTUP_BACKGROUND } from "@openducktor/frontend/startup-splash/theme";
 import {
+  ALLOW_PRODUCTION_CONFIG_FLAG,
+  assertDevelopmentConfigAllowed,
   createFilesystemRemoteApprovalStore,
   remoteHostOwnerFromEnvironment,
   resolveOpenDucktorBaseDir,
@@ -184,6 +186,15 @@ const reportElectronMainFailure = (cause: unknown): void => {
   process.stderr.write(`OpenDucktor Electron fatal boundary: ${errorMessage(cause)}\n`);
 };
 const configDirScope = app.isPackaged ? "production" : "dev";
+try {
+  assertDevelopmentConfigAllowed(
+    configDirScope,
+    process.argv.includes(ALLOW_PRODUCTION_CONFIG_FLAG, 2),
+  );
+} catch (cause) {
+  reportElectronMainFailure(cause);
+  process.exit(1);
+}
 const electronMainLogger = await initializeElectronMainLogger({
   exitProcess: (exitCode) => process.exit(exitCode),
   loggerEffect: createElectronMainLogger({ configDirScope }),

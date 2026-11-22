@@ -126,6 +126,15 @@ describe("electron dev script", () => {
     ]);
   });
 
+  test("forwards acknowledgement to the Electron application after its entry point", () => {
+    expect(electronLaunchArgs("/repo/node_modules/electron/dist/Electron", true, true)).toEqual([
+      "/repo/node_modules/electron/dist/Electron",
+      "--remote-debugging-port=0",
+      "dist/main.js",
+      "--allow-production-config",
+    ]);
+  });
+
   test("uses typed errors for malformed renderer dev server ports", () => {
     const error = (() => {
       try {

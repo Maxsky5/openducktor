@@ -2,7 +2,11 @@
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateDevelopmentInstanceId } from "@openducktor/host";
+import {
+  ALLOW_PRODUCTION_CONFIG_FLAG,
+  assertDevelopmentConfigAllowed,
+  validateDevelopmentInstanceId,
+} from "@openducktor/host";
 import { Effect } from "effect";
 import { parseBasePathEffect } from "./browser-url-validation";
 import {
@@ -19,6 +23,7 @@ import { parseHostEffect, parseHttpOriginEffect } from "@openducktor/remote-host
 
 type CliOptions = {
   workspaceMode: boolean;
+  allowProductionConfig?: true;
   frontendPort: number;
   backendPort: number;
   host?: string;
@@ -70,7 +75,7 @@ export const createLauncherOptions = (
 
 const printHelp = (): void => {
   console.log(
-    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --host <host>           Bind address for the frontend and host; wrap IPv6 addresses in brackets, for example [::1]; use a Tailscale IP or 0.0.0.0 to reach them from another machine (default 127.0.0.1)\n  --external-url <origin> URL browsers use to reach the frontend, for example https://host.example; use an HTTPS proxy for network access\n  --base-path <path>      Serve the host under this path on the same origin, for example /api; use with a reverse proxy or Tailscale Serve\n  --remote-endpoint <url> Complete remote work endpoint for a proxy layout\n  --workspace             Serve the repo-local frontend with Vite for development\n  -h, --help              Show this help`,
+    `Usage: openducktor-web [options]\n\nOptions:\n  --port <port>           Frontend port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_FRONTEND_PORT})\n  --backend-port <port>   Local host port; 0 lets the OS assign it (workspace default 0, installed default ${DEFAULT_BACKEND_PORT})\n  --host <host>           Bind address for the frontend and host; wrap IPv6 addresses in brackets, for example [::1]; use a Tailscale IP or 0.0.0.0 to reach them from another machine (default 127.0.0.1)\n  --external-url <origin> URL browsers use to reach the frontend, for example https://host.example; use an HTTPS proxy for network access\n  --base-path <path>      Serve the host under this path on the same origin, for example /api; use with a reverse proxy or Tailscale Serve\n  --remote-endpoint <url> Complete remote work endpoint for a proxy layout\n  --workspace             Serve the repo-local frontend with Vite for development\n  ${ALLOW_PRODUCTION_CONFIG_FLAG}  Acknowledge use of the production config directory in workspace mode\n  -h, --help              Show this help`,
   );
 };
 
@@ -83,6 +88,7 @@ const invalidPortError = (raw: string, flag: string): WebValidationError =>
 
 const isKnownCliFlag = (value: string | undefined): boolean =>
   value === "--workspace" ||
+  value === ALLOW_PRODUCTION_CONFIG_FLAG ||
   value === "--port" ||
   value === "--backend-port" ||
   value === "--host" ||
@@ -161,6 +167,10 @@ export const parseCliArgsEffect = (
       if (arg === "--workspace") {
         continue;
       }
+      if (arg === ALLOW_PRODUCTION_CONFIG_FLAG) {
+        options.allowProductionConfig = true;
+        continue;
+      }
       if (arg === "--port") {
         const value = yield* readFlagValue(args, index, "--port");
         options.frontendPort = yield* parsePortEffect(value, "--port");
@@ -227,21 +237,24 @@ const runCliEffect = (cliOptions: CliOptions, logger: WebLogger): Effect.Effect<
 const runCli = async (): Promise<void> => {
   const args = process.argv.slice(2);
   const parseResult = await runWebBoundary(Effect.result(parseCliArgsEffect(args)));
-  if (parseResult._tag === "Success" && parseResult.success._tag === "Help") {
+  const invocation = parseResult._tag === "Success" ? parseResult.success : parseResult;
+  if (invocation._tag === "Help") {
     printHelp();
     process.exit(0);
+    return;
+  }
+  if (invocation._tag === "Failure" && args.includes("--workspace")) {
+    console.error(errorMessage(invocation.failure));
+    process.exit(1);
     return;
   }
 
   let logger: WebLogger;
   try {
-    const workspaceMode =
-      parseResult._tag === "Success" && parseResult.success._tag === "Launch"
-        ? parseResult.success.options.workspaceMode
-        : args.includes("--workspace");
-    logger = await runWebBoundary(
-      createWebLogger({ configDirScope: resolveWebConfigDirScope(workspaceMode) }),
-    );
+    const options = invocation._tag === "Launch" ? invocation.options : undefined;
+    const configDirScope = resolveWebConfigDirScope(options?.workspaceMode === true);
+    assertDevelopmentConfigAllowed(configDirScope, options?.allowProductionConfig === true);
+    logger = await runWebBoundary(createWebLogger({ configDirScope }));
   } catch (error) {
     console.error(errorMessage(error));
     process.exit(1);
@@ -260,18 +273,14 @@ const runCli = async (): Promise<void> => {
     }
   };
 
-  if (parseResult._tag === "Failure") {
-    await reportFailure(parseResult.failure);
+  if (invocation._tag === "Failure") {
+    await reportFailure(invocation.failure);
     process.exit(1);
     return;
   }
-  if (parseResult.success._tag === "Help") {
-    return;
-  }
-
   let exitCode: number;
   try {
-    exitCode = await runWebBoundary(runCliEffect(parseResult.success.options, logger));
+    exitCode = await runWebBoundary(runCliEffect(invocation.options, logger));
   } catch (cause) {
     await reportFailure(cause);
     exitCode = 1;

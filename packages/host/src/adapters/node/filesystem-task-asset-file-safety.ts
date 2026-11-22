@@ -1,10 +1,11 @@
-import { constants, realpathSync } from "node:fs";
+import { constants } from "node:fs";
 import { copyFile, link, mkdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type OpenDucktorConfigDirScope,
   resolveOpenDucktorBaseDir,
 } from "../../config/openducktor-config-dir";
+import { resolvePathSymlinks } from "../../infrastructure/resolve-path-symlinks";
 
 export const createTaskAssetFileSafety = ({
   configDir,
@@ -17,11 +18,11 @@ export const createTaskAssetFileSafety = ({
     configDirScope === "test"
       ? (["production", "dev"] as const).map((scope) => ({
           label: scope === "dev" ? "development" : scope,
-          path: resolveSymlinks(resolveOpenDucktorBaseDir(scope, {})),
+          path: resolvePathSymlinks(resolveOpenDucktorBaseDir(scope, {})),
         }))
       : [];
   const assertPathAllowed = (target: string): void => {
-    const resolvedTarget = resolveSymlinks(target);
+    const resolvedTarget = resolvePathSymlinks(target);
     for (const root of liveRoots) {
       if (isWithin(root.path, resolvedTarget)) {
         throw new Error(
@@ -82,20 +83,4 @@ function isWithin(directory: string, target: string): boolean {
     relative === "" ||
     (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
   );
-}
-
-function resolveSymlinks(target: string, tail: string[] = []): string {
-  const fullPath = path.resolve(target);
-  try {
-    return path.join(realpathSync.native(fullPath), ...tail);
-  } catch (cause) {
-    if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
-      throw cause;
-    }
-    const parent = path.dirname(fullPath);
-    if (parent === fullPath) {
-      throw cause;
-    }
-    return resolveSymlinks(parent, [path.basename(fullPath), ...tail]);
-  }
 }

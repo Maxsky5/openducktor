@@ -3,7 +3,11 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { sign, type SignOptions } from "@electron/osx-sign";
-import { resolveDevelopmentInstanceId } from "@openducktor/host";
+import {
+  ALLOW_PRODUCTION_CONFIG_FLAG,
+  assertDevelopmentConfigAllowed,
+  resolveDevelopmentInstanceId,
+} from "@openducktor/host";
 import { Effect, Exit } from "effect";
 import { z } from "zod";
 import {
@@ -489,10 +493,12 @@ export const electronDebugEndpointLogLine = (cdpPort: number): string =>
 export const electronLaunchArgs = (
   electronExecutablePath: string,
   remoteDebugging: boolean,
+  allowProductionConfig = false,
 ): string[] => [
   electronExecutablePath,
   ...(remoteDebugging ? ["--remote-debugging-port=0"] : []),
   "dist/main.js",
+  ...(allowProductionConfig ? [ALLOW_PRODUCTION_CONFIG_FLAG] : []),
 ];
 
 export const electronRuntimeEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
@@ -507,19 +513,23 @@ const startElectron = (
   rendererDevUrl: string,
   electronExecutablePath: string,
   remoteDebugging: boolean,
+  allowProductionConfig: boolean,
 ): ManagedElectronProcess => {
   // With CDP, Electron prints its DevTools endpoint to stderr. This script then pipes stderr and
   // copies it to the terminal.
-  const electron = Bun.spawn(electronLaunchArgs(electronExecutablePath, remoteDebugging), {
-    cwd: packageRoot,
-    detached: process.platform !== "win32",
-    stdout: "inherit",
-    stderr: remoteDebugging ? "pipe" : "inherit",
-    env: {
-      ...electronRuntimeEnv(process.env),
-      VITE_DEV_SERVER_URL: rendererDevUrl,
+  const electron = Bun.spawn(
+    electronLaunchArgs(electronExecutablePath, remoteDebugging, allowProductionConfig),
+    {
+      cwd: packageRoot,
+      detached: process.platform !== "win32",
+      stdout: "inherit",
+      stderr: remoteDebugging ? "pipe" : "inherit",
+      env: {
+        ...electronRuntimeEnv(process.env),
+        VITE_DEV_SERVER_URL: rendererDevUrl,
+      },
     },
-  });
+  );
   // Only a piped stderr has a stream.
   const { stderr } = electron;
   return {
@@ -597,7 +607,7 @@ type ElectronDevLifecycleOptions = {
   processHandlers?: ElectronDevProcessHandlers;
   remoteDebugging?: boolean;
   renderer: ElectronRendererDevServer;
-  startElectronProcess?: StartElectronProcess;
+  startElectronProcess: StartElectronProcess;
 };
 
 type DevToolsPortWait = {
@@ -612,7 +622,7 @@ export const runElectronDevLifecycleEffect = ({
   processHandlers = defaultElectronDevProcessHandlers,
   remoteDebugging = false,
   renderer,
-  startElectronProcess = startElectron,
+  startElectronProcess,
 }: ElectronDevLifecycleOptions): Effect.Effect<number, ElectronOperationErrorAggregate> =>
   Effect.callback<number, ElectronOperationErrorAggregate>((resume) => {
     let devToolsPortWait: DevToolsPortWait | null = null;
@@ -984,6 +994,11 @@ export const mainEffect = (): Effect.Effect<
   ElectronOperationErrorAggregate | ElectronValidationErrorAggregate
 > =>
   Effect.gen(function* () {
+    const allowProductionConfig = process.argv.includes(ALLOW_PRODUCTION_CONFIG_FLAG, 2);
+    yield* Effect.try({
+      try: () => assertDevelopmentConfigAllowed("dev", allowProductionConfig),
+      catch: (cause) => toElectronOperationError(cause, "electron.dev.check-config-directory"),
+    });
     const rendererPort = yield* resolveRendererDevPortEffect(
       process.env.ELECTRON_RENDERER_DEV_PORT,
       "electron.dev.resolve-renderer-dev-port",
@@ -1016,6 +1031,8 @@ export const mainEffect = (): Effect.Effect<
             electronExecutablePath,
             remoteDebugging: shouldEnableRemoteDebugging(process.argv),
             renderer,
+            startElectronProcess: (url, executable, debugging) =>
+              startElectron(url, executable, debugging, allowProductionConfig),
           });
         }),
       );

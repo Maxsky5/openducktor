@@ -173,6 +173,8 @@ Packaged Electron uses `~/.openducktor`. Electron and browser development use `~
 
 `OPENDUCKTOR_CONFIG_DIR` overrides the default in every scope. Parallel development instances still keep transient profiles and MCP discovery under `runtime/dev-instances/<instanceId>/` in the selected config root.
 
+Electron and web development stop at startup if the selected config directory resolves to `~/.openducktor`. Use a separate `OPENDUCKTOR_CONFIG_DIR` for development. To use the production directory on purpose, stop the host that uses it, then add `--allow-production-config` to `bun run electron:dev`, `bun run electron:dev:cdp`, or `bun run browser:dev`. The flag applies to that launch.
+
 Important paths:
 
 - config file: `<config-root>/config.json`
