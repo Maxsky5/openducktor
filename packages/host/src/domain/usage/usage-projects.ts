@@ -81,7 +81,7 @@ export const createUsageProjectGrouping = (
 };
 
 /** The page shows a project without a recorded folder under this label. */
-export const UNKNOWN_PROJECT_LABEL = "Unknown project";
+const UNKNOWN_PROJECT_LABEL = "Unknown project";
 
 const segmentsOf = (path: string): string[] => path.split("/").filter((part) => part.length > 0);
 

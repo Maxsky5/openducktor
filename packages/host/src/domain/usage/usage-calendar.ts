@@ -33,7 +33,7 @@ export const addDays = (date: UsageDate, days: number): UsageDate =>
   dateOfUtcMs(utcMsOfDate(date) + days * DAY_MS);
 
 /** Whole days from `start` to `end`. */
-export const daysBetween = (start: UsageDate, end: UsageDate): number =>
+const daysBetween = (start: UsageDate, end: UsageDate): number =>
   Math.round((utcMsOfDate(end) - utcMsOfDate(start)) / DAY_MS);
 
 /** Converts instants to calendar dates and back in one IANA time zone. */

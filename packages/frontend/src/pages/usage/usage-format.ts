@@ -89,11 +89,11 @@ export const formatUsd = (value: number): string => {
 };
 
 /** Cents in every table cell, so the decimals of a column line up. */
-export const formatUsdCents = (value: number): string =>
+const formatUsdCents = (value: number): string =>
   value > 0 && value < 0.01 ? "<$0.01" : cents.format(value);
 
 /** A short axis label of an amount. */
-export const formatAxisUsd = (value: number): string => {
+const formatAxisUsd = (value: number): string => {
   if (value === 0) return "$0";
   if (value >= 1_000) return compactDollars.format(value);
   return value >= 10 ? dollars.format(value) : cents.format(value);
@@ -137,7 +137,7 @@ export const metricValue = (figure: UsageFigure, metric: UsageMetric): number | 
 type MissingMetric = "unpriced" | "no_counts" | "unknown";
 
 /** Why a figure has no value to show, or null when it has one. */
-export const missingMetric = (figure: UsageFigure, metric: UsageMetric): MissingMetric | null => {
+const missingMetric = (figure: UsageFigure, metric: UsageMetric): MissingMetric | null => {
   if (metric === "cost" && figure.cost.state === "unavailable")
     return figure.cost.unpricedTokens === 0 ? "no_counts" : "unpriced";
   if (metric === "tokens" && onlyUnmeasured(figure)) return "no_counts";
@@ -163,7 +163,7 @@ export const shownValue = (figure: UsageFigure, metric: UsageMetric): number | n
   missingMetric(figure, metric) === null ? metricValue(figure, metric) : null;
 
 /** The share of processed tokens without a published rate. */
-export const unpricedShareOf = (figure: UsageFigure): number =>
+const unpricedShareOf = (figure: UsageFigure): number =>
   figure.tokens.processed === 0 ? 0 : figure.cost.unpricedTokens / figure.tokens.processed;
 
 /** A short note of what a value leaves out, or null when it leaves out nothing. */

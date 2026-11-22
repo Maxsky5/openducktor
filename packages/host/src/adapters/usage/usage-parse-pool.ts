@@ -8,7 +8,7 @@ import type {
 } from "./usage-worker-protocol";
 
 /** A parser thread failed on a source. Its message names the cause. */
-export class UsageParserFault extends Error {}
+class UsageParserFault extends Error {}
 
 export type UsageParsePool = ReturnType<typeof createUsageParsePool>;
 

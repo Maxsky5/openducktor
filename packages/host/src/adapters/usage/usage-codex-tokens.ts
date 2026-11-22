@@ -49,7 +49,7 @@ export const codexTokensOf = (usage: CodexUsage): UsageTokens => {
   };
 };
 
-export const sameCodexUsage = (left: CodexUsage, right: CodexUsage): boolean =>
+const sameCodexUsage = (left: CodexUsage, right: CodexUsage): boolean =>
   left.input === right.input &&
   left.cached === right.cached &&
   left.cacheWrite === right.cacheWrite &&

@@ -252,7 +252,10 @@ export function UsageTrendChart({
                 }),
               ),
             )),
-        lineY(settled, { id: "usage-total", ...totalLine, strokeWidth: single ? 2 : 1.75 }),
+        decorative(lineY(settled, { ...totalLine, strokeWidth: single ? 2 : 1.75 })),
+        // Pointer and keyboard focus take every period, also the one in progress, which the
+        // solid line stops before. This line only carries the focus; the marks above draw.
+        lineY(totals, { id: "usage-total", ...totalLine, strokeOpacity: 0 }),
         // The period in progress is still growing: a faint dashed segment to an open point.
         decorative(
           lineY(current, {

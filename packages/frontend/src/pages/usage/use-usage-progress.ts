@@ -81,7 +81,7 @@ const PARSE_WEIGHT = 0.8;
  * as much as its sessions to read, so a runtime with few sessions cannot fill the ring while a
  * large one still reads. Runtimes count alike until every runtime knows its sessions.
  */
-export const overallFraction = (progress: UsageIndexProgress): number => {
+const overallFraction = (progress: UsageIndexProgress): number => {
   const { runtimes } = progress;
   const known = runtimes.every((runtime) => (runtime.sessions.total ?? 0) > 0);
   let done = 0;
