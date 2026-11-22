@@ -91,10 +91,10 @@ export function ProcessCommandRow({
             )}
             aria-hidden="true"
           />
-          <span className="flex min-w-0 items-baseline gap-1.5 font-mono text-xs">
+          <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden font-mono text-xs">
             {root.directory ? (
               <>
-                <span className="max-w-48 shrink-0 truncate text-muted-foreground">
+                <span className="max-w-48 min-w-0 truncate text-muted-foreground">
                   {root.directory}
                 </span>
                 <span className="shrink-0 text-muted-foreground/60" aria-hidden="true">
@@ -461,10 +461,12 @@ function PortLinks({
   if (listeners.length === 0) return null;
   const shown = listeners.slice(0, VISIBLE_PORTS);
   const rest = listeners.slice(VISIBLE_PORTS);
+  // In a narrow view the ports clip, so Stop after them stays in view. The padding keeps the focus
+  // rings of the ports.
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center gap-2 font-mono tabular-nums",
+        "-m-0.5 flex min-w-0 items-center gap-2 overflow-hidden p-0.5 font-mono tabular-nums *:shrink-0",
         small ? "text-[11px]" : "text-xs",
       )}
     >
