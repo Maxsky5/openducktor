@@ -5,6 +5,7 @@ import {
   type RuntimeLifecycleEffect,
   type RuntimeLifecycleWorkspaceImpact,
 } from "@openducktor/contracts";
+import { isAgentSessionWaitingOnBackground } from "@openducktor/core";
 import { normalizePathForComparison } from "@openducktor/path-support";
 import type {
   RuntimeSetting,
@@ -112,6 +113,7 @@ export const groupSessionsByWorkspace = (
       activity: reviewed.activity,
       pendingInputCount: reviewed.pendingRequestIds.length,
     };
+    if (isAgentSessionWaitingOnBackground(snapshot)) session.waitingOnBackground = true;
     if (reviewed.executionEpisodeId) session.executionEpisodeId = reviewed.executionEpisodeId;
     if (reviewed.parentExternalSessionId) {
       session.parentExternalSessionId = reviewed.parentExternalSessionId;

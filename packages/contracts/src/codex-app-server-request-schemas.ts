@@ -461,6 +461,13 @@ export const codexAppServerRequestParamsSchemas = {
   "thread/unsubscribe": z.strictObject({ threadId: z.string() }),
   /** `event` is the snake_case core `GuardianAssessmentEvent` of the denied review. */
   "thread/approveGuardianDeniedAction": z.strictObject({ threadId: z.string(), event: z.json() }),
+  /** Stops one background terminal of a thread. Experimental API since Codex 0.140.0. */
+  "thread/backgroundTerminals/terminate": z.strictObject({
+    threadId: z.string(),
+    processId: z.string(),
+  }),
+  /** Stops every background terminal of a thread. Experimental API. */
+  "thread/backgroundTerminals/clean": z.strictObject({ threadId: z.string() }),
   /** The settings of turns that Codex starts later, such as goal turns. */
   "thread/settings/update": z.strictObject({
     threadId: z.string(),
@@ -586,6 +593,14 @@ export const codexAppServerClientRequestSchema = z.discriminatedUnion("method", 
     params: codexAppServerRequestParamsSchemas["thread/approveGuardianDeniedAction"],
   }),
   z.strictObject({
+    method: z.literal("thread/backgroundTerminals/terminate"),
+    params: codexAppServerRequestParamsSchemas["thread/backgroundTerminals/terminate"],
+  }),
+  z.strictObject({
+    method: z.literal("thread/backgroundTerminals/clean"),
+    params: codexAppServerRequestParamsSchemas["thread/backgroundTerminals/clean"],
+  }),
+  z.strictObject({
     method: z.literal("thread/settings/update"),
     params: codexAppServerRequestParamsSchemas["thread/settings/update"],
   }),
@@ -663,6 +678,10 @@ export type CodexAppServerThreadGoalClearParams =
   CodexAppServerRequestParamsMap["thread/goal/clear"];
 export type CodexAppServerThreadUnsubscribeParams =
   CodexAppServerRequestParamsMap["thread/unsubscribe"];
+export type CodexAppServerThreadBackgroundTerminalsTerminateParams =
+  CodexAppServerRequestParamsMap["thread/backgroundTerminals/terminate"];
+export type CodexAppServerThreadBackgroundTerminalsCleanParams =
+  CodexAppServerRequestParamsMap["thread/backgroundTerminals/clean"];
 export type CodexAppServerThreadSettingsUpdateParams =
   CodexAppServerRequestParamsMap["thread/settings/update"];
 export type CodexAppServerThreadGoalStatus = z.output<typeof codexAppServerThreadGoalStatusSchema>;

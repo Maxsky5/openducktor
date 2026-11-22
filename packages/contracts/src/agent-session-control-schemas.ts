@@ -260,6 +260,14 @@ export type AgentSessionControlUpdateTitleInput = z.infer<
 export const agentSessionControlStopInputSchema = agentSessionLiveRefSchema;
 export type AgentSessionControlStopInput = z.infer<typeof agentSessionControlStopInputSchema>;
 
+/** Stops one background task of the session tree of `externalSessionId`. */
+export const agentSessionBackgroundTaskStopInputSchema = agentSessionLiveRefSchema
+  .extend({ taskId: nonEmptyStringSchema })
+  .strict();
+export type AgentSessionBackgroundTaskStopInput = z.infer<
+  typeof agentSessionBackgroundTaskStopInputSchema
+>;
+
 /** Cancels the auto-resume of one usage-limit stop. A later stop is eligible again. */
 export const agentSessionUsageLimitAutoResumeCancelInputSchema = agentSessionLiveRefSchema
   .extend({

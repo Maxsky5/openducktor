@@ -521,6 +521,7 @@ describe("HostClient", () => {
       }
       if (
         command === "agent_session_control_stop" ||
+        command === "agent_session_background_task_stop" ||
         command === "agent_session_goal_control" ||
         command === "agent_session_usage_limit_auto_resume_cancel"
       ) {
@@ -577,6 +578,13 @@ describe("HostClient", () => {
       runtimeKind: "opencode",
       workingDirectory: "/repo/worktree",
       externalSessionId: "session-1",
+    });
+    await client.agentSessionBackgroundTaskStop({
+      repoPath: "/repo",
+      runtimeKind: "claude",
+      workingDirectory: "/repo/worktree",
+      externalSessionId: "session-1",
+      taskId: "task-a",
     });
     await client.agentSessionGoalControl({
       repoPath: "/repo",
@@ -650,6 +658,16 @@ describe("HostClient", () => {
           runtimeKind: "opencode",
           workingDirectory: "/repo/worktree",
           externalSessionId: "session-1",
+        },
+      },
+      {
+        command: "agent_session_background_task_stop",
+        args: {
+          repoPath: "/repo",
+          runtimeKind: "claude",
+          workingDirectory: "/repo/worktree",
+          externalSessionId: "session-1",
+          taskId: "task-a",
         },
       },
       {

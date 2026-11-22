@@ -341,6 +341,8 @@ const createHostClientApi = (invokeFn: InvokeFn): HostClientApi => {
       agentSessionLiveClient.agentSessionUsageLimitAutoResumeCancel.bind(agentSessionLiveClient),
     agentSessionGoalControl:
       agentSessionLiveClient.agentSessionGoalControl.bind(agentSessionLiveClient),
+    agentSessionBackgroundTaskStop:
+      agentSessionLiveClient.agentSessionBackgroundTaskStop.bind(agentSessionLiveClient),
     agentSessionControlUpdateModel:
       agentSessionLiveClient.agentSessionControlUpdateModel.bind(agentSessionLiveClient),
     agentSessionLiveList: agentSessionLiveClient.agentSessionLiveList.bind(agentSessionLiveClient),

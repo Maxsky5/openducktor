@@ -104,6 +104,22 @@ export type AgentSessionLivePendingQuestionRequest = z.infer<
   typeof agentSessionLivePendingQuestionRequestSchema
 >;
 
+/** One background task that still runs after or during a reply, such as a dev server. */
+export const agentSessionBackgroundTaskSchema = z.strictObject({
+  /** An opaque adapter handle, unique in the root session tree. */
+  taskId: nonEmptyStringSchema,
+  kind: z.enum(["command", "subagent", "task"]),
+  /** The command text, the subagent name, or the runtime task description. */
+  title: nonEmptyStringSchema,
+  /** The task description of a subagent. */
+  description: nonEmptyStringSchema.optional(),
+  stop: z.discriminatedUnion("allowed", [
+    z.strictObject({ allowed: z.literal(true) }),
+    z.strictObject({ allowed: z.literal(false), reason: nonEmptyStringSchema }),
+  ]),
+});
+export type AgentSessionBackgroundTask = z.infer<typeof agentSessionBackgroundTaskSchema>;
+
 const agentSessionLiveNoticeSchema = z
   .object({
     messageId: nonEmptyStringSchema,
@@ -159,6 +175,13 @@ export const agentSessionLiveSnapshotSchema = z
      * the next status update clears it. Other updates keep it.
      */
     statusUnavailableReason: nonEmptyStringSchema.optional(),
+    /**
+     * The running background tasks of this session and of its descendant sessions, oldest first.
+     * No field: no task runs.
+     */
+    backgroundTasks: z.array(agentSessionBackgroundTaskSchema).min(1).optional(),
+    /** A background task ended, but its result has not reached the agent yet. */
+    backgroundResultPending: z.literal(true).optional(),
   })
   .strict();
 export type AgentSessionLiveSnapshot = z.infer<typeof agentSessionLiveSnapshotSchema>;

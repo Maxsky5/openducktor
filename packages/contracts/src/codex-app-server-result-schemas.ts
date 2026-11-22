@@ -163,6 +163,12 @@ const codexAppServerThreadUnsubscribeResultSchema = z.object({ status: z.string(
 export type CodexAppServerThreadUnsubscribeResult = z.output<
   typeof codexAppServerThreadUnsubscribeResultSchema
 >;
+const codexAppServerThreadBackgroundTerminalsTerminateResultSchema = z.object({
+  terminated: z.boolean(),
+});
+export type CodexAppServerThreadBackgroundTerminalsTerminateResult = z.output<
+  typeof codexAppServerThreadBackgroundTerminalsTerminateResultSchema
+>;
 export type CodexAppServerThreadGoalClearResult = z.output<
   typeof codexAppServerThreadGoalClearResultSchema
 >;
@@ -210,6 +216,8 @@ export type CodexAppServerRequestResultMap = {
   "thread/settings/update": CodexAppServerThreadSetNameResult;
   "thread/unsubscribe": CodexAppServerThreadUnsubscribeResult;
   "thread/approveGuardianDeniedAction": CodexAppServerThreadSetNameResult;
+  "thread/backgroundTerminals/terminate": CodexAppServerThreadBackgroundTerminalsTerminateResult;
+  "thread/backgroundTerminals/clean": CodexAppServerThreadSetNameResult;
   "thread/turns/list": CodexAppServerThreadTurnsListResponse;
   "account/rateLimits/read": CodexAppServerAccountRateLimitsResponse;
   "skills/list": CodexAppServerSkillsListResponse;
@@ -244,6 +252,9 @@ const codexAppServerRequestResultSchemas: CodexAppServerRequestResultSchemaMap =
   "thread/settings/update": codexAppServerEmptyResponseSchema,
   "thread/unsubscribe": codexAppServerThreadUnsubscribeResultSchema,
   "thread/approveGuardianDeniedAction": codexAppServerEmptyResponseSchema,
+  "thread/backgroundTerminals/terminate":
+    codexAppServerThreadBackgroundTerminalsTerminateResultSchema,
+  "thread/backgroundTerminals/clean": codexAppServerEmptyResponseSchema,
   "thread/turns/list": codexAppServerThreadTurnsListResponseSchema,
   "account/rateLimits/read": codexAppServerAccountRateLimitsResponseSchema,
   "skills/list": codexAppServerSkillsListResponseSchema,
