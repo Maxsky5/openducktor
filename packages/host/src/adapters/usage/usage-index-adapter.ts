@@ -14,8 +14,11 @@ const parserWorkerUrl = siblingWorkerUrl(import.meta.url, "usage-parser-worker")
 /** Up to 4 parsers, and at most half of the cores, so running sessions keep the rest. */
 const PARSER_COUNT = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2)));
 
-/** The threads stop together after this time without a request. */
-const IDLE_MS = 60_000;
+/**
+ * The threads stop together after this time without a request. A user who looks at the page and
+ * then picks another range or runtime finds them, and their caches, still running.
+ */
+const IDLE_MS = 5 * 60_000;
 
 type Threads = { index: Worker; parsers: Worker[] };
 type Pending = {

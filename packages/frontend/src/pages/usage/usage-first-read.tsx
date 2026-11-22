@@ -25,10 +25,12 @@ const sessionsOf = (runtimes: readonly RuntimeProgress[]) => {
   return { done, total };
 };
 
-const sessionsText = ({ done, total }: RuntimeProgress["sessions"]): string =>
-  total === null
-    ? `${formatCountOf(done, "session")} read, counting the rest…`
-    : `${formatCount(done)} of ${formatCountOf(total, "session")}`;
+const sessionsText = ({ done, total }: RuntimeProgress["sessions"]): string => {
+  if (total !== null) return `${formatCount(done)} of ${formatCountOf(total, "session")}`;
+  return done === 0
+    ? "Counting sessions…"
+    : `${formatCountOf(done, "session")} read, counting the rest…`;
+};
 
 const formatElapsed = (ms: number): string => {
   const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -86,7 +88,14 @@ function ProgressRing({ fraction }: { fraction: number }): ReactElement {
 }
 
 /** One runtime: its bar in its series color, its share, and its sessions. */
-function RuntimeRow({ entry }: { entry: RuntimeProgress }): ReactElement {
+function RuntimeRow({
+  entry,
+  note,
+}: {
+  entry: RuntimeProgress;
+  /** Replaces the sessions line of a runtime that the read has no sources of. */
+  note?: string | undefined;
+}): ReactElement {
   const label = USAGE_RUNTIME_LABELS[entry.runtime];
   return (
     <li className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 py-3">
@@ -121,7 +130,7 @@ function RuntimeRow({ entry }: { entry: RuntimeProgress }): ReactElement {
         />
       </div>
       <p className="col-start-2 text-xs text-muted-foreground tabular-nums">
-        {sessionsText(entry.sessions)}
+        {note ?? sessionsText(entry.sessions)}
       </p>
     </li>
   );
@@ -133,12 +142,25 @@ function RuntimeRow({ entry }: { entry: RuntimeProgress }): ReactElement {
  */
 export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactElement {
   const { progress, seenSinceMs } = state;
+  const preparing = progress.phase === "preparing";
   // Once every runtime is read, what is left is the rollup into daily totals.
-  const summarizing = progress.runtimes.every((entry) => entry.done);
-  const runtimes = USAGE_RUNTIMES.flatMap((runtime) =>
-    progress.runtimes.filter((entry) => entry.runtime === runtime),
-  );
-  const sessions = sessionsOf(runtimes);
+  const summarizing =
+    !preparing && progress.runtimes.length > 0 && progress.runtimes.every((entry) => entry.done);
+  // Every runtime keeps its row, so the card keeps its size from the first event on.
+  const rows = USAGE_RUNTIMES.map((runtime) => {
+    const entry = progress.runtimes.find((candidate) => candidate.runtime === runtime);
+    if (entry) return { entry, note: undefined };
+    return {
+      entry: {
+        runtime,
+        progress: preparing ? 0 : 1,
+        done: !preparing,
+        sessions: { done: 0, total: 0 },
+      },
+      note: preparing ? "Finding sessions…" : progress.first ? "No history" : "Up to date",
+    };
+  });
+  const sessions = sessionsOf(progress.runtimes);
   return (
     <section
       aria-labelledby="usage-first-read"
@@ -148,7 +170,11 @@ export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactE
         <ProgressRing fraction={state.share} />
         <div className="flex min-w-0 flex-col gap-1">
           <h2 id="usage-first-read" className="text-base font-semibold" aria-live="polite">
-            {summarizing ? "Building the daily totals" : "Reading your agent history"}
+            {preparing
+              ? "Finding your agent history"
+              : summarizing
+                ? "Building the daily totals"
+                : "Reading your agent history"}
           </h2>
           <p className="text-sm text-muted-foreground">
             {summarizing
@@ -164,7 +190,7 @@ export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactE
             <span className="text-2xl font-semibold tracking-tight">
               {formatCount(sessions.done)}
             </span>
-            {sessions.total === null ? null : (
+            {sessions.total === null || preparing ? null : (
               <span className="text-sm text-muted-foreground">
                 of {formatCount(sessions.total)}
               </span>
@@ -179,8 +205,8 @@ export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactE
         </div>
       </dl>
       <ul className="flex flex-col divide-y divide-border">
-        {runtimes.map((entry) => (
-          <RuntimeRow key={entry.runtime} entry={entry} />
+        {rows.map(({ entry, note }) => (
+          <RuntimeRow key={entry.runtime} entry={entry} note={note} />
         ))}
       </ul>
     </section>

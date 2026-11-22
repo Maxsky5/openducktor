@@ -14,6 +14,7 @@ const runtime = (
 const event = (startedAt: string, runtimes: Runtime[]): UsageIndexProgress => ({
   phase: "reading",
   summarized: 0,
+  first: true,
   startedAt,
   runtimes,
 });

@@ -130,6 +130,10 @@ export const createUsageIndexStore = (path: string) => {
     /** The stored rate catalog. */
     rates,
 
+    /** True when the index holds no source yet, so the next read is a first read. */
+    isEmpty: (): Effect.Effect<boolean, HostOperationErrorAggregate> =>
+      withConnection((current) => current.isEmpty()),
+
     close: () =>
       Effect.suspend(() => {
         const current = connection;
@@ -307,6 +311,9 @@ const createConnection = (database: SqliteDatabase) => {
   return {
     /** Reads the stored names. */
     syncNames: () => names.sync(),
+
+    isEmpty: () =>
+      values("SELECT 1 FROM source LIMIT 1").pipe(Effect.map((rows) => rows.length === 0)),
 
     loadRates: () =>
       values("SELECT fetched_at_ms, etag, document FROM rate_catalog WHERE id = 1").pipe(

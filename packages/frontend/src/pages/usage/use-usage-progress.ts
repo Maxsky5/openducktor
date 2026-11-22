@@ -91,20 +91,24 @@ export const overallFraction = (progress: UsageIndexProgress): number => {
     done += weight * runtime.progress;
     total += weight;
   }
-  const parsed = total === 0 ? 1 : done / total;
+  // Before the history search ends, no runtime has work yet.
+  const parsed = total === 0 ? 0 : done / total;
   return PARSE_WEIGHT * parsed + (1 - PARSE_WEIGHT) * progress.summarized;
 };
 
-/** A read that ends sooner shows no progress, so a short parse never flashes it. */
+/** A later read that ends sooner shows no progress, so a short parse never flashes it. */
 const SHOW_AFTER_MS = 1_500;
 
 /**
- * The parse progress of the host's usage index while `active`, once the reads have parsed for
- * `SHOW_AFTER_MS`. The host publishes it only while a read parses new history.
+ * The parse progress of the host's usage index while `active`. The host publishes it only while
+ * a read parses new history. A first read shows at once: it takes a while, and the page has
+ * nothing else to show. A later read shows once it has parsed for `SHOW_AFTER_MS`.
  */
 export const useUsageProgress = (active: boolean): UsageProgressState | null => {
   const host = useHostConnection();
-  const [state, setState] = useState<(UsageProgressState & { carried: Carried }) | null>(null);
+  const [state, setState] = useState<
+    (UsageProgressState & { carried: Carried; first: boolean }) | null
+  >(null);
   const [visible, setVisible] = useState(false);
   const seenSinceMs = state?.seenSinceMs ?? null;
   useEffect(() => {
@@ -128,7 +132,13 @@ export const useUsageProgress = (active: boolean): UsageProgressState | null => 
           // The weights of the share settle once every runtime knows its sessions; the share
           // that the page showed stays.
           const share = Math.max(current?.share ?? 0, overallFraction(progress));
-          return { carried, progress, share, seenSinceMs: current?.seenSinceMs ?? Date.now() };
+          return {
+            carried,
+            progress,
+            share,
+            seenSinceMs: current?.seenSinceMs ?? Date.now(),
+            first: (current?.first ?? false) || event.first,
+          };
         });
       })
       .then((unsubscribe) => {
@@ -143,6 +153,6 @@ export const useUsageProgress = (active: boolean): UsageProgressState | null => 
       setVisible(false);
     };
   }, [active, host]);
-  if (!active || !visible || !state) return null;
+  if (!active || !state || !(visible || state.first)) return null;
   return { progress: state.progress, share: state.share, seenSinceMs: state.seenSinceMs };
 };

@@ -39,6 +39,8 @@ export type UsageReadInput = {
   /** A null start reads all history and starts at the earliest activity of the runtimes. */
   range: { start: UsageDate | null; end: UsageDate };
   workspaces: readonly UsageWorkspace[];
+  /** True to check the sources again; else a recent check of an earlier read can serve. */
+  refresh: boolean;
   /** Folders without a single owner, such as a shared worktree folder. They stay separate. */
   separateFolders: readonly string[];
 };

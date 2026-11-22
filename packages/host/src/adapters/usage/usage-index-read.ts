@@ -1,4 +1,4 @@
-import { knownRuntimeKindValues } from "@openducktor/contracts";
+import { knownRuntimeKindValues, type RuntimeKind } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import {
   createUsageCalendar,
@@ -21,7 +21,7 @@ import type { UsageParsePool } from "./usage-parse-pool";
 import type { UsageParseJob } from "./usage-worker-protocol";
 import { USAGE_RATES_SOURCE, type UsagePricing } from "./usage-rate-catalog";
 import { type Discovery, discoverUsageSources } from "./usage-source-discovery";
-import { resolveUsageRepositories } from "./usage-repositories";
+import { createUsageRepositoryResolver } from "./usage-repositories";
 import { planUsageSync } from "./usage-sync-plan";
 
 /** Runs an effect from a Promise callback and rejects with its original failure. */
@@ -34,8 +34,56 @@ const runEffect = async <A, E>(effect: Effect.Effect<A, E>): Promise<A> => {
 type Synced = {
   discovery: Discovery;
   checkedAtMs: number;
+  /** The runtimes and the range start that the check covered. */
+  scope: { runtimes: readonly RuntimeKind[]; sinceMs: number | null };
+  /** True when a cancel stopped the parse before every source of the check was claimed. */
+  stopped: boolean;
   /** The progress of a read that parsed sources. */
   progress: ReturnType<typeof createUsageProgressTracker> | null;
+};
+
+/** A read of a new selection uses the check of an earlier read of these last minutes. */
+const CHECK_REUSE_MS = 5 * 60_000;
+
+/**
+ * The last complete source check. A read of another range or runtime answers from the index
+ * with it while it is recent, unless the user asks for a refresh: a check stats every source and
+ * digests a changed OpenCode database, which takes from 0.1 s to about 1 s.
+ */
+export const createUsageCheckMemo = (now: () => number = Date.now) => {
+  let last: Synced | null = null;
+  // True once the index holds all history: a check of all runtimes from the first record.
+  let complete = false;
+  return {
+    complete: () => complete,
+    record: (synced: Synced) => {
+      if (synced.stopped) return;
+      last = { ...synced, progress: null };
+      if (
+        synced.scope.sinceMs === null &&
+        synced.scope.runtimes.length === knownRuntimeKindValues.length
+      )
+        complete = true;
+    },
+    /** The last check when it is recent and covers the runtimes and the range of a read. */
+    reusable: (runtimes: readonly RuntimeKind[], sinceMs: number | null): Synced | null => {
+      if (!last || now() - last.checkedAtMs >= CHECK_REUSE_MS) return null;
+      const { scope } = last;
+      if (!runtimes.every((runtime) => scope.runtimes.includes(runtime))) return null;
+      const coversRange =
+        complete || scope.sinceMs === null || (sinceMs !== null && sinceMs >= scope.sinceMs);
+      return coversRange ? last : null;
+    },
+  };
+};
+
+/** What the index worker keeps between reads. */
+export type UsageReadContext = {
+  store: UsageIndexStore;
+  pool: UsageParsePool;
+  /** Resolves recorded folders to repositories, and keeps what it learned from the disk. */
+  repositories: ReturnType<typeof createUsageRepositoryResolver>;
+  checks: ReturnType<typeof createUsageCheckMemo>;
 };
 
 /** Reads at most this many rollout heads at once. */
@@ -95,7 +143,9 @@ const syncSources = (
     // Every later read needs the history of a first read, so a first read never stops early.
     const stopsEarly = first ? () => false : isCancelled;
     const progress =
-      onProgress && plan.jobs.length > 0 ? createUsageProgressTracker(plan.jobs, onProgress) : null;
+      onProgress && plan.jobs.length > 0
+        ? createUsageProgressTracker(plan.jobs, first, onProgress)
+        : null;
     // The root sessions of Codex rollouts come from their first lines, read beside the parse.
     const codexSessions = progress ? countCodexSessions(plan.jobs, progress.sessionOf) : null;
     yield* Effect.tryPromise({
@@ -124,11 +174,18 @@ const syncSources = (
     });
     if (codexSessions) yield* Effect.promise(() => codexSessions);
     progress?.summarizing();
-    return { discovery, checkedAtMs, progress };
+    return {
+      discovery,
+      checkedAtMs,
+      scope: { runtimes, sinceMs: first ? null : sinceMs },
+      stopped: !first && isCancelled(),
+      progress,
+    };
   });
 
 /** The figures of the range, the issues, and the project groups of the recorded folders. */
 const reportOf = (
+  repositories: UsageReadContext["repositories"],
   snapshot: UsageIndexSnapshot,
   input: UsageReadInput,
   pricing: UsagePricing,
@@ -137,15 +194,11 @@ const reportOf = (
   Effect.gen(function* () {
     const groups = new Map<string, UsageProjectGroup>();
     const groupProjects = (paths: readonly (string | null)[]) => {
-      const repositories = resolveUsageRepositories(
+      const found = repositories(
         paths.filter((path): path is string => path !== null),
         input.workspaces.map((workspace) => workspace.repoPath),
       );
-      const grouping = createUsageProjectGrouping(
-        input.workspaces,
-        input.separateFolders,
-        repositories,
-      );
+      const grouping = createUsageProjectGrouping(input.workspaces, input.separateFolders, found);
       return paths.map((path) => {
         const group = grouping(path);
         groups.set(group.key, group);
@@ -183,12 +236,12 @@ const reportOf = (
 
 /**
  * Checks the sources of the range and its runtimes, rolls them up, and reads the report figures
- * in one write transaction of the index. A canceled read stops new parses, and still commits the
- * sources that its parsers finished, with their rollup.
+ * in one write transaction of the index. A read of a new selection can use a recent check of an
+ * earlier read instead. A canceled read stops new parses, and still commits the sources that its
+ * parsers finished, with their rollup.
  */
 export const readUsageIndex = (
-  store: UsageIndexStore,
-  pool: UsageParsePool,
+  context: UsageReadContext,
   input: UsageReadInput,
   pricing: UsagePricing,
   isCancelled: () => boolean,
@@ -196,15 +249,23 @@ export const readUsageIndex = (
 ): Effect.Effect<UsageReadResult, HostOperationErrorAggregate | Error> => {
   const calendar = createUsageCalendar(input.timeZone);
   const sinceMs = input.range.start === null ? null : calendar.startOf(input.range.start);
+  const reused = input.refresh ? null : context.checks.reusable(input.runtimes, sinceMs);
   let progress: Synced["progress"] = null;
-  return store.read(
+  return context.store.read(
     calendar,
     pricing.pricer,
     (writer) =>
-      syncSources(writer, pool, input, sinceMs, isCancelled, onProgress).pipe(
-        Effect.tap((synced) => Effect.sync(() => void (progress = synced.progress))),
-      ),
-    (snapshot, synced) => reportOf(snapshot, input, pricing, synced),
+      reused
+        ? Effect.succeed(reused)
+        : syncSources(writer, context.pool, input, sinceMs, isCancelled, onProgress).pipe(
+            Effect.tap((synced) =>
+              Effect.sync(() => {
+                progress = synced.progress;
+                context.checks.record(synced);
+              }),
+            ),
+          ),
+    (snapshot, synced) => reportOf(context.repositories, snapshot, input, pricing, synced),
     (fraction) => progress?.rollup(fraction),
   );
 };
@@ -215,23 +276,22 @@ export const readUsageIndex = (
  * claiming parse jobs as soon as `isStopped` returns true; jobs in progress still commit.
  */
 export const catchUpUsageIndex = (
-  store: UsageIndexStore,
-  pool: UsageParsePool,
+  context: UsageReadContext,
   input: UsageReadInput,
   pricing: UsagePricing,
   isStopped: () => boolean,
 ): Effect.Effect<void, HostOperationErrorAggregate | Error> =>
-  store.read(
+  context.store.read(
     createUsageCalendar(input.timeZone),
     pricing.pricer,
     (writer) =>
       syncSources(
         writer,
-        pool,
+        context.pool,
         { ...input, runtimes: knownRuntimeKindValues },
         null,
         isStopped,
         null,
-      ),
+      ).pipe(Effect.tap((synced) => Effect.sync(() => context.checks.record(synced)))),
     () => Effect.void,
   );

@@ -186,6 +186,7 @@ export const createUsageReportService = (dependencies: UsageReportServiceDepende
         locations: dependencies.locations(),
         runtimes,
         range: { start: fixedStart, end: range.kind === "custom" ? range.end : today },
+        refresh: input.refresh ?? false,
         ...(yield* workspaceFoldersOf(dependencies)),
       });
       const { start, end } = result.range;

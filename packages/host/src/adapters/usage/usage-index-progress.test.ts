@@ -26,6 +26,7 @@ const track = () => {
   let clock = 0;
   const tracker = createUsageProgressTracker(
     JOBS,
+    true,
     (event) => events.push(event),
     () => (clock += 1_000),
   );
@@ -78,7 +79,7 @@ describe("createUsageProgressTracker", () => {
 
   test("sends at most one update per interval, and the last update of a burst later", async () => {
     const events: UsageIndexProgress[] = [];
-    const tracker = createUsageProgressTracker(JOBS, (event) => events.push(event));
+    const tracker = createUsageProgressTracker(JOBS, true, (event) => events.push(event));
     tracker.finished(0);
     tracker.finished(1);
     expect(events).toHaveLength(1);

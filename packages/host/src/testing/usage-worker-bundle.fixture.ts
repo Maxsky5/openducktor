@@ -126,7 +126,12 @@ try {
   // transcript path names and the root session that the first line of the rollout names.
   const byName = (event: UsageIndexProgress | undefined) =>
     event?.runtimes.toSorted((a, b) => a.runtime.localeCompare(b.runtime));
-  assert.deepEqual(byName(progressEvents[0]), [
+  // The empty index tells the clients at once that a first read starts.
+  assert.deepEqual(
+    [progressEvents[0]?.phase, progressEvents[0]?.first, progressEvents[0]?.runtimes],
+    ["preparing", true, []],
+  );
+  assert.deepEqual(byName(progressEvents[1]), [
     { runtime: "claude", progress: 0, done: false, sessions: { done: 0, total: 1 } },
     { runtime: "codex", progress: 0, done: false, sessions: { done: 0, total: null } },
   ]);

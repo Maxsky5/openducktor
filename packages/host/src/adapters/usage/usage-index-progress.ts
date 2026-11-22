@@ -40,6 +40,7 @@ type JobState = {
  */
 export const createUsageProgressTracker = (
   jobs: readonly Job[],
+  first: boolean,
   emit: (progress: UsageIndexProgress) => void,
   now: () => number = Date.now,
 ) => {
@@ -95,7 +96,7 @@ export const createUsageProgressTracker = (
     if (trailing) clearTimeout(trailing);
     trailing = null;
     sentAt = now();
-    emit({ phase, summarized, startedAt, runtimes: runtimes.map(runtimeProgress) });
+    emit({ phase, first, summarized, startedAt, runtimes: runtimes.map(runtimeProgress) });
   };
   /** Sends at most once per interval. A skipped update goes out at the end of the interval. */
   const send = () => {

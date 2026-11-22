@@ -141,7 +141,16 @@ export function UsageOverview({
         </ul>
       </div>
       <div className="flex min-w-0 flex-col gap-3">
-        <h2 className="text-sm font-semibold">{chartTitle}</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">{chartTitle}</h2>
+          {runtimes.length > 1 ? (
+            // The runtime list is the legend of the bands; the total line needs its own.
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="h-0.5 w-3 rounded-full bg-foreground" aria-hidden="true" />
+              Total
+            </span>
+          ) : null}
+        </div>
         <UsageTrendChart
           periods={report.periods}
           granularity={report.granularity}

@@ -18,15 +18,16 @@ export function UsageHeaderSkeleton(): ReactElement {
   );
 }
 
-/** The layout of a usage report while its first result loads. */
+/** The layout of a usage report while a slow read loads. */
 export function UsagePageSkeleton(): ReactElement {
   return (
-    <div className="flex flex-col gap-12" role="status">
+    // It appears after a moment, so a read that answers sooner never flashes it. A first read
+    // shows its progress card instead.
+    <div
+      className="flex flex-col gap-12 motion-safe:animate-[usage-reveal_200ms_ease-out_300ms_both]"
+      role="status"
+    >
       <span className="sr-only">Loading usage</span>
-      <p className="text-sm text-muted-foreground">
-        Reading the runtime history of this host. The first read of a large history can take a
-        minute.
-      </p>
       <div className="grid grid-cols-1 gap-x-12 gap-y-8 @4xl:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <div className="flex flex-col gap-7">
           <div className="flex flex-col gap-2">

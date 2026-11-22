@@ -107,22 +107,49 @@ const nearestExisting = (folder: string): string => {
  *
  * Other folders stay their own projects.
  */
+/**
+ * Resolves folders to repositories. It keeps what it learned from the disk for its own life, so a
+ * report of another range reads git data only for folders that it has not seen. The index worker
+ * keeps one for the life of its threads.
+ */
+export const createUsageRepositoryResolver = () => {
+  const around = new Map<string, string | null>();
+  const nearest = new Map<string, string>();
+  const containers = new Map<string, string | null>();
+  return (folders: readonly string[], knownRepositories: readonly string[]) =>
+    resolveRepositories(folders, knownRepositories, { around, nearest, containers });
+};
+
+/** Resolves folders to repositories with caches for one call. */
 export const resolveUsageRepositories = (
   folders: readonly string[],
   knownRepositories: readonly string[],
+): UsageRepositories => createUsageRepositoryResolver()(folders, knownRepositories);
+
+const resolveRepositories = (
+  folders: readonly string[],
+  knownRepositories: readonly string[],
+  caches: {
+    around: Map<string, string | null>;
+    nearest: Map<string, string>;
+    containers: Map<string, string | null>;
+  },
 ): UsageRepositories => {
-  const around = new Map<string, string | null>();
+  const { around, nearest, containers } = caches;
   const fromGit = new Map<string, string>();
   const outsideGit: { folder: string; holder: string }[] = [];
   for (const folder of folders) {
-    const existing = nearestExisting(folder);
+    let existing = nearest.get(folder);
+    if (existing === undefined) {
+      existing = nearestExisting(folder);
+      nearest.set(folder, existing);
+    }
     const repository = repositoryAround(existing, around);
     if (repository !== null) fromGit.set(folder, repository);
     // The worktrees beside a folder that exists are in its parent folder.
     else outsideGit.push({ folder, holder: existing === folder ? path.dirname(folder) : existing });
   }
 
-  const containers = new Map<string, string | null>();
   /** The one repository of the worktrees in a folder, or null. */
   const containerRepository = (holder: string): string | null => {
     const cached = containers.get(holder);

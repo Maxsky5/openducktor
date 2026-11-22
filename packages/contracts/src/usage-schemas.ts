@@ -37,6 +37,11 @@ export const usageReportReadInputSchema = z.strictObject({
   range: usageRangeInputSchema,
   /** `null` selects all runtimes. */
   runtime: runtimeKindSchema.nullable(),
+  /**
+   * True to check the history again. Without it, a read can use the check of an earlier read of
+   * the last few minutes, so a new selection answers from the index at once.
+   */
+  refresh: z.boolean().optional(),
 });
 export type UsageReportReadInput = z.infer<typeof usageReportReadInputSchema>;
 
@@ -150,8 +155,13 @@ const progressCountSchema = z.number().int().nonnegative();
  * `openducktor://usage-index-progress` only while a read parses sources.
  */
 export const usageIndexProgressSchema = z.strictObject({
-  /** `reading` parses the sources; `summarizing` rolls them up into days. */
-  phase: z.enum(["reading", "summarizing"]),
+  /**
+   * `preparing` finds the history of a first read; `reading` parses the sources; `summarizing`
+   * rolls them up into days.
+   */
+  phase: z.enum(["preparing", "reading", "summarizing"]),
+  /** True for the first read of an empty index, which reads all history. */
+  first: z.boolean(),
   /** The share of the daily totals that `summarizing` built, from 0 to 1. */
   summarized: z.number().min(0).max(1),
   startedAt: z.iso.datetime({ offset: true }),

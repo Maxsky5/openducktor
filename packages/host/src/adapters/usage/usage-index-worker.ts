@@ -2,9 +2,15 @@ import { parentPort } from "node:worker_threads";
 import { knownRuntimeKindValues } from "@openducktor/contracts";
 import { Cause, Effect, Exit } from "effect";
 import { errorMessage, HostOperationError } from "../../effect/host-errors";
-import { catchUpUsageIndex, readUsageIndex } from "./usage-index-read";
-import { createUsageIndexStore, type UsageIndexStore } from "./usage-index-store";
-import { createUsageParsePool, type UsageParsePool } from "./usage-parse-pool";
+import {
+  catchUpUsageIndex,
+  createUsageCheckMemo,
+  readUsageIndex,
+  type UsageReadContext,
+} from "./usage-index-read";
+import { createUsageRepositoryResolver } from "./usage-repositories";
+import { createUsageIndexStore } from "./usage-index-store";
+import { createUsageParsePool } from "./usage-parse-pool";
 import { createUsageRateCatalog } from "./usage-rate-catalog";
 import type { UsageReadInput } from "../../ports/usage-index-port";
 import type { UsageIndexReply, UsageIndexRequest } from "./usage-worker-protocol";
@@ -20,11 +26,8 @@ const failureMessage = (cause: unknown): string => {
   return `OpenDucktor cannot update its usage index: ${message} Check the free disk space and access to the OpenDucktor config folder, then retry.`;
 };
 
-let index: {
-  store: UsageIndexStore;
-  pool: UsageParsePool;
-  rates: ReturnType<typeof createUsageRateCatalog>;
-} | null = null;
+let index: { context: UsageReadContext; rates: ReturnType<typeof createUsageRateCatalog> } | null =
+  null;
 let activeRequestId: number | null = null;
 const cancelled = new Set<number>();
 let queue: Promise<void> = Promise.resolve();
@@ -33,8 +36,6 @@ let waiting = 0;
 /** The input of the last read that skipped history, until the catch-up parses it. */
 let catchUp: UsageReadInput | null = null;
 let catchingUp = false;
-/** True after a catch-up parsed all history that reads had skipped. */
-let historyCaughtUp = false;
 
 const reply = (message: UsageIndexReply) => port.postMessage(message);
 
@@ -53,13 +54,13 @@ const runCatchUp = () => {
     if (!index || !input || waiting > 0) return;
     catchUp = null;
     catchingUp = true;
-    const { store, pool, rates } = index;
+    const { context, rates } = index;
     const exit = await Effect.runPromiseExit(
       rates
         .current()
         .pipe(
           Effect.flatMap((pricing) =>
-            catchUpUsageIndex(store, pool, input, pricing, () => waiting > 0),
+            catchUpUsageIndex(context, input, pricing, () => waiting > 0),
           ),
         ),
     );
@@ -68,7 +69,6 @@ const runCatchUp = () => {
     if (Exit.isFailure(exit))
       console.error("Usage history catch-up failed", Cause.squash(exit.cause));
     else if (waiting > 0) catchUp = input;
-    else historyCaughtUp = true;
     settle();
   });
 };
@@ -77,21 +77,25 @@ port.on("message", (message: UsageIndexRequest) => {
   if (message.kind === "init") {
     const store = createUsageIndexStore(message.indexPath);
     index = {
-      store,
-      pool: createUsageParsePool(message.parserPorts),
+      context: {
+        store,
+        pool: createUsageParsePool(message.parserPorts),
+        repositories: createUsageRepositoryResolver(),
+        checks: createUsageCheckMemo(),
+      },
       rates: createUsageRateCatalog(store.rates, message.ratesUrl),
     };
     return;
   }
   if (message.kind === "cancel") {
     cancelled.add(message.requestId);
-    if (message.requestId === activeRequestId) index?.pool.stop();
+    if (message.requestId === activeRequestId) index?.context.pool.stop();
     return;
   }
   const { requestId } = message;
   waiting++;
   // A read goes first: the catch-up stops claiming parse jobs.
-  if (catchingUp) index?.pool.stop();
+  if (catchingUp) index?.context.pool.stop();
   // One request at a time, in arrival order.
   queue = queue.then(async () => {
     waiting--;
@@ -103,13 +107,28 @@ port.on("message", (message: UsageIndexRequest) => {
         reply({ kind: "cancelled", requestId });
         return;
       }
-      const { store, pool, rates } = index;
+      const { context, rates } = index;
+      // A first read can take a minute. Clients show it at once, before the rates and the
+      // history search; a failure here comes back from the read itself.
+      const empty = await Effect.runPromiseExit(context.store.isEmpty());
+      if (Exit.isSuccess(empty) && empty.value)
+        reply({
+          kind: "progress",
+          requestId,
+          progress: {
+            phase: "preparing",
+            first: true,
+            summarized: 0,
+            startedAt: new Date().toISOString(),
+            runtimes: [],
+          },
+        });
       const exit = await Effect.runPromiseExit(
         rates
           .current()
           .pipe(
             Effect.flatMap((pricing) =>
-              readUsageIndex(store, pool, message.input, pricing, isCancelled, (progress) =>
+              readUsageIndex(context, message.input, pricing, isCancelled, (progress) =>
                 reply({ kind: "progress", requestId, progress }),
               ),
             ),
@@ -125,10 +144,10 @@ port.on("message", (message: UsageIndexRequest) => {
           ? { kind: "cancelled", requestId }
           : { kind: "result", requestId, result: exit.value },
       );
-      // A read of a range or of one runtime skips the rest of the history. One complete
-      // catch-up is enough: an older source that changes gets a recent modification time.
+      // A read of a range or of one runtime skips the rest of the history, until the index holds
+      // all of it: an older source that changes gets a recent modification time.
       if (
-        !historyCaughtUp &&
+        !context.checks.complete() &&
         (message.input.range.start !== null ||
           message.input.runtimes.length < knownRuntimeKindValues.length)
       )

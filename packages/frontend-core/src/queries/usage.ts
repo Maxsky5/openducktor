@@ -11,7 +11,13 @@ const USAGE_REPORT_KEY = "usage-report";
 export const usageReportQueryOptions = (input: UsageReportReadInput) =>
   queryOptions({
     queryKey: [USAGE_REPORT_KEY, input.range, input.runtime],
-    queryFn: ({ client, signal }) => connectionHost(client).usageReportRead(input, signal),
+    // A read of a selection that has a result is a refresh: it checks the history again. A new
+    // selection can use a recent check of the host and answers from its index at once.
+    queryFn: ({ client, queryKey, signal }) =>
+      connectionHost(client).usageReportRead(
+        { ...input, refresh: client.getQueryData(queryKey) !== undefined },
+        signal,
+      ),
     staleTime: Infinity,
     // A cold read can take a minute, so reconnect recovery must not wait for it. The connection
     // reads it again after admission with `refreshUsageReports`.

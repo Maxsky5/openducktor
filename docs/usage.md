@@ -33,7 +33,10 @@ flowchart TD
 
 ## Threads
 
-- The host thread starts the threads at the first read. They stop together 60 seconds after the index worker reports that it is idle.
+- The host thread starts the threads at the first read. They stop together 5 minutes after the index worker reports that it is idle.
+- A read checks the sources only when the caller asks for a refresh, or when no check of the last 5 minutes covers its runtimes and range. Otherwise it answers from the index with that check, so a new range or runtime reads in 40 to 120 ms. The page asks for a refresh when it reads a selection that already has a result, such as Refresh. A check stats every source and digests a changed OpenCode database, which takes from 0.1 s to about 1 s.
+- The index worker keeps the git data of the recorded folders for the life of its threads, so a report of another range reads git data only for folders that it has not seen.
+- A read of an empty index sends a `preparing` progress event before it loads the rates and searches the history, so a client can show the first read at once. Every progress event says with `first` whether it belongs to a first read.
 - The index worker owns the index connection, the source check, the commits, the rollup, and the report queries.
 - Up to 4 parser threads read sources, and at most half of the cores. They claim jobs through a shared counter, so they never wait for a commit.
 - The largest sources start first. The OpenCode database is one long job.
@@ -182,9 +185,9 @@ stateDiagram-v2
 - The page waits for the workspace list, as other pages do, and shows the onboarding frame when the list has no workspaces or fails. It mounts once: a second mount would cancel its read.
 - The header has the runtime menu beside the title, then the range tabs, the metric tabs (`Tokens` and `Cost`), and Refresh. The filters use `ToggleTabs`, a radio group with the look of `TabsList`.
 - The overview shows the total, the sessions, and each runtime's part, beside the trend chart. The runtime list is also the chart legend.
-- The trend chart uses TanStack Charts (`@tanstack/charts`): SVG, one smooth monotone line and gradient area per runtime, a crosshair, and one tooltip for all runtimes of a period. Pointer and keyboard focus use the same points. The chart code loads with the page chunk only.
+- The trend chart uses TanStack Charts (`@tanstack/charts`): SVG, the runtimes as stacked bands with smooth monotone edges, and the total of all runtimes as a line on top, with a `Total` legend beside the title. One tooltip shows the total, then each runtime with its share. With one runtime, its band is the total and the line takes its color. The chart code loads with the page chunk only.
 - Highlights is one card of four tiles: the cache hit rate (cache reads over all input-side tokens) with a meter, the busiest period with one column for each period, the average per period with a strip of active periods, and the value per session with the sessions of each runtime. A tile whose value leaves out usage has an info mark that names what it leaves out.
-- A read that parses new history shows its progress once it has run for 1.5 s, so a short read never flashes it. Before the first result, the page shows one card: the overall share, the sessions read out of the sessions to read, the elapsed time, and one row for each runtime with its share and its sessions. The parse makes up 80% of the ring and the daily totals 20%, as measured on the reference machine; in the parse, each runtime weighs as much as its sessions to read. The ring never goes back. When a read follows a canceled one, the card adds the new read to what the earlier read finished, and a runtime that an earlier read finished stays done. With a shown result, the header line shows the share instead. A fast read shows the skeleton only.
+- A first read shows its progress card at once, from its `preparing` event: the page has nothing else to show. A later read that parses new history shows its progress once it has run for 1.5 s, so a short read never flashes it. Before the first result, the page shows one card: the overall share, the sessions read out of the sessions to read, the elapsed time, and one row for each runtime with its share and its sessions. Every runtime keeps its row from the first event on, so the card keeps its size: `Finding sessions…` while the history search runs, then `No history` for a runtime without history, or `Up to date` in a later read. The parse makes up 80% of the ring and the daily totals 20%, as measured on the reference machine; in the parse, each runtime weighs as much as its sessions to read. The ring never goes back. When a read follows a canceled one, the card adds the new read to what the earlier read finished, and a runtime that an earlier read finished stays done. With a shown result, the header line shows the share instead. The skeleton appears only after 300 ms, so a read that answers sooner never flashes it.
 - A new selection keeps the shown result, dimmed after 150 ms, with a loading line in the header, until its own result arrives. A fast read never flashes, and a failed read shows its error, not the result of another selection.
 - The breakdown table shows models, projects, or periods. Models and projects rank by the selected metric and show their share of it; periods show each runtime, newest first.
 - The page lays out by its own width with container queries, so an open sidebar gives it the narrow layout.
@@ -214,8 +217,8 @@ These numbers come from a host with 13 GB of Claude Code transcripts, 12 GB of c
 |---|---|
 | First read of `Last 30 days` | 35 s to 65 s |
 | First read of `All time` | 40 s to 60 s |
-| Later read without changes | 0.1 s to 0.2 s: the source checks only; it skips the OpenCode database |
-| Another range after the catch-up | About 0.2 s for `Last 90 days` and `All time`; a range that the page read before shows at once from the query cache |
+| Later read without changes | 0.1 s to 0.2 s with a source check; it skips the OpenCode database |
+| Another range or runtime | 40 to 120 ms with a recent check; a selection that the page read before shows at once from the query cache |
 | Later read after an OpenCode change | Adds about 0.8 s for the identity digest of 470,000 rows |
 | Rollup rebuild for 1.4 million units | About 6 s |
 

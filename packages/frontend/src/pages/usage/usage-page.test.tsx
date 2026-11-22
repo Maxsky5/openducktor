@@ -105,7 +105,11 @@ describe("UsagePage", () => {
     expect(await screen.findByText("Processed tokens")).toBeTruthy();
     expect(screen.getAllByText("2.01M").length).toBeGreaterThan(0);
     expect(screen.getByText("4 sessions · $12.50")).toBeTruthy();
-    expect(read.mock.calls[0]?.[0]).toEqual({ range: { kind: "last_30_days" }, runtime: null });
+    expect(read.mock.calls[0]?.[0]).toEqual({
+      range: { kind: "last_30_days" },
+      runtime: null,
+      refresh: false,
+    });
 
     chooseMetric("Cost");
     expect(screen.getByText("Estimated API cost")).toBeTruthy();
@@ -134,25 +138,32 @@ describe("UsagePage", () => {
       done: number,
       total: number | null,
     ) => ({ runtime, progress, done: progress === 1, sessions: { done, total } });
-    jest.useFakeTimers();
-    try {
-      await act(() =>
-        progress.listener?.({
-          phase: "reading",
-          summarized: 0,
-          startedAt: "2026-11-21T10:00:00.000Z",
-          runtimes: [runtime("claude", 0.5, 2, 4), runtime("opencode", 0.25, 1, null)],
-        }),
-      );
-      // A short read never shows the card: it waits until the read has run for a moment.
-      expect(screen.queryByText("Reading your agent history")).toBeNull();
-      act(() => jest.advanceTimersByTime(1_500));
-    } finally {
-      jest.useRealTimers();
-    }
+    // A first read shows at once, already while it finds the history.
+    await act(() =>
+      progress.listener?.({
+        phase: "preparing",
+        summarized: 0,
+        first: true,
+        startedAt: "2026-11-21T09:59:59.000Z",
+        runtimes: [],
+      }),
+    );
+    expect(screen.getByText("Finding your agent history")).toBeTruthy();
+    expect(screen.getAllByText("Finding sessions…")).toHaveLength(3);
+    await act(() =>
+      progress.listener?.({
+        phase: "reading",
+        summarized: 0,
+        first: true,
+        startedAt: "2026-11-21T10:00:00.000Z",
+        runtimes: [runtime("claude", 0.5, 2, 4), runtime("opencode", 0.25, 1, null)],
+      }),
+    );
     expect(screen.getByText("Reading your agent history")).toBeTruthy();
     expect(screen.getByText("2 of 4 sessions")).toBeTruthy();
     expect(screen.getByText("1 session read, counting the rest…")).toBeTruthy();
+    // Codex has no history on this host.
+    expect(screen.getByText("No history")).toBeTruthy();
     // The parse is 80% of the ring: (50% + 25%) / 2 of it, before OpenCode knows its sessions.
     expect(
       screen.getByRole("progressbar", { name: "Usage history read" }).getAttribute("aria-valuenow"),
@@ -161,12 +172,48 @@ describe("UsagePage", () => {
       progress.listener?.({
         phase: "summarizing",
         summarized: 0.5,
+        first: true,
         startedAt: "2026-11-21T10:00:00.000Z",
         runtimes: [runtime("claude", 1, 4, 4), runtime("opencode", 1, 3, 3)],
       }),
     );
     expect(screen.getByText("Building the daily totals")).toBeTruthy();
     expect(screen.getByText("of 7")).toBeTruthy();
+  });
+
+  test("shows a later read only once it has parsed for a moment", async () => {
+    const progress: ProgressChannel = { listener: null };
+    renderPage(() => new Promise<UsageReport>(() => {}), progress);
+    await waitFor(() => expect(progress.listener).not.toBeNull());
+    jest.useFakeTimers();
+    try {
+      await act(() =>
+        progress.listener?.({
+          phase: "reading",
+          summarized: 0,
+          first: false,
+          startedAt: "2026-11-21T10:00:00.000Z",
+          runtimes: [
+            { runtime: "codex", progress: 0.5, done: false, sessions: { done: 1, total: 2 } },
+          ],
+        }),
+      );
+      // A short read never shows the card.
+      expect(screen.queryByText("Reading your agent history")).toBeNull();
+      act(() => jest.advanceTimersByTime(1_500));
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(screen.getByText("Reading your agent history")).toBeTruthy();
+    expect(screen.getAllByText("Up to date")).toHaveLength(2);
+  });
+
+  test("checks the history again on Refresh only", async () => {
+    const read = renderPage(async () => report());
+    await screen.findByText("Processed tokens");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(read.mock.calls.map((call) => call[0].refresh)).toEqual([false, true]);
   });
 
   test("names a rate download problem under Sources", async () => {
@@ -221,7 +268,11 @@ describe("UsagePage", () => {
     await screen.findByText("Processed tokens");
     fireEvent.click(screen.getByRole("radio", { name: "90 days" }));
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-    expect(read.mock.calls[1]?.[0]).toEqual({ range: { kind: "last_90_days" }, runtime: null });
+    expect(read.mock.calls[1]?.[0]).toEqual({
+      range: { kind: "last_90_days" },
+      runtime: null,
+      refresh: false,
+    });
   });
 
   test("tells the user to update a host without Usage", async () => {
@@ -277,6 +328,7 @@ describe("UsagePage", () => {
     expect(read.mock.calls[1]?.[0]).toEqual({
       range: { kind: "custom", start: "2026-11-10", end: "2026-11-15" },
       runtime: null,
+      refresh: false,
     });
   });
 

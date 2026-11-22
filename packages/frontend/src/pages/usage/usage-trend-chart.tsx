@@ -16,6 +16,7 @@ import {
   formatAxisDate,
   formatAxisMetric,
   formatMetric,
+  formatShare,
   missingReason,
   PERIOD_NOUNS,
   periodName,
@@ -26,7 +27,7 @@ import {
 } from "./usage-format";
 import { RuntimeDot } from "./usage-parts";
 
-const CHART_HEIGHT = 260;
+const CHART_HEIGHT = 280;
 const curve = d3Curve(curveMonotoneX);
 /** A fixed axis gutter, so the plot keeps its place when the metric changes. */
 const MARGIN = { top: 12, right: 8, bottom: 28, left: 56 };
@@ -77,25 +78,38 @@ const useWidth = () => {
   return { ref, width };
 };
 
-/** One point of one runtime. A null value is a gap: the period has no value to draw. */
-type TrendRow = { index: number; date: Date; value: number | null; partial: boolean };
+/**
+ * One point of one runtime in the stack: its band from `low` to `high`. A runtime without a value
+ * in a period, such as usage without a rate, adds nothing there; the tooltip names the gap.
+ */
+type StackRow = { index: number; date: Date; low: number; high: number };
 
-const rowsOf = (
+/** The total of one period. `partial` marks a total that unread history can make too low. */
+type TotalRow = { index: number; date: Date; value: number; partial: boolean };
+
+/** The bands of the runtimes, stacked in runtime order, and the total of each period. */
+const stackOf = (
   periods: readonly UsagePeriod[],
-  runtime: RuntimeKind,
+  runtimes: readonly RuntimeKind[],
   metric: UsageMetric,
-): TrendRow[] =>
-  periods.map((period, index) => {
-    const figure = period.runtimes.find((entry) => entry.runtime === runtime)?.figure;
-    if (!figure) return { index, date: dateOf(period.start), value: 0, partial: false };
-    return {
-      index,
-      date: dateOf(period.start),
-      value: shownValue(figure, metric),
-      // Unread history can make the value too low. The tooltip names other gaps.
-      partial: !figure.complete,
-    };
+) => {
+  const bands = new Map<RuntimeKind, StackRow[]>(runtimes.map((runtime) => [runtime, []]));
+  const totals: TotalRow[] = periods.map((period, index) => {
+    const date = dateOf(period.start);
+    let value = 0;
+    let partial = false;
+    const figures = new Map(period.runtimes.map((entry) => [entry.runtime, entry.figure]));
+    for (const runtime of runtimes) {
+      const figure = figures.get(runtime);
+      const shown = figure ? (shownValue(figure, metric) ?? 0) : 0;
+      if (figure && !figure.complete) partial = true;
+      bands.get(runtime)?.push({ index, date, low: value, high: value + shown });
+      value += shown;
+    }
+    return { index, date, value, partial };
   });
+  return { bands, totals };
+};
 
 /** The values of one period for the tooltip, with their total and what they leave out. */
 function TrendTooltip({
@@ -143,23 +157,29 @@ function TrendTooltip({
         {periodName(period, granularity)}
         {inProgress ? <span className="font-normal text-muted-foreground"> · so far</span> : null}
       </div>
+      {runtimes.length > 1 ? (
+        <div className="flex items-center justify-between gap-2 border-b border-border pb-1.5">
+          <span className="flex items-center gap-2 font-medium">
+            <span className="h-0.5 w-2.5 rounded-full bg-foreground" aria-hidden="true" />
+            Total
+          </span>
+          <span className="text-sm font-semibold tabular-nums">{formatMetric(total, metric)}</span>
+        </div>
+      ) : null}
       {rows.map(({ runtime, value }) => (
         <div key={runtime} className="flex items-center gap-2">
           <RuntimeDot runtime={runtime} />
           <span className="min-w-0 flex-1 truncate text-muted-foreground">
             {USAGE_RUNTIME_LABELS[runtime]}
           </span>
-          <span className="font-medium tabular-nums">
+          {runtimes.length > 1 && value !== null && total > 0 ? (
+            <span className="text-muted-foreground tabular-nums">{formatShare(value / total)}</span>
+          ) : null}
+          <span className="min-w-14 text-right font-medium tabular-nums">
             {value === null ? "—" : formatMetric(value, metric)}
           </span>
         </div>
       ))}
-      {runtimes.length > 1 ? (
-        <div className="mt-0.5 flex items-center justify-between gap-2 border-t border-border pt-1.5">
-          <span className="text-muted-foreground">Total</span>
-          <span className="font-medium tabular-nums">{formatMetric(total, metric)}</span>
-        </div>
-      ) : null}
       {notes.map((note) => (
         <span key={note} className="text-[11px] text-muted-foreground">
           {note}
@@ -170,8 +190,9 @@ function TrendTooltip({
 }
 
 /**
- * Usage over time: one smooth line per runtime on one shared zero-based axis. A period that is
- * still in progress, such as today, ends the line with a dashed segment.
+ * Usage over time: the runtimes as stacked bands on one zero-based axis, and the total of all of
+ * them as a line on top. A period that is still in progress, such as today, ends the total with a
+ * dashed segment and an open point.
  */
 export function UsageTrendChart({
   periods,
@@ -194,116 +215,88 @@ export function UsageTrendChart({
     const ticks = labelDates(periods, labelCount, granularity);
     const firstTick = ticks[0]?.getTime();
     const lastTick = ticks.at(-1)?.getTime();
-    // A runtime that stays near zero in the view keeps its tooltip row and runtime list
-    // entry, but draws no line along the baseline.
-    const peakOf = (runtime: RuntimeKind) =>
-      Math.max(0, ...rowsOf(periods, runtime, metric).map((row) => row.value ?? 0));
-    const top = Math.max(0, ...runtimes.map(peakOf));
-    const drawn = runtimes.filter((runtime) => top > 0 && peakOf(runtime) >= top * 0.005);
-    const series = drawn.map((runtime) => {
-      const rows = rowsOf(periods, runtime, metric);
-      return {
-        runtime,
-        rows,
-        // The solid line stops before a period in progress; a dashed segment reaches it.
-        settled: inProgress
-          ? rows.map((row) => (row.index === last ? { ...row, value: null } : row))
-          : rows,
-        current: inProgress ? rows.slice(-2) : [],
-        today: inProgress ? rows.slice(-1).filter((row) => (row.value ?? 0) > 0) : [],
-      };
-    });
-    const line = (runtime: RuntimeKind) => ({
-      x: "date" as const,
-      y: "value" as const,
-      stroke: USAGE_RUNTIME_COLORS[runtime],
-      strokeWidth: 2,
-      // A lone value between gaps draws nothing, not a stray dot; the tooltip still shows it.
-      lineCap: "butt" as const,
-      curve,
-    });
+    const { bands, totals } = stackOf(periods, runtimes, metric);
+    const single = runtimes.length === 1 ? runtimes[0] : undefined;
+    // With one runtime, its band is the total: the line takes its color.
+    const totalColor = single ? USAGE_RUNTIME_COLORS[single] : "var(--foreground)";
+    const settled = inProgress ? totals.slice(0, -1) : totals;
+    const current = inProgress ? totals.slice(-2) : [];
+    const today = inProgress ? totals.slice(-1).filter((row) => row.value > 0) : [];
+    const totalLine = { x: "date" as const, y: "value" as const, stroke: totalColor, curve };
     return defineChart({
       margin: narrow ? NARROW_MARGIN : MARGIN,
-      gradients: drawn.map((runtime) => ({
-        id: `usage-area-${runtime}`,
-        x1: 0,
-        y1: 0,
-        x2: 0,
-        y2: 1,
-        stops: [
-          { offset: 0, color: USAGE_RUNTIME_COLORS[runtime], opacity: 0.28 },
-          { offset: 1, color: USAGE_RUNTIME_COLORS[runtime], opacity: 0 },
-        ],
-      })),
       marks: [
-        ...series.map(({ runtime, rows }) =>
+        ...runtimes.map((runtime) =>
           decorative(
-            areaY(rows, { x: "date", y: "value", fill: `url(#usage-area-${runtime})`, curve }),
+            areaY(bands.get(runtime) ?? [], {
+              x: "date",
+              y1: "low",
+              y2: "high",
+              fill: USAGE_RUNTIME_COLORS[runtime],
+              fillOpacity: single ? 0.16 : 0.26,
+              curve,
+            }),
           ),
         ),
-        // A day without a value, such as usage without a published rate, is a gap. A faint
-        // dotted bridge keeps the gap from reading as a drawing fault; the tooltip names it.
-        ...series.map(({ runtime, settled }) =>
-          decorative(
-            lineY(
-              settled.filter((row) => row.value !== null),
-              { ...line(runtime), strokeDasharray: "2 4", strokeOpacity: 0.4, strokeWidth: 1.5 },
-            ),
-          ),
-        ),
-        ...series.map(({ runtime, settled }) =>
-          lineY(settled, { id: `usage-line-${runtime}`, ...line(runtime) }),
-        ),
+        // The top of each band, so neighbors stay apart where their colors meet.
+        ...(single
+          ? []
+          : runtimes.map((runtime) =>
+              decorative(
+                lineY(bands.get(runtime) ?? [], {
+                  x: "date",
+                  y: "high",
+                  stroke: USAGE_RUNTIME_COLORS[runtime],
+                  strokeWidth: 1.5,
+                  curve,
+                }),
+              ),
+            )),
+        lineY(settled, { id: "usage-total", ...totalLine, strokeWidth: single ? 2 : 1.75 }),
         // The period in progress is still growing: a faint dashed segment to an open point.
-        ...series.map(({ runtime, current }) =>
-          decorative(
-            lineY(current, { ...line(runtime), strokeDasharray: "4 4", strokeOpacity: 0.55 }),
-          ),
+        decorative(
+          lineY(current, {
+            ...totalLine,
+            strokeWidth: 2,
+            strokeDasharray: "4 4",
+            strokeOpacity: 0.6,
+          }),
         ),
-        ...series.map(({ runtime, today }) =>
-          decorative(
-            dot(today, {
+        decorative(
+          dot(today, {
+            x: "date",
+            y: "value",
+            r: 3.5,
+            fill: "var(--background)",
+            stroke: totalColor,
+            strokeWidth: 1.75,
+          }),
+        ),
+        // A total with unread history shows an open point: it can be higher.
+        decorative(
+          dot(
+            totals.filter((row) => row.partial && row.index !== last),
+            {
               x: "date",
               y: "value",
               r: 3,
               fill: "var(--background)",
-              stroke: USAGE_RUNTIME_COLORS[runtime],
+              stroke: totalColor,
               strokeWidth: 1.5,
-            }),
+            },
           ),
         ),
-        // A value with unread history shows an open point: it can be higher.
-        ...series.map(({ runtime, rows }) =>
-          decorative(
-            dot(
-              rows.filter((row) => row.partial && row.value !== null),
-              {
-                x: "date",
-                y: "value",
-                r: 3,
-                fill: "var(--background)",
-                stroke: USAGE_RUNTIME_COLORS[runtime],
-                strokeWidth: 1.5,
-              },
-            ),
-          ),
-        ),
-        // The inspected period shows a point on every line.
-        ...series.map(({ runtime, rows }) =>
-          whenFocused(
-            dot(
-              rows.filter((row) => row.value !== null),
-              {
-                x: "date",
-                y: "value",
-                r: 4,
-                fill: USAGE_RUNTIME_COLORS[runtime],
-                stroke: "var(--background)",
-                strokeWidth: 2,
-              },
-            ),
-            { match: "x" },
-          ),
+        // The inspected period shows a point on the total.
+        whenFocused(
+          dot(totals, {
+            x: "date",
+            y: "value",
+            r: 4.5,
+            fill: totalColor,
+            stroke: "var(--background)",
+            strokeWidth: 2,
+          }),
+          { match: "x" },
         ),
         crosshair({ x: true, y: false }),
       ],
@@ -350,7 +343,7 @@ export function UsageTrendChart({
       theme: {
         foreground: "var(--muted-foreground)",
         muted: "var(--muted-foreground)",
-        // The dots on every line show the inspected period; a ring would mark one of them.
+        // The point on the total shows the inspected period; a ring would add a second mark.
         focusRing: false,
       },
       focus: "group-x",
@@ -365,7 +358,7 @@ export function UsageTrendChart({
     });
   }, [periods, runtimes, metric, granularity, inProgress, narrow, labelCount]);
 
-  const renderTooltipBody = ({ points }: ChartTooltipBodyRenderContext<TrendRow>) => {
+  const renderTooltipBody = ({ points }: ChartTooltipBodyRenderContext<TotalRow>) => {
     const index = points[0]?.datum.index;
     const period = index === undefined ? undefined : periods[index];
     if (!period || index === undefined) return null;
@@ -385,7 +378,7 @@ export function UsageTrendChart({
       <Chart
         definition={definition}
         height={CHART_HEIGHT}
-        ariaLabel={`${metric === "tokens" ? "Tokens" : "Estimated cost"} per ${PERIOD_NOUNS[granularity]} and runtime`}
+        ariaLabel={`${metric === "tokens" ? "Tokens" : "Estimated cost"} per ${PERIOD_NOUNS[granularity]}: total and runtimes`}
         renderTooltipBody={renderTooltipBody}
       />
     </div>
