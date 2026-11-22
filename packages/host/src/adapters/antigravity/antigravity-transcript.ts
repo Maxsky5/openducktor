@@ -4,10 +4,7 @@ import type {
   ToolCall,
   ToolCallUpdate,
 } from "@agentclientprotocol/sdk/unstable";
-import {
-  type AgentTurnOutcome,
-  MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
-} from "@openducktor/contracts";
+import type { AgentTurnOutcome } from "@openducktor/contracts";
 import type {
   AcceptedAgentUserMessage,
   AgentEvent,
@@ -15,6 +12,15 @@ import type {
   AgentSessionHistoryMessage,
   AgentUserMessageDisplayPart,
 } from "@openducktor/core";
+import { ANTIGRAVITY_COMPACT_COMMAND, compactionNotice } from "./antigravity-compaction";
+import {
+  ANTIGRAVITY_GOAL_STOP_MESSAGE,
+  type AntigravityGoal,
+  type AntigravityGoalEnd,
+  pendingAntigravityGoalMarkerLength,
+  readAntigravityGoalObjective,
+  stripAntigravityGoalMarkers,
+} from "./antigravity-goal";
 import {
   type AntigravityToolState,
   mergeAntigravityToolState,
@@ -26,7 +32,12 @@ const SLASH_COMMAND_ONLY = /^\/\S+$/;
 type OpenItem = {
   readonly kind: "text" | "reasoning";
   readonly messageId: string;
+  /** The shown text. A text item shows its stream without the goal markers. */
   text: string;
+  /** The streamed text of a text item, with its goal markers. */
+  raw: string;
+  /** The goal markers of the item that the transcript already applied. */
+  markers: number;
 };
 
 /** A user message of the transcript, in the form that the live event and history share. */
@@ -49,23 +60,6 @@ export type AntigravityLiveUserMessage = {
  * the index of the item in the turn. A new item starts at each change of update kind. Tool items
  * keep the native `toolCallId`.
  */
-const ANTIGRAVITY_COMPACT_COMMAND = `/${MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger}`;
-export const ANTIGRAVITY_COMPACTED_MESSAGE = "Session compacted.";
-
-const compactionNotice = (
-  messageId: string,
-  timestamp: string,
-  accuracy: { timestampIsApproximate?: true } = {},
-): AgentSessionHistoryMessage => ({
-  messageId,
-  role: "system",
-  timestamp,
-  ...accuracy,
-  text: ANTIGRAVITY_COMPACTED_MESSAGE,
-  notice: { tone: "info", reason: "session_compacted", title: "Compacted" },
-  parts: [],
-});
-
 export class AntigravityTranscript {
   readonly history: AgentSessionHistoryMessage[] = [];
   private turn = 0;
@@ -77,6 +71,9 @@ export class AntigravityTranscript {
   private readonly declinedTools = new Set<string>();
   /** True while the transcript applies a `session/load` replay. */
   private replaying = false;
+  private goalState: AntigravityGoal | null = null;
+  /** True when the last user message asked the agent to stop its goal. */
+  private goalStopAsked = false;
 
   constructor(
     private readonly sessionId: string,
@@ -98,6 +95,7 @@ export class AntigravityTranscript {
     const closedItems = this.closeOpenItem();
     const messageId = this.startTurn();
     const timestamp = input.sentAt ?? this.now();
+    this.noteGoalMessage(input.message.text);
     const event: AcceptedAgentUserMessage = {
       type: "user_message",
       externalSessionId: this.sessionId,
@@ -120,6 +118,36 @@ export class AntigravityTranscript {
     if (input.model) history.model = input.model;
     this.history.push(history);
     return { closedItems, userMessage: event };
+  }
+
+  /** The goal of the session, from its user messages and the goal markers of the replies. */
+  get goal(): AntigravityGoal | null {
+    return this.goalState;
+  }
+
+  /** Removes a goal that the agent already ended. It returns false when no ended goal is set. */
+  forgetEndedGoal(): boolean {
+    if (!this.goalState?.end) return false;
+    this.goalState = null;
+    return true;
+  }
+
+  /**
+   * A `/goal` message sets the goal, and a new one replaces the goal before it. The stop message
+   * of OpenDucktor asks the agent to cancel the goal, so its cancel removes the goal.
+   */
+  private noteGoalMessage(text: string): void {
+    const objective = readAntigravityGoalObjective(text);
+    if (objective) this.goalState = { objective };
+    this.goalStopAsked = objective === null && text.trim() === ANTIGRAVITY_GOAL_STOP_MESSAGE;
+  }
+
+  private noteGoalEnds(ends: readonly AntigravityGoalEnd[]): void {
+    for (const end of ends) {
+      if (!this.goalState || this.goalState.end) continue;
+      this.goalState =
+        end === "cancelled" && this.goalStopAsked ? null : { ...this.goalState, end };
+    }
   }
 
   /**
@@ -258,6 +286,7 @@ export class AntigravityTranscript {
     if (!open) return;
     this.openUserMessage = null;
     const message = this.readUserChunks(open.blocks);
+    this.noteGoalMessage(message.text);
     // History keeps a finished compaction as its notice, as the live view shows it.
     if (message.text.trim() === ANTIGRAVITY_COMPACT_COMMAND) {
       this.history.push(
@@ -284,7 +313,7 @@ export class AntigravityTranscript {
     let item = this.openItem;
     if (item?.kind !== kind) {
       events.push(...this.closeOpenItem());
-      item = { kind, messageId: this.nextItemId(), text: "" };
+      item = { kind, messageId: this.nextItemId(), text: "", raw: "", markers: 0 };
       this.openItem = item;
       this.history.push(
         this.withTimeAccuracy({
@@ -296,19 +325,24 @@ export class AntigravityTranscript {
         }),
       );
     }
-    item.text += block.text;
+    const shownBefore = item.text;
+    if (kind === "text") this.streamText(item, block.text);
+    else item.text += block.text;
     this.updateItemHistory(item, false);
     const timestamp = this.now();
     if (kind === "text") {
       this.lastTurnText = { messageId: item.messageId, text: item.text };
-      events.push({
-        type: "assistant_delta",
-        externalSessionId: this.sessionId,
-        timestamp,
-        channel: "text",
-        messageId: item.messageId,
-        delta: block.text,
-      });
+      const delta = item.text.slice(shownBefore.length);
+      if (delta.length > 0) {
+        events.push({
+          type: "assistant_delta",
+          externalSessionId: this.sessionId,
+          timestamp,
+          channel: "text",
+          messageId: item.messageId,
+          delta,
+        });
+      }
     } else {
       events.push(this.reasoningEvent(item, false));
     }
@@ -348,10 +382,28 @@ export class AntigravityTranscript {
     ];
   }
 
+  /**
+   * Adds a chunk to a text item. The item shows its text without the goal markers, and holds back
+   * an end that can still grow into a marker, so the shown text only grows.
+   */
+  private streamText(item: OpenItem, chunk: string): void {
+    item.raw += chunk;
+    const { text, ends } = stripAntigravityGoalMarkers(item.raw);
+    this.noteGoalEnds(ends.slice(item.markers));
+    item.markers = ends.length;
+    item.text = text.slice(0, text.length - pendingAntigravityGoalMarkerLength(text));
+  }
+
   private closeOpenItem(): AgentEvent[] {
     const item = this.openItem;
     if (!item) return [];
     this.openItem = null;
+    // A held end that never became a marker is text of the reply.
+    if (item.kind === "text") {
+      item.text = stripAntigravityGoalMarkers(item.raw).text;
+      if (this.lastTurnText?.messageId === item.messageId)
+        this.lastTurnText = { messageId: item.messageId, text: item.text };
+    }
     this.updateItemHistory(item, true);
     if (item.kind === "reasoning") return [this.reasoningEvent(item, true)];
     return [

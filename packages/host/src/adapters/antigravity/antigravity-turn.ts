@@ -18,10 +18,8 @@ import { toTranscriptEvents } from "./antigravity-live-change";
 import { describeAntigravityRequestError } from "./antigravity-native-contract";
 import { encodeAntigravityPrompt, toAntigravityUserMessage } from "./antigravity-prompt";
 import type { AntigravitySessionModel } from "./antigravity-session-model";
-import {
-  ANTIGRAVITY_COMPACTED_MESSAGE,
-  type AntigravityTranscript,
-} from "./antigravity-transcript";
+import { ANTIGRAVITY_COMPACTED_MESSAGE } from "./antigravity-compaction";
+import type { AntigravityTranscript } from "./antigravity-transcript";
 
 export type AntigravitySendInput = {
   readonly parts: AgentUserMessagePart[];

@@ -7,26 +7,30 @@ import {
   type SessionConfigOption,
   type SessionUpdate,
 } from "@agentclientprotocol/sdk/unstable";
-import type {
-  AgentSessionContextUsage,
-  AgentSessionLivePendingApprovalRequest,
-  AgentSessionLiveRef,
-  AgentSessionLiveSnapshot,
-  AgentSessionScope,
-  AgentSessionTranscriptEvent,
-  RuntimeApprovalReplyOutcome,
-  SlashCommandCatalog,
+import {
+  type AgentSessionContextUsage,
+  type AgentSessionGoal,
+  type AgentSessionLivePendingApprovalRequest,
+  type AgentSessionLiveRef,
+  type AgentSessionLiveSnapshot,
+  type AgentSessionScope,
+  type AgentSessionTranscriptEvent,
+  GOAL_SLASH_COMMAND,
+  type RuntimeApprovalReplyOutcome,
+  type SlashCommandCatalog,
 } from "@openducktor/contracts";
 import {
   type AcceptedAgentUserMessage,
   type AgentEvent,
   type AgentModelSelection,
+  type AgentSessionGoalCommand,
   type AgentSessionHistoryMessage,
   type AgentSessionSummary,
   classifyAgentSessionActivity,
 } from "@openducktor/core";
 import { withSystemPromptHistoryMessage } from "../agent-sessions/system-prompt-history-message";
 import type { AntigravityAgentConnection } from "./antigravity-agent-connection";
+import { ANTIGRAVITY_GOAL_STOP_MESSAGE } from "./antigravity-goal";
 import {
   type AntigravityLivePublisher,
   type AntigravityPublishOptions,
@@ -107,6 +111,8 @@ export class AntigravityLiveSession {
   private readonly pendingApprovals = new Map<string, AntigravityPendingApproval>();
   private readonly pendingQuestions = new Map<string, AntigravityPendingQuestion>();
   private readonly turns: AntigravityTurns;
+  /** True while the stop message of a goal clear runs, so the goal no longer shows as active. */
+  private goalClearing = false;
 
   constructor(
     input: AntigravityLiveSessionInput,
@@ -160,7 +166,27 @@ export class AntigravityLiveSession {
     };
     if (this.sessionScope.kind === "repository") snapshot.repositoryScope = this.sessionScope;
     if (this.model.selection) snapshot.model = this.model.selection;
+    const goal = this.goalSnapshot();
+    if (goal) snapshot.goal = goal;
     return snapshot;
+  }
+
+  /**
+   * The goal state that the snapshot shows. Antigravity continues a goal only while it works, or
+   * with the next user message. A goal that the agent completed is complete, and a goal that it
+   * cancelled without the stop message of OpenDucktor ended.
+   */
+  private goalSnapshot(): AgentSessionGoal | undefined {
+    const goal = this.transcript.goal;
+    if (!goal) return undefined;
+    const { objective } = goal;
+    if (goal.end === "met") return { objective, status: "complete" };
+    if (goal.end === "cancelled")
+      return { objective, status: "ended", reason: "The agent cancelled the goal." };
+    return {
+      objective,
+      status: this.turns.running && !this.goalClearing ? "active" : "waiting_for_message",
+    };
   }
 
   summary(): AgentSessionSummary {
@@ -401,7 +427,50 @@ export class AntigravityLiveSession {
 
   /** Sends one message as a new turn or as a steer of the running turn. */
   send(input: AntigravitySendInput): Promise<AcceptedAgentUserMessage> {
+    this.goalClearing = false;
     return this.turns.send(input);
+  }
+
+  /**
+   * Runs a goal action as a message. `set` sends `/goal <objective>`, and a new goal replaces the
+   * goal before it. Antigravity has no clear command: `clear` removes a goal that already ended, or
+   * sends the stop message that its documentation names, and the goal leaves when the agent cancels
+   * it. A running turn gets the message as a steer.
+   */
+  async controlGoal(
+    command: Extract<AgentSessionGoalCommand, { kind: "set" | "clear" }>,
+    options: Omit<AntigravitySendInput, "parts" | "delivery">,
+  ): Promise<void> {
+    const delivery = this.turns.running ? "steer" : "new_turn";
+    if (command.kind === "set") {
+      this.goalClearing = false;
+      await this.turns.send({
+        ...options,
+        parts: [
+          { kind: "slash_command", command: GOAL_SLASH_COMMAND },
+          { kind: "text", text: command.objective },
+        ],
+        delivery,
+      });
+      return;
+    }
+    if (this.transcript.forgetEndedGoal()) {
+      await this.publish([]);
+      return;
+    }
+    if (!this.transcript.goal) return;
+    this.goalClearing = true;
+    try {
+      await this.turns.send({
+        ...options,
+        parts: [{ kind: "text", text: ANTIGRAVITY_GOAL_STOP_MESSAGE }],
+        delivery,
+      });
+    } catch (cause) {
+      this.goalClearing = false;
+      this.publishInBackground([]);
+      throw cause;
+    }
   }
 
   /** Stops the running turn and waits until the runtime ends it, within the deadline. */

@@ -12,6 +12,7 @@ import {
 } from "@openducktor/contracts";
 import {
   type AgentModelSelection,
+  GOAL_COMMAND_ACCEPTED,
   type WorkflowRolePolicyResolver,
   readCatalogSurface,
 } from "@openducktor/core";
@@ -44,6 +45,7 @@ import type { WorkspaceFileSearch } from "../file-search/workspace-file-search";
 import type { OpenDucktorMcpServerConfigResolver } from "../mcp/openducktor-mcp-server-config";
 import { toAgentUserMessagePart } from "./agent-user-message-part";
 import { createAntigravityLiveSessionProjection } from "./antigravity-live-session-projection";
+import { toSendControls } from "./antigravity-send-controls";
 import {
   unsupportedGeneratedImageOperations,
   unsupportedGeneratedImageSource,
@@ -424,28 +426,34 @@ export const createAntigravityLiveSessionAdapterPreparer =
           Effect.tryPromise({
             try: () =>
               sessions.require(toLiveSessionRef(input)).send({
+                ...toSendControls(input, options),
                 parts: input.parts.map(toAgentUserMessagePart),
                 delivery: input.delivery,
-                submissionId: input.submissionId,
                 resolvedQuestionRequestIds: input.resolvedQuestionRequestIds,
-                workStartGuard: {
-                  assertCurrent: () => {
-                    input.workStartGuard?.assertCurrent();
-                    options?.assertCurrent?.();
-                  },
-                },
-                onWorkIssued: () => {
-                  input.onWorkIssued?.();
-                  options?.onSent?.();
-                },
-                onWorkAccepted: input.onWorkAccepted,
               }),
             catch: (cause) =>
               toAgentSessionSendError(cause) ??
               sessionError("antigravity-live-session.send-user-message", input)(cause),
           }),
-        controlGoal: () =>
-          unsupported("Antigravity has no native goals. Send `/goal` as a message instead."),
+        controlGoal: (input, options) => {
+          const { command } = input;
+          if (command.kind === "pause" || command.kind === "resume")
+            return Effect.fail(
+              new HostValidationError({
+                field: "command",
+                message: `Antigravity cannot ${command.kind} a goal.`,
+              }),
+            );
+          return Effect.tryPromise({
+            try: () =>
+              sessions
+                .require(toLiveSessionRef(input))
+                .controlGoal(command, toSendControls(input, options)),
+            catch: (cause) =>
+              toAgentSessionSendError(cause) ??
+              sessionError("antigravity-live-session.control-goal", input)(cause),
+          }).pipe(Effect.as(GOAL_COMMAND_ACCEPTED));
+        },
         updateSessionModel: (input) =>
           run("antigravity-live-session.update-session-model", input, () =>
             sessions.require(toLiveSessionRef(input)).selectModel(input.model),

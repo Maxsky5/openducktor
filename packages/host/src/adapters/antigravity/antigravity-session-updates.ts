@@ -96,6 +96,12 @@ const ANTIGRAVITY_CORE_SLASH_COMMANDS = new Set([
   "voice",
 ]);
 
+/**
+ * Built-in commands that OpenDucktor does not offer. The workers of `/swarm` run in their own
+ * conversations, which only the Swarm pane of Antigravity shows, and a swarm uses quota fast.
+ */
+const HIDDEN_ANTIGRAVITY_COMMANDS = new Set(["swarm"]);
+
 /** True for a slash command name that Antigravity runs as a skill. */
 export const isAntigravitySkillName = (name: string): boolean =>
   name.length > 0 && !ANTIGRAVITY_CORE_SLASH_COMMANDS.has(name);
@@ -112,7 +118,7 @@ export const toAntigravitySlashCommandCatalog = (
   const commands: SlashCommandCatalog["commands"] = [];
   for (const command of update.availableCommands) {
     const name = command.name.trim();
-    if (!name || seen.has(name)) continue;
+    if (!name || seen.has(name) || HIDDEN_ANTIGRAVITY_COMMANDS.has(name)) continue;
     seen.add(name);
     if (name === MANUAL_SESSION_COMPACTION_SLASH_COMMAND.trigger) {
       commands.push(MANUAL_SESSION_COMPACTION_SLASH_COMMAND);

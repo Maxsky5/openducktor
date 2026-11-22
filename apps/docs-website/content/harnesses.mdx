@@ -19,7 +19,7 @@ Install the harness and sign in to it with its own tool. Then turn it on in Open
 
 To [steer a message](/coding-sessions/#queue) into a running reply, OpenCode needs 2.0.24 or later and Codex needs 0.106.0 or later. The Antigravity CLI 1.5.14 can steer.
 
-[Goal mode](/coding-sessions/#goal-mode) needs OpenCode 2.2.1, Codex 0.166.0, or Claude Code 2.1.306 or later. See [Goal mode support](#goals).
+[Goal mode](/coding-sessions/#goal-mode) needs OpenCode 2.2.1, Codex 0.166.0, Claude Code 2.1.306, or Antigravity 1.5.14 or later. See [Goal mode support](#goals).
 
 To update, run `opencode upgrade`, `claude update`, or `agy update`. Update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`.
 
@@ -57,7 +57,7 @@ All four harnesses run every agent role. Each one supports questions, permission
 | Todo list in the session | No | Yes | Yes | No |
 | Subagents in the background | Yes | No | Yes | No. A subagent shows as a tool call. |
 | Mention a subagent with `@` | Yes | No | No | No |
-| [Goal mode](/coding-sessions/#goal-mode) | Yes | Yes | Yes | No. Send `/goal` as a message. |
+| [Goal mode](/coding-sessions/#goal-mode) | Yes | Yes | Yes | Yes |
 | Naming model | Yes | Yes | Yes | No |
 | [Permission replies](/coding-sessions/#answer-a-permission-request) | <Action>Approve once</Action>, <Action>Allow for project</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Approve for session</Action>, <Action>Always allow</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> |
 
@@ -67,22 +67,24 @@ With an API key sign-in, Codex cannot tell when the account works again, so a Co
 
 - After OpenDucktor restarts, a reopened Antigravity transcript has no approval decisions. A turn that ran in another Antigravity client has no times, reply model, or stop notice. A tool that you stopped shows as failed, and a slash command shows as text.
 - Antigravity sessions keep the title that Antigravity gives them.
-- Your message shows as **Unread** until Antigravity starts to answer.
-- A new session shows its slash commands after its first message. `/goal` and `/compact` are Antigravity commands. OpenDucktor goal mode and compaction are not available.
-- OpenDucktor offers the Gemini models of your account. Google offers other models only to the ACP clients that its [ACP guide](https://antigravity.google/docs/ide/extensions/acp/#models-and-thinking-level) names.
+- A message that you send while Antigravity works shows as **Unread** until Antigravity reads it.
+- A new session shows its slash commands after its first message. OpenDucktor runs `/goal` as goal mode and `/compact` as compaction. `/swarm` is not available: its workers run in conversations that only Antigravity shows.
+- OpenDucktor offers every model of your account. Only Gemini models have a thinking level.
 - Attachments reach the agent as file links that it reads with its own tools.
 - Antigravity does not report the results of OpenDucktor tool calls, so their rows show what the agent asked for.
-- Spec, Planner, and QA must not change files. OpenDucktor refuses the file change requests of these roles, but the native Antigravity settings can approve edits and commands without a request. In the **Auto** mode, Antigravity edits workspace files without asking. Use the native **Default** mode, or check the changes of these roles.
+- Spec, Planner, and QA never change files with the Antigravity file tools: OpenDucktor refuses their file edits in every [session mode](/settings-reference/#harnesses-antigravity-session-mode). Their shell commands follow the mode, so a command can still change a file.
 
 ### Goal mode support [#goals]
 
-OpenCode, Codex, and Claude Code run [Goal mode](/coding-sessions/#goal-mode). They differ in these points:
+OpenCode, Codex, Claude Code, and Antigravity run [Goal mode](/coding-sessions/#goal-mode). They differ in these points:
 
-| | OpenCode | Codex | Claude Code |
-|---|---|---|---|
-| Minimum version | 2.2.1 | 0.166.0 | 2.1.306 |
-| <Action>Pause goal</Action> and <Action>Resume goal</Action> | Yes | Yes | No. Only <Action>Clear goal</Action>. |
-| <Action>Stop session</Action> during a goal | Stops the turn and pauses the goal | Stops the turn and pauses the goal | Stops the turn and keeps the goal. The row shows **Waiting for your message**. |
+| | OpenCode | Codex | Claude Code | Antigravity |
+|---|---|---|---|---|
+| Minimum version | 2.2.1 | 0.166.0 | 2.1.306 | 1.5.14 |
+| <Action>Pause goal</Action> and <Action>Resume goal</Action> | Yes | Yes | No. Only <Action>Clear goal</Action>. | No. Only <Action>Clear goal</Action>. |
+| <Action>Stop session</Action> during a goal | Stops the turn and pauses the goal | Stops the turn and pauses the goal | Stops the turn and keeps the goal. The row shows **Waiting for your message**. | Stops the turn and keeps the goal. The row shows **Waiting for your message**. |
+
+Antigravity has no clear command. <Action>Clear goal</Action> sends a message that asks the agent to stop the goal, and the goal leaves when the agent cancels it.
 
 With an older harness, the **Goal mode** switch is off and names the version to install. OpenCode runs goals with its goal plugin. If your OpenCode config turns the plugin off, remove `-opencode.goal` from `plugins` in the OpenCode config.
 

@@ -207,29 +207,40 @@ describe("useChatComposerSlashCommands", () => {
     }
   });
 
-  test("lists /goal in a session composer whose runtime has goals", async () => {
-    const harness = createHookHarness(
-      useChatComposerSlashCommands,
-      {
-        promptInputRuntime: sessionRuntime,
-        runtimeSupportsSlashCommands: false,
-        reusablePrompts: [],
-        loadRuntimeCatalog: mock(async () => createRuntimeCatalogFixture()),
-        goalsAvailable: true,
-      },
-      { wrapper },
-    );
+  test.each([
+    ["opencode", ["<objective> | pause | resume | clear"]],
+    ["antigravity", ["<objective> | clear"]],
+  ] as const)(
+    "lists /goal with the %s goal actions in a session composer",
+    async (runtimeKind, hints) => {
+      const harness = createHookHarness(
+        useChatComposerSlashCommands,
+        {
+          promptInputRuntime: {
+            ...sessionRuntime,
+            runtimeRef: { ...sessionRuntime.runtimeRef, runtimeKind },
+          },
+          runtimeSupportsSlashCommands: false,
+          reusablePrompts: [],
+          loadRuntimeCatalog: mock(async () => createRuntimeCatalogFixture()),
+          goalsAvailable: true,
+        },
+        { wrapper },
+      );
 
-    try {
-      await harness.mount();
-      expect(harness.getLatest().supportsSlashCommands).toBe(true);
-      expect(harness.getLatest().slashCommands.map((command) => command.id)).toEqual([
-        "system:goal",
-      ]);
-    } finally {
-      await harness.unmount();
-    }
-  });
+      try {
+        await harness.mount();
+        expect(harness.getLatest().supportsSlashCommands).toBe(true);
+        expect(harness.getLatest().slashCommands.map((command) => command.id)).toEqual([
+          "system:goal",
+        ]);
+        // A runtime without pause and resume offers only the actions that it can run.
+        expect(harness.getLatest().slashCommands[0]?.hints).toEqual([...hints]);
+      } finally {
+        await harness.unmount();
+      }
+    },
+  );
 
   test("reads repo slash commands from a supported runtime", async () => {
     const runtimeCommand: AgentSlashCommand = {

@@ -10,13 +10,14 @@ const catalog = toAntigravitySlashCommandCatalog({
   availableCommands: [
     { name: "compact", description: "Compact the conversation now." },
     { name: "goal", description: "Run until the goal is finished." },
+    { name: "swarm", description: "Run a swarm of agents." },
     { name: "clean-code", description: "Pragmatic coding standards." },
     { name: "clean-code", description: "A second skill with the same name." },
   ],
 });
 
 describe("Antigravity command list", () => {
-  test("shows /compact as the session compaction and marks the skills", () => {
+  test("shows /compact as the session compaction, hides /swarm, and marks the skills", () => {
     expect(catalog.commands).toEqual([
       MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
       {

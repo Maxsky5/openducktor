@@ -337,7 +337,8 @@ export const ANTIGRAVITY_RUNTIME_CAPABILITIES = {
     minimumSteeringRuntimeVersion: "1.5.14",
   },
   goals: {
-    minimumRuntimeVersion: null,
+    // `/goal` keeps the agent working until it reports the goal complete or cancelled.
+    minimumRuntimeVersion: "1.5.14",
     supportsPauseResume: false,
   },
   history: {

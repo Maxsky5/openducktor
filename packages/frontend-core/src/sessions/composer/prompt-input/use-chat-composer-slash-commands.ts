@@ -2,6 +2,7 @@ import {
   GOAL_SLASH_COMMAND,
   isManualSessionCompactionSlashCommand,
   type ReusablePrompt,
+  RUNTIME_DESCRIPTORS_BY_KIND,
 } from "@openducktor/contracts";
 import {
   type AgentRuntimeCatalog,
@@ -71,10 +72,11 @@ const openDucktorTriggersOf = (
       .map((command) => command.trigger.toLowerCase()),
   ]);
 
-const GOAL_COMMAND: AgentSlashCommand = {
+/** The `/goal` entry of the menu, with only the actions that the runtime can run. */
+const goalCommandFor = (supportsPauseResume: boolean): AgentSlashCommand => ({
   ...GOAL_SLASH_COMMAND,
-  hints: [...GOAL_SLASH_COMMAND.hints],
-};
+  hints: supportsPauseResume ? [...GOAL_SLASH_COMMAND.hints] : ["<objective> | clear"],
+});
 
 export const filterSlashCommandsForComposerScope = (
   commands: AgentSlashCommand[],
@@ -131,15 +133,25 @@ export const useChatComposerSlashCommands = ({
     goalsAvailable &&
     promptInputRuntime.state === "available" &&
     promptInputRuntime.scope === "session";
+  const goalSupportsPauseResume =
+    promptInputRuntime.state === "available" &&
+    RUNTIME_DESCRIPTORS_BY_KIND[promptInputRuntime.runtimeRef.runtimeKind].capabilities.goals
+      .supportsPauseResume;
   const slashCommands = useMemo(
     () =>
       mergeSlashCommands(
         runtimeSlashCommands,
         reusablePromptSlashCommands,
-        showsGoal ? [GOAL_COMMAND] : [],
+        showsGoal ? [goalCommandFor(goalSupportsPauseResume)] : [],
         openDucktorTriggers,
       ),
-    [reusablePromptSlashCommands, runtimeSlashCommands, showsGoal, openDucktorTriggers],
+    [
+      reusablePromptSlashCommands,
+      runtimeSlashCommands,
+      showsGoal,
+      goalSupportsPauseResume,
+      openDucktorTriggers,
+    ],
   );
   const slashCommandCatalog = useMemo<AgentSlashCommandCatalog>(
     () => ({ commands: slashCommands }),

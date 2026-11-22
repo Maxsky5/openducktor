@@ -186,6 +186,50 @@ describe("AntigravityTranscript", () => {
     expect(events.at(-1)).toMatchObject({ messageId: "session-1:t1:i1", message: "Hello" });
   });
 
+  test("streams a goal reply without its marker and reports the complete goal", () => {
+    const transcript = createTranscript();
+    transcript.addLiveUserMessage({
+      message: { text: "/goal Make the tests pass", displayParts: [] },
+    });
+    expect(transcript.goal).toEqual({ objective: "Make the tests pass" });
+    const events = [
+      ...transcript.applyUpdate(text("agent_message_chunk", "All pass. <!-- GOAL_"), "live"),
+      ...transcript.applyUpdate(text("agent_message_chunk", "COMPLETE -->"), "live"),
+      ...transcript.finishTurn("completed"),
+    ];
+
+    // The stream never shows a part of the marker.
+    const deltas = events.flatMap((event) =>
+      event.type === "assistant_delta" ? [event.delta] : [],
+    );
+    expect(deltas.join("")).toBe("All pass. ");
+    expect(events.at(-1)).toMatchObject({ type: "assistant_message", message: "All pass. " });
+    expect(transcript.goal).toEqual({ objective: "Make the tests pass", end: "met" });
+  });
+
+  test("rebuilds the goal from a replay, and the stop message removes a cancelled goal", () => {
+    const replay = createTranscript();
+    for (const update of [
+      text("user_message_chunk", "/goal Ship it"),
+      text("agent_message_chunk", "Working."),
+      text("user_message_chunk", "Stop the current goal. I'll take it from here."),
+      text("agent_message_chunk", "Stopped. <!-- GOAL_CANCELLED -->"),
+      text("user_message_chunk", "/goal Ship it again"),
+      text("agent_message_chunk", "Asked to stop. <!-- GOAL_CANCELLED -->"),
+    ]) {
+      replay.applyUpdate(update, "replay");
+    }
+    replay.finishReplay();
+
+    // A cancel without the stop message of OpenDucktor ends the goal and keeps it to show.
+    expect(replay.goal).toEqual({ objective: "Ship it again", end: "cancelled" });
+    expect(replay.history.map(({ text: body }) => body)).not.toContain(
+      expect.stringContaining("GOAL_"),
+    );
+    expect(replay.forgetEndedGoal()).toBe(true);
+    expect(replay.goal).toBeNull();
+  });
+
   test("shows a declined tool as cancelled, and an interrupted turn has no final reply", () => {
     const transcript = createTranscript();
     transcript.addLiveUserMessage({ message: { text: "Edit", displayParts: [] } });

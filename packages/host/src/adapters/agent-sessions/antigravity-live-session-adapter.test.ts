@@ -441,6 +441,75 @@ describe("Antigravity live session adapter", () => {
     expect(snapshot.flatMap((entry) => entry.pendingApprovals ?? [])).toEqual([]);
   });
 
+  test("runs a goal as /goal, shows its state, and clears it with the stop message", async () => {
+    const { adapter, fake } = await prepareAdapter();
+    const { externalSessionId } = await startSession(adapter);
+    const target = {
+      repoPath: "/repo",
+      runtimeKind: "antigravity" as const,
+      workingDirectory: "/repo/worktree",
+      externalSessionId,
+    };
+    const goal = (command: Parameters<typeof adapter.controlGoal>[0]["command"]) =>
+      Effect.runPromise(adapter.controlGoal({ ...target, sessionScope, command }));
+    const snapshotGoal = async () =>
+      (await Effect.runPromise(adapter.listSnapshots())).find(
+        (snapshot) => snapshot.ref.externalSessionId === externalSessionId,
+      )?.goal;
+    const reply = async (
+      prompt: Awaited<ReturnType<typeof fake.waitForPrompts>>,
+      textReply: string,
+    ) => {
+      await prompt.client.notify(methods.client.session.update, {
+        sessionId: externalSessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: textReply },
+        },
+      });
+      prompt.respond({ stopReason: "end_turn" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+
+    expect(await goal({ kind: "set", objective: "Ship it" })).toEqual({
+      type: "command_accepted",
+      commandName: "goal",
+    });
+    const setPrompt = await fake.waitForPrompts(1);
+    expect(setPrompt.params.prompt).toEqual([{ type: "text", text: "/goal Ship it" }]);
+    expect(await snapshotGoal()).toEqual({ objective: "Ship it", status: "active" });
+    await reply(setPrompt, "Shipped. <!-- GOAL_COMPLETE -->");
+    expect(await snapshotGoal()).toEqual({ objective: "Ship it", status: "complete" });
+
+    // A clear of an ended goal needs no message.
+    await goal({ kind: "clear" });
+    expect(await snapshotGoal()).toBeUndefined();
+    expect(fake.prompts).toHaveLength(1);
+
+    await goal({ kind: "set", objective: "Ship again" });
+    await reply(await fake.waitForPrompts(2), "Working.");
+    expect(await snapshotGoal()).toEqual({
+      objective: "Ship again",
+      status: "waiting_for_message",
+    });
+    await goal({ kind: "clear" });
+    const stopPrompt = await fake.waitForPrompts(3);
+    expect(stopPrompt.params.prompt).toEqual([
+      { type: "text", text: "Stop the current goal. I'll take it from here." },
+    ]);
+    expect(await snapshotGoal()).toEqual({
+      objective: "Ship again",
+      status: "waiting_for_message",
+    });
+    await reply(stopPrompt, "Stopped. <!-- GOAL_CANCELLED -->");
+    expect(await snapshotGoal()).toBeUndefined();
+
+    const refused = await Effect.runPromise(
+      Effect.flip(adapter.controlGoal({ ...target, sessionScope, command: { kind: "pause" } })),
+    );
+    expect(refused.message).toBe("Antigravity cannot pause a goal.");
+  });
+
   test("refuses to open a session in a mode that Antigravity does not offer", async () => {
     const { adapter, fake } = await prepareAdapter({ sessionMode: "auto" });
     fake.offeredModes.splice(fake.offeredModes.indexOf("auto"), 1);
