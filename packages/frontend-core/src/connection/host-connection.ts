@@ -44,6 +44,11 @@ type TaskMergeStatusUpdateListener = (
   payload: HostEventPayload<"openducktor://task-merge-status-updated"> | ConnectionControlEvent,
 ) => void | Promise<void>;
 
+/** Usage index progress. Control events report stream loss and reconnects. */
+export type UsageProgressListener = (
+  payload: HostEventPayload<"openducktor://usage-index-progress"> | ConnectionControlEvent,
+) => void | Promise<void>;
+
 export type StartupProgressListener = (
   event: SessionStartupProgressEvent | ConnectionControlEvent,
 ) => void | Promise<void>;
@@ -73,6 +78,7 @@ export type HostConnection = {
   ) => Promise<() => void>;
   subscribeRuntimeChanges: (listener: RuntimeChangeListener) => Promise<() => void>;
   subscribeTaskMergeStatusUpdates: (listener: TaskMergeStatusUpdateListener) => Promise<() => void>;
+  subscribeUsageProgress: (listener: UsageProgressListener) => Promise<() => void>;
   subscribeBrowserTabEvents: (listener: BrowserTabEventListener) => Promise<() => void>;
   subscribeRunEvents: (listener: RunEventListener) => Promise<() => void>;
   subscribeAzureDevOpsConnectionUpdates: (

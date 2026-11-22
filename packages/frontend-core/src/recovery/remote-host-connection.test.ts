@@ -6,8 +6,12 @@ import { liveSessionStreamEventName } from "@openducktor/host-client";
 import type { RemoteTransport } from "@openducktor/host-client/remote";
 import { QueryObserver } from "@tanstack/react-query";
 import { createClientQueryClient } from "../connection/client-query-client";
-import { createChannelTestTransport } from "../test-support/remote-channel-transport";
+import {
+  createChannelTestTransport,
+  testRemoteDescriptor,
+} from "../test-support/remote-channel-transport";
 import { waitForExpectation } from "../test-support/wait-for-expectation";
+import { usageReportQueryOptions } from "../queries/usage";
 import { createRemoteHostConnection } from "./remote-host-connection";
 
 /** A transport whose discovery waits until its read stops, or fails at once with `failure`. */
@@ -284,6 +288,77 @@ describe("an oversized reply during recovery", () => {
       stop();
       await connection.remote.disconnect();
       queryClient.clear();
+    }
+  });
+});
+
+describe("Usage results across a reconnect", () => {
+  test.each([
+    ["keeps them for the same host instance", "instance-1", true],
+    ["drops them for another host instance", "instance-2", false],
+  ] as const)("%s", async (_name, nextInstance, kept) => {
+    let instance = "instance-1";
+    const { transport, channel } = createChannelTestTransport({
+      descriptor: () => testRemoteDescriptor({ hostInstanceId: instance }),
+    });
+    const queryClient = createClientQueryClient();
+    const connection = createRemoteHostConnection({
+      authorizationStore: savedTestAuthorizationStore(),
+      clientKind: "mobile",
+      endpoint: "https://host.test/remote",
+      version: "mobile-release",
+      transport,
+      queryClient,
+    });
+    const key = usageReportQueryOptions({ range: { kind: "all_time" }, runtime: null }).queryKey;
+    try {
+      await connection.waitForAdmission();
+      // SAFETY: The test only checks whether the entry stays; no reader uses its fields.
+      queryClient.setQueryData(key, { resultAt: "earlier" } as never);
+      instance = nextInstance;
+      channel.closeAll();
+      await waitForExpectation(() => {
+        expect(channel.sockets).toHaveLength(2);
+        expect(connection.remote.readState().status).toBe("connected");
+      }, 3_000);
+      expect(queryClient.getQueryData(key) !== undefined).toBe(kept);
+    } finally {
+      await connection.remote.disconnect();
+    }
+  });
+});
+
+describe("a slow Usage read during a reconnect", () => {
+  test("does not hold the connection", async () => {
+    const { transport, channel } = createChannelTestTransport();
+    const queryClient = createClientQueryClient();
+    const connection = createRemoteHostConnection({
+      authorizationStore: savedTestAuthorizationStore(),
+      clientKind: "mobile",
+      endpoint: "https://host.test/remote",
+      version: "mobile-release",
+      transport,
+      queryClient,
+    });
+    const options = usageReportQueryOptions({ range: { kind: "last_30_days" }, runtime: null });
+    // SAFETY: The test only needs an open report to read again; no reader uses its fields.
+    queryClient.setQueryData(options.queryKey, { resultAt: "earlier" } as never);
+    // The read takes as long as a cold read of a large history.
+    const observer = new QueryObserver(queryClient, {
+      ...options,
+      queryFn: () => new Promise<never>(() => {}),
+    });
+    const stop = observer.subscribe(() => {});
+    try {
+      await connection.waitForAdmission();
+      channel.closeAll();
+      await waitForExpectation(() => {
+        expect(channel.sockets).toHaveLength(2);
+        expect(connection.remote.readState().status).toBe("connected");
+      }, 3_000);
+    } finally {
+      stop();
+      await connection.remote.disconnect();
     }
   });
 });

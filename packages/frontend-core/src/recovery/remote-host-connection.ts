@@ -1,3 +1,4 @@
+import { clearUsageReports, refreshUsageReports } from "../queries/usage";
 import { refreshWorkflowMetadata, workflowQueryKeys } from "../queries/workflows";
 import {
   REMOTE_BASELINE_CAPABILITIES,
@@ -136,16 +137,23 @@ export const createRemoteHostConnection = ({
     return restoring;
   };
   const synchronize = async (context: RemoteSynchronizationContext) => {
-    if (queryClient.getQueryData(workflowQueryKeys.catalog))
-      await refreshWorkflowMetadata(queryClient);
-    // State owners must apply stream snapshots before current-state reads.
-    await taskOwners.synchronize();
     // The replay ran before this step. When it has every missed live change of a repository, its
     // owner keeps its state and transcripts and receives those changes in order, as if the
     // connection had stayed up. A gap or another host needs a new snapshot and history.
     const hostChanged =
       context.hostChanged ||
       (context.previousHostInstanceId !== null && context.hostReplay.hostChanged);
+    // Another host instance at the same endpoint has its own history. Its Usage results go
+    // before any recovery step that can fail.
+    const usageCleared =
+      hostChanged ||
+      (context.previousHostInstanceId !== null &&
+        context.previousHostInstanceId !== context.host.hostInstanceId);
+    if (usageCleared) void clearUsageReports(queryClient);
+    if (queryClient.getQueryData(workflowQueryKeys.catalog))
+      await refreshWorkflowMetadata(queryClient);
+    // State owners must apply stream snapshots before current-state reads.
+    await taskOwners.synchronize();
     const gaps = new Set(context.hostReplay.gaps);
     await Promise.all(
       [...live].map((owner) => {
@@ -169,6 +177,8 @@ export const createRemoteHostConnection = ({
         missedEventNames: context.hostReplay.gaps,
       });
       context.signal.throwIfAborted();
+      // A reset report reads again by itself; a kept one reads again after admission.
+      if (!usageCleared) refreshUsageReports(queryClient);
     }
   };
   const remote = createRemoteHostClient(
@@ -180,6 +190,9 @@ export const createRemoteHostConnection = ({
   );
   const taskOwners = createRemoteTaskSubscriptions(remote);
   remote.subscribeState((state) => {
+    // Usage shows host-wide history. It must not stay on screen once access ends. A retry or a
+    // pause of the same host keeps it.
+    if (isRemotePairingFailure(state.failure?.code)) void clearUsageReports(queryClient);
     if (state.status === "disconnected" || state.status === "failed" || state.status === "idle") {
       notifications.fail(new Error(state.failure?.message ?? "The remote connection was lost."));
       taskOwners.invalidate();
@@ -230,6 +243,11 @@ export const createRemoteHostConnection = ({
     subscribeTaskMergeStatusUpdates: (listener) =>
       subscribe((event) => {
         if (event.channel === "openducktor://task-merge-status-updated")
+          logListenerFailure(listener(event.payload));
+      }, listener),
+    subscribeUsageProgress: (listener) =>
+      subscribe((event) => {
+        if (event.channel === "openducktor://usage-index-progress")
           logListenerFailure(listener(event.payload));
       }, listener),
     subscribeBrowserTabEvents: (listener) =>

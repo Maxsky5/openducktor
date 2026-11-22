@@ -10,6 +10,7 @@ import {
   createHostClient,
   liveSessionStreamEventName,
   STARTUP_EVENT_STREAM_NAME,
+  USAGE_EVENT_STREAM_NAME,
   type HostClient,
 } from "@openducktor/host-client";
 import { hostChannelInvokeError } from "@openducktor/host-client/channel";
@@ -48,6 +49,7 @@ export type LocalHostConnection = Pick<
   | "subscribeStartupProgress"
   | "subscribeRuntimeChanges"
   | "subscribeTaskMergeStatusUpdates"
+  | "subscribeUsageProgress"
   | "subscribeBrowserTabEvents"
   | "observeAgentSessionLive"
   | "subscribeNotificationStream"
@@ -195,6 +197,16 @@ export const createLocalHostConnection = ({
         if (isControlEvent(event)) return listener(event);
         if (event.channel === TASK_MERGE_STATUS_EVENT_CHANNEL) return listener(event.payload);
       }),
+    subscribeUsageProgress: (listener) =>
+      subscribeReady(
+        "openducktor://usage-index-progress",
+        (event) => {
+          if (isControlEvent(event)) return listener(event);
+          if (event.channel === "openducktor://usage-index-progress")
+            return listener(event.payload);
+        },
+        USAGE_EVENT_STREAM_NAME,
+      ),
     subscribeBrowserTabEvents: (listener) =>
       subscribeReady(
         BROWSER_EVENT_CHANNEL,
