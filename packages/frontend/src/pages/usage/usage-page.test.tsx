@@ -109,7 +109,6 @@ describe("UsagePage", () => {
     expect(read.mock.calls[0]?.[0]).toEqual({
       range: { kind: "last_30_days" },
       runtime: null,
-      refresh: false,
     });
 
     chooseMetric("Cost");
@@ -228,7 +227,7 @@ describe("UsagePage", () => {
     await screen.findByText("Processed tokens");
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-    expect(read.mock.calls.map((call) => call[0].refresh)).toEqual([false, true]);
+    expect(read.mock.calls.map((call) => call[0].refresh)).toEqual([undefined, true]);
   });
 
   test("names a rate download problem under Sources", async () => {
@@ -286,7 +285,6 @@ describe("UsagePage", () => {
     expect(read.mock.calls[1]?.[0]).toEqual({
       range: { kind: "last_90_days" },
       runtime: null,
-      refresh: false,
     });
   });
 
@@ -343,7 +341,6 @@ describe("UsagePage", () => {
     expect(read.mock.calls[1]?.[0]).toEqual({
       range: { kind: "custom", start: "2026-11-10", end: "2026-11-15" },
       runtime: null,
-      refresh: false,
     });
   });
 

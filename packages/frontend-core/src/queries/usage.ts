@@ -12,10 +12,11 @@ export const usageReportQueryOptions = (input: UsageReportReadInput) =>
   queryOptions({
     queryKey: [USAGE_REPORT_KEY, input.range, input.runtime],
     // A read of a selection that has a result is a refresh: it checks the history again. A new
-    // selection can use a recent check of the host and answers from its index at once.
+    // selection can use a recent check of the host and answers from its index at once. The flag
+    // goes only with a refresh, so a plain read keeps the input that every Usage host accepts.
     queryFn: ({ client, queryKey, signal }) =>
       connectionHost(client).usageReportRead(
-        { ...input, refresh: client.getQueryData(queryKey) !== undefined },
+        client.getQueryData(queryKey) === undefined ? input : { ...input, refresh: true },
         signal,
       ),
     staleTime: Infinity,
