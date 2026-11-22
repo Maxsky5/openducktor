@@ -33,13 +33,11 @@ type ProcessesFocus = { workspaceId: string; taskId: string };
 
 /**
  * What a reader can do with the Processes view, and the facts that change only with the workspace
- * or the host. The value stays the same while the view opens, closes, or moves, so a task chip or a
+ * or the host. The value stays the same while the view opens, closes, or moves, so a ports button or a
  * command that only opens the view does not render again.
  */
 export type ProcessesActions = {
   activeWorkspaceId: string | null;
-  /** Opens the view as the user left it, flyout or window, with the processes of a task first. */
-  openProcesses(focus?: ProcessesFocus): void;
   /** The rail button and the shortcut open and close the view. */
   toggleProcesses(): void;
   closeProcesses(): void;
@@ -69,7 +67,7 @@ export const PROCESSES_SURFACE = "[data-processes-surface]";
 export const LIVE_REFRESH_MS = 2_000;
 
 /**
- * The rail badge and the port chips read them this often while the view is closed. A command that
+ * The rail badge and the ports buttons read them this often while the view is closed. A command that
  * the user stops leaves the badge within this time.
  */
 const AMBIENT_REFRESH_MS = 5_000;
@@ -113,31 +111,19 @@ export function ProcessesProvider({ children }: PropsWithChildren): ReactElement
   const [mode, setMode] = useState<"flyout" | "floating">("flyout");
   const [floatingRect, setFloatingRect] = useState(defaultFloatingRect);
   const view: ProcessesView = open ? mode : "closed";
-  const [requestedFocus, setRequestedFocus] = useState<ProcessesFocus | null>(null);
   const focus = useMemo(
     () =>
-      requestedFocus ??
-      (studioTaskId && activeWorkspaceId
+      studioTaskId && activeWorkspaceId
         ? { workspaceId: activeWorkspaceId, taskId: studioTaskId }
-        : null),
-    [requestedFocus, studioTaskId, activeWorkspaceId],
+        : null,
+    [studioTaskId, activeWorkspaceId],
   );
 
-  const openProcesses = useCallback(
-    (nextFocus?: ProcessesFocus) => {
-      if (!available) return;
-      setRequestedFocus(nextFocus ?? null);
-      setOpen(true);
-    },
-    [available],
-  );
   const closeProcesses = useCallback(() => {
     setOpen(false);
-    setRequestedFocus(null);
   }, []);
   const toggleProcesses = useCallback(() => {
     if (!available) return;
-    setRequestedFocus(null);
     setOpen((current) => !current);
   }, [available]);
   const detach = useCallback((rect: FloatingWindowRect) => {
@@ -168,7 +154,6 @@ export function ProcessesProvider({ children }: PropsWithChildren): ReactElement
       available
         ? {
             activeWorkspaceId,
-            openProcesses,
             toggleProcesses,
             closeProcesses,
             detach,
@@ -176,16 +161,7 @@ export function ProcessesProvider({ children }: PropsWithChildren): ReactElement
             openUrl,
           }
         : null,
-    [
-      available,
-      activeWorkspaceId,
-      openProcesses,
-      toggleProcesses,
-      closeProcesses,
-      detach,
-      attach,
-      openUrl,
-    ],
+    [available, activeWorkspaceId, toggleProcesses, closeProcesses, detach, attach, openUrl],
   );
   const viewState = useMemo(() => ({ view, focus }), [view, focus]);
   const placement = useMemo(
@@ -206,7 +182,7 @@ export function ProcessesProvider({ children }: PropsWithChildren): ReactElement
 
 /**
  * The one read that refreshes the shared list. Other readers only watch the cache. The open view
- * reads while the app shows. The badge and the chips read only while the app has the focus, and
+ * reads while the app shows. The badge and the ports buttons read only while the app has the focus, and
  * the query reads again at once when the focus comes back.
  */
 const LiveProcessRead = memo(function LiveProcessRead({ open }: { open: boolean }): null {

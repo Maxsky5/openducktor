@@ -60,7 +60,7 @@ export function ProcessGroupSection({
       <h3 className="sticky top-0 z-10 border-b border-border/60 bg-popover">
         <button
           type="button"
-          className="flex h-7 w-full items-center gap-2 bg-muted/50 px-3 text-left transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
+          className="flex h-7 w-full items-center gap-2 overflow-hidden bg-muted/50 px-3 text-left transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
           aria-expanded={open}
           title={group.checkoutPath}
           onClick={() => setUnfolded(!open)}
@@ -79,7 +79,7 @@ export function ProcessGroupSection({
           {subtitle ? (
             <span
               className={cn(
-                "max-w-48 shrink-0 truncate text-muted-foreground",
+                "max-w-48 min-w-0 truncate text-muted-foreground",
                 subtitle.taskIds ? "font-mono text-[11px]" : "text-xs",
               )}
             >

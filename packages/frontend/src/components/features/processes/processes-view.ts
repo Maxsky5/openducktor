@@ -219,8 +219,8 @@ export const contextRank = (
 export const runningCommandCount = (list: WorkspaceProcessList): number =>
   buildGroupViews(list.groups, "").reduce((total, view) => total + view.commands.length, 0);
 
-/** A web port of a task, which a chip on its card opens. */
-export type TaskServerLink = { port: number; url: string; title: string };
+/** A web port of a task, which the ports button of its sheet or its session opens. */
+export type TaskServerLink = { port: number; url: string; name: string };
 
 /** The web ports that run in the worktrees of a task, once each, by port number. */
 export const taskServerLinks = (
@@ -235,7 +235,11 @@ export const taskServerLinks = (
       for (const listener of row.listeners) {
         const url = linkOf(listener);
         if (url && !links.has(url))
-          links.set(url, { port: listener.port, url, title: `Open ${url} · ${row.name}` });
+          links.set(url, {
+            port: listener.port,
+            url,
+            name: row.name,
+          });
       }
   }
   return [...links.values()].sort((left, right) => left.port - right.port);
