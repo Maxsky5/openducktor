@@ -52,12 +52,17 @@ export function isSameConfigDirectory(selectedRoot: string, productionRoot: stri
 
   const production = resolvePathSymlinkParts(productionRoot);
   const sameRemainingPath = path.relative(production.remainingPath, selected.remainingPath) === "";
-  const possibleMacCaseAlias =
-    process.platform === "darwin" &&
-    production.remainingPath.toLowerCase() === selected.remainingPath.toLowerCase();
-  return (
-    (sameRemainingPath || possibleMacCaseAlias) &&
-    isSameExistingPath(production.existingPath, selected.existingPath) &&
-    (sameRemainingPath || !macVolumeSupportsCaseSensitiveNames(production.existingPath))
-  );
+  if (
+    !sameRemainingPath &&
+    (process.platform !== "darwin" ||
+      production.remainingPath.toLowerCase() !== selected.remainingPath.toLowerCase())
+  ) {
+    return false;
+  }
+
+  if (!isSameExistingPath(production.existingPath, selected.existingPath)) {
+    return false;
+  }
+
+  return sameRemainingPath || !macVolumeSupportsCaseSensitiveNames(production.existingPath);
 }

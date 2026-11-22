@@ -19,7 +19,7 @@ const launch = (
     allowProductionConfig = false,
     scope = "dev",
   }: { allowProductionConfig?: boolean; scope?: OpenDucktorConfigDirScope } = {},
-) => {
+): string | null => {
   try {
     assertDevelopmentConfigAllowed(scope, allowProductionConfig, {
       OPENDUCKTOR_CONFIG_DIR: configDir,
