@@ -22,6 +22,9 @@ import type { AgentChatMessage } from "../../types/agent-orchestrator";
 import type { AgentChatTranscriptSession } from "./agent-chat-transcript.types";
 
 const NO_LINKS: readonly HandoffLink[] = [];
+const collectHistoryReads = <Data>(
+  results: readonly { data: Data | undefined; error: Error | null }[],
+) => results.map(({ data, error }) => ({ data, error }));
 
 /** Adds the earlier native segments to the live projection of the active member. */
 export const useRuntimeHandoffTranscript = ({
@@ -51,32 +54,41 @@ export const useRuntimeHandoffTranscript = ({
             ),
           )
         : [],
+    combine: (results) =>
+      segments.map((link, index) => ({
+        link,
+        ref: results[index]?.data,
+        error: results[index]?.error,
+      })),
   });
-  const readyRefs = refs.flatMap(({ data }) => (data ? [data] : []));
+  const readyRefs = useMemo(() => refs.flatMap(({ ref }) => (ref ? [ref] : [])), [refs]);
   const history = useQueries({
     queries: readyRefs.map((ref) =>
       sessionHistoryQueryOptions(ref, readSessionHistory, queryClient),
     ),
+    combine: collectHistoryReads,
   });
-  return useMemo(() => {
-    if (!session || !segments.length) return session;
+  const activeMessages = session?.messages;
+  const timestamp = activeMessages?.items[0]?.timestamp ?? "1970-01-01T00:00:00.000Z";
+  const earlierSegments = useMemo(() => {
+    if (!refs.length) return null;
     const items: AgentChatMessage[] = [];
-    let version = session.messages.version;
+    let version = 0;
     const available = new Map(
       readyRefs.map((ref, index) => [agentSessionIdentityKey(ref), history[index]]),
     );
-    const timestamp = session.messages.items[0]?.timestamp ?? new Date(0).toISOString();
-    for (const [index, link] of segments.entries()) {
+    for (const { link, ref, error: refError } of refs) {
       const segmentKey = agentSessionIdentityKey(link.from);
       const read = available.get(segmentKey);
-      const error = refs[index]?.error ?? read?.error;
+      const error = refError ?? read?.error;
       const source = RUNTIME_DESCRIPTORS_BY_KIND[link.from.runtimeKind].label;
       const destination = RUNTIME_DESCRIPTORS_BY_KIND[link.to.runtimeKind].label;
+      const contextNote = link.partialHistory ? "Some earlier context was omitted." : undefined;
       if (read?.data) {
         const earlier = createReadonlyTranscriptSession({
           ...link.from,
           history: read.data,
-          sessionScope: scope,
+          sessionScope: ref?.sessionScope ?? null,
         });
         version += earlier.messages.version;
         for (const message of earlier.messages.items) {
@@ -91,7 +103,10 @@ export const useRuntimeHandoffTranscript = ({
           } else if (item.meta?.kind === "tool") {
             item.meta = { ...item.meta, sourceSession: link.from };
           } else if (item.meta?.kind === "subagent") {
-            item.meta = { ...item.meta, sourceSession: { ...link.from, sessionScope: scope } };
+            item.meta = {
+              ...item.meta,
+              sourceSession: { ...link.from, sessionScope: ref?.sessionScope ?? null },
+            };
           } else if (item.meta?.kind === "image_generation" && repoPath) {
             item.meta = { ...item.meta, sourceSession: { ...link.from, repoPath } };
           }
@@ -110,25 +125,32 @@ export const useRuntimeHandoffTranscript = ({
       items.push({
         id: `runtime-handoff:${segmentKey}`,
         role: "system",
-        content: `${source} to ${destination}${link.partialHistory ? ". Some earlier context was omitted." : ""}`,
+        content: `${source} to ${destination}${contextNote ? `. ${contextNote}` : ""}`,
         timestamp,
         timestampIsApproximate: true,
         meta: {
           kind: "session_notice",
           tone: "info",
           reason: "runtime_handoff",
-          title: "Runtime handoff",
+          title: "Handoff",
+          direction: { from: link.from.runtimeKind, to: link.to.runtimeKind },
+          contextNote,
         },
       });
     }
-    return {
-      ...session,
-      hasEarlierHandoffSegments: true as const,
-      messages: createSessionMessagesState(
-        session.externalSessionId,
-        [...items, ...session.messages.items],
-        version,
-      ),
-    };
-  }, [history, readyRefs, refs, repoPath, scope, segments, session]);
+    return { items, version };
+  }, [history, readyRefs, refs, repoPath, timestamp]);
+  const messages = useMemo(() => {
+    if (!earlierSegments || !activeMessages) return null;
+    return createSessionMessagesState(
+      activeMessages.externalSessionId,
+      [...earlierSegments.items, ...activeMessages.items],
+      earlierSegments.version + activeMessages.version,
+    );
+  }, [activeMessages, earlierSegments]);
+  return useMemo<AgentChatTranscriptSession | null>(
+    () =>
+      session && messages ? { ...session, hasEarlierHandoffSegments: true, messages } : session,
+    [messages, session],
+  );
 };

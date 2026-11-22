@@ -67,7 +67,7 @@ import { useComposerPolicy } from "@openducktor/frontend-core/sessions/composer/
 import { useAgentChatComposerSubmit } from "@openducktor/frontend-core/sessions/composer/use-agent-chat-composer-submit";
 import type { ComposerFailure } from "@openducktor/frontend-core/sessions/composer/composer-failure";
 import { steerShortcutLabel } from "@/lib/steer-shortcut";
-import { Button } from "@/components/ui/button";
+import { RuntimeHandoffCue } from "./agent-chat-runtime-handoff";
 
 const MemoizedAgentChatComposerEditor = memo(AgentChatComposerEditor);
 
@@ -540,31 +540,6 @@ const composerCardClassName = ({
   return ACTIVE_COMPOSER_CARD_CLASS_NAME;
 };
 
-function HandoffNotice({
-  notice,
-}: {
-  notice: NonNullable<AgentChatComposerModel["handoff"]>["notice"] | undefined;
-}): ReactElement | null {
-  if (!notice) return null;
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm">
-      <div role="status" className="min-w-0">
-        <p className="font-medium">{notice.title}</p>
-        <p className="text-muted-foreground">{notice.details}</p>
-      </div>
-      {notice.check ? (
-        <Button type="button" size="sm" variant="outline" onClick={notice.check}>
-          Check delivery
-        </Button>
-      ) : notice.cancel ? (
-        <Button type="button" size="sm" variant="ghost" onClick={notice.cancel}>
-          Cancel handoff
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
 function AgentChatComposerFormView({
   primaryMode,
   sendBlockedReason,
@@ -705,6 +680,12 @@ function AgentChatComposerFormView({
         model={model.isReadOnly ? null : model.goalRow}
         scope={model.goalRowScope}
       />
+      <RuntimeHandoffCue
+        notice={model.handoff?.notice}
+        sourceModel={model.selectedModelDescriptor?.modelName}
+        currentRuntime={model.handoff?.identity?.runtimeKind}
+        editorRef={composerEditorRef}
+      />
       <div
         className={composerCardClassName({
           isWaitingInput,
@@ -726,7 +707,6 @@ function AgentChatComposerFormView({
             pendingSendItems={pendingSendItems}
             pendingSendBlockedReason={pendingSendBlockedReason}
           />
-          <HandoffNotice notice={model.handoff?.notice} />
           <AgentChatComposerAttachments
             draft={draft}
             attachmentErrors={attachmentErrors}

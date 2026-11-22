@@ -26,7 +26,7 @@ import { BorderRay } from "@/ui/border-ray";
 import { useBottomEdgePadding } from "@/ui/keyboard-inset-view";
 import { blurFocusedField } from "@/ui/keyboard-dismiss";
 import { Text } from "@/ui/text";
-import { Callout } from "@/ui/callout";
+import { RuntimeHandoffIndicator } from "@/features/session/runtime-handoff-indicator";
 import { useCompactHeight } from "@/ui/use-wide-layout";
 import { useSessionSelector } from "@/features/session/use-session-selector";
 import { withAlpha } from "@/theme/color-alpha";
@@ -224,6 +224,11 @@ function SessionComposerView({
           onPick={pickSuggestion}
         />
       ) : null}
+      <HandoffCue
+        notice={delivery.handoff?.notice}
+        currentRuntime={target.identity.runtimeKind}
+        sourceModel={composer.selectedModelDescriptor?.modelName}
+      />
       {/* The queue stack tucks its front card under the composer card, so no gap parts them. */}
       <View style={styles.queueAndCard}>
         {delivery.messageQueue ? (
@@ -250,7 +255,6 @@ function SessionComposerView({
             />
           ) : null}
           {delivery.messageQueue ? <QueuePauseNotice model={delivery.messageQueue} /> : null}
-          <HandoffNotice notice={delivery.handoff?.notice} />
           {pendingComments ? (
             <PendingCommentsNotice
               comments={pendingComments}
@@ -295,26 +299,37 @@ function SessionComposerView({
   );
 }
 
-function HandoffNotice({
+function HandoffCue({
   notice,
+  currentRuntime,
+  sourceModel,
 }: {
   notice: NonNullable<SessionComposerModel["delivery"]["handoff"]>["notice"] | undefined;
+  currentRuntime: SessionComposerModel["target"]["identity"]["runtimeKind"];
+  sourceModel: string | undefined;
 }): ReactElement | null {
   if (!notice) return null;
+  const action = notice.check ?? notice.cancel;
   return (
-    <Callout
-      tone="info"
-      size="sm"
-      title={notice.title}
-      message={notice.details}
-      action={
-        notice.check ? (
-          <ComposerTextButton label="Check delivery" variant="outline" onPress={notice.check} />
-        ) : notice.cancel ? (
-          <ComposerTextButton label="Cancel handoff" variant="ghost" onPress={notice.cancel} />
-        ) : undefined
-      }
-    />
+    <View>
+      <RuntimeHandoffIndicator
+        direction={notice.direction}
+        title={notice.title}
+        detail={notice.details}
+        sourceModel={currentRuntime === notice.direction.from ? sourceModel : undefined}
+        destinationModel={notice.destinationModel}
+        live
+      />
+      {action ? (
+        <View style={styles.handoffAction}>
+          <ComposerTextButton
+            label={notice.check ? "Check delivery" : "Cancel handoff"}
+            variant={notice.check ? "outline" : "ghost"}
+            onPress={action}
+          />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -455,6 +470,28 @@ function ComposerNotices({
   );
 }
 
+function composerModelForNextMessage(composer: SessionComposerModel) {
+  const handoff = composer.delivery.handoff?.selection;
+  const runtimeKind = handoff?.model.runtimeKind ?? composer.target.identity.runtimeKind;
+  const runtime = RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind];
+  const model = composerModelText({
+    selectedModel: handoff?.model ?? composer.selectedModel,
+    modelName: handoff?.descriptor.modelName ?? composer.selectedModelDescriptor?.modelName,
+    catalog: handoff ? null : composer.modelCatalog,
+    runtime,
+  });
+  return {
+    ...model,
+    runtimeKind,
+    accessibilityLabel: handoff
+      ? `Select model, ${runtime.label}, ${model.label}`
+      : model.accessibilityLabel,
+    accessibilityHint: handoff
+      ? "Opens the model picker."
+      : "Opens the model, profile, effort, and speed.",
+  };
+}
+
 /** The bar of the composer card: attach and the model on the start; usage, Stop, and Send on the end. */
 function ComposerControls({
   composer,
@@ -478,13 +515,7 @@ function ComposerControls({
     catalog: composer.modelCatalog,
     selectedModel: composer.selectedModel,
   });
-  const runtimeKind = target.identity.runtimeKind;
-  const model = composerModelText({
-    selectedModel: composer.selectedModel,
-    modelName: composer.selectedModelDescriptor?.modelName,
-    catalog: composer.modelCatalog,
-    runtime: RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind],
-  });
+  const model = composerModelForNextMessage(composer);
   const openOptions = useCallback((): void => {
     // The field gives up the focus, so Android does not open the keyboard over the options sheet
     // when a picker of the sheet closes.
@@ -512,13 +543,13 @@ function ComposerControls({
       <View style={[styles.controlsStart, compact && styles.inlineControlsStart]}>
         <ComposerAttachButton pickers={pickers} picking={attachmentPickers} />
         <QuietSelector
-          leading={<RuntimeIcon runtimeKind={runtimeKind} size={16} />}
+          leading={<RuntimeIcon runtimeKind={model.runtimeKind} size={16} />}
           profile={model.profile}
           label={model.label}
           detail={model.effort}
           speedTone={model.speedTone}
           accessibilityLabel={model.accessibilityLabel}
-          accessibilityHint="Opens the model, profile, effort, and speed."
+          accessibilityHint={model.accessibilityHint}
           disabled={composer.modelOptionsDisabled}
           onPress={openOptions}
         />
@@ -598,6 +629,7 @@ const cardStyleOf = (state: ReturnType<typeof composerCardState>) => {
 };
 
 const styles = StyleSheet.create((theme) => ({
+  handoffAction: { alignSelf: "flex-end" },
   // The field gives up height before the controls, so its text scrolls above the keyboard.
   container: {
     flexShrink: 1,

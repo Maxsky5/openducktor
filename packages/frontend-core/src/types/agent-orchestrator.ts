@@ -159,7 +159,11 @@ export type AgentChatMessageMeta =
       tone: "info";
       reason: "runtime_handoff";
       title: string;
+      direction: RuntimeHandoffDirection;
+      contextNote: string | undefined;
     };
+
+export type RuntimeHandoffDirection = { from: RuntimeKind; to: RuntimeKind };
 
 export type AgentChatMessage = {
   id: string;

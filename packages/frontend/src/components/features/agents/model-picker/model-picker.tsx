@@ -537,6 +537,8 @@ export function ModelPicker({
     placeholder,
     onOpenChange,
   });
+  const [disabledReasonOpen, setDisabledReasonOpen] = useState(false);
+  if (disabledReasonOpen && !ctrl.triggerBlocked) setDisabledReasonOpen(false);
   const focusBridge = useMemo(
     () => ({
       setSpeedFocusNode: ctrl.setSpeedFocusNode,
@@ -553,7 +555,10 @@ export function ModelPicker({
             {ctrl.closedDisabledReason}
           </span>
         ) : null}
-        <Tooltip open={ctrl.effectiveOpen || !ctrl.triggerBlocked ? false : undefined}>
+        <Tooltip
+          open={ctrl.triggerBlocked && disabledReasonOpen}
+          onOpenChange={(open) => setDisabledReasonOpen(ctrl.triggerBlocked && open)}
+        >
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
               <ModelPickerTrigger

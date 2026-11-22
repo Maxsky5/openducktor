@@ -86,12 +86,18 @@ test.each(["local", "remote"] as const)(
       agentChatHandoffSend: send,
       agentChatHandoffCheck: check,
     });
+    expect(initial.result.current.delivery.notice).toMatchObject({
+      direction: { from: source.runtimeKind, to: destination.runtimeKind },
+      destinationModel: model.modelName,
+      title: "Handoff pending",
+    });
     const sent = await act(() => initial.result.current.delivery.send([...parts]));
     act(() => attach(sessions, "host-one"));
     expect(sent).toBe(false);
     expect(initial.result.current.delivery.blocked).toBe(false);
     expect(initial.result.current.delivery.notice).toMatchObject({
       check: null,
+      title: "Handoff needs attention",
       details: "Remote control is off. Enable remote control and retry.",
     });
     act(() => initial.result.current.delivery.notice?.cancel?.());

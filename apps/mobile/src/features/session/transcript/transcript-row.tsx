@@ -28,6 +28,7 @@ import type { MessagePartItem } from "./transcript-message-parts";
 import { messageRowKind } from "./transcript-row-type";
 import { useTranscriptRows } from "./transcript-rows-context";
 import { messageTimeLabel } from "./transcript-text";
+import { RuntimeHandoffIndicator } from "../runtime-handoff-indicator";
 
 export type TranscriptRowProps = {
   item: AgentChatTranscriptRow | MessagePartItem | ToolRunListItem;
@@ -173,6 +174,15 @@ function MessageRow({
     case "subagent":
       return <SubagentRow meta={row.meta} pendingCount={subagentPendingCount} />;
     case "notice":
+      if (row.meta.reason === "runtime_handoff") {
+        return (
+          <RuntimeHandoffIndicator
+            direction={row.meta.direction}
+            title={row.meta.title}
+            detail={row.meta.contextNote}
+          />
+        );
+      }
       return <NoticeRow message={message} meta={row.meta} timeLabel={timeLabel} />;
     case "user":
       return <UserMessageRow message={message} rowKey={rowKey} timeLabel={timeLabel} />;

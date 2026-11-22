@@ -134,9 +134,10 @@ function useSessionModelField({
   return {
     runtimes: [...(runtime ? [runtime] : NO_RUNTIMES), ...destinations.runtimes],
     fallbackRuntimeKind: runtimeKind,
+    handoffPending: handoff.selection !== undefined,
     selection: handoff.selection?.model ?? selection,
     hint: handoff.selection
-      ? `${runtimeLabel} to ${RUNTIME_DESCRIPTORS_BY_KIND[handoff.selection.model.runtimeKind].label}. Send shares earlier messages and selected chat activity.`
+      ? `${runtimeLabel} to ${RUNTIME_DESCRIPTORS_BY_KIND[handoff.selection.model.runtimeKind].label}. Sending can share earlier messages and some chat activity.`
       : `Runtime: ${runtimeLabel}. Model changes apply to the next turn.`,
     onOpen: () => {
       setPickerOpen(true);
@@ -220,7 +221,7 @@ function SessionOptions({
       }),
     };
   }, [catalog, catalogQuery.error, catalogQuery.isLoading, descriptor, retry]);
-  const modelField = useSessionModelField({
+  const { handoffPending, ...modelField } = useSessionModelField({
     repoPath,
     identity: routeIdentity,
     readOnly,
@@ -251,7 +252,7 @@ function SessionOptions({
           </View>
         ) : null}
         <FormBody>
-          {supportsProfiles && profiles.length > 0 ? (
+          {!handoffPending && supportsProfiles && profiles.length > 0 ? (
             <FormField label="Agent" hint={profileHint}>
               <MenuSelect
                 title="Agent"
@@ -271,25 +272,29 @@ function SessionOptions({
             disabled={disabled}
             pickerDisabled={disabled}
           />
-          <EffortField
-            effort={{
-              options: options.variantOptions,
-              value: selection?.variant,
-              placeholder: effortPlaceholder({
-                loading: catalogQuery.isLoading,
-                hasModel: selection !== null,
-              }),
-              caption: modelName ?? "Effort",
-              disabled,
-              onSelect: actions.handleSelectVariant,
-            }}
-          />
-          <SpeedField
-            key={speed?.key}
-            control={speed}
-            caption={modelName ?? "Speed"}
-            disabled={disabled}
-          />
+          {handoffPending ? null : (
+            <>
+              <EffortField
+                effort={{
+                  options: options.variantOptions,
+                  value: selection?.variant,
+                  placeholder: effortPlaceholder({
+                    loading: catalogQuery.isLoading,
+                    hasModel: selection !== null,
+                  }),
+                  caption: modelName ?? "Effort",
+                  disabled,
+                  onSelect: actions.handleSelectVariant,
+                }}
+              />
+              <SpeedField
+                key={speed?.key}
+                control={speed}
+                caption={modelName ?? "Speed"}
+                disabled={disabled}
+              />
+            </>
+          )}
         </FormBody>
       </ScrollView>
     </ModalLoadingContent>

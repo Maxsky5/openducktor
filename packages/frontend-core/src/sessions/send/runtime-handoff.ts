@@ -18,7 +18,7 @@ import {
 } from "../../lib/agent-session-identity";
 import { perConnection } from "../../lib/per-connection";
 import { useRuntimeModelCatalogs } from "../../queries/use-runtime-model-catalogs";
-import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
+import type { AgentSessionIdentity, RuntimeHandoffDirection } from "../../types/agent-orchestrator";
 import { AgentSessionsContext, useAgentSessionsContext } from "../session-contexts";
 import type { AgentSessionsStore } from "../agent-sessions-store";
 import { workspaceSessionIdentity } from "../agent-orchestrator/session-read-model/workspace-session-records";
@@ -172,6 +172,15 @@ export const useHandoffModelRuntimes = ({
   };
 };
 
+export type RuntimeHandoffNotice = {
+  direction: RuntimeHandoffDirection;
+  destinationModel: string | undefined;
+  title: string;
+  details: string;
+  check: (() => Promise<void>) | null;
+  cancel: (() => boolean) | null;
+};
+
 const projectHandoffNotice = (
   delivery: HandoffDeliverySnapshot,
   selection: HandoffSelection | undefined,
@@ -179,22 +188,24 @@ const projectHandoffNotice = (
 ) => {
   const { latest, pending, reply } = delivery;
   const destination = latest?.handoff?.destination ?? selection?.model;
-  const destinationRuntime =
-    latest?.handoff?.acceptedLink?.to.runtimeKind ?? destination?.runtimeKind;
-  const sourceLabel = identity ? RUNTIME_DESCRIPTORS_BY_KIND[identity.runtimeKind].label : "";
-  const destinationLabel = destinationRuntime
-    ? RUNTIME_DESCRIPTORS_BY_KIND[destinationRuntime].label
-    : "";
-  const modelName = selection?.descriptor.modelName ?? destination?.modelId;
-  const title = pending
-    ? `Sending to ${destinationLabel}…`
-    : `${sourceLabel} to ${destinationLabel}${modelName ? ` · ${modelName}` : ""}`;
+  const link = latest?.handoff?.acceptedLink;
+  const from = link?.from.runtimeKind ?? identity?.runtimeKind;
+  const to = link?.to.runtimeKind ?? destination?.runtimeKind;
+  if (!from || !to || (latest?.handoff?.committed && !latest.failure)) return null;
+  let title = "Handoff pending";
+  if (pending) title = "Sending handoff…";
+  else if (reply?.error || latest?.failure) title = "Handoff needs attention";
   const details =
     reply?.error ??
     (latest?.failure
       ? `${latest.failure.message} ${latest.failure.nextAction}`
-      : "Send shares earlier messages and selected chat activity with the destination.");
-  return { destinationRuntime, title, details };
+      : "Sending can share earlier messages and some chat activity.");
+  return {
+    direction: { from, to },
+    destinationModel: selection?.descriptor.modelName ?? destination?.modelId,
+    title,
+    details,
+  } satisfies Omit<RuntimeHandoffNotice, "check" | "cancel">;
 };
 
 function useLiveHandoffObservation(identity: AgentSessionIdentity | null) {
@@ -247,7 +258,7 @@ export const useRuntimeHandoff = (
   const snapshot = readHandoffDelivery(observed, state, hostEpoch);
   const { latest, blocked, waitingForLocalDraft, pending } = snapshot;
   const committed = latest?.handoff?.committed === true;
-  const { destinationRuntime, title, details } = projectHandoffNotice(
+  const notice = projectHandoffNotice(
     snapshot,
     state.selection,
     snapshot.reply?.response?.ref ?? observed?.ref ?? source,
@@ -276,15 +287,13 @@ export const useRuntimeHandoff = (
     acceptedLink: latest?.handoff?.acceptedLink,
     acceptedModel: latest?.handoff?.destination,
     committedLink: committed ? latest?.handoff?.acceptedLink : undefined,
-    notice:
-      destinationRuntime && (!committed || latest?.failure)
-        ? {
-            title,
-            details,
-            check: blocked && !pending ? delivery.check : null,
-            cancel: !blocked ? clear : null,
-          }
-        : null,
+    notice: notice
+      ? {
+          ...notice,
+          check: blocked && !pending ? delivery.check : null,
+          cancel: !blocked ? clear : null,
+        }
+      : null,
   };
 };
 
