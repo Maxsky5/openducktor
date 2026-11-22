@@ -268,30 +268,41 @@ export const createUsageIndexReader = ({
       const sinceMs = sinceOf(input);
       const reused = input.refresh ? null : checks.reusable({ runtimes: input.runtimes, sinceMs });
       let progress: ReturnType<typeof createUsageProgressTracker> | null = null;
-      return store.read({
-        calendar: createUsageCalendar(input.timeZone),
-        pricer: pricing.pricer,
-        sync: (writer) =>
-          reused
-            ? Effect.succeed(reused)
-            : syncSources({
-                writer,
-                pool,
-                input,
-                sinceMs,
-                first,
-                isCancelled,
-                onProgress,
-              }).pipe(
-                Effect.map((result) => {
-                  progress = result.progress;
-                  checks.record(result.synced);
-                  return result.synced;
-                }),
-              ),
-        report: (snapshot, synced) => reportOf({ repositories, snapshot, input, pricing, synced }),
-        onRollup: (fraction) => progress?.rollup(fraction),
-      });
+      let checked: Synced | null = null;
+      return store
+        .read({
+          calendar: createUsageCalendar(input.timeZone),
+          pricer: pricing.pricer,
+          sync: (writer) =>
+            reused
+              ? Effect.succeed(reused)
+              : syncSources({
+                  writer,
+                  pool,
+                  input,
+                  sinceMs,
+                  first,
+                  isCancelled,
+                  onProgress,
+                }).pipe(
+                  Effect.map((result) => {
+                    progress = result.progress;
+                    checked = result.synced;
+                    return result.synced;
+                  }),
+                ),
+          report: (snapshot, synced) =>
+            reportOf({ repositories, snapshot, input, pricing, synced }),
+          onRollup: (fraction) => progress?.rollup(fraction),
+          // A check counts only once its sources commit: a failed transaction rolls them back.
+        })
+        .pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              if (checked) checks.record(checked);
+            }),
+          ),
+        );
     },
 
     /**
@@ -307,22 +318,32 @@ export const createUsageIndexReader = ({
       input: UsageIndexReadInput;
       pricing: UsagePricing;
       isStopped: () => boolean;
-    }): Effect.Effect<void, UsageReadError> =>
-      store.read({
-        calendar: createUsageCalendar(input.timeZone),
-        pricer: pricing.pricer,
-        sync: (writer) =>
-          syncSources({
-            writer,
-            pool,
-            input: { ...input, runtimes: knownRuntimeKindValues },
-            sinceMs: null,
-            first: false,
-            isCancelled: isStopped,
-            onProgress: null,
-          }).pipe(Effect.map(({ synced }) => checks.record(synced))),
-        report: () => Effect.void,
-      }),
+    }): Effect.Effect<void, UsageReadError> => {
+      let checked: Synced | null = null;
+      return store
+        .read({
+          calendar: createUsageCalendar(input.timeZone),
+          pricer: pricing.pricer,
+          sync: (writer) =>
+            syncSources({
+              writer,
+              pool,
+              input: { ...input, runtimes: knownRuntimeKindValues },
+              sinceMs: null,
+              first: false,
+              isCancelled: isStopped,
+              onProgress: null,
+            }).pipe(Effect.map(({ synced }) => (checked = synced))),
+          report: () => Effect.void,
+        })
+        .pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              if (checked) checks.record(checked);
+            }),
+          ),
+        );
+    },
   };
 };
 

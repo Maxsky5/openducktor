@@ -241,10 +241,11 @@ export function UsageTrendChart({
             strokeWidth: 1.75,
           }),
         ),
-        // A partial total shows an open point: it can be higher.
+        // A partial total shows an open point: it can be higher. The point of the period in
+        // progress already marks the last period.
         decorative(
           dot(
-            totals.filter((row) => row.partial && row.index !== last),
+            totals.filter((row) => row.partial && !(row.index === last && today.length > 0)),
             {
               x: "date",
               y: "value",

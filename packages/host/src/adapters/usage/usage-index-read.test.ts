@@ -1,6 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { knownRuntimeKindValues } from "@openducktor/contracts";
-import { createUsageCheckMemo } from "./usage-index-read";
+import { Effect } from "effect";
+import { createUsagePricer } from "../../domain/usage/usage-pricing";
+import { removeTestDirectory } from "../../test-support/temp-directory";
+import { createUsageCheckMemo, createUsageIndexReader } from "./usage-index-read";
+import { createUsageIndexStore, type UsageIndexStore } from "./usage-index-store";
+import { createUsageParsePool } from "./usage-parse-pool";
+import type { UsageIndexReadInput } from "./usage-worker-protocol";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -53,5 +62,67 @@ describe("createUsageCheckMemo", () => {
     expect(checks.needsCatchUp({ runtimes: ["codex"], sinceMs: DAY })).toBe(true);
     checks.record(check(0, knownRuntimeKindValues, null));
     expect(checks.needsCatchUp({ runtimes: ["codex"], sinceMs: DAY })).toBe(false);
+  });
+});
+
+describe("createUsageIndexReader", () => {
+  let directory = "";
+  let store: UsageIndexStore;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(path.join(tmpdir(), "odt-usage-read-"));
+    store = createUsageIndexStore(path.join(directory, "usage-index.sqlite"));
+  });
+
+  afterEach(async () => {
+    await Effect.runPromise(store.close());
+    await removeTestDirectory(directory);
+  });
+
+  test("keeps no check of a read whose transaction fails", async () => {
+    // The sources sync, then the report fails, so the transaction rolls back.
+    // SAFETY: the wrapper passes every option of `read` and replaces only `report`, so it keeps
+    // the generic signature of `read`.
+    const failing: UsageIndexStore = {
+      ...store,
+      read: ((options) =>
+        store.read({
+          ...options,
+          report: () => Effect.fail("report failed"),
+        })) as UsageIndexStore["read"],
+    };
+    const reader = createUsageIndexReader({ store: failing, pool: createUsageParsePool([]) });
+    const input: UsageIndexReadInput = {
+      timeZone: "UTC",
+      runtimes: knownRuntimeKindValues,
+      range: { start: null, end: "2026-11-22" },
+      workspaces: [],
+      refresh: false,
+      separateFolders: [],
+      locations: {
+        claude: path.join(directory, "claude"),
+        codex: [path.join(directory, "codex")],
+        opencode: { directory: path.join(directory, "opencode"), databaseFile: null },
+      },
+    };
+    const pricing = { pricer: createUsagePricer({}), updatedAtMs: null, failure: null };
+
+    const read = reader.read({
+      input,
+      pricing,
+      first: true,
+      isCancelled: () => false,
+      onProgress: () => {},
+    });
+    const failure: unknown = await Effect.runPromise(Effect.flip(read));
+    expect(failure).toBe("report failed");
+    // A check of all history would make every later read reuse it and skip the catch-up.
+    expect(
+      reader.needsCatchUp({
+        ...input,
+        runtimes: ["codex"],
+        range: { start: "2026-11-01", end: "2026-11-22" },
+      }),
+    ).toBe(true);
   });
 });
