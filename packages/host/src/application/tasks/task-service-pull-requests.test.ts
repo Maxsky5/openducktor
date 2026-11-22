@@ -2021,13 +2021,12 @@ describe("createTaskService pull requests", () => {
       }
     });
   }
-  test.each([
-    ["retry with detached checkout", true, false],
-    ["link and keep checkout", false, false],
-    ["sync and remove checkout", false, true],
-  ] as const)(
-    "preserves task resources during an unresolved handoff on %s",
-    async (_intent, detached, sync) => {
+  test.each(["detached checkout", "Keep Worktree with unreadable HEAD", "automatic sync"] as const)(
+    "protects task resources until handoff settlement, then stops the saved destination on %s",
+    async (scenario) => {
+      const detached = scenario === "detached checkout";
+      const unreadableHead = scenario === "Keep Worktree with unreadable HEAD";
+      const sync = scenario === "automatic sync";
       const ref = { workspaceId: "repo", repoPath: "/repo", taskId: "task-1" };
       const worktreePath = "/worktrees/repo/task-1";
       const merged = {
@@ -2041,6 +2040,13 @@ describe("createTaskService pull requests", () => {
       const { taskWorkflows, fields, role } = syncWorkflows["a workflow without merge events"];
       let current = task(fields);
       const source = createAgentSessionRecord({ role, workingDirectory: worktreePath });
+      const destination = createAgentSessionRecord({
+        role,
+        workingDirectory: worktreePath,
+        runtimeKind: "codex",
+        externalSessionId: "destination",
+      });
+      const sessions = [source];
       const settingsConfig = createBuildSettingsConfig(new Set([ref.repoPath, worktreePath]));
       const cleanup: string[] = [];
       let unresolved = true;
@@ -2060,6 +2066,15 @@ describe("createTaskService pull requests", () => {
       const service = createGithubTaskService({
         taskWorkflows,
         gitPort: extendGitPort(gitPort, {
+          getCurrentBranch: (path) =>
+            unreadableHead && !unresolved
+              ? Effect.fail(
+                  new HostOperationError({
+                    operation: "git.currentBranch",
+                    message: "Cannot read the task worktree HEAD.",
+                  }),
+                )
+              : gitPort.getCurrentBranch(path),
           removeWorktree: () =>
             Effect.sync(() => {
               cleanup.push("remove worktree");
@@ -2090,7 +2105,15 @@ describe("createTaskService pull requests", () => {
             stopSession: () => Effect.void,
           },
           runtimeRegistry: createRuntimeRegistryPort({
-            probeSessionStatus: () => Effect.succeed({ supported: true, hasLiveSession: false }),
+            probeSessionStatus: ({ externalSessionId }) =>
+              Effect.succeed({
+                supported: true,
+                hasLiveSession: externalSessionId === destination.externalSessionId,
+              }),
+            stopSession: ({ runtimeKind, externalSessionId }) =>
+              Effect.sync(() => {
+                cleanup.push(`stop ${runtimeKind} ${externalSessionId}`);
+              }),
           }),
         }),
         taskStore: {
@@ -2098,7 +2121,7 @@ describe("createTaskService pull requests", () => {
           getTaskMetadata: () =>
             Effect.succeed({
               artifacts: {},
-              agentSessions: [source],
+              agentSessions: sessions,
               pullRequest: linked,
             }),
           listPullRequestSyncCandidates: () =>
@@ -2112,6 +2135,7 @@ describe("createTaskService pull requests", () => {
             }),
           transitionTask: ({ status }) =>
             Effect.sync(() => {
+              cleanup.push("close task");
               current = { ...current, status };
               return current;
             }),
@@ -2155,12 +2179,16 @@ describe("createTaskService pull requests", () => {
       expect(current.status).toBe(fields.status);
       expect(cleanup).toEqual([]);
 
+      sessions.push(destination);
       unresolved = false;
       await run();
       expect(current.status).toBe("closed");
-      expect(cleanup).toEqual(
-        sync ? ["close terminals", "remove worktree", "delete branch"] : ["close terminals"],
-      );
+      expect(cleanup).toContain("close terminals");
+      expect(cleanup.filter((step) => step !== "close terminals")).toEqual([
+        "stop codex destination",
+        ...(sync ? ["remove worktree", "delete branch"] : []),
+        "close task",
+      ]);
     },
   );
 
@@ -3404,9 +3432,13 @@ describe("createTaskService pull requests", () => {
     expect(result.changes).toEqual({ taskIds: ["task-1"], removedTaskIds: [] });
     expect(result.failure).toBe(failure);
   });
-  test.each([null, "/worktrees/repo/task-1"])(
-    "retries a saved merged pull request and preserves Git failures for worktree %s",
-    async (worktreePath) => {
+  test.each([
+    ["retry with missing checkout", null, true, true],
+    ["retry that requests removal", "/worktrees/repo/task-1", true, true],
+    ["new link that keeps the checkout", "/worktrees/repo/task-1", false, false],
+  ] as const)(
+    "preserves branch inspection outcomes for %s",
+    async (_scenario, worktreePath, alreadyLinked, removeWorktree) => {
       const saved = pullRequest();
       const failure = new HostOperationError({
         operation: "git.currentBranch",
@@ -3423,7 +3455,11 @@ describe("createTaskService pull requests", () => {
         taskStore: {
           listTasks: () => Effect.succeed([current]),
           getTaskMetadata: () =>
-            Effect.succeed({ artifacts: {}, agentSessions: [], pullRequest: saved }),
+            Effect.succeed({
+              artifacts: {},
+              agentSessions: [],
+              pullRequest: alreadyLinked ? saved : undefined,
+            }),
           setPullRequest: (input) =>
             Effect.sync(() => {
               writes.push(input.pullRequest);
@@ -3444,7 +3480,7 @@ describe("createTaskService pull requests", () => {
             workspaceId: "repo",
             repoPath: "/repo",
             taskId: "task-1",
-            removeWorktree: true,
+            removeWorktree,
             pullRequest: saved,
           }),
         ),

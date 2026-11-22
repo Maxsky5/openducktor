@@ -9,8 +9,6 @@ import {
   requireLinkMergedPullRequestDependencies,
   requirePullRequestLinkDependencies,
 } from "../support/required-task-dependencies";
-import { createTaskCleanupProgressState } from "../support/task-cleanup-progress";
-import { runTaskRuntimeCleanup } from "../support/task-cleanup-support";
 import { completeTaskClosure } from "../support/task-closure";
 import { ensureNoDirectMergeEffect } from "../support/direct-merge-block";
 import { coreTaskTransition, requirePullRequestManagement } from "../support/task-workflow-events";
@@ -109,16 +107,19 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         );
       }
 
-      const branchState = yield* inspectTaskBranches(dependencies, {
-        workspaceId: input.workspaceId,
-        repoPath,
-        task: current,
-        operationLabel: "Pull request linking",
-      });
-      // The cleanup needs the task branch. A relink can find it already removed.
-      if (branchState.kind === "unavailable" && metadata.pullRequest === undefined)
-        return yield* branchState.error;
-      if (branchState.kind === "available") {
+      let removeCheckedWorktree = false;
+      if (!sameExistingPullRequest || removeWorktree) {
+        const branchState = yield* inspectTaskBranches(dependencies, {
+          workspaceId: input.workspaceId,
+          repoPath,
+          task: current,
+          operationLabel: "Pull request linking",
+        });
+        if (branchState.kind === "unavailable" && !sameExistingPullRequest)
+          return yield* branchState.error;
+        removeCheckedWorktree = removeWorktree && branchState.kind === "available";
+      }
+      if (removeCheckedWorktree) {
         yield* requireWorktreeFiles(dependencies.worktreeFiles);
       }
       yield* taskStore.setPullRequest({
@@ -128,38 +129,29 @@ export const createTaskLinkMergedPullRequestUseCase = ({
         pullRequest,
       });
       const postLink = yield* Effect.result(
-        Effect.gen(function* () {
-          const cleanupEffect =
-            branchState.kind === "available"
-              ? cleanupConfirmedMergeClose({
-                  workspaceId: input.workspaceId,
-                  dependencies: { ...dependencies, taskActivityGuard, worktreeOwners },
-                  taskStore,
-                  lifecycle: taskSessionLifecycleCoordinator,
-                  repoPath,
-                  task: current,
-                  // The confirmation showed the uncommitted files that removal deletes.
-                  worktreeCleanup: { remove: removeWorktree, force: true },
-                })
-              : runTaskRuntimeCleanup({
-                  workspaceId: input.workspaceId,
-                  progress: createTaskCleanupProgressState(),
-                  repoPath,
-                  taskIds: [taskId],
-                  terminalService: dependencies.terminalService,
-                });
-          return yield* completeTaskClosure({
+        completeTaskClosure({
+          workspaceId: input.workspaceId,
+          cleanup: cleanupConfirmedMergeClose({
             workspaceId: input.workspaceId,
-            cleanup: cleanupEffect,
-            gitPort: dependencies.gitPort,
-            operation: "link merged pull request",
-            repoPath,
-            decide: coreTaskTransition(taskWorkflows, "close"),
-            taskId,
-            taskActivityGuard,
-            taskSessionLifecycleCoordinator,
+            dependencies: { ...dependencies, taskActivityGuard, worktreeOwners },
             taskStore,
-          });
+            lifecycle: taskSessionLifecycleCoordinator,
+            repoPath,
+            task: current,
+            worktreeCleanup: {
+              remove: removeCheckedWorktree,
+              // The confirmation showed the uncommitted files that removal deletes.
+              force: true,
+            },
+          }),
+          gitPort: dependencies.gitPort,
+          operation: "link merged pull request",
+          repoPath,
+          decide: coreTaskTransition(taskWorkflows, "close"),
+          taskId,
+          taskActivityGuard,
+          taskSessionLifecycleCoordinator,
+          taskStore,
         }),
       );
       if (postLink._tag === "Failure") {

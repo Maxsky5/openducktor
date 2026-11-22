@@ -153,6 +153,8 @@ A confirmed close removes the task worktree, the session worktrees, and the rela
 
 An unresolved runtime handoff blocks task closure, direct merge, and Remove Worktree before they stop sessions or terminals or change Git state. Use Check delivery in the task's Agent Studio chat, then retry the action.
 
+A merged pull request retry stops saved task sessions before it closes the task. With Keep Worktree, the retry skips branch inspection. The retry needs an available task branch to remove the worktree or delete local branches.
+
 ## Remove worktree
 
 Remove Worktree is a core task action of a closed task. The host rejects `task_worktree_remove` for a task that is not `closed`. The detail sheet reads the worktree of a closed task and shows the action while the task has a managed worktree or a related local branch. The desktop detail sheet and the mobile task details show it in the actions menu, after Reset Task and Close Task and before Delete Task. The command palette and the Kanban card do not show it, because they do not read the worktree.
