@@ -40,9 +40,16 @@ const beforeCreationAliasResults = filesystemAlias
       ),
     }
   : {};
-const target = path.join(homeDir, "config-target");
-await symlink(process.platform === "win32" ? target : "config-target", productionRoot, "junction");
+const targetName = filesystemAlias ? "caf\u00e9" : "config-target";
+const target = path.join(homeDir, targetName);
+await symlink(process.platform === "win32" ? target : targetName, productionRoot, "junction");
 const danglingTarget = launch(target);
+const unicodeAliasResults = filesystemAlias
+  ? {
+      unicodeAlias: launch(path.join(homeDir, targetName.normalize("NFD"))),
+      unicodeCaseAlias: launch(path.join(homeDir, targetName.toUpperCase().normalize("NFD"))),
+    }
+  : {};
 await rm(productionRoot);
 await mkdir(productionRoot);
 await mkdir(isolatedRoot);
@@ -60,6 +67,7 @@ console.log(
     isolated: launch(isolatedRoot),
     production: launch(undefined, { scope: "production" }),
     ...beforeCreationAliasResults,
+    ...unicodeAliasResults,
     ...(filesystemAlias && { filesystemAlias: launch(filesystemAlias) }),
   }),
 );

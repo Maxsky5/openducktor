@@ -1,7 +1,38 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { createLauncherOptions, parseCliArgs, parseCliArgsEffect } from "./cli";
+
+test("reports malformed workspace arguments before opening the production config directory", async () => {
+  const home = await mkdtemp(path.join(tmpdir(), "odt-web-cli-"));
+  const configDir = path.join(home, ".openducktor");
+  try {
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        fileURLToPath(new URL("./cli.ts", import.meta.url)),
+        "--workspace",
+        "--allow-production-config",
+        "--host",
+      ],
+      env: { ...process.env, HOME: home, USERPROFILE: home, OPENDUCKTOR_CONFIG_DIR: configDir },
+      stdout: "ignore",
+      stderr: "pipe",
+      timeout: 4000,
+    });
+    const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+    expect(exitCode).toBe(1);
+    expect(stderr.trim()).toBe("Missing value for --host.");
+    expect(existsSync(configDir)).toBe(false);
+  } finally {
+    await rm(home, { force: true, recursive: true });
+  }
+  // Loading the CLI in a child process can take longer than the package test timeout.
+}, 5000);
 
 describe("web CLI argument parsing", () => {
   test.each([

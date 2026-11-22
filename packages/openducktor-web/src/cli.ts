@@ -243,13 +243,16 @@ const runCli = async (): Promise<void> => {
     process.exit(0);
     return;
   }
+  if (invocation._tag === "Failure" && args.includes("--workspace")) {
+    console.error(errorMessage(invocation.failure));
+    process.exit(1);
+    return;
+  }
 
   let logger: WebLogger;
   try {
     const options = invocation._tag === "Launch" ? invocation.options : undefined;
-    const configDirScope = resolveWebConfigDirScope(
-      options?.workspaceMode ?? args.includes("--workspace"),
-    );
+    const configDirScope = resolveWebConfigDirScope(options?.workspaceMode === true);
     assertDevelopmentConfigAllowed(configDirScope, options?.allowProductionConfig === true);
     logger = await runWebBoundary(createWebLogger({ configDirScope }));
   } catch (error) {

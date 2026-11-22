@@ -160,10 +160,12 @@ test("development requires acknowledgement for the production config root and it
 
 // The web CLI runs under Node, which can report both macOS paths for the same directory.
 test.skipIf(process.platform !== "darwin")(
-  "development refuses the macOS Data volume path before and after production root creation",
+  "development refuses macOS Data volume and Unicode aliases of the production root",
   async () => {
     const homeDir = await mkdtemp("/Users/Shared/odt-development-config-");
     try {
+      await mkdir(path.join(homeDir, "case-probe"));
+      const caseInsensitive = existsSync(path.join(homeDir, "CASE-PROBE"));
       const result = await Bun.build({
         entrypoints: [fileURLToPath(developmentConfigGuardFixture)],
         target: "node",
@@ -182,6 +184,8 @@ test.skipIf(process.platform !== "darwin")(
         filesystemAliasBeforeCreation: productionRefusal(),
         isolatedBeforeCreation: null,
         filesystemAlias: productionRefusal(),
+        unicodeAlias: productionRefusal(),
+        unicodeCaseAlias: caseInsensitive ? productionRefusal() : null,
       });
     } finally {
       await rm(homeDir, { recursive: true, force: true });
