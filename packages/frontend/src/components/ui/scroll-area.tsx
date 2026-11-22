@@ -14,9 +14,13 @@ function ScrollArea({
       className={cn("relative", className)}
       {...props}
     >
+      {/*
+        Radix wraps the content in a table that grows to its widest line. This scroll area has no
+        horizontal scrollbar, so the content takes the width of the viewport instead and truncates.
+      */}
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="size-full [&>div]:block! rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>

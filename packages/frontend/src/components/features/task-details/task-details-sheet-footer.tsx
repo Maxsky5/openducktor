@@ -11,7 +11,7 @@ import {
   coreTaskActions,
   REMOVE_WORKTREE_ACTION,
 } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
-import { Cpu, PencilLine, Trash2 } from "lucide-react";
+import { PencilLine, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 import { coreTaskActionMenuItem } from "@/components/features/kanban/task-action-ui";
 import { TaskWorkflowActionGroup } from "@/components/features/kanban/task-workflow-action-group";
@@ -32,8 +32,6 @@ export type TaskDetailsSheetFooterProps = {
   /** Shows Remove Worktree. The sheet passes it only while a closed task keeps its worktree. */
   onRemoveWorktreeSelect?: () => void;
   onDeleteSelect?: () => void;
-  /** Shows the processes of the task worktree. Absent for a remote host. */
-  onProcessesSelect?: () => void;
 };
 
 const deleteMenuActions = (onDeleteSelect: (() => void) | undefined) =>
@@ -64,7 +62,6 @@ export function TaskDetailsSheetFooter(props: TaskDetailsSheetFooterProps): Reac
     onCoreTaskAction,
     onRemoveWorktreeSelect,
     onDeleteSelect,
-    onProcessesSelect,
   } = props;
   const root = useRef<HTMLDivElement>(null);
   const shortcutOwner = useTaskDetailsShortcuts(root, props);
@@ -97,12 +94,6 @@ export function TaskDetailsSheetFooter(props: TaskDetailsSheetFooterProps): Reac
               <PencilLine className="size-4" />
               Edit
             </ShortcutButton>
-          ) : null}
-          {onProcessesSelect ? (
-            <Button type="button" variant="outline" onClick={onProcessesSelect}>
-              <Cpu className="size-4" />
-              Processes
-            </Button>
           ) : null}
         </div>
 

@@ -38,8 +38,6 @@ type ProcessesFocus = { workspaceId: string; taskId: string };
  */
 export type ProcessesActions = {
   activeWorkspaceId: string | null;
-  /** Opens the view as the user left it, flyout or window, with the processes of a task first. */
-  openProcesses(focus?: ProcessesFocus): void;
   /** The rail button and the shortcut open and close the view. */
   toggleProcesses(): void;
   closeProcesses(): void;
@@ -113,31 +111,19 @@ export function ProcessesProvider({ children }: PropsWithChildren): ReactElement
   const [mode, setMode] = useState<"flyout" | "floating">("flyout");
   const [floatingRect, setFloatingRect] = useState(defaultFloatingRect);
   const view: ProcessesView = open ? mode : "closed";
-  const [requestedFocus, setRequestedFocus] = useState<ProcessesFocus | null>(null);
   const focus = useMemo(
     () =>
-      requestedFocus ??
-      (studioTaskId && activeWorkspaceId
+      studioTaskId && activeWorkspaceId
         ? { workspaceId: activeWorkspaceId, taskId: studioTaskId }
-        : null),
-    [requestedFocus, studioTaskId, activeWorkspaceId],
+        : null,
+    [studioTaskId, activeWorkspaceId],
   );
 
-  const openProcesses = useCallback(
-    (nextFocus?: ProcessesFocus) => {
-      if (!available) return;
-      setRequestedFocus(nextFocus ?? null);
-      setOpen(true);
-    },
-    [available],
-  );
   const closeProcesses = useCallback(() => {
     setOpen(false);
-    setRequestedFocus(null);
   }, []);
   const toggleProcesses = useCallback(() => {
     if (!available) return;
-    setRequestedFocus(null);
     setOpen((current) => !current);
   }, [available]);
   const detach = useCallback((rect: FloatingWindowRect) => {
@@ -168,7 +154,6 @@ export function ProcessesProvider({ children }: PropsWithChildren): ReactElement
       available
         ? {
             activeWorkspaceId,
-            openProcesses,
             toggleProcesses,
             closeProcesses,
             detach,
@@ -176,16 +161,7 @@ export function ProcessesProvider({ children }: PropsWithChildren): ReactElement
             openUrl,
           }
         : null,
-    [
-      available,
-      activeWorkspaceId,
-      openProcesses,
-      toggleProcesses,
-      closeProcesses,
-      detach,
-      attach,
-      openUrl,
-    ],
+    [available, activeWorkspaceId, toggleProcesses, closeProcesses, detach, attach, openUrl],
   );
   const viewState = useMemo(() => ({ view, focus }), [view, focus]);
   const placement = useMemo(
