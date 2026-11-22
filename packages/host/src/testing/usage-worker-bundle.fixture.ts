@@ -110,8 +110,8 @@ try {
     timeZone: () => "UTC",
     now: () => Date.parse("2026-03-03T00:00:00.000Z"),
   });
-  // A read of one runtime starts a background catch-up of the other runtimes. The next read
-  // goes first and still sees every source.
+  // The first read of an empty index reads all history, also for one runtime. The report still
+  // shows the selected runtime only.
   const codexOnly = await Effect.runPromise(
     service.read({
       range: { kind: "custom", start: "2026-03-01", end: "2026-03-03" },
@@ -122,12 +122,16 @@ try {
     codexOnly.byRuntime.map(({ runtime, figure }) => [runtime, figure.tokens.processed]),
     [["codex", 107]],
   );
-  // The read parsed one rollout, so it reported its progress: the runtime first, then the rollup
-  // with the root session that the first line of the rollout names.
-  assert.deepEqual(progressEvents[0]?.runtimes, [
+  // It reported its progress: both runtimes first, then the rollup, with the session that the
+  // transcript path names and the root session that the first line of the rollout names.
+  const byName = (event: UsageIndexProgress | undefined) =>
+    event?.runtimes.toSorted((a, b) => a.runtime.localeCompare(b.runtime));
+  assert.deepEqual(byName(progressEvents[0]), [
+    { runtime: "claude", progress: 0, done: false, sessions: { done: 0, total: 1 } },
     { runtime: "codex", progress: 0, done: false, sessions: { done: 0, total: null } },
   ]);
-  assert.deepEqual(progressEvents.at(-1)?.runtimes, [
+  assert.deepEqual(byName(progressEvents.at(-1)), [
+    { runtime: "claude", progress: 1, done: true, sessions: { done: 1, total: 1 } },
     { runtime: "codex", progress: 1, done: true, sessions: { done: 1, total: 1 } },
   ]);
   assert.equal(progressEvents.at(-1)?.phase, "summarizing");

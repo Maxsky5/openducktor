@@ -234,8 +234,10 @@ export const AppShell = memo(function AppShell(): ReactElement {
     void retryWorkspaces().catch(() => undefined);
   }, [retryWorkspaces]);
 
-  // Usage reads the history of the host, so it needs no workspace and no workspace list.
-  if (isUsageRoute && !hasWorkspaces) return <UsageWithoutWorkspace />;
+  // Usage reads the history of the host, so it needs no workspace and works when the workspace
+  // list fails. It waits for the list, as other pages do: a list that brings workspaces would move
+  // the page into the workspace shell, and that second mount would cancel its read.
+  if (isUsageRoute && !hasWorkspaces && !isLoadingWorkspaces) return <UsageWithoutWorkspace />;
 
   if (isLoadingWorkspaces) {
     return (

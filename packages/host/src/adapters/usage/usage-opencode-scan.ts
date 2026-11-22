@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import { z } from "zod";
+import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import type {
   SqliteDatabase,
   SqliteStatement,
@@ -13,7 +15,7 @@ export const rootsOf = (table: string) => `root(id, root_id) AS (
 )`;
 
 /** Row IDs of one window. Windows keep each scan in row ID order and let it report progress. */
-const WINDOW_ROWS = 20_000;
+const WINDOW_ROWS = 5_000;
 
 /** One message table to scan: its query, its cursor, and its last row ID. */
 export type TableScan = {
@@ -32,6 +34,12 @@ export const readRows = (
   database: SqliteDatabase,
   scans: readonly TableScan[],
   onWindow: (positions: readonly number[]) => void,
+  /** Runs before the rows of each window, such as the digest of a first read. */
+  beforeWindow: (
+    index: number,
+    start: number,
+    end: number,
+  ) => Effect.Effect<void, HostOperationErrorAggregate> = () => Effect.void,
 ) =>
   Effect.gen(function* () {
     const rows: SqliteValue[][] = [];
@@ -54,6 +62,7 @@ export const readRows = (
         if (!scan || !statement) break;
         const start = positions[next] ?? 0;
         const end = Math.min(start + WINDOW_ROWS, scan.lastRowId);
+        yield* beforeWindow(next, start, end);
         for (const row of yield* statement.values(
           scan.cursor.mark,
           scan.cursor.afterRowId,
@@ -121,3 +130,64 @@ export const sessionEnds = (database: SqliteDatabase, tables: readonly MessageTa
       }
     return createSessionCounter(ends);
   });
+
+const identityRowSchema = z.tuple([z.number(), z.string(), z.number().nullable().catch(null)]);
+/** Rows of one identity batch. It bounds the memory of the digest of a large table. */
+const IDENTITY_BATCH = 10_000;
+
+/**
+ * A digest of the row ID and message ID of each row, in row ID order: of the rows up to
+ * `upToRowId`, and of all rows. A message ID never repeats, so a deleted or replaced earlier row
+ * changes the first digest, also when SQLite gives its row ID to a new row. It also finds the
+ * newest update.
+ */
+export const createIdentityDigest = (upToRowId: number) => {
+  const hash = createHash("sha1");
+  let earlier: string | null = upToRowId < 0 ? hash.copy().digest("hex") : null;
+  let lastRowId = Number.MIN_SAFE_INTEGER;
+  let mark = 0;
+  return {
+    add: (rows: readonly SqliteValue[][]) => {
+      for (const row of rows) {
+        const [rowId, id, updated] = identityRowSchema.parse(row);
+        if (earlier === null && rowId > upToRowId) earlier = hash.copy().digest("hex");
+        hash.update(`${rowId}\u0000${id}\u0000`);
+        lastRowId = rowId;
+        if (updated !== null && updated > mark) mark = updated;
+      }
+    },
+    lastRowId: () => lastRowId,
+    result: () => ({
+      earlier: earlier ?? hash.copy().digest("hex"),
+      all: hash.digest("hex"),
+      mark,
+    }),
+  };
+};
+
+export const identityColumns = (table: string) => `SELECT rowid, id, time_updated FROM ${table}`;
+
+/** Digests a whole table in batches, and calls `onBatch` with the row ID that it reached. */
+export const identityDigests = (
+  database: SqliteDatabase,
+  table: string,
+  upToRowId: number,
+  onBatch: (rowId: number) => void,
+) =>
+  Effect.acquireUseRelease(
+    database.prepare(
+      `${identityColumns(table)} WHERE rowid > ? ORDER BY rowid LIMIT ${IDENTITY_BATCH}`,
+    ),
+    (statement) =>
+      Effect.gen(function* () {
+        const digest = createIdentityDigest(upToRowId);
+        for (;;) {
+          const rows = yield* statement.values(digest.lastRowId());
+          digest.add(rows);
+          onBatch(digest.lastRowId());
+          if (rows.length < IDENTITY_BATCH) break;
+        }
+        return digest.result();
+      }),
+    (statement) => statement.close().pipe(Effect.ignore),
+  );

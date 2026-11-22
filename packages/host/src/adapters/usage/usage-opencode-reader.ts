@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { UsageUnit } from "../../domain/usage/usage-unit";
@@ -6,9 +5,13 @@ import type { HostOperationErrorAggregate } from "../../effect/host-errors";
 import {
   openSqliteDatabase,
   type SqliteDatabase,
+  type SqliteStatement,
   type SqliteValue,
 } from "../../infrastructure/sqlite/sqlite-driver";
 import {
+  createIdentityDigest,
+  identityColumns,
+  identityDigests,
   type MessageTable as ScanTable,
   readRows,
   rootsOf,
@@ -247,49 +250,6 @@ const scalar = (database: SqliteDatabase, sql: string) =>
     Effect.map((rows) => scalarSchema.catch(0).parse(rows[0] ?? [null])),
   );
 
-const identityRowSchema = z.tuple([z.number(), z.string(), z.number().nullable().catch(null)]);
-/** Rows of one identity batch. It bounds the memory of the digest of a large table. */
-const IDENTITY_BATCH = 10_000;
-
-/**
- * Digests the row ID and message ID of each row, in row ID order: the digest of the rows up to
- * `upToRowId`, and of all rows. A message ID never repeats, so a deleted or replaced earlier row
- * changes the first digest, also when SQLite gives its row ID to a new row. The same pass finds
- * the newest update, and calls `onBatch` with the row ID that it reached.
- */
-const identityDigests = (
-  database: SqliteDatabase,
-  table: string,
-  upToRowId: number,
-  onBatch: (rowId: number) => void,
-) =>
-  Effect.acquireUseRelease(
-    database.prepare(
-      `SELECT rowid, id, time_updated FROM ${table} WHERE rowid > ? ORDER BY rowid LIMIT ${IDENTITY_BATCH}`,
-    ),
-    (statement) =>
-      Effect.gen(function* () {
-        const hash = createHash("sha1");
-        let earlier: string | null = upToRowId < 0 ? hash.copy().digest("hex") : null;
-        let afterRowId = Number.MIN_SAFE_INTEGER;
-        let mark = 0;
-        for (;;) {
-          const rows = yield* statement.values(afterRowId);
-          for (const row of rows) {
-            const [rowId, id, updated] = identityRowSchema.parse(row);
-            if (earlier === null && rowId > upToRowId) earlier = hash.copy().digest("hex");
-            hash.update(`${rowId}\u0000${id}\u0000`);
-            afterRowId = rowId;
-            if (updated !== null && updated > mark) mark = updated;
-          }
-          onBatch(afterRowId);
-          if (rows.length < IDENTITY_BATCH) break;
-        }
-        return { earlier: earlier ?? hash.copy().digest("hex"), all: hash.digest("hex"), mark };
-      }),
-    (statement) => statement.close().pipe(Effect.ignore),
-  );
-
 const FULL_READ = { mark: 0, afterRowId: -1 };
 
 /** A message table with its query and what the last read saw of it. */
@@ -322,6 +282,109 @@ const readTableState = (
       state: { mark: digests.mark, lastRowId, digest: digests.all } satisfies TableState,
       cursor: unchangedRows ? { mark: previous.mark, afterRowId: previous.lastRowId } : FULL_READ,
     };
+  });
+
+type TableRead = { state: TableState; cursor: TableScan["cursor"] };
+
+const sumOf = (values: readonly number[]) => values.reduce((sum, value) => sum + value, 0);
+
+/**
+ * The first read of a database: one pass in row ID windows that digests each window and reads its
+ * rows. It knows its root sessions at once.
+ */
+const firstRead = (
+  database: SqliteDatabase,
+  tables: readonly MessageTable[],
+  lastRowIds: readonly number[],
+  onProgress: (progress: OpenCodeProgress) => void,
+) =>
+  Effect.gen(function* () {
+    const sessions = yield* sessionEnds(database, tables);
+    const work = Math.max(1, sumOf(lastRowIds));
+    const digests = tables.map(() => createIdentityDigest(-1));
+    const statements: SqliteStatement[] = [];
+    try {
+      for (const table of tables)
+        statements.push(
+          yield* database.prepare(
+            `${identityColumns(table.name)} WHERE rowid > ? AND rowid <= ? ORDER BY rowid`,
+          ),
+        );
+      const rows = yield* readRows(
+        database,
+        tables.map((table, index) => ({
+          sql: table.sql,
+          cursor: FULL_READ,
+          lastRowId: lastRowIds[index] ?? 0,
+        })),
+        (positions) =>
+          onProgress({
+            fraction: Math.min(1, sumOf(positions) / work),
+            sessions: { done: sessions.doneAt(positions), total: sessions.total },
+          }),
+        (index, start, end) =>
+          Effect.gen(function* () {
+            const statement = statements[index];
+            if (statement) digests[index]?.add(yield* statement.values(start, end));
+          }),
+      );
+      const states = digests.map((digest, index): TableRead => {
+        const { all, mark } = digest.result();
+        return {
+          state: { mark, lastRowId: lastRowIds[index] ?? 0, digest: all },
+          cursor: FULL_READ,
+        };
+      });
+      return { states, rows, replace: true };
+    } finally {
+      for (const statement of statements) yield* statement.close().pipe(Effect.ignore);
+    }
+  });
+
+/**
+ * A later read: it digests each table first, to find a deletion, then reads the changed rows, or
+ * all rows after a deletion. It adds rows to sessions that a read already counted, so it has no
+ * sessions of its own to count.
+ */
+const nextRead = (
+  database: SqliteDatabase,
+  tables: readonly MessageTable[],
+  lastRowIds: readonly number[],
+  onProgress: (progress: OpenCodeProgress) => void,
+) =>
+  Effect.gen(function* () {
+    // Two passes over each table: the identity digest, then the row windows.
+    const work = 2 * Math.max(1, sumOf(lastRowIds));
+    const digested = tables.map(() => 0);
+    let scanned: readonly number[] = tables.map(() => 0);
+    const report = () =>
+      onProgress({
+        fraction: Math.min(1, (sumOf(digested) + sumOf(scanned)) / work),
+        sessions: { done: 0, total: 0 },
+      });
+    const states: TableRead[] = [];
+    for (const [index, table] of tables.entries())
+      states.push(
+        yield* readTableState(database, table, lastRowIds[index] ?? 0, (rowId) => {
+          digested[index] = rowId;
+          report();
+        }),
+      );
+    // A deletion in either table reads both again, because the index replaces the whole source.
+    const replace = states.some((table) => table.cursor === FULL_READ);
+    const rows = yield* readRows(
+      database,
+      tables.map((table, index) => ({
+        sql: table.sql,
+        cursor: replace ? FULL_READ : (states[index]?.cursor ?? FULL_READ),
+        lastRowId: lastRowIds[index] ?? 0,
+      })),
+      (positions) => {
+        scanned = positions;
+        report();
+      },
+    );
+    return { states, rows, replace };
   });
 
 /**
@@ -362,50 +425,14 @@ export const readOpenCodeUsage = (
             sql: V1_QUERY,
             previous: previous?.v1 ?? null,
           });
-        // The work is two passes over each table: the identity digest, then the row windows.
         const lastRowIds: number[] = [];
         for (const table of tables)
           lastRowIds.push(yield* scalar(database, `SELECT MAX(rowid) FROM ${table.name}`));
-        const work =
-          2 *
-          Math.max(
-            1,
-            lastRowIds.reduce((sum, rowId) => sum + rowId, 0),
-          );
-        const digested = tables.map(() => 0);
-        let scanned = tables.map(() => 0);
-        // A first read knows its sessions at once. A read from a cursor does not know them.
-        let sessions = previous === null ? yield* sessionEnds(database, tables) : null;
-        const report = () =>
-          onProgress({
-            fraction: Math.min(1, [...digested, ...scanned].reduce((a, b) => a + b, 0) / work),
-            sessions: sessions
-              ? { done: sessions.doneAt(scanned), total: sessions.total }
-              : { done: 0, total: null },
-          });
-        const states: { state: TableState; cursor: TableScan["cursor"] }[] = [];
-        for (const [index, table] of tables.entries())
-          states.push(
-            yield* readTableState(database, table, lastRowIds[index] ?? 0, (rowId) => {
-              digested[index] = rowId;
-              report();
-            }),
-          );
-        // A deletion in either table reads both again, because the index replaces the whole source.
-        const replace = previous === null || states.some((table) => table.cursor === FULL_READ);
-        if (replace) sessions ??= yield* sessionEnds(database, tables);
-        const rows = yield* readRows(
-          database,
-          tables.map((table, index) => ({
-            sql: table.sql,
-            cursor: replace ? FULL_READ : (states[index]?.cursor ?? FULL_READ),
-            lastRowId: lastRowIds[index] ?? 0,
-          })),
-          (positions) => {
-            scanned = [...positions];
-            report();
-          },
-        );
+        const read =
+          previous === null
+            ? yield* firstRead(database, tables, lastRowIds, onProgress)
+            : yield* nextRead(database, tables, lastRowIds, onProgress);
+        const { states, rows, replace } = read;
         const stateOf = (version: MessageTable["version"]) =>
           states[tables.findIndex((table) => table.version === version)]?.state ?? null;
         const units: UsageUnit[] = [];

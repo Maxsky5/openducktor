@@ -2,7 +2,6 @@ import type { UsageIndexProgress } from "@openducktor/contracts";
 import { CircleCheck } from "lucide-react";
 import { type ReactElement, useEffect, useState } from "react";
 import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-icon";
-import { cn } from "@/lib/utils";
 import {
   formatCount,
   formatCountOf,
@@ -14,13 +13,6 @@ import {
 import type { UsageProgressState } from "./use-usage-progress";
 
 type RuntimeProgress = UsageIndexProgress["runtimes"][number];
-
-/** The share of all parse work: each runtime counts alike, because their measures differ. */
-export const overallFraction = (progress: UsageIndexProgress): number => {
-  if (progress.phase === "summarizing" || progress.runtimes.length === 0) return 1;
-  const sum = progress.runtimes.reduce((total, runtime) => total + runtime.progress, 0);
-  return sum / progress.runtimes.length;
-};
 
 /** The sessions read of all runtimes, with their total once every runtime knows its total. */
 const sessionsOf = (runtimes: readonly RuntimeProgress[]) => {
@@ -56,7 +48,7 @@ function Elapsed({ sinceMs }: { sinceMs: number }): ReactElement {
 const RING_RADIUS = 26;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
 
-/** A ring that fills with the overall share, or turns while the share is unknown. */
+/** A ring that fills with the overall share. */
 function ProgressRing({ fraction }: { fraction: number }): ReactElement {
   return (
     <div
@@ -67,14 +59,7 @@ function ProgressRing({ fraction }: { fraction: number }): ReactElement {
       aria-valuenow={Math.round(fraction * 100)}
       className="relative flex size-16 shrink-0 items-center justify-center"
     >
-      <svg
-        viewBox="0 0 64 64"
-        className={cn(
-          "absolute inset-0 -rotate-90",
-          fraction === null && "motion-safe:animate-spin",
-        )}
-        aria-hidden="true"
-      >
+      <svg viewBox="0 0 64 64" className="absolute inset-0 -rotate-90" aria-hidden="true">
         <circle
           cx="32"
           cy="32"
@@ -101,13 +86,7 @@ function ProgressRing({ fraction }: { fraction: number }): ReactElement {
 }
 
 /** One runtime: its bar in its series color, its share, and its sessions. */
-function RuntimeRow({
-  entry,
-  summarizing,
-}: {
-  entry: RuntimeProgress;
-  summarizing: boolean;
-}): ReactElement {
+function RuntimeRow({ entry }: { entry: RuntimeProgress }): ReactElement {
   const label = USAGE_RUNTIME_LABELS[entry.runtime];
   return (
     <li className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 py-3">
@@ -118,7 +97,7 @@ function RuntimeRow({
           {entry.done ? (
             <>
               <CircleCheck className="size-3.5 text-success-muted" aria-hidden="true" />
-              {summarizing ? "Read" : "Done"}
+              Done
             </>
           ) : (
             formatShare(entry.progress)
@@ -154,7 +133,8 @@ function RuntimeRow({
  */
 export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactElement {
   const { progress, seenSinceMs } = state;
-  const summarizing = progress.phase === "summarizing";
+  // Once every runtime is read, what is left is the rollup into daily totals.
+  const summarizing = progress.runtimes.every((entry) => entry.done);
   const runtimes = USAGE_RUNTIMES.flatMap((runtime) =>
     progress.runtimes.filter((entry) => entry.runtime === runtime),
   );
@@ -165,7 +145,7 @@ export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactE
       className="mx-auto flex w-full max-w-2xl flex-col gap-6 rounded-xl border border-border bg-card p-6 shadow-xs motion-safe:animate-[usage-enter_240ms_var(--motion-ease-out)] @2xl:p-8"
     >
       <div className="flex items-start gap-5">
-        <ProgressRing fraction={overallFraction(progress)} />
+        <ProgressRing fraction={state.share} />
         <div className="flex min-w-0 flex-col gap-1">
           <h2 id="usage-first-read" className="text-base font-semibold" aria-live="polite">
             {summarizing ? "Building the daily totals" : "Reading your agent history"}
@@ -200,7 +180,7 @@ export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactE
       </dl>
       <ul className="flex flex-col divide-y divide-border">
         {runtimes.map((entry) => (
-          <RuntimeRow key={entry.runtime} entry={entry} summarizing={summarizing} />
+          <RuntimeRow key={entry.runtime} entry={entry} />
         ))}
       </ul>
     </section>

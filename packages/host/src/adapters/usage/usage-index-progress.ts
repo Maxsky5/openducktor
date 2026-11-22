@@ -90,11 +90,12 @@ export const createUsageProgressTracker = (
   let sentAt = Number.NEGATIVE_INFINITY;
   let trailing: ReturnType<typeof setTimeout> | null = null;
   let phase: UsageIndexProgress["phase"] = "reading";
+  let summarized = 0;
   const sendNow = () => {
     if (trailing) clearTimeout(trailing);
     trailing = null;
     sentAt = now();
-    emit({ phase, startedAt, runtimes: runtimes.map(runtimeProgress) });
+    emit({ phase, summarized, startedAt, runtimes: runtimes.map(runtimeProgress) });
   };
   /** Sends at most once per interval. A skipped update goes out at the end of the interval. */
   const send = () => {
@@ -129,6 +130,11 @@ export const createUsageProgressTracker = (
     summarizing: () => {
       phase = "summarizing";
       sendNow();
+    },
+    /** The share of a full rollup that is built. */
+    rollup: (fraction: number) => {
+      summarized = fraction;
+      send();
     },
   };
 };

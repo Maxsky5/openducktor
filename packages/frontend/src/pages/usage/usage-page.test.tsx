@@ -139,6 +139,7 @@ describe("UsagePage", () => {
       await act(() =>
         progress.listener?.({
           phase: "reading",
+          summarized: 0,
           startedAt: "2026-11-21T10:00:00.000Z",
           runtimes: [runtime("claude", 0.5, 2, 4), runtime("opencode", 0.25, 1, null)],
         }),
@@ -152,12 +153,14 @@ describe("UsagePage", () => {
     expect(screen.getByText("Reading your agent history")).toBeTruthy();
     expect(screen.getByText("2 of 4 sessions")).toBeTruthy();
     expect(screen.getByText("1 session read, counting the rest…")).toBeTruthy();
+    // The parse is 80% of the ring: (50% + 25%) / 2 of it, before OpenCode knows its sessions.
     expect(
       screen.getByRole("progressbar", { name: "Usage history read" }).getAttribute("aria-valuenow"),
-    ).toBe("38");
+    ).toBe("30");
     await act(() =>
       progress.listener?.({
         phase: "summarizing",
+        summarized: 0.5,
         startedAt: "2026-11-21T10:00:00.000Z",
         runtimes: [runtime("claude", 1, 4, 4), runtime("opencode", 1, 3, 3)],
       }),

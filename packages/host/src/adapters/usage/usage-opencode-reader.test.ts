@@ -237,14 +237,14 @@ describe("readOpenCodeUsage", () => {
     const fractions = events.map((event) => event.fraction);
     expect(fractions).toEqual(fractions.toSorted((a, b) => a - b));
     // The fork ends in the first row window; the root session has rows in the second one too.
-    expect(events.map((event) => event.sessions.done).filter((done) => done > 0)).toEqual([1, 2]);
+    expect([...new Set(events.map((event) => event.sessions.done))]).toEqual([1, 2]);
     expect(events.at(-1)).toEqual({ fraction: 1, sessions: { done: 2, total: 2 } });
-    // A read that continues from a cursor does not know its sessions.
+    // A read that continues from a cursor adds rows to sessions that a read already counted.
     const next: OpenCodeProgress[] = [];
     await Effect.runPromise(
       readOpenCodeUsage(databasePath, first.state, (progress) => next.push(progress)),
     );
-    expect(next.at(-1)).toEqual({ fraction: 1, sessions: { done: 0, total: null } });
+    expect(next.at(-1)).toEqual({ fraction: 1, sessions: { done: 0, total: 0 } });
   });
 
   test("reports a database without the known tables as unsupported", async () => {

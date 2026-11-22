@@ -22,7 +22,10 @@ export const createUsageParsePool = (parsers: readonly MessagePort[]) => {
   let stopActive: (() => void) | null = null;
 
   return {
-    /** Stops the active run from claiming more jobs. Jobs in progress still finish and commit. */
+    /**
+     * Stops the active run from claiming more jobs when its `isCancelled` says so. Jobs in
+     * progress still finish and commit.
+     */
     stop: () => stopActive?.(),
 
     /**
@@ -42,7 +45,9 @@ export const createUsageParsePool = (parsers: readonly MessagePort[]) => {
       const claims = new SharedArrayBuffer(8);
       const shared = new Int32Array(claims);
       const stop = () => Atomics.store(shared, 1, 1);
-      stopActive = stop;
+      stopActive = () => {
+        if (isCancelled()) stop();
+      };
       if (isCancelled()) stop();
       let commits: Promise<void> = Promise.resolve();
       let failure: Error | null = null;

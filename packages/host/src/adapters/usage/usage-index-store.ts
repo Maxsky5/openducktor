@@ -62,6 +62,9 @@ export type UsageIndexSnapshot = {
   aggregate: (input: UsageAggregateInput) => ReturnType<typeof aggregateUsage>;
 };
 
+/** Days of one batch of a full rollup. */
+const ROLLUP_BATCH_DAYS = 31;
+
 const storageError = (cause: unknown) =>
   new HostOperationError({
     operation: "usage.index.open",
@@ -119,8 +122,10 @@ export const createUsageIndexStore = (path: string) => {
       pricer: UsagePricer,
       sync: (writer: UsageIndexWriter) => Effect.Effect<S, SyncError>,
       report: (snapshot: UsageIndexSnapshot, synced: S) => Effect.Effect<A, ReportError>,
+      /** Gets the share of a full rollup that is built. */
+      onRollup: (fraction: number) => void = () => {},
     ): Effect.Effect<A, HostOperationErrorAggregate | SyncError | ReportError> =>
-      withConnection((current) => current.read(calendar, pricer, sync, report)),
+      withConnection((current) => current.read(calendar, pricer, sync, report, onRollup)),
 
     /** The stored rate catalog. */
     rates,
@@ -237,7 +242,12 @@ const createConnection = (database: SqliteDatabase) => {
    * Brings the rollup up to date. An empty index, or a different time zone or other rates,
    * rebuilds all of it. Otherwise it recomputes the dates of every copy of the touched units.
    */
-  const refreshRollup = (changes: UsageReadChanges, calendar: UsageCalendar, pricer: UsagePricer) =>
+  const refreshRollup = (
+    changes: UsageReadChanges,
+    calendar: UsageCalendar,
+    pricer: UsagePricer,
+    onRollup: (fraction: number) => void,
+  ) =>
     Effect.gen(function* () {
       // Another host that shares the index can add names that need a price.
       yield* names.sync();
@@ -246,7 +256,12 @@ const createConnection = (database: SqliteDatabase) => {
       if (!changes.rebuild && touchedCount === 0 && changes.removedSlots.size === 0) return;
       if (changes.rebuild) {
         yield* run("DELETE FROM day");
-        yield* recomputeTargets(calendar, yield* allDates(calendar));
+        // A full rollup takes seconds, so it goes in month-sized batches that report progress.
+        const dates = yield* allDates(calendar);
+        for (let start = 0; start < dates.length; start += ROLLUP_BATCH_DAYS) {
+          yield* recomputeTargets(calendar, dates.slice(start, start + ROLLUP_BATCH_DAYS));
+          onRollup(Math.min(1, (start + ROLLUP_BATCH_DAYS) / dates.length));
+        }
       } else {
         const slots = new Set(changes.removedSlots);
         const rows = yield* values(
@@ -324,6 +339,7 @@ const createConnection = (database: SqliteDatabase) => {
       pricer: UsagePricer,
       sync: (writer: UsageIndexWriter) => Effect.Effect<S, SyncError>,
       report: (snapshot: UsageIndexSnapshot, synced: S) => Effect.Effect<A, ReportError>,
+      onRollup: (fraction: number) => void,
     ) =>
       Effect.gen(function* () {
         yield* database.exec("BEGIN IMMEDIATE");
@@ -348,7 +364,7 @@ const createConnection = (database: SqliteDatabase) => {
             ),
         });
         if (empty) yield* database.exec(USAGE_INDEX_UNIT_INDEXES);
-        yield* refreshRollup(changes, calendar, pricer);
+        yield* refreshRollup(changes, calendar, pricer, onRollup);
         const result = yield* report(snapshot, synced);
         yield* database.exec("COMMIT");
         return result;

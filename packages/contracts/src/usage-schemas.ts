@@ -152,6 +152,8 @@ const progressCountSchema = z.number().int().nonnegative();
 export const usageIndexProgressSchema = z.strictObject({
   /** `reading` parses the sources; `summarizing` rolls them up into days. */
   phase: z.enum(["reading", "summarizing"]),
+  /** The share of the daily totals that `summarizing` built, from 0 to 1. */
+  summarized: z.number().min(0).max(1),
   startedAt: z.iso.datetime({ offset: true }),
   runtimes: z.array(
     z.strictObject({

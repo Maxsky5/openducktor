@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { UsageBreakdown } from "./usage-breakdown";
 import { UsageCoverage } from "./usage-coverage";
-import { overallFraction, UsageFirstRead } from "./usage-first-read";
+import { UsageFirstRead } from "./usage-first-read";
 import {
   MetricTabs,
   RangeTabs,
@@ -315,7 +315,7 @@ function ResultLine({
 const progressText = (state: UsageProgressState | null): string | null => {
   if (!state) return null;
   if (state.progress.phase === "summarizing") return "Building the daily totals…";
-  return `Reading new history · ${Math.floor(overallFraction(state.progress) * 100)}%`;
+  return `Reading new history · ${Math.floor(state.share * 100)}%`;
 };
 
 /** Usage of every Claude Code, Codex, and OpenCode session on the selected host. */

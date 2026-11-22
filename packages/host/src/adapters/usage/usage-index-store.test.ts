@@ -209,6 +209,25 @@ describe("usage index store", () => {
     expect(row?.unpricedTokens).toBe(1_000_010);
   });
 
+  test("builds a full rollup in month batches and reports its share", async () => {
+    const shares: number[] = [];
+    const days = Array.from({ length: 40 }, (_, day) =>
+      unit({ identity: `d${day}`, occurredAtMs: Date.UTC(2026, 9, 1 + day, 12) }),
+    );
+    await Effect.runPromise(
+      store.read(
+        utc,
+        pricer,
+        (writer) => writer.applySource(source("/p/a.jsonl", days)),
+        () => Effect.void,
+        (share) => shares.push(share),
+      ),
+    );
+    expect(shares).toEqual([31 / 40, 1]);
+    const result = await report(utc, "2026-10-01", "2026-11-30");
+    expect(result.byRuntime[0]?.sessions).toBe(1);
+  });
+
   test("prices the rollup again when a rate changes", async () => {
     await write(source("/p/a.jsonl", [unit()]));
     expect((await report()).byRuntime[0]?.costUsd).toBeCloseTo(4.0002, 6);

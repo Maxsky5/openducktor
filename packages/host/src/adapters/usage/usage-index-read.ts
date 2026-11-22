@@ -31,7 +31,12 @@ const runEffect = async <A, E>(effect: Effect.Effect<A, E>): Promise<A> => {
   throw Cause.squash(exit.cause);
 };
 
-type Synced = { discovery: Discovery; checkedAtMs: number };
+type Synced = {
+  discovery: Discovery;
+  checkedAtMs: number;
+  /** The progress of a read that parsed sources. */
+  progress: ReturnType<typeof createUsageProgressTracker> | null;
+};
 
 /** Reads at most this many rollout heads at once. */
 const HEAD_READS = 8;
@@ -73,15 +78,22 @@ const syncSources = (
 ): Effect.Effect<Synced, HostOperationErrorAggregate | Error> =>
   Effect.gen(function* () {
     const checkedAtMs = Date.now();
-    const discovery = discoverUsageSources(input.locations, input.runtimes);
+    const stored = yield* writer.sources();
+    // The first read of an empty index reads all history, as the page tells the user. A range or
+    // runtime that the user picks during it then finds its history read, and adds no work.
+    const first = stored.length === 0;
+    const runtimes = first ? knownRuntimeKindValues : input.runtimes;
+    const discovery = discoverUsageSources(input.locations, runtimes);
     const plan = planUsageSync({
-      runtimes: input.runtimes,
+      runtimes,
       onDisk: discovery.sources,
       unreadablePaths: discovery.unreadablePaths,
-      stored: yield* writer.sources(),
-      sinceMs,
+      stored,
+      sinceMs: first ? null : sinceMs,
     });
     for (const sourceId of plan.removeIds) yield* writer.removeSource(sourceId);
+    // Every later read needs the history of a first read, so a first read never stops early.
+    const stopsEarly = first ? () => false : isCancelled;
     const progress =
       onProgress && plan.jobs.length > 0 ? createUsageProgressTracker(plan.jobs, onProgress) : null;
     // The root sessions of Codex rollouts come from their first lines, read beside the parse.
@@ -105,14 +117,14 @@ const syncSources = (
                 })
                 .pipe(Effect.tap(() => Effect.sync(() => progress?.finished(result.jobId)))),
             ),
-          isCancelled,
+          stopsEarly,
           (jobIndex, inside) => progress?.inside(jobIndex, inside),
         ),
       catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
     });
     if (codexSessions) yield* Effect.promise(() => codexSessions);
     progress?.summarizing();
-    return { discovery, checkedAtMs };
+    return { discovery, checkedAtMs, progress };
   });
 
 /** The figures of the range, the issues, and the project groups of the recorded folders. */
@@ -184,11 +196,16 @@ export const readUsageIndex = (
 ): Effect.Effect<UsageReadResult, HostOperationErrorAggregate | Error> => {
   const calendar = createUsageCalendar(input.timeZone);
   const sinceMs = input.range.start === null ? null : calendar.startOf(input.range.start);
+  let progress: Synced["progress"] = null;
   return store.read(
     calendar,
     pricing.pricer,
-    (writer) => syncSources(writer, pool, input, sinceMs, isCancelled, onProgress),
+    (writer) =>
+      syncSources(writer, pool, input, sinceMs, isCancelled, onProgress).pipe(
+        Effect.tap((synced) => Effect.sync(() => void (progress = synced.progress))),
+      ),
     (snapshot, synced) => reportOf(snapshot, input, pricing, synced),
+    (fraction) => progress?.rollup(fraction),
   );
 };
 

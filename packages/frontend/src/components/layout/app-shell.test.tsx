@@ -668,14 +668,21 @@ describe("AppShell", () => {
     expect(screen.queryByText("Kanban")).toBeNull();
   });
 
-  test("shows host-wide Usage while the workspace list loads or fails", () => {
-    const view = renderAppShellForTest({
+  test("shows host-wide Usage after the workspace list loads without workspaces or fails", () => {
+    // Usage waits for the list, so it mounts once: a second mount would cancel its read.
+    const loading = renderAppShellForTest({
       initialEntry: "/usage",
       workspacePresence: { isLoadingWorkspaces: true, hasWorkspaces: false },
     });
+    expect(screen.getByText("Loading workspaces…")).toBeTruthy();
+    loading.unmount();
+
+    const view = renderAppShellForTest({
+      initialEntry: "/usage",
+      workspacePresence: { hasWorkspaces: false },
+    });
     expect(screen.getByRole("link", { name: "Setup" })).toBeTruthy();
     expect(screen.getByText("Usage", { selector: "main main" })).toBeTruthy();
-    expect(screen.queryByText("Loading workspaces…")).toBeNull();
     view.unmount();
 
     renderAppShellForTest({

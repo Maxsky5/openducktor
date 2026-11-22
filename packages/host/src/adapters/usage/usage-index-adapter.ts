@@ -49,6 +49,11 @@ export const createUsageIndexAdapter = ({
   let nextRequestId = 1;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   const pending = new Map<number, Pending>();
+  /**
+   * Reads whose progress the clients get. A canceled read stays here until the worker ends it:
+   * it still parses its open sources, and the next read starts after it.
+   */
+  const reporting = new Set<number>();
 
   const stop = () => {
     const current = threads;
@@ -57,6 +62,7 @@ export const createUsageIndexAdapter = ({
     const stopped = threadFailure(new Error("The usage reader stopped."));
     for (const request of pending.values()) request.reject(stopped);
     pending.clear();
+    reporting.clear();
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = null;
     if (!current) return Promise.resolve();
@@ -70,6 +76,7 @@ export const createUsageIndexAdapter = ({
     const error = threadFailure(cause);
     for (const request of pending.values()) request.reject(error);
     pending.clear();
+    reporting.clear();
     void stop();
   };
 
@@ -104,10 +111,10 @@ export const createUsageIndexAdapter = ({
       }
       const request = pending.get(reply.requestId);
       if (reply.kind === "progress") {
-        // A canceled read still parses its open sources, but nobody waits for its progress.
-        if (request) onProgress(reply.progress);
+        if (reporting.has(reply.requestId)) onProgress(reply.progress);
         return;
       }
+      reporting.delete(reply.requestId);
       pending.delete(reply.requestId);
       if (reply.kind === "result") request?.resolve(reply.result);
       else if (reply.kind === "error")
@@ -131,6 +138,7 @@ export const createUsageIndexAdapter = ({
         return;
       }
       const requestId = nextRequestId++;
+      reporting.add(requestId);
       pending.set(requestId, {
         resolve: (result) => resume(Effect.succeed(result)),
         reject: (error) => resume(Effect.fail(error)),
