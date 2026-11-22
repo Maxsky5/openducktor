@@ -1,4 +1,3 @@
-import { statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { OPENDUCKTOR_CONFIG_DIR_NAMES } from "@openducktor/contracts";
@@ -8,8 +7,7 @@ import {
   resolveNormalizedUserPath,
 } from "@openducktor/path-support";
 import { HostResourceError, HostValidationError } from "../effect/host-errors";
-import { macVolumeSupportsCaseSensitiveNames } from "../infrastructure/mac-volume-case-sensitivity";
-import { resolvePathSymlinkParts } from "../infrastructure/resolve-path-symlinks";
+import { isSameConfigDirectory } from "./config-directory-identity";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
 export const ALLOW_PRODUCTION_CONFIG_FLAG = "--allow-production-config";
@@ -91,15 +89,6 @@ export const resolveOpenDucktorBaseDir = (
   return path.join(resolveHomeDirectory(), OPENDUCKTOR_CONFIG_DIR_NAMES[scope]);
 };
 
-const isSameExistingPath = (left: string, right: string): boolean => {
-  if (path.relative(left, right) === "") return true;
-
-  // macOS firmlinks can name the same existing directory with different resolved paths.
-  const leftStat = statSync(left, { bigint: true });
-  const rightStat = statSync(right, { bigint: true });
-  return leftStat.dev === rightStat.dev && leftStat.ino === rightStat.ino;
-};
-
 export const assertDevelopmentConfigAllowed = (
   scope: OpenDucktorConfigDirScope,
   allowProductionConfig: boolean,
@@ -107,17 +96,8 @@ export const assertDevelopmentConfigAllowed = (
 ): void => {
   if (scope !== "dev" || allowProductionConfig) return;
   const productionRoot = resolveOpenDucktorBaseDir("production", {});
-  const config = resolvePathSymlinkParts(resolveOpenDucktorBaseDir(scope, env));
-  const production = resolvePathSymlinkParts(productionRoot);
-  const sameRemainingPath = path.relative(production.remainingPath, config.remainingPath) === "";
-  const possibleMacCaseAlias =
-    process.platform === "darwin" &&
-    production.remainingPath.toLowerCase() === config.remainingPath.toLowerCase();
-  if (
-    (sameRemainingPath || possibleMacCaseAlias) &&
-    isSameExistingPath(production.existingPath, config.existingPath) &&
-    (sameRemainingPath || !macVolumeSupportsCaseSensitiveNames(production.existingPath))
-  ) {
+  const selectedRoot = resolveOpenDucktorBaseDir(scope, env);
+  if (isSameConfigDirectory(selectedRoot, productionRoot)) {
     throw new HostValidationError({
       field: OPENDUCKTOR_CONFIG_DIR_ENV,
       message: `Development startup refused the production config directory ${productionRoot}. Set ${OPENDUCKTOR_CONFIG_DIR_ENV} to a separate directory or stop the production host and rerun with ${ALLOW_PRODUCTION_CONFIG_FLAG}.`,

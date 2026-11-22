@@ -189,7 +189,7 @@ const configDirScope = app.isPackaged ? "production" : "dev";
 try {
   assertDevelopmentConfigAllowed(
     configDirScope,
-    process.argv.slice(2).includes(ALLOW_PRODUCTION_CONFIG_FLAG),
+    process.argv.includes(ALLOW_PRODUCTION_CONFIG_FLAG, 2),
   );
 } catch (cause) {
   reportElectronMainFailure(cause);

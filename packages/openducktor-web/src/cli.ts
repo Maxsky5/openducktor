@@ -237,7 +237,8 @@ const runCliEffect = (cliOptions: CliOptions, logger: WebLogger): Effect.Effect<
 const runCli = async (): Promise<void> => {
   const args = process.argv.slice(2);
   const parseResult = await runWebBoundary(Effect.result(parseCliArgsEffect(args)));
-  if (parseResult._tag === "Success" && parseResult.success._tag === "Help") {
+  const invocation = parseResult._tag === "Success" ? parseResult.success : parseResult;
+  if (invocation._tag === "Help") {
     printHelp();
     process.exit(0);
     return;
@@ -245,10 +246,7 @@ const runCli = async (): Promise<void> => {
 
   let logger: WebLogger;
   try {
-    const options =
-      parseResult._tag === "Success" && parseResult.success._tag === "Launch"
-        ? parseResult.success.options
-        : null;
+    const options = invocation._tag === "Launch" ? invocation.options : undefined;
     const configDirScope = resolveWebConfigDirScope(
       options?.workspaceMode ?? args.includes("--workspace"),
     );
@@ -272,18 +270,14 @@ const runCli = async (): Promise<void> => {
     }
   };
 
-  if (parseResult._tag === "Failure") {
-    await reportFailure(parseResult.failure);
+  if (invocation._tag === "Failure") {
+    await reportFailure(invocation.failure);
     process.exit(1);
     return;
   }
-  if (parseResult.success._tag === "Help") {
-    return;
-  }
-
   let exitCode: number;
   try {
-    exitCode = await runWebBoundary(runCliEffect(parseResult.success.options, logger));
+    exitCode = await runWebBoundary(runCliEffect(invocation.options, logger));
   } catch (cause) {
     await reportFailure(cause);
     exitCode = 1;

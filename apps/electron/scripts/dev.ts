@@ -513,7 +513,7 @@ const startElectron = (
   rendererDevUrl: string,
   electronExecutablePath: string,
   remoteDebugging: boolean,
-  allowProductionConfig = false,
+  allowProductionConfig: boolean,
 ): ManagedElectronProcess => {
   // With CDP, Electron prints its DevTools endpoint to stderr. This script then pipes stderr and
   // copies it to the terminal.
@@ -607,7 +607,7 @@ type ElectronDevLifecycleOptions = {
   processHandlers?: ElectronDevProcessHandlers;
   remoteDebugging?: boolean;
   renderer: ElectronRendererDevServer;
-  startElectronProcess?: StartElectronProcess;
+  startElectronProcess: StartElectronProcess;
 };
 
 type DevToolsPortWait = {
@@ -622,7 +622,7 @@ export const runElectronDevLifecycleEffect = ({
   processHandlers = defaultElectronDevProcessHandlers,
   remoteDebugging = false,
   renderer,
-  startElectronProcess = startElectron,
+  startElectronProcess,
 }: ElectronDevLifecycleOptions): Effect.Effect<number, ElectronOperationErrorAggregate> =>
   Effect.callback<number, ElectronOperationErrorAggregate>((resume) => {
     let devToolsPortWait: DevToolsPortWait | null = null;
@@ -994,7 +994,7 @@ export const mainEffect = (): Effect.Effect<
   ElectronOperationErrorAggregate | ElectronValidationErrorAggregate
 > =>
   Effect.gen(function* () {
-    const allowProductionConfig = process.argv.slice(2).includes(ALLOW_PRODUCTION_CONFIG_FLAG);
+    const allowProductionConfig = process.argv.includes(ALLOW_PRODUCTION_CONFIG_FLAG, 2);
     yield* Effect.try({
       try: () => assertDevelopmentConfigAllowed("dev", allowProductionConfig),
       catch: (cause) => toElectronOperationError(cause, "electron.dev.check-config-directory"),
