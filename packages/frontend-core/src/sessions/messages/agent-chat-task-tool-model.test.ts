@@ -37,6 +37,19 @@ describe("task tool model", () => {
     expect(buildTaskToolSummary("create_task", completed, null)).toBe("Invalid task result");
   });
 
+  test("shows the input of a completed call whose runtime reports no result", () => {
+    // Antigravity reports a finished MCP call without its result.
+    const created = meta({ input: { title: "Fix login" } });
+    expect(showsInvalidTaskToolAlert("create_task", created, null)).toBe(false);
+    expect(buildTaskToolSummary("create_task", created, null)).toBe("Fix login");
+    const updated = meta({ tool: "odt_update_task", input: { taskId: "task-1", priority: 3 } });
+    expect(showsInvalidTaskToolAlert("update_task", updated, null)).toBe(false);
+    expect(buildTaskToolSummary("update_task", updated, null)).toBe("Updated task-1");
+    expect(buildTaskToolSummary("search_tasks", meta({ input: { limit: 50 } }), null)).toBe(
+      "limit: 50",
+    );
+  });
+
   test("summarizes search filters", () => {
     expect(
       buildTaskToolSummary(

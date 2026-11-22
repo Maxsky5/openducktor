@@ -8,8 +8,10 @@ import {
 } from "@openducktor/contracts";
 import type { AgentChatTaskToolName } from "../send/agent-chat.types";
 import type { ToolMeta } from "./agent-chat-message-card-model.types";
-import { getToolLifecyclePhase } from "./tool-lifecycle";
+import { getToolLifecyclePhase, hasNonEmptyText } from "./tool-lifecycle";
 import { parseToolOutput } from "./tool-output-utils";
+
+const hasToolOutput = (meta: ToolMeta): boolean => hasNonEmptyText(meta.output);
 
 const taskSearchSummary = (meta: ToolMeta): string => {
   const input = SearchTasksInputSchema.safeParse(meta.input);
@@ -26,7 +28,8 @@ const taskSearchSummary = (meta: ToolMeta): string => {
     filters.push(meta.input ? "Invalid search filters" : "Waiting for filters");
   }
   const phase = getToolLifecyclePhase(meta);
-  if (phase === "completed") {
+  // A runtime can report a finished MCP call without its result, so only a result can be invalid.
+  if (phase === "completed" && hasToolOutput(meta)) {
     const result = parseToolOutput(searchTasksResultSchema, meta.output);
     if (result) {
       const { totalCount, results } = result;
@@ -67,9 +70,15 @@ export const buildTaskToolSummary = (
   if (phase === "failed") return meta.error || "Tool failed";
   if (phase === "cancelled") return "Tool cancelled";
   if (task) return task.title;
-  if (phase === "completed") return "Invalid task result";
+  if (phase === "completed" && hasToolOutput(meta)) return "Invalid task result";
   const title = CreateTaskInputSchema.shape.title.safeParse(meta.input?.title);
   if (title.success) return title.data;
+  if (phase === "completed") {
+    const taskId = meta.input?.taskId;
+    return tool === "update_task"
+      ? `Updated ${hasNonEmptyText(taskId) ? taskId.trim() : "task"}`
+      : "Created task";
+  }
   return tool === "update_task" ? "Updating task" : "Creating task";
 };
 
@@ -81,6 +90,7 @@ export const showsInvalidTaskToolAlert = (
 ): boolean =>
   (tool === "create_task" || tool === "update_task") &&
   getToolLifecyclePhase(meta) === "completed" &&
+  hasToolOutput(meta) &&
   task === null;
 
 export const INVALID_TASK_TOOL_RESULT_MESSAGE =
