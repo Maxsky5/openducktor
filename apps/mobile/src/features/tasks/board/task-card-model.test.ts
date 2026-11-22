@@ -137,6 +137,19 @@ describe("buildTaskCardModel", () => {
       label: "Builder running and waiting on background tasks",
       state: "background",
     });
+    expect(model.frame).toBe("background");
+  });
+
+  test("frames the card as running while another session of the task works on a reply", () => {
+    const model = buildTaskCardModel({
+      task: task({ status: "in_progress", availableActions: ["build_start", "open_builder"] }),
+      taskSessions: [session("build", "running", true), session("qa", "running")],
+      historicalSessions: [],
+      activeSessionRole: "build",
+      taskActivityState: "active",
+    });
+    expect(model.liveSession?.state).toBe("background");
+    expect(model.frame).toBe("running");
   });
 
   test("outlines a start that is not the next workflow step", () => {

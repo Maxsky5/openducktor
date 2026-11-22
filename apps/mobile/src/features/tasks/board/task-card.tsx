@@ -104,8 +104,7 @@ const cardFrame = (
   model: TaskCardModel,
 ): "selectedFrame" | "runningFrame" | "waitingFrame" | "backgroundFrame" | "idleFrame" => {
   if (selected) return "selectedFrame";
-  if (!model.liveSession) return "idleFrame";
-  return LIVE_FRAMES[model.liveSession.state];
+  return model.frame ? LIVE_FRAMES[model.frame] : "idleFrame";
 };
 
 const LIVE_FRAMES = {
@@ -158,8 +157,8 @@ export const TaskCard = memo(function TaskCard({
   const items = useMemo(() => menuItems(model), [model]);
   const menuRef = useRef<ActionMenuHandle>(null);
   const copyTaskId = useCopyTaskId();
-  // As on desktop, a light runs around the card while its session works on a reply.
-  const running = model.liveSession?.state === "running";
+  // As on desktop, a light runs around the card while a session of the task works on a reply.
+  const running = model.frame === "running";
   const frame = styles[cardFrame(selected, model)];
 
   const selectMenu = useCallback(

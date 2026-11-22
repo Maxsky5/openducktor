@@ -16,6 +16,7 @@ import type {
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
 import {
   getTaskFooter,
+  kanbanCardSessionTone,
   type KanbanPrimarySessionState,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
 import { getPriorityLabel } from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
@@ -103,6 +104,8 @@ export type TaskCardModel = {
   hiddenLabels: string[];
   reviewRejected: boolean;
   liveSession: TaskCardLiveSession | null;
+  /** The frame of the card, from every active session of the task, as on desktop. */
+  frame: TaskCardSessionState | null;
   primary: TaskCardPrimary | null;
   menu: TaskCardMenuItem[];
   shortcuts: TaskCardShortcut[];
@@ -261,6 +264,7 @@ export const buildTaskCardModel = ({
     hiddenLabels: labels.slice(CARD_VISIBLE_LABEL_COUNT),
     reviewRejected,
     liveSession,
+    frame: hasActiveSession ? kanbanCardSessionTone(taskActivityState, taskSessions) : null,
     primary,
     menu,
     shortcuts,
