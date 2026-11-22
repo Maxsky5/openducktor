@@ -3,7 +3,11 @@ import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/s
 import type { TaskSessionGroup, TaskSessionRow } from "./task-sessions-model";
 import { taskWorkflowSteps } from "./task-workflow-model";
 
-const row = (id: string, activityState: TaskSessionRow["activityState"]): TaskSessionRow => ({
+const row = (
+  id: string,
+  activityState: TaskSessionRow["activityState"],
+  waitingOnBackground = false,
+): TaskSessionRow => ({
   key: id,
   identity: { externalSessionId: id, runtimeKind: "opencode", workingDirectory: "/wt/task-1" },
   label: "Builder #1",
@@ -16,7 +20,7 @@ const row = (id: string, activityState: TaskSessionRow["activityState"]): TaskSe
   statusIcon: null,
   live: activityState === "running",
   activityState,
-  waitingOnBackground: false,
+  waitingOnBackground,
 });
 
 describe("taskWorkflowSteps", () => {
@@ -79,5 +83,13 @@ describe("taskWorkflowSteps", () => {
     ];
     const [spec] = taskWorkflowSteps(createTaskCardFixture(), groups);
     expect(spec).toMatchObject({ stateLabel: "In progress", working: true });
+  });
+
+  test("marks a step whose newest session waits on background tasks", () => {
+    const groups: TaskSessionGroup[] = [
+      { role: "build", roleLabel: "Builder", rows: [row("b-1", "running", true)] },
+    ];
+    const [, , build] = taskWorkflowSteps(createTaskCardFixture(), groups);
+    expect(build?.state).toMatchObject({ liveSession: "running", waitingOnBackground: true });
   });
 });

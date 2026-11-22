@@ -301,6 +301,26 @@ describe("Sidebar session previews", () => {
     expect(status.querySelector(".lucide-hourglass")).not.toBeNull();
   });
 
+  test("marks the workflow step of a session that waits on background tasks", async () => {
+    const { row } = mountSidebar([
+      session({
+        activity: "running",
+        foregroundTurnActive: false,
+        backgroundTasks: [
+          { taskId: "task-1", kind: "command", title: "bun run dev", stop: { allowed: true } },
+        ],
+      }),
+    ]);
+
+    const preview = await openPreview(row);
+    const builder = within(within(preview).getByLabelText("Task workflow")).getByText("Builder");
+    expect(
+      within(builder.closest("li")!).getByRole("img", {
+        name: "Running and waiting on background tasks",
+      }),
+    ).toBeTruthy();
+  });
+
   test("shows task workflow, metadata, live model and effort without reading history or adding observers", async () => {
     const history = mock(async () => {
       throw new Error("A preview must not load history.");
