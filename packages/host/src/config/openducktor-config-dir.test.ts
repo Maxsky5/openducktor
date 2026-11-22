@@ -1,6 +1,8 @@
+import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { HostValidationError } from "../effect/host-errors";
+import { runFixtureProcess } from "../test-support/fixture-process";
 import {
   displayUserPath,
   resolveOpenDucktorBaseDir,
@@ -117,4 +119,28 @@ describe("OpenDucktor config directory resolution", () => {
       "/home/developer/config.json",
     );
   });
+});
+
+test("development requires acknowledgement for the production config root and its aliases", async () => {
+  const homeDir = await mkdtemp(path.join(tmpdir(), "odt-development-config-"));
+  try {
+    const stdout = await runFixtureProcess({
+      fixtureUrl: new URL("./test-support/development-config-guard-fixture.ts", import.meta.url),
+      args: [],
+      homeDir,
+    });
+    const refusal = expect.stringMatching(
+      /refused the production config directory .*\.openducktor\. Set OPENDUCKTOR_CONFIG_DIR.*--allow-production-config/,
+    );
+    expect(JSON.parse(stdout)).toEqual({
+      direct: refusal,
+      alias: refusal,
+      acknowledged: null,
+      defaultDevelopment: null,
+      isolated: null,
+      production: null,
+    });
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
+  }
 });

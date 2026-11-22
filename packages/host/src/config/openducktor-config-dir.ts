@@ -7,8 +7,10 @@ import {
   resolveNormalizedUserPath,
 } from "@openducktor/path-support";
 import { HostResourceError, HostValidationError } from "../effect/host-errors";
+import { resolvePathSymlinks } from "../infrastructure/resolve-path-symlinks";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
+export const ALLOW_PRODUCTION_CONFIG_FLAG = "--allow-production-config";
 
 export type OpenDucktorConfigDirScope = "dev" | "production" | "test";
 export type OpenDucktorConfigDir = Readonly<{
@@ -85,4 +87,20 @@ export const resolveOpenDucktorBaseDir = (
   }
 
   return path.join(resolveHomeDirectory(), OPENDUCKTOR_CONFIG_DIR_NAMES[scope]);
+};
+
+export const assertDevelopmentConfigAllowed = (
+  scope: OpenDucktorConfigDirScope,
+  allowProductionConfig: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): void => {
+  if (scope !== "dev" || allowProductionConfig) return;
+  const configRoot = resolvePathSymlinks(resolveOpenDucktorBaseDir(scope, env));
+  const productionRoot = resolvePathSymlinks(resolveOpenDucktorBaseDir("production", {}));
+  if (path.relative(productionRoot, configRoot) === "") {
+    throw new HostValidationError({
+      field: OPENDUCKTOR_CONFIG_DIR_ENV,
+      message: `Development startup refused the production config directory ${productionRoot}. Set ${OPENDUCKTOR_CONFIG_DIR_ENV} to a separate directory or stop the production host and rerun with ${ALLOW_PRODUCTION_CONFIG_FLAG}.`,
+    });
+  }
 };

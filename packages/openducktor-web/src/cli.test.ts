@@ -24,6 +24,16 @@ describe("web CLI argument parsing", () => {
     });
   });
 
+  test("reads the production config acknowledgement as a workspace CLI flag", () => {
+    expect(parseCliArgs(["--workspace", "--allow-production-config"])).toMatchObject({
+      workspaceMode: true,
+      allowProductionConfig: true,
+    });
+    expect(() => parseCliArgs(["--workspace", "--host", "--allow-production-config"])).toThrow(
+      "Missing value for --host.",
+    );
+  });
+
   test("keeps fixed defaults for installed static launches", () => {
     expect(parseCliArgs([])).toMatchObject({
       frontendPort: 1420,
