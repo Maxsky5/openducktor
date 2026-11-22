@@ -629,7 +629,10 @@ describe("shared host settings", () => {
           defaults: config.agentRuntimes.claude.defaults,
           roleOverrides: config.agentRuntimes.claude.roleOverrides,
         },
-        antigravity: null,
+        antigravity: {
+          defaults: config.agentRuntimes.antigravity.defaults,
+          roleOverrides: config.agentRuntimes.antigravity.roleOverrides,
+        },
         custom: null,
       });
       expect(storedRuntimes.find(({ runtimeKind }) => runtimeKind === "custom")).toEqual({

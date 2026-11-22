@@ -1,6 +1,7 @@
 import { WorkflowTestProvider } from "@/test-utils/workflow-provider";
 import { describe, expect, mock, test } from "bun:test";
 import {
+  ANTIGRAVITY_RUNTIME_DESCRIPTOR,
   type AgentRuntimes,
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
@@ -485,6 +486,48 @@ describe("AgentRuntimesSection", () => {
       expect(screen.getByRole("button", { name: "Planner" }).textContent).toContain("Inherited");
       expect(screen.getByRole("button", { name: "Builder" }).textContent).toContain("Inherited");
       expect(screen.getByRole("button", { name: "QA" }).textContent).toContain("Inherited");
+    } finally {
+      renderer.unmount();
+    }
+  });
+
+  test("sets the Antigravity session mode and keeps read-only roles in Default", () => {
+    const updates: AgentRuntimes[] = [];
+    const renderer = render(
+      createElement(AgentRuntimesSection, {
+        ...runtimeDefinitionRequestProps,
+        agentRuntimes: DEFAULT_AGENT_RUNTIMES,
+        runtimeDefinitions: [ANTIGRAVITY_RUNTIME_DESCRIPTOR, OPENCODE_RUNTIME_DESCRIPTOR],
+        disabled: false,
+        requiresClaudeDangerAcknowledgement: false,
+        isClaudeDangerAcknowledged: false,
+        onClaudeDangerAcknowledgedChange: () => {},
+        requiresCodexDangerAcknowledgement: false,
+        isCodexDangerAcknowledged: false,
+        onCodexDangerAcknowledgedChange: () => {},
+        onUpdateAgentRuntimes: (updater) => {
+          updates.push(updater(DEFAULT_AGENT_RUNTIMES));
+        },
+      }),
+    );
+
+    try {
+      fireEvent.click(screen.getByRole("tab", { name: /Antigravity/i }));
+      expect(screen.getByRole("region", { name: "Session mode" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Default mode" }).textContent).toContain("Auto");
+
+      fireEvent.click(screen.getByRole("switch", { name: "Enable Session mode role overrides" }));
+      expect(updates).toHaveLength(0);
+      // A read-only role can choose a mode: its file edits stay refused in every mode.
+      const spec = screen.getByRole("button", { name: "Spec" });
+      expect(spec.textContent).toContain("Inherited");
+      expect(spec.hasAttribute("disabled")).toBe(false);
+      expect(renderer.container.textContent).toContain(
+        "Read-only role. OpenDucktor refuses its file edits in every mode.",
+      );
+      const builder = screen.getByRole("button", { name: "Builder" });
+      expect(builder.textContent).toContain("Inherited");
+      expect(builder.hasAttribute("disabled")).toBe(false);
     } finally {
       renderer.unmount();
     }

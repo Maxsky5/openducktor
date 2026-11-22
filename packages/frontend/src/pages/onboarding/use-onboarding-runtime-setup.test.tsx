@@ -42,7 +42,12 @@ describe("useOnboardingRuntimeSetup", () => {
         enabled: true,
         executablePath: "/valid/claude",
       },
-      antigravity: { enabled: true, executablePath: "/valid/agy" },
+      antigravity: {
+        enabled: true,
+        executablePath: "/valid/agy",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const validation = createDeferred<RuntimeExecutableCheck>();
     const client: Partial<HostClient> = {};
@@ -82,7 +87,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const client: Partial<HostClient> = {};
     const filesystemListDirectory = mock(async () => ({
@@ -207,7 +217,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const snapshot = createSettingsSnapshotFixture({ agentRuntimes: runtimes });
     const client: Partial<HostClient> = {};
@@ -250,7 +265,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const initialValidation = createDeferred<RuntimeExecutableCheck>();
     const latestValidation = createDeferred<RuntimeExecutableCheck>();
@@ -335,7 +355,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "/broken/claude", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const client: Partial<HostClient> = {};
     client.runtimeExecutablesCheck = mock(async (input) => {
@@ -367,7 +392,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "/slow/claude", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const claudeValidation = createDeferred<RuntimeExecutableCheck>();
     const opencodePaths: string[] = [];
@@ -423,7 +453,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const saveSettingsSnapshot = mock(async () => savedSettingsResult());
     let discoveryAttempts = 0;
@@ -466,7 +501,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const discovery = createDeferred<RuntimeExecutableCheck>();
     const client: Partial<HostClient> = {};
@@ -508,7 +548,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const discoveredRuntimes: AgentRuntimes = {
       ...runtimes,
@@ -518,7 +563,12 @@ describe("useOnboardingRuntimeSetup", () => {
         enabled: true,
         executablePath: "/discovered/opencode",
       },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const discovery = createDeferred<RuntimeExecutableCheck>();
     const client: Partial<HostClient> = {};
@@ -574,7 +624,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const discoveredRuntimes: AgentRuntimes = {
       ...runtimes,
@@ -584,7 +639,12 @@ describe("useOnboardingRuntimeSetup", () => {
         enabled: true,
         executablePath: "/discovered/opencode",
       },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const requests: Array<"discover" | { opencodePath: string }> = [];
     const client: Partial<HostClient> = {};
@@ -677,7 +737,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const client: Partial<HostClient> = {};
     client.runtimeExecutablesCheck = mock(async (input) =>
@@ -713,7 +778,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const error =
       "OpenCode at '/tools/opencode' is not compatible with OpenDucktor. OpenDucktor needs OpenCode 2 or later. Run `opencode upgrade`, or select another OpenCode executable. Then try again.";
@@ -751,7 +821,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const client: Partial<HostClient> = {};
     client.runtimeExecutablesCheck = mock(async () => createCheck(runtimes));
@@ -777,7 +852,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const invalidCheck = createDeferred<RuntimeExecutableCheck>();
     const runtimeExecutablesCheck = mock(async (input) => {
@@ -847,7 +927,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true, executablePath: "/valid/codex" },
       claude: { enabled: true, executablePath: "/valid/claude", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const requests: RuntimeKind[][] = [];
     const changedCheck = createDeferred<RuntimeExecutableCheck>();
@@ -909,7 +994,12 @@ describe("useOnboardingRuntimeSetup", () => {
       opencode: { defaults: { rules: [] }, roleOverrides: {}, enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const client: Partial<HostClient> = {};
     client.runtimeExecutablesCheck = mock(async (input) => {
@@ -956,7 +1046,12 @@ describe("useOnboardingRuntimeSetup", () => {
       opencode: { defaults: { rules: [] }, roleOverrides: {}, enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const client: Partial<HostClient> = {};
     client.runtimeExecutablesCheck = mock(async (input) => {
@@ -1002,7 +1097,12 @@ describe("useOnboardingRuntimeSetup", () => {
       opencode: { defaults: { rules: [] }, roleOverrides: {}, enabled: false, executablePath: "" },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false, executablePath: "" },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     let saveCalls = 0;
     const saveSettingsSnapshot = mock(async () => {
@@ -1057,7 +1157,12 @@ describe("useOnboardingRuntimeSetup", () => {
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true, executablePath: "/valid/codex" },
       claude: { enabled: true, executablePath: "/valid/claude", defaults: {}, roleOverrides: {} },
-      antigravity: { enabled: false, executablePath: "" },
+      antigravity: {
+        enabled: false,
+        executablePath: "",
+        defaults: { mode: "auto" },
+        roleOverrides: {},
+      },
     };
     const availableCheck: RuntimeExecutableCheck = {
       runtimes: runtimeDefinitions.map(({ kind }) => ({

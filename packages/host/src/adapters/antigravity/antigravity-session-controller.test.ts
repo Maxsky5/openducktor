@@ -579,7 +579,7 @@ describe("AntigravitySessionController", () => {
     expect((await pending).outcome).toEqual({ outcome: "selected", optionId: "deny" });
   });
 
-  test("refuses file changes for a read-only role without asking the user", async () => {
+  test("refuses file changes of a read-only role and approves its commands in the auto setting", async () => {
     const harness = await createConnectedController();
     const { ref } = await startBuildSession(harness, "qa");
     void sendText(harness, ref, "Review");
@@ -597,6 +597,21 @@ describe("AntigravitySessionController", () => {
     expect(response.outcome).toEqual({ outcome: "selected", optionId: "deny" });
     expect(lastSnapshot(harness)?.pendingApprovals).toEqual([]);
     expect(eventTypes(harness)).toContain("session_policy_notice");
+
+    // In the auto setting, the session runs in the native default mode and approves the commands.
+    const command = await prompt.client.request(methods.client.session.requestPermission, {
+      sessionId: ref.externalSessionId,
+      toolCall: { toolCallId: "find-1", kind: "execute", title: "find . -name '*.ts'" },
+      options: [
+        { optionId: "allow", name: "Allow", kind: "allow_once" },
+        { optionId: "deny", name: "Deny", kind: "reject_once" },
+      ],
+    });
+    expect(command.outcome).toEqual({ outcome: "selected", optionId: "allow" });
+    expect(lastSnapshot(harness)?.pendingApprovals).toEqual([]);
+    expect(
+      harness.fake.modes.filter(({ sessionId }) => sessionId === ref.externalSessionId),
+    ).toEqual([]);
   });
 
   test("stops the exact session and closes its pending approvals", async () => {

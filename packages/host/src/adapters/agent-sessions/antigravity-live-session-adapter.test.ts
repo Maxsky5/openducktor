@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import { methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
-import { RUNTIME_DESCRIPTORS_BY_KIND, type RuntimeInstanceSummary } from "@openducktor/contracts";
+import {
+  type AntigravityMode,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  type RuntimeInstanceSummary,
+} from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostOperationError } from "../../effect/host-errors";
 import {
@@ -24,7 +28,12 @@ const runtime: RuntimeInstanceSummary = {
 
 const sessionScope = { kind: "repository" as const, workspaceId: "workspace-1" };
 
-const prepareAdapter = async ({ failPublication = false } = {}) => {
+const prepareAdapter = async ({
+  failPublication = false,
+  sessionMode = "auto",
+}: { failPublication?: boolean; sessionMode?: AntigravityMode } = {}) => {
+  // The runtime setting can change between sessions, so a test can change this mode.
+  const setting = { mode: sessionMode };
   const changes: AgentSessionLiveAdapterChange[] = [];
   const prewarmed: string[] = [];
   const released: string[] = [];
@@ -60,6 +69,7 @@ const prepareAdapter = async ({ failPublication = false } = {}) => {
             ODT_RUNTIME_KIND: "antigravity",
           },
         }),
+      resolveSessionMode: () => Effect.sync(() => setting.mode),
       resolveWorkflowRolePolicy: () => ({ tools: [], readOnly: false }),
       directoriesMatch: (left, right) => Effect.succeed(left === right),
       attachmentStageDirectory: "/tmp/openducktor-local-attachments",
@@ -89,6 +99,7 @@ const prepareAdapter = async ({ failPublication = false } = {}) => {
     prewarmed,
     released,
     runtimeSessions,
+    setting,
   };
 };
 
@@ -375,6 +386,70 @@ describe("Antigravity live session adapter", () => {
     expect(fake.sessions).toEqual([]);
     expect(fake.loaded.map((load) => load.sessionId)).toEqual([externalSessionId]);
     expect(reopened.externalSessionId).toBe(externalSessionId);
+  });
+
+  test("sets the session mode of the runtime setting when a session starts and reopens", async () => {
+    const { adapter, fake, setting } = await prepareAdapter({ sessionMode: "accept-edits" });
+    const { externalSessionId } = await startSession(adapter);
+    setting.mode = "auto";
+    await Effect.runPromise(
+      adapter.releaseSession({
+        repoPath: "/repo",
+        runtimeKind: "antigravity",
+        workingDirectory: "/repo/worktree",
+        externalSessionId,
+      }),
+    );
+    await Effect.runPromise(resume(adapter, externalSessionId));
+
+    expect(fake.modes.map(({ sessionId, value }) => [sessionId, value])).toEqual([
+      [externalSessionId, "accept-edits"],
+      [externalSessionId, "auto"],
+    ]);
+  });
+
+  test("runs a bypass session in auto and approves each request without asking", async () => {
+    const { adapter, fake } = await prepareAdapter({ sessionMode: "bypass-permissions" });
+    const { externalSessionId } = await startSession(adapter);
+    const sent = Effect.runPromise(
+      adapter.sendUserMessage({
+        repoPath: "/repo",
+        runtimeKind: "antigravity",
+        workingDirectory: "/repo/worktree",
+        externalSessionId,
+        sessionScope,
+        parts: [{ kind: "text", text: "Delete the build folder" }],
+        delivery: "new_turn",
+      }),
+    );
+    const prompt = await fake.waitForPrompts(1);
+
+    const reply = await prompt.client.request(methods.client.session.requestPermission, {
+      sessionId: externalSessionId,
+      toolCall: { toolCallId: "rm-1", kind: "execute", title: "rm -rf build" },
+      options: [
+        { optionId: "allow", name: "Allow", kind: "allow_once" },
+        { optionId: "deny", name: "Deny", kind: "reject_once" },
+      ],
+    });
+    prompt.respond({ stopReason: "end_turn" });
+    await sent;
+
+    expect(fake.modes.map(({ value }) => value)).toEqual(["auto"]);
+    expect(reply.outcome).toEqual({ outcome: "selected", optionId: "allow" });
+    const snapshot = await Effect.runPromise(adapter.listSnapshots());
+    expect(snapshot.flatMap((entry) => entry.pendingApprovals ?? [])).toEqual([]);
+  });
+
+  test("refuses to open a session in a mode that Antigravity does not offer", async () => {
+    const { adapter, fake } = await prepareAdapter({ sessionMode: "auto" });
+    fake.offeredModes.splice(fake.offeredModes.indexOf("auto"), 1);
+
+    const failure = await Effect.runPromise(Effect.flip(startEffect(adapter)));
+
+    expect(failure.message).toContain("Antigravity does not offer the session mode 'auto'.");
+    expect(fake.closed).toHaveLength(1);
+    expect(await Effect.runPromise(adapter.listSnapshots())).toEqual([]);
   });
 
   test("stops and probes the sessions of the runtime by its runtime ID until it is released", async () => {

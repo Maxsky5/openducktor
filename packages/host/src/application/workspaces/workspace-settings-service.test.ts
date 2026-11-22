@@ -10,6 +10,7 @@ import path from "node:path";
 import {
   DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CHAT_SETTINGS,
+  DEFAULT_ANTIGRAVITY_RUNTIME_POLICY,
   DEFAULT_CODEX_RUNTIME_POLICY,
   type GlobalConfig,
   type RepoConfig,
@@ -126,7 +127,12 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
       roleOverrides: {},
     },
     claude: { enabled: false, executablePath: "/bin/claude", defaults: {}, roleOverrides: {} },
-    antigravity: { enabled: false, executablePath: "/bin/agy" },
+    antigravity: {
+      enabled: false,
+      executablePath: "/bin/agy",
+      defaults: { ...DEFAULT_ANTIGRAVITY_RUNTIME_POLICY },
+      roleOverrides: {},
+    },
   },
   agentModelFavorites: [],
   workspaces: {},

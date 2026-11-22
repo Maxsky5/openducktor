@@ -1,5 +1,6 @@
 import {
   agentRuntimeConfigSchema,
+  antigravityRuntimeConfigSchema,
   claudeRuntimeConfigSchema,
   codexPolicyFieldsSchema,
   codexRuntimeConfigSchema,
@@ -43,6 +44,8 @@ const storedRuntimeSchemas = {
   codex: storedCodexRuntimeSchema,
   claude: storedClaudeRuntimeSchema,
   opencode: storedOpenCodeRuntimeSchema,
+  // A row stored before the Antigravity policy has no policy, so it gets the default policy.
+  antigravity: antigravityRuntimeConfigSchema,
 };
 const storedRuntimesSchema = z.object(storedRuntimeSchemas).catchall(agentRuntimeConfigSchema);
 

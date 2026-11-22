@@ -6,6 +6,7 @@ import {
   readAgentJsonAnswer,
   type AgentSessionLiveRef,
   type AgentSessionScope,
+  type AntigravityMode,
   type RuntimeInstanceSummary,
   type WorkspaceSessionExternal,
 } from "@openducktor/contracts";
@@ -67,6 +68,10 @@ export type AntigravityLiveSessionAdapterPreparer = (
 export type CreateAntigravityLiveSessionAdapterPreparerInput = {
   readonly liveSessionLifecycle: Pick<RuntimeLiveSessionLifecyclePort, "createRuntimeRegistration">;
   readonly resolveMcpServerConfig: OpenDucktorMcpServerConfigResolver;
+  /** The session mode that the runtime setting gives a session scope. */
+  readonly resolveSessionMode: (
+    sessionScope: AgentSessionScope,
+  ) => Effect.Effect<AntigravityMode, HostError>;
   readonly resolveWorkflowRolePolicy: WorkflowRolePolicyResolver;
   readonly directoriesMatch: (left: string, right: string) => Effect.Effect<boolean, HostError>;
   readonly attachmentStageDirectory: string;
@@ -112,6 +117,7 @@ export const createAntigravityLiveSessionAdapterPreparer =
   ({
     liveSessionLifecycle,
     resolveMcpServerConfig,
+    resolveSessionMode,
     resolveWorkflowRolePolicy,
     directoriesMatch,
     attachmentStageDirectory,
@@ -183,8 +189,9 @@ export const createAntigravityLiveSessionAdapterPreparer =
             input.repoPath,
             input.sessionScope.workspaceId,
           );
+          const mode = yield* resolveSessionMode(input.sessionScope);
           return yield* run(operation, input, () =>
-            controller.reattachSession({ ...input, nativeSession, managedMcpServer }),
+            controller.reattachSession({ ...input, nativeSession, managedMcpServer, mode }),
           );
         });
 
@@ -366,6 +373,7 @@ export const createAntigravityLiveSessionAdapterPreparer =
                 input.repoPath,
                 input.sessionScope.workspaceId,
               );
+              const mode = yield* resolveSessionMode(input.sessionScope);
               return yield* Effect.tryPromise({
                 try: () =>
                   controller.startSession({
@@ -375,6 +383,7 @@ export const createAntigravityLiveSessionAdapterPreparer =
                     systemPrompt: input.systemPrompt,
                     model: input.model,
                     managedMcpServer,
+                    mode,
                   }),
                 catch: runtimeError("antigravity-live-session.start-session"),
               });

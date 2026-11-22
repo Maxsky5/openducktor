@@ -407,6 +407,22 @@ When on, sandboxed commands can use every Unix socket. A command can then reach 
 
 When the draft adds **Bypass permissions** or turns off the Bash sandbox, the section shows **Confirm reduced Claude protections**. Before you save, turn on **I understand these Claude settings reduce safety protections.** Values that you saved before need no new confirmation.
 
+### Antigravity session mode [#harnesses-antigravity-session-mode]
+
+Sets what Antigravity approves without asking you. The change applies to Antigravity sessions that start or open again after the save.
+
+| Mode | What it does |
+|---|---|
+| **Default** | Asks before edits and commands, as your Antigravity permission settings say. |
+| **Accept edits** | Approves file edits in the workspace without asking. |
+| **Auto** | Approves edits and safe commands. Asks before irreversible actions. |
+| **Bypass permissions** | Approves every action without asking, irreversible actions too. Questions still come to you. |
+
+- The default is **Auto**.
+- Set **Role overrides** to give a role another mode. **Inherited** uses the default.
+- Spec, Planner, QA, and other read-only roles never change files: OpenDucktor refuses their file edits in every mode. Their mode decides whether their commands and other tools run without asking: **Auto** and **Bypass permissions** run them, **Default** and **Accept edits** ask you.
+- Your Antigravity permission rules apply in every mode. In **Bypass permissions**, OpenDucktor approves each request that is left.
+
 ## Repositories [#repositories]
 
 This section holds the settings of one workspace. Select the workspace in the **Repository** list, then select **Configuration**, **Scripts**, **Git**, **Agents**, or **Repository prompts**.

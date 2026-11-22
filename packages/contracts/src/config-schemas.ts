@@ -195,23 +195,74 @@ export const openCodeRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
   })
   .strict();
 export type OpenCodeRuntimeConfig = z.infer<typeof openCodeRuntimeConfigSchema>;
+
+/**
+ * The session modes of Antigravity that decide what it approves without asking. `plan` is left
+ * out, because it changes how the agent works, not what it may do. `bypass-permissions` is not a
+ * native mode: the session runs in `auto`, and OpenDucktor approves each request that is left.
+ */
+export const ANTIGRAVITY_MODE_VALUES = [
+  "default",
+  "accept-edits",
+  "auto",
+  "bypass-permissions",
+] as const;
+const antigravityModeSchema = z.enum(ANTIGRAVITY_MODE_VALUES);
+export type AntigravityMode = z.infer<typeof antigravityModeSchema>;
+
+export const DEFAULT_ANTIGRAVITY_RUNTIME_POLICY = { mode: "auto" } as const;
+
+const antigravityPolicyFieldsSchema = z
+  .object({ mode: antigravityModeSchema.default(DEFAULT_ANTIGRAVITY_RUNTIME_POLICY.mode) })
+  .strict();
+export type AntigravityPolicyFields = z.infer<typeof antigravityPolicyFieldsSchema>;
+
+const antigravityRoleOverrideSchema = z.object({ mode: antigravityModeSchema.optional() }).strict();
+export type AntigravityRoleOverride = z.infer<typeof antigravityRoleOverrideSchema>;
+
+const createDefaultAntigravityRuntimePolicy = (): AntigravityPolicyFields => ({
+  ...DEFAULT_ANTIGRAVITY_RUNTIME_POLICY,
+});
+
+/** A runtime without a stored policy gets the default policy. */
+export const antigravityRuntimeConfigSchema = agentRuntimeEnabledConfigSchema
+  .extend({
+    defaults: antigravityPolicyFieldsSchema.default(() => createDefaultAntigravityRuntimePolicy()),
+    roleOverrides: z.partialRecord(agentRoleSchema, antigravityRoleOverrideSchema).default({}),
+  })
+  .strict();
+export type AntigravityRuntimeConfig = z.infer<typeof antigravityRuntimeConfigSchema>;
+
+/**
+ * The mode setting of an Antigravity session: the override of its role, else the default. For a
+ * read-only role, the mode decides only about commands and other tools: file edits stay refused.
+ */
+export const resolveAntigravitySessionMode = (
+  config: AntigravityRuntimeConfig,
+  role: string | null,
+): AntigravityMode => {
+  const override = role ? config.roleOverrides[role] : undefined;
+  return override?.mode ?? config.defaults.mode;
+};
+
 export type AgentRuntimeConfig =
   | AgentRuntimeEnabledConfig
   | CodexRuntimeConfig
   | ClaudeRuntimeConfig
-  | OpenCodeRuntimeConfig;
+  | OpenCodeRuntimeConfig
+  | AntigravityRuntimeConfig;
 export type AgentRuntimes = Record<string, AgentRuntimeConfig> & {
   opencode: OpenCodeRuntimeConfig;
   codex: CodexRuntimeConfig;
   claude: ClaudeRuntimeConfig;
-  antigravity: AgentRuntimeEnabledConfig;
+  antigravity: AntigravityRuntimeConfig;
 };
 
 type DefaultAgentRuntimes = {
   opencode: OpenCodeRuntimeConfig;
   codex: CodexRuntimeConfig;
   claude: ClaudeRuntimeConfig;
-  antigravity: AgentRuntimeEnabledConfig;
+  antigravity: AntigravityRuntimeConfig;
 };
 
 const createDefaultAgentRuntimes = (): DefaultAgentRuntimes => ({
@@ -223,7 +274,12 @@ const createDefaultAgentRuntimes = (): DefaultAgentRuntimes => ({
     roleOverrides: {},
   },
   claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-  antigravity: { enabled: false, executablePath: "" },
+  antigravity: {
+    enabled: false,
+    executablePath: "",
+    defaults: createDefaultAntigravityRuntimePolicy(),
+    roleOverrides: {},
+  },
 });
 
 export const DEFAULT_AGENT_RUNTIMES: AgentRuntimes = createDefaultAgentRuntimes();
@@ -233,7 +289,7 @@ export const agentRuntimesSchema = z
     opencode: openCodeRuntimeConfigSchema.optional(),
     codex: codexRuntimeConfigSchema.optional(),
     claude: claudeRuntimeConfigSchema.optional(),
-    antigravity: agentRuntimeEnabledConfigSchema.optional(),
+    antigravity: antigravityRuntimeConfigSchema.optional(),
   })
   .catchall(agentRuntimeEnabledConfigSchema)
   .transform((value): AgentRuntimes => ({
@@ -251,7 +307,12 @@ export const agentRuntimesSchema = z
       roleOverrides: {},
     },
     claude: value.claude ?? { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
-    antigravity: value.antigravity ?? { enabled: false, executablePath: "" },
+    antigravity: value.antigravity ?? {
+      enabled: false,
+      executablePath: "",
+      defaults: createDefaultAntigravityRuntimePolicy(),
+      roleOverrides: {},
+    },
   }))
   .default(() => createDefaultAgentRuntimes());
 
@@ -953,6 +1014,7 @@ export const promptAppendEditsSchema = keyedSettingsEditsSchema(
 export const codexRolePatchSchema = settingsFieldsPatchSchema(codexRoleOverrideSchema);
 export const claudePolicyPatchSchema = settingsFieldsPatchSchema(claudePolicyFieldsSchema);
 export const openCodePolicyPatchSchema = settingsFieldsPatchSchema(openCodePermissionRulesSchema);
+const antigravityRolePatchSchema = settingsFieldsPatchSchema(antigravityRoleOverrideSchema);
 const agentRuntimeFieldsPatchSchema = settingsFieldsPatchSchema(agentRuntimeEnabledConfigSchema);
 const agentRuntimesPatchSchema = z
   .object({
@@ -983,6 +1045,16 @@ const agentRuntimesPatchSchema = z
         roleOverrides: keyedSettingsEditsSchema(
           claudePolicyFieldsSchema,
           claudePolicyPatchSchema,
+        ).optional(),
+      })
+      .optional(),
+    antigravity: z
+      .strictObject({
+        ...agentRuntimeFieldsPatchSchema.shape,
+        defaults: settingsFieldsPatchSchema(antigravityPolicyFieldsSchema).optional(),
+        roleOverrides: keyedSettingsEditsSchema(
+          antigravityRoleOverrideSchema,
+          antigravityRolePatchSchema,
         ).optional(),
       })
       .optional(),

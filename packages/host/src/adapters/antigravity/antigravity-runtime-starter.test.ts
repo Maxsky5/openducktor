@@ -92,6 +92,7 @@ const createStarter = (initialize: "v1" | "v2" | "auth") => {
     liveSessionLifecycle,
     prepareLiveSessionAdapter: createAntigravityLiveSessionAdapterPreparer({
       liveSessionLifecycle,
+      resolveSessionMode: () => Effect.succeed("auto"),
       resolveMcpServerConfig: () =>
         Effect.succeed({
           command: ["/bin/odt-mcp"],

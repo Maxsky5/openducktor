@@ -32,6 +32,8 @@ import {
   persistedGlobalConfigV2Schema,
   repoActionCommandLines,
   repoConfigSchema,
+  antigravityRuntimeConfigSchema,
+  resolveAntigravitySessionMode,
   resolveCodexEffectivePolicy,
   resolveHorizontalScrollbarVisibility,
   reusablePromptSchema,
@@ -1290,5 +1292,40 @@ describe("config-schemas", () => {
 
     expect(config.notifications).toEqual(createDefaultNotificationSettings());
     expect(snapshot.notifications).toEqual(createDefaultNotificationSettings());
+  });
+});
+
+describe("Antigravity runtime policy", () => {
+  test("gives a stored runtime without a policy the Auto mode", () => {
+    expect(
+      antigravityRuntimeConfigSchema.parse({ enabled: true, executablePath: "/bin/agy" }),
+    ).toEqual({
+      enabled: true,
+      executablePath: "/bin/agy",
+      defaults: { mode: "auto" },
+      roleOverrides: {},
+    });
+    expect(() =>
+      antigravityRuntimeConfigSchema.parse({
+        enabled: true,
+        executablePath: "/bin/agy",
+        defaults: { mode: "plan" },
+      }),
+    ).toThrow();
+  });
+
+  test("uses the role override of any role, read-only roles too", () => {
+    const config = antigravityRuntimeConfigSchema.parse({
+      enabled: true,
+      executablePath: "/bin/agy",
+      defaults: { mode: "accept-edits" },
+      roleOverrides: { build: { mode: "auto" }, qa: { mode: "auto" } },
+    });
+
+    expect(resolveAntigravitySessionMode(config, null)).toBe("accept-edits");
+    expect(resolveAntigravitySessionMode(config, "build")).toBe("auto");
+    expect(resolveAntigravitySessionMode(config, "planner")).toBe("accept-edits");
+    // The adapter keeps a read-only role in the native default mode and applies this mode itself.
+    expect(resolveAntigravitySessionMode(config, "qa")).toBe("auto");
   });
 });

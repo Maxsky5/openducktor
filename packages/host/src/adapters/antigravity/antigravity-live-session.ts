@@ -75,6 +75,8 @@ export type AntigravityLiveSessionInput = {
   readonly startedAt: string;
   readonly callerBindingId: string;
   readonly readOnly: boolean;
+  /** True when the mode setting approves the permission requests that the session gets. */
+  readonly approvesRequests: boolean;
   readonly transcript: AntigravityTranscript;
 };
 
@@ -96,6 +98,7 @@ export class AntigravityLiveSession {
   private readonly startedAt: string;
   private readonly systemPrompt: string;
   private readonly readOnly: boolean;
+  private readonly approvesRequests: boolean;
   private readonly transcript: AntigravityTranscript;
   private title: string;
   /** The last command list of the session. The setup publish sends it. */
@@ -116,6 +119,7 @@ export class AntigravityLiveSession {
     this.startedAt = input.startedAt;
     this.systemPrompt = input.systemPrompt;
     this.readOnly = input.readOnly;
+    this.approvesRequests = input.approvesRequests;
     this.transcript = input.transcript;
     this.title = input.title;
     this.model = new AntigravitySessionModel(connection, input.ref.externalSessionId);
@@ -298,6 +302,7 @@ export class AntigravityLiveSession {
       ]);
       return Promise.resolve(rejectAntigravityPermission(params));
     }
+    if (this.approvesRequests) return Promise.resolve(allowAntigravityPermissionOnce(params));
     const requestId = randomUUID();
     const { promise, resolve } = Promise.withResolvers<RequestPermissionResponse>();
     this.pendingApprovals.set(requestId, {

@@ -162,6 +162,10 @@ export const createNodeHostRuntimeComposition = ({
     launchDirectory,
     liveSessionLifecycle: liveState,
     readEnv,
+    readRuntimeSettings: () =>
+      settingsConfig
+        .readGlobalConfig()
+        .pipe(Effect.map(({ agentRuntimes }) => agentRuntimes.antigravity)),
     resolveMcpServerConfig: mcpServerConfigFor("antigravity"),
     resolveWorkflowRolePolicy,
     toolDiscovery,

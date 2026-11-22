@@ -65,7 +65,7 @@ describe("runtime config initializer", () => {
       executablePath: "/tools/claude",
     });
     // Antigravity is opt-in, so a detected CLI only fills its path.
-    expect(config.agentRuntimes.antigravity).toEqual({
+    expect(config.agentRuntimes.antigravity).toMatchObject({
       enabled: false,
       executablePath: "/tools/agy",
     });

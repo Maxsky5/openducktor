@@ -3,6 +3,7 @@ import {
   type WorkflowSettingsData,
 } from "@openducktor/frontend-core/queries/workflow-settings";
 import type { WorkflowRoleId as AgentRole } from "@openducktor/workflows";
+import { AntigravityPolicySettings } from "./settings-antigravity-policy";
 import { ClaudePolicySection } from "./settings-claude-policy-section";
 import {
   RuntimePolicyCard,
@@ -869,6 +870,18 @@ export function AgentRuntimesSection({
                       onUpdateAgentRuntimes((current) => ({
                         ...current,
                         codex: updater(codexConfigWithDefaults(current.codex)),
+                      }))
+                    }
+                  />
+                ) : null}
+                {selectedDefinition.kind === "antigravity" ? (
+                  <AntigravityPolicySettings
+                    config={agentRuntimes.antigravity}
+                    disabled={disabled}
+                    onUpdate={(updater) =>
+                      onUpdateAgentRuntimes((current) => ({
+                        ...current,
+                        antigravity: updater(current.antigravity),
                       }))
                     }
                   />

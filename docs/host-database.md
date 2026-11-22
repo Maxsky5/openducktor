@@ -13,7 +13,7 @@ OpenDucktor stores shared workspace data and execution settings in `<config-root
 
 The settings adapter composes reads from both stores. Saves contain edited fields. Shared edits commit first; preference edits follow. A preference failure after a shared commit reports the saved shared fields and retains the failed preference edits.
 
-Runtime permission policies use `agent_runtime_settings.policy_json`. Known runtimes store their existing `defaults` and `roleOverrides` objects. Other runtimes keep this column NULL. Reads and writes validate the payload and preserve omitted fields, empty collections, false values, rule order, and duplicates.
+Runtime permission policies use `agent_runtime_settings.policy_json`. Known runtimes, Antigravity included, store their `defaults` and `roleOverrides` objects. An Antigravity row stored before its policy existed has a NULL policy, and a read gives it the default policy. Other runtimes keep this column NULL. Reads and writes validate the payload and preserve omitted fields, empty collections, false values, rule order, and duplicates.
 
 Workspace removal deletes only the target registration and owned rows. It keeps the database file and other workspaces.
 

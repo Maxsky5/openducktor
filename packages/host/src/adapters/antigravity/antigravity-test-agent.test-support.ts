@@ -17,6 +17,7 @@ import {
 import type {
   AgentSessionLiveRef,
   AgentTextGenerationInput,
+  AntigravityMode,
   RuntimeApprovalReplyOutcome,
 } from "@openducktor/contracts";
 import type { AgentModelSelection, ManagedMcpServer } from "@openducktor/core";
@@ -64,19 +65,35 @@ export const createFakeAntigravityAgent = () => {
   /** Updates that the agent sends before it answers each `session/set_config_option`. */
   const updatesOnConfig: SessionUpdate[] = [];
   const nativeModels = new Map<string, { model: string; thought_level: string }>();
+  /** The session modes that `session/set_config_option` set, apart from the model writes. */
+  const modes: SetSessionConfigOptionRequest[] = [];
+  const modesBySession = new Map<string, string>();
+  /** The modes that the agent offers. A test can remove one. */
+  const offeredModes = ["default", "accept-edits", "auto", "plan"];
   const configOptionsOf = (sessionId: string): SessionConfigOption[] => {
     const values = nativeModels.get(sessionId) ?? {
       model: "gemini-flash",
       thought_level: "medium",
     };
     nativeModels.set(sessionId, values);
-    return (["model", "thought_level"] as const).map((id) => ({
-      id,
-      name: id,
-      type: "select",
-      currentValue: values[id],
-      options: [{ value: values[id], name: values[id] }],
-    }));
+    const mode = modesBySession.get(sessionId) ?? "default";
+    return [
+      ...(["model", "thought_level"] as const).map((id): SessionConfigOption => ({
+        id,
+        name: id,
+        type: "select",
+        currentValue: values[id],
+        options: [{ value: values[id], name: values[id] }],
+      })),
+      {
+        id: "mode",
+        name: "Mode",
+        category: "mode",
+        type: "select",
+        currentValue: mode,
+        options: offeredModes.map((value) => ({ value, name: value })),
+      },
+    ];
   };
   let nextSessionId = 1;
   let promptWaiters: Array<() => void> = [];
@@ -124,6 +141,11 @@ export const createFakeAntigravityAgent = () => {
       return {};
     })
     .onRequest(methods.agent.session.setConfigOption, async ({ params, client }) => {
+      if (params.configId === "mode") {
+        modes.push(params);
+        modesBySession.set(params.sessionId, String(params.value));
+        return { configOptions: configOptionsOf(params.sessionId) };
+      }
       configOptions.push(params);
       for (const update of updatesOnConfig) {
         await client.notify(methods.client.session.update, { sessionId: params.sessionId, update });
@@ -166,6 +188,8 @@ export const createFakeAntigravityAgent = () => {
     closed,
     cancelled,
     configOptions,
+    modes,
+    offeredModes,
     refusedConfigValues,
     updatesOnConfig,
     updatesAfterLoad,
@@ -228,15 +252,23 @@ export const createConnectedController = async (
   });
   agentConnection.attach(connection);
   const runtime = {
-    startSession: (input: Omit<AntigravityStartInput, "managedMcpServer">) =>
+    startSession: (
+      input: Omit<AntigravityStartInput, "managedMcpServer" | "mode"> & {
+        mode?: AntigravityMode;
+      },
+    ) =>
       controller.startSession({
+        mode: "auto",
         ...input,
         managedMcpServer: managedMcpServer(input.sessionScope.workspaceId),
       }),
     reattachSession: async (
-      input: Omit<AntigravityReattachInput, "nativeSession" | "managedMcpServer">,
+      input: Omit<AntigravityReattachInput, "nativeSession" | "managedMcpServer" | "mode"> & {
+        mode?: AntigravityMode;
+      },
     ) =>
       controller.reattachSession({
+        mode: "auto",
         ...input,
         nativeSession: await findListedAntigravitySession(agentConnection, input.externalSessionId),
         managedMcpServer: managedMcpServer(input.sessionScope.workspaceId),
