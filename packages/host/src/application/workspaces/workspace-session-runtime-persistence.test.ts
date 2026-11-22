@@ -309,6 +309,16 @@ describe("Workspace Session persistence through the shared command module", () =
     expect(h.titleAttempts).toEqual(["First accepted prompt"]);
   });
 
+  test("names no session and adds no activity for a pending message", async () => {
+    const h = await setup();
+    const before = await h.get();
+
+    await h.emit({ ...h.accepted(), state: "pending", sessionRef: h.ref });
+
+    expect(h.titleAttempts).toEqual([]);
+    expect(await h.get()).toEqual(before);
+  });
+
   test("renames the runtime session when another client sends the first message", async () => {
     const h = await setup();
     await h.emit({ ...h.accepted(), sessionRef: h.ref });

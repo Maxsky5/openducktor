@@ -2,13 +2,13 @@ import { RUNTIME_ICON_GEOMETRY } from "@openducktor/theme/runtime-icons";
 import type { WorkflowIcon } from "@openducktor/contracts";
 import type { RuntimeKind } from "@openducktor/contracts";
 import { memo, type ReactElement } from "react";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useAppTheme } from "@/theme/app-theme-context";
 import type { Tone } from "@/theme/tokens";
 
-const { codex, claude, opencode } = RUNTIME_ICON_GEOMETRY;
+const { antigravity, codex, claude, opencode } = RUNTIME_ICON_GEOMETRY;
 
 /**
  * The desktop role and runtime icons. Roles are custom drawings on the Lucide 24-point grid, and
@@ -123,6 +123,19 @@ export const RuntimeIcon = memo(function RuntimeIcon({
       return (
         <Svg width={size} height={size} viewBox={claude.viewBox}>
           <Path d={claude.path} fill="#D97757" fillRule="nonzero" />
+        </Svg>
+      );
+    case "antigravity":
+      return (
+        <Svg width={size} height={size} viewBox={antigravity.viewBox}>
+          <Defs>
+            <LinearGradient id="antigravity-brand" x1="0" y1="1" x2="0.4" y2="0">
+              {antigravity.gradientStops.map((stop) => (
+                <Stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />
+              ))}
+            </LinearGradient>
+          </Defs>
+          <Path d={antigravity.path} fill="url(#antigravity-brand)" />
         </Svg>
       );
   }

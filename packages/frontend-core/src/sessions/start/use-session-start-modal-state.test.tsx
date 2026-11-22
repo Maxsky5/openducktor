@@ -26,6 +26,7 @@ import {
 } from "../../test-support/runtime-hook-harness";
 import { useSessionStartModalState } from "./use-session-start-modal-state";
 import {
+  ANTIGRAVITY_RUNTIME_DESCRIPTOR,
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -123,6 +124,7 @@ const createRuntimeDescriptor = ({
     opencode: OPENCODE_RUNTIME_DESCRIPTOR,
     codex: CODEX_RUNTIME_DESCRIPTOR,
     claude: CLAUDE_RUNTIME_DESCRIPTOR,
+    antigravity: ANTIGRAVITY_RUNTIME_DESCRIPTOR,
   }[kind],
   kind,
   label,

@@ -47,10 +47,10 @@ import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { resolveOpenDucktorMcpCommand } from "../mcp/openducktor-mcp-command";
 import { loadClaudeHistory, loadClaudeRuntimeCatalog } from "./claude-agent-sdk-catalog";
 import {
-  type ClaudeWorkspaceFileSearch,
-  createClaudeWorkspaceFileSearch,
-  trackClaudeFileSearchSessions,
-} from "./claude-agent-sdk-file-search";
+  type WorkspaceFileSearch,
+  createWorkspaceFileSearch,
+} from "../file-search/workspace-file-search";
+import { trackClaudeFileSearchSessions } from "./claude-agent-sdk-file-search";
 import {
   type ClaudeContextUsageDependencies,
   loadClaudeSessionContextUsage,
@@ -104,7 +104,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
   private readonly now: () => string;
   private readonly randomId: () => string;
   private readonly sessionStore: ClaudeSessionStore;
-  private readonly fileSearch: ClaudeWorkspaceFileSearch;
+  private readonly fileSearch: WorkspaceFileSearch;
   private readonly untrackFileSearchSessions: () => void;
   private readonly historyReader: ClaudeTranscriptReadOwner;
   private readonly transcriptReader: ManagedClaudeTranscriptReader;
@@ -120,7 +120,7 @@ class ClaudeAgentSdkServiceImpl implements ClaudeAgentSdkService {
     this.sessionStore =
       input.sessionStore ??
       createClaudeAgentSdkSessionStore({ now: this.now, ...(input.emit && { emit: input.emit }) });
-    this.fileSearch = input.fileSearch ?? createClaudeWorkspaceFileSearch();
+    this.fileSearch = input.fileSearch ?? createWorkspaceFileSearch();
     this.untrackFileSearchSessions = trackClaudeFileSearchSessions({
       fileSearch: this.fileSearch,
       sessionStore: this.sessionStore,

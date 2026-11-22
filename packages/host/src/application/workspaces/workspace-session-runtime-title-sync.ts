@@ -1,7 +1,16 @@
-import type { AgentSessionLiveRef, RuntimeKind, WorkspaceSession } from "@openducktor/contracts";
+import {
+  type AgentSessionLiveRef,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  RUNTIME_HOST_TRAITS_BY_KIND,
+  type RuntimeKind,
+  type WorkspaceSession,
+} from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Effect } from "effect";
-import { runtimeTitle } from "../../domain/workspace-sessions/workspace-session-title";
+import {
+  planRuntimeTitleRename,
+  runtimeTitle,
+} from "../../domain/workspace-sessions/workspace-session-title";
 import { type HostError, HostOperationError } from "../../effect/host-errors";
 import type { WorkspaceSessionStoreRef } from "../../ports/workspace-session-store-port";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
@@ -35,7 +44,7 @@ export const syncTitleAfterTurn = (
   },
 ) =>
   Effect.gen(function* () {
-    const runtimeLabel = runtimeRef.runtimeKind === "claude" ? "Claude" : "Codex";
+    const runtimeLabel = RUNTIME_DESCRIPTORS_BY_KIND[runtimeRef.runtimeKind].label;
     const key = agentSessionRefKey(runtimeRef);
     if (state.get(key) !== "pending") return;
     state.set(key, "queued");
@@ -79,7 +88,33 @@ export const syncTitleAfterTurn = (
     );
   });
 
-export const titleSyncNeedsTurn = (runtimeKind: RuntimeKind): boolean =>
-  runtimeKind === "codex" || runtimeKind === "claude";
+/**
+ * When the host pushes a Workspace Session title to the native session: at once, after the first
+ * turn of the session, or never, for a runtime without rename.
+ */
+export const titleSyncMode = (runtimeKind: RuntimeKind): "immediate" | "after_turn" | "none" =>
+  RUNTIME_HOST_TRAITS_BY_KIND[runtimeKind].sessionTitleSync;
+
+/**
+ * The native rename that gives a runtime session a new effective title, or null when there is none.
+ * A runtime without rename keeps its native title. `resendUnchanged` sends the title again to a
+ * runtime that syncs after the turn, because its native title can lag behind the saved one.
+ */
+export const planNativeRename = (
+  session: Pick<
+    WorkspaceSession,
+    "runtimeKind" | "externalSessionId" | "generatedTitle" | "manualTitle"
+  >,
+  nextTitle: string | null,
+  { resendUnchanged = false }: { resendUnchanged?: boolean } = {},
+): { externalSessionId: string; title: string } | null => {
+  const mode = titleSyncMode(session.runtimeKind);
+  if (mode === "none") return null;
+  const rename = planRuntimeTitleRename(session, nextTitle);
+  if (rename || !resendUnchanged || mode !== "after_turn") return rename;
+  return session.externalSessionId !== null && nextTitle !== null
+    ? { externalSessionId: session.externalSessionId, title: nextTitle }
+    : null;
+};
 
 type LocatedSession = { ref: WorkspaceSessionStoreRef; session: WorkspaceSession };

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
-import type { AgentSessionLiveEnvelope, AgentSessionLiveRef } from "@openducktor/contracts";
+import type { AgentSessionLiveRef } from "@openducktor/contracts";
 import { createAgentSessionTurnRecorder } from "../../application/agent-sessions/agent-session-turn-recorder";
 import type { AgentSessionTurnStorePort } from "../../ports/agent-session-turn-store-port";
 import { normalizePathForComparison } from "../../domain/path-comparison";
@@ -86,10 +86,16 @@ export const createNodeWorkspaceSessionPersistence = ({
   const reportRenameFailure: WorkspaceSessionRenameFailureReporter = (ref, message, operation) =>
     Effect.try({
       try: () => {
+        // Callers can pass a send input. The fault names only the session.
         publishLiveEnvelope({
           type: "fault",
           repoPath: ref.repoPath,
-          ref,
+          ref: {
+            repoPath: ref.repoPath,
+            runtimeKind: ref.runtimeKind,
+            workingDirectory: ref.workingDirectory,
+            externalSessionId: ref.externalSessionId,
+          },
           operation: operation ?? "workspaceSession.accepted-message.rename",
           message,
         });
@@ -130,6 +136,7 @@ export const createNodeWorkspaceSessionPersistence = ({
     tasks: taskStore,
     readTaskWorkspace: readOpenWorkspace,
     workspace: workspacePersistence,
+    turns: createAgentSessionTurnRecorder(sessionTurns),
     publishTaskRecords: (scope, records) =>
       Effect.try({
         try: () =>
@@ -137,19 +144,7 @@ export const createNodeWorkspaceSessionPersistence = ({
         catch: (cause) => toHostOperationError(cause, "agent-session.persist-activity.publish"),
       }),
   });
-  const turnRecorder = createAgentSessionTurnRecorder({
-    store: sessionTurns,
-    readWorkspaceId: (ref) =>
-      readOpenWorkspace(ref).pipe(Effect.map((scope) => scope?.workspaceId ?? null)),
-  });
-  const persistence = {
-    ...workspacePersistence,
-    ...activityPersistence,
-    observe: (envelope: AgentSessionLiveEnvelope, provenance?: "baseline" | "live") =>
-      activityPersistence
-        .observe(envelope, provenance)
-        .pipe(Effect.andThen(turnRecorder.observe(envelope, provenance))),
-  };
+  const persistence = { ...workspacePersistence, ...activityPersistence };
   return {
     persistence,
     store,

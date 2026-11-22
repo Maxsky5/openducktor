@@ -1,12 +1,16 @@
 import {
   type AgentSessionLiveSnapshot,
-  type OdtBrowserCaller,
+  type OdtCaller,
   RUNTIME_DESCRIPTORS_BY_KIND,
+  RUNTIME_HOST_TRAITS_BY_KIND,
 } from "@openducktor/contracts";
 import { agentSessionRefsShareRuntimeStream } from "@openducktor/core";
 import { Effect } from "effect";
-import { type HostError, HostValidationError } from "../../effect/host-errors";
-import type { AgentSessionLiveAdapterBinding } from "../../ports/agent-session-live-adapter-port";
+import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import type {
+  AgentSessionLiveAdapterBinding,
+  AgentSessionLiveAdapterPort,
+} from "../../ports/agent-session-live-adapter-port";
 import type { TaskStoreError } from "../../ports/task-repository-ports";
 import type {
   RuntimeSessionOwner,
@@ -19,7 +23,7 @@ import type {
 
 export type ManagedCallerResolverInput = {
   workspaceId: string;
-  caller: OdtBrowserCaller;
+  caller: OdtCaller;
 };
 
 export type ManagedCallerResolverError = HostError | TaskStoreError | WorkspaceSettingsError;
@@ -32,7 +36,7 @@ export type ManagedCallerResolver = {
 };
 
 /** One shared runtime. Its live sessions carry the parent links of subagent sessions. */
-type LiveSessionSource = {
+type LiveSessionSource = Pick<AgentSessionLiveAdapterPort, "resolveCallerBinding"> & {
   readonly binding: Pick<AgentSessionLiveAdapterBinding, "runtimeKind">;
   listSnapshots(): Effect.Effect<
     ReadonlyArray<Pick<AgentSessionLiveSnapshot, "ref" | "parentExternalSessionId">>,
@@ -51,8 +55,34 @@ export const createManagedCallerResolver = ({
   workspaceSessions,
   liveSessions,
 }: CreateManagedCallerResolverInput): ManagedCallerResolver => {
+  /**
+   * The session that holds a caller binding. A runtime that starts the MCP process before the
+   * session has an ID names a binding, and its live adapter resolves it.
+   */
+  const toRuntimeSessionCaller = (
+    caller: OdtCaller,
+  ): Effect.Effect<RuntimeCaller, ManagedCallerResolverError> => {
+    if (!("callerBindingId" in caller)) return Effect.succeed(caller);
+    return Effect.gen(function* () {
+      const label = RUNTIME_DESCRIPTORS_BY_KIND[caller.runtime].label;
+      if (RUNTIME_HOST_TRAITS_BY_KIND[caller.runtime].mcpCaller.source !== "process_binding")
+        return yield* unmanagedCaller(caller, `names a caller binding, but ${label} uses none`);
+      for (const source of liveSessions.list()) {
+        if (source.binding.runtimeKind !== caller.runtime) continue;
+        if (!source.resolveCallerBinding)
+          return yield* new HostOperationError({
+            operation: "managedCaller.resolve",
+            message: `The ${label} live adapter cannot resolve a caller binding. Update OpenDucktor, then restart ${label}.`,
+          });
+        const ref = yield* source.resolveCallerBinding(caller.callerBindingId);
+        if (ref) return { runtime: caller.runtime, runtimeSessionId: ref.externalSessionId };
+      }
+      return yield* unmanagedCaller(caller, `is not open in a running ${label} runtime`);
+    });
+  };
+
   /** Child session ID to parent session ID, for the live sessions of one repository. */
-  const readParentLinks = (caller: OdtBrowserCaller, repoPath: string) =>
+  const readParentLinks = (caller: RuntimeCaller, repoPath: string) =>
     Effect.gen(function* () {
       const sources = liveSessions
         .list()
@@ -80,8 +110,9 @@ export const createManagedCallerResolver = ({
     });
 
   return {
-    resolve: ({ workspaceId, caller }) =>
+    resolve: ({ workspaceId, caller: nativeCaller }) =>
       Effect.gen(function* () {
+        const caller = yield* toRuntimeSessionCaller(nativeCaller);
         const { repoPath } = yield* workspaceSettings.getRepoConfig(workspaceId);
         const readOwners = (externalSessionIds: readonly string[]) =>
           workspaceSessions.listRuntimeOwners({
@@ -141,13 +172,19 @@ export const createManagedCallerResolver = ({
   };
 };
 
-const unmanagedCaller = (caller: OdtBrowserCaller, reason: string) =>
-  new HostValidationError({
+/** A caller that names its runtime session. */
+type RuntimeCaller = { runtime: OdtCaller["runtime"]; runtimeSessionId: string };
+
+const unmanagedCaller = (caller: OdtCaller, reason: string) => {
+  const label = RUNTIME_DESCRIPTORS_BY_KIND[caller.runtime].label;
+  const session =
+    "runtimeSessionId" in caller
+      ? `session '${caller.runtimeSessionId}'`
+      : `session with caller binding '${caller.callerBindingId}'`;
+  const details = { operation: "managedCaller.resolve", ...caller };
+  return new HostValidationError<typeof details>({
     field: "caller",
-    message: `The ${RUNTIME_DESCRIPTORS_BY_KIND[caller.runtime].label} session '${caller.runtimeSessionId}' ${reason}.`,
-    details: {
-      operation: "managedCaller.resolve",
-      runtime: caller.runtime,
-      runtimeSessionId: caller.runtimeSessionId,
-    },
+    message: `The ${label} ${session} ${reason}.`,
+    details,
   });
+};

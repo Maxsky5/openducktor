@@ -13,15 +13,14 @@ export type AgentSessionTurnSessionKey = {
 type AgentSessionTurnStart = AgentSessionTurnSessionKey & {
   readonly workspaceId: string;
   readonly userMessageId: string;
-  /** A hash of the user message text. A reader uses a turn only when its message still matches. */
+  /** The fingerprint of the user message text. See `agent-session-message-fingerprint`. */
   readonly userMessageHash: string;
   readonly startedAt: string;
   readonly model?: AgentModelSelection | undefined;
 };
 
-/** The end of a run, saved on the turn of its last user message. */
-type AgentSessionTurnEnd = AgentSessionTurnSessionKey & {
-  readonly userMessageId: string;
+/** How a run ended. The turn of the last user message of the run keeps it. */
+type AgentSessionTurnEnd = {
   readonly completedAt: string;
   readonly outcome: AgentTurnOutcome;
   /** The time from the first user message of the run to its end. */
@@ -31,9 +30,10 @@ type AgentSessionTurnEnd = AgentSessionTurnSessionKey & {
   readonly interruption?: { readonly messageId: string; readonly message: string } | undefined;
 };
 
-/** One turn that the host saw while the session was live. */
-export type AgentSessionTurnRecord = Omit<AgentSessionTurnStart, "workspaceId"> &
-  Partial<Omit<AgentSessionTurnEnd, keyof AgentSessionTurnSessionKey | "userMessageId">>;
+/** One turn that the host saw while the session was live. A turn with no end is open or not last. */
+export type AgentSessionTurnRecord = Omit<AgentSessionTurnStart, "workspaceId"> & {
+  readonly end?: AgentSessionTurnEnd | undefined;
+};
 
 /**
  * Keeps the facts of each turn that the host saw live, for every runtime. History reads use them
@@ -42,7 +42,10 @@ export type AgentSessionTurnRecord = Omit<AgentSessionTurnStart, "workspaceId"> 
 export type AgentSessionTurnStorePort = {
   /** Saves a turn once. A later start of the same user message keeps the first one. */
   readonly recordTurnStart: (start: AgentSessionTurnStart) => Effect.Effect<void, HostError>;
-  readonly recordTurnEnd: (end: AgentSessionTurnEnd) => Effect.Effect<void, HostError>;
+  readonly recordTurnEnd: (
+    turn: AgentSessionTurnSessionKey & { readonly userMessageId: string },
+    end: AgentSessionTurnEnd,
+  ) => Effect.Effect<void, HostError>;
   /** The turns of a session in start order. */
   readonly listTurns: (
     session: AgentSessionTurnSessionKey,

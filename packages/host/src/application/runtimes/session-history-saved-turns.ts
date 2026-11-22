@@ -1,6 +1,6 @@
 import type { AgentSessionHistoryMessage } from "@openducktor/core";
 import type { AgentSessionTurnRecord } from "../../ports/agent-session-turn-store-port";
-import { agentSessionMessageFingerprint } from "../../domain/agent-session-message-fingerprint";
+import { turnMatchesMessage } from "../../domain/agent-session-message-fingerprint";
 
 type HistoryEntry = AgentSessionHistoryMessage;
 
@@ -8,12 +8,12 @@ const isStopNotice = (entry: HistoryEntry): boolean =>
   entry.role === "system" && entry.notice?.reason === "session_interrupted";
 
 const toStopNotice = (turn: AgentSessionTurnRecord): HistoryEntry | null =>
-  turn.interruption && turn.completedAt
+  turn.end?.interruption
     ? {
-        messageId: turn.interruption.messageId,
+        messageId: turn.end.interruption.messageId,
         role: "system",
-        timestamp: turn.completedAt,
-        text: turn.interruption.message,
+        timestamp: turn.end.completedAt,
+        text: turn.end.interruption.message,
         notice: { tone: "cancelled", reason: "session_interrupted", title: "Interrupted" },
         parts: [],
       }
@@ -32,19 +32,20 @@ const withTurn = (
     return user;
   }
   if (entry.role !== "assistant") return entry;
-  if (entry.messageId === turn.finalMessageId && turn.completedAt) {
+  const end = turn.end;
+  if (end && entry.messageId === end.finalMessageId) {
     const { timestampIsApproximate: _approximate, ...exact } = entry;
-    const final = { ...exact, timestamp: turn.completedAt };
+    const final = { ...exact, timestamp: end.completedAt };
     if (!final.model && turn.model) final.model = turn.model;
-    if (final.durationMs === undefined && turn.durationMs !== undefined) {
-      final.durationMs = turn.durationMs;
+    if (final.durationMs === undefined && end.durationMs !== undefined) {
+      final.durationMs = end.durationMs;
     }
     return final;
   }
   // A history without completion state marks the last reply of each turn final. Only a
   // completed run has a final reply.
   const parts =
-    !exposesCompletionState && turn.outcome && turn.outcome !== "completed"
+    !exposesCompletionState && end && end.outcome !== "completed"
       ? entry.parts.filter((part) => part.kind !== "step")
       : entry.parts;
   return { ...entry, timestamp: turn.startedAt, parts };
@@ -74,7 +75,7 @@ export const applySavedTurns = (
     if (entry.role === "user") {
       closeTurn();
       const turn = byUserMessageId.get(entry.messageId);
-      current = turn?.userMessageHash === agentSessionMessageFingerprint(entry.text) ? turn : null;
+      current = turn && turnMatchesMessage(turn, entry.text) ? turn : null;
       hasStopNotice = false;
     }
     if (isStopNotice(entry)) hasStopNotice = true;

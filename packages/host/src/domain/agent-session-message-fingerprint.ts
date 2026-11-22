@@ -15,3 +15,9 @@ export const agentSessionMessageFingerprint = (text: string): string => {
   }
   return `fnv1a64:${hash.toString(16).padStart(16, "0")}`;
 };
+
+/** True when a saved turn still names this user message text. */
+export const turnMatchesMessage = (
+  turn: { readonly userMessageHash: string },
+  text: string,
+): boolean => turn.userMessageHash === agentSessionMessageFingerprint(text);

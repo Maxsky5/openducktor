@@ -98,6 +98,7 @@ const DESKTOP_TOKEN_NAMES = [
   "odt-runtime-accent-opencode",
   "odt-runtime-accent-codex",
   "odt-runtime-accent-claude",
+  "odt-runtime-accent-antigravity",
   "terminal-surface",
   "terminal-panel",
   "terminal-border",

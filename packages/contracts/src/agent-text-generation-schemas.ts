@@ -52,3 +52,37 @@ export const agentJsonAnswerMismatch = (runtime: string, error: z.ZodError): Err
   new Error(
     `${runtime} returned an answer that does not fit the output schema: ${z.prettifyError(error)}`,
   );
+
+/**
+ * The instructions of a JSON generation on a runtime that cannot constrain the answer to a JSON
+ * Schema. The JSON Schema of the answer goes into the instructions as text.
+ */
+export const agentJsonSchemaInstructions = <Answer>(
+  input: AgentJsonGenerationInput<Answer>,
+): string =>
+  `${input.instructions}\n\nReturn only one JSON object that matches this JSON Schema, with no Markdown or other text:\n${JSON.stringify(agentJsonOutputSchema(input.answerSchema))}`;
+
+/**
+ * The answer of `answerSchema` in the answer text of a runtime that cannot constrain the answer.
+ * A model can wrap the JSON object in a Markdown code fence or add a sentence, so the object is
+ * the text from the first `{` to the last `}`.
+ */
+export const readAgentJsonAnswer = <Answer>(
+  runtime: string,
+  text: string,
+  answerSchema: z.ZodType<Answer>,
+): Answer => {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end < start)
+    throw new Error(`${runtime} returned no JSON object for the output schema: ${text}`);
+  let value: unknown;
+  try {
+    value = JSON.parse(text.slice(start, end + 1));
+  } catch (cause) {
+    throw new Error(`${runtime} returned a JSON object that does not parse: ${text}`, { cause });
+  }
+  const answer = answerSchema.safeParse(value);
+  if (!answer.success) throw agentJsonAnswerMismatch(runtime, answer.error);
+  return answer.data;
+};

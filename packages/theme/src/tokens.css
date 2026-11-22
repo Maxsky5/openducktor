@@ -146,6 +146,7 @@
   --odt-runtime-accent-opencode: #000;
   --odt-runtime-accent-codex: oklch(0.596 0.145 163.225); /* OpenAI green */
   --odt-runtime-accent-claude: #d97757; /* Claude Code orange */
+  --odt-runtime-accent-antigravity: #1a73e8; /* Google blue */
   --speed-fast: var(--color-amber-600);
   --speed-ultrafast: var(--color-violet-600);
 
@@ -296,6 +297,7 @@
   --odt-runtime-accent-opencode: #fff;
   --odt-runtime-accent-codex: oklch(0.723 0.219 149.579); /* ~green-500 */
   --odt-runtime-accent-claude: #c86649; /* Claude Code orange, dark-theme adjusted */
+  --odt-runtime-accent-antigravity: #669df6; /* Google blue, dark-theme adjusted */
   --speed-fast: var(--color-amber-400);
   --speed-ultrafast: var(--color-violet-400);
 

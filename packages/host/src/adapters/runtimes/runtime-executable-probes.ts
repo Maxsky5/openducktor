@@ -1,4 +1,5 @@
 import type { RuntimeExecutableProbesByKind } from "../../ports/runtime-executable-probe-port";
+import { createAntigravityExecutableProbe } from "../antigravity/antigravity-executable-probe";
 import { createClaudeExecutableProbe } from "../claude/claude-executable-probe";
 import { createCodexExecutableProbe } from "../codex/codex-executable-probe";
 import { createOpenCodeExecutableProbe } from "../opencode/opencode-executable-probe";
@@ -15,6 +16,9 @@ export const createRuntimeExecutableProbes = ({
     codexInput.clientVersion = clientVersion;
   }
   return {
+    antigravity: createAntigravityExecutableProbe(
+      clientVersion ? { readEnv, clientVersion } : { readEnv },
+    ),
     claude: createClaudeExecutableProbe({ readEnv }),
     codex: createCodexExecutableProbe(codexInput),
     opencode: createOpenCodeExecutableProbe({ readEnv }),

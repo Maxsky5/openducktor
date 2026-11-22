@@ -37,6 +37,8 @@ Evaluate each runtime against the native runtime contract. It must support privi
 
 ACP can still inform transport and stream design. It is not a workflow runtime target under this decision.
 
+Antigravity meets the second review condition: it advertises a system prompt extension that its adapter requires. [ADR 0014](./0014-run-antigravity-as-an-acp-workflow-runtime.md) records that exception. This decision still applies to other ACP agents.
+
 ## References
 
 - [ACP session setup](https://agentclientprotocol.com/protocol/session-setup)

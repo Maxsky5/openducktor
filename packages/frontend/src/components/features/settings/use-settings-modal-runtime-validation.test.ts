@@ -21,6 +21,7 @@ const createSnapshot = (): SettingsSnapshot =>
       },
       codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
       claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
+      antigravity: { enabled: false, executablePath: "" },
     },
     workspaces: {
       repo: {

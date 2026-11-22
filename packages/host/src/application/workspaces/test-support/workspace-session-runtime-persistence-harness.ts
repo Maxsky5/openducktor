@@ -43,6 +43,8 @@ import {
   createWorktreeFilePortTestDouble,
 } from "../../../test-support/service-test-doubles";
 import { createAgentSessionActivityPersistence } from "../../agent-sessions/agent-session-activity-persistence";
+import { createAgentSessionTurnRecorder } from "../../agent-sessions/agent-session-turn-recorder";
+import { createMemoryAgentSessionTurnStore } from "../../../ports/agent-session-turn-store.test-support";
 import { createAgentSessionCommandService } from "../../agent-sessions/agent-session-command-service";
 import { createAgentSessionLiveStateService } from "../../agent-sessions/agent-session-live-state-service";
 import { createTaskSessionLifecycleCoordinator } from "../../tasks/worktrees/task-session-lifecycle-coordinator";
@@ -279,6 +281,7 @@ export const createPersistenceHarness = async (
       readTaskWorkspace: () =>
         Effect.succeed({ workspaceId: database.workspaceId, repoPath: database.repoPath }),
       workspace: workspacePersistence,
+      turns: createAgentSessionTurnRecorder(createMemoryAgentSessionTurnStore().store),
       tasks: database.store,
       publishTaskRecords: (scope, records) =>
         Effect.sync(() => {

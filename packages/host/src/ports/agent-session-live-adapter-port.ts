@@ -174,6 +174,13 @@ type AgentSessionLiveAdapterBase = {
     repoPath: string,
     roots?: AgentSessionAuthorizedRoot[],
   ) => Effect.Effect<void, HostError>;
+  /**
+   * Resolves the caller binding ID that a runtime gives its managed MCP process to the session
+   * that holds it. Only a runtime that cannot name the calling session in a call has it.
+   */
+  readonly resolveCallerBinding?: (
+    callerBindingId: string,
+  ) => Effect.Effect<AgentSessionLiveRef | null, HostError>;
   /** Lists every live session of this runtime, across all repositories. */
   readonly listSnapshots: () => Effect.Effect<ReadonlyArray<AgentSessionLiveSnapshot>, HostError>;
   readonly readSnapshot: (

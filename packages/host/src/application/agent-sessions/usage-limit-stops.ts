@@ -2,6 +2,7 @@ import {
   type AgentSessionLiveEnvelope,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
+  isAcceptedUserMessage,
   RUNTIME_DESCRIPTORS_BY_KIND,
   type RuntimeKind,
   type UsageLimitAutoResume,
@@ -186,7 +187,9 @@ export const createUsageLimitStops = (changed: (ref: AgentSessionLiveRef) => voi
           const { event } = envelope;
           if (event.type === "turn_error")
             return observeLimitError(agentSessionRefKey(event.sessionRef), event);
-          if (event.type === "user_message") newWork(agentSessionRefKey(event.sessionRef));
+          if (isAcceptedUserMessage(event)) {
+            newWork(agentSessionRefKey(event.sessionRef));
+          }
           if (event.type !== "session_turn_finished" && event.type !== "session_idle") return null;
           const key = agentSessionRefKey(event.sessionRef);
           const stop = stops.get(key);

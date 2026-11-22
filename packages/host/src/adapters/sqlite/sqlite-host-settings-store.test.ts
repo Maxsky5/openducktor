@@ -363,8 +363,8 @@ describe("shared host settings", () => {
         ),
       });
       const imported = await measureSettingsEdits(session, (current) => current, config);
-      expect(imported.rows).toBe(1055);
-      expect(imported.requests).toBeLessThanOrEqual(19);
+      expect(imported.rows).toBe(1056);
+      expect(imported.requests).toBeLessThanOrEqual(20);
       const mixed = await measureSettingsEdits(session, (current) => {
         const next = current;
         const workspace = next.workspaces.one!;
@@ -629,6 +629,7 @@ describe("shared host settings", () => {
           defaults: config.agentRuntimes.claude.defaults,
           roleOverrides: config.agentRuntimes.claude.roleOverrides,
         },
+        antigravity: null,
         custom: null,
       });
       expect(storedRuntimes.find(({ runtimeKind }) => runtimeKind === "custom")).toEqual({

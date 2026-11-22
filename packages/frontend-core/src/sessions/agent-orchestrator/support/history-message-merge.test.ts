@@ -94,6 +94,23 @@ const compactionNotice = (
 };
 
 describe("agent-orchestrator/support/history-message-merge", () => {
+  test("keeps a live read user message read when older history has it pending or queued", () => {
+    const userMessage = (state: "pending" | "queued" | "read"): AgentChatMessage => ({
+      id: "user-1",
+      role: "user",
+      content: "Hello",
+      timestamp: "2026-03-01T09:00:00.000Z",
+      meta: { kind: "user", state, parts: [{ kind: "text", text: "Hello" }] },
+    });
+
+    for (const stale of ["pending", "queued"] as const) {
+      const [merged] = mergedMessages([userMessage(stale)], [userMessage("read")]);
+      expect(merged?.meta?.kind === "user" ? merged.meta.state : null).toBe("read");
+    }
+    const [advanced] = mergedMessages([userMessage("read")], [userMessage("queued")]);
+    expect(advanced?.meta?.kind === "user" ? advanced.meta.state : null).toBe("read");
+  });
+
   test("deduplicates a live turn failure when hydration returns the same result", () => {
     const errorNotice = {
       id: "result-error-1",

@@ -147,7 +147,7 @@ describe("browser tools", () => {
       name: "a Codex call with only turn metadata",
       env: { ODT_RUNTIME_KIND: "codex" },
       meta: { "x-codex-turn-metadata": { thread_id: "thread-1" } },
-      reason: "_meta.threadId",
+      reason: `_meta["threadId"]`,
     },
   ])("fails the call for $name", async (testCase) => {
     const bridge = await startMockBridge();
@@ -168,6 +168,47 @@ describe("browser tools", () => {
     expect(browserRequests(bridge.requests)).toEqual([]);
   });
 
+  test("sends the Antigravity caller binding to the host", async () => {
+    const bridge = await startMockBridge();
+    const client = await connectClientWithEnv(bridge.url, {
+      ODT_ALLOWED_TOOLS: MANAGED_TOOLS,
+      ODT_RUNTIME_KIND: "antigravity",
+      ODT_RUNTIME_CALLER_BINDING_ID: "binding-1",
+    });
+
+    const result = await client.callTool({
+      name: "odt_browser_click",
+      arguments: { tabId: TAB_ID, ref: "e12" },
+      _meta: { threadId: "forged-thread" },
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(browserRequests(bridge.requests)).toEqual([
+      {
+        url: "/invoke/odt_browser_click",
+        body: {
+          tabId: TAB_ID,
+          ref: "e12",
+          workspaceId: "repo",
+          caller: { runtime: "antigravity", callerBindingId: "binding-1" },
+        },
+      },
+    ]);
+  });
+
+  test("an Antigravity process needs its caller binding at startup", async () => {
+    const bridge = await startMockBridge();
+
+    await expect(
+      connectClientWithEnv(bridge.url, {
+        ODT_ALLOWED_TOOLS: MANAGED_TOOLS,
+        ODT_RUNTIME_KIND: "antigravity",
+      }),
+    ).rejects.toThrow(
+      "ODT_RUNTIME_CALLER_BINDING_ID must name the calling session when ODT_RUNTIME_KIND is antigravity.",
+    );
+  });
+
   test("a Claude process needs its session ID at startup", async () => {
     const bridge = await startMockBridge();
 
@@ -176,7 +217,9 @@ describe("browser tools", () => {
         ODT_ALLOWED_TOOLS: MANAGED_TOOLS,
         ODT_RUNTIME_KIND: "claude",
       }),
-    ).rejects.toThrow("ODT_RUNTIME_SESSION_ID must name the Claude session");
+    ).rejects.toThrow(
+      "ODT_RUNTIME_SESSION_ID must name the calling session when ODT_RUNTIME_KIND is claude.",
+    );
   });
 
   test("an unknown runtime kind fails at startup", async () => {
@@ -187,7 +230,7 @@ describe("browser tools", () => {
         ODT_ALLOWED_TOOLS: MANAGED_TOOLS,
         ODT_RUNTIME_KIND: "cursor",
       }),
-    ).rejects.toThrow("ODT_RUNTIME_KIND must be opencode, codex, or claude.");
+    ).rejects.toThrow("ODT_RUNTIME_KIND must be one of: opencode, codex, claude, antigravity.");
   });
 
   test("screenshot returns text and image content without structured output", async () => {

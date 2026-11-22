@@ -4,6 +4,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentUserMessageDisplayPart } from "@openducktor/core";
 import type { AgentChatMessage } from "../../types/agent-orchestrator";
+import { awaitsRuntime } from "./user-message-state";
 
 const USER_MESSAGE_REFERENCE_KINDS = [
   "file_reference",
@@ -252,7 +253,7 @@ export const buildUserMessageContent = (
       ),
     ),
     attachments: allParts.filter(isAttachmentPart),
-    isUnread: meta?.state === "queued",
+    isUnread: meta ? awaitsRuntime(meta.state) : false,
   };
 };
 

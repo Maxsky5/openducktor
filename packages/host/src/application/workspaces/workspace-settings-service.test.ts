@@ -126,6 +126,7 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
       roleOverrides: {},
     },
     claude: { enabled: false, executablePath: "/bin/claude", defaults: {}, roleOverrides: {} },
+    antigravity: { enabled: false, executablePath: "/bin/agy" },
   },
   agentModelFavorites: [],
   workspaces: {},

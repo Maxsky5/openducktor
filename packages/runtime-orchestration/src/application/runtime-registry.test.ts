@@ -73,6 +73,7 @@ const createHarness = (
     opencode: driverFor("opencode"),
     codex: driverFor("codex"),
     claude: driverFor("claude"),
+    antigravity: driverFor("antigravity"),
   };
   const registry = createRuntimeRegistry({
     admission,

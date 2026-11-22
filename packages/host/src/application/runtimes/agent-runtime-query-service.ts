@@ -144,31 +144,34 @@ export const createAgentRuntimeQueryService = (
       read("searchFiles", input, (queries, request) => queries.searchFiles(request)),
     loadSessionHistory: (input) =>
       read("loadSessionHistory", input, (queries, request, runtime) =>
-        Effect.all([
-          queries
-            .loadSessionHistory(request)
-            .pipe(
-              Effect.map((history) =>
-                dependencies.deniedToolParts.apply(request, history, request.limit !== undefined),
-              ),
-            ),
-          dependencies.sessionTurns
-            .listTurns({
-              runtimeKind: request.runtimeKind,
-              externalSessionId: request.externalSessionId,
-            })
-            .pipe(
-              Effect.mapError((cause) =>
-                runtimeQueryError(
-                  "loadSessionHistory",
-                  request,
-                  "runtime_unavailable",
-                  cause.message,
-                  cause,
+        Effect.all(
+          [
+            queries
+              .loadSessionHistory(request)
+              .pipe(
+                Effect.map((history) =>
+                  dependencies.deniedToolParts.apply(request, history, request.limit !== undefined),
                 ),
               ),
-            ),
-        ]).pipe(
+            dependencies.sessionTurns
+              .listTurns({
+                runtimeKind: request.runtimeKind,
+                externalSessionId: request.externalSessionId,
+              })
+              .pipe(
+                Effect.mapError((cause) =>
+                  runtimeQueryError(
+                    "loadSessionHistory",
+                    request,
+                    "runtime_unavailable",
+                    cause.message,
+                    cause,
+                  ),
+                ),
+              ),
+          ],
+          { concurrency: 2 },
+        ).pipe(
           Effect.map(([history, turns]) =>
             applySavedTurns(
               history,

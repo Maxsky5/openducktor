@@ -6,7 +6,7 @@ import {
 } from "../../adapters/sqlite/sqlite-task-store-test-support";
 import { createGitPortTestDouble } from "../../test-support/service-test-doubles";
 import { HostOperationError } from "../../effect/host-errors";
-import type { JsonValue } from "@openducktor/contracts";
+import type { JsonValue, RuntimeKind } from "@openducktor/contracts";
 import type { HostError } from "../../effect/host-errors";
 import { createModelNamingService } from "../../test-support/naming-test-doubles";
 import {
@@ -30,8 +30,9 @@ describe("Workspace Session naming", () => {
   const setup = async (
     temporaryBranch: string | null,
     answer: Effect.Effect<JsonValue, HostError>,
+    runtimeKind: RuntimeKind = "opencode",
   ) => {
-    const h = await createPersistenceHarness(database);
+    const h = await createPersistenceHarness(database, runtimeKind);
     h.config.namingModel = NAMING_MODEL;
     const model = createModelNamingService(() => answer);
     const requests = model.requests;
@@ -224,6 +225,20 @@ describe("Workspace Session naming", () => {
     Effect.runSync(Deferred.succeed(pending, { title: "OAuth login redirect" }));
     await waitFor(async () => (await h.get()).generatedTitle === "OAuth login redirect");
     expect((await h.get()).executionTarget).toMatchObject({ branchName: "feature/session" });
+  });
+
+  test("saves the model title of a runtime without rename and never renames its session", async () => {
+    const { h, requests } = await setup(
+      null,
+      Effect.succeed({ title: "Login fix" }),
+      "antigravity",
+    );
+    await h.send("Fix login");
+    await waitFor(() => requests.length === 1);
+    await waitFor(async () => (await h.get()).generatedTitle === "Login fix");
+
+    expect(h.titleAttempts).toEqual([]);
+    expect(h.renameFailures).toEqual([]);
   });
 
   test("keeps a manual title that the user set before the model title arrives", async () => {

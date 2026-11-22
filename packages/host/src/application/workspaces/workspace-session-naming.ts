@@ -10,7 +10,6 @@ import { Effect } from "effect";
 import { toBranchSlug } from "../../domain/naming/naming-output";
 import { checkoutBranch, cleanTaskBranchPrefix } from "../../domain/task/task-branch-policy";
 import {
-  planRuntimeTitleRename,
   runtimeTitle,
   visibleMessageText,
 } from "../../domain/workspace-sessions/workspace-session-title";
@@ -38,7 +37,11 @@ import type {
   WorkspaceSessionRenameFailureReporter,
   WorkspaceSessionUpdatedPublisher,
 } from "./workspace-session-persistence-callbacks";
-import { titleSyncNeedsTurn, type TitleSyncState } from "./workspace-session-runtime-title-sync";
+import {
+  planNativeRename,
+  type TitleSyncState,
+  titleSyncMode,
+} from "./workspace-session-runtime-title-sync";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
 /** The startup step that renames the temporary branch when the workspace has no naming model. */
@@ -122,9 +125,12 @@ export const createWorkspaceSessionNaming = ({
         yield* publishUpdated(current.ref.workspaceId, saved);
         // A sync that waits for the end of the turn reads the saved title then.
         const sync = titleSync.get(agentSessionRefKey(runtimeRef));
-        if (titleSyncNeedsTurn(runtimeRef.runtimeKind) && (sync === "pending" || sync === "queued"))
+        if (
+          titleSyncMode(runtimeRef.runtimeKind) === "after_turn" &&
+          (sync === "pending" || sync === "queued")
+        )
           return;
-        const rename = planRuntimeTitleRename(current.session, runtimeTitle(saved));
+        const rename = planNativeRename(current.session, runtimeTitle(saved));
         if (rename !== null)
           yield* renameRuntimeTitle({
             ...rename,

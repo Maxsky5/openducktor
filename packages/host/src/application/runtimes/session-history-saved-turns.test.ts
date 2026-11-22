@@ -47,18 +47,22 @@ test("gives a replay the saved times, model, duration, and stop notice", () => {
     [user("u1", "Hi"), reply("a1"), user("u2", "Stop"), reply("a2")],
     [
       turn({
-        completedAt: "2026-11-22T10:00:05.000Z",
-        outcome: "completed",
-        durationMs: 5000,
-        finalMessageId: "a1",
+        end: {
+          completedAt: "2026-11-22T10:00:05.000Z",
+          outcome: "completed",
+          durationMs: 5000,
+          finalMessageId: "a1",
+        },
       }),
       turn({
         userMessageId: "u2",
         userMessageHash: agentSessionMessageFingerprint("Stop"),
         startedAt: "2026-11-22T10:01:00.000Z",
-        completedAt: "2026-11-22T10:01:09.000Z",
-        outcome: "interrupted",
-        interruption: { messageId: "stop-1", message: "Session stopped at your request." },
+        end: {
+          completedAt: "2026-11-22T10:01:09.000Z",
+          outcome: "interrupted",
+          interruption: { messageId: "stop-1", message: "Session stopped at your request." },
+        },
       }),
     ],
     false,
@@ -90,7 +94,13 @@ test("keeps exact runtime times and skips a turn whose message text changed", ()
   const merged = applySavedTurns(
     history,
     [
-      turn({ completedAt: "2026-11-22T10:00:05.000Z", outcome: "completed", finalMessageId: "a1" }),
+      turn({
+        end: {
+          completedAt: "2026-11-22T10:00:05.000Z",
+          outcome: "completed",
+          finalMessageId: "a1",
+        },
+      }),
       turn({ userMessageId: "u2", userMessageHash: agentSessionMessageFingerprint("Original") }),
     ],
     true,

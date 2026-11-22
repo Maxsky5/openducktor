@@ -80,14 +80,15 @@ test("saves the start and end of each turn and lists them in start order", async
       );
     }
     await Effect.runPromise(
-      store.recordTurnEnd({
-        ...session,
-        userMessageId: "message-2",
-        completedAt: "2026-11-22T10:00:05.000Z",
-        outcome: "interrupted",
-        durationMs: 5000,
-        interruption: { messageId: "stop-1", message: "Session stopped at your request." },
-      }),
+      store.recordTurnEnd(
+        { ...session, userMessageId: "message-2" },
+        {
+          completedAt: "2026-11-22T10:00:05.000Z",
+          outcome: "interrupted",
+          durationMs: 5000,
+          interruption: { messageId: "stop-1", message: "Session stopped at your request." },
+        },
+      ),
     );
 
     expect(await Effect.runPromise(store.listTurns(session))).toEqual([
@@ -104,10 +105,12 @@ test("saves the start and end of each turn and lists them in start order", async
         userMessageHash: "hash-message-2",
         startedAt: "2026-11-22T10:00:01.000Z",
         model,
-        completedAt: "2026-11-22T10:00:05.000Z",
-        outcome: "interrupted",
-        durationMs: 5000,
-        interruption: { messageId: "stop-1", message: "Session stopped at your request." },
+        end: {
+          completedAt: "2026-11-22T10:00:05.000Z",
+          outcome: "interrupted",
+          durationMs: 5000,
+          interruption: { messageId: "stop-1", message: "Session stopped at your request." },
+        },
       },
     ]);
   });

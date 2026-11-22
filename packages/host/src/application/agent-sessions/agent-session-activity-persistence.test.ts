@@ -16,6 +16,8 @@ import { createAgentSessionRecord } from "../../ports/task-store-port-contract.t
 import { workspaceSessionOwnership } from "../../test-support/workspace-session-ownership";
 import { createAgentSessionActivityPersistence } from "./agent-session-activity-persistence";
 import { createAgentSessionLiveEnvelopePublisher } from "./agent-session-live-envelope";
+import { createAgentSessionTurnRecorder } from "./agent-session-turn-recorder";
+import { createMemoryAgentSessionTurnStore } from "../../ports/agent-session-turn-store.test-support";
 
 let database: SqliteTaskStoreTestHarness;
 beforeEach(async () => {
@@ -191,6 +193,37 @@ test("saves foreground completion and final output before background activity be
   expect(h.writes).toEqual([7_000, 6_000]);
 });
 
+test("saves a turn only for an accepted live user message", async () => {
+  const h = await setup();
+  await h.transcript(
+    { type: "user_message", messageId: "old", message: "Old", parts: [], state: "read" },
+    1_000,
+    "baseline",
+  );
+  await h.transcript(
+    { type: "user_message", messageId: "u1", message: "Hi", parts: [], state: "pending" },
+    2_000,
+  );
+  await h.transcript(
+    { type: "user_message", messageId: "u1", message: "Hi", parts: [], state: "read" },
+    3_000,
+  );
+  await h.transcript({ type: "assistant_message", messageId: "a1", message: "Done" }, 4_000);
+  await h.transcript({ type: "session_idle", turnOutcome: "completed" }, 5_000);
+
+  expect(await h.turns()).toMatchObject([
+    {
+      userMessageId: "u1",
+      startedAt: new Date(3_000).toISOString(),
+      end: {
+        completedAt: new Date(4_000).toISOString(),
+        outcome: "completed",
+        finalMessageId: "a1",
+      },
+    },
+  ]);
+});
+
 test("reports a failed activity save through the shared live channel", async () => {
   const h = await setup();
   const envelopes: AgentSessionLiveEnvelope[] = [];
@@ -198,6 +231,7 @@ test("reports a failed activity save through the shared live channel", async () 
     readTaskWorkspace: () =>
       Effect.succeed({ workspaceId: database.workspaceId, repoPath: database.repoPath }),
     tasks: database.store,
+    turns: createAgentSessionTurnRecorder(createMemoryAgentSessionTurnStore().store),
     workspace: {
       observe: () => Effect.void,
       recordActivity: () =>
@@ -276,8 +310,10 @@ const setup = async () => {
   };
   const updates: TaskAgentSessions[] = [];
   const writes: number[] = [];
+  const turnStore = createMemoryAgentSessionTurnStore();
   const restart = () =>
     createAgentSessionActivityPersistence({
+      turns: createAgentSessionTurnRecorder(turnStore.store),
       readTaskWorkspace: () =>
         Effect.succeed({ workspaceId: database.workspaceId, repoPath: database.repoPath }),
       tasks: {
@@ -310,6 +346,7 @@ const setup = async () => {
     ref,
     writes,
     updates,
+    turns: () => Effect.runPromise(turnStore.store.listTurns(ref)),
     restart,
     observe,
     transcript: (

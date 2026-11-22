@@ -1,8 +1,9 @@
-import type {
-  AcceptedAgentUserMessage,
-  AgentSessionLiveEnvelope,
-  AgentSessionLiveRef,
-  AgentSessionUserMessagePart,
+import {
+  type AcceptedAgentUserMessage,
+  type AgentSessionLiveEnvelope,
+  type AgentSessionLiveRef,
+  type AgentSessionUserMessagePart,
+  isAcceptedUserMessage,
 } from "@openducktor/contracts";
 import { agentSessionRefKey, BLOCKED_ON_INPUT_REASON } from "@openducktor/core";
 import { HostValidationError } from "../../effect/host-errors";
@@ -145,7 +146,9 @@ const transcriptSignal = (
     case "session_error":
       return { kind: "pause", ref, pause: { cause: "agent_error", detail: event.message } };
     case "user_message":
-      return { kind: "user_message", ref, acceptedMessage: event };
+      return isAcceptedUserMessage(event)
+        ? { kind: "user_message", ref, acceptedMessage: event }
+        : null;
     case "session_idle":
     case "session_turn_finished":
       if (event.turnOutcome === "completed") return { kind: "turn_completed", ref };

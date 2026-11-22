@@ -642,6 +642,34 @@ test.each(["task-1", "Artifact task"])(
   },
 );
 
+const taskReads: Array<
+  ["odt_read_task" | "odt_read_task_artifacts" | "odt_read_task_assets", Record<string, string[]>]
+> = [
+  ["odt_read_task", {}],
+  ["odt_read_task_artifacts", { codes: ["spec"] }],
+  ["odt_read_task_assets", { assetIds: ["00000000-0000-4000-8000-000000000000"] }],
+];
+
+test.each(taskReads)("rejects a %s call of another managed task", async (toolName, input) => {
+  const error = await Effect.runPromise(
+    bridgeWith({}, managedOwner("build", "task-2"))
+      .invoke(toolName, { ...scope, caller: { ...caller }, ...input })
+      .pipe(Effect.flip),
+  );
+  expect(error).toMatchObject({
+    _tag: "HostValidationError",
+    field: "taskId",
+    message: "Managed task sessions can read tasks only for their own task.",
+  });
+});
+
+test("lets a managed task session read its own task", async () => {
+  const result = await Effect.runPromise(
+    bridgeWith({}, managedOwner("build", "task-1")).invoke("odt_read_task", { ...scope, caller }),
+  );
+  expect(result).toMatchObject({ task: { id: "task-1" } });
+});
+
 test("allows a managed Workspace Session to delete a task artifact", async () => {
   await seedArtifact("notes");
   const owner: RuntimeSessionOwner = {

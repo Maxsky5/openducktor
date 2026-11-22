@@ -1,10 +1,10 @@
 ---
 icon: Cpu
 title: Harnesses
-description: Set up OpenCode, Codex, or Claude Code, see what each one supports, and set what agents can do.
+description: Set up OpenCode, Codex, Claude Code, or Antigravity, see what each one supports, and set what agents can do.
 ---
 
-A harness is the coding agent that runs your sessions: OpenCode, Codex, or Claude Code. OpenDucktor uses the [models](/models/) of your sign-in to the harness.
+A harness is the coding agent that runs your sessions: OpenCode, Codex, Claude Code, or Antigravity. OpenDucktor uses the [models](/models/) of your sign-in to the harness.
 
 ## Install a harness [#install]
 
@@ -15,12 +15,15 @@ Install the harness and sign in to it with its own tool. Then turn it on in Open
 | OpenCode | 2 or later | [OpenCode documentation](https://opencode.ai/docs) |
 | Codex | With `codex app-server` | [Codex documentation](https://developers.openai.com/codex) |
 | Claude Code | 2.1.306 or later | [Claude Code documentation](https://code.claude.com/docs/en/overview) |
+| Antigravity CLI | 1.5.14 or later | [Antigravity documentation](https://antigravity.google/docs/cli) |
 
-To [steer a message](/coding-sessions/#queue) into a running reply, OpenCode needs 2.0.24 or later and Codex needs 0.106.0 or later.
+To [steer a message](/coding-sessions/#queue) into a running reply, OpenCode needs 2.0.24 or later and Codex needs 0.106.0 or later. The Antigravity CLI 1.5.14 can steer.
 
 [Goal mode](/coding-sessions/#goal-mode) needs OpenCode 2.2.1, Codex 0.166.0, or Claude Code 2.1.306 or later. See [Goal mode support](#goals).
 
-To update, run `opencode upgrade` or `claude update`. Update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`.
+To update, run `opencode upgrade`, `claude update`, or `agy update`. Update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest` or `brew upgrade --cask codex`.
+
+Sign in to Antigravity with the Antigravity CLI: run `agy` in a terminal and follow the sign-in steps. OpenDucktor uses that sign-in and your Antigravity settings. It does not ask for your credentials.
 
 <Callout type="info" title="Claude subscriptions">To use Claude Code with a Claude subscription, read [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).</Callout>
 
@@ -30,7 +33,7 @@ The setup wizard turns on the harnesses that you choose. Use these steps to turn
 
 <Steps>
 <Step>Open [**Settings**](/settings-reference/#open-settings), then **Agent runtimes**, then the harness. Settings shows Claude Code as **Claude**.</Step>
-<Step>Turn on **Enabled**. If the harness does not show **Available**, select <Action>Browse</Action> and choose its executable.</Step>
+<Step>Turn on **Enabled**. If the harness does not show **Available**, select <Action>Browse</Action> and choose its executable. Antigravity stays off until you turn it on, even when OpenDucktor finds `agy`.</Step>
 <Step>Select <Action>Save settings</Action>.</Step>
 </Steps>
 
@@ -40,25 +43,40 @@ If the harness shows **Needs attention**, see [Troubleshooting](/troubleshooting
 
 ## What each harness supports [#capabilities]
 
-All three harnesses run every agent role. Each one supports questions, permission requests, attachments, slash commands, skills, and session forks. They differ in these features:
+All four harnesses run every agent role. Each one supports questions, permission requests, attachments, and slash commands. They differ in these features:
 
-| Feature | OpenCode | Codex | Claude Code |
-|---|---|---|---|
-| Image generation | No | Yes | No |
-| **Resume** after a turn stops | Yes | Yes | Yes |
-| [Auto-resume after a usage limit](/coding-sessions/#usage-limit) | No | Yes, with a ChatGPT sign-in | Yes |
-| [**Speed** choice](/models/) | No | Some models | Some models |
-| [**Agent profile** choice](/models/) | Yes | No | No |
-| Todo list in the session | No | Yes | Yes |
-| Subagents in the background | Yes | No | Yes |
-| Mention a subagent with `@` | Yes | No | No |
-| [Permission replies](/coding-sessions/#answer-a-permission-request) | <Action>Approve once</Action>, <Action>Allow for project</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Approve for session</Action>, <Action>Always allow</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> |
+| Feature | OpenCode | Codex | Claude Code | Antigravity |
+|---|---|---|---|---|
+| Session forks | Yes | Yes | Yes | No |
+| Skills with `$` | Yes | Yes | Yes | No. Skills show as slash commands. |
+| Image generation | No | Yes | No | No |
+| **Resume** after a turn stops | Yes | Yes | Yes | No. Send a new message. |
+| [Auto-resume after a usage limit](/coding-sessions/#usage-limit) | No | Yes, with a ChatGPT sign-in | Yes | No |
+| [**Speed** choice](/models/) | No | Some models | Some models | No |
+| [**Agent profile** choice](/models/) | Yes | No | No | No |
+| Todo list in the session | No | Yes | Yes | No |
+| Subagents in the background | Yes | No | Yes | No. A subagent shows as a tool call. |
+| Mention a subagent with `@` | Yes | No | No | No |
+| [Goal mode](/coding-sessions/#goal-mode) | Yes | Yes | Yes | No. Send `/goal` as a message. |
+| Naming model | Yes | Yes | Yes | No |
+| [Permission replies](/coding-sessions/#answer-a-permission-request) | <Action>Approve once</Action>, <Action>Allow for project</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Approve for session</Action>, <Action>Always allow</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> |
 
 With an API key sign-in, Codex cannot tell when the account works again, so a Codex session needs a manual **Resume** after a usage limit.
 
+### Antigravity limits [#antigravity]
+
+- After OpenDucktor restarts, a reopened Antigravity transcript has no approval decisions. A turn that ran in another Antigravity client has no times, reply model, or stop notice. A tool that you stopped shows as failed, and a slash command shows as text.
+- Antigravity sessions keep the title that Antigravity gives them.
+- Your message shows as **Unread** until Antigravity starts to answer.
+- A new session shows its slash commands after its first message. `/goal` and `/compact` are Antigravity commands. OpenDucktor goal mode and compaction are not available.
+- OpenDucktor offers the Gemini models of your account. Google offers other models only to the ACP clients that its [ACP guide](https://antigravity.google/docs/ide/extensions/acp/#models-and-thinking-level) names.
+- Attachments reach the agent as file links that it reads with its own tools.
+- Antigravity does not report the results of OpenDucktor tool calls, so their rows show what the agent asked for.
+- Spec, Planner, and QA must not change files. OpenDucktor refuses the file change requests of these roles, but the native Antigravity settings can approve edits and commands without a request. In the **Auto** mode, Antigravity edits workspace files without asking. Use the native **Default** mode, or check the changes of these roles.
+
 ### Goal mode support [#goals]
 
-All three harnesses run [Goal mode](/coding-sessions/#goal-mode). They differ in these points:
+OpenCode, Codex, and Claude Code run [Goal mode](/coding-sessions/#goal-mode). They differ in these points:
 
 | | OpenCode | Codex | Claude Code |
 |---|---|---|---|
@@ -70,7 +88,7 @@ With an older harness, the **Goal mode** switch is off and names the version to 
 
 ## Control what agents can do [#permissions]
 
-Each harness has its own permission settings in **Agent runtimes**.
+OpenCode, Codex, and Claude Code have their own permission settings in **Agent runtimes**. Antigravity uses its native permission settings and has no OpenDucktor permission settings.
 
 <Steps>
 <Step>In **Agent runtimes**, select the harness.</Step>

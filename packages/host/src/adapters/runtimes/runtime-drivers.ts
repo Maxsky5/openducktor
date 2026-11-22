@@ -42,5 +42,6 @@ export const createRuntimeDrivers = ({
     opencode: driverFor("opencode"),
     codex: driverFor("codex"),
     claude: driverFor("claude"),
+    antigravity: driverFor("antigravity"),
   };
 };

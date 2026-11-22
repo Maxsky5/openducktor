@@ -103,6 +103,23 @@ const CLAUDE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   overrideVariable: "OPENDUCKTOR_CLAUDE_BINARY",
 });
 
+const ANTIGRAVITY_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
+  command: "agy",
+  displayName: "Antigravity",
+  installHint:
+    "Install the Antigravity CLI and ensure agy is available on PATH, or set OPENDUCKTOR_ANTIGRAVITY_BINARY.",
+  overrideVariable: "OPENDUCKTOR_ANTIGRAVITY_BINARY",
+  sources: [
+    {
+      // The Antigravity CLI installer puts `agy` here. A desktop app does not always have it on PATH.
+      directories: (context) => [joinToolPath(context, context.homeDir, ".local", "bin")],
+      kind: "searchDirectories",
+      label: "standard install directories",
+      policy: "candidate",
+    },
+  ],
+});
+
 const OPENCODE_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
   command: "opencode",
   displayName: "OpenCode",
@@ -155,6 +172,7 @@ const CODEX_TOOL_DESCRIPTOR: ToolDiscoveryDescriptor = commandTool({
 });
 
 export const TOOL_DISCOVERY_DESCRIPTORS = {
+  antigravity: ANTIGRAVITY_TOOL_DESCRIPTOR,
   bun: BUN_TOOL_DESCRIPTOR,
   claude: CLAUDE_TOOL_DESCRIPTOR,
   codex: CODEX_TOOL_DESCRIPTOR,

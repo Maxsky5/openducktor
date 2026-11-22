@@ -1,10 +1,7 @@
-import {
-  AGENT_SESSION_SYSTEM_PROMPT_PREFIX,
-  type AgentSessionHistoryMessage,
-  type LoadAgentSessionHistoryInput,
-} from "@openducktor/core";
+import type { AgentSessionHistoryMessage, LoadAgentSessionHistoryInput } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
+import { withSystemPromptHistoryMessage } from "../agent-sessions/system-prompt-history-message";
 import { toClaudeHistoryMessages } from "./claude-agent-sdk-history";
 import {
   isClaudeSessionMissingError,
@@ -68,22 +65,11 @@ export const finalizeClaudeHistory = (
   input: LoadAgentSessionHistoryInput,
   history: AgentSessionHistoryMessage[],
 ): AgentSessionHistoryMessage[] => {
-  const limitedHistory = history.slice(input.limit ? -input.limit : undefined);
-  const systemPromptContext = input.systemPromptContext;
-  const systemPrompt = systemPromptContext?.systemPrompt.trim() ?? "";
-  if (!systemPromptContext || systemPrompt.length === 0) {
-    return limitedHistory;
-  }
-  return [
-    {
-      messageId: `claude-system-prompt:${input.externalSessionId}`,
-      role: "system",
-      timestamp: systemPromptContext.startedAt,
-      text: `${AGENT_SESSION_SYSTEM_PROMPT_PREFIX}${systemPrompt}`,
-      parts: [],
-    },
-    ...limitedHistory,
-  ];
+  return withSystemPromptHistoryMessage(
+    `claude-system-prompt:${input.externalSessionId}`,
+    input.systemPromptContext,
+    history.slice(input.limit ? -input.limit : undefined),
+  );
 };
 
 export const loadClaudeHistory = (

@@ -204,12 +204,14 @@ export type AgentRuntimes = Record<string, AgentRuntimeConfig> & {
   opencode: OpenCodeRuntimeConfig;
   codex: CodexRuntimeConfig;
   claude: ClaudeRuntimeConfig;
+  antigravity: AgentRuntimeEnabledConfig;
 };
 
 type DefaultAgentRuntimes = {
   opencode: OpenCodeRuntimeConfig;
   codex: CodexRuntimeConfig;
   claude: ClaudeRuntimeConfig;
+  antigravity: AgentRuntimeEnabledConfig;
 };
 
 const createDefaultAgentRuntimes = (): DefaultAgentRuntimes => ({
@@ -221,6 +223,7 @@ const createDefaultAgentRuntimes = (): DefaultAgentRuntimes => ({
     roleOverrides: {},
   },
   claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
+  antigravity: { enabled: false, executablePath: "" },
 });
 
 export const DEFAULT_AGENT_RUNTIMES: AgentRuntimes = createDefaultAgentRuntimes();
@@ -230,6 +233,7 @@ export const agentRuntimesSchema = z
     opencode: openCodeRuntimeConfigSchema.optional(),
     codex: codexRuntimeConfigSchema.optional(),
     claude: claudeRuntimeConfigSchema.optional(),
+    antigravity: agentRuntimeEnabledConfigSchema.optional(),
   })
   .catchall(agentRuntimeEnabledConfigSchema)
   .transform((value): AgentRuntimes => ({
@@ -247,6 +251,7 @@ export const agentRuntimesSchema = z
       roleOverrides: {},
     },
     claude: value.claude ?? { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
+    antigravity: value.antigravity ?? { enabled: false, executablePath: "" },
   }))
   .default(() => createDefaultAgentRuntimes());
 

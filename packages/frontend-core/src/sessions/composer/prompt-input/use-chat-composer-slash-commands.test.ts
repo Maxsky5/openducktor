@@ -87,6 +87,32 @@ describe("use-chat-composer-slash-commands", () => {
     ).toEqual(["system:compact", "runtime-review"]);
   });
 
+  test("keeps the native /goal and /compact of a runtime that OpenDucktor runs neither for", () => {
+    const runtimeCommands: AgentSlashCommand[] = [
+      { id: "antigravity:goal", trigger: "goal", title: "/goal", source: "command", hints: [] },
+      { id: "antigravity:compact", trigger: "compact", title: "/compact", hints: [] },
+    ];
+    const reusableCommands: AgentSlashCommand[] = [
+      { id: "prompt-goal", trigger: "goal", title: "Prompt goal", source: "custom", hints: [] },
+    ];
+
+    expect(
+      mergeSlashCommands(runtimeCommands, reusableCommands, [], new Set()).map(({ id }) => id),
+    ).toEqual(["antigravity:goal", "antigravity:compact"]);
+  });
+
+  test("keeps the native /goal of a runtime that OpenDucktor runs only /compact for", () => {
+    const runtimeCommands: AgentSlashCommand[] = [
+      MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
+      { id: "runtime:goal", trigger: "goal", title: "/goal", source: "command", hints: [] },
+      { id: "runtime:compact", trigger: "compact", title: "/compact", hints: [] },
+    ];
+
+    expect(
+      mergeSlashCommands(runtimeCommands, [], [], new Set(["compact"])).map(({ id }) => id),
+    ).toEqual(["system:compact", "runtime:goal"]);
+  });
+
   test("removes system commands from repository-scoped composers", () => {
     expect(
       filterSlashCommandsForComposerScope(
@@ -95,38 +121,25 @@ describe("use-chat-composer-slash-commands", () => {
           { id: "review", trigger: "review", title: "Review", hints: [] },
         ],
         "repo",
-        "opencode",
       ).map((command) => command.id),
     ).toEqual(["review"]);
   });
 
   test("keeps system commands in Codex session composers", () => {
     expect(
-      filterSlashCommandsForComposerScope(
-        [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
-        "session",
-        "codex",
-      ),
+      filterSlashCommandsForComposerScope([MANUAL_SESSION_COMPACTION_SLASH_COMMAND], "session"),
     ).toEqual([MANUAL_SESSION_COMPACTION_SLASH_COMMAND]);
   });
 
   test("keeps system commands in Claude session composers", () => {
     expect(
-      filterSlashCommandsForComposerScope(
-        [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
-        "session",
-        "claude",
-      ),
+      filterSlashCommandsForComposerScope([MANUAL_SESSION_COMPACTION_SLASH_COMMAND], "session"),
     ).toEqual([MANUAL_SESSION_COMPACTION_SLASH_COMMAND]);
   });
 
   test("removes system commands from Codex repository composers", () => {
     expect(
-      filterSlashCommandsForComposerScope(
-        [MANUAL_SESSION_COMPACTION_SLASH_COMMAND],
-        "repo",
-        "codex",
-      ),
+      filterSlashCommandsForComposerScope([MANUAL_SESSION_COMPACTION_SLASH_COMMAND], "repo"),
     ).toEqual([]);
   });
 
@@ -144,7 +157,7 @@ describe("use-chat-composer-slash-commands", () => {
       ],
     );
 
-    expect(filterSlashCommandsForComposerScope(mergedCommands, "repo", "opencode")).toEqual([]);
+    expect(filterSlashCommandsForComposerScope(mergedCommands, "repo")).toEqual([]);
   });
 
   test("keeps runtime commands alongside compact in Claude session composers", () => {
@@ -155,7 +168,6 @@ describe("use-chat-composer-slash-commands", () => {
           { id: "review", trigger: "review", title: "Review", hints: [] },
         ],
         "session",
-        "claude",
       ).map((command) => command.id),
     ).toEqual(["system:compact", "review"]);
   });

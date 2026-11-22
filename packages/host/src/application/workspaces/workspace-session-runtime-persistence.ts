@@ -1,16 +1,16 @@
-import type {
-  AcceptedAgentUserMessage,
-  AgentSessionControlResumeInput,
-  AgentSessionControlSummary,
-  AgentSessionControlUpdateTitleInput,
-  AgentSessionLiveRef,
-  WorkspaceSession,
+import {
+  type AcceptedAgentUserMessage,
+  type AgentSessionControlResumeInput,
+  type AgentSessionControlSummary,
+  type AgentSessionControlUpdateTitleInput,
+  type AgentSessionLiveRef,
+  isAcceptedUserMessage,
+  type WorkspaceSession,
 } from "@openducktor/contracts";
 import { agentSessionRefKey, isSameSelection } from "@openducktor/core";
 import { Effect, Exit, FiberSet, Scope } from "effect";
 import {
   buildWorkspaceSessionTitle,
-  planRuntimeTitleRename,
   runtimeTitle,
 } from "../../domain/workspace-sessions/workspace-session-title";
 import {
@@ -39,9 +39,10 @@ import type {
 } from "../agent-sessions/agent-session-operation-policy";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
 import {
-  titleSyncNeedsTurn,
+  planNativeRename,
   syncTitleAfterTurn,
   type TitleSyncState,
+  titleSyncMode,
 } from "./workspace-session-runtime-title-sync";
 import {
   validateWorkspaceSessionTarget,
@@ -167,13 +168,15 @@ export const createWorkspaceSessionRuntimePersistence = ({
         generatedTitle: buildWorkspaceSessionTitle(message),
         occurredAt: Date.parse(message.timestamp),
       };
-      if (titleSyncNeedsTurn(runtimeRef.runtimeKind)) return { input, runtimeRename: null };
+      // Only a runtime that takes a title at once renames on an accepted message.
+      if (titleSyncMode(runtimeRef.runtimeKind) !== "immediate")
+        return { input, runtimeRename: null };
       const storedGeneratedTitle = known.session.generatedTitle ?? input.generatedTitle;
       const nextTitle = runtimeTitle({
         ...known.session,
         generatedTitle: storedGeneratedTitle,
       });
-      const plannedRename = planRuntimeTitleRename(known.session, nextTitle);
+      const plannedRename = planNativeRename(known.session, nextTitle);
       const runtimeRename =
         plannedRename === null
           ? null
@@ -210,7 +213,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const { input, runtimeRename } = plan;
-        if (titleSyncNeedsTurn(runtimeRef.runtimeKind))
+        if (titleSyncMode(runtimeRef.runtimeKind) === "after_turn")
           return yield* restore(saveMessage(runtimeRef, known, input));
         // Rename before saving so a failed native rename leaves the saved title alone.
         if (runtimeRename !== null) {
@@ -288,7 +291,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message);
-      if (titleSyncNeedsTurn(runtimeRef.runtimeKind))
+      if (titleSyncMode(runtimeRef.runtimeKind) === "after_turn")
         return yield* saveMessage(runtimeRef, known, plan.input);
       // Defer observed renames because a manual rename can hold the gate during live publication.
       const renamePending = plan.runtimeRename !== null || sessionTitleGate.isActive(known.ref);
@@ -460,12 +463,12 @@ export const createWorkspaceSessionRuntimePersistence = ({
         }
         if (envelope.type !== "transcript_event") return;
         const { event } = envelope;
-        if (event.type === "user_message") {
+        if (isAcceptedUserMessage(event)) {
           yield* recordObservedMessage(event.sessionRef, event);
         } else if (
           (event.type === "session_idle" || event.type === "session_turn_finished") &&
           event.turnOutcome !== undefined &&
-          titleSyncNeedsTurn(event.sessionRef.runtimeKind)
+          titleSyncMode(event.sessionRef.runtimeKind) === "after_turn"
         ) {
           yield* syncTitleAfterTurn(event.sessionRef, {
             state: titleSync,

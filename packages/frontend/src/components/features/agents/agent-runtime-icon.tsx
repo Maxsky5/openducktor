@@ -1,9 +1,9 @@
 import { RUNTIME_ICON_GEOMETRY } from "@openducktor/theme/runtime-icons";
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { ReactElement } from "react";
+import { type ReactElement, useId } from "react";
 import { cn } from "@/lib/utils";
 
-const { codex, claude, opencode } = RUNTIME_ICON_GEOMETRY;
+const { antigravity, codex, claude, opencode } = RUNTIME_ICON_GEOMETRY;
 
 type AgentRuntimeIconProps = {
   runtimeKind: RuntimeKind;
@@ -67,6 +67,29 @@ function ClaudeBrandIcon({ className }: RuntimeBrandIconProps): ReactElement {
   );
 }
 
+function AntigravityBrandIcon({ className }: RuntimeBrandIconProps): ReactElement {
+  // Each icon needs its own gradient ID, because SVG IDs are global in the document.
+  const gradientId = useId();
+  return (
+    <svg
+      aria-hidden="true"
+      className={cn("size-4 shrink-0", className)}
+      viewBox={antigravity.viewBox}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="1" x2="0.4" y2="0">
+          {antigravity.gradientStops.map((stop) => (
+            <stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />
+          ))}
+        </linearGradient>
+      </defs>
+      <path d={antigravity.path} fill={`url(#${gradientId})`} />
+    </svg>
+  );
+}
+
 export function AgentRuntimeIcon({ runtimeKind, className }: AgentRuntimeIconProps): ReactElement {
   switch (runtimeKind) {
     case "opencode":
@@ -75,6 +98,8 @@ export function AgentRuntimeIcon({ runtimeKind, className }: AgentRuntimeIconPro
       return <CodexBrandIcon className={className} />;
     case "claude":
       return <ClaudeBrandIcon className={className} />;
+    case "antigravity":
+      return <AntigravityBrandIcon className={className} />;
   }
 
   const exhaustiveRuntimeKind: never = runtimeKind;

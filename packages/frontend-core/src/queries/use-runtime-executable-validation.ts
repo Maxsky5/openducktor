@@ -21,14 +21,8 @@ export type RuntimeExecutableValidationState = {
 
 const activeOtherValidationCountForKind = (
   kind: RuntimeKind,
-  opencode: number,
-  codex: number,
-  claude: number,
-): number => {
-  if (kind === "opencode") return opencode;
-  if (kind === "codex") return codex;
-  return claude;
-};
+  counts: Record<RuntimeKind, number>,
+): number => counts[kind];
 
 export const useRuntimeExecutableValidation = (
   runtimes: AgentRuntimes | null,
@@ -50,6 +44,11 @@ export const useRuntimeExecutableValidation = (
     queryKey: runtimeQueryKeys.executableKind("claude"),
     predicate: (query) => query.queryKey.at(-1) !== claudePath,
   });
+  const antigravityPath = runtimes?.antigravity.executablePath ?? "";
+  const activeAntigravityValidationCount = useIsFetching({
+    queryKey: runtimeQueryKeys.executableKind("antigravity"),
+    predicate: (query) => query.queryKey.at(-1) !== antigravityPath,
+  });
   const inputs = knownRuntimeKindValues.map((kind) => ({
     kind,
     path: runtimes?.[kind].executablePath ?? "",
@@ -60,12 +59,12 @@ export const useRuntimeExecutableValidation = (
       enabled:
         enabled &&
         runtimes !== null &&
-        activeOtherValidationCountForKind(
-          kind,
-          activeOpenCodeValidationCount,
-          activeCodexValidationCount,
-          activeClaudeValidationCount,
-        ) === 0,
+        activeOtherValidationCountForKind(kind, {
+          opencode: activeOpenCodeValidationCount,
+          codex: activeCodexValidationCount,
+          claude: activeClaudeValidationCount,
+          antigravity: activeAntigravityValidationCount,
+        }) === 0,
     })),
   });
   const results = inputs.flatMap(({ kind, path }, index) => {

@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   DEFAULT_AGENT_RUNTIMES,
@@ -1405,6 +1406,8 @@ describe("useAgentStudioChatComposer", () => {
               title: "Runtime compact",
               hints: [],
             },
+            // The runtime offers the OpenDucktor `/compact`, so it does not own the trigger.
+            MANUAL_SESSION_COMPACTION_SLASH_COMMAND,
           ],
         },
       }),

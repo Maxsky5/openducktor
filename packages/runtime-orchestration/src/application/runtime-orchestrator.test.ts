@@ -17,6 +17,7 @@ const settingsWith = (enabled: Partial<Record<RuntimeKind, string>>): RuntimeSet
   opencode: { enabled: "opencode" in enabled, executablePath: enabled.opencode ?? "" },
   codex: { enabled: "codex" in enabled, executablePath: enabled.codex ?? "" },
   claude: { enabled: "claude" in enabled, executablePath: enabled.claude ?? "" },
+  antigravity: { enabled: "antigravity" in enabled, executablePath: enabled.antigravity ?? "" },
 });
 
 const session = (
@@ -77,6 +78,7 @@ const createHarness = (saved: RuntimeSettings) => {
     opencode: driverFor("opencode"),
     codex: driverFor("codex"),
     claude: driverFor("claude"),
+    antigravity: driverFor("antigravity"),
   };
   const orchestrator = createRuntimeOrchestrator({
     drivers,
@@ -135,6 +137,7 @@ describe("runtime orchestrator", () => {
     ).toEqual([
       ["codex", undefined, "disabled"],
       ["claude", undefined, "disabled"],
+      ["antigravity", undefined, "disabled"],
       ["opencode", undefined, "starting"],
       ["opencode", "starting", "ready"],
     ]);
@@ -148,6 +151,7 @@ describe("runtime orchestrator", () => {
 
     const statuses = await Effect.runPromise(harness.orchestrator.statuses());
     expect(statuses.map((status) => [status.state, status.failure?.phase])).toEqual([
+      ["error", "configuration"],
       ["error", "configuration"],
       ["error", "configuration"],
       ["error", "configuration"],

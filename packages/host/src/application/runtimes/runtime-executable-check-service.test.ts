@@ -8,6 +8,7 @@ import { createRuntimeDefinitionsService } from "./runtime-definitions-service";
 import { createRuntimeExecutableCheckService } from "./runtime-executable-check-service";
 
 const paths = {
+  antigravity: "/tools/agy",
   bun: "",
   opencode: "/tools/opencode",
   codex: "/tools/codex",
@@ -87,7 +88,7 @@ describe("runtime executable check service", () => {
   test("returns one row for every runtime and treats a discovery miss as row data", async () => {
     const result = await Effect.runPromise(service.check({ mode: "discover" }));
 
-    expect(result.runtimes).toHaveLength(3);
+    expect(result.runtimes).toHaveLength(4);
     expect(result.runtimes.find((row) => row.kind === "opencode")).toMatchObject({
       path: "/tools/opencode",
       ok: true,
@@ -192,7 +193,7 @@ describe("runtime executable check service", () => {
           getRuntimeHealth(kind, executablePath) {
             return Effect.gen(function* () {
               startedKinds.push(kind);
-              if (startedKinds.length === 3) {
+              if (startedKinds.length === 4) {
                 yield* Deferred.succeed(allStarted, undefined);
               }
               yield* Deferred.await(release);
@@ -232,6 +233,11 @@ describe("runtime executable check service", () => {
     );
 
     expect(Option.isSome(result.startedTogether)).toBeTrue();
-    expect(result.checked.runtimes.map((row) => row.kind)).toEqual(["opencode", "codex", "claude"]);
+    expect(result.checked.runtimes.map((row) => row.kind)).toEqual([
+      "opencode",
+      "codex",
+      "claude",
+      "antigravity",
+    ]);
   });
 });

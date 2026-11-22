@@ -2,7 +2,7 @@
 
 Use this document to find the owner of a rule and trace a user action across packages.
 
-OpenDucktor supports OpenCode, Codex, and Claude runtimes. OpenCode is the default. `packages/frontend-core` holds the client behavior that all clients share. `packages/frontend` is the shared browser UI. Electron and `packages/openducktor-web` provide the shells. `packages/host` serves both shells. The desktop app runs on macOS, Windows, and Linux. `apps/mobile` is the native iOS and Android client of a remote host.
+OpenDucktor supports OpenCode, Codex, Claude, and Antigravity runtimes. OpenCode is the default. Antigravity is opt-in. `packages/frontend-core` holds the client behavior that all clients share. `packages/frontend` is the shared browser UI. Electron and `packages/openducktor-web` provide the shells. `packages/host` serves both shells. The desktop app runs on macOS, Windows, and Linux. `apps/mobile` is the native iOS and Android client of a remote host.
 
 This guide covers the desktop app, the browser runner, and the mobile app. Read [the marketing website guide](../apps/marketing-website/README.md) for the public Astro website.
 
@@ -120,7 +120,7 @@ Launch rules:
 - A frontend workspace change does not cancel an admitted workflow launch.
 - Stop cancels a launch that targets the stopped session. A canceled launch sends no first instruction. If the runtime accepted the first instruction during the Stop, settlement stops the session again.
 - Host shutdown interrupts launch workers and waits for their cleanup before it stops runtimes and the task store.
-- A launch asks the runtime adapter to return only after the runtime accepts the first instruction. The Codex adapter waits for the `turn/start` or `turn/steer` answer. The Claude and OpenCode adapters return their normal send receipt. A later runtime failure shows as a session error.
+- A launch asks the runtime adapter to return only after the runtime accepts the first instruction. The Codex adapter waits for the `turn/start` or `turn/steer` answer. The Claude and OpenCode adapters return their normal send receipt. The Antigravity adapter returns when the runtime starts work on the turn or answers the prompt. A later runtime failure shows as a session error.
 - Only a fresh decision can name a target working directory. The host accepts only the canonical task worktree.
 - Only Autopilot launches that use the configured default model check the runtime catalog.
 - A reuse launch refuses a session that waits for an approval or a blocking question. Its first instruction answers open background questions.
@@ -319,7 +319,7 @@ The page does not parse chat text to create a pull request.
 - Workflow definitions and `createWorkflow` in `packages/workflows`.
 - Agent engine ports in `packages/core/src/ports/agent-engine.ts`.
 - Live-session port in `packages/host/src/ports/agent-session-live-adapter-port.ts`.
-- Native runtime code in `packages/adapters-opencode-sdk`, `packages/adapters-codex-app-server`, and `packages/host/src/adapters/claude`.
+- Native runtime code in `packages/adapters-opencode-sdk`, `packages/adapters-codex-app-server`, `packages/host/src/adapters/claude`, and `packages/host/src/adapters/antigravity`.
 - SQLite `TaskStorePort` code under `packages/host/src/adapters/sqlite`.
 
 ## Cross-layer change order

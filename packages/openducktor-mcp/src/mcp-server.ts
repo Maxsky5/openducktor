@@ -20,7 +20,7 @@ import {
   getListedToolOutputSchema,
   type RegisteredToolName,
 } from "./listed-tool-schema";
-import { OdtTaskStore, type PlainWorkspaceToolName } from "./odt-task-store";
+import { type CallerToolName, OdtTaskStore, type PlainWorkspaceToolName } from "./odt-task-store";
 import { type OdtStoreContext, resolveStoreContext } from "./store-context";
 import {
   mcpToolPayloadSchema,
@@ -247,6 +247,15 @@ const defineWorkspaceTool = <Name extends PlainWorkspaceToolName>(
     execute: (store, input) => store.callWorkspaceTask(name, input),
   });
 
+const defineCallerTool = <Name extends CallerToolName>(
+  name: Name,
+  definition: Omit<ToolDefinitionOptions<Name, (typeof ODT_TOOL_SCHEMAS)[Name]>, "execute">,
+): OdtToolDefinition<Name> =>
+  defineOdtTool(name, {
+    ...definition,
+    execute: (store, input, meta) => store.callWithCaller(name, input, meta),
+  });
+
 type ListedOdtTool = Pick<OdtToolDefinition, "name" | "description" | "outputSchema">;
 
 type ListedToolDefinition = {
@@ -333,16 +342,16 @@ const ODT_TOOL_DEFINITIONS = [
     description:
       "Search active tasks. Filters match exactly, title matches a substring, and a task must have all tags. Returns a page of task summaries.",
   }),
-  defineWorkspaceTool("odt_read_task", {
+  defineCallerTool("odt_read_task", {
     description:
       "Read one task's fields, workflow artifact states, and all current workflow and free artifact metadata. Call it first.",
   }),
-  defineWorkspaceTool("odt_read_task_assets", {
+  defineCallerTool("odt_read_task_assets", {
     description:
       "Read description images of a task as image content, in request order. A batch is at most 20 MiB. The call fails when an asset is unavailable.",
     nativeResult: toTaskAssetsToolResult,
   }),
-  defineWorkspaceTool("odt_read_task_artifacts", {
+  defineCallerTool("odt_read_task_artifacts", {
     description:
       "Read artifact content by code. Get the workflow and free artifact codes from odt_read_task.",
     nativeResult: toTaskArtifactsToolResult,
@@ -353,19 +362,17 @@ const ODT_TOOL_DEFINITIONS = [
       "Save an artifact by code from odt_read_task. Workflow artifacts use Markdown, and a review artifact requires one of its verdicts. Set mediaType for a free artifact's format.",
     execute: (store, input, meta) => store.setTaskArtifact(input, meta),
   }),
-  defineOdtTool("odt_delete_task_artifact", {
+  defineCallerTool("odt_delete_task_artifact", {
     description:
       "Delete a free artifact by its stable code. This cannot delete workflow artifacts or change task status.",
-    execute: (store, input, meta) => store.deleteTaskArtifact(input, meta),
   }),
   defineWorkspaceTool("odt_update_task", {
     description:
       "Update fields of one task. Omitted fields stay. An empty description or labels clears it. It never changes status or artifacts.",
   }),
-  defineOdtTool("odt_apply_workflow_event", {
+  defineCallerTool("odt_apply_workflow_event", {
     description:
       "Send a workflow event of the task. Use only an event that your role instructions list, and add a note when they require one.",
-    execute: (store, input, meta) => store.applyWorkflowEvent(input, meta),
   }),
   defineWorkspaceTool("odt_set_pull_request", {
     description:

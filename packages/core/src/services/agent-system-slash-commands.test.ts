@@ -152,14 +152,31 @@ describe("classifySystemSlashCommandInvocation for /goal", () => {
     ).toThrow("Start the message with /goal");
   });
 
-  test("rejects a runtime command named goal", () => {
-    expect(() =>
+  test("passes a runtime command named goal to the runtime", () => {
+    expect(
       classifySystemSlashCommandInvocation([
         {
           kind: "slash_command",
           command: { id: "goal", trigger: "goal", title: "Goal", source: "command", hints: [] },
         },
         { kind: "text", text: "ship it" },
+      ]),
+    ).toEqual({ kind: "not_system" });
+  });
+
+  test("rejects a prompt command named goal", () => {
+    expect(() =>
+      classifySystemSlashCommandInvocation([
+        {
+          kind: "slash_command",
+          command: {
+            id: "prompt:goal",
+            trigger: "goal",
+            title: "Goal",
+            source: "custom",
+            hints: [],
+          },
+        },
       ]),
     ).toThrow("/goal is a reserved system slash command.");
   });

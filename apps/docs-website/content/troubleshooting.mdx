@@ -146,10 +146,18 @@ Cause: the harness did not start. The message on the row gives the reason, for e
 
 Cause: the harness is too old, or it did not start. The message gives the reason and the update command.
 
-1. Run the update command in the message, for example `opencode upgrade` or `claude update`.
+1. Run the update command in the message, for example `opencode upgrade`, `claude update`, or `agy update`.
 2. Select <Action>Check again</Action>, and wait for **Available**.
 3. Select <Action>Restart</Action> on the Diagnostics row, then <Action>Restart</Action> in the dialog.
 4. Wait until the row shows **Ready**.
+
+</Accordion>
+<Accordion id="antigravity-sign-in" title="Antigravity needs a sign-in">
+
+Cause: the Antigravity CLI has no valid sign-in. OpenDucktor does not sign in for you.
+
+1. Run `agy` in a terminal and follow the sign-in steps.
+2. Send the message again, or start the session again.
 
 </Accordion>
 <Accordion id="goal-mode-off" title="Goals need OpenCode 2.2.1 or later">

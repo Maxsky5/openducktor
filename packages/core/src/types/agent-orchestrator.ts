@@ -26,6 +26,7 @@ import type {
   AgentSessionTranscriptEvent as ContractsAgentSessionTranscriptEvent,
   AgentToolName as ContractsAgentToolName,
   AgentTranscriptModelSelection as ContractsAgentTranscriptModelSelection,
+  AgentUserMessageState as ContractsAgentUserMessageState,
   AgentTranscriptPendingApprovalRequest as ContractsAgentTranscriptPendingApprovalRequest,
   AgentTranscriptPendingQuestionRequest as ContractsAgentTranscriptPendingQuestionRequest,
   AgentTranscriptSessionStatus as ContractsAgentTranscriptSessionStatus,
@@ -173,7 +174,8 @@ export type AgentSessionTodoPriority = "high" | "medium" | "low";
 
 export type AgentSessionTodoItem = ContractsAgentTranscriptSessionTodoItem;
 
-export type AgentUserMessageState = "queued" | "read";
+/** See `agentUserMessageStateSchema`: no reader treats a `pending` message as accepted. */
+export type AgentUserMessageState = ContractsAgentUserMessageState;
 
 export type AgentApprovalMutation = "mutating" | "read_only" | "unknown";
 

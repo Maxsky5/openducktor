@@ -29,13 +29,14 @@ import {
 export const agentRuntimePreviewModelsInputSchema = z
   .object({
     repoPath: z.string().trim().min(1),
-    runtimeKind: z.enum(["claude", "codex", "opencode"]),
+    runtimeKind: z.enum(["claude", "codex", "opencode", "antigravity"]),
   })
   .strict();
 export type AgentRuntimePreviewModelsInput = z.infer<typeof agentRuntimePreviewModelsInputSchema>;
 
 const opencodePolicySchema = z.object({ kind: z.literal("opencode") }).strict();
 const claudePolicySchema = z.object({ kind: z.literal("claude") }).strict();
+const antigravityPolicySchema = z.object({ kind: z.literal("antigravity") }).strict();
 const codexPolicySchema = z
   .object({
     kind: z.literal("codex"),
@@ -50,6 +51,7 @@ export const agentSessionRuntimePolicySchema = z.discriminatedUnion("kind", [
   opencodePolicySchema,
   claudePolicySchema,
   codexPolicySchema,
+  antigravityPolicySchema,
 ]);
 export type AgentSessionRuntimePolicy = z.infer<typeof agentSessionRuntimePolicySchema>;
 
@@ -57,12 +59,14 @@ const runtimePolicyBindings = [
   { runtimeKind: z.literal("opencode"), runtimePolicy: opencodePolicySchema },
   { runtimeKind: z.literal("claude"), runtimePolicy: claudePolicySchema },
   { runtimeKind: z.literal("codex"), runtimePolicy: codexPolicySchema },
+  { runtimeKind: z.literal("antigravity"), runtimePolicy: antigravityPolicySchema },
 ] as const;
 
 export const agentRuntimePolicyBindingSchema = z.discriminatedUnion("runtimeKind", [
   z.object(runtimePolicyBindings[0]).strict(),
   z.object(runtimePolicyBindings[1]).strict(),
   z.object(runtimePolicyBindings[2]).strict(),
+  z.object(runtimePolicyBindings[3]).strict(),
 ]);
 export type AgentRuntimePolicyBinding = z.infer<typeof agentRuntimePolicyBindingSchema>;
 
@@ -77,6 +81,7 @@ export const policyBoundSessionRefSchema = z.discriminatedUnion("runtimeKind", [
   z.object({ ...policyBoundSessionFields, ...runtimePolicyBindings[0] }).strict(),
   z.object({ ...policyBoundSessionFields, ...runtimePolicyBindings[1] }).strict(),
   z.object({ ...policyBoundSessionFields, ...runtimePolicyBindings[2] }).strict(),
+  z.object({ ...policyBoundSessionFields, ...runtimePolicyBindings[3] }).strict(),
 ]);
 export type PolicyBoundSessionRef = z.infer<typeof policyBoundSessionRefSchema>;
 
@@ -99,6 +104,7 @@ export const agentRuntimeLoadSessionHistoryInputSchema = z.discriminatedUnion("r
   z.object({ ...historyFields, ...runtimePolicyBindings[0] }).strict(),
   z.object({ ...historyFields, ...runtimePolicyBindings[1] }).strict(),
   z.object({ ...historyFields, ...runtimePolicyBindings[2] }).strict(),
+  z.object({ ...historyFields, ...runtimePolicyBindings[3] }).strict(),
 ]);
 export type AgentRuntimeLoadSessionHistoryInput = z.infer<
   typeof agentRuntimeLoadSessionHistoryInputSchema
@@ -118,6 +124,7 @@ export const agentRuntimeLoadSessionHistoryCommandInputSchema = z.discriminatedU
     z.object({ ...historyCommandFields, ...runtimePolicyBindings[0] }).strict(),
     z.object({ ...historyCommandFields, ...runtimePolicyBindings[1] }).strict(),
     z.object({ ...historyCommandFields, ...runtimePolicyBindings[2] }).strict(),
+    z.object({ ...historyCommandFields, ...runtimePolicyBindings[3] }).strict(),
   ],
 );
 const toolPartFields = {
@@ -129,6 +136,7 @@ export const agentRuntimeLoadSessionToolPartInputSchema = z.discriminatedUnion("
   z.object({ ...toolPartFields, ...runtimePolicyBindings[0] }).strict(),
   z.object({ ...toolPartFields, ...runtimePolicyBindings[1] }).strict(),
   z.object({ ...toolPartFields, ...runtimePolicyBindings[2] }).strict(),
+  z.object({ ...toolPartFields, ...runtimePolicyBindings[3] }).strict(),
 ]);
 export type AgentRuntimeLoadSessionToolPartInput = z.infer<
   typeof agentRuntimeLoadSessionToolPartInputSchema

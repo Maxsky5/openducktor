@@ -1,8 +1,9 @@
-import type {
-  AgentSessionLiveRef,
-  AgentSessionLiveSnapshot,
-  TaskAgentSessions,
-  WorkspaceRef,
+import {
+  type AgentSessionLiveRef,
+  type AgentSessionLiveSnapshot,
+  isAcceptedUserMessage,
+  type TaskAgentSessions,
+  type WorkspaceRef,
 } from "@openducktor/contracts";
 import { agentSessionRefKey } from "@openducktor/core";
 import { Clock, Effect } from "effect";
@@ -13,6 +14,8 @@ import {
 } from "../../effect/host-errors";
 import type { AgentSessionPersistencePort } from "../../ports/agent-session-persistence-port";
 import type { AgentSessionRepository } from "../../ports/task-repository-ports";
+import { type FinalReply, retractFinalReply, withFinalReply } from "./agent-session-final-reply";
+import type { AgentSessionTurnRecorder } from "./agent-session-turn-recorder";
 
 type ObservedSession = {
   ref: AgentSessionLiveRef;
@@ -20,22 +23,27 @@ type ObservedSession = {
   parentExternalSessionId?: string | undefined;
   pending: ReadonlySet<string>;
   untimedStatusChange: boolean;
-  finalMessage?: { messageId: string; at: number };
+  finalMessage?: FinalReply | undefined;
 };
 
 type WorkspacePersistence = AgentSessionPersistencePort & {
   recordActivity(ref: AgentSessionLiveRef, occurredAt: number): Effect.Effect<void, HostError>;
 };
 
-/** Save activity from the ordered live stream. Baselines and streamed text never write a date. */
+/**
+ * Save activity and turns from the ordered live stream. Baselines and streamed text never write a
+ * date.
+ */
 export const createAgentSessionActivityPersistence = ({
   tasks,
   workspace,
+  turns,
   readTaskWorkspace,
   publishTaskRecords,
 }: {
   tasks: Pick<AgentSessionRepository, "recordAgentSessionActivity">;
   workspace: WorkspacePersistence;
+  turns: AgentSessionTurnRecorder;
   readTaskWorkspace(ref: AgentSessionLiveRef): Effect.Effect<WorkspaceRef | null, HostError>;
   publishTaskRecords(
     scope: WorkspaceRef,
@@ -43,7 +51,11 @@ export const createAgentSessionActivityPersistence = ({
   ): Effect.Effect<void, HostError>;
 }): AgentSessionPersistencePort => {
   const sessions = new Map<string, ObservedSession>();
-  const record = (ref: AgentSessionLiveRef, at: number): Effect.Effect<void, HostError> =>
+  /** Saves activity on the root session, and returns the open workspace of the session. */
+  const record = (
+    ref: AgentSessionLiveRef,
+    at: number,
+  ): Effect.Effect<WorkspaceRef | null, HostError> =>
     Effect.gen(function* () {
       let root = ref;
       const visited = new Set<string>();
@@ -61,13 +73,14 @@ export const createAgentSessionActivityPersistence = ({
       }
       yield* workspace.recordActivity(root, at);
       const scope = yield* readTaskWorkspace(root);
-      if (!scope) return;
+      if (!scope) return null;
       const saved = yield* tasks
         .recordAgentSessionActivity({ ...scope, identity: root, occurredAt: at })
         .pipe(
           Effect.mapError((cause) => toHostOperationError(cause, "agent-session.persist-activity")),
         );
       if (saved) yield* publishTaskRecords(scope, saved);
+      return scope;
     });
   const flush = (ref: AgentSessionLiveRef, current: ObservedSession) =>
     Effect.gen(function* () {
@@ -103,6 +116,7 @@ export const createAgentSessionActivityPersistence = ({
         if (envelope.type === "session_removed") {
           const key = agentSessionRefKey(envelope.ref);
           const current = sessions.get(key);
+          turns.forget(envelope.ref);
           if (provenance !== "baseline" && current && isActive(current))
             yield* record(envelope.ref, yield* Clock.currentTimeMillis);
           sessions.delete(key);
@@ -141,20 +155,30 @@ export const createAgentSessionActivityPersistence = ({
         const key = agentSessionRefKey(ref);
         let current = sessions.get(key);
         const at = Date.parse(event.timestamp);
+        if (isAcceptedUserMessage(event)) {
+          const scope = yield* record(ref, at);
+          yield* turns.start(event, scope?.workspaceId ?? null);
+          current ??= { ref, pending: new Set<string>(), untimedStatusChange: false };
+          current.activity = "running";
+          current.untimedStatusChange = false;
+          sessions.set(key, current);
+          return;
+        }
+        // A pending message is not accepted yet, so it is no session activity.
+        if (event.type === "user_message") return;
+        yield* turns.observe(event);
         if (event.type === "assistant_message") {
           current ??= { ref, pending: new Set<string>(), untimedStatusChange: false };
-          if (!current.finalMessage || at > current.finalMessage.at)
-            current.finalMessage = { messageId: event.messageId, at };
+          current.finalMessage = withFinalReply(current.finalMessage, event.messageId, at);
           sessions.set(key, current);
           return;
         }
         if (event.type === "transcript_retracted") {
-          if (current?.finalMessage && event.messageIds.includes(current.finalMessage.messageId))
-            delete current.finalMessage;
+          if (current)
+            current.finalMessage = retractFinalReply(current.finalMessage, event.messageIds);
           return;
         }
         switch (event.type) {
-          case "user_message":
           case "session_started":
           case "image_generation_turn_started":
             yield* record(ref, at);

@@ -100,6 +100,7 @@ const createOperations = (operationsInput: Partial<CreateRuntimeSessionOperation
     opencode: { stopSession: unusedPort, probeSessionStatus: unusedPort },
     codexAppServer: { request: unusedPort },
     claudeAgentSdk: { stopSession: unusedPort, probeSessionStatus: unusedPort },
+    antigravity: { stopSession: unusedPort, probeSessionStatus: unusedPort },
     ...operationsInput,
   });
 

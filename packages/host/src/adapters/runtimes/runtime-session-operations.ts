@@ -36,9 +36,10 @@ export type CreateRuntimeSessionOperationsInput = {
   codexAppServer: Pick<CodexAppServerPort, "request">;
   directoriesMatch: CodexDirectoryMatcher;
   claudeAgentSdk: ClaudeRuntimeSessionOperationsPort;
+  antigravity: RuntimeSessionOperations;
 };
 
-const toClaudeSessionOperationError = (
+const toSessionOperationError = (
   resource: string,
   operation: string,
   cause: unknown,
@@ -56,7 +57,7 @@ const createCodexSessionOperations = (
 ): RuntimeSessionOperations => ({
   stopSession(input, runtime) {
     return Effect.gen(function* () {
-      const runtimeId = yield* requireCodexRuntimeId(runtime.runtimeRoute);
+      const runtimeId = yield* requireStdioRuntimeId(runtime.runtimeRoute, "Codex app-server");
       return yield* stopCodexSession({
         codexAppServer,
         directoriesMatch,
@@ -68,7 +69,7 @@ const createCodexSessionOperations = (
   },
   probeSessionStatus(input, runtime) {
     return Effect.gen(function* () {
-      const runtimeId = yield* requireCodexRuntimeId(runtime.runtimeRoute);
+      const runtimeId = yield* requireStdioRuntimeId(runtime.runtimeRoute, "Codex app-server");
       return yield* probeCodexSessionStatus({
         codexAppServer,
         directoriesMatch,
@@ -88,11 +89,7 @@ const createClaudeSessionOperations = (
       .stopSession(input)
       .pipe(
         Effect.mapError((cause) =>
-          toClaudeSessionOperationError(
-            "claudeAgentSdk",
-            "runtimeRegistry.stopClaudeSession",
-            cause,
-          ),
+          toSessionOperationError("claudeAgentSdk", "runtimeRegistry.stopClaudeSession", cause),
         ),
       );
   },
@@ -101,7 +98,7 @@ const createClaudeSessionOperations = (
       .probeSessionStatus(input)
       .pipe(
         Effect.mapError((cause) =>
-          toClaudeSessionOperationError(
+          toSessionOperationError(
             "claudeAgentSdk",
             "runtimeRegistry.probeClaudeSessionStatus",
             cause,
@@ -115,15 +112,17 @@ export const createRuntimeSessionOperations = ({
   codexAppServer,
   directoriesMatch,
   claudeAgentSdk,
+  antigravity,
   opencode,
 }: CreateRuntimeSessionOperationsInput) =>
   ({
     opencode,
     codex: createCodexSessionOperations(codexAppServer, directoriesMatch),
     claude: createClaudeSessionOperations(claudeAgentSdk),
+    antigravity,
   }) satisfies RuntimeSessionOperationsByKind;
 
-const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
+const requireStdioRuntimeId = (runtimeRoute: RuntimeRoute, runtimeLabel: string) =>
   Effect.gen(function* () {
     if (runtimeRoute.type === "stdio") {
       return runtimeRoute.identity;
@@ -131,7 +130,7 @@ const requireCodexRuntimeId = (runtimeRoute: RuntimeRoute) =>
     return yield* Effect.fail(
       new HostValidationError({
         field: "runtimeRoute",
-        message: "Codex app-server operations require a stdio runtime route.",
+        message: `${runtimeLabel} operations require a stdio runtime route.`,
         details: { runtimeRouteType: runtimeRoute.type },
       }),
     );

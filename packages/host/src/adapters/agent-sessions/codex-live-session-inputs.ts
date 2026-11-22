@@ -2,9 +2,9 @@ import type {
   AgentSessionControlSendInput,
   AgentSessionControlForkInput,
   AgentSessionScope,
-  AgentSessionUserMessagePart,
 } from "@openducktor/contracts";
-import type { AgentRuntimePolicyBinding, AgentUserMessagePart } from "@openducktor/core";
+import type { AgentRuntimePolicyBinding } from "@openducktor/core";
+import { toAgentUserMessagePart } from "./agent-user-message-part";
 import type { CodexSessionController } from "./codex-live-session-adapter-contract";
 
 type CodexSendRequest = Parameters<CodexSessionController["sendUserMessage"]>[0];
@@ -40,7 +40,7 @@ export const toCodexSendRequest = ({
   }): CodexSendRequest => {
   const request: CodexSendRequest = {
     ...requiredInput,
-    parts: parts.map(toCodexUserMessagePart),
+    parts: parts.map(toAgentUserMessagePart),
   };
   if (resolvedQuestionRequestIds !== undefined) {
     request.resolvedQuestionRequestIds = resolvedQuestionRequestIds;
@@ -48,18 +48,4 @@ export const toCodexSendRequest = ({
   if (systemPrompt !== undefined) request.systemPrompt = systemPrompt;
   if (submissionId !== undefined) request.submissionId = submissionId;
   return request;
-};
-
-const toCodexUserMessagePart = (part: AgentSessionUserMessagePart): AgentUserMessagePart => {
-  if (part.kind !== "attachment") {
-    return part;
-  }
-  const { mime, ...requiredAttachment } = part.attachment;
-  if (mime === undefined) {
-    return { kind: "attachment", attachment: requiredAttachment };
-  }
-  return {
-    kind: "attachment",
-    attachment: { ...requiredAttachment, mime },
-  };
 };

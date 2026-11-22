@@ -1,4 +1,5 @@
 import { liveSessionRefKey } from "./live-session-ref";
+import { createOrderedLiveChangeQueue } from "./ordered-live-change-queue";
 import { agentSessionStatusFromActivity } from "@openducktor/core";
 import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import type { CodexLiveSessionMutation } from "@openducktor/adapters-codex-app-server";
@@ -23,12 +24,6 @@ import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-s
 
 type CodexProjectionRuntime = {
   readonly runtimeId: string;
-};
-
-type QueuedMutation = {
-  readonly mutation: CodexLiveSessionMutation;
-  readonly resolve: () => void;
-  readonly reject: (cause: unknown) => void;
 };
 
 type ParsedMutation = Pick<
@@ -56,10 +51,6 @@ export const createCodexLiveSessionProjection = ({
     runtimeId: runtime.runtimeId,
     runtimeKind: "codex" as const,
   });
-  const queuedMutations: QueuedMutation[] = [];
-  let forwarding = false;
-  let released = false;
-  let forwardingChain = Promise.resolve();
 
   /** Parse all input before changing state so an invalid ref cannot leave partial changes. */
   const applyMutation = (
@@ -70,7 +61,7 @@ export const createCodexLiveSessionProjection = ({
       Effect.flatMap((parsed) =>
         binding.runMutation(
           Effect.sync(() => {
-            if (released) {
+            if (queue.released) {
               return { value: undefined, changes: [] };
             }
             const changes: AgentSessionLiveAdapterChange[] = [];
@@ -230,42 +221,19 @@ export const createCodexLiveSessionProjection = ({
       return parsed;
     });
 
-  const drainQueuedMutations = (): Promise<void> => {
-    forwardingChain = forwardingChain.then(async () => {
-      while (forwarding && queuedMutations.length > 0) {
-        const queued = queuedMutations.shift();
-        if (!queued) {
-          continue;
-        }
-        try {
-          await Effect.runPromise(applyMutation(queued.mutation));
-          queued.resolve();
-        } catch (error) {
-          queued.reject(error);
-        }
-      }
-    });
-    return forwardingChain;
-  };
-
-  const enqueueMutation = (mutation: CodexLiveSessionMutation): Promise<void> =>
-    new Promise<void>((resolve, reject) => {
-      if (released) {
-        reject(new Error(`Codex runtime '${runtime.runtimeId}' is already released.`));
-        return;
-      }
-      queuedMutations.push({ mutation, resolve, reject });
-      if (forwarding) {
-        void drainQueuedMutations();
-      }
-    });
+  const queue = createOrderedLiveChangeQueue<CodexLiveSessionMutation>({
+    runtimeLabel: "Codex",
+    runtimeId: runtime.runtimeId,
+    operationPrefix: "codex-live-session",
+    apply: (mutation) => applyMutation(mutation),
+  });
 
   return {
     binding,
     /** A runtime-wide catalog change also invalidates each catalog that this runtime served. */
     recordCatalogRepository: (repoPath: string) => void catalogRepoPaths.add(repoPath),
     applyMutation,
-    enqueueMutation,
+    enqueueMutation: queue.enqueue,
     hasSnapshot: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(liveSessionRefKey(ref)),
     /** Lists the live sessions of every repository on this runtime. */
     listSnapshots: () =>
@@ -284,31 +252,13 @@ export const createCodexLiveSessionProjection = ({
           : ({ type: "missing", ref } as const),
       );
     },
-    startForwarding: (): Effect.Effect<void, HostError> =>
-      Effect.tryPromise({
-        try: async () => {
-          if (released) {
-            throw new Error(`Codex runtime '${runtime.runtimeId}' is already released.`);
-          }
-          forwarding = true;
-          await drainQueuedMutations();
-        },
-        catch: (cause) =>
-          toHostOperationError(cause, "codex-live-session.start-forwarding", {
-            runtimeId: runtime.runtimeId,
-          }),
-      }),
+    startForwarding: queue.startForwarding,
     releaseRuntime: (
       releaseController: () => void,
     ): Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> =>
       Effect.suspend(() => {
-        if (released) {
+        if (!queue.release()) {
           return Effect.succeed([]);
-        }
-        released = true;
-        forwarding = false;
-        for (const queued of queuedMutations.splice(0)) {
-          queued.reject(new Error(`Codex runtime '${runtime.runtimeId}' was released.`));
         }
         const refs = [...snapshotsByRef.values()].map((snapshot) => snapshot.ref);
         snapshotsByRef.clear();

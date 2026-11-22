@@ -47,9 +47,9 @@ describe("OdtTaskStore", () => {
       { client },
     );
 
-    await expect(store.callWorkspaceTask("odt_read_task", { taskId: "task-1" })).resolves.toEqual(
-      summaryPayload,
-    );
+    await expect(
+      store.callWithCaller("odt_read_task", { taskId: "task-1" }, undefined),
+    ).resolves.toEqual(summaryPayload);
     expect(calls).toEqual([
       { toolName: "odt_read_task", workspaceId: "repo", input: { taskId: "task-1" } },
     ]);
@@ -80,7 +80,7 @@ describe("OdtTaskStore", () => {
     );
 
     await expect(
-      store.callWorkspaceTask("odt_read_task_assets", { taskId: "task-1", assetIds }),
+      store.callWithCaller("odt_read_task_assets", { taskId: "task-1", assetIds }, undefined),
     ).resolves.toEqual(payload);
     expect(calls).toEqual([
       {
@@ -112,7 +112,11 @@ describe("OdtTaskStore", () => {
     );
 
     await expect(
-      store.callWorkspaceTask("odt_read_task", { workspaceId: "tool-repo", taskId: "task-1" }),
+      store.callWithCaller(
+        "odt_read_task",
+        { workspaceId: "tool-repo", taskId: "task-1" },
+        undefined,
+      ),
     ).resolves.toEqual(summaryPayload);
 
     expect(calls).toEqual([
@@ -251,7 +255,7 @@ describe("OdtTaskStore", () => {
       {
         workspaceId: "repo",
         hostUrl: "http://127.0.0.1:14327",
-        callerSource: { runtime: "codex" },
+        resolveCaller: (meta) => ({ runtime: "codex", runtimeSessionId: String(meta?.threadId) }),
       },
       { client },
     );
@@ -261,8 +265,8 @@ describe("OdtTaskStore", () => {
     );
     const input = { taskId: "task-1", eventId: "build-completed" };
 
-    await managed.applyWorkflowEvent(input, { threadId: "thread-1" });
-    await external.applyWorkflowEvent(input);
+    await managed.callWithCaller("odt_apply_workflow_event", input, { threadId: "thread-1" });
+    await external.callWithCaller("odt_apply_workflow_event", input, undefined);
 
     expect(calls).toEqual([
       {
@@ -272,6 +276,42 @@ describe("OdtTaskStore", () => {
         caller: { runtime: "codex", runtimeSessionId: "thread-1" },
       },
       { toolName: "odt_apply_workflow_event", workspaceId: "repo", input, caller: undefined },
+    ]);
+  });
+
+  test("sends a task read with the native caller of a managed session", async () => {
+    const calls: unknown[] = [];
+    const client: OdtHostBridgeClientPort = {
+      ready: async () => ({
+        bridgeVersion: ODT_MCP_BRIDGE_VERSION,
+        toolNames: [],
+        activeStatuses: TEST_ACTIVE_STATUSES,
+      }),
+      getWorkspaces: async () => workspacesPayload,
+      call: async (toolName, workspaceId, input, caller) => {
+        calls.push({ toolName, workspaceId, input, caller });
+        return summaryPayload;
+      },
+    };
+    const managed = new OdtTaskStore(
+      {
+        workspaceId: "repo",
+        hostUrl: "http://127.0.0.1:14327",
+        resolveCaller: () => ({ runtime: "antigravity", callerBindingId: "binding-1" }),
+      },
+      { client },
+    );
+    const input = { taskId: "task-1" };
+
+    await managed.callWithCaller("odt_read_task", input, undefined);
+
+    expect(calls).toEqual([
+      {
+        toolName: "odt_read_task",
+        workspaceId: "repo",
+        input,
+        caller: { runtime: "antigravity", callerBindingId: "binding-1" },
+      },
     ]);
   });
 

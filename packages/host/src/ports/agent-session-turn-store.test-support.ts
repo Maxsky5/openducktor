@@ -14,10 +14,10 @@ export const createMemoryAgentSessionTurnStore = () => {
       Effect.sync(() => {
         if (!turns.has(key(start))) turns.set(key(start), start);
       }),
-    recordTurnEnd: (end) =>
+    recordTurnEnd: (turn, end) =>
       Effect.sync(() => {
-        const existing = turns.get(key(end));
-        if (existing) turns.set(key(end), { ...existing, ...end });
+        const existing = turns.get(key(turn));
+        if (existing) turns.set(key(turn), { ...existing, end });
       }),
     listTurns: (session) =>
       Effect.sync(() =>

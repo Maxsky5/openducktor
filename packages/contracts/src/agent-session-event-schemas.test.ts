@@ -4,6 +4,7 @@ import {
   agentSessionTranscriptEventSchema,
   isAgentSessionTranscriptEventType,
 } from "./agent-session-event-schemas";
+import { acceptedAgentInputSchema } from "./agent-session-control-schemas";
 import type { AgentSessionLiveRef } from "./agent-session-schemas";
 
 const ref = {
@@ -37,6 +38,24 @@ describe("agent session transcript event contract", () => {
     expect(agentRuntimeEventSchema.safeParse({ ...completion, completionId: "" }).success).toBe(
       false,
     );
+  });
+
+  test("keeps a pending user message out of submissions and accepted receipts", () => {
+    const pending = {
+      ...base,
+      type: "user_message",
+      messageId: "m1",
+      message: "hello",
+      parts: [{ kind: "text", text: "hello" }],
+      state: "pending",
+    } as const;
+
+    expect(agentSessionTranscriptEventSchema.parse(pending)).toEqual(pending);
+    expect(
+      agentSessionTranscriptEventSchema.safeParse({ ...pending, submissionId: "s1" }).success,
+    ).toBe(false);
+    expect(acceptedAgentInputSchema.safeParse(pending).success).toBe(false);
+    expect(acceptedAgentInputSchema.safeParse({ ...pending, state: "read" }).success).toBe(true);
   });
 
   test("validates every existing normalized event variant", () => {

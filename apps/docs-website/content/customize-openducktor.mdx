@@ -92,7 +92,7 @@ The agent gets `Find bugs and missing tests in the parser module.`
 
 Every workspace has the same reusable prompts. A message with a reusable prompt must start with the command, and it can have only one command. It cannot have attachments, file references, skill references, or subagent references.
 
-If a harness command has the same name, the menu shows only the reusable prompt. The exceptions are the system commands `/compact` and `/goal`. `/compact` always compacts the session, and `/goal` always sets a [goal](/coding-sessions/#goal-command). The menu does not show a reusable prompt named `compact` or `goal`. A message with one of them fails, for example with `/goal is a reserved system slash command.` Do not use these names.
+If a harness command has the same name, the menu shows only the reusable prompt. The exceptions are the system commands `/compact` and `/goal`. Where the harness supports them, `/compact` compacts the session and `/goal` sets a [goal](/coding-sessions/#goal-command). With Antigravity, `/compact` and `/goal` are Antigravity commands. The menu does not show a reusable prompt named `compact` or `goal`. A message with one of them fails, for example with `/goal is a reserved system slash command.` Do not use these names.
 
 ## Next [#next]
 

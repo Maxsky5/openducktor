@@ -215,6 +215,7 @@ describe("host runtime service", () => {
       ["opencode", "ready"],
       ["codex", "disabled"],
       ["claude", "disabled"],
+      ["antigravity", "disabled"],
     ]);
     expect(harness.events).toEqual(["start:opencode-1"]);
   });
@@ -226,7 +227,12 @@ describe("host runtime service", () => {
     await Effect.runPromise(harness.service.initialize());
 
     const snapshot = await Effect.runPromise(harness.service.snapshot());
-    expect(snapshot.runtimes.map((status) => status.state)).toEqual(["error", "error", "error"]);
+    expect(snapshot.runtimes.map((status) => status.state)).toEqual([
+      "error",
+      "error",
+      "error",
+      "error",
+    ]);
     expect(harness.events).toEqual([]);
     for (const status of snapshot.runtimes) {
       expect(status.failure?.message).toEndWith(

@@ -3,6 +3,7 @@ import type { Effect } from "effect";
 import type { HostDependencyError, HostValidationError } from "../effect/host-errors";
 
 export const TOOL_DISCOVERY_IDS = [
+  "antigravity",
   "bun",
   "claude",
   "codex",

@@ -28,6 +28,7 @@ export * from "./services/odt-workflow-tools";
 export * from "./services/odt-tool-history";
 export * from "./services/renderable-file-diffs";
 export * from "./services/runtime-connections";
+export { compareRuntimeVersion } from "./services/runtime-version";
 export * from "./types/agent-orchestrator";
 
 export type { AgentSessionQueryParentPort } from "./ports/agent-session-query-parent";

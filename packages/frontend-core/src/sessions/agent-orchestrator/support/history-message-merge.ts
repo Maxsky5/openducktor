@@ -1,4 +1,5 @@
 import { mergeAgentImageGeneration } from "@openducktor/core";
+import { laterUserMessageState } from "../../messages/user-message-state";
 import { replaceEqualDeep } from "@tanstack/react-query";
 import type { AgentChatMessage, AgentSessionState } from "../../../types/agent-orchestrator";
 import {
@@ -579,6 +580,8 @@ const mergeSameMessageId = (
     const meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }> = {
       ...currentMessage.meta,
       ...loadedMessage.meta,
+      // History taken before a live update must not undo it: a read message stays read.
+      state: laterUserMessageState(currentMessage.meta.state, loadedMessage.meta.state),
     };
     if (parts) {
       meta.parts = parts;

@@ -46,13 +46,21 @@ const toRecord = (row: AgentSessionTurnRow): AgentSessionTurnRecord => {
     userMessageHash: row.userMessageHash,
     startedAt: toIso(row.startedAt),
     ...(model && { model }),
-    ...(row.completedAt !== null && { completedAt: toIso(row.completedAt) }),
-    ...(row.outcome !== null && { outcome: row.outcome }),
-    ...(row.durationMs !== null && { durationMs: row.durationMs }),
-    ...(row.finalMessageId !== null && { finalMessageId: row.finalMessageId }),
-    ...(row.interruptionMessageId !== null &&
-      row.interruptionMessage !== null && {
-        interruption: { messageId: row.interruptionMessageId, message: row.interruptionMessage },
+    ...(row.completedAt !== null &&
+      row.outcome !== null && {
+        end: {
+          completedAt: toIso(row.completedAt),
+          outcome: row.outcome,
+          ...(row.durationMs !== null && { durationMs: row.durationMs }),
+          ...(row.finalMessageId !== null && { finalMessageId: row.finalMessageId }),
+          ...(row.interruptionMessageId !== null &&
+            row.interruptionMessage !== null && {
+              interruption: {
+                messageId: row.interruptionMessageId,
+                message: row.interruptionMessage,
+              },
+            }),
+        },
       }),
   };
 };
@@ -93,7 +101,7 @@ export const createSqliteAgentSessionTurnStore = (
           })
           .onConflictDoNothing(),
       ).pipe(Effect.asVoid),
-    recordTurnEnd: (end) =>
+    recordTurnEnd: (turn, end) =>
       query("agentSessionTurns.recordTurnEnd", (db) =>
         db
           .update(agentSessionTurns)
@@ -105,7 +113,7 @@ export const createSqliteAgentSessionTurnStore = (
             interruptionMessageId: end.interruption?.messageId ?? null,
             interruptionMessage: end.interruption?.message ?? null,
           })
-          .where(and(sessionTurns(end), eq(agentSessionTurns.userMessageId, end.userMessageId))),
+          .where(and(sessionTurns(turn), eq(agentSessionTurns.userMessageId, turn.userMessageId))),
       ).pipe(Effect.asVoid),
     listTurns: (session) =>
       query("agentSessionTurns.listTurns", (db) =>

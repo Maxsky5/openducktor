@@ -1,6 +1,7 @@
 import "../test-support/dom-environment";
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import {
+  ANTIGRAVITY_RUNTIME_DESCRIPTOR,
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -29,6 +30,7 @@ const descriptorByRuntime = {
   opencode: OPENCODE_RUNTIME_DESCRIPTOR,
   codex: CODEX_RUNTIME_DESCRIPTOR,
   claude: CLAUDE_RUNTIME_DESCRIPTOR,
+  antigravity: ANTIGRAVITY_RUNTIME_DESCRIPTOR,
 };
 
 const catalogFor = (runtimeKind: RuntimeKind): AgentModelCatalog => ({

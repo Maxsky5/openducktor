@@ -3,6 +3,7 @@ import type { RuntimeKind } from "@openducktor/contracts";
 const OPENCODE_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-opencode)";
 export const CODEX_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-codex)";
 export const CLAUDE_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-claude)";
+const ANTIGRAVITY_SESSION_ACCENT_COLOR = "var(--odt-runtime-accent-antigravity)";
 
 export const resolveAgentSessionAccentColor = ({
   runtimeKind,
@@ -16,6 +17,8 @@ export const resolveAgentSessionAccentColor = ({
       return CODEX_SESSION_ACCENT_COLOR;
     case "claude":
       return CLAUDE_SESSION_ACCENT_COLOR;
+    case "antigravity":
+      return ANTIGRAVITY_SESSION_ACCENT_COLOR;
     default:
       return undefined;
   }

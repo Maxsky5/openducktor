@@ -45,7 +45,11 @@ const createToolDiscovery = (
 
 describe("runtime config initializer", () => {
   const initialize = createRuntimeConfigInitializer(
-    createToolDiscovery({ opencode: "/tools/opencode", claude: "/tools/claude" }),
+    createToolDiscovery({
+      opencode: "/tools/opencode",
+      claude: "/tools/claude",
+      antigravity: "/tools/agy",
+    }),
   );
 
   test("enables only detected runtimes for a new config", async () => {
@@ -59,6 +63,11 @@ describe("runtime config initializer", () => {
     expect(config.agentRuntimes.claude).toMatchObject({
       enabled: true,
       executablePath: "/tools/claude",
+    });
+    // Antigravity is opt-in, so a detected CLI only fills its path.
+    expect(config.agentRuntimes.antigravity).toEqual({
+      enabled: false,
+      executablePath: "/tools/agy",
     });
   });
 

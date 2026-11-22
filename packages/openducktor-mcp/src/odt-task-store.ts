@@ -7,7 +7,7 @@ import {
   type WorkspaceScopedOdtToolName,
 } from "@openducktor/contracts";
 import type { z } from "zod";
-import { type RuntimeCallerSource, resolveNativeCaller } from "./runtime-caller";
+import { requireRuntimeCaller, type RuntimeCallerResolver } from "./runtime-caller";
 import {
   OdtHostBridgeClient,
   type OdtHostBridgeClientPort,
@@ -21,19 +21,29 @@ export type OdtTaskStoreDeps = {
 };
 
 type ToolInput<Name extends OdtToolName> = z.infer<(typeof ODT_TOOL_SCHEMAS)[Name]>;
+/**
+ * Task tools that name the calling session of a managed runtime, so the host keeps a task session
+ * on its own task. A call from a user client names no caller.
+ */
+export type CallerToolName =
+  | "odt_read_task"
+  | "odt_read_task_artifacts"
+  | "odt_read_task_assets"
+  | "odt_delete_task_artifact"
+  | "odt_apply_workflow_event";
 export type PlainWorkspaceToolName = Exclude<
   WorkspaceTaskToolName,
-  "odt_set_task_artifact" | "odt_delete_task_artifact" | "odt_apply_workflow_event"
+  "odt_set_task_artifact" | CallerToolName
 >;
 
 export class OdtTaskStore {
   readonly workspaceId: string | undefined;
-  private readonly callerSource: RuntimeCallerSource | undefined;
+  private readonly resolveCaller: RuntimeCallerResolver | undefined;
   private readonly client: OdtHostBridgeClientPort;
 
   constructor(options: Omit<OdtStoreOptions, "activeStatuses">, deps: OdtTaskStoreDeps = {}) {
     this.workspaceId = options.workspaceId;
-    this.callerSource = options.callerSource;
+    this.resolveCaller = options.resolveCaller;
     this.client =
       deps.client ??
       new OdtHostBridgeClient({ baseUrl: options.hostUrl, appToken: options.hostToken });
@@ -63,13 +73,23 @@ export class OdtTaskStore {
     return this.client.call(toolName, workspaceId, input);
   }
 
+  async callWithCaller<Name extends CallerToolName>(
+    toolName: Name,
+    input: ToolInput<Name>,
+    meta: RequestMeta | undefined,
+  ) {
+    const caller = this.resolveCaller?.(meta);
+    const workspaceId = this.resolveWorkspaceId(toolName, input);
+    return this.client.call(toolName, workspaceId, input, caller);
+  }
+
   /** `meta` is the `_meta` of the MCP request. OpenCode and Codex name the calling session there. */
   async callBrowserTool<Name extends OdtBrowserToolName>(
     toolName: Name,
     input: ToolInput<Name>,
     meta: RequestMeta | undefined,
   ) {
-    const caller = resolveNativeCaller(this.callerSource, meta);
+    const caller = requireRuntimeCaller(this.resolveCaller, meta);
     const workspaceId = this.resolveWorkspaceId(toolName, input);
     return this.client.callBrowserTool(toolName, workspaceId, input, caller);
   }
@@ -79,7 +99,7 @@ export class OdtTaskStore {
   }
 
   async setTaskArtifact(input: ToolInput<"odt_set_task_artifact">, meta?: RequestMeta) {
-    const caller = this.callerSource ? resolveNativeCaller(this.callerSource, meta) : undefined;
+    const caller = this.resolveCaller?.(meta);
     const { content, ...bridgeInput } = input;
     const dataBase64 = toBridgeArtifactBase64(content, input.dataBase64);
     if (dataBase64 !== undefined) {
@@ -87,18 +107,6 @@ export class OdtTaskStore {
     }
     const workspaceId = this.resolveWorkspaceId("odt_set_task_artifact", input);
     return this.client.call("odt_set_task_artifact", workspaceId, bridgeInput, caller);
-  }
-
-  async deleteTaskArtifact(input: ToolInput<"odt_delete_task_artifact">, meta?: RequestMeta) {
-    const caller = this.callerSource ? resolveNativeCaller(this.callerSource, meta) : undefined;
-    const workspaceId = this.resolveWorkspaceId("odt_delete_task_artifact", input);
-    return this.client.call("odt_delete_task_artifact", workspaceId, input, caller);
-  }
-
-  async applyWorkflowEvent(input: ToolInput<"odt_apply_workflow_event">, meta?: RequestMeta) {
-    const caller = this.callerSource ? resolveNativeCaller(this.callerSource, meta) : undefined;
-    const workspaceId = this.resolveWorkspaceId("odt_apply_workflow_event", input);
-    return this.client.call("odt_apply_workflow_event", workspaceId, input, caller);
   }
 }
 

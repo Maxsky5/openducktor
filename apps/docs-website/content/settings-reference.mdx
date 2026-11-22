@@ -204,12 +204,12 @@ This section sets the direct merge method and the cleanup when a task closes, fo
 
 ## Agent runtimes [#harnesses]
 
-Sets up OpenCode, Codex, and Claude Code. Select a harness in the list to see its settings. See [Harnesses](/harnesses/).
+Sets up OpenCode, Codex, Claude Code, and Antigravity. Select a harness in the list to see its settings. See [Harnesses](/harnesses/).
 
 ### Enabled [#harnesses-enabled]
 
 - OpenDucktor does not start a disabled harness, and new sessions cannot use it.
-- The default is off until the first-run setup turns on the harnesses that you choose.
+- The default is off until the first-run setup turns on the harnesses that you choose. Antigravity stays off until you turn it on.
 - When a workspace uses a disabled harness, [Agents](#repository-agents) shows a warning, such as `Default Model runtime "Codex" is disabled.`
 - When the change stops running sessions, [Apply runtime changes](#harnesses-apply-runtime-changes) opens before the save.
 
@@ -563,6 +563,7 @@ For the model that each new session uses, see [Which model a session uses](/mode
 
 - Sets the **Runtime and model** and the **Effort** of the model that names work in this workspace. It has no **Agent profile**.
 - The model writes the title of a new workspace session from its first message. It also names the branch of a new task worktree, and the branch of a new workspace session worktree when you leave **Worktree name** blank. See [Name work with a model](/workspace-sessions/#naming-model).
+- An Antigravity naming model saves each naming request as a conversation in your Antigravity history.
 - The default is none. Without a naming model, OpenDucktor makes no naming request: titles come from the first message, task branches come from the task title, and **Worktree name** is required. **Clear** removes the naming model.
 - One naming request waits at most 15 seconds. After that time, OpenDucktor uses the names that it uses without a naming model.
 

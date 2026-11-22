@@ -21,7 +21,12 @@ import {
   findWorkspaceByRepo,
 } from "./demo-world";
 
-const RUNTIME_KINDS: RuntimeKind[] = ["opencode", "codex", "claude"];
+/** The demo runtimes. Runtimes outside the demo story stay off in its settings. */
+const RUNTIME_KINDS = ["opencode", "codex", "claude"] as const;
+type DemoRuntimeKind = (typeof RUNTIME_KINDS)[number];
+
+const isDemoRuntimeKind = (runtimeKind: RuntimeKind): runtimeKind is DemoRuntimeKind =>
+  RUNTIME_KINDS.some((kind) => kind === runtimeKind);
 const RUNTIME_DESCRIPTORS = {
   opencode: OPENCODE_RUNTIME_DESCRIPTOR,
   codex: CODEX_RUNTIME_DESCRIPTOR,
@@ -34,6 +39,9 @@ const providerIdOf = (provider: string): string =>
 
 /** The fictional model catalog of a runtime, from the Fieldnotes story. */
 const modelCatalog = (runtimeKind: RuntimeKind): AgentRuntimeCatalog => {
+  if (!isDemoRuntimeKind(runtimeKind)) {
+    throw new Error(`The demo has no ${RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind].label} runtime.`);
+  }
   const models = CATALOGS[runtimeKind].map((model) => ({
     id: `${providerIdOf(model.provider)}/${model.id}`,
     providerId: providerIdOf(model.provider),

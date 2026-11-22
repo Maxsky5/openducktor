@@ -1,4 +1,8 @@
-import type { WorkspaceProcessListener } from "@openducktor/contracts";
+import {
+  RUNTIME_HOST_TRAITS_BY_KIND,
+  type RuntimeServerProcess,
+  type WorkspaceProcessListener,
+} from "@openducktor/contracts";
 import { basenameForPath } from "@openducktor/path-support";
 import type { LiveProcess } from "../../ports/process-inspector-port";
 
@@ -93,23 +97,26 @@ export const runsAgentCommand = (process: LiveProcess): boolean =>
   COMMAND_CARRIERS.has(programName(process));
 
 /**
- * True for an agent runtime that serves another app: `opencode serve`, such as the one that
- * OpenDucktor starts or the background service of OpenCode, `codex app-server`, and Claude Code
- * with `--input-format stream-json`. Claude Code can have a version as its file name, so its first
- * argument names it.
+ * True for an agent runtime that serves another app, as the `serverProcess` of its host traits
+ * names it, such as the `opencode serve` that OpenDucktor starts or the background service of
+ * OpenCode. A runtime can have a version as its file name, so its first argument can name it.
  */
 export const isAgentRuntimeServer = (process: LiveProcess): boolean => {
   const program = programName(process);
   const args = process.arguments ?? [];
-  const [, command] = args;
-  const inputFormat = args.indexOf("--input-format");
-  return (
-    (program === "opencode" && command === "serve") ||
-    (program === "codex" && command === "app-server") ||
-    (basenameForPath(args[0] ?? "") === "claude" &&
-      inputFormat !== -1 &&
-      args[inputFormat + 1] === "stream-json")
+  const firstArgument = basenameForPath(args[0] ?? "");
+  const servers: readonly RuntimeServerProcess[] = Object.values(RUNTIME_HOST_TRAITS_BY_KIND).map(
+    (traits) => traits.serverProcess,
   );
+  return servers.some((serverProcess) => {
+    if (program !== serverProcess.program && firstArgument !== serverProcess.program) return false;
+    if (serverProcess.subcommand !== undefined && args[1] !== serverProcess.subcommand)
+      return false;
+    if (serverProcess.option === undefined) return true;
+    const [name, value] = serverProcess.option;
+    const index = args.indexOf(name);
+    return index !== -1 && args[index + 1] === value;
+  });
 };
 
 /**
