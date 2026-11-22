@@ -113,8 +113,12 @@ describe("agents-page-view-model", () => {
       ],
       workflowRail: buildWorkflowRail(createTaskCard("task-1"), (role) =>
         role === "spec"
-          ? { session: agentSessionIdentityKey(activeSessionSummary), liveSession: "waiting_input" }
-          : { session: null, liveSession: "none" },
+          ? {
+              session: agentSessionIdentityKey(activeSessionSummary),
+              liveSession: "waiting_input",
+              waitingOnBackground: false,
+            }
+          : { session: null, liveSession: "none", waitingOnBackground: false },
       ),
       selectedRole: "spec",
       workflowSessionByRole: {

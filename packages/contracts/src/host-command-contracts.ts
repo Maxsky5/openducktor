@@ -3,6 +3,7 @@ import { z } from "zod";
 
 export const HOST_COMMAND_NAMES = [
   ...AGENT_RUNTIME_QUERY_HOST_COMMAND_NAMES,
+  "agent_session_background_task_stop",
   "agent_session_begin_generated_image_batch",
   "agent_session_control_fork",
   "agent_session_control_release",

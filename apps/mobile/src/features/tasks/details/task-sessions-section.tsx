@@ -10,7 +10,7 @@ import { RoleTile, RuntimeIcon } from "@/ui/brand-icons";
 import { Callout } from "@/ui/callout";
 import { Text } from "@/ui/text";
 import { DetailsCard, DetailsCount, DetailsItem, DetailsNote } from "./details-card";
-import type { TaskSessionGroup } from "./task-sessions-model";
+import type { TaskSessionGroup, TaskSessionRow } from "./task-sessions-model";
 
 /**
  * The task-bound sessions of a task in Workflow Role order, newest first. Each item shows the
@@ -60,42 +60,23 @@ export const TaskSessionsSection = memo(function TaskSessionsSection({
           />
         ) : null}
         {groups.flatMap((group) =>
-          group.rows.map((row) => {
-            const started = formatElapsedAgo(now - Date.parse(row.startedAt));
-            const name = row.label;
-            return (
-              <DetailsItem
-                key={row.key}
-                leading={<RoleTile hint={group.iconHint} />}
-                trailing={
-                  row.statusTone === "neutral" ? null : (
-                    <Badge label={row.statusLabel} tone={row.statusTone} dot={row.live} />
-                  )
-                }
-                accessibilityLabel={`${name}, ${row.statusLabel}, ${row.runtimeLabel}, started ${started}`}
-                accessibilityHint="Opens the session."
-                onPress={() =>
-                  router.push(
-                    routes.session({
-                      ...sessionParams(workspaceId, row.identity),
-                      title: taskTitle,
-                      task: "1",
-                    }),
-                  )
-                }
-              >
-                <Text variant="subhead" weight="semibold" numberOfLines={1} style={styles.title}>
-                  {name}
-                </Text>
-                <View style={styles.meta}>
-                  <RuntimeIcon runtimeKind={row.identity.runtimeKind} size={12} />
-                  <Text variant="footnote" numberOfLines={1} style={styles.muted}>
-                    {started}
-                  </Text>
-                </View>
-              </DetailsItem>
-            );
-          }),
+          group.rows.map((row) => (
+            <TaskSessionItem
+              key={row.key}
+              row={row}
+              iconHint={group.iconHint}
+              started={formatElapsedAgo(now - Date.parse(row.startedAt))}
+              onPress={() =>
+                router.push(
+                  routes.session({
+                    ...sessionParams(workspaceId, row.identity),
+                    title: taskTitle,
+                    task: "1",
+                  }),
+                )
+              }
+            />
+          )),
         )}
       </DetailsCard>
       {error ? (
@@ -110,6 +91,57 @@ export const TaskSessionsSection = memo(function TaskSessionsSection({
     </View>
   );
 });
+
+/**
+ * One session of the task. A row with an unavailable status shows the reason under the start
+ * time, so the user can read why the status is unknown.
+ */
+function TaskSessionItem({
+  row,
+  iconHint,
+  started,
+  onPress,
+}: {
+  row: TaskSessionRow;
+  iconHint: TaskSessionGroup["iconHint"];
+  started: string;
+  onPress: () => void;
+}): ReactElement {
+  return (
+    <DetailsItem
+      leading={<RoleTile hint={iconHint} />}
+      trailing={
+        row.statusTone === "neutral" ? null : (
+          <Badge
+            label={row.statusLabel}
+            tone={row.statusTone}
+            icon={row.statusIcon ?? undefined}
+            dot={row.live}
+            accessibilityLabel={row.statusDescription}
+          />
+        )
+      }
+      accessibilityLabel={`${row.label}, ${row.statusDescription}, ${row.runtimeLabel}, started ${started}`}
+      accessibilityHint="Opens the session."
+      onPress={onPress}
+    >
+      <Text variant="subhead" weight="semibold" numberOfLines={1} style={styles.title}>
+        {row.label}
+      </Text>
+      <View style={styles.meta}>
+        <RuntimeIcon runtimeKind={row.identity.runtimeKind} size={12} />
+        <Text variant="footnote" numberOfLines={1} style={styles.muted}>
+          {started}
+        </Text>
+      </View>
+      {row.statusReason ? (
+        <Text variant="footnote" style={styles.muted}>
+          {row.statusReason}
+        </Text>
+      ) : null}
+    </DetailsItem>
+  );
+}
 
 const styles = StyleSheet.create((theme) => ({
   title: { color: theme.desktop.foreground },

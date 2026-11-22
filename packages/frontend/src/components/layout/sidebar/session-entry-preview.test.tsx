@@ -287,6 +287,40 @@ describe("Sidebar session previews", () => {
     expect(loadCatalog).not.toHaveBeenCalled();
   });
 
+  test("says that a running session waits on background tasks", async () => {
+    const entry = {
+      ...fixtureEntry(),
+      attention: [],
+      status: { kind: "running" as const, waitingOnBackground: true as const },
+    };
+    const { row } = mountSidebar([], entry);
+
+    const preview = await openPreview(row);
+    const status = within(preview).getByText("Running and waiting on background tasks");
+    expect(status.className).toContain("text-pending-muted");
+    expect(status.querySelector(".lucide-hourglass")).not.toBeNull();
+  });
+
+  test("marks the workflow step of a session that waits on background tasks", async () => {
+    const { row } = mountSidebar([
+      session({
+        activity: "running",
+        foregroundTurnActive: false,
+        backgroundTasks: [
+          { taskId: "task-1", kind: "command", title: "bun run dev", stop: { allowed: true } },
+        ],
+      }),
+    ]);
+
+    const preview = await openPreview(row);
+    const builder = within(within(preview).getByLabelText("Task workflow")).getByText("Builder");
+    expect(
+      within(builder.closest("li")!).getByRole("img", {
+        name: "Running and waiting on background tasks",
+      }),
+    ).toBeTruthy();
+  });
+
   test("shows task workflow, metadata, live model and effort without reading history or adding observers", async () => {
     const history = mock(async () => {
       throw new Error("A preview must not load history.");

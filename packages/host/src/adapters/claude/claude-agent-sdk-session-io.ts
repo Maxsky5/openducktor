@@ -21,6 +21,7 @@ import {
 import { isClaudeContinuationAdmission } from "./claude-agent-sdk-continuation-admission";
 import { withClaudeNativeProcessDiagnostic } from "./claude-agent-sdk-native-process";
 import { handleClaudeSdkMessage } from "./claude-agent-sdk-events";
+import { publishClaudeBackgroundTasks } from "./claude-agent-sdk-background-task-list";
 import { parseClaudeUserToolResultIngress } from "./claude-agent-sdk-ingress-schemas";
 import { applyClaudeLifecycleEvent } from "./claude-agent-sdk-lifecycle";
 import { readClaudeSdkMessageTimestamp } from "./claude-agent-sdk-message-timestamp";
@@ -42,7 +43,7 @@ import type {
   ClaudeAcceptedUserMessage,
   ClaudeAgentSdkEvent,
   ClaudeAgentSdkEventEmitter,
-  ClaudeGoalEvent,
+  ClaudeTranscriptLiveEvent,
   ClaudeSession,
   ClaudeSessionContext,
   ClaudeSessionStore,
@@ -132,8 +133,8 @@ export const applyClaudeSessionModel = async (
 /** Own the native stream through cleanup and report unhandled failures to startup and the background hook. */
 export const consumeClaudeSession = (input: {
   emit: ClaudeAgentSdkEventEmitter;
-  /** Receives the goal changes that the adapter reads from the transcript. */
-  emitGoal: (session: ClaudeSessionContext, event: ClaudeGoalEvent) => void;
+  /** Receives the goal changes that the adapter reads from the transcript, and the task lists. */
+  emitLive: (session: ClaudeSessionContext, event: ClaudeTranscriptLiveEvent) => void;
   now: () => string;
   onBackgroundFailure: CreateClaudeAgentSdkServiceInput["onBackgroundFailure"];
   onContinuationAdmission?: () => void;
@@ -181,11 +182,18 @@ export const consumeClaudeSession = (input: {
         if (applyClaudeUserMessageSignal({ emit: emitEvent, message, session, timestamp }))
           continue;
         handleClaudeSdkMessage({ session, message, timestamp, emit: emitEvent, modelSelection });
+        // Task runs and pending results change only with system frames.
+        if (message.type === "system")
+          publishClaudeBackgroundTasks({
+            session,
+            timestamp,
+            emit: (event) => input.emitLive(session, event),
+          });
         observeClaudeGoalFrame({
           session,
           message,
           now,
-          emit: (event) => input.emitGoal(session, event),
+          emit: (event) => input.emitLive(session, event),
           onFailure: (error) => Effect.runFork(onBackgroundFailure(error)),
         });
         if (shouldRefreshClaudeContextUsageForMessage(message)) {

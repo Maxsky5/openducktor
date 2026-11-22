@@ -477,6 +477,16 @@ body:has([data-separator="active"]) [data-browser-surface] {
     0 0 18px color-mix(in srgb, var(--color-warning-ring) 30%, transparent);
 }
 
+/* A running task card that waits on background tasks: the input card glow, in the violet pending colors. */
+.kanban-background-card {
+  position: relative;
+  isolation: isolate;
+  border-color: var(--color-pending-border);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-pending-border) 72%, transparent),
+    0 0 18px color-mix(in srgb, var(--color-pending-ring) 30%, transparent);
+}
+
 /* Transform animations move the bars, so the ray keeps running while the main thread is busy. */
 .odt-border-ray {
   --odt-border-ray-color: var(--status-running);

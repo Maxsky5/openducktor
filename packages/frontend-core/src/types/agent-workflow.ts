@@ -21,6 +21,8 @@ export type WorkflowStepPresentation = {
   availability: WorkflowStepAvailability;
   completion: WorkflowStepCompletion;
   liveSession: WorkflowStepLiveSession;
+  /** The running session of the step waits on background tasks. Only its style changes. */
+  waitingOnBackground: boolean;
 };
 
 export type WorkflowStepAttentionVariant = "none" | "session_waiting_input" | "blocked_task";

@@ -36,6 +36,7 @@ import {
   type AgentSessionControlReleaseInput,
   type AgentSessionResumeIntent,
   type AgentSessionControlStopInput,
+  type AgentSessionBackgroundTaskStopInput,
   type AgentSessionUsageLimitAutoResumeCancelInput,
   type AgentSessionGoalControlInput,
   type AgentSessionStartupResult,
@@ -62,6 +63,7 @@ import {
   agentSessionResumeIntentSchema,
   agentRepositorySessionStartInputSchema,
   agentSessionControlStopInputSchema,
+  agentSessionBackgroundTaskStopInputSchema,
   agentSessionUsageLimitAutoResumeCancelInputSchema,
   agentSessionGoalControlInputSchema,
   agentSessionStartupResultSchema,
@@ -203,6 +205,15 @@ export class HostAgentSessionLiveClient {
     await this.invokeFn(
       "agent_session_control_stop",
       agentSessionControlStopInputSchema.parse(input),
+      voidResultSchema,
+    );
+  }
+
+  /** Stops one background task of a session. The task leaves the live snapshot when it ends. */
+  async agentSessionBackgroundTaskStop(input: AgentSessionBackgroundTaskStopInput): Promise<void> {
+    await this.invokeFn(
+      "agent_session_background_task_stop",
+      agentSessionBackgroundTaskStopInputSchema.parse(input),
       voidResultSchema,
     );
   }

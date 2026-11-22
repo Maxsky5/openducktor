@@ -102,6 +102,9 @@ describe("session navigation entry labels", () => {
     expect(sessionEntryStatusText(taskSessionEntry({ attention: ["question", "blocked"] }))).toBe(
       "Needs you: Question, Blocked",
     );
+    expect(
+      sessionEntryStatusText(chatEntry({ status: { kind: "running", waitingOnBackground: true } })),
+    ).toBe("Running and waiting on background tasks");
     expect(sessionEntryStatusText(chatEntry({ status: { kind: "running" } }))).toBe("Running");
     expect(sessionEntryStatusText(chatEntry({ status: { kind: "settled", failed: true } }))).toBe(
       "Last run failed",

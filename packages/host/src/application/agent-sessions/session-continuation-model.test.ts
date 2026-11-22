@@ -131,6 +131,7 @@ const setup = (
           };
         }),
       releaseSession: unexpected,
+      stopBackgroundTask: unexpected,
       stopSession: unexpected,
       sendUserMessage: unexpected,
       loadContext: unexpected,

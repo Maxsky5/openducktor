@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
 import { AgentChatGoalRow } from "./agent-chat-goal-row";
+import { AgentChatBackgroundTaskBar } from "./agent-chat-background-task-bar";
 import { buildComposerAttachmentsFromFiles } from "./agent-chat-attachment-intake";
 import { CHAT_ATTACHMENT_ACCEPT } from "@openducktor/frontend-core/drafts/agent-chat-attachments";
 import {
@@ -685,6 +686,10 @@ function AgentChatComposerFormView({
       {model.messageQueue && !model.isReadOnly ? (
         <AgentChatMessageQueue model={model.messageQueue} composer={model} />
       ) : null}
+      <AgentChatBackgroundTaskBar
+        model={model.isReadOnly ? null : model.backgroundTasks}
+        scope={model.displayedSessionKey}
+      />
       <AgentChatGoalRow
         model={model.isReadOnly ? null : model.goalRow}
         scope={model.goalRowScope}

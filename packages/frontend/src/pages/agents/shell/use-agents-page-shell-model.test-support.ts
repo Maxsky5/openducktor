@@ -54,6 +54,7 @@ export const createAgentChatModelFixture = (): AgentChatModel => {
       messageQueue: null,
       goalRow: null,
       goalRowScope: null,
+      backgroundTasks: null,
       draftScope: { key: "task-1", persistence: null },
       onSend: async () => false,
       isSending: false,

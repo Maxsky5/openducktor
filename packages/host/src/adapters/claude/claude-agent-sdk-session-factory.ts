@@ -154,7 +154,7 @@ export const createClaudeAgentSdkSession = async ({
     sessionStore,
     now,
     emit,
-    emitGoal: emit,
+    emitLive: emit,
     onBackgroundFailure: serviceInput.onBackgroundFailure,
     startupValidation: startupValidation.promise,
   };

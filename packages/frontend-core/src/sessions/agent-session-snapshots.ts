@@ -1,5 +1,9 @@
 import type { WorkflowRoleId } from "@openducktor/workflows";
-import { getAgentSessionActivityStateFromSession } from "../lib/agent-session-activity-state";
+import {
+  getAgentSessionActivityStateFromSession,
+  isAgentSessionLiveStateObserved,
+  isAgentSessionWaitingOnBackgroundState,
+} from "../lib/agent-session-activity-state";
 import { agentSessionIdentityKey, toAgentSessionIdentity } from "../lib/agent-session-identity";
 import type { AgentSessionCollection } from "./agent-session-collection";
 import { listAgentSessions } from "./agent-session-collection";
@@ -9,14 +13,20 @@ import type {
   WorkflowAgentSessionState,
 } from "../types/agent-orchestrator";
 import type { AgentSessionActivityState } from "../types/agent-session-activity";
+import type { AgentSessionReadModelLoadState } from "../types/agent-session-read-model";
 import { isWorkflowAgentSession } from "./agent-orchestrator/support/workflow-session";
 
 export type AgentSessionSummary = AgentSessionIdentity &
-  Pick<WorkflowAgentSessionState, "title" | "startedAt" | "statusUnavailableReason"> & {
+  Pick<
+    WorkflowAgentSessionState,
+    "title" | "startedAt" | "statusUnavailableReason" | "livePresence"
+  > & {
     workspaceId: string;
     taskId: WorkflowAgentSessionState["sessionAssociation"]["taskId"];
     role: WorkflowRoleId;
     activityState: AgentSessionActivityState;
+    /** The running session has no reply and waits on background tasks. Only its style changes. */
+    waitingOnBackground: boolean;
     pendingApprovalCount: number;
     pendingQuestionCount: number;
     selectedModel: AgentSessionState["selectedModel"];
@@ -93,6 +103,24 @@ export function toAgentSessionSummary(session: AgentSessionState): AgentSessionS
   };
 }
 
+/**
+ * A summary shows the Background style only while the live state of its session is known. While
+ * the live state is unknown, the running session keeps the plain Running style.
+ */
+export const observeAgentSessionSummaries = (
+  readModelLoadState: AgentSessionReadModelLoadState,
+  summaries: AgentSessionSummary[],
+): AgentSessionSummary[] => {
+  const unobserved = (summary: AgentSessionSummary): boolean =>
+    summary.waitingOnBackground && !isAgentSessionLiveStateObserved(readModelLoadState, summary);
+  // The input keeps its identity when nothing changes, so selectors do not render again. The
+  // common case allocates nothing.
+  if (readModelLoadState.kind === "ready" || !summaries.some(unobserved)) return summaries;
+  return summaries.map((summary) =>
+    unobserved(summary) ? { ...summary, waitingOnBackground: false } : summary,
+  );
+};
+
 const newestFirst = (left: AgentSessionState, right: AgentSessionState): number => {
   if (Date.parse(left.startedAt) > Date.parse(right.startedAt)) return -1;
   if (Date.parse(left.startedAt) < Date.parse(right.startedAt)) return 1;
@@ -114,7 +142,9 @@ const toSummary = (session: AgentSessionState): RepositoryAgentSessionSummary =>
     startedAt: session.startedAt,
     selectedModel: session.selectedModel,
     activityState: getAgentSessionActivityStateFromSession(session),
+    waitingOnBackground: isAgentSessionWaitingOnBackgroundState(session),
     statusUnavailableReason: session.statusUnavailableReason,
+    livePresence: session.livePresence,
     pendingApprovalCount: session.pendingApprovals.length,
     pendingQuestionCount: session.pendingQuestions.length,
   };
@@ -129,7 +159,9 @@ const sameSummary = (
   left !== undefined &&
   left.title === right.title &&
   left.activityState === right.activityState &&
+  left.waitingOnBackground === right.waitingOnBackground &&
   left.statusUnavailableReason === right.statusUnavailableReason &&
+  left.livePresence === right.livePresence &&
   Date.parse(left.startedAt) === Date.parse(right.startedAt) &&
   left.workingDirectory === right.workingDirectory &&
   left.selectedModel === right.selectedModel &&

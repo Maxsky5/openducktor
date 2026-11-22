@@ -417,6 +417,16 @@ export const createOpenCodeSessionControlAdapter = ({
           ),
         ),
       ),
+    stopBackgroundTask: (input) =>
+      Effect.tryPromise({
+        try: () => connection.stopBackgroundTask(input),
+        catch: (cause) =>
+          toHostOperationError(cause, "opencode-live-session.stop-background-task", {
+            runtimeId: runtime.runtimeId,
+            externalSessionId: input.externalSessionId,
+            taskId: input.taskId,
+          }),
+      }),
     releaseSession: (input) =>
       Effect.tryPromise({
         try: () => connection.releaseSession(input),

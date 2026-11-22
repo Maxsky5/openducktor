@@ -29,7 +29,7 @@ export type SessionCreateOption = {
 };
 
 export type AgentSessionWorkflowSummary = AgentSessionOptionSummary &
-  Pick<AgentSessionSummary, "taskId">;
+  Pick<AgentSessionSummary, "taskId" | "waitingOnBackground">;
 
 type WorkflowSessionSummary = AgentSessionWorkflowSummary & {
   role: AgentRole;

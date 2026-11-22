@@ -67,6 +67,7 @@ const chat = (id: string, workingDirectory: string, updatedAt: number): Workspac
 
 const facts = (overrides: Partial<WorkspaceSessionLiveFacts>): WorkspaceSessionLiveFacts => ({
   activityState: "idle",
+  waitingOnBackground: false,
   pendingQuestion: false,
   pendingPermission: false,
   pendingInputs: new Set(),
@@ -392,4 +393,65 @@ test("keeps every unchanged entry and the model of an equal rebuild", async () =
   expect(renamed).not.toBe(renamedBefore);
   expect(after.groups[0]).toBe(before.groups[0]);
   expect(after.taskBlocks).toBe(before.taskBlocks);
+});
+
+test("gives a running chat a new entry when it starts to wait on background tasks", async () => {
+  const chats = [chat("server", "/alpha", Date.parse("2026-09-30T07:00:00.000Z"))];
+  const connection = createTestClientConnection({
+    client: {
+      tasksList: async () => [],
+      agentSessionsListForTasks: async () => [],
+      workspaceSessionListActive: async () => chats,
+    },
+  });
+  const key = agentSessionIdentityKey({
+    externalSessionId: "native-server",
+    runtimeKind: "codex",
+    workingDirectory: "/alpha",
+  });
+  const liveSnapshot = (waitingOnBackground: boolean) => ({
+    statesByWorkspaceId: new Map([
+      [
+        "alpha",
+        {
+          kind: "ready" as const,
+          sessions: new Map([[key, facts({ activityState: "running", waitingOnBackground })]]),
+          faults: new Map(),
+        },
+      ],
+    ]),
+    sessionRecordsError: null,
+  });
+  let current = liveSnapshot(false);
+  const listeners = new Set<() => void>();
+  const observer = {
+    ...createWorkspaceActivityObserverStub(),
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getSessionLiveSnapshot: () => current,
+  };
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <ClientConnectionProvider connection={connection}>
+      <WorkspaceActivityContext.Provider value={observer}>
+        {children}
+      </WorkspaceActivityContext.Provider>
+    </ClientConnectionProvider>
+  );
+  const { result } = renderHook(() => useSessionNavigationModel([alpha], "none").model, {
+    wrapper,
+  });
+  await waitFor(() => expect(result.current.groups[1]?.entries).toHaveLength(1));
+  const replying = result.current.groups[1]?.entries[0];
+  expect(replying?.status).toEqual({ kind: "running" });
+
+  act(() => {
+    current = liveSnapshot(true);
+    for (const listener of listeners) listener();
+  });
+
+  const waiting = result.current.groups[1]?.entries[0];
+  expect(waiting).not.toBe(replying);
+  expect(waiting?.status).toEqual({ kind: "running", waitingOnBackground: true });
 });

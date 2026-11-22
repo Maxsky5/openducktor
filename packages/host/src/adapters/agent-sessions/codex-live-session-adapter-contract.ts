@@ -66,6 +66,7 @@ export type CodexSessionController = Pick<
   | "updateSessionModel"
   | "updateSessionTitle"
   | "stopSession"
+  | "stopBackgroundTask"
   | "releaseSession"
 >;
 
@@ -96,4 +97,9 @@ export type CreateCodexLiveSessionAdapterPreparerInput = {
   /** Resolves the managed MCP server of the workspace that owns a session repository. */
   readonly resolveMcpServerConfig: OpenDucktorMcpServerConfigResolver;
   readonly createController?: (options: CodexAppServerAdapterOptions) => CodexSessionController;
+  /**
+   * The version that the host read from the Codex executable, or `null` when it could not read
+   * it. Stopping one background terminal needs a known version.
+   */
+  readonly readRuntimeVersion: () => string | null;
 };

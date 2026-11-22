@@ -1,8 +1,13 @@
+import {
+  AGENT_SESSION_BACKGROUND_DOT_CLASS,
+  AGENT_SESSION_BACKGROUND_TEXT_CLASS,
+} from "@/lib/agent-session-background-styles";
 import { AGENT_WORKFLOW_TONE_ICON_CLASSES } from "@/lib/agent-workflow-styles";
 import { cn } from "@/lib/utils";
 import {
   type SessionEntryDotTone,
   type SessionEntryTitleTone,
+  isSessionEntryWaitingOnBackground,
   sessionEntryIconTone,
 } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import type {
@@ -27,6 +32,7 @@ export const SESSION_DOT_CLASSES = {
   input_unread: "bg-status-input-unread",
   input_read: "bg-status-input-read",
   running: "bg-status-running",
+  background: AGENT_SESSION_BACKGROUND_DOT_CLASS,
   unread: "bg-status-unread",
   read: "bg-status-read",
 } satisfies Record<SessionEntryDotTone, string>;
@@ -41,12 +47,16 @@ export const SESSION_TITLE_CLASSES = {
 /** Task role colors follow the workflow rail. Known attention always keeps its warning cue. */
 export const sessionEntryIconClassName = (entry: SessionNavigationEntry): string => {
   const tone = sessionEntryIconTone(entry);
-  return tone === "muted"
-    ? "text-sidebar-muted-foreground"
-    : AGENT_WORKFLOW_TONE_ICON_CLASSES[tone];
+  if (tone === "muted") return "text-sidebar-muted-foreground";
+  if (tone === "background") return AGENT_SESSION_BACKGROUND_TEXT_CLASS;
+  return AGENT_WORKFLOW_TONE_ICON_CLASSES[tone];
 };
 
-/** A selection strengthens its section's surface instead of replacing its state color. */
+/**
+ * A selection strengthens its section's surface instead of replacing its state color. A running
+ * session that waits on background tasks keeps a running surface in the calmer violet Background
+ * colors.
+ */
 export const sessionEntrySurfaceClassName = (
   entry: SessionNavigationEntry,
   selected: boolean,
@@ -59,6 +69,15 @@ export const sessionEntrySurfaceClassName = (
       selected
         ? "bg-warning-surface-selected ring-3 ring-warning-accent hover:bg-warning-surface-selected"
         : "bg-warning-surface ring-1 ring-warning-border hover:bg-warning-surface-hover",
+    );
+  }
+  if (isSessionEntryWaitingOnBackground(entry)) {
+    return cn(
+      frame,
+      "text-pending-surface-foreground focus-visible:ring-pending-ring",
+      selected
+        ? "bg-pending-surface ring-3 ring-pending-accent hover:bg-pending-surface"
+        : "bg-pending-surface ring-1 ring-pending-border hover:bg-pending-surface",
     );
   }
   if (entry.status.kind === "running") {

@@ -143,6 +143,33 @@ In the composer of a session, type `/goal`, then the objective, and send the mes
 - While the agent works in a normal turn, a `/goal` message waits in the queue. You cannot steer it.
 - While a goal drives the work, your other queued messages wait until the goal stops. A `/goal` message applies at once.
 
+## Background tasks [#background-tasks]
+
+An agent can start work that continues after its reply ends, for example a dev server, a background command, or a background subagent. The session stays **Running** until this work ends.
+
+| Style of Running | What it means |
+|---|---|
+| Moving mark | The agent writes a reply. |
+| Still hourglass, violet | The reply ended, but background tasks still run. The agent waits on them. |
+
+- The session counts as running everywhere: the **Running** group of the sidebar, the workspace rail, and the Kanban board.
+- The session goes **Idle** when all work ends. OpenDucktor sends the "agent finished" notification then.
+- You can send a message while the agent waits on background tasks. The agent replies at once, and the tasks keep running.
+
+### Stop a background task [#stop-background-task]
+
+The **Background tasks** bar shows above the composer while a task runs. It shows the number of tasks.
+
+<Steps>
+<Step>Select the bar. The list shows each task: its kind, and its command or subagent.</Step>
+<Step>Select <Action>Stop</Action> on a task, then confirm.</Step>
+</Steps>
+
+- The task leaves the list when it stops. The agent and the other tasks continue.
+- A stopped subagent ends before it finishes its work.
+- If a harness cannot stop a task, the row tells you why. Codex can stop a terminal from version 0.140.0.
+- <Action>Stop</Action> on the session stops the agent and all its background tasks.
+
 ## Answer the agent [#answer-pending-input]
 
 When an agent asks a question, needs a permission, or reports that the task is blocked, its session moves to **Needs you**. The agent waits until you answer. You can also answer from your phone. See [Answer the agent](/mobile/sessions/#answer-pending-input).

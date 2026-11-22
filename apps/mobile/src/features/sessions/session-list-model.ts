@@ -1,4 +1,5 @@
 import { SESSION_MENU_LABELS } from "@openducktor/frontend-core/workspace-sessions/workspace-session-menu";
+import { isSessionEntryWaitingOnBackground } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import { titleCase } from "@/features/workflow/start-session/start-form-model";
 import {
   SESSION_GROUP_LABELS,
@@ -194,10 +195,12 @@ export const sessionRowAccessibleLabel = (
 };
 
 /** The surface of a row, as the desktop session row: warning, running, or plain. */
-export type SessionRowSurface = "attention" | "running" | "plain";
+export type SessionRowSurface = "attention" | "running" | "background" | "plain";
 
 export const sessionRowSurface = (entry: SessionNavigationEntry): SessionRowSurface => {
   if (entry.attention.length > 0) return "attention";
+  // A running session that waits on background tasks keeps a running surface in violet.
+  if (isSessionEntryWaitingOnBackground(entry)) return "background";
   if (entry.status.kind === "running") return "running";
   return "plain";
 };
@@ -215,6 +218,9 @@ const ICON_COLORS = {
   waiting_input: "warningMuted",
   failed: "destructiveMuted",
   blocked: "mutedForeground",
+  // A session that waits on background tasks: the calm violet of a pending state, not the sky of
+  // a running reply.
+  background: "pendingMuted",
   muted: "sidebarMutedForeground",
 } as const satisfies Record<SessionEntryIconTone, DesktopColorName>;
 
@@ -228,6 +234,7 @@ const DOT_COLORS = {
   input_unread: "statusInputUnread",
   input_read: "statusInputRead",
   running: "statusRunning",
+  background: "pendingAccent",
   unread: "statusUnread",
   read: "statusRead",
 } as const satisfies Record<SessionEntryDotTone, DesktopColorName>;

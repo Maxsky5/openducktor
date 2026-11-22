@@ -1,3 +1,4 @@
+import { useSessionBackgroundTasks } from "@openducktor/frontend-core/sessions/background-tasks/use-session-background-tasks";
 import { useSessionGoalRow } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
 import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import { findCatalogModel } from "@openducktor/core";
@@ -215,6 +216,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     identity,
     runtimeDescriptor: descriptor,
   });
+  const backgroundTasks = useSessionBackgroundTasks({ repoPath: target.repoPath, identity });
   const inlineCommentOwner = useMemo(() => inlineCommentOwnerOf(target), [target]);
   const reviewComments = useReviewCommentComposer({
     owner: inlineCommentOwner,
@@ -320,6 +322,7 @@ export function useSessionComposer({ onSent }: { onSent: () => void }) {
     submit,
     delivery,
     goalRow,
+    backgroundTasks,
     promptInput,
     reviewComments,
     /** The task or chat whose Changes hold the review comments of this composer. */

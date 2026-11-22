@@ -1,8 +1,10 @@
 /*
  * The goal row sits on the top edge of the composer, like the front card of the message queue.
  * It rises out of the composer when a goal starts, and it sinks back when the goal is cleared.
+ * The background task bar sits on the same edge, above the goal row, and moves the same way.
  */
-.goal-row {
+.goal-row,
+.background-task-bar {
   --presence-enter-dur: var(--queue-open);
   --presence-exit-dur: var(--queue-close);
   --presence-ease: var(--queue-ease);
@@ -14,13 +16,15 @@
   transition-property: height, margin-bottom, opacity, filter;
 }
 
-.goal-row[data-presence="exiting"] {
+.goal-row[data-presence="exiting"],
+.background-task-bar[data-presence="exiting"] {
   margin-bottom: 0;
   filter: blur(var(--queue-blur));
 }
 
 @starting-style {
-  .goal-row[data-animate-entry="true"] {
+  .goal-row[data-animate-entry="true"],
+  .background-task-bar[data-animate-entry="true"] {
     margin-bottom: 0;
     filter: blur(var(--queue-blur));
   }
@@ -73,12 +77,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .goal-row {
+  .goal-row,
+  .background-task-bar {
     transition-property: opacity;
   }
 
   .goal-row,
-  .goal-row[data-presence="exiting"] {
+  .goal-row[data-presence="exiting"],
+  .background-task-bar,
+  .background-task-bar[data-presence="exiting"] {
     filter: none;
   }
 

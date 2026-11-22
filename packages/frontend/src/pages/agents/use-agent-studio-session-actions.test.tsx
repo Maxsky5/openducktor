@@ -357,6 +357,37 @@ describe("useAgentStudioSessionActions", () => {
     }
   });
 
+  test("keeps a session that waits on background tasks running, with Stop available", async () => {
+    const session = createSession({
+      status: "running",
+      foregroundTurnActive: false,
+      backgroundTasks: [
+        { taskId: "task-1", kind: "command", title: "bun test", stop: { allowed: true } },
+      ],
+    });
+    const selectedSession = {
+      ...selectedSessionFromSession(session),
+      ...deriveSelectedSessionViewProjection({
+        selectedSessionIdentity: toAgentSessionIdentity(session),
+        session,
+        sessionSummary: null,
+        selectedTask: null,
+        sessionFault: null,
+        readModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
+        runtimeReadinessState: "ready",
+      }),
+    };
+    const harness = createHookHarness({ ...createBaseArgs(), selectedSession });
+    try {
+      await harness.mount();
+      expect(selectedSession.activityState).toBe("running");
+      expect(harness.getLatest().isSessionWorking).toBe(true);
+      expect(harness.getLatest().canStopSession).toBe(true);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
   test("shows the host reason and next action when the runtime refuses a continuation", async () => {
     const failure = new HostInvokeError("Continuation refused", {
       kind: "agent_session_resume",

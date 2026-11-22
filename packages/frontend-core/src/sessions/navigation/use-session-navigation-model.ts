@@ -347,6 +347,9 @@ const sameStatus = (
   right: SessionNavigationEntry["status"],
 ): boolean => {
   if (left.kind === "settled") return right.kind === "settled" && right.failed === left.failed;
+  if (left.kind === "running") {
+    return right.kind === "running" && right.waitingOnBackground === left.waitingOnBackground;
+  }
   if (left.kind === "unavailable") {
     return right.kind === "unavailable" && right.reason === left.reason;
   }

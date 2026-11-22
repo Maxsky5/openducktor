@@ -169,6 +169,45 @@ describe("KanbanTaskCard rerender behavior", () => {
     unmount();
   });
 
+  test("updates the Background style when a running session starts to wait on background tasks", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-4",
+      status: "in_progress",
+      availableActions: ["open_builder"],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const card = (waitingOnBackground: boolean) => (
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <KanbanTaskCard
+          task={task}
+          taskActivityState="active"
+          hasActiveSession
+          activeSessionRole="build"
+          taskSessions={[
+            {
+              runtimeKind: "opencode",
+              workingDirectory: "/repo/worktrees/build",
+              externalSessionId: "session-1",
+              role: "build",
+              activityState: "running",
+              waitingOnBackground,
+            },
+          ]}
+          onOpenDetails={noop}
+        />
+      </MemoryRouter>
+    );
+
+    const { rerender, container, unmount } = render(card(false));
+    expect(container.innerHTML).toContain("kanban-active-session-card");
+
+    rerender(card(true));
+
+    expect(container.innerHTML).toContain("kanban-background-card");
+    expect(container.innerHTML).not.toContain("kanban-active-session-ray");
+    unmount();
+  });
+
   test("updates open-session action when same-id session identity changes", () => {
     const task = createTaskCardFixture({
       id: "TASK-5",

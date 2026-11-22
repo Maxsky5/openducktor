@@ -63,6 +63,18 @@ export type ClaudeBackgroundToolState = {
   toolStartedAtMsByCallId?: Map<string, number>;
 };
 
+/**
+ * The input of the transcript part of a background tool call. The part keeps the input after the
+ * launch result, which ends the call.
+ */
+export const readClaudeBackgroundToolInput = (
+  state: ClaudeBackgroundToolState,
+  callId: string,
+): ToolPart["input"] => {
+  const taskId = state.backgroundToolTaskIdsByCallId?.get(callId);
+  return taskId ? state.backgroundToolTasksById?.get(taskId)?.part?.input : undefined;
+};
+
 export const projectClaudeBackgroundToolUse = (
   state: ClaudeBackgroundToolState,
   part: ToolPart,

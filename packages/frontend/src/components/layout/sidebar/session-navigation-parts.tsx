@@ -4,8 +4,16 @@ import { AgentRuntimeIcon } from "@/components/features/agents/agent-runtime-ico
 import { Button } from "@/components/ui/button";
 import { RunningStatusDot } from "@/components/ui/running-status-dot";
 import { cn } from "@/lib/utils";
+import {
+  AGENT_SESSION_BACKGROUND_ICON,
+  AGENT_SESSION_BACKGROUND_TEXT_CLASS,
+} from "@/lib/agent-session-background-styles";
+import { AGENT_SESSION_BACKGROUND_DESCRIPTION } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { SESSION_DOT_CLASSES } from "./session-navigation-styles";
-import { sessionEntryDotTone } from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
+import {
+  type SessionEntryDotTone,
+  sessionEntryDotTone,
+} from "@openducktor/frontend-core/sessions/navigation/session-entry-presentation";
 import type {
   SessionNavigationEntry,
   SessionNavigationSourceIssue,
@@ -126,26 +134,42 @@ export function SessionEntryStatusDot({
   className,
 }: SessionEntryStatusDotProps): ReactElement {
   const tone = sessionEntryDotTone(entry, unread);
-  const running = tone === "running";
-  const readLabel = unread ? "Unread session" : "Session read";
-  const label = running ? "Session running" : readLabel;
+  const label = sessionEntryStatusLabel(tone, unread);
   return (
     <span
       id={id}
       role="img"
       aria-label={label}
+      title={tone === "background" ? label : undefined}
       className={cn("flex size-2.5 shrink-0 items-center justify-center", className)}
     >
-      {running ? (
-        <RunningStatusDot size="sm" />
-      ) : (
-        <span
-          aria-hidden="true"
-          className={cn("size-2.5 rounded-full", SESSION_DOT_CLASSES[tone])}
-        />
-      )}
+      <SessionEntryStatusMark tone={tone} />
       <span className="sr-only">{label}</span>
     </span>
+  );
+}
+
+const sessionEntryStatusLabel = (tone: SessionEntryDotTone, unread: boolean): string => {
+  if (tone === "running") return "Session running";
+  if (tone === "background") return AGENT_SESSION_BACKGROUND_DESCRIPTION;
+  return unread ? "Unread session" : "Session read";
+};
+
+/** Running moves; Background shows its static icon; the other states show their dot. */
+function SessionEntryStatusMark({ tone }: { tone: SessionEntryDotTone }): ReactElement {
+  if (tone === "running") return <RunningStatusDot size="sm" />;
+  if (tone === "background") {
+    const BackgroundIcon = AGENT_SESSION_BACKGROUND_ICON;
+    return (
+      <BackgroundIcon
+        aria-hidden="true"
+        strokeWidth={3}
+        className={cn("size-3 shrink-0", AGENT_SESSION_BACKGROUND_TEXT_CLASS)}
+      />
+    );
+  }
+  return (
+    <span aria-hidden="true" className={cn("size-2.5 rounded-full", SESSION_DOT_CLASSES[tone])} />
   );
 }
 

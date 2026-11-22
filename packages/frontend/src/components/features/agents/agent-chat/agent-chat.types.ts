@@ -1,4 +1,5 @@
 import type { AgentSessionGoalRowModel } from "@openducktor/frontend-core/sessions/goals/use-agent-session-goal-row";
+import type { SessionBackgroundTasksModel } from "@openducktor/frontend-core/sessions/background-tasks/use-session-background-tasks";
 import type { ReactNode } from "react";
 import type { AgentChatForkActions } from "./agent-chat-fork-context";
 import type { AgentChatSendResult } from "@openducktor/frontend-core/sessions/send/agent-chat-send-result";
@@ -98,6 +99,8 @@ export type AgentChatComposerModel = {
   goalRow: AgentSessionGoalRowModel | null;
   /** The goal row animates only changes within this scope. */
   goalRowScope: string | null;
+  /** The running background tasks of the session, or null when no task runs. */
+  backgroundTasks: SessionBackgroundTasksModel | null;
   selectedModelSelection: AgentModelSelection | null;
   /** Null when no speed control is available. */
   speed: SpeedControlModel | null;

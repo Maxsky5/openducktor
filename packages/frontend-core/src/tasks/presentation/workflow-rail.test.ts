@@ -11,8 +11,8 @@ describe("buildWorkflowRail", () => {
     });
     const rail = buildWorkflowRail(task, (role) =>
       role === "build"
-        ? { session: "build-session", liveSession: "waiting_input" }
-        : { session: null, liveSession: "none" },
+        ? { session: "build-session", liveSession: "waiting_input", waitingOnBackground: false }
+        : { session: null, liveSession: "none", waitingOnBackground: false },
     );
     expect(rail.map(({ id, role }) => ({ id, role }))).toEqual(
       task.taskWorkflow.definition.steps.map((step) => ({
@@ -26,5 +26,22 @@ describe("buildWorkflowRail", () => {
     expect(build.stateLabel).toBe("Needs input");
     expect(build.attentionVariant).toBe("session_waiting_input");
     expect(rail.find(({ role }) => role === "spec")?.session).toBeNull();
+  });
+
+  test("marks the step of a running session that waits on background tasks", () => {
+    const task = createTaskCardFixture({
+      id: "T-2",
+      status: "in_progress",
+      availableActions: ["open_builder"],
+    });
+    const rail = buildWorkflowRail(task, (role) =>
+      role === "build"
+        ? { session: "build-session", liveSession: "running", waitingOnBackground: true }
+        : { session: null, liveSession: "none", waitingOnBackground: false },
+    );
+    const build = rail.find(({ role }) => role === "build")!;
+    expect(build.state).toMatchObject({ liveSession: "running", waitingOnBackground: true });
+    expect(build.hint).toBe("Session is running and waiting on background tasks");
+    expect(rail.find(({ role }) => role === "spec")?.state.waitingOnBackground).toBe(false);
   });
 });

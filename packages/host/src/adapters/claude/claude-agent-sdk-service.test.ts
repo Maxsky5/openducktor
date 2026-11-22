@@ -788,7 +788,7 @@ describe("createClaudeAgentSdkService", () => {
     const store = createClaudeAgentSdkSessionStore();
     const service = createService(session, undefined, store);
     const consumption = consumeClaudeSession({
-      emitGoal: () => {},
+      emitLive: () => {},
       session,
       sessionStore: store,
       emit: () => {},

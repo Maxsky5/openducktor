@@ -36,6 +36,11 @@ import type {
   CodexAppServerThreadGoalClearResult,
   CodexAppServerThreadGoalSetParams,
   CodexAppServerThreadSettingsUpdateParams,
+  CodexAppServerThreadBackgroundTerminalsCleanParams,
+  CodexAppServerThreadBackgroundTerminalsListParams,
+  CodexAppServerThreadBackgroundTerminalsListResult,
+  CodexAppServerThreadBackgroundTerminalsTerminateParams,
+  CodexAppServerThreadBackgroundTerminalsTerminateResult,
   CodexAppServerThreadUnsubscribeParams,
   CodexAppServerThreadUnsubscribeResult,
   CodexAppServerThreadGoalSetResult,
@@ -200,6 +205,18 @@ export type CodexAppServerClient = {
   threadApproveGuardianDeniedAction(
     params: CodexAppServerRequestParamsMap["thread/approveGuardianDeniedAction"],
   ): Promise<CodexAppServerThreadSetNameResult>;
+  /** Stops one background terminal. Codex answers after the process exits. */
+  threadBackgroundTerminalsTerminate(
+    params: CodexAppServerThreadBackgroundTerminalsTerminateParams,
+  ): Promise<CodexAppServerThreadBackgroundTerminalsTerminateResult>;
+  /** Lists one page of the running background terminals of a thread. */
+  threadBackgroundTerminalsList(
+    params: CodexAppServerThreadBackgroundTerminalsListParams,
+  ): Promise<CodexAppServerThreadBackgroundTerminalsListResult>;
+  /** Stops every background terminal of a thread. */
+  threadBackgroundTerminalsClean(
+    params: CodexAppServerThreadBackgroundTerminalsCleanParams,
+  ): Promise<CodexAppServerThreadSetNameResult>;
   turnStart(params: CodexTurnStartParams): Promise<CodexTurnStartResult>;
   turnSteer(params: CodexTurnSteerParams): Promise<CodexAppServerTurnSteerResult>;
   turnInterrupt(params: CodexTurnInterruptParams): Promise<CodexAppServerTurnInterruptResult>;
@@ -234,6 +251,11 @@ type CodexAppServerAdapterBaseOptions = {
   prepareImageGenerations?: CodexImageGenerationPreparer;
   logSessionPolicy?: (entry: CodexPolicyLogEntry) => void;
   questionHistory?: CodexQuestionHistory;
+  /**
+   * The version that the host read from the Codex executable, or `null` when it could not read
+   * it. Without this reader, the version is unknown, so no background terminal offers Stop.
+   */
+  readRuntimeVersion?: () => string | null;
 };
 
 export type CodexAppServerEventSubscriber = (

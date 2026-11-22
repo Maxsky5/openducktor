@@ -420,6 +420,8 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "agentSessionControlStartInputSchema",
   "agentRepositorySessionStartInputSchema",
   "agentSessionControlStopInputSchema",
+  "agentSessionBackgroundTaskSchema",
+  "agentSessionBackgroundTaskStopInputSchema",
   "agentSessionControlSummarySchema",
   "agentSessionControlUpdateModelInputSchema",
   "agentSessionForkPointSchema",

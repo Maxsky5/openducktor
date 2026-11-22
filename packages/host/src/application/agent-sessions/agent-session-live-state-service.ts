@@ -481,6 +481,8 @@ export const createAgentSessionLiveStateService = ({
       runControl(input, (adapter) => adapter.stopSession(input)).pipe(
         Effect.andThen(service.holdWorkflowLaunch(input, false)),
       ),
+    stopBackgroundTask: (input) =>
+      runControl(input, (adapter) => adapter.stopBackgroundTask(input)),
     releaseSession: (input) =>
       runControl(input, (adapter) => adapter.releaseSession(input)).pipe(
         Effect.andThen(service.holdWorkflowLaunch(input, false)),

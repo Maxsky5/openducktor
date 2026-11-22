@@ -157,6 +157,7 @@ const setup = (
       resumeSession: unexpected,
       continueInterruptedTurn: unexpected,
       releaseSession: unexpected,
+      stopBackgroundTask: () => Effect.die(new Error("unexpected background task stop")),
       stopSession: () =>
         Effect.sync(() => {
           activity = "idle";

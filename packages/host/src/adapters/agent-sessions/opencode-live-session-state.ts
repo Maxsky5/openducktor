@@ -10,7 +10,6 @@ import type {
 } from "@openducktor/adapters-opencode-sdk";
 import {
   type AgentSessionContextUsage,
-  type AgentSessionGoal,
   type AgentSessionLiveReadResult,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
@@ -31,10 +30,13 @@ import { toOpenCodeLiveSession } from "./opencode-live-session-control-summary";
 import { applyOpenCodeSessionSources } from "./opencode-live-session-source-refresh";
 import { applyOpenCodeSessionFault } from "./opencode-live-session-fault";
 import { createOpenCodeSessionGoals } from "./opencode-live-session-goals";
+import { createOpenCodeSessionBackground } from "./opencode-live-session-background";
+import { createOpenCodePublishedSnapshots } from "./opencode-live-session-published";
 import {
   openCodeActivityForPending,
   openCodeActivityFromEvent,
   openCodeLiveSnapshotsEqual,
+  openCodeSessionAncestors,
   openCodeSessionTreeRefs,
   type OpenCodeLiveSession,
   parseOpenCodeLiveSnapshot,
@@ -57,6 +59,7 @@ export const createOpenCodeLiveSessionState = ({
   readonly resolveWorkflowRolePolicy: import("@openducktor/core").WorkflowRolePolicyResolver;
 }) => {
   const sessionsByRef = new Map<string, OpenCodeLiveSession>();
+  const published = createOpenCodePublishedSnapshots();
   const refsByExternalSessionId = new OpenCodeSessionRefIndex(runtime.runtimeId);
   const approvalContext = {
     sessionsByRef,
@@ -66,6 +69,7 @@ export const createOpenCodeLiveSessionState = ({
   };
   const contextUsageBySessionId = new Map<string, AgentSessionContextUsage>();
   const goals = createOpenCodeSessionGoals();
+  const background = createOpenCodeSessionBackground();
   const versions = new OpenCodeSessionVersions();
   const pendingRequests = createOpenCodePendingRequestRouter({
     runtimeId: runtime.runtimeId,
@@ -77,18 +81,16 @@ export const createOpenCodeLiveSessionState = ({
   const commitSnapshot = (reported: OpenCodeLiveSession): AgentSessionLiveAdapterChange[] => {
     const session = { ...reported, snapshot: goals.apply(reported.snapshot) };
     const key = liveSessionRefKey(session.snapshot.ref);
-    const previous = sessionsByRef.get(key)?.snapshot;
     sessionsByRef.set(key, session);
     refsByExternalSessionId.set(session.snapshot.ref);
     const { contextUsage } = session.snapshot;
     if (contextUsage)
       contextUsageBySessionId.set(session.snapshot.ref.externalSessionId, contextUsage);
     else contextUsageBySessionId.delete(session.snapshot.ref.externalSessionId);
-    if (previous && openCodeLiveSnapshotsEqual(previous, session.snapshot)) {
-      return [];
-    }
+    const snapshot = background.apply(session.snapshot);
+    if (!published.publish(key, snapshot)) return [];
     versions.snapshotChanged(session.snapshot.ref);
-    return [{ type: "session_upsert", snapshot: session.snapshot }];
+    return [{ type: "session_upsert", snapshot }];
   };
 
   /** A confirmed status makes the status of each runtime read in progress outdated. */
@@ -123,10 +125,13 @@ export const createOpenCodeLiveSessionState = ({
     return commitSnapshot(next);
   };
 
-  /** Applies a goal change of the goal plugin. `null`: the session has no goal. */
-  const setGoal = (id: string, goal: AgentSessionGoal | null): AgentSessionLiveAdapterChange[] => {
-    goals.set(id, goal);
-    const ref = refsByExternalSessionId.find(id);
+  /** Applies a goal change of the goal plugin, or the background work of a session tree. */
+  const applyReport = (
+    signal: Extract<OpencodeSessionRuntimeSignal, { type: "goal_updated" | "background_updated" }>,
+  ): AgentSessionLiveAdapterChange[] => {
+    if (signal.type === "goal_updated") goals.set(signal.externalSessionId, signal.goal);
+    else background.set(signal.externalSessionId, signal);
+    const ref = refsByExternalSessionId.find(signal.externalSessionId);
     return ref ? commitSnapshot(requireSession(ref)) : [];
   };
 
@@ -383,6 +388,8 @@ export const createOpenCodeLiveSessionState = ({
     versions.removed(ref);
     contextUsageBySessionId.delete(ref.externalSessionId);
     goals.set(ref.externalSessionId, null);
+    published.remove(key);
+    background.remove(ref.externalSessionId);
     pendingRequests.removeSession(ref);
     return [{ type: "session_removed", ref: toLiveSessionRef(ref) }];
   };
@@ -397,19 +404,8 @@ export const createOpenCodeLiveSessionState = ({
       resolveOpenCodePendingApproval(input, requirePendingRoute, requireSession, (id) =>
         refsByExternalSessionId.find(id),
       ),
-    listSnapshots: (): AgentSessionLiveSnapshot[] =>
-      [...sessionsByRef.values()].map(({ snapshot }) =>
-        parseOpenCodeLiveSnapshot(snapshot, "opencode-live-session.clone-snapshot"),
-      ),
-    readSnapshot: (ref: AgentSessionLiveRef): AgentSessionLiveReadResult => {
-      const snapshot = sessionsByRef.get(liveSessionRefKey(ref))?.snapshot;
-      return snapshot
-        ? {
-            type: "live",
-            session: parseOpenCodeLiveSnapshot(snapshot, "opencode-live-session.read-snapshot"),
-          }
-        : { type: "missing", ref: toLiveSessionRef(ref) };
-    },
+    listSnapshots: (): AgentSessionLiveSnapshot[] => published.list(),
+    readSnapshot: (ref: AgentSessionLiveRef): AgentSessionLiveReadResult => published.read(ref),
     contextUsage: (ref: AgentSessionLiveRef): AgentSessionContextUsage | null =>
       sessionsByRef.get(liveSessionRefKey(ref))?.snapshot.contextUsage ?? null,
     readStart: (): OpenCodeSessionReadStart => versions.readStart(),
@@ -431,7 +427,7 @@ export const createOpenCodeLiveSessionState = ({
         removeSession: dropSession,
       }),
     setContext,
-    setGoal,
+    applyReport,
     applyLoadedContext,
     applyControlSummary,
     applySessionSources: (
@@ -466,15 +462,21 @@ export const createOpenCodeLiveSessionState = ({
       if (!ref) return { value: undefined, changes: [] };
       if (signal.type === "session_removed")
         return { value: undefined, changes: removeSession(ref) };
-      return {
-        value: undefined,
-        changes: applyOpenCodeSessionFault({
-          signal,
-          session: requireSession(ref),
-          pendingRequests,
-          commitSnapshot,
-        }),
-      };
+      // The task list of an ancestor includes the tasks of the session, so it is lost too.
+      const ancestors = signal.backgroundTrackingLost
+        ? openCodeSessionAncestors(sessionsByRef.values(), requireSession(ref))
+        : [];
+      if (signal.backgroundTrackingLost)
+        for (const lost of [ref, ...ancestors.map((ancestor) => ancestor.snapshot.ref)])
+          background.loseTracking(lost.externalSessionId, signal.message);
+      const changes = applyOpenCodeSessionFault({
+        signal,
+        session: requireSession(ref),
+        pendingRequests,
+        commitSnapshot,
+      });
+      for (const ancestor of ancestors) changes.push(...commitSnapshot(ancestor));
+      return { value: undefined, changes };
     },
     refForExternalSession: (externalSessionId: string): AgentSessionLiveRef | null =>
       refsByExternalSessionId.find(externalSessionId),
@@ -486,10 +488,12 @@ export const createOpenCodeLiveSessionState = ({
         versions.removed(ref);
       }
       sessionsByRef.clear();
+      published.clear();
       refsByExternalSessionId.clear();
       pendingRequests.clear();
       contextUsageBySessionId.clear();
       goals.clear();
+      background.clear();
       return refs;
     },
   };

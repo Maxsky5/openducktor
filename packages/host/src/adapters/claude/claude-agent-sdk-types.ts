@@ -1,6 +1,7 @@
 import type { ClaudeLaunchPolicyPort } from "../../application/runtimes/claude-launch-policy";
 import type { ClaudeGoalTracking } from "./claude-agent-sdk-goals";
 import type { ErrorState } from "./claude-agent-sdk-errors";
+import type { AgentSessionBackgroundTaskStopInput } from "@openducktor/contracts";
 import type {
   PermissionResult,
   Query,
@@ -10,6 +11,7 @@ import type {
 import type {
   AgentEvent,
   AgentModelSelection,
+  AgentSessionBackgroundWork,
   AgentSessionSummary,
   AgentSessionTodoItem,
   AgentUserMessageDisplayPart,
@@ -86,10 +88,29 @@ export type ClaudeGoalEvent = {
   readonly clearing?: true;
 };
 
+/** The background tasks of one session, with the tasks of its descendant sessions. */
+export type ClaudeSessionBackgroundTasks = AgentSessionBackgroundWork & {
+  readonly externalSessionId: string;
+};
+
+/**
+ * The background tasks of a root session tree changed. `sessions` lists each session of the tree
+ * that has a task or a pending result. The other sessions have none.
+ */
+export type ClaudeBackgroundTasksEvent = {
+  readonly type: "session_background_tasks_updated";
+  readonly externalSessionId: string;
+  readonly timestamp: string;
+  readonly sessions: readonly ClaudeSessionBackgroundTasks[];
+};
+
 export type ClaudeAgentSdkEvent = AgentEvent & { readonly statusUnavailable?: true };
 
+/** An event that the adapter reads from the transcript: a goal change or the task lists. */
+export type ClaudeTranscriptLiveEvent = ClaudeGoalEvent | ClaudeBackgroundTasksEvent;
+
 /** An event that the Claude service publishes to the live session adapter. */
-export type ClaudeLiveEvent = ClaudeAgentSdkEvent | ClaudeGoalEvent;
+export type ClaudeLiveEvent = ClaudeAgentSdkEvent | ClaudeTranscriptLiveEvent;
 export type ClaudeLiveEventEmitter = (
   session: ClaudeSessionContext,
   event: ClaudeLiveEvent,
@@ -147,6 +168,7 @@ export type ClaudeSessionQuery = AsyncGenerator<SDKMessage, void> &
     | "initializationResult"
     | "mcpServerStatus"
     | "setModel"
+    | "stopTask"
   >;
 
 type ClaudePendingUserMessageAdmission = {
@@ -236,6 +258,10 @@ export type ClaudeSessionStore = {
     timestamp?: string,
   ): void;
   get(externalSessionId: string): ClaudeSession | undefined;
+  /** Stops one background task of the session tree of the ref. An unknown task needs no stop. */
+  stopBackgroundTask(
+    input: AgentSessionBackgroundTaskStopInput,
+  ): Effect.Effect<void, HostOperationErrorAggregate | HostValidationErrorAggregate>;
   /** Match the latest execution even after it leaves live state. */
   isLatest(session: ClaudeSessionContext): boolean;
   /** Include consumers that still run after close removes their session. */

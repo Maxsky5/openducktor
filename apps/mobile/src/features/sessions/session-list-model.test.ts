@@ -83,6 +83,7 @@ const chat = (
 
 const facts = (overrides: Partial<WorkspaceSessionLiveFacts> = {}): WorkspaceSessionLiveFacts => ({
   activityState: "idle",
+  waitingOnBackground: false,
   pendingQuestion: false,
   pendingPermission: false,
   pendingInputs: new Set(),
@@ -368,6 +369,12 @@ describe("row colors", () => {
     expect(sessionRowSurface(running)).toBe("running");
     expect(sessionEntryIconColor(running)).toBe("infoMuted");
     expect(sessionEntryDotColor(running, false)).toBe("statusRunning");
+  });
+
+  test("keep a running surface, in violet, for a session that waits on background tasks", () => {
+    const running = titled("Build login");
+    const waiting = { ...running, status: { kind: "running", waitingOnBackground: true } } as const;
+    expect(sessionRowSurface(waiting)).toBe("background");
   });
 
   test("dim a settled session that is read", () => {

@@ -156,6 +156,7 @@ const toActivitySession = (
     pendingQuestions: snapshot.pendingQuestions,
     // Apply the snapshot reason last because a starting session can keep its old state.
     statusUnavailableReason: snapshot.statusUnavailableReason ?? null,
+    goal: snapshot.goal,
     preview,
   };
 };

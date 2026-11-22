@@ -16,6 +16,7 @@ import {
   type CoreTaskAction,
 } from "../workflow/core-task-actions";
 import { eventActionStep } from "../workflow/task-action-destination";
+import { isAgentSessionActivityActive } from "../../lib/agent-session-activity-state";
 import type { KanbanTaskActivityState, KanbanTaskSession } from "./kanban-task-activity";
 import {
   resolveHistoricalSessionRoles,
@@ -23,6 +24,33 @@ import {
   resolveSessionTargetOptions,
   type SessionTargetOptions,
 } from "./session-target-resolution";
+
+/**
+ * How an active session shows on a card: it needs input, or it runs. A running session that waits
+ * on background tasks shows the Background style of Running.
+ */
+export type KanbanPrimarySessionState = "waiting_input" | "running" | "background";
+
+/**
+ * The tone of the frame of a task card, or null when no session of the task is active. A card
+ * whose active sessions all wait on background tasks shows the Background style of Running.
+ */
+export const kanbanCardSessionTone = (
+  state: KanbanTaskActivityState,
+  taskSessions: readonly KanbanTaskSession[],
+): KanbanPrimarySessionState | null => {
+  let active = false;
+  let allWaitOnBackground = true;
+  for (const session of taskSessions) {
+    if (!isAgentSessionActivityActive(session.activityState, session.statusUnavailableReason))
+      continue;
+    active = true;
+    if (!session.waitingOnBackground) allWaitOnBackground = false;
+  }
+  if (!active) return null;
+  if (state === "waiting_input") return "waiting_input";
+  return allWaitOnBackground ? "background" : "running";
+};
 
 export type WorkflowPendingState = {
   isSessionStarting: boolean;
@@ -106,9 +134,12 @@ export const getTaskFooter = ({
     hasActiveSession && activeSessionRole
       ? resolvePreferredActiveSession(taskSessions, activeSessionRole)
       : null;
-  const primarySessionIsWaitingInput =
+  const waitsForInput =
     primaryActiveSession?.activityState === "waiting_input" ||
     (taskActivityState === "waiting_input" && hasActiveSession);
+  let primarySessionState: KanbanPrimarySessionState = "running";
+  if (waitsForInput) primarySessionState = "waiting_input";
+  else if (primaryActiveSession?.waitingOnBackground) primarySessionState = "background";
 
   return {
     sessions,
@@ -117,7 +148,7 @@ export const getTaskFooter = ({
     leadingCoreAction,
     disabledActions,
     primaryActiveSession,
-    primarySessionIsWaitingInput,
+    primarySessionState,
   };
 };
 
@@ -176,7 +207,8 @@ type Footer = {
   leadingCoreAction: CoreTaskAction | null;
   disabledActions: TaskWorkflowAction[];
   primaryActiveSession: KanbanTaskSession | null;
-  primarySessionIsWaitingInput: boolean;
+  /** How the primary active session shows: it needs input, runs, or runs in the Background style. */
+  primarySessionState: KanbanPrimarySessionState;
 };
 
 type FooterInputs = {

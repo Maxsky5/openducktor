@@ -4,6 +4,7 @@ import { ActivityIndicator, ScrollView, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { routes, sessionParams } from "@/navigation/routes";
 import { useAppTheme } from "@/theme/app-theme-context";
+import { AGENT_SESSION_BACKGROUND_DESCRIPTION } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import { RoleIcon } from "@/ui/brand-icons";
 import { Icon } from "@/ui/icon";
 import { Text } from "@/ui/text";
@@ -14,8 +15,9 @@ import type { TaskWorkflowStep } from "./task-workflow-model";
 /**
  * The desktop workflow rail on a phone: Spec, Planner, Builder, and QA as the desktop role
  * buttons, in the colors of their states, joined by chevrons in the color of the next step. An
- * optional step has a dashed outline, a spinner replaces the role icon while a session works, and
- * the screen reader name of each button says its state. A step with a session opens its newest
+ * optional step has a dashed outline, a spinner replaces the role icon while a session writes a
+ * reply, a still hourglass replaces it while the session waits on background tasks, and the
+ * screen reader name of each button says its state. A step with a session opens its newest
  * session.
  */
 export const TaskWorkflowRail = memo(function TaskWorkflowRail({
@@ -42,7 +44,10 @@ export const TaskWorkflowRail = memo(function TaskWorkflowRail({
       {steps.map((step, index) => {
         const { session } = step;
         const colors = workflowToneColors(theme, step.state.tone);
-        const label = `${step.label}, ${step.stateLabel}`;
+        const label =
+          step.liveMark === "hourglass"
+            ? `${step.label}, ${step.stateLabel}, ${AGENT_SESSION_BACKGROUND_DESCRIPTION}`
+            : `${step.label}, ${step.stateLabel}`;
         const pillStyle = [
           styles.pill,
           { backgroundColor: colors.surface, borderColor: colors.border },
@@ -50,8 +55,10 @@ export const TaskWorkflowRail = memo(function TaskWorkflowRail({
         ];
         const pill = (
           <>
-            {step.working ? (
+            {step.liveMark === "spinner" ? (
               <ActivityIndicator size="small" color={colors.icon} style={styles.spinner} />
+            ) : step.liveMark === "hourglass" ? (
+              <Icon name="hourglass" size={13} colorValue={theme.desktop.pendingMuted} />
             ) : (
               <RoleIcon hint={step.iconHint} size={13} color={colors.icon} />
             )}

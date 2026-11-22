@@ -23,6 +23,8 @@ import {
 import { resolveTaskLabelOverflow } from "@/components/features/kanban/kanban-task-label-overflow";
 import {
   getTaskFooter,
+  kanbanCardSessionTone,
+  type KanbanPrimarySessionState,
   type WorkflowPendingState,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
 import { taskActionIcon } from "@/components/features/kanban/task-action-ui";
@@ -38,7 +40,12 @@ import { BorderRay } from "@/components/ui/border-ray";
 import { TaskLabelChip } from "@/components/ui/task-label-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
-import { isAgentSessionActivityActive } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { AGENT_SESSION_BACKGROUND_DESCRIPTION } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import {
+  AGENT_SESSION_BACKGROUND_ICON,
+  AGENT_SESSION_BACKGROUND_SURFACE_CLASS,
+  AGENT_SESSION_BACKGROUND_TEXT_CLASS,
+} from "@/lib/agent-session-background-styles";
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
 import { cn } from "@/lib/utils";
 import { getPriorityStyle, taskIssueTypeStyle } from "./kanban-task-badge-model";
@@ -72,16 +79,9 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
   mergedTarget,
   autoCloseFailure,
 }: CardProps): ReactElement {
-  const isActive =
-    (hasActiveSession ?? true) &&
-    taskSessions.some((session) =>
-      isAgentSessionActivityActive(session.activityState, session.statusUnavailableReason),
-    );
-  const isWaitingInput = taskActivityState === "waiting_input";
-  const cardActivityClassName = getCardActivityClassName({
-    hasActiveSession: isActive,
-    isWaitingInput,
-  });
+  const cardTone =
+    (hasActiveSession ?? true) ? kanbanCardSessionTone(taskActivityState, taskSessions) : null;
+  const cardActivityClassName = cardTone ? CARD_ACTIVITY_CLASSES[cardTone] : undefined;
   const isCompact = taskCardView === "compact";
 
   const focus = useCardFocus();
@@ -99,7 +99,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
         cardActivityClassName,
       )}
     >
-      {isActive && !isWaitingInput ? (
+      {cardTone === "running" ? (
         <BorderRay turnDurationMs={2000} strokeWidth={4} className="kanban-active-session-ray" />
       ) : null}
 
@@ -129,7 +129,7 @@ export const KanbanTaskCard = memo(function KanbanTaskCard({
           task={task}
           taskSessions={taskSessions}
           historicalSessions={historicalSessions}
-          hasActiveSession={isActive}
+          hasActiveSession={cardTone !== null}
           {...(activeSessionRole ? { activeSessionRole } : {})}
           taskActivityState={taskActivityState}
           pendingState={pendingState}
@@ -255,6 +255,7 @@ const sameTaskSessions = (
       leftSession.role !== rightSession.role ||
       leftSession.startedAt !== rightSession.startedAt ||
       leftSession.activityState !== rightSession.activityState ||
+      leftSession.waitingOnBackground !== rightSession.waitingOnBackground ||
       leftSession.statusUnavailableReason !== rightSession.statusUnavailableReason
     ) {
       return false;
@@ -310,39 +311,31 @@ function sameProps(previous: CardProps, next: CardProps): boolean {
   );
 }
 
-const getSessionChipClassName = (isWaitingInput: boolean): string => {
-  if (isWaitingInput) {
-    return "border-warning-border bg-warning-surface text-warning-surface-foreground hover:border-warning-border hover:bg-warning-surface";
-  }
+type SessionTone = KanbanPrimarySessionState;
 
-  return "border-info-border bg-info-surface text-info-surface-foreground hover:border-info-border hover:bg-info-surface";
-};
+const SESSION_CHIP_CLASSES = {
+  waiting_input:
+    "border-warning-border bg-warning-surface text-warning-surface-foreground hover:border-warning-border hover:bg-warning-surface",
+  running:
+    "border-info-border bg-info-surface text-info-surface-foreground hover:border-info-border hover:bg-info-surface",
+  background: cn(
+    AGENT_SESSION_BACKGROUND_SURFACE_CLASS,
+    "hover:border-pending-border hover:bg-pending-surface",
+  ),
+} satisfies Record<SessionTone, string>;
 
-const getSessionStatusTextClassName = (isWaitingInput: boolean): string => {
-  if (isWaitingInput) {
-    return "text-warning-surface-foreground";
-  }
+const SESSION_STATUS_TEXT_CLASSES = {
+  waiting_input: "text-warning-surface-foreground",
+  running: "text-status-running",
+  background: AGENT_SESSION_BACKGROUND_TEXT_CLASS,
+} satisfies Record<SessionTone, string>;
 
-  return "text-status-running";
-};
-
-const getCardActivityClassName = ({
-  hasActiveSession,
-  isWaitingInput,
-}: {
-  hasActiveSession: boolean;
-  isWaitingInput: boolean;
-}): string | undefined => {
-  if (!hasActiveSession) {
-    return undefined;
-  }
-
-  if (isWaitingInput) {
-    return "kanban-waiting-input-card border-warning-border hover:border-warning-border";
-  }
-
-  return "kanban-active-session-card border-info-border shadow-info-border";
-};
+/** A Background card has a quiet border and no ray, because the agent writes no reply. */
+const CARD_ACTIVITY_CLASSES = {
+  waiting_input: "kanban-waiting-input-card border-warning-border hover:border-warning-border",
+  running: "kanban-active-session-card border-info-border shadow-info-border",
+  background: "kanban-background-card border-pending-border hover:border-pending-border",
+} satisfies Record<SessionTone, string>;
 
 function TaskPrimaryMeta({ task }: { task: TaskCard }): ReactElement {
   return (
@@ -595,18 +588,18 @@ const taskActionsGroupClassName = (compact: boolean): string =>
 const taskActionsPrimaryClassName = ({
   compact,
   hasActiveSession,
-  isWaitingInput,
+  sessionTone,
 }: {
   compact: boolean;
   hasActiveSession: boolean;
-  isWaitingInput: boolean;
+  sessionTone: SessionTone;
 }): string => {
   if (hasActiveSession) {
     return cn(
       compact
         ? "h-7 rounded-md px-2 py-0 text-xs font-medium shadow-none"
         : "h-9 rounded-lg px-2 py-1 text-[11px] font-semibold shadow-none",
-      getSessionChipClassName(isWaitingInput),
+      SESSION_CHIP_CLASSES[sessionTone],
     );
   }
 
@@ -615,12 +608,8 @@ const taskActionsPrimaryClassName = ({
     : "h-9 rounded-lg font-semibold shadow-sm";
 };
 
-const taskActionSessionStatusClassName = (compact: boolean, isWaitingInput: boolean): string =>
-  cn(
-    compact ? "text-xs" : "text-[10px]",
-    "font-medium",
-    getSessionStatusTextClassName(isWaitingInput),
-  );
+const taskActionSessionStatusClassName = (compact: boolean, sessionTone: SessionTone): string =>
+  cn(compact ? "text-xs" : "text-[10px]", "font-medium", SESSION_STATUS_TEXT_CLASSES[sessionTone]);
 
 type TaskActionsProps = Omit<CardProps, "onOpenDetails" | "taskCardView"> & {
   taskSessions: KanbanTaskSession[];
@@ -658,7 +647,8 @@ function TaskActions({
     mergedTarget,
     autoCloseFailure,
   });
-  const { primaryActiveSession, primarySessionIsWaitingInput, leadingCoreAction } = footer;
+  const { primaryActiveSession, primarySessionState: sessionTone, leadingCoreAction } = footer;
+  const SessionIcon = sessionTone === "background" ? AGENT_SESSION_BACKGROUND_ICON : PlayCircle;
   if (footer.actions.allActions.length === 0 && footer.shortcuts.length === 0 && !leadingCoreAction)
     return null;
 
@@ -726,19 +716,22 @@ function TaskActions({
         primaryClassName={taskActionsPrimaryClassName({
           compact,
           hasActiveSession: hasActiveSession && !leadingCoreAction,
-          isWaitingInput: primarySessionIsWaitingInput,
+          sessionTone,
         })}
         primaryContent={
           hasActiveSession && primaryActiveSession ? (
             <>
-              <PlayCircle className="size-3" />
+              <SessionIcon className="size-3" />
               {workflowRoleLabel(task.taskWorkflow, primaryActiveSession.role)}
               <span
-                className={taskActionSessionStatusClassName(compact, primarySessionIsWaitingInput)}
+                className={taskActionSessionStatusClassName(compact, sessionTone)}
+                title={
+                  sessionTone === "background" ? AGENT_SESSION_BACKGROUND_DESCRIPTION : undefined
+                }
               >
                 {taskSessionStatusLabel({
                   session: primaryActiveSession,
-                  isWaitingInput: primarySessionIsWaitingInput,
+                  isWaitingInput: sessionTone === "waiting_input",
                 })}
               </span>
             </>

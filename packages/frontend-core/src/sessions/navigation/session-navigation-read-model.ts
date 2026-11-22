@@ -60,7 +60,8 @@ export type SessionNavigationWorkspaceSources = {
 export type SessionNavigationAttentionReason = "question" | "permission" | "blocked";
 
 type SessionNavigationStatus =
-  | { kind: "running" }
+  /** `waitingOnBackground`: the agent has no reply and waits on background tasks. */
+  | { kind: "running"; waitingOnBackground?: true }
   | { kind: "settled"; failed: boolean }
   /** Live status has not answered yet. */
   | { kind: "checking" }
@@ -290,7 +291,10 @@ const sessionStatus = (
   if (live.kind === "unknown") return { kind: "checking" };
   if (live.kind === "unavailable") return { kind: "unavailable", reason: live.reason };
   if (statusFailure !== null) return { kind: "unavailable", reason: statusFailure };
-  if (facts && isAgentSessionActivityWorking(facts.activityState)) return { kind: "running" };
+  if (facts && isAgentSessionActivityWorking(facts.activityState))
+    return facts.waitingOnBackground
+      ? { kind: "running", waitingOnBackground: true }
+      : { kind: "running" };
   return { kind: "settled", failed: facts?.activityState === "error" };
 };
 
@@ -387,6 +391,7 @@ const taskEntries = (
             role: record.role,
             workflow: roleWorkflowForTask(task, record.role),
             liveSession: facts?.activityState ?? "none",
+            waitingOnBackground: facts?.waitingOnBackground ?? false,
           }).tone,
           attention,
           status: sessionStatus(live, liveFacts),

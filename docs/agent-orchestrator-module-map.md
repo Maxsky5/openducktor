@@ -186,6 +186,18 @@ The host owns every auto-resume decision. All its state stays in host memory, so
 - `buildInterruptedTurnNotice` maps the usage limit, the entry, the local Resume state, and the time to the notice of both clients. `useUsageLimitAutoResumeCancel` runs Cancel auto-resume for both clients and keeps its state for one stop.
 - A failed auto-resume shows its reason in the resume notice and, as for a failed manual Resume, as the session operation error in the transcript.
 
+## Background tasks
+
+Files: `packages/core/src/services/agent-session-background.ts`, `background-work-ledger.ts`, `packages/host/src/adapters/claude/claude-agent-sdk-background-task-list.ts`, `claude-live-session-background-tasks.ts`, `packages/adapters-opencode-sdk/src/opencode-background-session.ts`, `opencode-live-session-background.ts`, `packages/adapters-codex-app-server/src/codex-background-terminals.ts`, `packages/frontend-core/src/sessions/background-tasks`, `agent-chat-background-task-bar.tsx`, and `apps/mobile/src/features/composer/background-task-bar.tsx`.
+
+Each runtime owns its background tasks. OpenDucktor stores no task data. The live snapshot carries `backgroundTasks` and `backgroundResultPending` from the adapter, and the frontend projects them into `AgentSessionState`. The rules are in [the runtime integration guide](runtime-integration-guide.md#background-tasks).
+
+- `isAgentSessionWaitingOnBackground` in core is the one rule for the Background style. The session stays Running in every count, group, and rank. The host uses the rule for runtime impact. Frontend-core sets `waitingOnBackground` on summaries, workspace facts, sidebar entries, Kanban sessions, and workflow steps, and only style code reads it.
+- `BackgroundWorkLedger` and `stopBackgroundWork` in core hold the rules that do not depend on a runtime: task ends, results, tracking loss, release, and Stop rounds. The OpenCode and Codex adapters extend the ledger and keep only native parsing and requests.
+- `setSnapshotBackgroundWork` writes the reported work to a snapshot. The Claude and OpenCode host projections use it.
+- `agent_session_background_task_stop` runs through `runScopedCommand` of the command service, then `stopBackgroundTask` of the control adapter port.
+- `useSessionBackgroundTasks` gives each composer its task bar model. It reads the tasks only while the live state of the session is observed, so the bar hides and Stop sends nothing while the state is unknown. Each row carries one Stop view for desktop and mobile.
+
 ## Workspace metadata and notifications
 
 Files: `packages/frontend-core/src/queries/workspace-sessions.ts`, `packages/frontend-core/src/queries/workspace-session-updates.ts`, and `packages/frontend-core/src/queries/agent-session-association.ts`.

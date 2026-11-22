@@ -1,3 +1,4 @@
+import { useSessionBackgroundTasks } from "@openducktor/frontend-core/sessions/background-tasks/use-session-background-tasks";
 import {
   useSessionGoalRow,
   useSessionGoalRowScope,
@@ -160,6 +161,10 @@ export function useAgentStudioChatModel({
       : null,
   });
   const goalRowScope = useSessionGoalRowScope(selectedSessionIdentity);
+  const backgroundTasks = useSessionBackgroundTasks({
+    repoPath,
+    identity: selectedSessionIdentity,
+  });
   const selectedSessionRuntimeData = selectedSessionState.runtimeData;
   const rawTranscriptSession = useMemo(
     () =>
@@ -365,6 +370,7 @@ export function useAgentStudioChatModel({
       ...messageDelivery,
       goalRow,
       goalRowScope,
+      backgroundTasks,
       displayedSessionKey: selectedSessionKey,
       selectedSession: selectedSessionIdentity,
       isSessionWorking: sessionActions.isSessionWorking,
@@ -474,6 +480,7 @@ export function useAgentStudioChatModel({
     sessionActions.canStopSession,
     goalRow,
     goalRowScope,
+    backgroundTasks,
     sessionActions.isResumingSession,
     sessionActions.isSessionWorking,
     sessionActions.isStarting,

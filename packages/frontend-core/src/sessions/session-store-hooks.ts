@@ -1,12 +1,17 @@
 import type { AgentMessageQueueSnapshot, AgentSessionLiveRef } from "@openducktor/contracts";
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import type { AgentSessionVisiblePendingInput } from "./agent-session-visible-pending-input";
-import type {
-  AgentActivitySessionsSnapshot,
-  AgentSessionPendingInputSummary,
-  AgentSessionSummary,
+import {
+  type AgentActivitySessionsSnapshot,
+  type AgentSessionPendingInputSummary,
+  type AgentSessionSummary,
+  observeAgentSessionSummaries,
 } from "./agent-session-snapshots";
-import { useAgentMessageQueuesContext, useAgentSessionsContext } from "./session-contexts";
+import {
+  useAgentMessageQueuesContext,
+  useAgentSessionReadModelStateContext,
+  useAgentSessionsContext,
+} from "./session-contexts";
 import type { AgentSessionIdentity, AgentSessionState } from "../types/agent-orchestrator";
 
 /**
@@ -21,8 +26,18 @@ const useActivitySnapshotField = <Field extends keyof AgentActivitySessionsSnaps
   return useSyncExternalStore(sessionStore.subscribe, read, read);
 };
 
-export const useAgentSessionSummaries = (): AgentSessionSummary[] =>
-  useActivitySnapshotField("sessions");
+/**
+ * The task session summaries. A running summary loses its Background style while its live state is
+ * unknown.
+ */
+export const useAgentSessionSummaries = (): AgentSessionSummary[] => {
+  const summaries = useActivitySnapshotField("sessions");
+  const { sessionReadModelLoadState } = useAgentSessionReadModelStateContext();
+  return useMemo(
+    () => observeAgentSessionSummaries(sessionReadModelLoadState, summaries),
+    [sessionReadModelLoadState, summaries],
+  );
+};
 
 export const useAgentPendingInputSessions = (): AgentSessionPendingInputSummary[] =>
   useActivitySnapshotField("pendingInputSessions");

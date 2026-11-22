@@ -2,7 +2,7 @@ import {
   type ResolvedTaskCard as TaskCard,
   type WorkflowRoleId as AgentRole,
 } from "@openducktor/workflows";
-import { isAgentSessionActivityWorking } from "@openducktor/frontend-core/lib/agent-session-activity-state";
+import { AGENT_SESSION_BACKGROUND_DESCRIPTION } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import type { WorkflowStepTone } from "@openducktor/frontend-core/types/agent-workflow";
 import { useRouter } from "expo-router";
 import {
@@ -36,6 +36,7 @@ import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { LoaderSpinner } from "@/ui/loader-spinner";
 import { useRepoTask } from "@/features/work-owner/use-repo-task";
+import { type WorkflowStepMark, workflowStepMarks } from "./workflow-step-marks";
 
 /** One row under the navigation bar, or one column in the side panel of a low or wide window. */
 export type WorkflowRailOrientation = "row" | "column";
@@ -195,23 +196,34 @@ const ringColor = (theme: AppTheme, tone: WorkflowStepTone): string => {
   return workflowConnectorColor(theme, tone);
 };
 
-/** The state mark after the label, as the desktop `WorkflowStepContent`. */
-const stateMark = (step: TaskWorkflowStep): IconName | "spinner" | null => {
-  const { tone, liveSession } = step.state;
-  if (tone === "done") return "check";
-  if (liveSession === "waiting_input") return "circle-dashed";
-  if (tone === "in_progress") {
-    return liveSession !== "none" && isAgentSessionActivityWorking(liveSession)
-      ? "spinner"
-      : "circle-dot-dashed";
-  }
-  if (tone === "available") return "circle";
-  if (tone === "optional") return "circle-dashed";
-  if (tone === "rejected" || tone === "failed") return "triangle-alert";
-  // A Builder step that waits for the user marks a blocked task.
-  if (tone === "waiting_input") return "triangle-alert";
-  return null;
+/** The color of a state mark: success for done, violet for background tasks, else the step text. */
+const markColor = (theme: AppTheme, mark: IconName, text: string): string => {
+  if (mark === "check") return theme.desktop.successAccent;
+  if (mark === "hourglass") return theme.desktop.pendingMuted;
+  return text;
 };
+
+/** The state marks of a step: a moving spinner or still icons. */
+function StepMarks({
+  marks,
+  text,
+}: {
+  marks: readonly WorkflowStepMark[];
+  text: string;
+}): ReactElement {
+  const theme = useAppTheme();
+  return (
+    <>
+      {marks.map((mark) =>
+        mark === "spinner" ? (
+          <LoaderSpinner key={mark} size={11} color={text} />
+        ) : (
+          <Icon key={mark} name={mark} size={11} colorValue={markColor(theme, mark, text)} />
+        ),
+      )}
+    </>
+  );
+}
 
 const WorkflowStep = memo(function WorkflowStep({
   step,
@@ -227,18 +239,8 @@ const WorkflowStep = memo(function WorkflowStep({
   const theme = useAppTheme();
   const { tone } = step.state;
   const colors = workflowToneColors(theme, tone);
-  const mark = stateMark(step);
   styles.useVariants({ tone });
-  const markView =
-    mark === "spinner" ? (
-      <LoaderSpinner size={11} color={colors.text} />
-    ) : mark ? (
-      <Icon
-        name={mark}
-        size={11}
-        colorValue={mark === "check" ? theme.desktop.successAccent : colors.text}
-      />
-    ) : null;
+  const markView = <StepMarks marks={workflowStepMarks(step.state)} text={colors.text} />;
   const content = column ? (
     <View style={[styles.step, styles.columnStep, tone === "optional" && styles.dashed]}>
       <RoleIcon hint={step.iconHint} size={16} color={colors.icon} />
@@ -264,7 +266,9 @@ const WorkflowStep = memo(function WorkflowStep({
       {content}
     </View>
   );
-  const label = `${step.label}, ${step.stateLabel}`;
+  const label = step.state.waitingOnBackground
+    ? `${step.label}, ${step.stateLabel}, ${AGENT_SESSION_BACKGROUND_DESCRIPTION}`
+    : `${step.label}, ${step.stateLabel}`;
   if (!press) {
     return (
       <View

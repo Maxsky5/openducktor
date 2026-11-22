@@ -312,6 +312,31 @@ describe("Codex app-server 0.149 experimental request schemas", () => {
     });
   }
 
+  test("parses the background terminal requests and their results", () => {
+    const terminate = {
+      method: "thread/backgroundTerminals/terminate",
+      params: { threadId: "thread-1", processId: "1234" },
+    };
+    const clean = { method: "thread/backgroundTerminals/clean", params: { threadId: "thread-1" } };
+    expect(parseCodexAppServerClientRequest(terminate)).toEqual(terminate);
+    expect(parseCodexAppServerClientRequest(clean)).toEqual(clean);
+    expect(() =>
+      parseCodexAppServerClientRequest({
+        method: "thread/backgroundTerminals/terminate",
+        params: { threadId: "thread-1", processId: 1234 },
+      }),
+    ).toThrow();
+    expect(
+      parseCodexAppServerRequestResult("thread/backgroundTerminals/terminate", {
+        terminated: false,
+      }),
+    ).toEqual({ terminated: false });
+    expect(() =>
+      parseCodexAppServerRequestResult("thread/backgroundTerminals/terminate", {}),
+    ).toThrow();
+    expect(parseCodexAppServerRequestResult("thread/backgroundTerminals/clean", {})).toEqual({});
+  });
+
   test("rejects invalid u32 pagination limits", () => {
     for (const limit of [-1, 1.5, 4_294_967_296]) {
       const requests = [

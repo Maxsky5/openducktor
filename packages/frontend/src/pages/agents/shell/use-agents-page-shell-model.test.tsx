@@ -29,6 +29,7 @@ import {
 } from "@/state/app-state-contexts";
 import {
   AgentOperationsContext,
+  AgentSessionReadModelStateContext,
   AgentSessionsContext,
 } from "@openducktor/frontend-core/sessions/session-contexts";
 import {
@@ -540,21 +541,30 @@ const notificationContextValue: NotificationContextValue = {
   },
 };
 
+const readModelState = {
+  sessionReadModelLoadState: { kind: "ready", workspaceRepoPath: "/repo" },
+  workspaceSessionRecordsError: null,
+  reloadSessionReadModel: () => {},
+  getSessionFault: () => null,
+} as const;
+
 const AppStateTestWrapper = ({ children }: PropsWithChildren): ReactElement => (
   <WorkspaceStateContext.Provider value={workspaceStateValue()}>
     <WorkspaceBranchStateContext.Provider value={workspaceStateValue()}>
       <ChecksStateContext.Provider value={checksStateValue()}>
         <TasksStateContext.Provider value={tasksState}>
           <AgentOperationsContext.Provider value={agentOperations}>
-            <AgentSessionsContext.Provider value={sessionStore}>
-              <NotificationContext.Provider value={notificationContextValue}>
-                <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
-                  <TaskWorkflowActionsContext.Provider value={createTaskWorkflowActionsFixture()}>
-                    <BrowserRuntimeProvider>{children}</BrowserRuntimeProvider>
-                  </TaskWorkflowActionsContext.Provider>
-                </RuntimeDefinitionsContext.Provider>
-              </NotificationContext.Provider>
-            </AgentSessionsContext.Provider>
+            <AgentSessionReadModelStateContext.Provider value={readModelState}>
+              <AgentSessionsContext.Provider value={sessionStore}>
+                <NotificationContext.Provider value={notificationContextValue}>
+                  <RuntimeDefinitionsContext.Provider value={runtimeDefinitionsValue()}>
+                    <TaskWorkflowActionsContext.Provider value={createTaskWorkflowActionsFixture()}>
+                      <BrowserRuntimeProvider>{children}</BrowserRuntimeProvider>
+                    </TaskWorkflowActionsContext.Provider>
+                  </RuntimeDefinitionsContext.Provider>
+                </NotificationContext.Provider>
+              </AgentSessionsContext.Provider>
+            </AgentSessionReadModelStateContext.Provider>
           </AgentOperationsContext.Provider>
         </TasksStateContext.Provider>
       </ChecksStateContext.Provider>

@@ -3,16 +3,24 @@ import { createTaskCardFixture } from "@openducktor/frontend-core/test-support/s
 import type { TaskSessionGroup, TaskSessionRow } from "./task-sessions-model";
 import { taskWorkflowSteps } from "./task-workflow-model";
 
-const row = (id: string, activityState: TaskSessionRow["activityState"]): TaskSessionRow => ({
+const row = (
+  id: string,
+  activityState: TaskSessionRow["activityState"],
+  waitingOnBackground = false,
+): TaskSessionRow => ({
   key: id,
   identity: { externalSessionId: id, runtimeKind: "opencode", workingDirectory: "/wt/task-1" },
   label: "Builder #1",
   runtimeLabel: "OpenCode",
   startedAt: "2026-10-01T08:00:00.000Z",
   statusLabel: "Running",
+  statusDescription: "Running",
   statusTone: "running",
+  statusReason: null,
+  statusIcon: null,
   live: activityState === "running",
   activityState,
+  waitingOnBackground,
 });
 
 describe("taskWorkflowSteps", () => {
@@ -46,7 +54,7 @@ describe("taskWorkflowSteps", () => {
     ];
     const [spec, , build] = taskWorkflowSteps(task, groups);
     expect(spec).toMatchObject({ stateLabel: "Done", session: null });
-    expect(build).toMatchObject({ stateLabel: "Needs input", working: false });
+    expect(build).toMatchObject({ stateLabel: "Needs input", liveMark: null });
     expect(build?.session?.externalSessionId).toBe("b-2");
   });
 
@@ -74,6 +82,15 @@ describe("taskWorkflowSteps", () => {
       { role: "spec", roleLabel: "Spec", rows: [row("s-1", "running")] },
     ];
     const [spec] = taskWorkflowSteps(createTaskCardFixture(), groups);
-    expect(spec).toMatchObject({ stateLabel: "In progress", working: true });
+    expect(spec).toMatchObject({ stateLabel: "In progress", liveMark: "spinner" });
+  });
+
+  test("marks a step whose newest session waits on background tasks", () => {
+    const groups: TaskSessionGroup[] = [
+      { role: "build", roleLabel: "Builder", rows: [row("b-1", "running", true)] },
+    ];
+    const [, , build] = taskWorkflowSteps(createTaskCardFixture(), groups);
+    expect(build?.state).toMatchObject({ liveSession: "running", waitingOnBackground: true });
+    expect(build?.liveMark).toBe("hourglass");
   });
 });

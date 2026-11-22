@@ -23,6 +23,33 @@ const selectedIdentityFromSession = (session: AgentSessionSummary | null = null)
   session ? toAgentSessionIdentity(session) : null;
 
 describe("use-agent-studio-page-model-builders", () => {
+  test("buildWorkflowModelContext marks the rail step of a session that waits on background tasks", () => {
+    const builderSession = {
+      ...createSession({
+        status: "running",
+        sessionAssociation: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "build",
+        },
+      }),
+      waitingOnBackground: true,
+    };
+
+    const context = buildWorkflowModelContext({
+      selectedTask: createTaskCardFixture(),
+      sessionsForTask: [builderSession],
+      selectedSessionIdentity: null,
+      role: "build",
+      isSessionWorking: true,
+      roleLabelByRole,
+    });
+
+    const builder = context.workflowRail.find((step) => step.role === "build");
+    expect(builder?.state).toMatchObject({ liveSession: "running", waitingOnBackground: true });
+  });
+
   test("buildWorkflowModelContext keeps history unselected for a draft", () => {
     const plannerSession = createSession({
       runtimeKind: "opencode",

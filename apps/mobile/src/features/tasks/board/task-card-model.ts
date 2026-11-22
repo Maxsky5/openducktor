@@ -14,7 +14,11 @@ import type {
   KanbanTaskActivityState,
   KanbanTaskSession,
 } from "@openducktor/frontend-core/tasks/board/kanban-task-activity";
-import { getTaskFooter } from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
+import {
+  getTaskFooter,
+  kanbanCardSessionTone,
+  type KanbanPrimarySessionState,
+} from "@openducktor/frontend-core/tasks/board/kanban-task-footer";
 import { getPriorityLabel } from "@openducktor/frontend-core/tasks/board/kanban-task-badge-model";
 import type { TaskWorkflowAction } from "@openducktor/workflows";
 import type { SessionTargetOptions } from "@openducktor/frontend-core/tasks/board/session-target-resolution";
@@ -25,6 +29,7 @@ import {
   taskSessionStatusLabel,
 } from "@openducktor/frontend-core/tasks/board/task-action-presentation";
 import { toDisplayTaskLabels } from "@openducktor/frontend-core/tasks/presentation/task-labels";
+import { AGENT_SESSION_BACKGROUND_DESCRIPTION } from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import type { IconName } from "@/ui/icon-names";
 import type { CoreTaskAction } from "@openducktor/frontend-core/tasks/workflow/core-task-actions";
 import {
@@ -38,10 +43,19 @@ const CARD_VISIBLE_LABEL_COUNT = 2;
 
 /**
  * How the primary control looks, with the desktop rules: the next workflow step is violet, other
- * starts are outlined, a reset is rose, and the control of a live session is sky, or amber while
- * the session waits for input.
+ * starts are outlined, a reset is rose, and the control of a live session is sky, amber while
+ * the session waits for input, or a calm violet while it waits on background tasks.
  */
-type TaskCardPrimaryAppearance = "filled" | "outline" | "destructive" | "running" | "waiting";
+type TaskCardPrimaryAppearance =
+  | "filled"
+  | "outline"
+  | "destructive"
+  | "running"
+  | "waiting"
+  | "background";
+
+/** The state of the live session of a card: it writes a reply, needs input, or waits on tasks. */
+export type TaskCardSessionState = KanbanPrimarySessionState;
 
 /** A workflow action of the task, or a core task action such as Close Task for a merged branch. */
 export type TaskCardAction =
@@ -56,8 +70,13 @@ export type TaskCardPrimary = {
   command: boolean;
   roleIconHint?: WorkflowIcon | undefined;
   disabled: boolean;
-  /** The active session that the primary control opens, with its state label. */
-  activeSession: { roleLabel: string; statusLabel: string; waitingInput: boolean } | null;
+  /** The active session that the primary control opens, with its state label and mark. */
+  activeSession: {
+    roleLabel: string;
+    statusLabel: string;
+    state: TaskCardSessionState;
+    mark: IconName;
+  } | null;
 };
 
 type TaskCardMenuItem = {
@@ -80,7 +99,7 @@ export type TaskCardLiveSession = {
   role: AgentRole;
   iconHint?: WorkflowIcon | undefined;
   label: string;
-  waitingInput: boolean;
+  state: TaskCardSessionState;
 };
 
 export type TaskCardModel = {
@@ -90,6 +109,8 @@ export type TaskCardModel = {
   hiddenLabels: string[];
   reviewRejected: boolean;
   liveSession: TaskCardLiveSession | null;
+  /** The frame of the card, from every active session of the task, as on desktop. */
+  frame: TaskCardSessionState | null;
   primary: TaskCardPrimary | null;
   menu: TaskCardMenuItem[];
   shortcuts: TaskCardShortcut[];
@@ -118,8 +139,25 @@ const PRIMARY_APPEARANCES = {
   warning: "outline",
 } as const satisfies Record<TaskActionTone, TaskCardPrimaryAppearance>;
 
-const liveSessionLabel = (roleLabel: string, statusLabel: string, waitingInput: boolean): string =>
-  waitingInput ? `${roleLabel} needs input` : `${roleLabel} ${statusLabel.toLowerCase()}`;
+/** As on desktop: a play mark, or a still hourglass while the session waits on background tasks. */
+const SESSION_MARKS = {
+  running: "play-circle",
+  waiting_input: "play-circle",
+  background: "hourglass",
+} as const satisfies Record<TaskCardSessionState, IconName>;
+
+const SESSION_APPEARANCES = {
+  running: "running",
+  waiting_input: "waiting",
+  background: "background",
+} as const satisfies Record<TaskCardSessionState, TaskCardPrimaryAppearance>;
+
+const liveSessionLabel = (roleLabel: string, statusLabel: string, state: TaskCardSessionState) => {
+  if (state === "waiting_input") return `${roleLabel} needs input`;
+  if (state === "background")
+    return `${roleLabel} ${AGENT_SESSION_BACKGROUND_DESCRIPTION.toLowerCase()}`;
+  return `${roleLabel} ${statusLabel.toLowerCase()}`;
+};
 
 /**
  * What a board card shows. The workflow footer of frontend-core picks the primary action, the
@@ -150,15 +188,16 @@ export const buildTaskCardModel = ({
   const disabled = new Set(footer.disabledActions);
   const closed = task.status === TASK_CLOSED_STATE;
   const activeSession = hasActiveSession ? footer.primaryActiveSession : null;
-  const waitingInput = footer.primarySessionIsWaitingInput;
+  const sessionState = footer.primarySessionState;
   const session = activeSession
     ? {
         roleLabel: task.taskWorkflow.role(activeSession.role).label,
         statusLabel: taskSessionStatusLabel({
           session: activeSession,
-          isWaitingInput: waitingInput,
+          isWaitingInput: sessionState === "waiting_input",
         }),
-        waitingInput,
+        state: sessionState,
+        mark: SESSION_MARKS[sessionState],
       }
     : null;
   const liveSession: TaskCardLiveSession | null =
@@ -166,8 +205,8 @@ export const buildTaskCardModel = ({
       ? {
           role: activeSession.role,
           iconHint: workflowRoleIcon(task.taskWorkflow, activeSession.role),
-          label: liveSessionLabel(session.roleLabel, session.statusLabel, waitingInput),
-          waitingInput,
+          label: liveSessionLabel(session.roleLabel, session.statusLabel, session.state),
+          state: session.state,
         }
       : null;
   const primaryAction = closed ? null : footer.actions.primaryAction;
@@ -186,7 +225,7 @@ export const buildTaskCardModel = ({
   } else if (primaryAction) {
     let appearance: TaskCardPrimaryAppearance =
       PRIMARY_APPEARANCES[taskActionTone(primaryAction, task)];
-    if (session) appearance = session.waitingInput ? "waiting" : "running";
+    if (session) appearance = SESSION_APPEARANCES[session.state];
     primary = {
       action: { kind: "workflow", action: primaryAction },
       label: taskActionLabel(primaryAction, task),
@@ -238,6 +277,7 @@ export const buildTaskCardModel = ({
     hiddenLabels: labels.slice(CARD_VISIBLE_LABEL_COUNT),
     reviewRejected,
     liveSession,
+    frame: hasActiveSession ? kanbanCardSessionTone(taskActivityState, taskSessions) : null,
     primary,
     menu,
     shortcuts,

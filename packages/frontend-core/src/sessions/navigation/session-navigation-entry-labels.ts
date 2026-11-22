@@ -1,4 +1,6 @@
 import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
+import { AGENT_SESSION_BACKGROUND_DESCRIPTION } from "../../lib/agent-session-activity-state";
+import { isSessionEntryWaitingOnBackground } from "./session-entry-presentation";
 import { formatElapsedAgo, formatElapsedShort } from "../../lib/relative-time";
 import { statusLabel } from "../../tasks/presentation/task-status-presentation";
 import { taskNeedsInput, workflowRoleLabel } from "@openducktor/workflows";
@@ -68,11 +70,13 @@ const sessionEntryAttentionText = (entry: SessionNavigationEntry): string =>
 
 /** Live state for the floating card and accessible names. */
 export const sessionEntryStatusText = (entry: SessionNavigationEntry): string => {
+  const { status } = entry;
   if (entry.attention.length > 0) return `Needs you: ${sessionEntryAttentionText(entry)}`;
-  if (entry.status.kind === "running") return "Running";
-  if (entry.status.kind === "checking") return "Checking status";
-  if (entry.status.kind === "unavailable") return `Status unavailable: ${entry.status.reason}`;
-  return entry.status.failed ? "Last run failed" : "Idle";
+  if (isSessionEntryWaitingOnBackground(entry)) return AGENT_SESSION_BACKGROUND_DESCRIPTION;
+  if (status.kind === "running") return "Running";
+  if (status.kind === "checking") return "Checking status";
+  if (status.kind === "unavailable") return `Status unavailable: ${status.reason}`;
+  return status.failed ? "Last run failed" : "Idle";
 };
 
 export const sessionEntryTimeText = (entry: SessionNavigationEntry, now: number): string | null => {

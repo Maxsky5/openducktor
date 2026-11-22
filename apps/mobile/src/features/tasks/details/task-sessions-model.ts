@@ -14,7 +14,12 @@ import {
   workflowRoleIcon,
 } from "@openducktor/workflows";
 import type { AgentSessionIdentity } from "@openducktor/frontend-core/types/agent-orchestrator";
+import {
+  AGENT_SESSION_BACKGROUND_DESCRIPTION,
+  visibleSessionActivity,
+} from "@openducktor/frontend-core/lib/agent-session-activity-state";
 import type { AgentSessionActivityState } from "@openducktor/frontend-core/types/agent-session-activity";
+import type { IconName } from "@/ui/icon-names";
 import type { Tone } from "@/ui/tones";
 
 export type TaskSessionRow = {
@@ -26,11 +31,19 @@ export type TaskSessionRow = {
   runtimeLabel: string;
   startedAt: string;
   statusLabel: string;
+  /** What a screen reader says for the status: the label, or a longer text such as Background. */
+  statusDescription: string;
   statusTone: Tone;
+  /** Why the status is unavailable, for the row to show under the session name, or null. */
+  statusReason: string | null;
+  /** The still icon of a state that has one, such as Background. */
+  statusIcon: IconName | null;
   /** True while the session works, so its status can show as live. */
   live: boolean;
-  /** The live state of the session, or null for a saved session without live state. */
+  /** The live state of the session, or null for a saved session or an unavailable status. */
   activityState: AgentSessionActivityState | null;
+  /** The running session waits on background tasks. Only its style changes. */
+  waitingOnBackground: boolean;
 };
 
 export type TaskSessionGroup = {
@@ -40,6 +53,14 @@ export type TaskSessionGroup = {
   rows: TaskSessionRow[];
 };
 
+type StatusPresentation = {
+  label: string;
+  description?: string;
+  reason?: string;
+  tone: Tone;
+  icon?: IconName;
+};
+
 const STATUS_PRESENTATION = {
   waiting_input: { label: "Waiting input", tone: "warning" },
   starting: { label: "Starting", tone: "running" },
@@ -47,27 +68,68 @@ const STATUS_PRESENTATION = {
   idle: { label: "Idle", tone: "neutral" },
   stopped: { label: "Stopped", tone: "cancelled" },
   error: { label: "Error", tone: "destructive" },
-} as const satisfies Record<AgentSessionActivityState, { label: string; tone: Tone }>;
+} as const satisfies Record<AgentSessionActivityState, StatusPresentation>;
+
+/** A running session that waits on its background tasks: Running in a calm violet, with a still mark. */
+const RUNNING_ON_BACKGROUND: StatusPresentation = {
+  label: "Running",
+  description: AGENT_SESSION_BACKGROUND_DESCRIPTION,
+  tone: "pending",
+  icon: "hourglass",
+};
 
 /** The session list shows a saved session that this client has no live state for. */
-const SAVED_SESSION = { label: "Saved", tone: "neutral" } as const;
+const SAVED_SESSION: StatusPresentation = { label: "Saved", tone: "neutral" };
+
+/** The status of a session whose work is unknown, such as while the live stream is down. */
+const unavailableStatus = (reason: string): StatusPresentation => ({
+  label: "Status unavailable",
+  description: `Status unavailable: ${reason}`,
+  reason,
+  tone: "cancelled",
+  icon: "circle-alert",
+});
 
 type SessionEntry = AgentSessionRecencySummary & {
   role: AgentRole;
   activityState: AgentSessionActivityState | null;
+  waitingOnBackground: boolean;
+  statusUnavailableReason: string | null;
 };
 
 const toEntry = (
   session: AgentSessionRecord | AgentSessionSummary,
-  activityState: AgentSessionActivityState | null,
+  live: AgentSessionSummary | undefined,
 ): SessionEntry => ({
   externalSessionId: session.externalSessionId,
   runtimeKind: session.runtimeKind,
   workingDirectory: session.workingDirectory,
   role: session.role,
   startedAt: session.startedAt,
-  activityState,
+  activityState: live?.activityState ?? null,
+  waitingOnBackground: live?.waitingOnBackground ?? false,
+  statusUnavailableReason: live?.statusUnavailableReason ?? null,
 });
+
+type EntryStatus = {
+  presentation: StatusPresentation;
+  /** The state that the row shows, or null for a saved session or an unavailable status. */
+  activityState: AgentSessionActivityState | null;
+};
+
+/** An unavailable status replaces a state that it makes unknown, such as Running or Idle. */
+const entryStatus = (entry: SessionEntry): EntryStatus => {
+  const activityState = visibleSessionActivity(entry.activityState, entry.statusUnavailableReason);
+  if (activityState === "running" && entry.waitingOnBackground)
+    return { presentation: RUNNING_ON_BACKGROUND, activityState };
+  if (activityState) return { presentation: STATUS_PRESENTATION[activityState], activityState };
+  return {
+    presentation: entry.statusUnavailableReason
+      ? unavailableStatus(entry.statusUnavailableReason)
+      : SAVED_SESSION,
+    activityState: null,
+  };
+};
 
 /**
  * The task-bound sessions of a task, grouped by Workflow Role in workflow order, newest first.
@@ -89,10 +151,10 @@ export const groupTaskSessions = (
   const entries = new Map<string, SessionEntry>();
   for (const record of records) {
     const key = agentSessionIdentityKey(record);
-    entries.set(key, toEntry(record, liveByKey.get(key)?.activityState ?? null));
+    entries.set(key, toEntry(record, liveByKey.get(key)));
   }
   for (const [key, summary] of liveByKey) {
-    if (!entries.has(key)) entries.set(key, toEntry(summary, summary.activityState));
+    if (!entries.has(key)) entries.set(key, toEntry(summary, summary));
   }
   for (const entry of entries.values()) {
     if (!task.taskWorkflow.roles.some(({ id }) => id === entry.role))
@@ -105,7 +167,7 @@ export const groupTaskSessions = (
     const sessionNumbers = buildRoleSessionSequenceByIdentity(roleEntries);
     const rows = roleEntries.toSorted(compareAgentSessionRecency).map((entry, index) => {
       const key = agentSessionIdentityKey(entry);
-      const status = entry.activityState ? STATUS_PRESENTATION[entry.activityState] : SAVED_SESSION;
+      const { presentation: status, activityState } = entryStatus(entry);
       return {
         key,
         identity: {
@@ -121,9 +183,13 @@ export const groupTaskSessions = (
         runtimeLabel: RUNTIME_DESCRIPTORS_BY_KIND[entry.runtimeKind].label,
         startedAt: entry.startedAt,
         statusLabel: status.label,
+        statusDescription: status.description ?? status.label,
         statusTone: status.tone,
-        live: entry.activityState === "running" || entry.activityState === "starting",
-        activityState: entry.activityState,
+        statusReason: status.reason ?? null,
+        statusIcon: status.icon ?? null,
+        live: activityState === "running" || activityState === "starting",
+        activityState,
+        waitingOnBackground: activityState === "running" && entry.waitingOnBackground,
       };
     });
     return rows.length > 0

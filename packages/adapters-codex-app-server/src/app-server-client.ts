@@ -69,6 +69,15 @@ export const createCodexAppServerClient = (
     async threadSettingsUpdate(params) {
       return requestCodex(transport, { method: "thread/settings/update", params });
     },
+    async threadBackgroundTerminalsTerminate(params) {
+      return requestCodex(transport, { method: "thread/backgroundTerminals/terminate", params });
+    },
+    async threadBackgroundTerminalsList(params) {
+      return requestCodex(transport, { method: "thread/backgroundTerminals/list", params });
+    },
+    async threadBackgroundTerminalsClean(params) {
+      return requestCodex(transport, { method: "thread/backgroundTerminals/clean", params });
+    },
     async threadResume(params: CodexThreadResumeParams) {
       return requestCodex(transport, { method: "thread/resume", params });
     },

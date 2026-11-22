@@ -116,6 +116,8 @@ export const createNodeHostRuntimeComposition = ({
     liveSessionLifecycle: liveState,
     prepareLiveSessionAdapter: createCodexLiveSessionAdapterPreparer({
       directoriesMatch,
+      // The preparer runs only after the orchestrator exists, at runtime start.
+      readRuntimeVersion: () => Effect.runSync(orchestrator.status("codex")).version,
       prepareImageGenerations: defaultPorts.imageWorkers.prepareHistory,
       liveSessionLifecycle: liveState,
       codexAppServer,

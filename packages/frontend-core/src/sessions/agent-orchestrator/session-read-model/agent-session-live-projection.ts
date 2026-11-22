@@ -200,6 +200,8 @@ type SessionSnapshotActivity = Pick<
   | "runtimeStatusMessage"
   | "foregroundTurnActive"
   | "statusUnavailableReason"
+  | "backgroundTasks"
+  | "backgroundResultPending"
 >;
 
 export const projectSessionSnapshotActivity = (
@@ -212,6 +214,8 @@ export const projectSessionSnapshotActivity = (
     | "pendingQuestions"
     | "foregroundTurnActive"
     | "statusUnavailableReason"
+    | "backgroundTasks"
+    | "backgroundResultPending"
   >,
 ): SessionSnapshotActivity => {
   const isNewEpisode =
@@ -229,6 +233,9 @@ export const projectSessionSnapshotActivity = (
     executionEpisodeId: snapshot.executionEpisodeId ?? current.executionEpisodeId,
     foregroundTurnActive: snapshot.foregroundTurnActive,
     statusUnavailableReason: snapshot.statusUnavailableReason ?? null,
+    // An equal list keeps its identity, so the task bar does not render again.
+    backgroundTasks: replaceEqualDeep(current.backgroundTasks, snapshot.backgroundTasks),
+    backgroundResultPending: snapshot.backgroundResultPending,
     ...activity,
     runtimeStatusMessage: activity.status === "idle" ? null : current.runtimeStatusMessage,
   };
@@ -536,6 +543,8 @@ const settleRemovedDirectSession = (session: AgentSessionState): AgentSessionSta
     statusUnavailableReason: null,
     goal: undefined,
     deniedActions: undefined,
+    backgroundTasks: undefined,
+    backgroundResultPending: undefined,
     pendingApprovals: session.pendingApprovals.filter((request) => request.source !== undefined),
     pendingQuestions: session.pendingQuestions.filter((request) => request.source !== undefined),
     contextUsage: null,
@@ -570,6 +579,8 @@ const resetSessionLiveStateForSnapshot = (
     statusUnavailableReason: null,
     goal: undefined,
     deniedActions: undefined,
+    backgroundTasks: undefined,
+    backgroundResultPending: undefined,
     pendingApprovals: [],
     pendingQuestions: [],
     contextUsage: null,

@@ -102,6 +102,155 @@ describe("Claude host live-session state", () => {
     expect(state.listSnapshots()[0]?.goal).toBeUndefined();
   });
 
+  describe("background tasks", () => {
+    const childExternalSessionId = "session-1::claude-subagent::child-1";
+    const childRef = { ...ref, externalSessionId: childExternalSessionId };
+    const command = {
+      taskId: "dev",
+      kind: "command",
+      title: "bun run dev",
+      stop: { allowed: true },
+    } as const;
+    const subagent = {
+      taskId: "child-1",
+      kind: "subagent",
+      title: "code-reviewer",
+      stop: { allowed: true },
+    } as const;
+    const setup = () => {
+      const state = createClaudeLiveSessionState();
+      state.applyControlSummary("/repo", summary);
+      state.applyEvent(session, {
+        type: "assistant_part",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-11-21T10:00:00.000Z",
+        part: {
+          kind: "subagent",
+          messageId: "root-assistant",
+          partId: "claude-subagent:child-1",
+          correlationKey: "child-1",
+          status: "running",
+          externalSessionId: childExternalSessionId,
+        },
+      });
+      const report = (
+        sessions: Extract<
+          Parameters<typeof state.applyEvent>[1],
+          { type: "session_background_tasks_updated" }
+        >["sessions"],
+      ) =>
+        state.applyEvent(session, {
+          type: "session_background_tasks_updated",
+          externalSessionId: ref.externalSessionId,
+          timestamp: "2026-11-21T10:00:01.000Z",
+          sessions,
+        });
+      const read = (target: typeof ref) => {
+        const snapshot = state.readSnapshot(target);
+        return snapshot.type === "live" ? snapshot.session : undefined;
+      };
+      return { state, report, read };
+    };
+
+    test("projects the reported tasks and the pending result on each session", () => {
+      const { report, read } = setup();
+      report([
+        {
+          externalSessionId: ref.externalSessionId,
+          tasks: [subagent, command],
+          resultPending: true,
+        },
+        { externalSessionId: childExternalSessionId, tasks: [command], resultPending: false },
+      ]);
+      expect(read(ref)).toMatchObject({
+        backgroundTasks: [subagent, command],
+        backgroundResultPending: true,
+      });
+      expect(read(childRef)?.backgroundTasks).toEqual([command]);
+      expect(read(childRef)?.backgroundResultPending).toBeUndefined();
+
+      report([
+        { externalSessionId: ref.externalSessionId, tasks: [subagent], resultPending: false },
+      ]);
+      expect(read(ref)?.backgroundTasks).toEqual([subagent]);
+      expect(read(ref)?.backgroundResultPending).toBeUndefined();
+      expect(read(childRef)?.backgroundTasks).toBeUndefined();
+    });
+
+    test("keeps a subagent with a running task in Background after its part ends", () => {
+      const { state, report, read } = setup();
+      report([
+        { externalSessionId: ref.externalSessionId, tasks: [command], resultPending: false },
+        { externalSessionId: childExternalSessionId, tasks: [command], resultPending: false },
+      ]);
+      state.applyEvent(session, {
+        type: "assistant_part",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-11-21T10:00:02.000Z",
+        part: {
+          kind: "subagent",
+          messageId: "root-assistant",
+          partId: "claude-subagent:child-1",
+          correlationKey: "child-1",
+          status: "completed",
+          externalSessionId: childExternalSessionId,
+        },
+      });
+      expect(read(childRef)).toMatchObject({
+        activity: "running",
+        foregroundTurnActive: false,
+        backgroundTasks: [command],
+      });
+
+      report([]);
+      expect(read(childRef)?.activity).toBe("idle");
+      expect(read(childRef)?.foregroundTurnActive).toBeUndefined();
+    });
+
+    test("drops the tasks of the root with its idle state", () => {
+      const { state, report, read } = setup();
+      report([
+        { externalSessionId: ref.externalSessionId, tasks: [command], resultPending: false },
+      ]);
+      const changes = state.applyEvent(session, {
+        type: "session_idle",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-11-21T10:00:02.000Z",
+      });
+      expect(changes).toContainEqual({
+        type: "session_upsert",
+        snapshot: expect.not.objectContaining({ backgroundTasks: expect.anything() }),
+      });
+      expect(read(ref)).toMatchObject({ activity: "idle" });
+      expect(read(ref)?.backgroundTasks).toBeUndefined();
+    });
+
+    test("clears the tasks when the session tree becomes unavailable or leaves", () => {
+      const { state, report, read } = setup();
+      const tree = [
+        { externalSessionId: ref.externalSessionId, tasks: [command], resultPending: true },
+        { externalSessionId: childExternalSessionId, tasks: [command], resultPending: false },
+      ];
+      report(tree);
+      state.applyEvent(session, {
+        type: "session_context_error",
+        externalSessionId: ref.externalSessionId,
+        timestamp: "2026-11-21T10:00:02.000Z",
+        message: "Claude stopped.",
+        statusUnavailable: true,
+      });
+      for (const target of [ref, childRef]) {
+        expect(read(target)?.backgroundTasks).toBeUndefined();
+        expect(read(target)?.backgroundResultPending).toBeUndefined();
+      }
+
+      report(tree);
+      state.removeSession(ref);
+      state.applyControlSummary("/repo", summary);
+      expect(read(ref)?.backgroundTasks).toBeUndefined();
+    });
+  });
+
   test("keeps a restored goal that arrives before the resume summary", () => {
     const state = createClaudeLiveSessionState();
     state.applyControlSummary("/repo", summary);

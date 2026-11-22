@@ -107,6 +107,7 @@ export const LUCIDE_GLYPHS = {
   hammer: "\u{e0ec}",
   hand: "\u{e1d7}",
   history: "\u{e1f5}",
+  hourglass: "\u{e296}",
   image: "\u{e0f6}",
   "image-plus": "\u{e1f7}",
   inbox: "\u{e0f7}",

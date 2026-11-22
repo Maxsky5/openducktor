@@ -12,6 +12,7 @@ const task = (overrides: Partial<TaskCard>): TaskCard =>
 const session = (
   role: KanbanTaskSession["role"],
   activityState: KanbanTaskSession["activityState"],
+  waitingOnBackground = false,
 ): KanbanTaskSession => ({
   externalSessionId: `${role}-session`,
   runtimeKind: "opencode",
@@ -19,6 +20,7 @@ const session = (
   role,
   startedAt: "2026-10-01T10:00:00.000Z",
   activityState,
+  waitingOnBackground,
 });
 
 describe("buildTaskCardModel", () => {
@@ -86,14 +88,15 @@ describe("buildTaskCardModel", () => {
     expect(model.primary?.activeSession).toEqual({
       roleLabel: "Builder",
       statusLabel: "Waiting input",
-      waitingInput: true,
+      state: "waiting_input",
+      mark: "play-circle",
     });
     expect(model.primary?.appearance).toBe("waiting");
     expect(model.liveSession).toEqual({
       iconHint: "building",
       role: "build",
       label: "Builder needs input",
-      waitingInput: true,
+      state: "waiting_input",
     });
     expect(model.accessibilityLabel).toContain("Builder needs input");
     expect(model.sessionOptionsByRole.build?.session.externalSessionId).toBe("build-session");
@@ -113,8 +116,42 @@ describe("buildTaskCardModel", () => {
       iconHint: "building",
       role: "build",
       label: "Builder running",
-      waitingInput: false,
+      state: "running",
     });
+  });
+
+  test("shows a running session that waits on background tasks in a calm violet", () => {
+    const model = buildTaskCardModel({
+      task: task({ status: "in_progress", availableActions: ["build_start", "open_builder"] }),
+      taskSessions: [session("build", "running", true)],
+      historicalSessions: [],
+      activeSessionRole: "build",
+      taskActivityState: "active",
+    });
+    expect(model.primary?.appearance).toBe("background");
+    expect(model.primary?.activeSession).toEqual({
+      roleLabel: "Builder",
+      statusLabel: "Running",
+      state: "background",
+      mark: "hourglass",
+    });
+    expect(model.liveSession).toMatchObject({
+      label: "Builder running and waiting on background tasks",
+      state: "background",
+    });
+    expect(model.frame).toBe("background");
+  });
+
+  test("frames the card as running while another session of the task works on a reply", () => {
+    const model = buildTaskCardModel({
+      task: task({ status: "in_progress", availableActions: ["build_start", "open_builder"] }),
+      taskSessions: [session("build", "running", true), session("qa", "running")],
+      historicalSessions: [],
+      activeSessionRole: "build",
+      taskActivityState: "active",
+    });
+    expect(model.liveSession?.state).toBe("background");
+    expect(model.frame).toBe("running");
   });
 
   test("outlines a start that is not the next workflow step", () => {

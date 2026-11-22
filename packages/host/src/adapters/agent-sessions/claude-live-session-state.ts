@@ -16,15 +16,16 @@ import type { ClaudeLiveEvent, ClaudeSessionContext } from "../claude/claude-age
 import { createClaudeDeniedActions } from "./claude-live-session-denied-actions";
 import { claudeSessionRef } from "../claude/claude-agent-sdk-utils";
 import { createClaudeGoalProjection } from "./claude-live-session-goals";
+import { createClaudeBackgroundTaskProjection } from "./claude-live-session-background-tasks";
 import { activityForSummary } from "./claude-live-session-activity";
 import {
+  type ClaudePendingEvent,
   eventRef,
   inputActivity,
   sessionTree,
   readParent,
   subagentStartedAt,
-  toApproval,
-  toQuestion,
+  withPendingEvent,
 } from "./claude-live-session-inputs";
 
 type LoadedContextResult = AgentSessionLiveAdapterMutation<AgentSessionContextUsage | null>;
@@ -37,6 +38,7 @@ export const createClaudeLiveSessionState = () => {
   const contextRevisionsByRef = new Map<string, number>();
   const nativeActivityByRef = new Map<string, AgentSessionLiveSnapshot["activity"]>();
   const goals = createClaudeGoalProjection();
+  const backgroundTasks = createClaudeBackgroundTaskProjection();
   const retiredSessionKeys = new Set<string>();
   const subagentOwnersByRef = new Map<
     string,
@@ -51,10 +53,13 @@ export const createClaudeLiveSessionState = () => {
     return snapshot ? commitSnapshot(snapshot) : [];
   };
 
-  const commitSnapshot = (snapshot: AgentSessionLiveSnapshot): AgentSessionLiveAdapterChange[] => {
+  /** Commits the snapshot and its ancestors. A shared `visited` commits each session once. */
+  const commitSnapshot = (
+    snapshot: AgentSessionLiveSnapshot,
+    visited = new Set<string>(),
+  ): AgentSessionLiveAdapterChange[] => {
     const changes: AgentSessionLiveAdapterChange[] = [];
     let current: AgentSessionLiveSnapshot | undefined = snapshot;
-    const visited = new Set<string>();
     while (current) {
       const key = liveSessionRefKey(current.ref);
       if (visited.has(key)) break;
@@ -64,9 +69,8 @@ export const createClaudeLiveSessionState = () => {
         snapshotsByRef.values(),
         nativeActivityByRef.get(key),
       );
-      const parsed = cloneSnapshot(
-        deniedActions.project(key, goals.project(key, { ...current, activity })),
-      );
+      const projected = backgroundTasks.project(key, { ...current, activity });
+      const parsed = cloneSnapshot(deniedActions.project(key, goals.project(key, projected)));
       const previous = snapshotsByRef.get(key);
       snapshotsByRef.set(key, parsed);
       if (!previous || JSON.stringify(previous) !== JSON.stringify(parsed)) {
@@ -113,6 +117,7 @@ export const createClaudeLiveSessionState = () => {
     const key = liveSessionRefKey(ref);
     retiredSessionKeys.add(key);
     goals.set(key, null);
+    backgroundTasks.removeSession(key);
     contextRevisionsByRef.delete(key);
     nativeActivityByRef.delete(key);
     subagentOwnersByRef.delete(key);
@@ -136,55 +141,19 @@ export const createClaudeLiveSessionState = () => {
 
   const applyPendingEvent = (
     session: ClaudeSessionContext,
-    event: Extract<
-      AgentEvent,
-      {
-        type: "approval_required" | "approval_resolved" | "question_required" | "question_resolved";
-      }
-    >,
+    event: ClaudePendingEvent,
   ): AgentSessionLiveAdapterChange[] => {
     const ref = eventRef(session, event);
     const snapshot = { ...ensureSnapshot(session, ref, event.timestamp) };
     if (event.parentExternalSessionId)
       snapshot.parentExternalSessionId = event.parentExternalSessionId;
-    if (event.type === "approval_required") {
+    // A request that blocks the reply keeps the session running until its answer.
+    if (
+      event.type === "approval_required" ||
+      (event.type === "question_required" && event.blocking !== false)
+    )
       nativeActivityByRef.set(liveSessionRefKey(ref), "running");
-      const request = toApproval(event);
-      return commitSnapshot({
-        ...snapshot,
-        pendingApprovals: [
-          ...snapshot.pendingApprovals.filter(
-            (candidate) => candidate.requestId !== request.requestId,
-          ),
-          request,
-        ],
-      });
-    }
-    if (event.type === "question_required") {
-      if (event.blocking !== false) nativeActivityByRef.set(liveSessionRefKey(ref), "running");
-      const request = toQuestion(event);
-      return commitSnapshot({
-        ...snapshot,
-        pendingQuestions: [
-          ...snapshot.pendingQuestions.filter(
-            (candidate) => candidate.requestId !== request.requestId,
-          ),
-          request,
-        ],
-      });
-    }
-    const nextSnapshot = {
-      ...snapshot,
-      pendingApprovals:
-        event.type === "approval_resolved"
-          ? snapshot.pendingApprovals.filter((candidate) => candidate.requestId !== event.requestId)
-          : snapshot.pendingApprovals,
-      pendingQuestions:
-        event.type === "question_resolved"
-          ? snapshot.pendingQuestions.filter((candidate) => candidate.requestId !== event.requestId)
-          : snapshot.pendingQuestions,
-    };
-    return commitSnapshot(nextSnapshot);
+    return commitSnapshot(withPendingEvent(snapshot, event));
   };
 
   const applySubagentPart = (
@@ -248,9 +217,21 @@ export const createClaudeLiveSessionState = () => {
     ) {
       return [];
     }
+    if (event.type === "session_background_tasks_updated") {
+      const sessions = new Map(
+        event.sessions.map((tasks) => [liveSessionRefKey(eventRef(session, tasks)), tasks]),
+      );
+      // Background work changes no input state of an ancestor, so each session commits once.
+      const visited = new Set<string>();
+      return backgroundTasks.set(key, sessions).flatMap((changedKey) => {
+        const snapshot = snapshotsByRef.get(changedKey);
+        return snapshot ? commitSnapshot(snapshot, visited) : [];
+      });
+    }
     if (event.type === "session_context_error") {
       if (event.statusUnavailable) {
         const changes: AgentSessionLiveAdapterChange[] = [];
+        backgroundTasks.clearTree(liveSessionRefKey(claudeSessionRef(session)));
         const root = ensureSnapshot(session, claudeSessionRef(session), event.timestamp);
         const affected = sessionTree(root, snapshotsByRef.values());
         for (const snapshot of affected) {
@@ -330,6 +311,7 @@ export const createClaudeLiveSessionState = () => {
       changes.push(...commitSnapshot(next));
     } else if (event.type === "session_idle") {
       nativeActivityByRef.set(key, "idle");
+      if (event.externalSessionId === session.externalSessionId) backgroundTasks.clearSession(key);
       const next = { ...snapshot, foregroundTurnActive: false };
       delete next.statusUnavailableReason;
       changes.push(...commitSnapshot(next));
@@ -433,6 +415,7 @@ export const createClaudeLiveSessionState = () => {
       deniedActions.clear();
       snapshotsByRef.clear();
       goals.clear();
+      backgroundTasks.clear();
       contextRevisionsByRef.clear();
       nativeActivityByRef.clear();
       retiredSessionKeys.clear();

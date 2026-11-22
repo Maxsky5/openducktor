@@ -8,6 +8,7 @@ import {
 import type { RuntimeSessionTarget } from "../../ports/runtime-registry-port";
 import { flushClaudeLiveContextUsageRefresh } from "./claude-agent-sdk-context-usage";
 import { clearClaudeNativeActivity } from "./claude-agent-sdk-activity";
+import { stopClaudeBackgroundTask } from "./claude-agent-sdk-background-task-stop";
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import { hasActiveClaudeBackgroundTools } from "./claude-agent-sdk-event-session";
 import { childSessions } from "./claude-agent-sdk-session-children";
@@ -279,6 +280,8 @@ export const createClaudeAgentSdkSessionStore = ({
       fiber.addObserver(() => activeConsumers.delete(session));
     },
     get: (externalSessionId) => sessions.get(externalSessionId),
+    stopBackgroundTask: (input) =>
+      stopClaudeBackgroundTask({ get: (id) => sessions.get(id) }, input),
     isLatest,
     getForCleanup,
     set: (session) => {

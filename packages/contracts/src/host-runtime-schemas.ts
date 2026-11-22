@@ -137,6 +137,8 @@ export const runtimeLifecycleSessionImpactSchema = z
     title: nonEmptyStringSchema,
     activity: agentSessionActivitySchema,
     pendingInputCount: z.number().int().nonnegative(),
+    /** The session has no reply and waits on background tasks. */
+    waitingOnBackground: z.literal(true).optional(),
     executionEpisodeId: nonEmptyStringSchema.optional(),
     parentExternalSessionId: nonEmptyStringSchema.optional(),
   })

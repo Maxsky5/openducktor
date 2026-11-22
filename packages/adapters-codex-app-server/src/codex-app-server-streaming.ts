@@ -49,6 +49,7 @@ import { codexUserInputListToText, toDisplayParts } from "./codex-user-input-dis
 import { codexUserInputsFromItem } from "./codex-user-inputs";
 import type { CodexNotificationRecord, CodexSessionState, CodexUserInput } from "./types";
 import { type CodexAsyncQuestionState, parseCodexAsyncQuestionItem } from "./codex-async-questions";
+import type { CodexBackgroundTerminals } from "./codex-background-terminals";
 
 type CodexAgentMessageItem = Extract<CodexTimedThreadItem, { type: "agentMessage" }>;
 
@@ -123,6 +124,25 @@ export type CodexStreamingContext = {
   observeTurnStarted(session: CodexSessionState, turnId: string, startedAtMs: number): void;
   /** Returns and forgets the IDs of the user messages of the turn that ends. */
   takeTurnMessageIds(session: CodexSessionState): string[];
+  backgroundTerminals(runtimeId: string): CodexBackgroundTerminals;
+  /**
+   * A turn of the session thread ended, or the thread runs no turn when `turnId` is not set.
+   * The commands of that turn that still run become background terminals.
+   */
+  endTurnCommands(session: CodexSessionState, turnId?: string): void;
+  /**
+   * The session ended its reply. It stays running without a foreground turn, and emits no idle
+   * signal, while a background terminal of its tree runs. Else it becomes idle.
+   */
+  settleIdle(session: CodexSessionState): "held" | "idle";
+  /** Tells if a background terminal of the thread tree runs. */
+  hasBackgroundWork(runtimeId: string, threadId: string): boolean;
+  /** A new turn of the session starts, so its turn end no longer holds it running. */
+  startForegroundTurn(session: CodexSessionState, turnId: string): void;
+  /** Tells if a newer turn than `turnId` started on the session thread. */
+  isSupersededTurn(session: CodexSessionState, turnId: string): boolean;
+  /** A background terminal of the session ended. Sessions that it held running can go idle. */
+  endBackgroundTerminal(session: CodexSessionState, timestamp: string): void;
   failUnlinkedSubagentSpawns(
     parentThreadId: string,
     runtimeId: string,
@@ -470,6 +490,7 @@ const emitCompletedItem = (
   item: CodexTimedThreadItem,
   timestamp: string,
   turnId: string | null,
+  receivedAtMs: number,
   preparedImageGeneration?: AgentImageGenerationPart,
 ): void => {
   const itemId = item.id;
@@ -478,6 +499,9 @@ const emitCompletedItem = (
     const message = codexUserInputListToText(input);
     const echo = consumeSyntheticUserMessage(context, session.threadId, message);
     if (echo) {
+      // The echo of a sent message names the turn that took it.
+      const activeTurn = context.activeTurnsBySessionId.get(session.threadId);
+      if (activeTurn && turnId) context.bindActiveTurnId(activeTurn, turnId, receivedAtMs);
       if (echo.messageToPublish) emitCodexUserMessage(context, echo.messageToPublish);
       return;
     }
@@ -696,15 +720,19 @@ export const handleCodexPendingNotifications = async (
     );
     const notificationTurnId = codexNotificationTurnId(notification);
     const activeTurn = context.activeTurnsBySessionId.get(session.threadId);
-    if (notificationTurnId && activeTurn) {
-      context.bindActiveTurnId(
-        activeTurn,
-        notificationTurnId,
-        receivedAtMsFromCodexNotification(notification.receivedAt),
-      );
-    }
 
     if (notification.method === "turn/started") {
+      // Only its own start, the echo of its message, or its `turn/start` answer names the turn of
+      // a request. Other notifications can belong to an earlier turn, such as a late
+      // `turn/completed`.
+      if (activeTurn) {
+        context.bindActiveTurnId(
+          activeTurn,
+          notification.params.turn.id,
+          receivedAtMsFromCodexNotification(notification.receivedAt),
+        );
+      }
+      context.startForegroundTurn(session, notification.params.turn.id);
       context.observeTurnStarted(
         session,
         notification.params.turn.id,
@@ -731,6 +759,7 @@ export const handleCodexPendingNotifications = async (
         ) {
           continue;
         }
+        if (notification.params.status.type === "idle") context.endTurnCommands(session);
         // The turn ended, but Codex starts the next turn of the active goal by itself. A thread in
         // `systemError` starts no goal turn, so it ends the wait.
         if (notification.params.status.type === "systemError")
@@ -754,6 +783,15 @@ export const handleCodexPendingNotifications = async (
           emitUnlinkedSpawnFailures(context, session, timestamp);
         }
         if (continuesGoal) {
+          activeTurn?.markTurnSettled();
+          continue;
+        }
+        // Codex reports the thread idle before `turn/completed`. While a background terminal
+        // runs, the turn end decides, after the final reply, if the session waits or goes idle.
+        if (
+          notification.params.status.type === "idle" &&
+          context.hasBackgroundWork(session.runtimeId, session.threadId)
+        ) {
           activeTurn?.markTurnSettled();
           continue;
         }
@@ -892,22 +930,20 @@ export const handleCodexPendingNotifications = async (
       } else {
         clearTurnScopedStreamingState(context, session.threadId, turnId);
       }
+      context.endTurnCommands(session, turnId);
       const shouldSettleActiveTurn = activeTurn && (!turnId || activeTurn.turnId === turnId);
       if (shouldSettleActiveTurn) {
         activeTurn.markTurnSettled();
       }
-      const endsSessionTurn = !activeTurn || shouldSettleActiveTurn;
+      // The end of an older turn leaves the session state to the newer turn.
+      const endsSessionTurn =
+        !context.isSupersededTurn(session, turnId) && (!activeTurn || shouldSettleActiveTurn);
       const continuesGoal =
         endsSessionTurn &&
         (context.isWaitingForGoalTurn(session) || context.continueGoalAfterTurn(session));
-      if (endsSessionTurn) {
-        delete session.firstTurnHistory;
-        if (!continuesGoal) {
-          context.setSessionLiveStatus(session, {
-            classification: "idle",
-          });
-        }
-      }
+      if (endsSessionTurn) delete session.firstTurnHistory;
+      const waitsOnBackground =
+        endsSessionTurn && !continuesGoal && context.settleIdle(session) === "held";
       const turnMessageIds = endsSessionTurn ? context.takeTurnMessageIds(session) : [];
       const lifecycleEvents = context.eventMapperPipeline.runLive(
         { kind: "notification", notification },
@@ -928,7 +964,7 @@ export const handleCodexPendingNotifications = async (
           return mappingContext;
         })(),
       );
-      if (!continuesGoal) {
+      if (endsSessionTurn && !continuesGoal && !waitsOnBackground) {
         emitCanonicalEvents(context, lifecycleEvents);
         continue;
       }
@@ -937,7 +973,7 @@ export const handleCodexPendingNotifications = async (
         context,
         lifecycleEvents.filter((event) => event.kind !== "session_idle"),
       );
-      if (turn.status !== "inProgress") {
+      if (endsSessionTurn && turn.status !== "inProgress") {
         emitCodexSessionEvent(context, session.threadId, {
           type: "session_turn_finished",
           externalSessionId: session.threadId,
@@ -982,6 +1018,9 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "item/started") {
+      context
+        .backgroundTerminals(session.runtimeId)
+        .observeStarted(session.threadId, notification.params.turnId, notification.params.item);
       emitStartedItem(
         context,
         session,
@@ -994,14 +1033,19 @@ export const handleCodexPendingNotifications = async (
     }
 
     if (notification.method === "item/completed") {
+      const endedBackgroundTerminal = context
+        .backgroundTerminals(session.runtimeId)
+        .observeCompleted(session.threadId, notification.params.item.id);
       emitCompletedItem(
         context,
         session,
         { ...notification.params.item, completedAtMs: notification.params.completedAtMs },
         timestamp,
         notificationTurnId,
+        receivedAtMsFromCodexNotification(notification.receivedAt),
         preparedImageGeneration,
       );
+      if (endedBackgroundTerminal) context.endBackgroundTerminal(session, timestamp);
     }
   }
 };

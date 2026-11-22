@@ -83,6 +83,48 @@ describe("KanbanTaskCard active sessions", () => {
     expect(html).not.toContain("Sessions");
   });
 
+  test("shows a running session that waits on background tasks with a violet glow and no ray", () => {
+    const task = createTaskCardFixture({
+      id: "TASK-3",
+      title: "Run the long checks",
+      availableActions: ["build_start", "open_builder"],
+    });
+
+    const html = renderCardMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/kanban"] },
+        createElement(KanbanTaskCard, {
+          task,
+          taskActivityState: "active",
+          hasActiveSession: true,
+          activeSessionRole: "build",
+          taskSessions: [
+            {
+              runtimeKind: "claude",
+              workingDirectory: "/repo/worktrees/build",
+              externalSessionId: "session-build",
+              role: "build",
+              activityState: "running",
+              waitingOnBackground: true,
+            },
+          ],
+          onOpenDetails: noop,
+        }),
+      ),
+    );
+
+    expect(html).not.toContain("kanban-active-session-card");
+    expect(html).not.toContain("kanban-active-session-ray");
+    expect(html).toContain("kanban-background-card");
+    expect(html).toContain("border-pending-border");
+    expect(html).toContain("Running");
+    expect(html).toContain('title="Running and waiting on background tasks"');
+    expect(html).toContain("text-pending-muted");
+    expect(html).toContain("lucide-hourglass");
+    expect(html).not.toContain("lucide-circle-play");
+  });
+
   test("shows historical role view actions when there is no active session", () => {
     const task = createTaskCardFixture({
       id: "TASK-2",

@@ -6,6 +6,7 @@ import { createRuntimeQueryAdapter } from "./runtime-query-adapter";
 import { createCodexImageOperations } from "./codex-image-operations";
 import { createCodexTextGeneration } from "./codex-text-generation";
 import { createCodexImageSettlement } from "./codex-live-session-images";
+import { createCodexSessionStops } from "./codex-live-session-stops";
 import { toAgentSessionResumeError } from "../../ports/agent-session-resume-error";
 import {
   CodexAppServerAdapter,
@@ -19,7 +20,7 @@ import {
   acceptedAgentUserMessageSchema,
   agentSessionLiveLoadContextResultSchema,
 } from "@openducktor/contracts";
-import { Effect, Exit } from "effect";
+import { Effect } from "effect";
 import {
   errorMessage,
   HostOperationError,
@@ -67,6 +68,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
   resolveWorkflowRolePolicy,
   resolveMcpServerConfig,
   prepareImageGenerations,
+  readRuntimeVersion,
   createController = defaultCreateController,
 }: CreateCodexLiveSessionAdapterPreparerInput): CodexLiveSessionAdapterPreparer => {
   const questionHistory = new CodexQuestionHistory();
@@ -86,6 +88,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
             directoriesMatch: (left, right) => Effect.runPromise(directoriesMatch(left, right)),
             questionHistory,
             prepareImageGenerations,
+            readRuntimeVersion,
             resolveWorkflowRolePolicy,
             runtime,
             // Effect.runPromise rejects with the typed failure.
@@ -168,28 +171,6 @@ export const createCodexLiveSessionAdapterPreparer = ({
       });
 
       const images = createCodexImageSettlement(controller, runtime.runtimeId, refreshProjection);
-      const finishSession = (input: AgentSessionLiveRef, action: "stop" | "release") =>
-        Effect.uninterruptibleMask((restore) =>
-          Effect.gen(function* () {
-            const settlement = yield* Effect.exit(restore(images.settleSession(input)));
-            const cleanup = yield* Effect.exit(
-              Effect.tryPromise({
-                try: () =>
-                  action === "stop"
-                    ? controller.stopSession(input)
-                    : controller.releaseSession(input),
-                catch: sessionError(
-                  `codex-live-session.${action}-session`,
-                  input.externalSessionId,
-                ),
-              }),
-            );
-            const projection = yield* Effect.exit(refreshProjection());
-            const failures = Exit.asVoidAll([settlement, cleanup, projection]);
-            if (Exit.isFailure(failures)) return yield* Effect.failCause(failures.cause);
-            return yield* projection;
-          }),
-        );
       const releaseRuntime = (): Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> =>
         projection.releaseRuntime(() => controller.releaseRuntime(runtime.runtimeId));
 
@@ -205,6 +186,12 @@ export const createCodexLiveSessionAdapterPreparer = ({
             runtimeId: runtime.runtimeId,
             externalSessionId,
           });
+      const { finishSession, stopBackgroundTask } = createCodexSessionStops({
+        controller,
+        settleSession: images.settleSession,
+        refreshProjection: () => refreshProjection(),
+        sessionError,
+      });
       // A failure after Codex admitted the message keeps the message accepted.
       const messageError = (operation: string, input: AgentSessionLiveRef) => (cause: unknown) =>
         toCodexMessageSendError(cause, toLiveSessionRef(input)) ??
@@ -474,6 +461,7 @@ export const createCodexLiveSessionAdapterPreparer = ({
           ),
         stopSession: (input) =>
           goals.stopTurn(input).pipe(Effect.flatMap(() => finishSession(input, "stop"))),
+        stopBackgroundTask,
         releaseSession: (input) => finishSession(input, "release"),
       };
 

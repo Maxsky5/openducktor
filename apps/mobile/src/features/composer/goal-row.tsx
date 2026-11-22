@@ -11,10 +11,11 @@ import { Text } from "@/ui/text";
 import { Touchable } from "@/ui/touchable";
 import { goalActionsOpen, goalToneColor, pressGoalAction } from "./goal-row-state";
 import { CardIconButton } from "./card-icon-button";
-
-/** The desktop `-mb-1.5`: the row tucks under the composer card. */
-const TUCK = 6;
-const LINE_HEIGHT = 20;
+import {
+  COMPOSER_EDGE_LINE_HEIGHT as LINE_HEIGHT,
+  composerEdgeCardStyle,
+  composerEdgeTextStyle,
+} from "./composer-edge-card";
 
 const ACTION_ICONS = {
   pause: "pause",
@@ -86,32 +87,10 @@ export function GoalRow({
 }
 
 const styles = StyleSheet.create((theme, rt) => ({
-  // The desktop row: `mx-3 -mb-1.5 rounded-t-xl border border-b-0 border-input bg-chat-surface
-  // px-3 pt-2 pb-3.5 text-[13px] leading-5 text-muted-foreground shadow-xs`.
-  row: {
-    marginHorizontal: theme.space.md,
-    marginBottom: -TUCK,
-    paddingHorizontal: theme.space.md,
-    paddingTop: theme.space.sm,
-    paddingBottom: theme.space.sm + TUCK,
-    borderTopLeftRadius: theme.radius.xl,
-    borderTopRightRadius: theme.radius.xl,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    borderColor: theme.desktop.input,
-    backgroundColor: theme.desktop.chatSurface,
-    boxShadow: theme.shadows.card,
-  },
+  row: composerEdgeCardStyle(theme),
   line: { flexDirection: "row", alignItems: "flex-start", gap: theme.space.sm },
   glyph: { height: LINE_HEIGHT * rt.fontScale, justifyContent: "center" },
-  label: {
-    fontFamily: theme.fonts.sans.medium,
-    fontWeight: "500",
-    fontSize: 13,
-    lineHeight: LINE_HEIGHT,
-    color: theme.desktop.foreground,
-  },
+  label: composerEdgeTextStyle(theme, "medium", theme.desktop.foreground),
   status: {
     fontFamily: theme.fonts.sans.medium,
     fontWeight: "500",
@@ -119,13 +98,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     lineHeight: LINE_HEIGHT,
   },
   objective: { flex: 1, minWidth: 0 },
-  objectiveText: {
-    fontFamily: theme.fonts.sans.regular,
-    fontWeight: "400",
-    fontSize: 13,
-    lineHeight: LINE_HEIGHT,
-    color: theme.desktop.foreground,
-  },
+  objectiveText: composerEdgeTextStyle(theme, "regular", theme.desktop.foreground),
   // The gaps hold the touch areas of the 24-point actions, so a tap never runs its neighbor.
   actions: { flexDirection: "row", alignItems: "center", gap: 2 * touchSlop(24) },
   detail: { marginTop: 2, paddingLeft: 22, color: theme.desktop.mutedForeground },

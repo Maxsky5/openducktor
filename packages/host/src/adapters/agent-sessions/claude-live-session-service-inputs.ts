@@ -1,6 +1,7 @@
 import type { AgentSessionControlContinueInterruptedTurnInput } from "../../ports/agent-session-live-adapter-port";
 import type {
   AcceptedAgentUserMessage,
+  AgentSessionBackgroundTaskStopInput,
   AgentSessionControlForkInput,
   AgentSessionControlResumeInput,
   AgentSessionControlSendInput,
@@ -25,6 +26,7 @@ import type {
 } from "@openducktor/core";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
+import type { ClaudeSessionStore } from "../claude/claude-agent-sdk-types";
 
 type ClaudeRuntimePolicyBinding = Extract<
   AgentRuntimePolicyBinding,
@@ -60,6 +62,14 @@ export const requireClaudePolicy = (
   }
   return Effect.void;
 };
+
+/** Stops one background task of a Claude session tree through the session store. */
+export const stopClaudeBackgroundTask =
+  (sessionStore: Pick<ClaudeSessionStore, "stopBackgroundTask">) =>
+  (input: AgentSessionBackgroundTaskStopInput) =>
+    requireClaudePolicy(input.runtimeKind, "stop-background-task").pipe(
+      Effect.andThen(sessionStore.stopBackgroundTask(input)),
+    );
 
 export const toClaudeLoadContextInput = (
   input: AgentSessionLiveLoadContextInput,

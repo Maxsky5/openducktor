@@ -58,6 +58,7 @@ import { ComposerSuggestionList } from "./composer-suggestion-list";
 import { ComposerTextField } from "./composer-text-field";
 import { resolveHardwareEnter } from "./hardware-enter";
 import { ContextUsageIndicator, useContextUsage } from "./context-usage-indicator";
+import { BackgroundTaskBar } from "./background-task-bar";
 import { GoalRow } from "./goal-row";
 import { MessageQueuePanel, QueuePauseNotice } from "./message-queue-panel";
 import { PendingCommentsNotice } from "./pending-comments-notice";
@@ -84,8 +85,9 @@ const CARD_RADIUS = 16;
 
 /**
  * The chat composer of a session, as the desktop composer: the Message Queue stacked on its top
- * edge, then a card with the queue pause, the pending review comments, the attachments, the field
- * with its chips, and a bar with attach, model, effort, context use, Stop, and Send. A light runs
+ * edge, the background tasks and the goal of the session, then a card with the queue pause, the
+ * pending review comments, the attachments, the field with its chips, and a bar with attach,
+ * model, effort, context use, Stop, and Send. A light runs
  * around the card while the agent works. The draft stays editable while the host is not
  * connected. Send, steer, queue actions, and pickers wait for the connection.
  *
@@ -220,6 +222,10 @@ function SessionComposerView({
             attachmentSupport={composer.selectedModelDescriptor?.attachmentSupport}
           />
         ) : null}
+        <BackgroundTaskBar
+          model={composer.backgroundTasks}
+          commandsOpen={gateOpen && composer.canInteract}
+        />
         {composer.goalRow ? (
           <GoalRow model={composer.goalRow} commandsOpen={gateOpen && composer.canInteract} />
         ) : null}

@@ -68,6 +68,7 @@ const createHarness = async (
   const submits: AgentMessageSubmitInput[] = [];
   const queueActions: AgentMessageQueueManageInput[] = [];
   const goalActions: unknown[] = [];
+  const backgroundTaskStops: unknown[] = [];
   const diffLoads: unknown[] = [];
   const starts: AgentSessionControlStartInput[] = [];
   const adapter: AgentSessionRuntimeAdapterPort = {
@@ -159,6 +160,10 @@ const createHarness = async (
     updateSessionModel: () => Effect.die(new Error("unexpected model update")),
     controlGoal: () => Effect.die(new Error("unexpected goal action")),
     updateSessionTitle: () => Effect.die(new Error("unexpected title update")),
+    stopBackgroundTask: (input) =>
+      Effect.sync(() => {
+        backgroundTaskStops.push(input);
+      }),
     stopSession: () => Effect.die(new Error("unexpected stop")),
     releaseSession: () => Effect.die(new Error("unexpected release")),
   };
@@ -204,6 +209,7 @@ const createHarness = async (
     }),
     queueActions,
     goalActions,
+    backgroundTaskStops,
     sends,
     starts,
     submits,
@@ -352,6 +358,25 @@ describe("createAgentSessionLiveCommandHandlers", () => {
     ).rejects.toThrow();
 
     expect(goalActions).toEqual([{ ...target, action: "pause" }]);
+  });
+
+  test("routes a background task stop to the adapter and rejects a missing task", async () => {
+    const { router, backgroundTaskStops } = await createHarness();
+    const target = {
+      repoPath: "/repo",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+      externalSessionId: "session-1",
+    };
+
+    await Effect.runPromise(
+      router.invoke("agent_session_background_task_stop", { ...target, taskId: "shell-1" }),
+    );
+    await expect(
+      Effect.runPromise(router.invoke("agent_session_background_task_stop", target)),
+    ).rejects.toThrow();
+
+    expect(backgroundTaskStops).toEqual([{ ...target, taskId: "shell-1" }]);
   });
 
   test("rejects native routing fields before invoking an adapter", async () => {
