@@ -8,6 +8,7 @@ import {
   resolveNormalizedUserPath,
 } from "@openducktor/path-support";
 import { HostResourceError, HostValidationError } from "../effect/host-errors";
+import { macVolumeSupportsCaseSensitiveNames } from "../infrastructure/mac-volume-case-sensitivity";
 import { resolvePathSymlinkParts } from "../infrastructure/resolve-path-symlinks";
 
 const OPENDUCKTOR_CONFIG_DIR_ENV = "OPENDUCKTOR_CONFIG_DIR";
@@ -105,13 +106,18 @@ export const assertDevelopmentConfigAllowed = (
   env: NodeJS.ProcessEnv = process.env,
 ): void => {
   if (scope !== "dev" || allowProductionConfig) return;
+  const productionRoot = resolveOpenDucktorBaseDir("production", {});
   const config = resolvePathSymlinkParts(resolveOpenDucktorBaseDir(scope, env));
-  const production = resolvePathSymlinkParts(resolveOpenDucktorBaseDir("production", {}));
+  const production = resolvePathSymlinkParts(productionRoot);
+  const sameRemainingPath = path.relative(production.remainingPath, config.remainingPath) === "";
+  const possibleMacCaseAlias =
+    process.platform === "darwin" &&
+    production.remainingPath.toLowerCase() === config.remainingPath.toLowerCase();
   if (
-    path.relative(production.remainingPath, config.remainingPath) === "" &&
-    isSameExistingPath(production.existingPath, config.existingPath)
+    (sameRemainingPath || possibleMacCaseAlias) &&
+    isSameExistingPath(production.existingPath, config.existingPath) &&
+    (sameRemainingPath || !macVolumeSupportsCaseSensitiveNames(production.existingPath))
   ) {
-    const productionRoot = path.join(production.existingPath, production.remainingPath);
     throw new HostValidationError({
       field: OPENDUCKTOR_CONFIG_DIR_ENV,
       message: `Development startup refused the production config directory ${productionRoot}. Set ${OPENDUCKTOR_CONFIG_DIR_ENV} to a separate directory or stop the production host and rerun with ${ALLOW_PRODUCTION_CONFIG_FLAG}.`,

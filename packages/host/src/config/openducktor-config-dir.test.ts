@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -134,6 +135,8 @@ const productionRefusal = () =>
 test("development requires acknowledgement for the production config root and its aliases", async () => {
   const homeDir = await mkdtemp(path.join(tmpdir(), "odt-development-config-"));
   try {
+    await mkdir(path.join(homeDir, "case-probe"));
+    const caseInsensitive = existsSync(path.join(homeDir, "CASE-PROBE"));
     const stdout = await runFixtureProcess({
       fixtureUrl: developmentConfigGuardFixture,
       args: [],
@@ -141,6 +144,8 @@ test("development requires acknowledgement for the production config root and it
     });
     expect(JSON.parse(stdout)).toEqual({
       directBeforeCreation: productionRefusal(),
+      caseAliasBeforeCreation: caseInsensitive ? productionRefusal() : null,
+      danglingTarget: productionRefusal(),
       direct: productionRefusal(),
       alias: productionRefusal(),
       acknowledged: null,

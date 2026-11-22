@@ -1,4 +1,4 @@
-import { mkdir, symlink } from "node:fs/promises";
+import { mkdir, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 import {
   assertDevelopmentConfigAllowed,
@@ -26,6 +26,9 @@ const launch = (
 };
 
 const directBeforeCreation = launch("dev", { OPENDUCKTOR_CONFIG_DIR: productionRoot });
+const caseAliasBeforeCreation = launch("dev", {
+  OPENDUCKTOR_CONFIG_DIR: path.join(homeDir, ".OPENDUCKTOR"),
+});
 const filesystemAliasBeforeCreation =
   filesystemAlias && launch("dev", { OPENDUCKTOR_CONFIG_DIR: filesystemAlias });
 const isolatedBeforeCreation =
@@ -33,6 +36,10 @@ const isolatedBeforeCreation =
   launch("dev", {
     OPENDUCKTOR_CONFIG_DIR: path.join(path.dirname(filesystemAlias), "isolated", ".openducktor"),
   });
+const target = path.join(homeDir, "config-target");
+await symlink(process.platform === "win32" ? target : "config-target", productionRoot, "junction");
+const danglingTarget = launch("dev", { OPENDUCKTOR_CONFIG_DIR: target });
+await rm(productionRoot);
 await mkdir(productionRoot);
 await mkdir(isolatedRoot);
 await symlink(productionRoot, alias, "junction");
@@ -40,6 +47,8 @@ await symlink(productionRoot, alias, "junction");
 console.log(
   JSON.stringify({
     directBeforeCreation,
+    caseAliasBeforeCreation,
+    danglingTarget,
     direct: launch("dev", { OPENDUCKTOR_CONFIG_DIR: "~/.openducktor" }),
     alias: launch("dev", { OPENDUCKTOR_CONFIG_DIR: alias }),
     acknowledged: launch("dev", { OPENDUCKTOR_CONFIG_DIR: alias }, true),
