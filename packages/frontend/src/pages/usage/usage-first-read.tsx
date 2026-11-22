@@ -164,7 +164,7 @@ export function UsageFirstRead({ state }: { state: UsageProgressState }): ReactE
   return (
     <section
       aria-labelledby="usage-first-read"
-      className="mx-auto flex w-full max-w-2xl flex-col gap-6 rounded-xl border border-border bg-card p-6 shadow-xs motion-safe:animate-[usage-enter_240ms_var(--motion-ease-out)] @2xl:p-8"
+      className="mx-auto flex w-full max-w-2xl flex-col gap-6 rounded-xl border border-border bg-card p-6 shadow-xs @2xl:p-8"
     >
       <div className="flex items-start gap-5">
         <ProgressRing fraction={state.share} />

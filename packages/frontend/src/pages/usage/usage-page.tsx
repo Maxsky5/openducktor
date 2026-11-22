@@ -10,7 +10,7 @@ import { usageReportQueryOptions } from "@openducktor/frontend-core/queries/usag
 import { RemoteConnectionError } from "@openducktor/host-client/remote";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { LoaderCircle, ServerOff, TriangleAlert } from "lucide-react";
-import { memo, type ReactElement, useMemo, useState } from "react";
+import { memo, type ReactElement, type ReactNode, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,7 @@ import { UsageHighlights } from "./usage-highlights";
 import { UsageOverview } from "./usage-overview";
 import { UsagePageSkeleton } from "./usage-page-skeleton";
 import { UsageTokenTypes } from "./usage-token-types";
+import { useSkeletonHold } from "./use-skeleton-hold";
 import { type UsageProgressState, useUsageProgress } from "./use-usage-progress";
 
 /** A host without Usage refuses the command it does not know. */
@@ -239,6 +240,13 @@ function StaleResultAlert({
   );
 }
 
+/** What replaces the skeleton fades in. A key change, such as an error after the card, fades again. */
+function Reveal({ children }: { children: ReactNode }): ReactElement {
+  return (
+    <div className="motion-safe:animate-[usage-enter_320ms_var(--motion-ease-out)]">{children}</div>
+  );
+}
+
 function UsageResult({
   report,
   error,
@@ -252,29 +260,47 @@ function UsageResult({
   metric: UsageMetric;
   onRetry: () => void;
 }): ReactElement {
-  if (report) return <UsageReportView report={report} metric={metric} />;
+  // Without data, the skeleton shows at once and stays for at least half a second.
+  const skeleton = useSkeletonHold(report === undefined && error === null && progress === null);
+  if (skeleton) return <UsagePageSkeleton />;
+  if (report)
+    return (
+      <Reveal key="report">
+        <UsageReportView report={report} metric={metric} />
+      </Reveal>
+    );
   if (isUsageUnavailable(error))
     return (
-      <UsageMessage icon={<ServerOff className="size-5" />} title="This host does not have Usage">
-        Update OpenDucktor on the host, then open Usage again.
-      </UsageMessage>
+      <Reveal key="unavailable">
+        <UsageMessage icon={<ServerOff className="size-5" />} title="This host does not have Usage">
+          Update OpenDucktor on the host, then open Usage again.
+        </UsageMessage>
+      </Reveal>
     );
   if (error)
     return (
-      <UsageMessage
-        icon={<TriangleAlert className="size-5" />}
-        title="Usage could not be read"
-        action={
-          <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-            Retry
-          </Button>
-        }
-      >
-        {errorText(error)}
-      </UsageMessage>
+      <Reveal key="error">
+        <UsageMessage
+          icon={<TriangleAlert className="size-5" />}
+          title="Usage could not be read"
+          action={
+            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
+          }
+        >
+          {errorText(error)}
+        </UsageMessage>
+      </Reveal>
     );
-  // A read that parses new history reports its progress; a fast read shows the skeleton only.
-  return progress ? <UsageFirstRead state={progress} /> : <UsagePageSkeleton />;
+  // A read that parses new history reports its progress.
+  return progress ? (
+    <Reveal key="progress">
+      <UsageFirstRead state={progress} />
+    </Reveal>
+  ) : (
+    <UsagePageSkeleton />
+  );
 }
 
 /** The dates that the custom range form starts with. */

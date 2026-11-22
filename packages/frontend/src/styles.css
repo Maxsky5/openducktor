@@ -330,13 +330,7 @@ pre {
   }
 }
 
-/* The Usage skeleton appears after a delay, and the first Usage read card enters. */
-@keyframes usage-reveal {
-  from {
-    opacity: 0;
-  }
-}
-
+/* Usage content that replaces its skeleton fades in. */
 @keyframes usage-enter {
   from {
     opacity: 0;

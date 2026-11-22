@@ -15,6 +15,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { UsagePage } from "./usage-page";
+import { SKELETON_MIN_MS } from "./use-skeleton-hold";
 
 const figure = (overrides: Partial<UsageFigure> = {}): UsageFigure => ({
   tokens: {
@@ -148,7 +149,8 @@ describe("UsagePage", () => {
         runtimes: [],
       }),
     );
-    expect(screen.getByText("Finding your agent history")).toBeTruthy();
+    // The skeleton stays half a second, then the card fades in.
+    expect(await screen.findByText("Finding your agent history")).toBeTruthy();
     expect(screen.getAllByText("Finding sessions…")).toHaveLength(3);
     await act(() =>
       progress.listener?.({
@@ -201,11 +203,24 @@ describe("UsagePage", () => {
       // A short read never shows the card.
       expect(screen.queryByText("Reading your agent history")).toBeNull();
       act(() => jest.advanceTimersByTime(1_500));
+      // The progress replaces the skeleton, which keeps its half second.
+      act(() => jest.advanceTimersByTime(500));
     } finally {
       jest.useRealTimers();
     }
     expect(screen.getByText("Reading your agent history")).toBeTruthy();
     expect(screen.getAllByText("Up to date")).toHaveLength(2);
+  });
+
+  test("keeps the skeleton half a second, then reveals the result", async () => {
+    const startedAt = performance.now();
+    const read = renderPage(async () => report());
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    // The read answered at once; the skeleton still shows.
+    expect(screen.getByText("Loading usage")).toBeTruthy();
+    expect(screen.queryByText("Processed tokens")).toBeNull();
+    expect(await screen.findByText("Processed tokens")).toBeTruthy();
+    expect(performance.now() - startedAt).toBeGreaterThanOrEqual(SKELETON_MIN_MS - 20);
   });
 
   test("checks the history again on Refresh only", async () => {
