@@ -27,6 +27,7 @@ const buildDependencies = ({
     preparedContexts,
     continueInterruptedTurn: createContinueInterruptedTurn({
       workspaceRepoPath: "/tmp/repo",
+      settleModelUpdates: async () => {},
       adapter: {
         continueInterruptedTurn: (input) => {
           calls.push(input);

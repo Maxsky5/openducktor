@@ -99,7 +99,7 @@ export function WorkspaceSessionChat({
     runtimeReadiness.state === "ready" && readModel.sessionReadModelLoadState.kind === "ready",
     visitKey,
   );
-  const { isStarting, isSavingModel } = actions;
+  const { isStarting } = actions;
   const recordsError = readModel.workspaceSessionRecordsError;
   const fault = readModel.getSessionFault(identity);
   const chatState = useMemo(
@@ -327,7 +327,6 @@ export function WorkspaceSessionChat({
     },
     interruptedTurnResume: buildWorkspaceInterruptedTurnResume({
       canResume: canResumeSession,
-      isSavingModel,
       identity,
       session,
       actions,

@@ -300,6 +300,7 @@ const createPendingResponseSend = (state: ReturnType<typeof createState>) => {
     turnMetadata: turn.metadata,
     clearSessionTurnState: turn.clearSession,
     recordTurnUserMessageTimestamp: turn.timing.recordTurnUserMessageTimestamp,
+    settleModelUpdates: async () => {},
     adapter: {
       submitUserMessage: (input) => {
         submitted.resolve(input);

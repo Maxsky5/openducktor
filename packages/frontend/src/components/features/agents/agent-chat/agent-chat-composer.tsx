@@ -178,7 +178,7 @@ export function AgentChatComposer({
     attachmentInputRef.current?.click();
   }, [attachmentIntakeDisabled]);
 
-  const isSendOrModelPending = isSubmitting || Boolean(model.isSavingModel);
+  const isSendOrModelPending = isSubmitting;
 
   useLayoutEffect(() => {
     draftRef.current = draft;

@@ -58,9 +58,9 @@ export function useWorkspaceSessionChatActions(
   const activityKey = record.id;
   const { hasInFlight } = activity;
   const isSendInFlight = useCallback(() => hasInFlight(activityKey), [hasInFlight, activityKey]);
-  const savingModel = useRef(false);
   const resuming = useRef(false);
-  const [isSavingModel, setSavingModel] = useState(false);
+  /** The newest pending draft model write. The runtime start waits for it. */
+  const draftModelWrite = useRef<Promise<void> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const latestRecord = useRef(record);
   const recipientVersion = useRef(0);
@@ -107,6 +107,7 @@ export function useWorkspaceSessionChatActions(
   );
 
   const prepare = useCallback(async () => {
+    if (draftModelWrite.current) await draftModelWrite.current.catch(() => undefined);
     await startWorkspaceSessionRuntime({
       host,
       store,
@@ -128,8 +129,8 @@ export function useWorkspaceSessionChatActions(
     parts: AgentUserMessagePart[],
     options: AgentMessageSendOptions & { assertCurrent: () => void },
   ): Promise<AgentMessageSendReceipt> => {
-    if (isSendInFlight() || savingModel.current || resuming.current)
-      throw new Error("Wait for the current send or model change to finish.");
+    if (isSendInFlight() || resuming.current)
+      throw new Error("Wait for the current send or session change to finish.");
     if (!isMounted() || record.archivedAt !== null)
       throw new Error(
         "Select or restore the saved workspace session before asking for assistance.",
@@ -170,69 +171,103 @@ export function useWorkspaceSessionChatActions(
     }
   };
 
+  /**
+   * Shows a draft model at once and saves it in the background, after the earlier saves. A failed
+   * save shows the saved model again, unless a later save waits.
+   */
   const saveDraftModel = useCallback(
-    (selection: AgentModelSelection) =>
-      host
-        .workspaceSessionSetDraftModel({
-          workspaceId: workspace.workspaceId,
-          sessionId: record.id,
-          selectedModel: { ...selection, runtimeKind: record.runtimeKind },
-        })
-        .then((saved) => updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved)),
-    [host, queryClient, record.id, record.runtimeKind, workspace.workspaceId],
+    (selection: AgentModelSelection): Promise<void> => {
+      const shown = latestRecord.current;
+      const selectedModel = { ...selection, runtimeKind: shown.runtimeKind };
+      updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, {
+        ...shown,
+        selectedModel,
+      });
+      const write: Promise<void> = (draftModelWrite.current ?? Promise.resolve())
+        .catch(() => undefined)
+        .then(() =>
+          host.workspaceSessionSetDraftModel({
+            workspaceId: workspace.workspaceId,
+            sessionId: shown.id,
+            selectedModel,
+          }),
+        )
+        .then(
+          (saved) => {
+            if (draftModelWrite.current !== write) return;
+            draftModelWrite.current = null;
+            updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved);
+          },
+          (cause: unknown) => {
+            if (draftModelWrite.current === write) {
+              draftModelWrite.current = null;
+              updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, shown);
+            }
+            throw cause;
+          },
+        );
+      draftModelWrite.current = write;
+      return write;
+    },
+    [host, queryClient, workspace.workspaceId],
   );
 
   const updateDraftModel = useCallback(
     (selection: AgentModelSelection | null) => {
-      if (savingModel.current || isSendInFlight() || resuming.current) return;
+      if (isSendInFlight() || resuming.current) return;
       if (!selection) {
         setError("Select a model before saving the draft model.");
         return;
       }
-      savingModel.current = true;
-      setSavingModel(true);
       setError(null);
-      void saveDraftModel(selection)
-        .catch((cause: unknown) => {
-          setError(errorMessage(cause));
-        })
-        .finally(() => {
-          savingModel.current = false;
-          setSavingModel(false);
-        });
+      void saveDraftModel(selection).catch((cause: unknown) => {
+        setError(errorMessage(cause));
+      });
     },
     [saveDraftModel, isSendInFlight],
   );
 
   const { updateAgentSessionModel } = operations;
-  // The speed control shows its own progress and failure, so it skips the model lock state.
+  // The speed control shows its own failure.
   const updateSpeed = useCallback(
     async (identity: AgentSessionIdentity | null, selection: AgentModelSelection) => {
-      if (savingModel.current || isSendInFlight() || resuming.current)
+      if (isSendInFlight() || resuming.current)
         throw new Error("Wait for the current send or session change before changing the speed.");
-      savingModel.current = true;
-      try {
-        await (identity ? updateAgentSessionModel(identity, selection) : saveDraftModel(selection));
-      } finally {
-        savingModel.current = false;
-      }
+      await (identity ? updateAgentSessionModel(identity, selection) : saveDraftModel(selection));
     },
     [saveDraftModel, updateAgentSessionModel, isSendInFlight],
   );
+  // The record shows the model, so it changes at once too. A failed last change shows the
+  // confirmed selection again, which the session store holds after its own rollback.
+  const sessionModelWrites = useRef(0);
   const updateSessionModel = useCallback(
     async (identity: AgentSessionIdentity, selection: AgentModelSelection | null) => {
-      if (savingModel.current || isSendInFlight() || resuming.current)
+      if (isSendInFlight() || resuming.current)
         throw new Error("Wait for the current send or session change before changing the model.");
-      savingModel.current = true;
-      setSavingModel(true);
+      const shown = latestRecord.current;
+      updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, {
+        ...shown,
+        selectedModel: selection ? { ...selection, runtimeKind: shown.runtimeKind } : null,
+      });
+      sessionModelWrites.current += 1;
       try {
         await updateAgentSessionModel(identity, selection);
+      } catch (cause) {
+        if (sessionModelWrites.current === 1) {
+          const confirmed = store.getSessionSnapshot(identity)?.selectedModel;
+          updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, {
+            ...latestRecord.current,
+            selectedModel: confirmed
+              ? { ...confirmed, runtimeKind: shown.runtimeKind }
+              : shown.selectedModel,
+          });
+        }
+        throw cause;
       } finally {
-        savingModel.current = false;
-        setSavingModel(false);
+        sessionModelWrites.current -= 1;
       }
     },
-    [updateAgentSessionModel, isSendInFlight],
+    [updateAgentSessionModel, isSendInFlight, queryClient, store, workspace.workspaceId],
   );
 
   const sendTarget = useCallback(
@@ -249,7 +284,7 @@ export function useWorkspaceSessionChatActions(
         const version = recipientVersion.current;
         return () => isMounted() && isCurrentWorkspace() && recipientVersion.current === version;
       },
-      canSend: () => canSend && preparation.ready && !savingModel.current && !resuming.current,
+      canSend: () => canSend && preparation.ready && !resuming.current,
       resolve: async () => {
         setError(null);
         const version = recipientVersion.current;
@@ -304,7 +339,7 @@ export function useWorkspaceSessionChatActions(
   const { continueInterruptedTurn } = operations;
   const resumeTurn = useCallback(
     async (identity: AgentSessionIdentity): Promise<void> => {
-      if (isSendInFlight() || savingModel.current || resuming.current)
+      if (isSendInFlight() || resuming.current)
         throw new Error("Wait for the current send or session change before resuming.");
       resuming.current = true;
       try {
@@ -345,7 +380,6 @@ export function useWorkspaceSessionChatActions(
   return {
     isSending: activity.isActive(activityKey),
     isStarting,
-    isSavingModel,
     error: error ?? preparation.error,
     updateDraftModel,
     updateSessionModel,

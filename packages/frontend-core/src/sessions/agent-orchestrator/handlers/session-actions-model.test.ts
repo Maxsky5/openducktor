@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AgentRuntimeTestAdapter } from "../../../test-support/agent-runtime-test-adapter";
+import { createOpenCodeAgentEngineTestAdapter } from "./opencode-agent-engine.test-support";
 import { createAgentSessionsStore } from "../../agent-sessions-store";
 import {
   buildSession,
@@ -233,30 +234,86 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     expect(runtimeCalls).toBe(0);
   });
 
-  test("reports a stale model operation when the session disappears after runtime update", async () => {
+  test("shows a model change before the runtime answers", async () => {
     const adapter = new AgentRuntimeTestAdapter();
-    let runtimeCalls = 0;
-    adapter.updateSessionModel = async () => {
-      runtimeCalls += 1;
-    };
+    const runtimeAnswer = Promise.withResolvers<void>();
+    adapter.updateSessionModel = () => runtimeAnswer.promise;
     const sessionsRef = createSessionsRef([buildSession()]);
-    const actions = createSessionActions({
-      adapter,
-      sessionsRef,
-      updateSession: () => {
-        sessionsRef.current = createSessionsRef().current;
-        return null;
-      },
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    const update = actions.updateAgentSessionModel(getSession(sessionsRef), {
+      runtimeKind: "opencode",
+      providerId: "openai",
+      modelId: "gpt-5",
     });
 
-    await expect(
-      actions.updateAgentSessionModel(getSession(sessionsRef), {
+    expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
+    runtimeAnswer.resolve();
+    await update;
+    expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
+  });
+
+  test("shows the confirmed model again when the last pending write fails", async () => {
+    const adapter = new AgentRuntimeTestAdapter();
+    const answers = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+    let calls = 0;
+    adapter.updateSessionModel = () => {
+      calls += 1;
+      return answers[calls - 1]?.promise ?? Promise.resolve();
+    };
+    const sessionsRef = createSessionsRef([buildSession()]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+    const change = (modelId: string) =>
+      actions
+        .updateAgentSessionModel(getSession(sessionsRef), {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId,
+        })
+        .catch((cause: unknown) => cause);
+
+    const first = change("gpt-5");
+    const second = change("gpt-5-mini");
+    expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5-mini");
+    answers[0]?.resolve();
+    await first;
+    // The writes run in order, so the second write starts after the first answers.
+    expect(calls).toBe(2);
+    answers[1]?.reject(new Error("Unknown model"));
+
+    expect(await second).toEqual(new Error("Unknown model"));
+    expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
+  });
+
+  test("sends a message after the pending model write, and not after a failed one", async () => {
+    const adapter = createOpenCodeAgentEngineTestAdapter(new AgentRuntimeTestAdapter());
+    const runtimeAnswer = Promise.withResolvers<void>();
+    adapter.updateSessionModel = () => runtimeAnswer.promise;
+    const submitted: string[] = [];
+    adapter.submitUserMessage = async (input) => {
+      submitted.push(input.submissionId);
+      return { kind: "acknowledged", outcome: "accepted", submissionId: input.submissionId };
+    };
+    const sessionsRef = createSessionsRef([buildSession({ status: "idle" })]);
+    const actions = createSessionActions({ adapter, sessionsRef });
+
+    const update = actions
+      .updateAgentSessionModel(getSession(sessionsRef), {
         runtimeKind: "opencode",
         providerId: "openai",
         modelId: "gpt-5",
-      }),
-    ).rejects.toThrow("Session 'session-1' became unavailable after its model changed.");
-    expect(runtimeCalls).toBe(1);
+      })
+      .catch((cause: unknown) => cause);
+    const sent = actions
+      .sendAgentMessage(getSession(sessionsRef), [{ kind: "text", text: "Hello" }])
+      .catch((cause: unknown) => cause);
+    await Promise.resolve();
+    expect(submitted).toEqual([]);
+
+    runtimeAnswer.reject(new Error("Unknown model"));
+    await update;
+    expect(String(await sent)).toContain("The model change failed, so the message was not sent.");
+    expect(submitted).toEqual([]);
   });
 
   test("fails instead of silently ignoring model changes for an unloaded session", async () => {

@@ -56,6 +56,13 @@ export const createAgentSessionActions = ({
   refreshTaskData,
   invalidateSessionStopQueries,
 }: SessionActionsDependencies) => {
+  const modelActions = createSessionModelActions({
+    workspaceRepoPath,
+    adapter,
+    readSessionSnapshot,
+    updateSession,
+  });
+
   const sendAgentMessage = createSendAgentMessage({
     feedback,
     workspaceRepoPath,
@@ -68,6 +75,7 @@ export const createAgentSessionActions = ({
     turnMetadata: sessionTurnState.metadata,
     clearSessionTurnState: sessionTurnState.clearSession,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
+    settleModelUpdates: modelActions.settleModelUpdates,
   });
 
   const manageAgentMessageQueue = createManageAgentMessageQueue({
@@ -99,6 +107,7 @@ export const createAgentSessionActions = ({
     workspaceRepoPath,
     adapter,
     readSessionSnapshot,
+    settleModelUpdates: modelActions.settleModelUpdates,
   });
 
   const cancelUsageLimitAutoResume = createCancelUsageLimitAutoResume({
@@ -116,13 +125,6 @@ export const createAgentSessionActions = ({
     turnMetadata: sessionTurnState.metadata,
     recordTurnUserMessageTimestamp: sessionTurnState.timing.recordTurnUserMessageTimestamp,
     readTurnUserMessageStartedAtMs: sessionTurnState.timing.readTurnUserMessageStartedAtMs,
-  });
-
-  const modelActions = createSessionModelActions({
-    workspaceRepoPath,
-    adapter,
-    readSessionSnapshot,
-    updateSession,
   });
 
   return {

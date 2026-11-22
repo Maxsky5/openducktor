@@ -409,7 +409,8 @@ test.each([
         actions.updateDraftModel({ providerId: "openai", modelId: "gpt-5" });
       }
     });
-    expect(action !== "model" ? actions.isSending : actions.isSavingModel).toBe(true);
+    // A model change does not lock the chat while it saves.
+    expect(actions.isSending).toBe(action !== "model");
     rendered.rerender(view("hidden"));
     await act(async () => {
       if (outcome === "accepted") pending.resolve();
@@ -418,7 +419,6 @@ test.each([
     rendered.rerender(view("visible"));
     expect(actions.isSending).toBe(false);
     expect(actions.isStarting).toBe(false);
-    expect(actions.isSavingModel).toBe(false);
     expect(actions.error).toBe(outcome === "rejected" ? "Request failed" : null);
     if (action !== "model") expect(await sendResult).toBe(outcome === "accepted");
   } finally {
@@ -452,7 +452,6 @@ test.each([false, true])("saves a speed change without the model lock, live=%p",
     act(() => {
       update = view.result.current.updateSpeed(identity, selection);
     });
-    expect(view.result.current.isSavingModel).toBe(false);
     await act(async () => {
       pending.resolve();
       await update;

@@ -19,7 +19,7 @@ type WorkspaceSessionComposerInput = {
   identity: AgentSessionIdentity | null;
   actions: Pick<
     ReturnType<typeof useWorkspaceSessionChatActions>,
-    "isStarting" | "isSavingModel" | "isResumingSession"
+    "isStarting" | "isResumingSession"
   >;
   delivery: ReturnType<typeof useAgentChatSend>;
   goalRow: AgentChatComposerConfig["goalRow"];
@@ -70,7 +70,6 @@ export function buildWorkspaceSessionComposer({
     onSend: pendingSend.onSend,
     pendingSendItems: pendingSend.pendingSendItems,
     isStarting: identity === null && actions.isStarting,
-    isSavingModel: actions.isSavingModel,
     contextUsage,
     selectedModelSelection: picker.selection,
     speed: picker.speed,

@@ -18,9 +18,10 @@ import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import { reportModelUpdateError } from "./model-update-error";
 
 type SelectionChange = (current: AgentModelSelection | null) => AgentModelSelection | null;
+/** The newest selection of a session while its changes write, so quick changes build on it. */
 type PendingSelectionUpdates = {
   selection: AgentModelSelection | null;
-  settled: Promise<void>;
+  pending: number;
 };
 
 export const useModelSelectionActions = ({
@@ -57,29 +58,19 @@ export const useModelSelectionActions = ({
       }
       const key = agentSessionIdentityKey(loadedSessionIdentity);
       const queues = pendingUpdates.current;
-      const queue = queues.get(key) ?? {
-        selection: selectedModelSelection,
-        settled: Promise.resolve(),
-      };
+      const queue = queues.get(key) ?? { selection: selectedModelSelection, pending: 0 };
+      const selection = change(queue.selection);
+      if (!selection) return;
+      // The change shows at once. The session writes it after the earlier changes.
+      queue.selection = selection;
+      queue.pending += 1;
       queues.set(key, queue);
-
-      // Resolve each change after the prior write, using only accepted selections.
-      const update = queue.settled.then(async () => {
-        const selection = change(queue.selection);
-        if (!selection) return;
+      try {
         await updateAgentSessionModel(loadedSessionIdentity, selection);
-        queue.selection = selection;
-      });
-      // A rejected write still reaches its caller. It must not poison the next change.
-      const settled = update.then(
-        () => {},
-        () => {},
-      );
-      queue.settled = settled;
-      void settled.then(() => {
-        if (queue.settled === settled) queues.delete(key);
-      });
-      await update;
+      } finally {
+        queue.pending -= 1;
+        if (queue.pending === 0) queues.delete(key);
+      }
     },
     [applyDraftSelection, loadedSessionIdentity, selectedModelSelection, updateAgentSessionModel],
   );
