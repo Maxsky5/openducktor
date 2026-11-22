@@ -1,3 +1,7 @@
+import type { HostEventBusPort } from "../../events/host-event-bus";
+import path from "node:path";
+import { createUsageIndexAdapter } from "../../adapters/usage/usage-index-adapter";
+import type { UsageIndexPort } from "../../ports/usage-index-port";
 import { createGeneratedImageFileAdapter } from "../../adapters/attachments/generated-image-file-adapter";
 import type { GeneratedImageWorkers } from "../../adapters/attachments/generated-image-worker-client";
 import { type GeneratedImageFilePort } from "../../ports/generated-image-file-port";
@@ -59,6 +63,8 @@ import {
 
 export type NodeHostDefaultPorts = {
   imageWorkers: GeneratedImageWorkers;
+  /** Starts its threads with the first Usage read. */
+  usageIndex: UsageIndexPort;
   codexAppServer: CodexAppServerPort & CodexSessionHistoryPort;
   codexTransportRegistry: CodexAppServerTransportRegistry;
   filesystem: FilesystemPort;
@@ -118,6 +124,8 @@ export type CreateNodeHostDefaultPortsInput = CodexAppServerInput & {
   browserEngine: BrowserEngineFactory;
 } & Partial<{
     clientVersion: string;
+    /** Carries host events, such as Usage progress, to the clients. */
+    eventBus: HostEventBusPort;
     filesystem: FilesystemPort;
     git: GitPort;
     generatedImageFiles: GeneratedImageFilePort;
@@ -204,6 +212,11 @@ export const createNodeHostDefaultPorts = (
 
         return {
           imageWorkers,
+          usageIndex: createUsageIndexAdapter({
+            indexPath: path.join(configDir.root, "usage-index.sqlite"),
+            onProgress: (payload) =>
+              input.eventBus?.publish({ channel: "openducktor://usage-index-progress", payload }),
+          }),
           codexAppServer,
           codexTransportRegistry,
           filesystem: input.filesystem ?? createFilesystemAdapter(),

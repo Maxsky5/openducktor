@@ -21,7 +21,7 @@ export type { SqliteValue, SqliteValueRow } from "./sqlite-driver-values";
 
 export type SqliteDriverRuntime = "bun" | "node";
 
-type SqliteStatement = {
+export type SqliteStatement = {
   all(...params: SqliteValue[]): Effect.Effect<SqliteRow[], HostOperationErrorAggregate>;
   close(): Effect.Effect<void, HostOperationErrorAggregate>;
   get(...params: SqliteValue[]): Effect.Effect<SqliteRow | null, HostOperationErrorAggregate>;

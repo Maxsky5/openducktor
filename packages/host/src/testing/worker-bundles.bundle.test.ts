@@ -25,6 +25,9 @@ beforeAll(
         path.join(sourceDirectory, "../adapters/claude/claude-transcript-worker.ts"),
         path.join(sourceDirectory, "generated-image-worker-bundle.fixture.ts"),
         path.join(sourceDirectory, "claude-transcript-worker-bundle.fixture.ts"),
+        path.join(sourceDirectory, "../adapters/usage/usage-index-worker.ts"),
+        path.join(sourceDirectory, "../adapters/usage/usage-parser-worker.ts"),
+        path.join(sourceDirectory, "usage-worker-bundle.fixture.ts"),
       ],
       outdir: outputDirectory,
       target: "node",
@@ -47,6 +50,8 @@ afterAll(async () => {
 test.each([
   { name: "generated image", file: "generated-image" },
   { name: "Claude transcript", file: "claude-transcript" },
+  // The usage fixture starts the index and parser workers next to it, and reads a zstd rollout.
+  { name: "usage", file: "usage" },
 ])(
   "the bundled $name worker handles its protocol under Node, Bun, and Electron",
   async ({ file }) => {

@@ -16,10 +16,15 @@ import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import type { NodeTaskAssetServices } from "./node-task-asset-services";
 import { createOpenDucktorMcpLaunchPaths } from "../../adapters/mcp/openducktor-mcp-command";
+import { resolveUsageLocations } from "../../adapters/usage/usage-locations";
+import { createUsageReportService } from "../../application/usage/usage-report-service";
+import { createUsageCommandHandlers } from "../../interface/commands/usage-command-handlers";
+import { homedir } from "node:os";
+import { hostTimeZone } from "../../domain/usage/usage-calendar";
 
 /**
- * The commands of the local tools: the file system, Git, Open in, the system checks, and the
- * Processes view.
+ * The commands of the local tools: the file system, Git, Open in, the system checks, the
+ * Processes view, and Usage of the runtime history on this host.
  */
 export const createNodeLocalToolCommandHandlers = ({
   filesystem,
@@ -31,6 +36,7 @@ export const createNodeLocalToolCommandHandlers = ({
   systemCommands,
   toolDiscovery,
   userEnvironment,
+  usageIndex,
   worktreeFiles,
   settingsConfig,
   assets,
@@ -47,6 +53,7 @@ export const createNodeLocalToolCommandHandlers = ({
   | "systemCommands"
   | "toolDiscovery"
   | "userEnvironment"
+  | "usageIndex"
   | "worktreeFiles"
 > & {
   settingsConfig: SettingsConfigPort;
@@ -83,6 +90,16 @@ export const createNodeLocalToolCommandHandlers = ({
       hostProcessIds: () => [process.pid, ...shellProcessIds()],
       managedProcesses: readManagedProcesses,
       hostLaunchPaths: createOpenDucktorMcpLaunchPaths({ runtimeDistribution, toolDiscovery }),
+    }),
+  ),
+  ...createUsageCommandHandlers(
+    createUsageReportService({
+      index: usageIndex,
+      settingsConfig,
+      taskOwnership: assets.taskOwnership,
+      locations: () => resolveUsageLocations(userEnvironment.current().environment, homedir()),
+      timeZone: hostTimeZone,
+      now: Date.now,
     }),
   ),
 });
