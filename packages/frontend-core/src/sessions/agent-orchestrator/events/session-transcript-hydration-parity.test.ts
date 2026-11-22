@@ -223,3 +223,41 @@ test("keeps a multi-step V2 transcript identical before and after hydration", as
     unsubscribe();
   }
 });
+
+test("gives no turn duration from approximate history times", () => {
+  const messages = historyToChatMessages(
+    [
+      {
+        messageId: "user-1",
+        role: "user",
+        timestamp: "2026-02-22T08:00:00.000Z",
+        timestampIsApproximate: true,
+        text: "Hello",
+        displayParts: [],
+        state: "read",
+        parts: [],
+      },
+      {
+        messageId: "assistant-1",
+        role: "assistant",
+        timestamp: "2026-02-22T08:00:00.001Z",
+        timestampIsApproximate: true,
+        text: "Hi",
+        parts: [
+          { kind: "text", messageId: "assistant-1", partId: "p1", text: "Hi", completed: true },
+          {
+            kind: "step",
+            messageId: "assistant-1",
+            partId: "assistant-1:finish",
+            phase: "finish",
+            reason: "stop",
+          },
+        ],
+      },
+    ],
+    { role: "spec" },
+  );
+
+  const reply = messages.find((message) => message.role === "assistant");
+  expect(reply?.meta?.kind === "assistant" ? reply.meta.durationMs : null).toBeUndefined();
+});

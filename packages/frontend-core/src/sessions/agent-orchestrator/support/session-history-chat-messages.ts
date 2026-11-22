@@ -260,7 +260,12 @@ export const historyToChatMessages = (
     }
 
     let assistantDurationMs: number | undefined;
-    if (isFinalAssistantMessage && !Number.isNaN(completedAtMs)) {
+    // An approximate time is the time of the history read, so it gives no turn duration.
+    if (
+      isFinalAssistantMessage &&
+      !Number.isNaN(completedAtMs) &&
+      (message.durationMs !== undefined || !message.timestampIsApproximate)
+    ) {
       if (message.durationMs !== undefined) {
         assistantDurationMs = message.durationMs;
       } else {
