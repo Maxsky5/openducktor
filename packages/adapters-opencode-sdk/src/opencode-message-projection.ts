@@ -28,6 +28,7 @@ import {
 import { readOpenCodeGoalKickoffObjective } from "./opencode-goals";
 import {
   AGENT_SESSION_INSTRUCTIONS_UPDATE_PREFIX,
+  type AcceptedAgentUserMessage,
   type AgentEvent,
   detectAgentFileReferenceKind,
 } from "@openducktor/core";
@@ -209,7 +210,7 @@ const userDisplay = (
 export const projectInboxUser = (
   item: Pick<SessionInboxUser, "id" | "sessionID" | "time" | "payload">,
   state: "queued" | "read" = "queued",
-): Extract<AgentEvent, { type: "user_message" }> => ({
+): AcceptedAgentUserMessage => ({
   type: "user_message",
   externalSessionId: item.sessionID,
   messageId: item.id,
@@ -223,7 +224,7 @@ export const projectInboxUser = (
 export const projectVisibleInboxUser = (
   item: SessionInboxInfo,
   state: "queued" | "read" = "queued",
-): Array<Extract<AgentEvent, { type: "user_message" }>> =>
+): AcceptedAgentUserMessage[] =>
   item.type === "user" && !isOpenCodeContinuationInput(item.payload)
     ? [projectInboxUser(item, state)]
     : [];

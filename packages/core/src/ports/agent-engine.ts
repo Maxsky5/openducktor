@@ -173,7 +173,10 @@ export type SendAgentUserMessageInput = SessionRef &
     submissionId?: string;
   };
 
-export type AcceptedAgentUserMessage = Extract<AgentEvent, { type: "user_message" }>;
+/** A user message that the runtime admitted, so it is never `pending`. */
+export type AcceptedAgentUserMessage = Extract<AgentEvent, { type: "user_message" }> & {
+  state: "queued" | "read";
+};
 export type AcceptedAgentInput =
   | AcceptedAgentUserMessage
   | Extract<import("@openducktor/contracts").AcceptedAgentInput, { type: "command_accepted" }>;

@@ -380,7 +380,7 @@ export type AgentUserMessageState = z.infer<typeof agentUserMessageStateSchema>;
 const transcriptEventSchema = <Fields extends ZodSchemaFields>(fields: Fields) =>
   z.object({ ...eventBaseFields, ...fields }).strict();
 
-export const agentUserMessageEventSchema = transcriptEventSchema({
+const agentUserMessageFields = {
   type: z.literal("user_message"),
   messageId: z.string(),
   message: z.string(),
@@ -398,10 +398,22 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
    * the accepted message in one step. It is live only and never part of stored history.
    */
   submissionId: z.string().trim().min(1).optional(),
-}).refine((event) => event.state !== "pending" || event.submissionId === undefined, {
-  message: "A pending user message names no submission, because the runtime has not admitted it.",
-  path: ["submissionId"],
+};
+
+export const agentUserMessageEventSchema = transcriptEventSchema(agentUserMessageFields).refine(
+  (event) => event.state !== "pending" || event.submissionId === undefined,
+  {
+    message: "A pending user message names no submission, because the runtime has not admitted it.",
+    path: ["submissionId"],
+  },
+);
+
+/** A receipt names a message that the runtime admitted, so it is never `pending`. */
+export const acceptedAgentUserMessageSchema = transcriptEventSchema({
+  ...agentUserMessageFields,
+  state: z.enum(["queued", "read"]),
 });
+export type AcceptedAgentUserMessage = z.infer<typeof acceptedAgentUserMessageSchema>;
 
 const agentSessionTurnFinishedEventSchema = transcriptEventSchema({
   type: z.literal("session_turn_finished"),

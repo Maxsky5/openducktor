@@ -1,7 +1,10 @@
-import type { AcceptedAgentUserMessage } from "@openducktor/core";
+import type { AgentEvent } from "@openducktor/core";
 import type { AgentChatMessage } from "../../../types/agent-orchestrator";
 
-const toUserMessageMeta = (event: AcceptedAgentUserMessage) => {
+/** A user message in any state, `pending` included: the transcript shows each one. */
+type UserMessageEvent = Extract<AgentEvent, { type: "user_message" }>;
+
+const toUserMessageMeta = (event: UserMessageEvent) => {
   const model = event.model;
   const parts = Array.isArray(event.parts) ? event.parts : [];
   const meta: Extract<NonNullable<AgentChatMessage["meta"]>, { kind: "user" }> = {
@@ -27,7 +30,7 @@ const toUserMessageMeta = (event: AcceptedAgentUserMessage) => {
 };
 
 export const toUserChatMessage = (
-  event: AcceptedAgentUserMessage,
+  event: UserMessageEvent,
 ): AgentChatMessage & { role: "user" } => ({
   id: event.messageId,
   role: "user",

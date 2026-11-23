@@ -10,7 +10,11 @@ import type {
   V2Event,
 } from "@opencode/client";
 import type { AgentToolDenial } from "@openducktor/contracts";
-import type { AgentEvent, AgentSessionHistoryMessage } from "@openducktor/core";
+import type {
+  AcceptedAgentUserMessage,
+  AgentEvent,
+  AgentSessionHistoryMessage,
+} from "@openducktor/core";
 import {
   iso,
   assistantPartEvents,
@@ -98,10 +102,7 @@ export class OpenCodeLiveMessageProjector {
    * Returns the user message of an input that the event stream already showed, queued or
    * delivered, or null when the stream did not show it.
    */
-  acceptedUserMessage(
-    sessionID: string,
-    id: string,
-  ): Extract<AgentEvent, { type: "user_message" }> | null {
+  acceptedUserMessage(sessionID: string, id: string): AcceptedAgentUserMessage | null {
     const queued = this.inbox.get(id);
     if (queued?.type === "user")
       return projectInboxUser(queued, this.startedTurns.has(id) ? "read" : "queued");

@@ -5,7 +5,8 @@ import { agentSessionControlSummarySchema } from "./agent-session-summary-schema
 import { runtimeKindSchema } from "./agent-runtime-schemas";
 import {
   type AgentSessionTranscriptEvent,
-  agentUserMessageEventSchema,
+  type AcceptedAgentUserMessage,
+  acceptedAgentUserMessageSchema,
 } from "./agent-session-event-schemas";
 import {
   agentModelSelectionSchema,
@@ -306,21 +307,14 @@ export const agentWorkflowSessionForkResultSchema = z.strictObject({
 });
 export type AgentWorkflowSessionForkResult = z.infer<typeof agentWorkflowSessionForkResultSchema>;
 
-/** A receipt names a message that the runtime admitted, so it is never `pending`. */
-export const acceptedAgentUserMessageSchema = agentUserMessageEventSchema.refine(
-  (event) => event.state !== "pending",
-  { message: "An accepted message cannot be pending.", path: ["state"] },
-);
-export type AcceptedAgentUserMessage = z.infer<typeof acceptedAgentUserMessageSchema>;
 /**
  * True for a user message that the runtime admitted. Only an accepted message starts a turn, counts
  * as session activity, or confirms a sent message. A `pending` message does none of these.
  */
 export const isAcceptedUserMessage = (
   event: AgentSessionTranscriptEvent,
-): event is Extract<AgentSessionTranscriptEvent, { type: "user_message" }> & {
-  state: "queued" | "read";
-} => event.type === "user_message" && event.state !== "pending";
+): event is Extract<AgentSessionTranscriptEvent, { type: "user_message" }> &
+  AcceptedAgentUserMessage => event.type === "user_message" && event.state !== "pending";
 export const acceptedAgentCommandSchema = z.strictObject({
   type: z.literal("command_accepted"),
   commandName: nonEmptyStringSchema,

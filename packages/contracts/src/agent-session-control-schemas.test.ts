@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { acceptedAgentUserMessageSchema } from "./agent-session-event-schemas";
 import {
-  acceptedAgentUserMessageSchema,
   agentSessionControlForkInputSchema,
   agentSessionControlResumeInputSchema,
   agentSessionControlSendInputSchema,
