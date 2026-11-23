@@ -13,6 +13,7 @@ import type {
 import type { AntigravityLiveChange } from "../antigravity/antigravity-live-change";
 import { liveSessionRefKey } from "./live-session-ref";
 import { createOrderedLiveChangeQueue } from "./ordered-live-change-queue";
+import { upsertLiveSessionSnapshots } from "./live-session-snapshot-upserts";
 
 /**
  * The ordered live projection of one Antigravity runtime: the snapshot of each live session, and
@@ -53,20 +54,10 @@ export const createAntigravityLiveSessionProjection = ({
     binding.runMutation(
       Effect.sync(() => {
         if (queue.released) return { value: undefined, changes: [] };
-        const changes: AgentSessionLiveAdapterChange[] = [];
-        // A settling snapshot goes after the transcript events, so a client never shows a settled
-        // turn without its final reply.
-        const settling: AgentSessionLiveAdapterChange[] = [];
-        for (const snapshot of change.snapshots) {
-          const key = liveSessionRefKey(snapshot.ref);
-          const previous = snapshotsByRef.get(key);
-          snapshotsByRef.set(key, snapshot);
-          if (previous && JSON.stringify(previous) === JSON.stringify(snapshot)) continue;
-          (previous && snapshot.activity === "idle" ? settling : changes).push({
-            type: "session_upsert",
-            snapshot,
-          });
-        }
+        const { upserts: changes, settling } = upsertLiveSessionSnapshots(
+          snapshotsByRef,
+          change.snapshots,
+        );
         for (const ref of change.removedRefs) {
           const key = liveSessionRefKey(ref);
           if (snapshotsByRef.delete(key)) changes.push({ type: "session_removed", ref });

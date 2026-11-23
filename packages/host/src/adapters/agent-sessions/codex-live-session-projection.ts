@@ -1,6 +1,6 @@
 import { liveSessionRefKey } from "./live-session-ref";
 import { createOrderedLiveChangeQueue } from "./ordered-live-change-queue";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
+import { upsertLiveSessionSnapshots } from "./live-session-snapshot-upserts";
 import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import type { CodexLiveSessionMutation } from "@openducktor/adapters-codex-app-server";
 import {
@@ -19,7 +19,6 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import { parseAdapterOutput as parseProjectionValue } from "../../effect/zod-output";
-import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 
 type CodexProjectionRuntime = {
@@ -64,25 +63,13 @@ export const createCodexLiveSessionProjection = ({
             if (queue.released) {
               return { value: undefined, changes: [] };
             }
-            const changes: AgentSessionLiveAdapterChange[] = [];
-            // The adapter emits the final reply of a turn before the snapshot that settles the
-            // turn, but a mutation keeps snapshots apart from transcript events. A settling
-            // snapshot of a known session therefore goes after the transcript events, so a
-            // client never shows a settled turn without its final reply.
-            const settlingUpserts: AgentSessionLiveAdapterChange[] = [];
-            const incomingKeys = new Set<string>();
-            for (const snapshot of parsed.snapshots) {
-              const key = liveSessionRefKey(snapshot.ref);
-              incomingKeys.add(key);
-              const previous = snapshotsByRef.get(key);
-              snapshotsByRef.set(key, snapshot);
-              if (!previous) {
-                changes.push({ type: "session_upsert", snapshot });
-              } else if (!snapshotsEqual(previous, snapshot)) {
-                const settles = agentSessionStatusFromActivity(snapshot.activity) === "idle";
-                (settles ? settlingUpserts : changes).push({ type: "session_upsert", snapshot });
-              }
-            }
+            const { upserts: changes, settling } = upsertLiveSessionSnapshots(
+              snapshotsByRef,
+              parsed.snapshots,
+            );
+            const incomingKeys = new Set(
+              parsed.snapshots.map((snapshot) => liveSessionRefKey(snapshot.ref)),
+            );
             const removals =
               parsed.snapshotMode === "full"
                 ? [...snapshotsByRef.values()]
@@ -98,7 +85,7 @@ export const createCodexLiveSessionProjection = ({
             for (const event of parsed.transcriptEvents) {
               changes.push({ type: "transcript_event", event });
             }
-            changes.push(...settlingUpserts);
+            changes.push(...settling);
             // The shared runtime serves many repositories. A runtime-wide change goes to
             // each repository that has a live session.
             const liveRepoPaths = new Set(
@@ -275,6 +262,3 @@ export const createCodexLiveSessionProjection = ({
 
 const refsEqual = (left: AgentSessionLiveRef, right: AgentSessionLiveRef): boolean =>
   liveSessionRefKey(left) === liveSessionRefKey(right);
-
-const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
-  JSON.stringify(left) === JSON.stringify(right);
