@@ -195,18 +195,47 @@ describe("AntigravityTranscript", () => {
     });
   });
 
-  test("shows a background task check as its action and task, not as a command", () => {
+  test.each([
+    {
+      call: "an MCP call",
+      name: "call_mcp_tool",
+      title: "MCP Tool search",
+      rawInput: { ServerName: "semble", ToolName: "search", Arguments: { query: "rows" } },
+      part: { tool: "semble.search", toolType: "generic", input: { query: "rows" } },
+    },
+    {
+      call: "a background task check",
+      name: "manage_task",
+      title: "Run manage_task",
+      rawInput: { Action: "status", TaskId: "session-1/task-820" },
+      part: { tool: "manage_task", toolType: "generic", title: "status task-820" },
+    },
+    {
+      call: "an unknown tool",
+      name: "set_timer",
+      title: "Run set_timer",
+      rawInput: { Seconds: 30 },
+      part: { tool: "set_timer", toolType: "generic" },
+    },
+    {
+      call: "a command before its command line",
+      name: "run_command",
+      title: "Run run_command",
+      rawInput: {},
+      part: { tool: "run_command", toolType: "generic" },
+    },
+  ])("shows $call of the kind execute as a tool row, never as an empty command", (entry) => {
     const transcript = createTranscript();
-    transcript.addLiveUserMessage({ message: { text: "Check it", displayParts: [] } });
+    transcript.addLiveUserMessage({ message: { text: "Work", displayParts: [] } });
     const events = transcript.applyUpdate(
       {
         sessionUpdate: "tool_call",
-        toolCallId: "call-2",
-        title: "Run manage_task",
-        name: "manage_task",
+        toolCallId: "call-9",
+        title: entry.title,
+        name: entry.name,
         kind: "execute",
         status: "completed",
-        rawInput: { Action: "status", TaskId: "session-1/task-820" },
+        rawInput: entry.rawInput,
       },
       "live",
     );
@@ -214,11 +243,7 @@ describe("AntigravityTranscript", () => {
     const tool = events.flatMap((event) =>
       event.type === "assistant_part" && event.part.kind === "tool" ? [event.part] : [],
     );
-    expect(tool.at(-1)).toMatchObject({
-      tool: "manage_task",
-      toolType: "generic",
-      title: "status task-820",
-    });
+    expect(tool.at(-1)).toMatchObject(entry.part);
   });
 
   test("streams text as deltas and confirms the final reply of a completed turn", () => {

@@ -8,6 +8,8 @@ import type { AgentToolPart, FileDiff } from "@openducktor/contracts";
 import { countRenderableFileDiffLines } from "@openducktor/core";
 import { createTwoFilesPatch } from "diff";
 import {
+  type AntigravityMcpCall,
+  readAntigravityCommandLine,
   readAntigravityCommandOutput,
   readAntigravityExitCode,
   readAntigravityMcpCall,
@@ -29,8 +31,11 @@ export type AntigravityToolState = {
   rawOutput?: ToolCallUpdate["rawOutput"];
 };
 
-/** The shared tool type of each ACP tool kind. Other kinds are generic. */
-const toolTypeForKind = (kind: ToolKind | undefined): ToolType => {
+/**
+ * The shared tool type of an ACP tool kind. `execute` has none: Antigravity also gives it to calls
+ * that run no command, such as an MCP call or a `manage_task` call.
+ */
+const toolTypeForKind = (kind: ToolKind | undefined): Exclude<ToolType, "bash"> => {
   switch (kind) {
     case "read":
       return "read";
@@ -40,13 +45,22 @@ const toolTypeForKind = (kind: ToolKind | undefined): ToolType => {
       return "file_edit";
     case "search":
       return "search";
-    case "execute":
-      return "bash";
     case "fetch":
       return "web";
     default:
       return "generic";
   }
+};
+
+/**
+ * The shared tool type of a native call. Only a call with a command line is a shell command, so no
+ * call becomes a shell command with no command. An MCP tool can do anything, so its row is
+ * generic.
+ */
+const toolTypeOf = (state: AntigravityToolState, mcp: AntigravityMcpCall | null): ToolType => {
+  if (mcp) return mcp.managed ? "workflow" : "generic";
+  if (readAntigravityCommandLine(state) !== null) return "bash";
+  return toolTypeForKind(state.kind);
 };
 
 const contentText = (content: ToolCallContent[] | undefined): string => {
@@ -126,19 +140,18 @@ export const toAntigravityToolPart = (
     partId: messageId,
     callId: state.toolCallId,
     tool,
-    toolType: managedMcp ? "workflow" : toolTypeForKind(state.kind),
+    toolType: toolTypeOf(state, mcp),
     status: "running",
   };
-  // A `manage_task` call checks or stops a background command. It runs no command of its own.
   const taskAction = readAntigravityTaskAction(state);
-  if (state.name === "manage_task") part.toolType = "generic";
   const displayLabel = mcp ? undefined : DISPLAY_LABELS.get(tool);
   if (displayLabel) part.displayLabel = displayLabel;
-  // A file tool has the title "File <path from the home directory>", and a managed or other
-  // tool "Run <native name>". The shared rows show the path and the tool name instead.
+  // A file tool has the title "File <path from the home directory>", an MCP tool "MCP Tool
+  // <name>", and another tool "Run <native name>". The shared rows show the path, the tool name,
+  // and the input instead.
   if (
     state.title &&
-    !managedMcp &&
+    !mcp &&
     !FILE_TOOL_KINDS.has(state.kind ?? "other") &&
     state.title !== `Run ${state.name}`
   ) {
