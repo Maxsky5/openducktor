@@ -1875,14 +1875,195 @@ describe("AgentChatThread", () => {
         { transform: "none" },
       ]);
 
-      // Upward user scroll immediately cancels the slide and clears overflow clipping.
+      // Upward user scroll stops the slide and absorbs its remaining offset into scrollTop so
+      // visible rows do not jump before native wheel scrolling runs.
+      const scrollTopBeforeWheel = container.scrollTop;
+      turnsElement.style.transform = "matrix(1, 0, 0, 1, 0, 30)";
       await act(async () => {
         container.dispatchEvent(new WheelEvent("wheel", { deltaY: -24 }));
+        turnsElement.style.transform = "";
+        container.dispatchEvent(new Event("scroll"));
         await flush();
       });
 
       expect(composedSlide?.cancelled).toBe(true);
       expect(turnsClipElement.style.overflowY).toBe("");
+      expect(container.scrollTop).toBe(scrollTopBeforeWheel - 30);
+    } finally {
+      rectSpy.mockRestore();
+      animate.mockRestore();
+      rendered.unmount();
+    }
+  });
+
+  test("preserves full displacement for tall appends, keeps finalized answers stationary when duration inserts, and lets scrollToTop cancel cleanly", async () => {
+    setGlobalWindow(window);
+    type RecordedAnimation = {
+      element: HTMLElement;
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null;
+      cancelled: boolean;
+    };
+    const recorded: RecordedAnimation[] = [];
+    const runAnimation = HTMLElement.prototype.animate;
+    const animate = spyOn(HTMLElement.prototype, "animate").mockImplementation(function (
+      this: HTMLElement,
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      const animation = runAnimation.call(this, keyframes, options);
+      const deferred = Promise.withResolvers<Animation>();
+      const entry: RecordedAnimation = {
+        element: this,
+        keyframes,
+        cancelled: false,
+      };
+      Object.defineProperty(animation, "finished", {
+        configurable: true,
+        value: deferred.promise,
+      });
+      animation.cancel = () => {
+        entry.cancelled = true;
+        deferred.reject(new DOMException("Cancelled", "AbortError"));
+      };
+      recorded.push(entry);
+      return animation;
+    });
+    const rowHeightFor = (element: Element): number => {
+      const key = element.getAttribute("data-row-key") ?? "";
+      if (key.includes(":duration")) return 28;
+      if (key.includes("tall-answer")) return 300;
+      return 60;
+    };
+    const rectSpy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.hasAttribute("data-row-key")) {
+          return new DOMRect(0, 0, 600, rowHeightFor(this));
+        }
+        return new DOMRect(0, 0, 600, 400);
+      },
+    );
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const ungroupedSettings = createChatSettingsFixture({
+      groupToolCalls: false,
+      collapseFinishedToolCalls: false,
+    });
+    const baseModel = buildBaseModel();
+    const loaded = Array.from({ length: 10 }, (_, index) =>
+      index % 2 === 1
+        ? buildMessage("assistant", `Message ${index}`, {
+            id: `initial-${index}`,
+            meta: { kind: "assistant", isFinal: true },
+          })
+        : buildMessage("user", `Message ${index}`, {
+            id: `initial-${index}`,
+          }),
+    );
+    let version = 1;
+    const renderMessages = (messages: ReturnType<typeof buildMessage>[]) => {
+      version += 1;
+      const session = {
+        ...buildSession({ externalSessionId: "session-tall-and-duration", status: "running" }),
+        messages: createSessionMessagesState("session-tall-and-duration", messages, version),
+      };
+      return createElement(
+        AgentChatSettingsProvider,
+        { value: ungroupedSettings },
+        createElement(AgentChatThreadComponent, {
+          model: completeThreadModel({
+            ...baseModel,
+            messagesContainerRef,
+            transcript: buildSessionTranscript(session),
+          }),
+        }),
+      );
+    };
+
+    const rendered = render(renderMessages(loaded));
+    await act(flush);
+    const container = messagesContainerRef.current;
+    if (!container) throw new Error("Expected messages container");
+    let scrollTopValue = 200;
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(container, "scrollHeight", {
+      configurable: true,
+      get: () =>
+        Array.from(container.querySelectorAll("[data-row-key]")).reduce(
+          (sum, row) => sum + rowHeightFor(row),
+          0,
+        ),
+    });
+    Object.defineProperty(container, "scrollTop", {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        const max = Math.max(0, container.scrollHeight - container.clientHeight);
+        scrollTopValue = Math.max(0, Math.min(value, max));
+      },
+    });
+    await act(async () => {
+      container.dispatchEvent(new Event("scroll"));
+      await flush();
+    });
+    const firstRow = container.querySelector<HTMLElement>("[data-row-key]");
+    const turnsElement = firstRow?.parentElement?.parentElement ?? null;
+    const turnsClipElement = turnsElement?.parentElement ?? null;
+    if (!turnsElement || !turnsClipElement) throw new Error("Expected turns wrapper elements");
+
+    try {
+      // 1. Tall 300px append in a 400px viewport starts at the full 300px displacement.
+      const streamingTall = buildMessage("assistant", "Long answer", {
+        id: "tall-answer",
+        meta: { kind: "assistant", isFinal: false },
+      });
+      rendered.rerender(renderMessages([...loaded, streamingTall]));
+      await act(flush);
+
+      const tallSlide = recorded.find((entry) => entry.element === turnsElement);
+      expect(tallSlide?.keyframes).toEqual([
+        { transform: "translateY(300px)" },
+        { transform: "none" },
+      ]);
+
+      // Finish the tall slide before finalizing with duration.
+      turnsClipElement.style.overflowY = "";
+      recorded.length = 0;
+
+      // 2. Finalizing the answer inserts a turn_duration separator before it; the separator
+      // fades in place without sliding or clipping the stationary answer below it.
+      const finalizedTall = buildMessage("assistant", "Long answer", {
+        id: "tall-answer",
+        meta: { kind: "assistant", isFinal: true, durationMs: 3_000 },
+      });
+      rendered.rerender(renderMessages([...loaded, finalizedTall]));
+      await act(flush);
+
+      expect(recorded.some((entry) => entry.element === turnsElement)).toBe(false);
+      expect(turnsClipElement.style.overflowY).toBe("");
+      const durationFade = recorded.find((entry) =>
+        entry.element.getAttribute("data-row-key")?.includes(":duration"),
+      );
+      expect(durationFade?.keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+
+      // 3. Explicit scrollToTop during a slide cancels it and moves straight to scrollTop 0.
+      recorded.length = 0;
+      const followUp = buildMessage("user", "Follow up", { id: "follow-up" });
+      rendered.rerender(renderMessages([...loaded, finalizedTall, followUp]));
+      await act(flush);
+      const followUpSlide = recorded.find((entry) => entry.element === turnsElement);
+      expect(followUpSlide?.keyframes).toEqual([
+        { transform: "translateY(60px)" },
+        { transform: "none" },
+      ]);
+
+      turnsElement.style.transform = "matrix(1, 0, 0, 1, 0, 40)";
+      const scrollToTopButton = screen.getByRole("button", { name: "Scroll to top" });
+      fireEvent.click(scrollToTopButton);
+      await act(flush);
+      turnsElement.style.transform = "";
+
+      expect(followUpSlide?.cancelled).toBe(true);
+      expect(turnsClipElement.style.overflowY).toBe("");
+      expect(container.scrollTop).toBe(0);
     } finally {
       rectSpy.mockRestore();
       animate.mockRestore();

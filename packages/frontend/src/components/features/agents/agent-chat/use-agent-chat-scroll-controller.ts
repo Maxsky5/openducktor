@@ -3,13 +3,18 @@ import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "rea
 import { REVEAL_ELEMENT_EVENT } from "@/lib/reveal-element";
 import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
+export type AgentChatScrollUnpinOptions = {
+  /** Keep visible rows stationary when cancelling an active entry slide on user scroll. */
+  preserveVisualPosition?: boolean;
+};
+
 type UseAgentChatScrollControllerInput = {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
   pinnedRef: RefObject<boolean>;
   // Only the latest row window contains the transcript end, so only it can stay pinned.
   canPin: boolean;
-  onUnpin?: (() => void) | undefined;
+  onUnpin?: ((options: AgentChatScrollUnpinOptions) => void) | undefined;
 };
 
 type UseAgentChatScrollControllerResult = {
@@ -124,10 +129,12 @@ export function useAgentChatScrollController({
   }, [messagesContainerRef]);
 
   const setPinned = useCallback(
-    (pinned: boolean) => {
+    (pinned: boolean, options?: AgentChatScrollUnpinOptions) => {
       pinnedRef.current = pinned;
       if (!pinned) {
-        onUnpinRef.current?.();
+        onUnpinRef.current?.({
+          preserveVisualPosition: options?.preserveVisualPosition ?? false,
+        });
       }
       const container = messagesContainerRef.current;
       if (container) {
@@ -175,7 +182,7 @@ export function useAgentChatScrollController({
         return;
       }
       if (isUpwardWheel(event) && pinnedRef.current && canScroll(container)) {
-        setPinned(false);
+        setPinned(false, { preserveVisualPosition: true });
       }
       container.scrollTop += readWheelDeltaYPx(event, container.clientHeight);
     },
@@ -201,7 +208,7 @@ export function useAgentChatScrollController({
         canScroll(container) &&
         !hasInnerScrollAbove(scrollTarget, container)
       ) {
-        setPinned(false);
+        setPinned(false, { preserveVisualPosition: true });
       }
     };
 
@@ -233,7 +240,7 @@ export function useAgentChatScrollController({
     };
 
     const handleRevealElement = () => {
-      setPinned(false);
+      setPinned(false, { preserveVisualPosition: true });
     };
 
     // Touch input uses touch events, because a touch pan cancels its pointer before it scrolls.
@@ -273,7 +280,7 @@ export function useAgentChatScrollController({
 
       if (pinnedRef.current) {
         if (hasDraggedUp) {
-          setPinned(false);
+          setPinned(false, { preserveVisualPosition: true });
           refreshEdges();
           return;
         }

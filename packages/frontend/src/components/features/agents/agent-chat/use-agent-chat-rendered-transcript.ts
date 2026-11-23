@@ -11,6 +11,7 @@ import type {
 import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
 import type { AgentChatTranscriptNavigation } from "./use-agent-chat-transcript-navigation";
 import { useAgentChatWindow } from "./use-agent-chat-window";
+import type { AgentChatScrollUnpinOptions } from "./use-agent-chat-scroll-controller";
 import {
   type TailOpenToolRun,
   useAgentChatRowEntryMotion,
@@ -145,9 +146,11 @@ export function useAgentChatRenderedTranscript({
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const turnsClipRef = useRef<HTMLDivElement | null>(null);
   const turnsRef = useRef<HTMLDivElement | null>(null);
-  const cancelEntryMotionRef = useRef<(() => void) | null>(null);
-  const cancelEntryMotion = useCallback(() => {
-    cancelEntryMotionRef.current?.();
+  const cancelEntryMotionRef = useRef<((options?: AgentChatScrollUnpinOptions) => void) | null>(
+    null,
+  );
+  const cancelEntryMotion = useCallback((options?: AgentChatScrollUnpinOptions) => {
+    cancelEntryMotionRef.current?.(options);
   }, []);
   const { transcriptState: transcriptModelState, isTranscriptModelMissing } =
     useAgentChatTranscriptModel({

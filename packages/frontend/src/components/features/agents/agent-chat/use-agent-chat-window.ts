@@ -5,7 +5,10 @@ import type {
   AgentChatTurnAnchor,
 } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { useAgentChatRowWindow } from "./use-agent-chat-row-window";
-import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
+import {
+  type AgentChatScrollUnpinOptions,
+  useAgentChatScrollController,
+} from "./use-agent-chat-scroll-controller";
 import {
   type AgentChatTranscriptNavigation,
   useAgentChatTranscriptNavigation,
@@ -18,7 +21,7 @@ type UseAgentChatWindowInput = {
   shouldResetForTranscriptLoad: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
-  onUnpin?: () => void;
+  onUnpin?: ((options: AgentChatScrollUnpinOptions) => void) | undefined;
 };
 
 type UseAgentChatWindowResult = {
