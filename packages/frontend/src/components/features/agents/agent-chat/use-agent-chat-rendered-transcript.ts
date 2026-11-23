@@ -13,6 +13,7 @@ import type { AgentChatTranscriptNavigation } from "./use-agent-chat-transcript-
 import { useAgentChatWindow } from "./use-agent-chat-window";
 import type { AgentChatScrollUnpinOptions } from "./use-agent-chat-scroll-controller";
 import {
+  type AgentChatRowEntryMotionControls,
   type TailOpenToolRun,
   useAgentChatRowEntryMotion,
 } from "./use-agent-chat-row-entry-motion";
@@ -146,11 +147,12 @@ export function useAgentChatRenderedTranscript({
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const turnsClipRef = useRef<HTMLDivElement | null>(null);
   const turnsRef = useRef<HTMLDivElement | null>(null);
-  const cancelEntryMotionRef = useRef<((options?: AgentChatScrollUnpinOptions) => void) | null>(
-    null,
-  );
+  const entryMotionRef = useRef<AgentChatRowEntryMotionControls | null>(null);
   const cancelEntryMotion = useCallback((options?: AgentChatScrollUnpinOptions) => {
-    cancelEntryMotionRef.current?.(options);
+    entryMotionRef.current?.cancelSlide(options);
+  }, []);
+  const handlePinnedResize = useCallback(() => {
+    entryMotionRef.current?.onPinnedResize();
   }, []);
   const { transcriptState: transcriptModelState, isTranscriptModelMissing } =
     useAgentChatTranscriptModel({
@@ -205,6 +207,7 @@ export function useAgentChatRenderedTranscript({
     messagesContainerRef,
     messagesContentRef,
     onUnpin: cancelEntryMotion,
+    onPinnedResize: handlePinnedResize,
   });
   const previousTurnsRef = useRef<AgentChatRenderedTurn[]>([]);
   const previousTurnsByKeyRef = useRef<Map<string, AgentChatRenderedTurn>>(new Map());
@@ -287,7 +290,7 @@ export function useAgentChatRenderedTranscript({
     return null;
   }, [renderedTurns]);
 
-  const cancelSlide = useAgentChatRowEntryMotion({
+  const entryMotion = useAgentChatRowEntryMotion({
     sessionKey: displayedSessionKey,
     isGrouped: classify !== null,
     rows: windowRows.rows,
@@ -302,8 +305,8 @@ export function useAgentChatRenderedTranscript({
   });
 
   useLayoutEffect(() => {
-    cancelEntryMotionRef.current = cancelSlide;
-  }, [cancelSlide]);
+    entryMotionRef.current = entryMotion;
+  }, [entryMotion]);
 
   // A transcript that follows its end stops following, so the run stays where the reader pressed
   // it. Scroll anchoring then keeps the content in view while the run changes its height.

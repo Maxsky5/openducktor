@@ -17,6 +17,19 @@ export type TailOpenToolRun = {
   callCount: number;
 };
 
+export type AgentChatRowEntryMotionControls = {
+  cancelSlide: (options?: AgentChatScrollUnpinOptions) => void;
+  onPinnedResize: () => void;
+};
+
+type ActiveEntryMotion = {
+  /** Turns container slide animation when overflowing, or the entering row animation before overflow. */
+  animation: Animation;
+  isSlide: boolean;
+  scrollTop: number;
+  scrollHeight: number;
+};
+
 type EnteringRows = {
   /**
    * "append": rows added after the previous final row (autoscroll shifts prior rows up).
@@ -178,7 +191,7 @@ export function useAgentChatRowEntryMotion({
   isPinned: () => boolean;
   isLatestWindow: boolean;
   syncScrollPosition: () => void;
-}): (options?: AgentChatScrollUnpinOptions) => void {
+}): AgentChatRowEntryMotionControls {
   const knownRef = useRef<KnownRows | null>(null);
   // The known rows change only after a commit, so a render reads the rows of the last commit.
   const entering = useMemo(
@@ -189,21 +202,25 @@ export function useAgentChatRowEntryMotion({
     entering: NO_ENTERING_ROWS,
     keys: new Set(),
   });
-  const activeSlideRef = useRef<Animation | null>(null);
+  const activeEntryRef = useRef<ActiveEntryMotion | null>(null);
   const previousTailOpenRunRef = useRef<(TailOpenToolRun & { sessionKey: string | null }) | null>(
     null,
   );
 
   const cancelSlide = useCallback(
     (options?: AgentChatScrollUnpinOptions) => {
-      const activeSlide = activeSlideRef.current;
+      const activeEntry = activeEntryRef.current;
       const turns = turnsRef.current;
       const container = containerRef.current;
       const remainingOffsetPx =
-        activeSlide && turns && options?.preserveVisualPosition ? readCurrentTranslateY(turns) : 0;
-      if (activeSlide) {
-        activeSlideRef.current = null;
-        activeSlide.cancel();
+        activeEntry?.isSlide && turns && options?.preserveVisualPosition
+          ? readCurrentTranslateY(turns)
+          : 0;
+      if (activeEntry) {
+        activeEntryRef.current = null;
+        if (activeEntry.isSlide) {
+          activeEntry.animation.cancel();
+        }
       }
       const turnsClip = turnsClipRef.current;
       if (turnsClip) {
@@ -225,26 +242,32 @@ export function useAgentChatRowEntryMotion({
       const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
       if (maxScrollTop <= 0) return false;
 
-      const activeSlide = activeSlideRef.current;
-      const existingOffsetPx = activeSlide ? readCurrentTranslateY(turns) : 0;
+      const activeEntry = activeEntryRef.current;
+      const existingOffsetPx = activeEntry?.isSlide ? readCurrentTranslateY(turns) : 0;
       // Start from the full scroll displacement (bounded only by maxScrollTop) so tall appends
       // preserve the prior row position on frame 0 and unpinning can absorb the remaining offset.
       const totalOffsetPx = Math.min(existingOffsetPx + addedHeightPx, maxScrollTop);
       if (totalOffsetPx <= 0.5) return false;
 
-      if (activeSlide) {
-        activeSlideRef.current = null;
-        activeSlide.cancel();
+      if (activeEntry?.isSlide) {
+        activeEntryRef.current = null;
+        activeEntry.animation.cancel();
       }
       turnsClip.style.overflowY = "clip";
       const animation = turns.animate(
         [{ transform: `translateY(${totalOffsetPx}px)` }, { transform: "none" }],
         ENTRY_TIMING,
       );
-      activeSlideRef.current = animation;
+      const nextEntry: ActiveEntryMotion = {
+        animation,
+        isSlide: true,
+        scrollTop: container.scrollTop,
+        scrollHeight: container.scrollHeight,
+      };
+      activeEntryRef.current = nextEntry;
       const cleanup = (): void => {
-        if (activeSlideRef.current !== animation) return;
-        activeSlideRef.current = null;
+        if (activeEntryRef.current !== nextEntry) return;
+        activeEntryRef.current = null;
         turnsClip.style.overflowY = "";
       };
       void animation.finished?.then(cleanup, cleanup);
@@ -252,6 +275,37 @@ export function useAgentChatRowEntryMotion({
     },
     [containerRef, turnsClipRef, turnsRef],
   );
+
+  const readActiveGrowthPx = useCallback((): number => {
+    const activeEntry = activeEntryRef.current;
+    const container = containerRef.current;
+    if (!activeEntry || !container) return 0;
+    const scrollDeltaPx = container.scrollTop - activeEntry.scrollTop;
+    const heightDeltaPx = container.scrollHeight - activeEntry.scrollHeight;
+    return Math.min(scrollDeltaPx, heightDeltaPx);
+  }, [containerRef]);
+
+  const syncActiveEntryBaseline = useCallback(() => {
+    const activeEntry = activeEntryRef.current;
+    const container = containerRef.current;
+    if (!activeEntry || !container) return;
+    activeEntry.scrollTop = container.scrollTop;
+    activeEntry.scrollHeight = container.scrollHeight;
+  }, [containerRef]);
+
+  const onPinnedResize = useCallback(() => {
+    const activeEntry = activeEntryRef.current;
+    if (!activeEntry || !isPinned() || !isLatestWindow || prefersReducedMotion()) {
+      return;
+    }
+    const growthPx = readActiveGrowthPx();
+    if (growthPx <= 0.5) {
+      // Keep the baseline aligned when only viewport height changed or content shrank.
+      syncActiveEntryBaseline();
+      return;
+    }
+    slideTranscript(growthPx);
+  }, [isLatestWindow, isPinned, readActiveGrowthPx, slideTranscript, syncActiveEntryBaseline]);
 
   useLayoutEffect(() => {
     void sessionKey;
@@ -291,14 +345,40 @@ export function useAgentChatRowEntryMotion({
         for (const row of newlyMounted) {
           row.animate(ENTRY_FADE_KEYFRAMES, ENTRY_TIMING);
         }
+        const activeEntry = activeEntryRef.current;
+        if (activeEntry) {
+          const tailGrowthPx = readActiveGrowthPx() - measureVerticalSpan(newlyMounted);
+          if (activeEntry.isSlide && isPinned() && isLatestWindow && tailGrowthPx > 0.5) {
+            slideTranscript(tailGrowthPx);
+          } else {
+            syncActiveEntryBaseline();
+          }
+        }
         return;
       }
 
-      const didSlide =
-        isPinned() && isLatestWindow ? slideTranscript(measureVerticalSpan(newlyMounted)) : false;
+      const addedHeightPx = Math.max(measureVerticalSpan(newlyMounted), readActiveGrowthPx());
+      const didSlide = isPinned() && isLatestWindow ? slideTranscript(addedHeightPx) : false;
       const rowKeyframes = didSlide ? ENTRY_FADE_KEYFRAMES : ENTRY_KEYFRAMES;
+      let lastRowAnimation: Animation | null = null;
       for (const row of newlyMounted) {
-        row.animate(rowKeyframes, ENTRY_TIMING);
+        lastRowAnimation = row.animate(rowKeyframes, ENTRY_TIMING);
+      }
+      if (!didSlide && isPinned() && isLatestWindow && lastRowAnimation && containerRef.current) {
+        // Track non-overflowing entry so a streamed reply that crosses overflow mid-entry slides.
+        const pendingEntry: ActiveEntryMotion = {
+          animation: lastRowAnimation,
+          isSlide: false,
+          scrollTop: containerRef.current.scrollTop,
+          scrollHeight: containerRef.current.scrollHeight,
+        };
+        activeEntryRef.current = pendingEntry;
+        const cleanupPending = (): void => {
+          if (activeEntryRef.current === pendingEntry) {
+            activeEntryRef.current = null;
+          }
+        };
+        void lastRowAnimation.finished?.then(cleanupPending, cleanupPending);
       }
       return;
     }
@@ -314,19 +394,34 @@ export function useAgentChatRowEntryMotion({
     ) {
       syncScrollPosition();
       const addedCount = tailOpenRun.callCount - previousTailRun.callCount;
-      slideTranscript(measureAppendedToolRunLinesHeight(turns, tailOpenRun.runKey, addedCount));
+      const addedHeightPx = Math.max(
+        measureAppendedToolRunLinesHeight(turns, tailOpenRun.runKey, addedCount),
+        readActiveGrowthPx(),
+      );
+      slideTranscript(addedHeightPx);
+      return;
+    }
+
+    // Keep an active entry motion aligned when a streamed reply grows on the same row.
+    if (activeEntryRef.current && isPinned() && isLatestWindow) {
+      syncScrollPosition();
+      onPinnedResize();
     }
   }, [
+    containerRef,
     entering,
     isLatestWindow,
     isPinned,
     mountedRows,
+    onPinnedResize,
+    readActiveGrowthPx,
     sessionKey,
     slideTranscript,
+    syncActiveEntryBaseline,
     syncScrollPosition,
     tailOpenRun,
     turnsRef,
   ]);
 
-  return cancelSlide;
+  return useMemo(() => ({ cancelSlide, onPinnedResize }), [cancelSlide, onPinnedResize]);
 }

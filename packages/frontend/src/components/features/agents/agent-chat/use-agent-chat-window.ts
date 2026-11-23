@@ -22,6 +22,7 @@ type UseAgentChatWindowInput = {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
   onUnpin?: ((options: AgentChatScrollUnpinOptions) => void) | undefined;
+  onPinnedResize?: (() => void) | undefined;
 };
 
 type UseAgentChatWindowResult = {
@@ -46,6 +47,7 @@ export function useAgentChatWindow({
   messagesContainerRef,
   messagesContentRef,
   onUnpin,
+  onPinnedResize,
 }: UseAgentChatWindowInput): UseAgentChatWindowResult {
   const prevSessionKeyRef = useRef<string | null>(null);
   const prevShouldResetForTranscriptLoadRef = useRef(shouldResetForTranscriptLoad);
@@ -77,6 +79,7 @@ export function useAgentChatWindow({
       pinnedRef,
       canPin: isLatestWindow,
       onUnpin,
+      onPinnedResize,
     });
   // The scroll position depends on whether the row window is the latest one, so that also counts.
   const committedRowWindowVersion = `${windowStart}:${visibleRows.length}:${isLatestWindow}`;

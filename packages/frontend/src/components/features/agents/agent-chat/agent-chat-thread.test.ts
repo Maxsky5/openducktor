@@ -1743,6 +1743,7 @@ describe("AgentChatThread", () => {
       element: HTMLElement;
       keyframes: Keyframe[] | PropertyIndexedKeyframes | null;
       cancelled: boolean;
+      finish: () => void;
     };
     const recorded: RecordedAnimation[] = [];
     const runAnimation = HTMLElement.prototype.animate;
@@ -1757,6 +1758,7 @@ describe("AgentChatThread", () => {
         element: this,
         keyframes,
         cancelled: false,
+        finish: () => deferred.resolve(animation),
       };
       Object.defineProperty(animation, "finished", {
         configurable: true,
@@ -1902,6 +1904,7 @@ describe("AgentChatThread", () => {
       element: HTMLElement;
       keyframes: Keyframe[] | PropertyIndexedKeyframes | null;
       cancelled: boolean;
+      finish: () => void;
     };
     const recorded: RecordedAnimation[] = [];
     const runAnimation = HTMLElement.prototype.animate;
@@ -1916,6 +1919,7 @@ describe("AgentChatThread", () => {
         element: this,
         keyframes,
         cancelled: false,
+        finish: () => deferred.resolve(animation),
       };
       Object.defineProperty(animation, "finished", {
         configurable: true,
@@ -2025,7 +2029,8 @@ describe("AgentChatThread", () => {
       ]);
 
       // Finish the tall slide before finalizing with duration.
-      turnsClipElement.style.overflowY = "";
+      tallSlide?.finish();
+      await act(flush);
       recorded.length = 0;
 
       // 2. Finalizing the answer inserts a turn_duration separator before it; the separator
@@ -2068,6 +2073,188 @@ describe("AgentChatThread", () => {
       rectSpy.mockRestore();
       animate.mockRestore();
       rendered.unmount();
+    }
+  });
+
+  test("extends an active entry slide when a streaming reply grows in grouped and ungrouped modes", async () => {
+    setGlobalWindow(window);
+    type RecordedAnimation = {
+      element: HTMLElement;
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null;
+      cancelled: boolean;
+      finish: () => void;
+    };
+    for (const groupToolCalls of [false, true]) {
+      const recorded: RecordedAnimation[] = [];
+      const runAnimation = HTMLElement.prototype.animate;
+      const animate = spyOn(HTMLElement.prototype, "animate").mockImplementation(function (
+        this: HTMLElement,
+        keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+        options?: number | KeyframeAnimationOptions,
+      ) {
+        const animation = runAnimation.call(this, keyframes, options);
+        const deferred = Promise.withResolvers<Animation>();
+        const entry: RecordedAnimation = {
+          element: this,
+          keyframes,
+          cancelled: false,
+          finish: () => deferred.resolve(animation),
+        };
+        Object.defineProperty(animation, "finished", {
+          configurable: true,
+          value: deferred.promise,
+        });
+        animation.cancel = () => {
+          entry.cancelled = true;
+          deferred.reject(new DOMException("Cancelled", "AbortError"));
+        };
+        recorded.push(entry);
+        return animation;
+      });
+      let streamingReplyHeight = 58;
+      const rowHeightFor = (element: Element): number => {
+        const key = element.getAttribute("data-row-key") ?? "";
+        if (key.includes("stream-reply")) return streamingReplyHeight;
+        return 60;
+      };
+      const rectSpy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+        function (this: HTMLElement) {
+          if (this.hasAttribute("data-row-key")) {
+            return new DOMRect(0, 0, 600, rowHeightFor(this));
+          }
+          return new DOMRect(0, 0, 600, 400);
+        },
+      );
+      const messagesContainerRef = createRef<HTMLDivElement>();
+      const settings = createChatSettingsFixture({
+        groupToolCalls,
+        collapseFinishedToolCalls: false,
+      });
+      const baseModel = buildBaseModel();
+      const sessionId = groupToolCalls ? "session-stream-grouped" : "session-stream-ungrouped";
+      const loaded = Array.from({ length: 10 }, (_, index) =>
+        index % 2 === 1
+          ? buildMessage("assistant", `Message ${index}`, {
+              id: `initial-${index}`,
+              meta: { kind: "assistant", isFinal: true },
+            })
+          : buildMessage("user", `Message ${index}`, { id: `initial-${index}` }),
+      );
+      let version = 1;
+      const renderMessages = (messages: ReturnType<typeof buildMessage>[]) => {
+        version += 1;
+        const session = {
+          ...buildSession({ externalSessionId: sessionId, status: "running" }),
+          messages: createSessionMessagesState(sessionId, messages, version),
+        };
+        return createElement(
+          AgentChatSettingsProvider,
+          { value: settings },
+          createElement(AgentChatThreadComponent, {
+            model: completeThreadModel({
+              ...baseModel,
+              messagesContainerRef,
+              transcript: buildSessionTranscript(session),
+            }),
+          }),
+        );
+      };
+
+      const rendered = render(renderMessages(loaded));
+      await act(flush);
+      const container = messagesContainerRef.current;
+      if (!container) throw new Error("Expected messages container");
+      let scrollTopValue = 200;
+      Object.defineProperty(container, "clientHeight", { configurable: true, value: 400 });
+      Object.defineProperty(container, "scrollHeight", {
+        configurable: true,
+        get: () =>
+          Array.from(container.querySelectorAll("[data-row-key]")).reduce(
+            (sum, row) => sum + rowHeightFor(row),
+            0,
+          ),
+      });
+      Object.defineProperty(container, "scrollTop", {
+        configurable: true,
+        get: () => scrollTopValue,
+        set: (value: number) => {
+          const max = Math.max(0, container.scrollHeight - container.clientHeight);
+          scrollTopValue = Math.max(0, Math.min(value, max));
+        },
+      });
+      await act(async () => {
+        container.dispatchEvent(new Event("scroll"));
+        await flush();
+      });
+      const firstRow = container.querySelector<HTMLElement>("[data-row-key]");
+      const turnsElement = firstRow?.parentElement?.parentElement ?? null;
+      const turnsClipElement = turnsElement?.parentElement ?? null;
+      if (!turnsElement || !turnsClipElement) throw new Error("Expected turns wrapper elements");
+
+      try {
+        // Initial one-paragraph streaming reply enters and starts a 58px slide.
+        const paragraphOne = buildMessage("assistant", "Paragraph one.", {
+          id: "stream-reply",
+          meta: { kind: "assistant", isFinal: false },
+        });
+        rendered.rerender(renderMessages([...loaded, paragraphOne]));
+        await act(flush);
+
+        const initialSlide = recorded.find((entry) => entry.element === turnsElement);
+        expect(initialSlide?.keyframes).toEqual([
+          { transform: "translateY(58px)" },
+          { transform: "none" },
+        ]);
+        expect(container.scrollTop).toBe(258);
+
+        // Mid-slide (42px remaining), the same reply grows to four paragraphs (+102px).
+        turnsElement.style.transform = "matrix(1, 0, 0, 1, 0, 42)";
+        recorded.length = 0;
+        streamingReplyHeight = 160;
+        const fourParagraphs = buildMessage(
+          "assistant",
+          "Paragraph one.\n\nParagraph two.\n\nParagraph three.\n\nParagraph four.",
+          {
+            id: "stream-reply",
+            meta: { kind: "assistant", isFinal: false },
+          },
+        );
+        rendered.rerender(renderMessages([...loaded, fourParagraphs]));
+        await act(flush);
+        turnsElement.style.transform = "";
+
+        expect(initialSlide?.cancelled).toBe(true);
+        expect(container.scrollTop).toBe(360);
+        const extendedSlide = recorded.find((entry) => entry.element === turnsElement);
+        expect(extendedSlide?.keyframes).toEqual([
+          { transform: "translateY(144px)" },
+          { transform: "none" },
+        ]);
+
+        // Once the slide finishes, later streaming growth does not start a fresh entry slide.
+        extendedSlide?.finish();
+        await act(flush);
+        expect(turnsClipElement.style.overflowY).toBe("");
+        recorded.length = 0;
+        streamingReplyHeight = 220;
+        const fiveParagraphs = buildMessage(
+          "assistant",
+          "Paragraph one.\n\nParagraph two.\n\nParagraph three.\n\nParagraph four.\n\nParagraph five.",
+          {
+            id: "stream-reply",
+            meta: { kind: "assistant", isFinal: false },
+          },
+        );
+        rendered.rerender(renderMessages([...loaded, fiveParagraphs]));
+        await act(flush);
+
+        expect(recorded.some((entry) => entry.element === turnsElement)).toBe(false);
+        expect(turnsClipElement.style.overflowY).toBe("");
+      } finally {
+        rectSpy.mockRestore();
+        animate.mockRestore();
+        rendered.unmount();
+      }
     }
   });
 

@@ -15,6 +15,7 @@ type UseAgentChatScrollControllerInput = {
   // Only the latest row window contains the transcript end, so only it can stay pinned.
   canPin: boolean;
   onUnpin?: ((options: AgentChatScrollUnpinOptions) => void) | undefined;
+  onPinnedResize?: (() => void) | undefined;
 };
 
 type UseAgentChatScrollControllerResult = {
@@ -94,9 +95,11 @@ export function useAgentChatScrollController({
   pinnedRef,
   canPin,
   onUnpin,
+  onPinnedResize,
 }: UseAgentChatScrollControllerInput): UseAgentChatScrollControllerResult {
   const canPinRef = useRef(canPin);
   const onUnpinRef = useRef(onUnpin);
+  const onPinnedResizeRef = useRef(onPinnedResize);
   const isPointerPressedRef = useRef(false);
   const lastPointerDownTargetRef = useRef<EventTarget | null>(null);
   const lastScrollTopRef = useRef(0);
@@ -110,7 +113,8 @@ export function useAgentChatScrollController({
   useLayoutEffect(() => {
     canPinRef.current = canPin;
     onUnpinRef.current = onUnpin;
-  }, [canPin, onUnpin]);
+    onPinnedResizeRef.current = onPinnedResize;
+  }, [canPin, onPinnedResize, onUnpin]);
 
   const refreshEdges = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -316,7 +320,12 @@ export function useAgentChatScrollController({
     ownerDocument.addEventListener("touchcancel", handleDocumentTouchEnd, { passive: true });
 
     // The viewport shrinks without a scroll event when a panel such as the terminal opens.
-    const resizeObserver = new ResizeObserver(syncScrollPosition);
+    const resizeObserver = new ResizeObserver(() => {
+      syncScrollPosition();
+      if (pinnedRef.current && canPinRef.current) {
+        onPinnedResizeRef.current?.();
+      }
+    });
     resizeObserver.observe(container);
     resizeObserver.observe(content);
 
