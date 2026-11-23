@@ -139,19 +139,37 @@ const STANDARD_TIERS = new Set(["standard", "default"]);
 export type UsagePricer = {
   /** The rate steps of a request, or null when the catalog has no rate for it. */
   stepsFor(provider: string, model: string, tier: string | null): readonly UsageRateStep[] | null;
+  /**
+   * The rate steps of a model ID that can end in variants that the catalog does not list, such as
+   * a thinking level: the rates of the ID, or of its longest prefix that the catalog lists.
+   */
+  stepsForVariant(
+    provider: string,
+    model: string,
+    tier: string | null,
+  ): readonly UsageRateStep[] | null;
 };
 
 /**
  * Matches the recorded provider and model exactly, or the model without its snapshot date
- * suffix. It never guesses a rate by similarity. A tier other than the standard tiers needs its
- * own rates.
+ * suffix. Only a runtime that records variant IDs uses the longest listed prefix. A tier other
+ * than the standard tiers needs its own rates.
  */
-export const createUsagePricer = (catalog: UsageRateCatalog): UsagePricer => ({
-  stepsFor: (provider, model, tier) => {
+export const createUsagePricer = (catalog: UsageRateCatalog): UsagePricer => {
+  const stepsFor: UsagePricer["stepsFor"] = (provider, model, tier) => {
     const models = catalog[provider];
     const rates = models?.[model] ?? models?.[model.replace(DATE_SUFFIX, "")];
     if (!rates) return null;
     if (tier === null || STANDARD_TIERS.has(tier)) return rates.base;
     return rates.tiers[tier] ?? null;
-  },
-});
+  };
+  return {
+    stepsFor,
+    stepsForVariant: (provider, model, tier) => {
+      for (let id = model; ; id = id.slice(0, id.lastIndexOf("-"))) {
+        const steps = stepsFor(provider, id, tier);
+        if (steps || !id.includes("-")) return steps;
+      }
+    },
+  };
+};

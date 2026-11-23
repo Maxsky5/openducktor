@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Effect } from "effect";
 import { removeTestDirectory } from "../../test-support/temp-directory";
-import { antigravityRateModel, readAntigravityUsage } from "./usage-antigravity-reader";
+import { readAntigravityUsage } from "./usage-antigravity-reader";
 
 // A resolved path, so its file URL is absolute on Windows too.
 const PROJECT = path.resolve("/repo/app");
@@ -127,13 +127,20 @@ describe("readAntigravityUsage", () => {
           label("root_cascade_id", "root"),
           label("request_id", "trajectory-1"),
           label("last_step_index", "0"),
+          label("used_claude", "true"),
+          label("used_non_gemini_model", "true"),
         ],
       }),
       call({
         steps: [],
         model: "gemini-3.8-flash-n",
         usage: [num(2, 952), num(3, 159), num(5, 23031), num(9, 113), num(10, 46)],
-        labels: [label("cascade_id", "child"), label("last_step_index", "2")],
+        labels: [
+          label("cascade_id", "child"),
+          label("last_step_index", "2"),
+          label("used_claude", "false"),
+          label("used_non_gemini_model", "false"),
+        ],
       }),
       // A call that failed before the model answered has no model and no tokens.
       call({ steps: [], model: null, usage: [], labels: [label("cascade_id", "child")] }),
@@ -161,8 +168,9 @@ describe("readAntigravityUsage", () => {
           // Without its own step, a call takes the time of the step before it.
           occurredAtMs: 1_795_370_294_000,
           session: "child",
+          // The price lookup resolves the variant of the recorded ID.
           provider: "google",
-          model: "gemini-3.8-flash",
+          model: "gemini-3.8-flash-n",
           project: PROJECT,
           serviceTier: null,
           // The output includes the thinking tokens.
@@ -192,23 +200,5 @@ describe("readAntigravityUsage", () => {
     database.exec("CREATE TABLE something (id INTEGER)");
 
     expect(await read(file)).toEqual({ kind: "unsupported" });
-  });
-});
-
-describe("antigravityRateModel", () => {
-  test("names the models.dev model of each Antigravity model ID", () => {
-    expect(antigravityRateModel("gemini-3.8-flash-tiered")).toEqual({
-      provider: "google",
-      model: "gemini-3.8-flash",
-    });
-    expect(antigravityRateModel("claude-opus-4-6-thinking")).toEqual({
-      provider: "anthropic",
-      model: "claude-opus-4-6",
-    });
-    expect(antigravityRateModel("gpt-oss-120b-medium")).toEqual({
-      provider: "google-vertex",
-      model: "openai/gpt-oss-120b-maas",
-    });
-    expect(antigravityRateModel("other-model")).toEqual({ provider: null, model: "other-model" });
   });
 });

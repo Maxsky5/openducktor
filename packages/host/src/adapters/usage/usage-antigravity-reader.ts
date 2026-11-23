@@ -49,25 +49,18 @@ type AntigravityConversation = {
   generations: readonly GenerationRow[];
 };
 
-/** The models.dev provider and model that price a call. */
-type AntigravityRateModel = { provider: string | null; model: string };
-
 /** The model calls of a conversation, and the rows that are not call messages. */
 type AntigravityUnits = { units: UsageUnit[]; malformed: number };
 
 /**
- * Antigravity records the model IDs of its own backend. The rates use the models.dev ID of the
- * same model: a Gemini call can carry a routing suffix, an Anthropic model can name its thinking
- * mode, and GPT-OSS runs as a Vertex AI model.
+ * The models.dev provider of a call, from the labels that Antigravity records with it: a Claude
+ * call is Anthropic, and a Gemini call is Google. Antigravity names no provider for its other
+ * models, so their calls have none. The recorded model ID can end in a variant, such as a thinking
+ * level, and the price lookup of the index resolves it.
  */
-export const antigravityRateModel = (model: string): AntigravityRateModel => {
-  const gemini = /^(gemini-\d+(?:\.\d+)?-(?:flash-lite|flash|pro))(?:-.+)?$/.exec(model);
-  if (gemini?.[1]) return { provider: "google", model: gemini[1] };
-  if (model.startsWith("claude-"))
-    return { provider: "anthropic", model: model.replace(/-thinking$/, "") };
-  const gptOss = /^gpt-oss-(\d+b)(?:-.+)?$/.exec(model);
-  if (gptOss?.[1]) return { provider: "google-vertex", model: `openai/gpt-oss-${gptOss[1]}-maas` };
-  return { provider: null, model };
+const providerOf = (labels: ReadonlyMap<string, string>): string | null => {
+  if (labels.get("used_claude") === "true") return "anthropic";
+  return labels.get("used_non_gemini_model") === "false" ? "google" : null;
 };
 
 /** The labels of a call: key and value pairs such as `root_cascade_id`. */
@@ -127,14 +120,14 @@ const antigravityUsageUnits = (conversation: AntigravityConversation): Antigravi
       continue;
     }
     const cascade = labels.get("cascade_id") ?? conversation.id;
-    const { provider, model } = antigravityRateModel(recorded);
+
     units.push({
       identity: labels.get("request_id") ?? `${cascade}:${row.idx}`,
       occurredAtMs,
       // A sub-agent conversation names the conversation that started it.
       session: labels.get("root_cascade_id") ?? cascade,
-      provider,
-      model,
+      provider: providerOf(labels),
+      model: recorded,
       project: conversation.project,
       serviceTier: null,
       tokens: tokensOf(call),

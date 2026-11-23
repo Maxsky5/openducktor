@@ -99,7 +99,8 @@ A unit is one model request. Copies of one request share a unit identity.
 - Antigravity stores each model call as a protocol buffer in `gen_metadata`, without a published schema. The reader decodes the fields that the CLI 1.5.14 writes: the usage message, the model ID, and the labels. The token sums of these fields match the usage that ACP reports for the same turn. A row that is not a message counts as a malformed record.
 - An Antigravity call takes the creation time of the first step that it produced, from `steps`, or of the step before it when it produced none. The working folder comes from the first workspace of the conversation metadata.
 - An Antigravity call without a model ID failed before the model answered, for example on a quota error, so it is not a request.
-- Antigravity records the model IDs of its own backend. The rates use the models.dev ID of the same model: a Gemini call drops its routing suffix (`gemini-3.8-flash-n` is `google/gemini-3.8-flash`), an Anthropic model drops `-thinking`, and GPT-OSS is `google-vertex/openai/gpt-oss-<size>-maas`.
+- An Antigravity call gets its provider from its labels: `used_claude` is `anthropic`, and `used_non_gemini_model` set to `false` is `google`. Antigravity names no provider for its other models, such as GPT-OSS, so their calls have no rate.
+- Antigravity records model IDs with variants, such as a thinking level or a routing suffix (`claude-opus-5-5-high`, `gemini-3.8-flash-n`). A provider and model that Antigravity records takes the rates of its longest prefix that models.dev lists for that provider. Other names match exactly.
 - OpenCode 2 stores messages in `session_message`. The frozen OpenCode 1 `message` table keeps a few messages that the version 2 copy skipped, so Usage reads both.
 
 ## Tokens

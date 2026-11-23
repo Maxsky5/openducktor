@@ -187,6 +187,19 @@ describe("usage index store", () => {
     expect([row?.unpricedTokens, row?.unmeasured, row?.costUsd]).toEqual([1_000_010, 1, 0]);
   });
 
+  test("prices a model ID that Antigravity records with a variant by its longest listed prefix", async () => {
+    const variant = { identity: "v", model: "claude-opus-5-5-high", serviceTier: null };
+    // Another runtime that records a variant ID gets no rate by similarity.
+    await write(source("/p/a.jsonl", [unit(variant)]));
+    expect((await report()).byRuntime[0]?.costUsd).toBe(0);
+
+    await write({ ...source("/p/b.db", [unit(variant)]), runtime: "antigravity" });
+    const result = await snapshotOf((snapshot) =>
+      aggregateOf(snapshot, { start: "2026-11-01", end: "2026-11-30", runtimes: ["antigravity"] }),
+    );
+    expect(result.byRuntime[0]?.costUsd).toBeCloseTo(4.0002, 6);
+  });
+
   test("prices a request by its service tier and by the rate step of its prompt", async () => {
     await write(
       source("/p/a.jsonl", [
