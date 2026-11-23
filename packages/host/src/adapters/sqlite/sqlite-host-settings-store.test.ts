@@ -901,6 +901,28 @@ describe("shared host settings", () => {
     });
   });
 
+  test("reads a database from before Antigravity with the default Antigravity settings", async () => {
+    await withDatabase(async ({ session }) => {
+      const config = createDefaultGlobalConfig();
+      await Effect.runPromise(
+        session.transaction("test.import", (transaction) =>
+          importHostSharedConfig(transaction, config),
+        ),
+      );
+      await Effect.runPromise(
+        session.execute(
+          (db) =>
+            db
+              .delete(agentRuntimeSettings)
+              .where(eq(agentRuntimeSettings.runtimeKind, "antigravity")),
+          "test.removeAntigravity",
+        ),
+      );
+      const read = await Effect.runPromise(readHostSharedConfig(session));
+      expect(read.agentRuntimes).toEqual(config.agentRuntimes);
+    });
+  });
+
   test("reports malformed Azure mappings with workspace identity", async () => {
     await withDatabase(async ({ session }) => {
       const config = createDefaultGlobalConfig();

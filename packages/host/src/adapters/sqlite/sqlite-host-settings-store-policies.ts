@@ -47,7 +47,13 @@ const storedRuntimeSchemas = {
   // A row stored before the Antigravity policy has no policy, so it gets the default policy.
   antigravity: antigravityRuntimeConfigSchema,
 };
-const storedRuntimesSchema = z.object(storedRuntimeSchemas).catchall(agentRuntimeConfigSchema);
+const storedRuntimesSchema = z
+  .object({
+    ...storedRuntimeSchemas,
+    // A database from before Antigravity has no row, and the settings schema gives the default.
+    antigravity: storedRuntimeSchemas.antigravity.optional(),
+  })
+  .catchall(agentRuntimeConfigSchema);
 
 export const readRuntimePolicies = (session: HostDatabaseSession) =>
   Effect.gen(function* () {
