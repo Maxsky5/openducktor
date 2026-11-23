@@ -422,6 +422,7 @@ Sets what Antigravity approves without asking you. The change applies to Antigra
 - Set **Role overrides** to give a role another mode. **Inherited** uses the default.
 - Spec, Planner, QA, and other read-only roles never change files: OpenDucktor refuses their file edits in every mode. Their mode decides whether their commands and other tools run without asking: **Auto** and **Bypass permissions** run them, **Default** and **Accept edits** ask you.
 - Your Antigravity permission rules apply in every mode. In **Bypass permissions**, OpenDucktor approves each request that is left.
+- In **Auto**, Antigravity asks before each tool call of a global MCP server, such as a server in `~/.gemini/config/mcp_config.json`. To run these calls without asking, set the role to **Bypass permissions**.
 
 ## Repositories [#repositories]
 
