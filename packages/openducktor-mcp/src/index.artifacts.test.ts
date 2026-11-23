@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type {
-  OdtBrowserCaller,
+  OdtCaller,
   DeleteTaskArtifactInput,
   ReadTaskArtifactsResult,
   SetTaskArtifactInput,
@@ -256,7 +256,7 @@ test.each([
       code: testCase.code,
       content: "\ufeff# Workflow é\r\n",
     };
-    const expectedBody: SetTaskArtifactInput & { caller?: OdtBrowserCaller } = {
+    const expectedBody: SetTaskArtifactInput & { caller?: OdtCaller } = {
       workspaceId: "repo",
       taskId: "task-1",
       code: testCase.code,
@@ -301,7 +301,7 @@ test.each([
       _meta: testCase.meta,
     });
     expect(deleted.isError).not.toBe(true);
-    const expectedDeleteBody: DeleteTaskArtifactInput & { caller?: OdtBrowserCaller } = {
+    const expectedDeleteBody: DeleteTaskArtifactInput & { caller?: OdtCaller } = {
       workspaceId: "repo",
       taskId: "task-1",
       code: "notes",
@@ -321,7 +321,7 @@ test.each([
 });
 
 test.each([
-  { runtime: "codex", meta: { turnId: "turn-1" }, reason: "_meta.threadId" },
+  { runtime: "codex", meta: { turnId: "turn-1" }, reason: `_meta["threadId"]` },
   { runtime: "opencode", meta: { sessionID: "model-session" }, reason: "ai.opencode/sessionID" },
 ])("MCP rejects a managed $runtime artifact write without a native caller", async (testCase) => {
   const bridge = await startMockBridge();

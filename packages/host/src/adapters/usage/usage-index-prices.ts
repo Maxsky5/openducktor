@@ -26,7 +26,7 @@ const BATCH = 100;
  * and tier. Tier ID 0 is a request without a recorded tier.
  */
 export const createUsagePriceTable = (
-  { run }: Pick<IndexQueries, "run">,
+  { run, values }: IndexQueries,
   names: ReturnType<typeof createUsageNameCache>,
 ) => {
   let pricedWith: UsagePricer | null = null;
@@ -42,12 +42,21 @@ export const createUsagePriceTable = (
     update: (pricer: UsagePricer): Effect.Effect<string, HostOperationErrorAggregate> =>
       Effect.gen(function* () {
         if (pricer === pricedWith && names.lastId() === pricedThroughId) return digest;
+        // Antigravity records model IDs with variants, such as `claude-opus-5-5-high`. A name that
+        // it records takes the rates of its longest listed prefix, for every runtime.
+        const variants = new Set(
+          (yield* values(
+            "SELECT DISTINCT provider_id, model_id FROM unit WHERE runtime = 'antigravity'",
+          )).map(([provider, model]) => `${provider}:${model}`),
+        );
         const rows: number[] = [];
         const tiers: [number, string | null][] = [[0, null], ...names.entries("tier")];
         for (const [providerId, provider] of names.entries("provider"))
           for (const [modelId, model] of names.entries("model"))
             for (const [tierId, tier] of tiers)
-              for (const { minPrompt, rates } of pricer.stepsFor(provider, model, tier) ?? [])
+              for (const { minPrompt, rates } of (variants.has(`${providerId}:${modelId}`)
+                ? pricer.stepsForVariant(provider, model, tier)
+                : pricer.stepsFor(provider, model, tier)) ?? [])
                 rows.push(
                   providerId,
                   modelId,

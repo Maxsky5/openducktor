@@ -220,7 +220,11 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
         parts,
       }),
     );
-  const userMessage = (messageId: string, submissionId?: string) => {
+  const userMessage = (
+    messageId: string,
+    submissionId?: string,
+    state: "pending" | "read" = "read",
+  ) => {
     const event: Extract<TranscriptEvent, { type: "user_message" }> = {
       type: "user_message",
       externalSessionId: ref.externalSessionId,
@@ -229,7 +233,7 @@ export const createHarness = (steering: AgentDeliveryAvailability = { available:
       messageId,
       message: "first",
       parts: [{ kind: "text", text: "first" }],
-      state: "read",
+      state,
     };
     if (submissionId) event.submissionId = submissionId;
     service.observeChanges([transcript(event)]);

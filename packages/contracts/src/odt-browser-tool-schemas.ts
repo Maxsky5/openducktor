@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { knownRuntimeKindSchema } from "./runtime-kind-schemas";
 import { browserTabIdSchema } from "./browser-tab-schemas";
 import { BROWSER_URL_MAX_LENGTH } from "./browser-url-rules";
 import { odtToolWorkspaceIdSchema } from "./odt-tool-workspace-id-schema";
@@ -190,11 +191,19 @@ export type OdtBrowserToolInput<Name extends OdtBrowserToolName> = z.infer<
   (typeof ODT_BROWSER_TOOL_SCHEMAS)[Name]
 >;
 
-export const odtBrowserCallerSchema = z.strictObject({
-  runtime: z.enum(["opencode", "codex", "claude"]),
-  runtimeSessionId: z.string().trim().min(1).max(512),
-});
-export type OdtBrowserCaller = z.infer<typeof odtBrowserCallerSchema>;
+export const odtCallerIdSchema = z.string().trim().min(1).max(512);
+
+/**
+ * The runtime session that made an ODT tool call. A runtime names the calling session in each call
+ * or in the MCP process environment. A runtime that starts the MCP process before it returns the
+ * session ID names a caller binding instead: the host gives each session activation a binding ID,
+ * and the live adapter of the runtime resolves it to the session.
+ */
+export const odtCallerSchema = z.union([
+  z.strictObject({ runtime: knownRuntimeKindSchema, runtimeSessionId: odtCallerIdSchema }),
+  z.strictObject({ runtime: knownRuntimeKindSchema, callerBindingId: odtCallerIdSchema }),
+]);
+export type OdtCaller = z.infer<typeof odtCallerSchema>;
 
 /** The host returns content blocks. Only the MCP adapter turns them into MCP content. */
 export const odtBrowserToolResultSchema = z.strictObject({

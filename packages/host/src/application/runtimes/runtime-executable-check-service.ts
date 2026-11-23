@@ -102,7 +102,8 @@ export const createRuntimeExecutableCheckService = ({
             runtimeHealth,
             toolDiscovery,
           }),
-        { concurrency: 3 },
+        // The runtimes are independent, so each kind runs its check at once.
+        { concurrency: "unbounded" },
       );
       return { runtimes };
     });

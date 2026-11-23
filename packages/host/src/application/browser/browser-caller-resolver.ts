@@ -37,10 +37,7 @@ export const createBrowserCallerResolver = (
               code: "browser_unmanaged_caller",
               operation: "browser.resolveCaller",
               message: `Browser tools need a managed OpenDucktor session. ${error.message}`,
-              details: {
-                runtime: input.caller.runtime,
-                runtimeSessionId: input.caller.runtimeSessionId,
-              },
+              details: { ...input.caller },
             })
           : error,
       ),

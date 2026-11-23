@@ -206,7 +206,7 @@ const createConnection = (database: SqliteDatabase) => {
     );
   const exec = (sql: string) => execOn(database, sql);
   const names = createUsageNameCache({ values, run });
-  const prices = createUsagePriceTable({ run }, names);
+  const prices = createUsagePriceTable({ run, values }, names);
   const { applySource, dropUnits, sources } = createUsageSourceWriter({ values, run }, names);
 
   const recomputeTargets = (calendar: UsageCalendar, dates: Iterable<UsageDate>) =>

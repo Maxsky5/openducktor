@@ -281,6 +281,11 @@ export type AgentSessionState = {
   pendingApprovals: AgentApprovalRequest[];
   pendingQuestions: AgentQuestionRequest[];
   selectedModel: AgentModelSelection | null;
+  /**
+   * True while model changes of the session save in order. The session shows the newest change, so
+   * a saved record of an earlier change does not replace it.
+   */
+  modelUpdatePending?: boolean | undefined;
   runtimeAvailability?: AgentSessionRuntimeAvailability;
   pendingUserMessageStartedAt?: number | undefined;
   pendingSubmissionId?: string | undefined;

@@ -1,4 +1,5 @@
 import { builtinWorkflowRolePolicy } from "../../test-support/workflow-role-policy";
+import { createMemoryAgentSessionTurnStore } from "../../ports/agent-session-turn-store.test-support";
 import { builtinTaskWorkflows } from "../../test-support/task-workflows";
 import { expect, test } from "bun:test";
 import {
@@ -108,6 +109,7 @@ const harness = async (
   const service = createAgentRuntimeQueryService({
     adapterRegistry,
     deniedToolParts,
+    sessionTurns: createMemoryAgentSessionTurnStore().store,
     runtimeRegistry: {
       requireReady: (kind) =>
         Effect.suspend(() =>

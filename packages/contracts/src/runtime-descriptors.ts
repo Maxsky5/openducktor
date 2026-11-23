@@ -317,6 +317,88 @@ export const CLAUDE_RUNTIME_CAPABILITIES = {
   },
 } as const satisfies RuntimeCapabilities;
 
+export const ANTIGRAVITY_RUNTIME_CAPABILITIES = {
+  speed: { support: "none" },
+  provisioningMode: "host_managed",
+  workflow: {
+    supportsOdtWorkflowTools: true,
+    supportedScopes: NATIVE_RUNTIME_SUPPORTED_SCOPES,
+  },
+  sessionLifecycle: {
+    supportedStartModes: ["fresh", "reuse"],
+    supportsSessionFork: false,
+    forkTargets: [],
+    supportsListLiveSessions: true,
+    supportsPendingInputSnapshots: true,
+    supportsInterruptedTurnResume: false,
+    supportsUsageLimitAutoResume: false,
+  },
+  messageDelivery: {
+    minimumSteeringRuntimeVersion: "1.5.14",
+  },
+  goals: {
+    // `/goal` keeps the agent working until it reports the goal complete or cancelled.
+    minimumRuntimeVersion: "1.5.14",
+    supportsPauseResume: false,
+  },
+  history: {
+    loadable: true,
+    fidelity: "message",
+    replay: "snapshot",
+    stableItemIds: true,
+    stableItemOrder: true,
+    exposesCompletionState: false,
+    limitations: [
+      "Antigravity history has no approval decisions. A turn that ran outside OpenDucktor has no times, reply model, or stop notice. A tool that Stop interrupted shows as failed, and a slash command shows as text.",
+    ],
+  },
+  approvals: {
+    supportedRequestTypes: ["command_execution", "file_change", "runtime_tool"],
+    supportedReplyOutcomes: ["approve_once", "reject"],
+    omittedPermissionBehavior: "deny",
+    pendingVisibility: ["live_snapshot"],
+    canClassifyMutatingRequests: true,
+    readOnlyAutoRejectSafe: true,
+  },
+  structuredInput: {
+    supportsQuestions: true,
+    supportsMultipleQuestions: true,
+    supportedAnswerModes: ["free_text", "single_select", "multi_select"],
+    supportsRequiredQuestions: false,
+    supportsDefaultValues: false,
+    supportsSecretInput: false,
+    supportsCustomAnswers: true,
+    supportsQuestionResolution: true,
+    pendingVisibility: ["live_snapshot"],
+  },
+  promptInput: {
+    supportedParts: [
+      "text",
+      "slash_command",
+      "skill_mention",
+      "file_reference",
+      "folder_reference",
+    ],
+    supportsAttachments: true,
+    supportsSlashCommands: true,
+    supportsFileSearch: true,
+    supportsSkillReferences: true,
+    supportsSubagentReferences: false,
+  },
+  optionalSurfaces: {
+    supportsProfiles: false,
+    supportsVariants: true,
+    supportsTodos: false,
+    supportsDiff: false,
+    supportsFileStatus: false,
+    supportsMcpStatus: false,
+    supportsImageGeneration: false,
+    supportsRunningCommandOutput: false,
+    supportsSubagents: false,
+    supportedSubagentExecutionModes: [],
+  },
+} as const satisfies RuntimeCapabilities;
+
 export const OPENCODE_RUNTIME_DESCRIPTOR = {
   kind: "opencode",
   label: "OpenCode",
@@ -325,6 +407,7 @@ export const OPENCODE_RUNTIME_DESCRIPTOR = {
   workflowToolAliasesByCanonical: createOpencodeWorkflowToolAliasesByCanonical(),
   capabilities: OPENCODE_RUNTIME_CAPABILITIES,
   updateAction: "Run `opencode upgrade`.",
+  enableOnDiscovery: true,
   capabilityLimits: [
     {
       scope: "runtime",
@@ -345,6 +428,7 @@ export const CODEX_RUNTIME_DESCRIPTOR = {
   capabilities: CODEX_RUNTIME_CAPABILITIES,
   updateAction:
     "Update Codex with the tool that installed it, for example `npm install -g @openai/codex@latest`.",
+  enableOnDiscovery: true,
 } as const satisfies RuntimeDescriptor;
 
 export const CLAUDE_RUNTIME_DESCRIPTOR = {
@@ -356,10 +440,39 @@ export const CLAUDE_RUNTIME_DESCRIPTOR = {
   workflowToolAliasesByCanonical: createClaudeWorkflowToolAliasesByCanonical(),
   capabilities: CLAUDE_RUNTIME_CAPABILITIES,
   updateAction: "Run `claude update`.",
+  enableOnDiscovery: true,
+} as const satisfies RuntimeDescriptor;
+
+export const ANTIGRAVITY_RUNTIME_DESCRIPTOR = {
+  kind: "antigravity",
+  label: "Antigravity",
+  description: "Local Google Antigravity CLI runtime connected through the OpenDucktor MCP bridge.",
+  // The adapter refuses native file changes for read-only roles. Shell commands follow the
+  // native Antigravity permissions.
+  readOnlyRoleBlockedTools: [],
+  workflowToolAliasesByCanonical: {},
+  capabilities: ANTIGRAVITY_RUNTIME_CAPABILITIES,
+  updateAction: "Run `agy update`.",
+  // A discovery fills the executable path, but only the user turns Antigravity on.
+  enableOnDiscovery: false,
+  capabilityLimits: [
+    {
+      scope: "runtime",
+      surface: "subagents",
+      reason:
+        "Antigravity reports a subagent as a tool call, with no child session or final state.",
+    },
+    {
+      scope: "runtime",
+      surface: "todos",
+      reason: "Antigravity sends no ACP plan updates.",
+    },
+  ],
 } as const satisfies RuntimeDescriptor;
 
 export const RUNTIME_DESCRIPTORS_BY_KIND = {
   [OPENCODE_RUNTIME_DESCRIPTOR.kind]: OPENCODE_RUNTIME_DESCRIPTOR,
   [CODEX_RUNTIME_DESCRIPTOR.kind]: CODEX_RUNTIME_DESCRIPTOR,
   [CLAUDE_RUNTIME_DESCRIPTOR.kind]: CLAUDE_RUNTIME_DESCRIPTOR,
+  [ANTIGRAVITY_RUNTIME_DESCRIPTOR.kind]: ANTIGRAVITY_RUNTIME_DESCRIPTOR,
 } as const satisfies Record<RuntimeKind, RuntimeDescriptor>;

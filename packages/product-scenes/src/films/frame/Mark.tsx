@@ -4,7 +4,7 @@
 import type { ReactElement } from "react";
 
 /** The paths of the duck in its 64 unit box, from the mark of the app. */
-export const DUCK = {
+const DUCK = {
   body: "M3.5 23.5C8.5 29 15 32.5 24 32.5H42C53 32.5 59.5 39 59.5 45.5C59.5 51.5 53.5 56 45 56H19.5C11 56 5.5 50.5 5 42.5C4.6 36 3.2 29.5 3.5 23.5Z",
   head: { cx: 37.5, cy: 20.5, r: 12.5 },
   bill: "M47.5 18.25H56.25A3.9 3.9 0 0 1 56.25 26.05H46.5Z",

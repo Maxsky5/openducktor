@@ -676,16 +676,19 @@ describe("useSettingsModalController", () => {
       opencode: 0,
       codex: 0,
       claude: 0,
+      antigravity: 0,
     } satisfies Record<RuntimeKind, number>;
     const initialValidationByKind = {
       opencode: createDeferred<RuntimeExecutableCheck>(),
       codex: createDeferred<RuntimeExecutableCheck>(),
       claude: createDeferred<RuntimeExecutableCheck>(),
+      antigravity: createDeferred<RuntimeExecutableCheck>(),
     } satisfies Record<RuntimeKind, ReturnType<typeof createDeferred<RuntimeExecutableCheck>>>;
     const repeatedValidationByKind = {
       opencode: createDeferred<RuntimeExecutableCheck>(),
       codex: createDeferred<RuntimeExecutableCheck>(),
       claude: createDeferred<RuntimeExecutableCheck>(),
+      antigravity: createDeferred<RuntimeExecutableCheck>(),
     } satisfies Record<RuntimeKind, ReturnType<typeof createDeferred<RuntimeExecutableCheck>>>;
     const runtimeExecutablesCheck: HostClient["runtimeExecutablesCheck"] = mock(async (input) => {
       if (input.mode !== "validate") throw new Error("Expected runtime validation");

@@ -1,5 +1,6 @@
 import { liveSessionRefKey } from "./live-session-ref";
-import { agentSessionStatusFromActivity } from "@openducktor/core";
+import { createOrderedLiveChangeQueue } from "./ordered-live-change-queue";
+import { upsertLiveSessionSnapshots } from "./live-session-snapshot-upserts";
 import { baselineLiveSessionChanges } from "../../application/agent-sessions/baseline-live-session-changes";
 import type { CodexLiveSessionMutation } from "@openducktor/adapters-codex-app-server";
 import {
@@ -18,17 +19,10 @@ import {
   toHostOperationError,
 } from "../../effect/host-errors";
 import { parseAdapterOutput as parseProjectionValue } from "../../effect/zod-output";
-import type { AgentSessionLiveAdapterChange } from "../../ports/agent-session-live-adapter-port";
 import type { RuntimeLiveSessionLifecyclePort } from "../../ports/runtime-live-session-lifecycle-port";
 
 type CodexProjectionRuntime = {
   readonly runtimeId: string;
-};
-
-type QueuedMutation = {
-  readonly mutation: CodexLiveSessionMutation;
-  readonly resolve: () => void;
-  readonly reject: (cause: unknown) => void;
 };
 
 type ParsedMutation = Pick<
@@ -56,10 +50,6 @@ export const createCodexLiveSessionProjection = ({
     runtimeId: runtime.runtimeId,
     runtimeKind: "codex" as const,
   });
-  const queuedMutations: QueuedMutation[] = [];
-  let forwarding = false;
-  let released = false;
-  let forwardingChain = Promise.resolve();
 
   /** Parse all input before changing state so an invalid ref cannot leave partial changes. */
   const applyMutation = (
@@ -70,28 +60,16 @@ export const createCodexLiveSessionProjection = ({
       Effect.flatMap((parsed) =>
         binding.runMutation(
           Effect.sync(() => {
-            if (released) {
+            if (queue.released) {
               return { value: undefined, changes: [] };
             }
-            const changes: AgentSessionLiveAdapterChange[] = [];
-            // The adapter emits the final reply of a turn before the snapshot that settles the
-            // turn, but a mutation keeps snapshots apart from transcript events. A settling
-            // snapshot of a known session therefore goes after the transcript events, so a
-            // client never shows a settled turn without its final reply.
-            const settlingUpserts: AgentSessionLiveAdapterChange[] = [];
-            const incomingKeys = new Set<string>();
-            for (const snapshot of parsed.snapshots) {
-              const key = liveSessionRefKey(snapshot.ref);
-              incomingKeys.add(key);
-              const previous = snapshotsByRef.get(key);
-              snapshotsByRef.set(key, snapshot);
-              if (!previous) {
-                changes.push({ type: "session_upsert", snapshot });
-              } else if (!snapshotsEqual(previous, snapshot)) {
-                const settles = agentSessionStatusFromActivity(snapshot.activity) === "idle";
-                (settles ? settlingUpserts : changes).push({ type: "session_upsert", snapshot });
-              }
-            }
+            const { upserts: changes, settling } = upsertLiveSessionSnapshots(
+              snapshotsByRef,
+              parsed.snapshots,
+            );
+            const incomingKeys = new Set(
+              parsed.snapshots.map((snapshot) => liveSessionRefKey(snapshot.ref)),
+            );
             const removals =
               parsed.snapshotMode === "full"
                 ? [...snapshotsByRef.values()]
@@ -107,7 +85,7 @@ export const createCodexLiveSessionProjection = ({
             for (const event of parsed.transcriptEvents) {
               changes.push({ type: "transcript_event", event });
             }
-            changes.push(...settlingUpserts);
+            changes.push(...settling);
             // The shared runtime serves many repositories. A runtime-wide change goes to
             // each repository that has a live session.
             const liveRepoPaths = new Set(
@@ -230,42 +208,19 @@ export const createCodexLiveSessionProjection = ({
       return parsed;
     });
 
-  const drainQueuedMutations = (): Promise<void> => {
-    forwardingChain = forwardingChain.then(async () => {
-      while (forwarding && queuedMutations.length > 0) {
-        const queued = queuedMutations.shift();
-        if (!queued) {
-          continue;
-        }
-        try {
-          await Effect.runPromise(applyMutation(queued.mutation));
-          queued.resolve();
-        } catch (error) {
-          queued.reject(error);
-        }
-      }
-    });
-    return forwardingChain;
-  };
-
-  const enqueueMutation = (mutation: CodexLiveSessionMutation): Promise<void> =>
-    new Promise<void>((resolve, reject) => {
-      if (released) {
-        reject(new Error(`Codex runtime '${runtime.runtimeId}' is already released.`));
-        return;
-      }
-      queuedMutations.push({ mutation, resolve, reject });
-      if (forwarding) {
-        void drainQueuedMutations();
-      }
-    });
+  const queue = createOrderedLiveChangeQueue<CodexLiveSessionMutation>({
+    runtimeLabel: "Codex",
+    runtimeId: runtime.runtimeId,
+    operationPrefix: "codex-live-session",
+    apply: (mutation) => applyMutation(mutation),
+  });
 
   return {
     binding,
     /** A runtime-wide catalog change also invalidates each catalog that this runtime served. */
     recordCatalogRepository: (repoPath: string) => void catalogRepoPaths.add(repoPath),
     applyMutation,
-    enqueueMutation,
+    enqueueMutation: queue.enqueue,
     hasSnapshot: (ref: AgentSessionLiveRef): boolean => snapshotsByRef.has(liveSessionRefKey(ref)),
     /** Lists the live sessions of every repository on this runtime. */
     listSnapshots: () =>
@@ -284,31 +239,13 @@ export const createCodexLiveSessionProjection = ({
           : ({ type: "missing", ref } as const),
       );
     },
-    startForwarding: (): Effect.Effect<void, HostError> =>
-      Effect.tryPromise({
-        try: async () => {
-          if (released) {
-            throw new Error(`Codex runtime '${runtime.runtimeId}' is already released.`);
-          }
-          forwarding = true;
-          await drainQueuedMutations();
-        },
-        catch: (cause) =>
-          toHostOperationError(cause, "codex-live-session.start-forwarding", {
-            runtimeId: runtime.runtimeId,
-          }),
-      }),
+    startForwarding: queue.startForwarding,
     releaseRuntime: (
       releaseController: () => void,
     ): Effect.Effect<ReadonlyArray<AgentSessionLiveRef>, HostError> =>
       Effect.suspend(() => {
-        if (released) {
+        if (!queue.release()) {
           return Effect.succeed([]);
-        }
-        released = true;
-        forwarding = false;
-        for (const queued of queuedMutations.splice(0)) {
-          queued.reject(new Error(`Codex runtime '${runtime.runtimeId}' was released.`));
         }
         const refs = [...snapshotsByRef.values()].map((snapshot) => snapshot.ref);
         snapshotsByRef.clear();
@@ -325,6 +262,3 @@ export const createCodexLiveSessionProjection = ({
 
 const refsEqual = (left: AgentSessionLiveRef, right: AgentSessionLiveRef): boolean =>
   liveSessionRefKey(left) === liveSessionRefKey(right);
-
-const snapshotsEqual = (left: AgentSessionLiveSnapshot, right: AgentSessionLiveSnapshot): boolean =>
-  JSON.stringify(left) === JSON.stringify(right);

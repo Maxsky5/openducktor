@@ -124,6 +124,7 @@ describe("buildDiagnosticsPanelModel", () => {
       "opencode",
       "codex",
       "claude",
+      "antigravity",
     ]);
     const [opencode, codex] = model.host.runtimes.entries;
     expect(opencode?.status).toEqual({ health: "ok", label: "Ready" });
@@ -232,7 +233,7 @@ describe("buildDiagnosticsPanelModel", () => {
     );
 
     expect(model.workspace).toEqual({ kind: "none", emptyMessage: NO_WORKSPACE_MESSAGE });
-    expect(model.host.runtimes.entries).toHaveLength(3);
+    expect(model.host.runtimes.entries).toHaveLength(4);
     expect(model.summaryState.label).toBe("Healthy");
   });
 
@@ -554,6 +555,7 @@ describe("buildDiagnosticsPanelModel without a live connection", () => {
     expect(workspaceCheck(model, "task-store").status.label).toBe("Unavailable");
     expect(hostCheck(model, "mcp-bridge").status.label).toBe("Unavailable");
     expect(model.host.runtimes.entries.map((entry) => entry.status.label)).toEqual([
+      "Unavailable",
       "Unavailable",
       "Unavailable",
       "Unavailable",

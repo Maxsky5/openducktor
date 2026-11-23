@@ -1,10 +1,8 @@
 import { z } from "zod";
 import { startupOperationSnapshotSchema } from "./session-startup-schemas";
 import { runtimeQueryFailureSchema } from "./runtime-query-failure-schemas";
-import {
-  acceptedAgentUserMessageSchema,
-  acceptedAgentCommandSchema,
-} from "./agent-session-control-schemas";
+import { acceptedAgentCommandSchema } from "./agent-session-control-schemas";
+import { acceptedAgentUserMessageSchema } from "./agent-session-event-schemas";
 import { runtimeOperationFailureSchema } from "./runtime-operation-failure-schemas";
 import { agentSessionLiveRefSchema } from "./agent-session-schemas";
 import { browserFailureSchema } from "./browser-tab-schemas";

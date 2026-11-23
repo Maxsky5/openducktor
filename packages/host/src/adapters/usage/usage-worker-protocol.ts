@@ -21,7 +21,8 @@ export type UsageIndexReply =
   /** No read waits and no background work runs, so the threads can stop. */
   | { kind: "idle" };
 
-export type UsageSourceFormat = "jsonl" | "jsonl_zst" | "opencode";
+/** A JSON lines file, a compressed one, the OpenCode database, or an Antigravity conversation. */
+export type UsageSourceFormat = "jsonl" | "jsonl_zst" | "opencode" | "antigravity";
 
 /** The size, time, and device and inode of a source. A change means a new read. */
 export type UsageSourceFingerprint = { size: number; modifiedAtMs: number; fileId: string };

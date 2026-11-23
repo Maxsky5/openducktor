@@ -92,6 +92,15 @@ describe("buildUserMessageContent", () => {
     expect(content.nodes).toEqual([{ kind: "text", key: "text", text: "See image" }]);
   });
 
+  test("shows a pending message as unread", () => {
+    const content = buildUserMessageContent(
+      buildMessage("user", "Hello", {
+        meta: { kind: "user", state: "pending", parts: [{ kind: "text", text: "Hello" }] },
+      }),
+    );
+    expect(content.isUnread).toBe(true);
+  });
+
   test("tells reference parts from other parts", () => {
     expect(isUserMessageReferencePart(file)).toBe(true);
     expect(isUserMessageReferencePart({ kind: "text", text: "x" })).toBe(false);

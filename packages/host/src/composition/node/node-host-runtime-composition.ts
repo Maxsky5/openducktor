@@ -32,6 +32,7 @@ import type { RuntimeStarterPort } from "../../ports/runtime-registry-port";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import { type HostLifecycleLogger, writeHostLifecycleLog } from "../host-lifecycle";
 import { resolveClaudeMcpBridgeConnection } from "./claude-mcp-bridge-connection";
+import { createAntigravityRuntimeComposition } from "./antigravity-runtime-composition";
 import { createClaudeRuntimeComposition } from "./claude-runtime-composition";
 import type { NodeHostDefaultPorts } from "./node-host-default-ports";
 import { createOpenCodeRuntimeComposition } from "./opencode-runtime-composition";
@@ -154,7 +155,23 @@ export const createNodeHostRuntimeComposition = ({
     taskSessionLifecycleCoordinator,
     toolDiscovery,
   });
+  const antigravityRuntime = createAntigravityRuntimeComposition({
+    attachmentStageDirectory: defaultPorts.localAttachments.stageDirectory(),
+    clientVersion,
+    directoriesMatch,
+    launchDirectory,
+    liveSessionLifecycle: liveState,
+    readEnv,
+    readRuntimeSettings: () =>
+      settingsConfig
+        .readGlobalConfig()
+        .pipe(Effect.map(({ agentRuntimes }) => agentRuntimes.antigravity)),
+    resolveMcpServerConfig: mcpServerConfigFor("antigravity"),
+    resolveWorkflowRolePolicy,
+    toolDiscovery,
+  });
   const runtimeStarters = {
+    antigravity: antigravityRuntime.runtimeStarter,
     claude: claudeRuntime.runtimeStarter,
     codex: createCodexRuntimeStarter(codexStarterInput),
     opencode: opencodeRuntime.runtimeStarter,
@@ -198,12 +215,18 @@ export const createNodeHostRuntimeComposition = ({
   const orchestrator = createRuntimeOrchestrator({
     drivers: createRuntimeDrivers({
       descriptorFor,
-      starters: { opencode: startGuard, codex: startGuard, claude: startGuard },
+      starters: {
+        opencode: startGuard,
+        codex: startGuard,
+        claude: startGuard,
+        antigravity: startGuard,
+      },
       sessionOperations: createRuntimeSessionOperations({
         directoriesMatch,
         opencode: opencodeRuntime.sessionOperations,
         codexAppServer,
         claudeAgentSdk: claudeRuntime.sessionOperations,
+        antigravity: antigravityRuntime.sessionOperations,
       }),
       runtimeHealth,
       toolDiscovery,

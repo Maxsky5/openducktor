@@ -6,6 +6,7 @@ import {
   agentSessionUsageLimitSchema,
   agentStreamPartSchema,
   agentUserMessageDisplayPartSchema,
+  agentUserMessageStateSchema,
 } from "./agent-session-event-schemas";
 import { agentSessionPendingQuestionRequestSchema } from "./agent-session-pending-schemas";
 import { agentModelSelectionSchema, agentSessionForkPointSchema } from "./agent-session-schemas";
@@ -127,7 +128,7 @@ export const agentSessionHistoryMessageSchema = z.discriminatedUnion("role", [
       ...sessionHistoryMessageFields,
       role: z.literal("user"),
       displayParts: z.array(agentUserMessageDisplayPartSchema),
-      state: z.enum(["queued", "read"]),
+      state: agentUserMessageStateSchema,
       model: agentModelSelectionSchema.optional(),
       resolvedQuestionRequestIds: z.array(nonEmptyStringSchema).optional(),
       parts: z.array(agentStreamPartSchema),

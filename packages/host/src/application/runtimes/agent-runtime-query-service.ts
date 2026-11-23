@@ -15,11 +15,13 @@ import type {
   AgentSessionLiveAdapterRegistryPort,
 } from "../../ports/agent-session-live-adapter-port";
 import type { GitPort } from "../../ports/git-port";
+import type { AgentSessionTurnStorePort } from "../../ports/agent-session-turn-store-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { TaskReader } from "../../ports/task-repository-ports";
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
 import { resolveRepoPath } from "./runtime-request-resolution";
 import { toCatalogResponse } from "./agent-runtime-catalog-response";
+import { applySavedTurns } from "./session-history-saved-turns";
 import { requireSessionScope, type QueryInput } from "./runtime-query-scope";
 import { requireRuntimeWorkingDirectory } from "./runtime-working-directory";
 import type { WorkspaceCheckoutGitPort } from "../git/workspace-checkout";
@@ -32,6 +34,7 @@ import type { DeniedToolPartRecords } from "../agent-sessions/denied-tool-part-r
 
 export type AgentRuntimeQueryDependencies = RuntimeHistoryWorkingDirectoryDependencies & {
   adapterRegistry: AgentSessionLiveAdapterRegistryPort;
+  sessionTurns: Pick<AgentSessionTurnStorePort, "listTurns">;
   runtimeRegistry: Pick<RuntimeRegistryPort, "requireReady">;
   gitPort: Pick<GitPort, "canonicalizePath" | "isGitRepository"> & WorkspaceCheckoutGitPort;
   taskReader: Pick<TaskReader, "getTaskMetadata">;
@@ -140,14 +143,43 @@ export const createAgentRuntimeQueryService = (
     searchFiles: (input) =>
       read("searchFiles", input, (queries, request) => queries.searchFiles(request)),
     loadSessionHistory: (input) =>
-      read("loadSessionHistory", input, (queries, request) =>
-        queries
-          .loadSessionHistory(request)
-          .pipe(
-            Effect.map((history) =>
-              dependencies.deniedToolParts.apply(request, history, request.limit !== undefined),
+      read("loadSessionHistory", input, (queries, request, runtime) =>
+        Effect.all(
+          [
+            queries
+              .loadSessionHistory(request)
+              .pipe(
+                Effect.map((history) =>
+                  dependencies.deniedToolParts.apply(request, history, request.limit !== undefined),
+                ),
+              ),
+            dependencies.sessionTurns
+              .listTurns({
+                runtimeKind: request.runtimeKind,
+                externalSessionId: request.externalSessionId,
+              })
+              .pipe(
+                Effect.mapError((cause) =>
+                  runtimeQueryError(
+                    "loadSessionHistory",
+                    request,
+                    "runtime_unavailable",
+                    cause.message,
+                    cause,
+                  ),
+                ),
+              ),
+          ],
+          { concurrency: 2 },
+        ).pipe(
+          Effect.map(([history, turns]) =>
+            applySavedTurns(
+              history,
+              turns,
+              runtime.descriptor.capabilities.history.exposesCompletionState,
             ),
           ),
+        ),
       ),
     loadSessionTodos: (input) =>
       read("loadSessionTodos", input, (queries, request) => queries.loadSessionTodos(request)),

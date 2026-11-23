@@ -49,7 +49,6 @@ export type AgentChatComposerConfig = {
   backgroundTasks: AgentChatComposerModel["backgroundTasks"];
   isSending: boolean;
   isStarting: boolean;
-  isSavingModel?: boolean;
   contextUsage: {
     totalTokens: number;
     contextWindow: number;
@@ -135,7 +134,6 @@ export function useAgentChatComposerModel({
       backgroundTasks: composer.backgroundTasks,
       isSending: composer.isSending,
       isStarting: composer.isStarting,
-      isSavingModel: composer.isSavingModel ?? false,
       isSessionWorking: composer.isSessionWorking,
       foregroundTurnActive: composer.foregroundTurnActive,
       isWaitingInput: composer.isWaitingInput,

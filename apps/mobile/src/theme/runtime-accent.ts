@@ -10,5 +10,7 @@ export const runtimeAccentColor = (theme: AppTheme, runtimeKind: RuntimeKind): s
       return theme.colors.runtimeCodex;
     case "claude":
       return theme.colors.runtimeClaude;
+    case "antigravity":
+      return theme.colors.runtimeAntigravity;
   }
 };

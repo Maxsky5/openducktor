@@ -434,10 +434,8 @@ describe("useModelSelectionActions", () => {
           else speedChange = state.handleSelectSpeed("fast");
         });
 
-        expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
-        firstUpdate.resolve();
-        await speedChange;
-        await harness.waitFor(() => updateAgentSessionModel.mock.calls.length === 2);
+        // The second change builds on the first at once, without waiting for its write.
+        expect(updateAgentSessionModel).toHaveBeenCalledTimes(2);
         expect(updateAgentSessionModel).toHaveBeenLastCalledWith(loadedClaudeSession, {
           ...claudeSelection,
           ...(change.setting === "effort"
@@ -445,6 +443,8 @@ describe("useModelSelectionActions", () => {
             : { modelId: "claude-sonnet-4-6" }),
           speed: "fast",
         });
+        firstUpdate.resolve();
+        await speedChange;
       } finally {
         firstUpdate.resolve();
         await speedChange;
@@ -454,7 +454,7 @@ describe("useModelSelectionActions", () => {
   );
 
   test.each([true, false])(
-    "continues from the accepted selection after failure with speedFirst=%s",
+    "builds a quick second change on the first one, and reports the failed first with speedFirst=%s",
     async (speedFirst) => {
       const firstUpdate = Promise.withResolvers<void>();
       const failure = new Error("setting update failed");
@@ -477,19 +477,20 @@ describe("useModelSelectionActions", () => {
           else speedResult = state.handleSelectSpeed("fast").catch((cause: unknown) => cause);
         });
 
-        expect(updateAgentSessionModel).toHaveBeenCalledTimes(1);
-        firstUpdate.reject(failure);
-        const result = await speedResult;
-        await harness.waitFor(() => updateAgentSessionModel.mock.calls.length === 2);
+        expect(updateAgentSessionModel).toHaveBeenCalledTimes(2);
         expect(updateAgentSessionModel).toHaveBeenLastCalledWith(loadedClaudeSession, {
           ...claudeSelection,
-          ...(speedFirst ? { variant: "xhigh" } : { speed: "fast" }),
+          variant: "xhigh",
+          speed: "fast",
         });
+        firstUpdate.reject(failure);
+        const result = await speedResult;
         if (speedFirst) {
           expect(result).toBe(failure);
           expect(feedback.shownOf("error")).toEqual([]);
         } else {
           expect(result).toBeUndefined();
+          await harness.waitFor(() => feedback.shownOf("error").length === 1);
           expect(feedback.shownOf("error")).toEqual([
             {
               kind: "error",
@@ -506,7 +507,7 @@ describe("useModelSelectionActions", () => {
     },
   );
 
-  test("keeps pending changes bound to the full session identity across navigation", async () => {
+  test("builds each change on the selection of the shown session across navigation", async () => {
     const firstUpdate = Promise.withResolvers<void>();
     const updateAgentSessionModel = mock(async () => {
       if (updateAgentSessionModel.mock.calls.length === 1) await firstUpdate.promise;
@@ -524,21 +525,23 @@ describe("useModelSelectionActions", () => {
       });
       await harness.update({ ...props, loadedSessionIdentity: otherSession });
       await harness.run((state) => state.handleSelectSpeed("fast"));
-      expect(updateAgentSessionModel).toHaveBeenCalledTimes(2);
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(3);
       expect(updateAgentSessionModel).toHaveBeenLastCalledWith(otherSession, {
         ...claudeSelection,
         speed: "fast",
       });
 
-      // Returning to the first session must keep its existing queue.
-      await harness.update(props);
+      // Returning to the first session builds on the pending changes that its store shows.
+      await harness.update({
+        ...props,
+        selectedModelSelection: { ...claudeSelection, variant: "xhigh", speed: "fast" },
+      });
       await harness.run((state) => {
         void state.handleSelectVariant("low");
       });
-      expect(updateAgentSessionModel).toHaveBeenCalledTimes(2);
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(4);
       firstUpdate.resolve();
       await speedChange;
-      await harness.waitFor(() => updateAgentSessionModel.mock.calls.length === 4);
       expect(updateAgentSessionModel).toHaveBeenLastCalledWith(loadedClaudeSession, {
         ...claudeSelection,
         variant: "low",

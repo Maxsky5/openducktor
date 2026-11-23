@@ -20,6 +20,12 @@ export const OPENDUCKTOR_MCP_ENV_VAR_NAMES = [
  */
 export const OPENDUCKTOR_MCP_RUNTIME_SESSION_ID_ENV = "ODT_RUNTIME_SESSION_ID";
 
+/**
+ * The host-issued caller binding of one session activation, for a runtime that starts the MCP
+ * process before the session has an ID. Tools that need the caller send this binding.
+ */
+export const OPENDUCKTOR_MCP_CALLER_BINDING_ID_ENV = "ODT_RUNTIME_CALLER_BINDING_ID";
+
 export type OpenDucktorMcpBridgeEnvironment = Record<
   (typeof OPENDUCKTOR_MCP_ENV_VAR_NAMES)[number],
   string
@@ -37,6 +43,7 @@ export const withoutOpenDucktorMcpEnvironment = (
     delete env[name];
   }
   delete env[OPENDUCKTOR_MCP_RUNTIME_SESSION_ID_ENV];
+  delete env[OPENDUCKTOR_MCP_CALLER_BINDING_ID_ENV];
   return env;
 };
 

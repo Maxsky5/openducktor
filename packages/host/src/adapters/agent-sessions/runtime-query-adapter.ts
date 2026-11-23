@@ -113,21 +113,27 @@ export const createRuntimeQueryAdapter = (
     usageLimits,
   );
 
+const runEffectQuery = <Result>(
+  run: () => Effect.Effect<Result, unknown>,
+  mapError: (cause: unknown) => RuntimeQueryError,
+): Effect.Effect<Result, RuntimeQueryError> =>
+  Effect.try({ try: run, catch: mapError }).pipe(
+    Effect.flatMap((query) => Effect.mapError(query, mapError)),
+  );
+
+/** The query adapter of a runtime whose native queries are Effects. */
+export const createEffectRuntimeQueryAdapter = (
+  native: RuntimeQuerySource<"effect">,
+): AgentRuntimeQueryAdapterPort => createQueryAdapter<"effect">(native, runEffectQuery);
+
 export const createClaudeRuntimeQueryAdapter = (
   native: RuntimeQuerySource<"effect", keyof NativeQueries | "readLatestUsageLimitStop">,
 ): AgentRuntimeQueryAdapterPort =>
-  createQueryAdapter<"effect">(
-    native,
-    (run, mapError) =>
-      Effect.try({ try: run, catch: mapError }).pipe(
-        Effect.flatMap((query) => Effect.mapError(query, mapError)),
-      ),
-    {
-      readLatestUsageLimitStop: (input) => native.readLatestUsageLimitStop(input),
-      // Claude reports the exact reset time of the stopped turn, and the resume waits until then.
-      readUsageLimitRecovery: () => Effect.succeed({ kind: "recovered" }),
-    },
-  );
+  createQueryAdapter<"effect">(native, runEffectQuery, {
+    readLatestUsageLimitStop: (input) => native.readLatestUsageLimitStop(input),
+    // Claude reports the exact reset time of the stopped turn, and the resume waits until then.
+    readUsageLimitRecovery: () => Effect.succeed({ kind: "recovered" }),
+  });
 
 const runtimeQueryFailureCode = (
   code: RuntimeOperationFailure["code"],

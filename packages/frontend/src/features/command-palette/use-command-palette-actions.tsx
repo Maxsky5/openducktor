@@ -257,7 +257,7 @@ export function useCommandPaletteActions({
         workspaceAction(
           "import-chat",
           icon(Import),
-          ["import session", "external session", "claude", "codex", "opencode"],
+          ["import session", "external session", "claude", "codex", "opencode", "antigravity"],
           () => openWorkspaceDialog({ kind: "import_chat", workspace: target }, previousFocus()),
           { suggested: true },
         ),

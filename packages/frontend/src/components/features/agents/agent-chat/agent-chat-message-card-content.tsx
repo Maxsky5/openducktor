@@ -275,16 +275,18 @@ type UserMessageDisplay = {
   inline: ReactElement | null;
   annotations: ReactElement | null;
   attachments: UserAttachmentPart[];
+  isUnread: boolean;
 };
 
 const readUserMessageDisplay = (message: AgentChatMessage): UserMessageDisplay => {
   // Pending browser annotations go after the user text. The chat shows them as chips.
   const sent = readSentBrowserAnnotations(readUserMessageText(message));
-  const { nodes, attachments } = buildUserMessageContent(message, sent?.textEnd ?? null);
+  const { nodes, attachments, isUnread } = buildUserMessageContent(message, sent?.textEnd ?? null);
   return {
     inline: renderUserMessageInlineContent(nodes),
     annotations: sent ? <BrowserAnnotationMessageChips annotations={sent.annotations} /> : null,
     attachments,
+    isUnread,
   };
 };
 
@@ -380,8 +382,8 @@ const UserMessage = ({
   message: AgentChatMessage;
   timeLabel: string;
 }): ReactElement => {
-  const isUnread = message.meta?.kind === "user" && message.meta.state === "queued";
   const display = readUserMessageDisplay(message);
+  const { isUnread } = display;
 
   return (
     <>

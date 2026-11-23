@@ -95,7 +95,10 @@ export const createNodeTaskSessionServices = ({
   };
   pauseForStop: Parameters<typeof createAgentSessionCommandService>[0]["pauseForStop"];
   /** The saved chats and tasks that own sessions and worktrees. */
-  savedSessions: Pick<NodeTaskAssetServices, "workspaceSessionStore" | "taskOwnership">;
+  savedSessions: Pick<
+    NodeTaskAssetServices,
+    "workspaceSessionStore" | "taskOwnership" | "agentSessionTurnStore"
+  >;
   claudeSessionMetadata: ClaudeSessionMetadataPort;
 }) => {
   const { workspaceSessionStore: store, taskOwnership } = savedSessions;
@@ -172,6 +175,7 @@ export const createNodeTaskSessionServices = ({
   const agentRuntimeQueries = createAgentRuntimeQueryService({
     adapterRegistry: workflowLaunch.adapterRegistry,
     deniedToolParts: workflowLaunch.deniedToolParts,
+    sessionTurns: savedSessions.agentSessionTurnStore,
     settingsConfig: taskServiceInput.settingsConfig,
     workspaceSettingsService: taskServiceInput.workspaceSettingsService,
     worktreeFiles: taskServiceInput.worktreeFiles,

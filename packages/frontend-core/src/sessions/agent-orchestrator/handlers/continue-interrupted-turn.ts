@@ -7,6 +7,8 @@ export type ContinueInterruptedTurnDependencies = {
   workspaceRepoPath: string | null;
   adapter: Pick<AgentEnginePort, "continueInterruptedTurn">;
   readSessionSnapshot: ReadSessionSnapshot;
+  /** Waits for the model changes of the session, so the turn continues with the shown model. */
+  settleModelUpdates: (session: AgentSessionIdentity) => Promise<void>;
 };
 
 /**
@@ -19,8 +21,10 @@ export const createContinueInterruptedTurn = ({
   workspaceRepoPath,
   adapter,
   readSessionSnapshot,
+  settleModelUpdates,
 }: ContinueInterruptedTurnDependencies) => {
   return async (identity: AgentSessionIdentity): Promise<void> => {
+    await settleModelUpdates(identity);
     const session = readSessionSnapshot(identity);
     if (!session) {
       throw new Error(

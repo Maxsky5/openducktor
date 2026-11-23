@@ -107,6 +107,7 @@ describe("agent runtime services", () => {
       "opencode",
       "codex",
       "claude",
+      "antigravity",
     ]);
   });
 

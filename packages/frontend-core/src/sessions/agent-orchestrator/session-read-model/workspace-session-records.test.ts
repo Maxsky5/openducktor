@@ -131,6 +131,29 @@ describe("Workspace Session records in the shared read model", () => {
     expect(entry.updatedAt).toBe(1000);
   });
 
+  test("keeps the shown model of a session while its model changes save", () => {
+    const entry = record();
+    entry.selectedModel = { runtimeKind: "codex", providerId: "openai", modelId: "first" };
+    const identity = workspaceSessionIdentity(entry)!;
+    const hydrated = applyWorkspaceSessionRecords(
+      emptyAgentSessionCollection(),
+      [entry],
+      "workspace-1",
+    );
+    const session = getAgentSession(hydrated, identity)!;
+    const pending = replaceAgentSession(hydrated, {
+      ...session,
+      selectedModel: { runtimeKind: "codex", providerId: "openai", modelId: "second" },
+      modelUpdatePending: true,
+    });
+
+    // The saved record of the first change arrives while the second change saves.
+    expect(
+      getAgentSession(applyWorkspaceSessionRecords(pending, [entry], "workspace-1"), identity)
+        ?.selectedModel?.modelId,
+    ).toBe("second");
+  });
+
   test("reports a directory mismatch without changing the stored target", () => {
     const entry = record();
     const live = snapshot(entry);

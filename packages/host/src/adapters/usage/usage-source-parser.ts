@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Cause, Effect, Exit } from "effect";
 import { z } from "zod";
 import { HostOperationError } from "../../effect/host-errors";
@@ -12,6 +13,7 @@ import {
 import type { UsageSourceIssue } from "../../domain/usage/usage-report";
 import { CODEX_USAGE_LINE_FILTER } from "./usage-codex-lines";
 import { canResumeJsonl, readJsonlLines } from "./usage-jsonl-reader";
+import { readAntigravityUsage } from "./usage-antigravity-reader";
 import { openCodeParserStateSchema, readOpenCodeUsage } from "./usage-opencode-reader";
 import type {
   OpenCodeProgress,
@@ -55,6 +57,8 @@ const continuationOf = ({ format, fingerprint, previous }: UsageParseJob): Conti
   if (previous === null || previous.fingerprint.fileId !== fingerprint.fileId) return FROM_START;
   // A database read compares its rows with the state of the last read.
   if (format === "opencode") return { resume: null, parserState: previous.parserState };
+  // A conversation database is small, so a change reads it again.
+  if (format === "antigravity") return FROM_START;
   // A compressed rollout never grows. A source that the host could not read starts again from
   // its first line, so issues of its earlier bytes come back.
   const grew =
@@ -156,6 +160,37 @@ const parseOpenCode = async (
   };
 };
 
+const parseAntigravity = async (job: UsageParseJob): Promise<UsageParseResult> => {
+  const id = path.basename(job.path, ".db");
+  const exit = await Effect.runPromiseExit(readAntigravityUsage(job.path, id));
+  if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
+  const read = exit.value;
+  if (read.kind === "unsupported")
+    return {
+      mode: "replace",
+      units: [],
+      resume: null,
+      parserState: null,
+      issue: { code: "unsupported_format", firstAtMs: null, lastAtMs: null },
+    };
+  const times = read.units.map((unit) => unit.occurredAtMs);
+  return {
+    mode: "replace",
+    units: read.units,
+    resume: null,
+    parserState: null,
+    // A call that the reader cannot decode leaves the figures of the conversation short.
+    issue:
+      read.malformed === 0
+        ? null
+        : {
+            code: "malformed_records",
+            firstAtMs: times.length > 0 ? Math.min(...times) : null,
+            lastAtMs: times.length > 0 ? Math.max(...times) : null,
+          },
+  };
+};
+
 /** File system and decoder errors carry a code. SQLite errors come from the driver. */
 const sourceReadErrorSchema = z.object({ code: z.string().min(1) });
 const isSourceReadError = (cause: Error): boolean =>
@@ -173,9 +208,9 @@ export const parseUsageSource = async (
 ): Promise<UsageParseResult> => {
   const continuation = continuationOf(job);
   try {
-    return job.format === "opencode"
-      ? await parseOpenCode(job, continuation, onProgress)
-      : await parseJsonl(job, continuation);
+    if (job.format === "opencode") return await parseOpenCode(job, continuation, onProgress);
+    if (job.format === "antigravity") return await parseAntigravity(job);
+    return await parseJsonl(job, continuation);
   } catch (cause) {
     if (!(cause instanceof Error) || !isSourceReadError(cause)) throw cause;
     return {

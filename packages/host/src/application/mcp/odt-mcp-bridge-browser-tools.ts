@@ -1,6 +1,6 @@
 import {
   ODT_BROWSER_TOOL_SCHEMAS,
-  odtBrowserCallerSchema,
+  odtCallerSchema,
   type OdtBrowserToolName,
   type OdtBrowserToolResult,
   odtBrowserToolResultSchema,
@@ -36,7 +36,7 @@ export const executeOdtMcpBrowserTool = (
       browserBridgeBodySchema,
       body,
     );
-    const caller = yield* parseToolInput(toolName, odtBrowserCallerSchema, rawCaller ?? null);
+    const caller = yield* parseToolInput(toolName, odtCallerSchema, rawCaller ?? null);
     const input = yield* parseToolInput(toolName, ODT_BROWSER_TOOL_SCHEMAS[toolName], toolBody);
     if (input.workspaceId === undefined) {
       return yield* new HostValidationError({

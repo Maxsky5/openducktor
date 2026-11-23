@@ -15,7 +15,6 @@ const model = (overrides: Partial<ComposerPolicyModel> = {}): ComposerPolicyMode
   isSessionWorking: false,
   isSending: false,
   isStarting: false,
-  isSavingModel: false,
   isInteractionEnabled: true,
   isReadOnly: false,
   isWaitingInput: false,

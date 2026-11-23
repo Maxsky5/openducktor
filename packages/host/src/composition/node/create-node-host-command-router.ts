@@ -139,7 +139,7 @@ export const assembleNodeEffectHostCommandRouter = (
   }));
   const workspaceSessions = createNodeWorkspaceSessionPersistence({
     taskStore,
-    store: assets.workspaceSessionStore,
+    stores: assets,
     settings: workspaceSettingsService,
     naming,
     git,

@@ -80,7 +80,7 @@ A fork is a new workspace session with the conversation of the source session up
 
 ## Import a session from an external runtime [#import]
 
-Continue in OpenDucktor a conversation that you started in OpenCode, Codex, or Claude Code.
+Continue in OpenDucktor a conversation that you started in OpenCode, Codex, Claude Code, or Antigravity.
 
 <ProductDemo id="import-session" />
 
@@ -88,7 +88,7 @@ Select the arrow beside <Action>New task</Action>, then <Action>Import session f
 
 The list shows only the main conversations that started in the repository folder or in one of its Git worktrees, and that no task or workspace session uses yet. For Codex, it also shows the sessions that you archived in Codex.
 
-The import does not copy the conversation. OpenDucktor continues the same session, with the same session ID, in the same folder. It uses the title and the model of the session, and the default target branch of the repository.
+The import does not copy the conversation. OpenDucktor continues the same session, with the same session ID, in the same folder. It uses the title and the model of the session, and the default target branch of the repository. Antigravity lists no model for a session, so an imported Antigravity session keeps the model that it has in Antigravity.
 
 The list stays current for 10 minutes. If an import fails with a message that ends with `Reload sessions.`, close the dialog and open it again.
 

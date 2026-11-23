@@ -38,6 +38,8 @@ The Electron package build verifies the unpacked payload after electron-builder.
 
 Packaging needs a host that matches the target platform and architecture. The native payload only loads on its target, so the verifier rejects a cross-target run before the probe and names the required host.
 
+Antigravity has no native file search, so its adapter uses the same finder from `packages/host/src/adapters/file-search`. See [ADR 0014](./0014-run-antigravity-as-an-acp-workflow-runtime.md).
+
 The Claude service owns finder lifetime. The service prewarms the finder before it creates the session, so a load failure fails the session start with an actionable error. The cache destroys a finder released during a search when the last search settles. The runtime release disposes the service, which removes the store close subscription and destroys the cached finders.
 
 ## References

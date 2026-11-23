@@ -1411,6 +1411,7 @@ describe("runtime schemas", () => {
       readOnlyRoleBlockedTools: ["shell", "apply_patch"],
       workflowToolAliasesByCanonical: OPENCODE_RUNTIME_DESCRIPTOR.workflowToolAliasesByCanonical,
       updateAction: "Update the runtime.",
+      enableOnDiscovery: true,
       capabilities: withRuntimeCapabilities({
         provisioningMode: "external",
         workflow: {

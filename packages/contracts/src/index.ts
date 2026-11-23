@@ -143,6 +143,7 @@ export * from "./pull-request-sync-schemas";
 export * from "./run-schemas";
 export * from "./runtime-catalog-schemas";
 export * from "./runtime-descriptors";
+export * from "./runtime-host-traits";
 export * from "./session-history-failure-schemas";
 export * from "./session-schemas";
 export * from "./session-todo-parsing";

@@ -97,6 +97,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(tableNames).toEqual(
       expect.arrayContaining([
         "__drizzle_migrations",
+        "agent_session_turns",
         "task_artifacts",
         "task_assets",
         "tasks",
@@ -106,6 +107,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     expect(tableNames).not.toContain("task_store_schema_migrations");
     expect(tableNames).not.toContain("task_documents");
     expect(readDrizzleMigrationRows(databasePath)).toEqual([
+      { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
       { hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
@@ -134,7 +136,7 @@ describe("createSqliteTaskRepository SQLite integration", () => {
     );
 
     expect(results).toEqual(Array.from({ length: 8 }, () => []));
-    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(5);
+    expect(readDrizzleMigrationRows(databasePath)).toHaveLength(6);
   });
 
   test("enforces the approved task asset registry shape and cascades task deletion", async () => {

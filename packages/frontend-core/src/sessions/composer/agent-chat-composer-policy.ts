@@ -29,7 +29,6 @@ export type ComposerPolicyModel = {
   foregroundTurnActive?: boolean | undefined;
   isSending: boolean;
   isStarting: boolean;
-  isSavingModel?: boolean | undefined;
   isInteractionEnabled: boolean;
   isReadOnly: boolean;
   canSend?: boolean | undefined;
@@ -128,7 +127,6 @@ export function useComposerPolicy({
     isComposerInputDisabled ||
     hasSlashAttachmentConflict ||
     pendingSendBlockedReason !== null ||
-    modelBlocksSend(model) ||
     !hasComposerSendContent(draft, model.pendingSendItems);
   const defaultSendDisabled = sendInputBlocked || hasBlockingAttachments;
   const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
@@ -236,10 +234,6 @@ const pendingSendBlockedReasonFor = (
       ? model.runningTurnModel?.attachmentSupport
       : model.selectedModelDescriptor?.attachmentSupport,
   });
-
-/** True while a model or speed change is still saving. */
-const modelBlocksSend = ({ isSavingModel, speed }: ComposerPolicyModel): boolean =>
-  Boolean(isSavingModel) || speed?.pending === true;
 
 const hasComposerSendContent = (
   draft: AgentChatComposerDraft,

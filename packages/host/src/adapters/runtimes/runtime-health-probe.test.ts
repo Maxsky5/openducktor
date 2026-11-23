@@ -14,6 +14,7 @@ import { createToolDiscoveryAdapter } from "../system/tool-discovery";
 import { createRuntimeHealthProbe } from "./runtime-health-probe";
 
 const executablePaths = {
+  antigravity: "/usr/local/bin/agy",
   claude: "/usr/local/bin/claude",
   codex: "/usr/local/bin/codex",
   opencode: "/usr/local/bin/opencode",
@@ -44,6 +45,9 @@ const createExecutableProbes = (
   ) => Effect.Effect<void, RuntimeExecutableProbeError> = () => Effect.void,
 ) =>
   ({
+    antigravity: {
+      probeExecutable: (executablePath) => probeExecutable("antigravity", executablePath),
+    },
     claude: {
       probeExecutable: (executablePath) => probeExecutable("claude", executablePath),
     },

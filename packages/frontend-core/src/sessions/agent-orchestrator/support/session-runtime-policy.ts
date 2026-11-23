@@ -26,10 +26,8 @@ export type LoadWorkflowRoleForRuntimePolicy = (
 export const resolveSettingsIndependentAgentSessionRuntimePolicy = (
   runtimeKind: RuntimeKind,
 ): AgentSessionRuntimePolicy | null => {
-  if (runtimeKind === "opencode" || runtimeKind === "claude") {
-    return { kind: runtimeKind };
-  }
-  return null;
+  // Only the Codex policy reads settings. Every other runtime policy is its kind alone.
+  return runtimeKind === "codex" ? null : { kind: runtimeKind };
 };
 
 export const resolveAgentSessionRuntimePolicy = async ({

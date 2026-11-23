@@ -11,7 +11,9 @@ import {
 } from "@opencode/client";
 import {
   OPENCODE_RUNTIME_DESCRIPTOR,
+  agentJsonSchemaInstructions,
   isManualSessionCompactionSlashCommand,
+  readAgentJsonAnswer,
   type AgentSessionScope,
   type AgentSessionControlUpdateTitleInput,
   type AgentJsonGenerationInput,
@@ -77,7 +79,7 @@ import {
 import { readOpenCodeTranscript } from "./opencode-session-transcript";
 import { readCatalog } from "./opencode-catalog";
 import { createOpenCodeMessageId } from "./opencode-message-id";
-import { openCodeJsonInstructions, readOpenCodeJsonAnswer } from "./opencode-json-answer";
+
 import type {
   OpenCodeRuntimeConnection,
   OpencodeSdkAdapterOptions,
@@ -749,11 +751,12 @@ export class OpencodeSdkAdapter {
     input: AgentJsonGenerationInput<Answer>,
     signal: AbortSignal,
   ): Promise<Answer> {
+    // `generate.text` has no output schema option (`@opencode/client` 2.2.5 to 2.3.2).
     const text = await this.generateText(
-      { ...input, instructions: openCodeJsonInstructions(input) },
+      { ...input, instructions: agentJsonSchemaInstructions(input) },
       signal,
     );
-    return readOpenCodeJsonAnswer(text, input.answerSchema);
+    return readAgentJsonAnswer("OpenCode", text, input.answerSchema);
   }
 
   /**

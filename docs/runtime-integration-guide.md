@@ -7,6 +7,7 @@ Read this guide before you add a runtime or change runtime capabilities, session
 | OpenCode, `opencode` | `local_http` | Host-managed V2 standalone process |
 | Codex, `codex` | `stdio` | Host-managed app server |
 | Claude, `claude` | `host_service` | Host-managed SDK service |
+| Antigravity, `antigravity` | `stdio` | Host-managed `agy acp` process. See [ADR 0014](adr/0014-run-antigravity-as-an-acp-workflow-runtime.md) |
 
 Each adapter keeps its native protocol inside the adapter and exposes OpenDucktor contracts outside it.
 
@@ -64,10 +65,13 @@ A shared process must not give every workspace the same workspace ID. Bind the m
 | OpenCode | Before a session uses workflow tools, `mcp.add` for the session directory with the bridge environment of its workspace. A directory keeps one binding, and a conflicting workspace fails the operation. |
 | Codex | Each `thread/start`, `thread/resume`, and `thread/fork` request sends `mcp_servers.openducktor.*` overrides with the bridge environment of the session workspace. |
 | Claude | Each session resolves the bridge from its own repository. |
+| Antigravity | Each `session/new` and `session/load` request sends a stdio MCP server named `openducktor_session` with the bridge environment of the session workspace. `ODT_ALLOWED_TOOLS` holds the tools of the session role, or all managed tools for a Workspace Session. |
 
 ### Calling session of browser tools
 
 The managed OpenDucktor MCP server gets `ODT_RUNTIME_KIND`. Browser tools read the runtime session that made each call from the native runtime, never from tool input. [External MCP](external-mcp.md#browser-tools) lists the source of the calling session for each runtime and describes the owner rules.
+
+A runtime with the `mcpCaller.source` host trait `process_binding` starts the MCP process of a session before the session has an ID. Its adapter gives each activation a new caller binding ID in `ODT_RUNTIME_CALLER_BINDING_ID` and implements `resolveCallerBinding`. The MCP server sends the binding, and the host asks the live adapters of that runtime kind for the session that holds it. The binding lives in memory until the session release, the next activation, or the runtime stop.
 
 Give each new, resumed, or forked Claude session its ID before the query starts. A subagent session calls with its own ID, and the host follows its live parent links to the root session. Keep `parentExternalSessionId` in the live snapshot of each child session.
 
@@ -171,10 +175,13 @@ The runtime owns the goal state. OpenDucktor stores no goal data and runs no goa
 | Codex | `thread/goal/*` requests and notifications | Pauses the goal, then interrupts the turn | Codex sends the goal after `thread/resume` |
 | OpenCode 2.2.1 or later | `opencode.goal` plugin, `/goal` command, `rpc.opencode.goal.changed` event | OpenCode pauses the goal with "Stopped by the user" | Plugin `get` |
 | Claude | `/goal` input and `goal_status` transcript records | Keeps the goal; the next message continues it | Last `goal_status` record of the resumed chain |
+| Antigravity 1.5.14 or later | `/goal <objective>` prompt and the goal markers of the reply | Keeps the goal; the next message continues it | Last `/goal` message and goal markers of the `session/load` replay |
 
 - Claude answers a refused `/goal <condition>` with text alone, and starts a model turn only after it sets the goal. The first model frame after the command reply therefore confirms a set. Claude writes its transcript on a 100 ms timer, so the adapter does not wait for the `goal_status` record before it confirms.
 - A Claude `goal_status` record with `met: true` reports a met goal, so the row shows `complete`. A record with `failed: true` reports an impossible goal, so the row shows `blocked`. A goal that ends for another reason, such as an unrecoverable error, shows `ended`.
 - Claude runs a `/goal clear` as a command turn that does not work on the goal. Until that clear ends, the Claude adapter shows the goal as `waiting_for_message`, not `active`. Claude `controlGoal` writes this status itself.
+- Antigravity sends no goal state over ACP. It tells the agent of a `/goal` request to end its reply with `<!-- GOAL_COMPLETE -->`, or with `<!-- GOAL_CANCELLED -->` when the user asks it to stop. The adapter reads these markers live and in the replay, and removes them from the reply text. A stream holds back an end of the text that can still grow into a marker, so no part of a marker shows.
+- Antigravity has no command that clears a goal. Clear removes a goal that the agent already ended with no runtime call. Otherwise it sends the stop message that the Antigravity documentation names, and the goal leaves when the agent cancels it. Until then, the row shows `waiting_for_message`. A cancel without that stop message ends the goal, so the row shows `ended`. A new `/goal` replaces the goal.
 - Codex starts goal turns itself with the thread settings. Before a goal set or resume, the Codex adapter sends `thread/settings/update` with the selected model, effort, and speed. Codex has no request that changes the workflow context of those turns.
 - Codex marks the goal `blocked` when a turn fails, so the session goes idle. After an interrupt that did not pause the goal, Codex starts the next goal turn when the thread is idle.
 - A release does not end a goal. Before task cleanup releases its sessions, it sends Stop to each session with an active goal. If a Stop fails, the cleanup releases no session.
@@ -200,6 +207,9 @@ The `agent_runtime_generate_text` host command asks one runtime model for one te
 | Claude | One `query()` with a string prompt | No tools, no MCP servers, no hooks, no saved session, and one turn. The instructions replace the system prompt. | `outputFormat` with the JSON Schema. The answer is `structured_output`. |
 | Codex | `thread/start`, one `turn/start`, then `thread/unsubscribe` | An ephemeral read-only thread with no environment and no approvals. The thread configuration turns off the features and MCP servers that Codex turns off for its own title threads. Built-in tools that need no environment, such as the clock, can stay. The text is the final agent message of the turn. | `outputSchema` of `turn/start`. The final agent message is the JSON text. |
 | OpenCode | `generate.text` | One stateless model call. The instructions start the prompt. | `generate.text` has no schema option. The JSON Schema goes into the instructions, and the answer is the JSON object of the text. |
+| Antigravity | `session/new`, one `session/prompt`, then `session/close` on the shared `agy acp` process | A new empty temporary directory, no MCP servers, and the instructions as the system prompt. A tool call, permission request, or question fails the generation. ACP has no switch that turns off tools. Antigravity keeps the session in its history. | ACP has no schema option. The JSON Schema goes into the instructions, and the answer is the JSON object of the text. |
+
+Antigravity keeps a session for each text generation. This is the only exception to the first rule above, and the user accepted it.
 
 ### History
 
@@ -290,6 +300,15 @@ A prompt cannot mix a slash command and attachments because a slash command uses
 - Slash command, file search, skill, and subagent flags agree with `supportedParts`.
 - A runtime without subagents has no subagent execution modes.
 - A runtime without goals cannot pause or resume a goal.
+
+Shared code reads runtime behavior from the descriptor or the host traits, never from the runtime kind. Clients read the descriptor. Only the host and its MCP server read `RUNTIME_HOST_TRAITS_BY_KIND`, so its fields stay out of the remote protocol.
+
+| Field | Source | Meaning |
+|---|---|---|
+| `enableOnDiscovery` | Descriptor | A discovery that finds a valid executable turns the runtime on. When it is `false`, a discovery only fills the executable path. |
+| `sessionTitleSync` | Host traits | When the host pushes a Workspace Session title to the native session: `immediate`, `after_turn`, or `none` for a runtime without rename. |
+| `mcpCaller` | Host traits | How the managed MCP process names the calling session: `call_meta` with the `_meta` key of each call, `process_session` in `ODT_RUNTIME_SESSION_ID`, or `process_binding` in `ODT_RUNTIME_CALLER_BINDING_ID`. |
+| `serverProcess` | Host traits | The program, subcommand, or option of the runtime process that serves another app. Process lists mark it as an agent runtime server. |
 
 `runtimeCapabilityKeyValues` defines product gates.
 
@@ -388,6 +407,8 @@ Show the initial system instructions once before the first user message. Keep la
 OpenCode marks an interrupted step with the native `aborted` error type. Keep its interrupted tool details, but do not report the step as a turn error. Its interrupted execution produces one cancellation notice with the native message ID in live output and history. This notice replaces the local stop confirmation when both describe the same stop. Keep baseline provenance through the transcript consumer. A restored interruption must not clear a current stop request or end a new turn.
 
 OpenCode stores the OpenDucktor role prompt in the `openducktor.workflow` instruction entry. Read this entry with the native messages for both history and live restoration. Do not use a later native instruction update or current prompt settings as the stored role prompt. Show native instruction updates separately in their original order.
+
+The host saves the turns of every runtime from the ordered live stream in `agent_session_turns`, as [Host database](host-database.md#agent-session-turns) describes. A history read adds the saved times, model, duration, and stop notice where the runtime history has only approximate times. Entries with exact native times stay as the runtime reports them. Adapters do not save or read turns.
 
 ### Configuration and catalogs
 
@@ -492,6 +513,9 @@ The host owns the message queue. A runtime is eligible when its adapter can refu
 | Codex | `turn/start` | `turn/steer` with `expectedTurnId` | Request answer | `turn/completed` |
 | OpenCode | `session.prompt` with `delivery: "queue"` | `session.prompt` with `delivery: "steer"` | Request answer | `session.execution.*` events |
 | Claude | SDK user message | SDK user message with priority `now` | `command_lifecycle` frame or replay echo | SDK result |
+| Antigravity | `session/prompt` | A second `session/prompt` while the first is open | First turn content, request, or prompt answer | Answer of the last open prompt |
+
+Antigravity sends no echo of the user message. When the adapter writes `session/prompt`, it publishes the message with state `pending` and no `submissionId`, and a snapshot that shows the running turn. A `pending` message is live display only: the queue, the operation owner, the Workspace Session title and activity, and usage-limit tracking ignore it, it never enters the transcript, and history does not list it. The contract refuses a `pending` message with a `submissionId` and a `pending` accepted receipt. The busy status waits for admission, so a refused prompt saves no session activity. Its ID is the ID that admission will most likely give. At admission the adapter adds the message to the transcript and publishes it with state `read` and the `submissionId`, which replaces the pending row, or retracts the pending row when the IDs differ. Turn content or a runtime request admits the oldest prompt that has no answer, and a prompt answer admits its own prompt. A refused message changes no turn index, gets a `transcript_retracted` event, and stays in the host queue. When no prompt of the turn was admitted, the snapshot returns to idle with no idle event. With an unknown delivery, the pending row stays in the live view. A history merge keeps the later state of a user message, so older history never turns a `read` message back to `pending` or `queued`. A steer makes Antigravity answer the earlier prompt at once with `end_turn`, and the turn content that follows admits the steer. ACP has no expected-turn guard, so a steer that arrives just after the turn ends starts a new turn, or Antigravity refuses it. When Antigravity refuses a steer after an earlier prompt answered, the turn ends with the outcome and reason of the last earlier answer. A prompt error after admission counts as a failed answer, so the turn ends as failed with a `turn_error`.
 
 ### Background tasks
 
@@ -524,6 +548,7 @@ An agent can start work that continues after its reply ends: a background shell 
 | Claude | Registered nonambient background run | Terminal `task_updated`, `task_notification`, or snapshot removal | Later native Idle or process exit | `query.stopTask(task_id)` |
 | OpenCode | Running `shell` tool with `shellID`; running `subagent` tool with child `sessionID` | `shell` or `subagent` notice in the session inbox | `session.inbox.delivered` | `shell.remove`; `session.interrupt` on the child |
 | Codex | `commandExecution` still `inProgress` at its `turn/completed` | Late `item/completed` of that item | No pending state | `thread/backgroundTerminals/terminate`, Codex `0.140.0` or later |
+| Antigravity | `run_command` call that is not a daemon and still runs at the `end_turn` answer of its prompt | Late `tool_call_update` with `completed` or `failed` | No pending state | Not supported |
 
 #### Stop one task
 
@@ -534,6 +559,7 @@ The `agent_session_background_task_stop` command calls `stopBackgroundTask` on t
 - A native failure while the task still runs fails with a typed `HostError` and the runtime reason. A failure for a task that already ended gives success. The host does not retry.
 - Claude: a run that ends as `stopped` or `killed` after the host requested its stop adds no pending delivery. The session therefore leaves the Background state without a later native Idle.
 - Codex below `0.140.0`, or with an unknown version, reports `stop.allowed: false`.
+- Antigravity has no ACP call that stops one command, so its tasks report `stop.allowed: false`.
 - OpenCode: `shell.remove` ends an agent background shell as `error`, delivers its notice to the session inbox, and wakes the session, so the agent replies. `shell.remove` has no option that skips the notice or the wake, so OpenDucktor keeps this runtime behavior.
 - Codex: a command that waited for an approval or an auto-review starts with no `processId`, and Codex sends no later start with it. Stop then reads `thread/backgroundTerminals/list` of the thread once and takes the `processId` of the item. A command that the list does not show fails the stop.
 
@@ -543,6 +569,8 @@ The `agent_session_background_task_stop` command calls `stopBackgroundTask` on t
 - OpenCode root `session.interrupt` does not cancel background jobs. Stop session starts watching the tree before it interrupts the root. It stops each task of the tree, and interrupts each session that takes a task notice, also a session that took one before Stop began, then waits for the end event of that execution. It cancels each undelivered notice and waits for its `delivered` or `cancelled` event, then checks the tree again. Tasks that started during cleanup are stopped in the next round, for at most 3 rounds. A tree that does not settle fails Stop session and keeps its tasks listed. An unreadable task item fails the cleanup waits of its session with the reason, and Stop session fails while any session of the tree has lost its task tracking.
 - Codex `turn/interrupt` keeps background terminals. Stop session sends `thread/backgroundTerminals/clean` for each thread of the tree with a running command. `clean` returns before the processes exit, so Stop session watches, from before `clean`, for the late `item/completed` of each command. It then checks the tree again, in the order of the runtime events, and cleans commands that started meanwhile, for at most 3 rounds. The last check and the release run as one step on the runtime event queue. A release, an unreadable event of the thread, no confirmation within 10 seconds, or a tree that does not settle fails Stop session, and the unconfirmed terminals stay listed.
 - Codex emits session Idle only when the current foreground turn and all background terminals have ended. A `turn/completed` of an older turn does not end a newer turn.
+- Antigravity `session/cancel` stops the background commands of the session, also when no prompt runs. Stop session sends it and waits for the `failed` update of each command.
+- Antigravity keeps a prompt open until its commands end, unless the agent marked a command as a daemon. A prompt can still end while a command runs. When that command ends, Antigravity wakes the agent and sends its work as session updates with no open prompt. ACP gives no signal for the end of that work, so the session shows Idle once the last command ended.
 - A failed step fails Stop session with the runtime reason. The tasks that still run stay in the list, so the session does not show Idle.
 
 ## Import existing runtime sessions
@@ -563,4 +591,25 @@ Only an explicit import can claim a native root. The host checks repository or r
 | Background work tracker and Stop rounds | `packages/core/src/services/background-work-ledger.ts` |
 | Runtime orchestration | `packages/runtime-orchestration/src` |
 | Runtime drivers | `packages/host/src/adapters/runtimes/runtime-drivers.ts` |
-| Native adapters | `packages/adapters-opencode-sdk/src`, `packages/adapters-codex-app-server/src`, `packages/host/src/adapters/claude` |
+| Native adapters | `packages/adapters-opencode-sdk/src`, `packages/adapters-codex-app-server/src`, `packages/host/src/adapters/claude`, `packages/host/src/adapters/antigravity` |
+
+## Antigravity
+
+The Antigravity adapter speaks ACP v1 through the official `@agentclientprotocol/sdk` `/unstable` entrypoint. One shared `agy acp` process serves every session. The runtime start requires CLI 1.5.14 or later and the system prompt extension that [ADR 0014](adr/0014-run-antigravity-as-an-acp-workflow-runtime.md) describes.
+
+| Area | Rule |
+|---|---|
+| Opt-in | `enableOnDiscovery` is `false`, so Antigravity is off for new and existing installs. |
+| Start | The `initialize` answer must use ACP protocol version 1. An authentication error tells the user to sign in with `agy`. A closed ACP connection ends the runtime through the runtime exit path, also when the process still runs. |
+| Models | `agy models` with the effective executable path. The catalog keeps every model of the account, because the ACP server offers the same models to the session. ACP offers a thinking level only for models that list one. The adapter groups lines that differ only in a last `-low`, `-medium`, `-high`, `-xhigh`, or `-max` segment into one model with thinking levels as variants. |
+| Model choice | `session/set_config_option` for `model`, then for `thought_level` when the selection has a variant. A refused value fails the operation with the runtime reason. A rollback to no selection sets the native model and level of the opened session. When a write fails after an earlier write of the change, the adapter sets the earlier native values again and checks the values that Antigravity reports. If it cannot restore them, also when Antigravity reported no earlier values, the session refuses messages until a model change succeeds. A reopened session stays in setup until its saved model applies. |
+| Slash commands | The adapter keeps the last command list of each session and publishes it at the end of `session/new` or `session/load`. The runtime catalog is keyed by directory, so a directory shows the newest list of a live session in it. A released session leaves no list. The native `/compact` is the OpenDucktor compaction, and the composer runs `/goal` as OpenDucktor goal mode because the descriptor declares goals. Both reach the runtime as prompts. The list leaves out `/swarm`: its workers run in their own conversations, which only the Swarm pane of Antigravity shows, and a swarm uses quota fast. A name that is not a documented core command is a skill. |
+| Item IDs | The session ID, the turn index (the count of user messages, steers included), and the item index in the turn. Tool items use the native `toolCallId`. Live updates and the `session/load` replay give the same IDs. |
+| Stop | `session/cancel` for the exact session. Pending approvals get `cancelled`, and pending questions get `cancel`. Stop fails with the reason when the turn does not end within 10 seconds. The `session_idle` of a stopped turn carries an `interruption`, and the held history keeps the same notice. |
+| Approvals | Calls of the managed `openducktor_session` server pass without a prompt. A read-only role refuses ACP tool kinds `edit`, `delete`, and `move`. Every other request waits for the user with `allow_once` and `reject_once`. |
+| Session mode | The `antigravity` runtime setting holds a default `mode` and role overrides: `default`, `accept-edits`, `auto`, or `bypass-permissions`, and `auto` when nothing is saved. `bypass-permissions` is not an Antigravity mode: the session runs in `auto`, and the adapter approves each permission request that Antigravity still sends. Questions still go to the user. `plan` is not a choice, because it changes how the agent works. The host reads the setting when a session starts or opens again. A read-only role always runs in the native `default` mode, so Antigravity asks before each action: the adapter refuses file edits, deletes, and moves, and approves the other requests when the setting is `auto` or `bypass-permissions`. In another native mode, Antigravity would approve file changes itself, and the read-only refusal would never run. The adapter sets the mode with `session/set_config_option` for `mode` after `session/new` or `session/load`, before the session opens. A session whose config options do not offer the mode fails to open. A session that reported no config options gets the write, and the answer of Antigravity decides. Text generations set no mode, because they refuse every tool. |
+| Questions | Each `elicitation/create` form becomes one question request. `qN` fields are questions, and `qN_other` is the custom answer of `qN`. Cancel Question sends `cancel`. |
+| Reopen | `session/list` must hold the exact session in the saved directory. `session/load` then replays the transcript with the managed MCP server and the current instructions. A missing session or another directory fails the open. |
+| History | A held session returns its live projection. Any other session is loaded with no MCP servers and no instructions, then closed. One gate for each session ID orders loads, attaches, history reads, and releases. |
+| Titles | ACP has no rename, so the `sessionTitleSync` host trait is `none` and sessions keep their native title. |
+| Process exit | Every live turn ends with a failure notice, and pending input is rejected. Saved records stay. |

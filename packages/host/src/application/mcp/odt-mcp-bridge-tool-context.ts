@@ -1,6 +1,6 @@
 import type { TaskWorkflowResolver } from "../../ports/task-workflow-port";
 import {
-  odtBrowserCallerSchema,
+  odtCallerSchema,
   type OdtBrowserToolName,
   type OdtToolName,
   type WorkspaceScopedOdtToolName,
@@ -160,7 +160,7 @@ export const resolveTaskCaller = (
 ): Effect.Effect<RuntimeSessionOwner | undefined, OdtMcpBridgeError> =>
   Effect.gen(function* () {
     if (rawCaller === undefined) return undefined;
-    const caller = yield* parseToolInput(toolName, odtBrowserCallerSchema, rawCaller);
+    const caller = yield* parseToolInput(toolName, odtCallerSchema, rawCaller);
     const owner = yield* context.managedCallers.resolve({ workspaceId, caller });
     if (owner.kind === "task" && owner.taskId !== taskId) {
       return yield* new HostValidationError({

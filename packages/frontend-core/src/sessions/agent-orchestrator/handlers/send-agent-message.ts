@@ -81,6 +81,8 @@ export type SendAgentMessageDependencies = {
     sessionKey: string,
     timestamp: string | number,
   ) => number | undefined;
+  /** Waits for the model changes of the session, so the message runs with the shown model. */
+  settleModelUpdates: (session: AgentSessionIdentity) => Promise<void>;
 };
 
 const settleStartingSession = (
@@ -215,6 +217,7 @@ export const createSendAgentMessage = (dependencies: SendAgentMessageDependencie
     const startsNoWork =
       systemInvocation.kind === "goal" && !goalCommandStartsWork(systemInvocation.command);
 
+    await dependencies.settleModelUpdates(identity);
     const currentSession = withSendScope(
       requireLoadedSession(dependencies.readSessionSnapshot, identity),
       options?.sessionScope,

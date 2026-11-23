@@ -13,6 +13,7 @@ describe("resolveUsageLocations", () => {
         path.join(home, ".codex", "archived_sessions"),
       ],
       opencode: { directory: path.join(home, ".local", "share", "opencode"), databaseFile: null },
+      antigravity: path.join(home, ".gemini", "antigravity-cli", "conversations"),
     });
   });
 
@@ -35,6 +36,8 @@ describe("resolveUsageLocations", () => {
         directory: path.join(root, "opencode"),
         databaseFile: path.resolve(root, "opencode", "custom.db"),
       },
+      // The Antigravity CLI reads no variable that moves its history.
+      antigravity: path.join(home, ".gemini", "antigravity-cli", "conversations"),
     });
   });
 });

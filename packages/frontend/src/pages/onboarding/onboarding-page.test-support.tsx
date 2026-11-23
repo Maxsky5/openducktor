@@ -1,6 +1,7 @@
 import { expect, mock } from "bun:test";
 import {
   type AgentRuntimes,
+  ANTIGRAVITY_RUNTIME_DESCRIPTOR,
   CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -33,6 +34,7 @@ export const runtimeDefinitions = [
   OPENCODE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   CLAUDE_RUNTIME_DESCRIPTOR,
+  ANTIGRAVITY_RUNTIME_DESCRIPTOR,
 ];
 
 const notificationContextValue = {
@@ -85,6 +87,13 @@ export const createCheck = (
       ok: false,
       version: null,
       error: "Claude executable is invalid.",
+    },
+    {
+      kind: "antigravity",
+      path: runtimes.antigravity.executablePath,
+      ok: false,
+      version: null,
+      error: "Antigravity executable is invalid.",
     },
   ],
 });
@@ -210,6 +219,12 @@ export const continueFromNotificationsToWorkspace = async (): Promise<void> => {
   });
   fireEvent.click(screen.getByRole("button", { name: "Continue to workspace" }));
   await screen.findByRole("heading", { name: "Open your first workspace" });
+};
+
+export const runtimeSection = (label: string): HTMLElement => {
+  const section = screen.getByRole("heading", { name: label }).closest("section");
+  if (!section) throw new Error(`${label} section is missing`);
+  return section;
 };
 
 export const opencodeSection = (): HTMLElement => {

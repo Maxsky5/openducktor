@@ -50,6 +50,7 @@ export const createTestRuntimeDrivers = (
     opencode: driverFor("opencode"),
     codex: driverFor("codex"),
     claude: driverFor("claude"),
+    antigravity: driverFor("antigravity"),
   };
 };
 
@@ -60,4 +61,5 @@ export const testRuntimeSettings = (
   opencode: { enabled: "opencode" in enabled, executablePath: enabled.opencode ?? "" },
   codex: { enabled: "codex" in enabled, executablePath: enabled.codex ?? "" },
   claude: { enabled: "claude" in enabled, executablePath: enabled.claude ?? "" },
+  antigravity: { enabled: "antigravity" in enabled, executablePath: enabled.antigravity ?? "" },
 });

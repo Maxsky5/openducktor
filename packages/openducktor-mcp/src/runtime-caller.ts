@@ -1,50 +1,30 @@
 import type { RequestMeta } from "@modelcontextprotocol/sdk/types.js";
-import { type OdtBrowserCaller, odtBrowserCallerSchema } from "@openducktor/contracts";
-import { z } from "zod";
+import {
+  knownRuntimeKindSchema,
+  type OdtCaller,
+  odtCallerIdSchema,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  RUNTIME_HOST_TRAITS_BY_KIND,
+  type RuntimeKind,
+} from "@openducktor/contracts";
 import { normalizeOptionalInput } from "./path-utils";
 import { OdtToolError } from "./tool-results";
 
 const RUNTIME_KIND_ENV = "ODT_RUNTIME_KIND";
 const RUNTIME_SESSION_ID_ENV = "ODT_RUNTIME_SESSION_ID";
-const OPENCODE_SESSION_ID_META_KEY = "ai.opencode/sessionID";
+const RUNTIME_CALLER_BINDING_ID_ENV = "ODT_RUNTIME_CALLER_BINDING_ID";
 
-const runtimeSessionIdSchema = odtBrowserCallerSchema.shape.runtimeSessionId;
-/** OpenCode sends the ID of the calling session with each `tools/call`. */
-const opencodeCallMetaSchema = z.object({ [OPENCODE_SESSION_ID_META_KEY]: runtimeSessionIdSchema });
-/** Codex sends the ID of the calling thread with each model tool call. */
-const codexCallMetaSchema = z.object({ threadId: runtimeSessionIdSchema });
+/** Finds the runtime session that made a tool call from the `_meta` of the call. */
+export type RuntimeCallerResolver = (meta: RequestMeta | undefined) => OdtCaller;
 
-/**
- * The managed runtime that started this MCP process. OpenCode and Codex share one MCP
- * process between sessions, so each call names its session. Claude starts one MCP process
- * for each session, so the process environment names it.
- */
-export type RuntimeCallerSource =
-  | { runtime: Exclude<OdtBrowserCaller["runtime"], "claude"> }
-  | { runtime: "claude"; runtimeSessionId: string };
-
-/** Reads the managed runtime of this process. External MCP clients set no runtime. */
-export const readRuntimeCallerSource = (): RuntimeCallerSource | undefined => {
-  const rawRuntime = normalizeOptionalInput(process.env[RUNTIME_KIND_ENV]);
-  if (rawRuntime === undefined) {
-    return undefined;
-  }
-  const runtime = odtBrowserCallerSchema.shape.runtime.safeParse(rawRuntime);
-  if (!runtime.success) {
-    throw new Error(`${RUNTIME_KIND_ENV} must be opencode, codex, or claude.`);
-  }
-  if (runtime.data !== "claude") {
-    return { runtime: runtime.data };
-  }
-  const runtimeSessionId = runtimeSessionIdSchema.safeParse(
-    normalizeOptionalInput(process.env[RUNTIME_SESSION_ID_ENV]),
-  );
-  if (!runtimeSessionId.success) {
+const readRequiredEnvironmentId = (name: string, runtime: RuntimeKind): string => {
+  const parsed = odtCallerIdSchema.safeParse(normalizeOptionalInput(process.env[name]));
+  if (!parsed.success) {
     throw new Error(
-      `${RUNTIME_SESSION_ID_ENV} must name the Claude session when ${RUNTIME_KIND_ENV} is claude.`,
+      `${name} must name the calling session when ${RUNTIME_KIND_ENV} is ${runtime}.`,
     );
   }
-  return { runtime: "claude", runtimeSessionId: runtimeSessionId.data };
+  return parsed.data;
 };
 
 const unmanagedCallerError = (reason: string): OdtToolError =>
@@ -53,37 +33,62 @@ const unmanagedCallerError = (reason: string): OdtToolError =>
     message: `This tool needs a managed OpenDucktor session: ${reason}. Run the tool from an agent session that OpenDucktor started.`,
   });
 
-/** Finds the runtime session that made a tool call. Tool input never selects it. */
-export const resolveNativeCaller = (
-  source: RuntimeCallerSource | undefined,
+/**
+ * Reads the managed runtime that started this MCP process once, and returns how it names the
+ * calling session, as the `mcpCaller` of its host traits says: in the environment of the process,
+ * as the session or as a host-issued caller binding, or in the `_meta` of each call. Tool input
+ * never selects the caller. External MCP clients set no runtime.
+ */
+export const readRuntimeCallerResolver = (): RuntimeCallerResolver | undefined => {
+  const rawRuntime = normalizeOptionalInput(process.env[RUNTIME_KIND_ENV]);
+  if (rawRuntime === undefined) {
+    return undefined;
+  }
+  const parsedRuntime = knownRuntimeKindSchema.safeParse(rawRuntime);
+  if (!parsedRuntime.success) {
+    throw new Error(
+      `${RUNTIME_KIND_ENV} must be one of: ${knownRuntimeKindSchema.options.join(", ")}.`,
+    );
+  }
+  const runtime = parsedRuntime.data;
+  const source = RUNTIME_HOST_TRAITS_BY_KIND[runtime].mcpCaller;
+  switch (source.source) {
+    case "process_binding": {
+      const caller = {
+        runtime,
+        callerBindingId: readRequiredEnvironmentId(RUNTIME_CALLER_BINDING_ID_ENV, runtime),
+      };
+      return () => caller;
+    }
+    case "process_session": {
+      const caller = {
+        runtime,
+        runtimeSessionId: readRequiredEnvironmentId(RUNTIME_SESSION_ID_ENV, runtime),
+      };
+      return () => caller;
+    }
+    case "call_meta":
+      return (meta) => {
+        const runtimeSessionId = odtCallerIdSchema.safeParse(meta?.[source.metaKey]);
+        if (!runtimeSessionId.success) {
+          throw unmanagedCallerError(
+            `the ${RUNTIME_DESCRIPTORS_BY_KIND[runtime].label} call has no session ID in _meta["${source.metaKey}"]`,
+          );
+        }
+        return { runtime, runtimeSessionId: runtimeSessionId.data };
+      };
+  }
+};
+
+/** The caller of a tool that needs one. A process that no OpenDucktor runtime started has none. */
+export const requireRuntimeCaller = (
+  resolveCaller: RuntimeCallerResolver | undefined,
   meta: RequestMeta | undefined,
-): OdtBrowserCaller => {
-  if (source === undefined) {
+): OdtCaller => {
+  if (resolveCaller === undefined) {
     throw unmanagedCallerError(
       `this MCP server has no ${RUNTIME_KIND_ENV}, so OpenDucktor did not start it`,
     );
   }
-  switch (source.runtime) {
-    case "claude":
-      return { runtime: "claude", runtimeSessionId: source.runtimeSessionId };
-    case "opencode": {
-      const parsed = opencodeCallMetaSchema.safeParse(meta);
-      if (!parsed.success) {
-        throw unmanagedCallerError(
-          `the OpenCode call has no session ID in _meta["${OPENCODE_SESSION_ID_META_KEY}"]`,
-        );
-      }
-      return {
-        runtime: "opencode",
-        runtimeSessionId: parsed.data[OPENCODE_SESSION_ID_META_KEY],
-      };
-    }
-    case "codex": {
-      const parsed = codexCallMetaSchema.safeParse(meta);
-      if (!parsed.success) {
-        throw unmanagedCallerError("the Codex call has no thread ID in _meta.threadId");
-      }
-      return { runtime: "codex", runtimeSessionId: parsed.data.threadId };
-    }
-  }
+  return resolveCaller(meta);
 };

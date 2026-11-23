@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type {
-  AgentSessionLiveSnapshot,
-  OdtBrowserCaller,
-  RuntimeKind,
-} from "@openducktor/contracts";
+import type { AgentSessionLiveSnapshot, OdtCaller, RuntimeKind } from "@openducktor/contracts";
 import { Effect } from "effect";
 import { HostValidationError } from "../../effect/host-errors";
 import type { WorkspaceRuntimeSessionOwner } from "../../ports/workspace-session-store-port";
@@ -56,9 +52,12 @@ const workspaceOwner = (externalSessionId: string, archived = false) =>
 const createResolver = ({
   owners = [],
   live = {},
+  callerBindings = {},
 }: {
   owners?: WorkspaceRuntimeSessionOwner[];
   live?: Partial<Record<RuntimeKind, LiveLink[]>>;
+  /** Antigravity caller binding ID to the session that holds it. */
+  callerBindings?: Record<string, string>;
 }) => {
   const ownerReads: unknown[] = [];
   let liveReads = 0;
@@ -102,14 +101,32 @@ const createResolver = ({
       },
     },
     liveSessions: {
-      list: () =>
-        (["opencode", "codex", "claude"] as const).map((runtimeKind) => ({
+      list: () => [
+        ...(["opencode", "codex", "claude"] as const).map((runtimeKind) => ({
           binding: { runtimeKind },
           listSnapshots: () => {
             liveReads += 1;
             return Effect.succeed(live[runtimeKind] ?? []);
           },
         })),
+        {
+          binding: { runtimeKind: "antigravity" as const },
+          listSnapshots: () => Effect.succeed(live.antigravity ?? []),
+          resolveCallerBinding: (callerBindingId: string) => {
+            const externalSessionId = callerBindings[callerBindingId];
+            return Effect.succeed(
+              externalSessionId === undefined
+                ? null
+                : {
+                    repoPath: "/repo",
+                    runtimeKind: "antigravity" as const,
+                    workingDirectory: "/repo/.worktrees/task-1",
+                    externalSessionId,
+                  },
+            );
+          },
+        },
+      ],
     },
   };
   return {
@@ -119,7 +136,10 @@ const createResolver = ({
   };
 };
 
-const caller = (runtimeSessionId: string, runtime: RuntimeKind = "opencode"): OdtBrowserCaller => ({
+const caller = (
+  runtimeSessionId: string,
+  runtime: Exclude<RuntimeKind, "antigravity"> = "opencode",
+): OdtCaller => ({
   runtime,
   runtimeSessionId,
 });
@@ -154,6 +174,46 @@ describe("createManagedCallerResolver", () => {
       },
     ]);
     expect(liveReads()).toBe(0);
+  });
+
+  test("resolves an Antigravity caller binding to the task of its session", async () => {
+    const { resolver, ownerReads } = createResolver({
+      owners: [taskOwner("ag-session", "antigravity")],
+      callerBindings: { "binding-1": "ag-session" },
+    });
+
+    const owner = await Effect.runPromise(
+      resolver.resolve({
+        workspaceId: "repo",
+        caller: { runtime: "antigravity", callerBindingId: "binding-1" },
+      }),
+    );
+
+    expect(owner).toEqual(taskOwner("ag-session", "antigravity"));
+    expect(ownerReads).toEqual([
+      {
+        workspaceId: "repo",
+        repoPath: "/repo",
+        filter: { runtimeKind: "antigravity", externalSessionIds: ["ag-session"] },
+      },
+    ]);
+  });
+
+  test("rejects an Antigravity caller binding that no open session holds", async () => {
+    const { resolver, ownerReads } = createResolver({
+      owners: [taskOwner("ag-session", "antigravity")],
+    });
+
+    const failure = await resolveFailure(resolver, {
+      workspaceId: "repo",
+      caller: { runtime: "antigravity", callerBindingId: "forged" },
+    });
+
+    expect(failure.field).toBe("caller");
+    expect(failure.message).toBe(
+      "The Antigravity session with caller binding 'forged' is not open in a running Antigravity runtime.",
+    );
+    expect(ownerReads).toEqual([]);
   });
 
   test("resolves an active Workspace Session to its session", async () => {

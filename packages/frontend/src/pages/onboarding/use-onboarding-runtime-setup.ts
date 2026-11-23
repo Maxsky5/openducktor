@@ -1,5 +1,6 @@
 import {
   type AgentRuntimes,
+  RUNTIME_DESCRIPTORS_BY_KIND,
   knownRuntimeKindValues,
   type RuntimeKind,
 } from "@openducktor/contracts";
@@ -122,7 +123,11 @@ export const useOnboardingRuntimeSetup = ({ onContinue }: { onContinue: () => vo
         const rows = new Map(checked.runtimes.map((row) => [row.kind, row]));
         let nextDraft = replaceRuntimeExecutablePaths(runtimeDraft, checked.runtimes);
         for (const kind of knownRuntimeKindValues) {
-          if (explicitRuntimeChoices.current.has(kind)) continue;
+          if (
+            explicitRuntimeChoices.current.has(kind) ||
+            !RUNTIME_DESCRIPTORS_BY_KIND[kind].enableOnDiscovery
+          )
+            continue;
           nextDraft = {
             ...nextDraft,
             [kind]: { ...nextDraft[kind], enabled: rows.get(kind)?.ok === true },

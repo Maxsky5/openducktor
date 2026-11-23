@@ -9,18 +9,25 @@ import type {
 export type UsageMetric = "tokens" | "cost";
 
 /** Runtimes in a fixed order, so a runtime keeps its color and place in every view. */
-export const USAGE_RUNTIMES: readonly RuntimeKind[] = ["claude", "codex", "opencode"];
+export const USAGE_RUNTIMES: readonly RuntimeKind[] = [
+  "claude",
+  "codex",
+  "opencode",
+  "antigravity",
+];
 
 export const USAGE_RUNTIME_LABELS = {
   claude: "Claude Code",
   codex: "Codex",
   opencode: "OpenCode",
+  antigravity: "Antigravity",
 } satisfies Record<RuntimeKind, string>;
 
 export const USAGE_RUNTIME_COLORS = {
   claude: "var(--chart-runtime-claude)",
   codex: "var(--chart-runtime-codex)",
   opencode: "var(--chart-runtime-opencode)",
+  antigravity: "var(--chart-runtime-antigravity)",
 } satisfies Record<RuntimeKind, string>;
 
 /** The words of a granularity: the name of one period, its adjective, and its title. */

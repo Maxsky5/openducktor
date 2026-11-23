@@ -33,6 +33,7 @@ describe("discoverUsageSources", () => {
           claude: path.join(directory, "missing-claude"),
           codex: [path.join(directory, "sessions"), archived],
           opencode: { directory: path.join(directory, "missing-opencode"), databaseFile: null },
+          antigravity: path.join(directory, "missing-antigravity"),
         },
         ["claude", "codex", "opencode"],
       );
@@ -55,6 +56,7 @@ describe("discoverUsageSources fingerprints", () => {
       claude: path.join(directory, "missing-claude"),
       codex: [path.join(directory, "missing-codex")],
       opencode: { directory, databaseFile: null },
+      antigravity: path.join(directory, "missing-antigravity"),
     };
     const before = discoverUsageSources(locations, ["opencode"]).sources[0];
     await writeFile(`${database}-wal`, "a log write");

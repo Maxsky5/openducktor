@@ -2,7 +2,7 @@
  * The tables of the usage index. Bump `USAGE_INDEX_FORMAT_VERSION` with any change of the tables
  * or of the parser state that they keep, so the index rebuilds from the native history.
  */
-export const USAGE_INDEX_FORMAT_VERSION = 9;
+export const USAGE_INDEX_FORMAT_VERSION = 10;
 
 /** The lookup indexes of units. A read that fills an empty unit table builds them after it. */
 export const USAGE_INDEX_UNIT_INDEXES = `

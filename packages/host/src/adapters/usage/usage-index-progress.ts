@@ -1,6 +1,6 @@
 import type { RuntimeKind, UsageIndexProgress } from "@openducktor/contracts";
 import { usageSourceWork } from "./usage-source-discovery";
-import { claudeSessionOf } from "./usage-source-sessions";
+import { antigravitySessionOf, claudeSessionOf } from "./usage-source-sessions";
 import type { OpenCodeProgress, UsageParseJob } from "./usage-worker-protocol";
 
 /** Progress goes out at most this often, and at each phase change. */
@@ -27,6 +27,13 @@ type JobState = {
   inside: OpenCodeProgress | null;
 };
 
+/** The session of a source from its path, or undefined when only its content names it. */
+const sessionOfPath = (job: UsageParseJob): string | undefined => {
+  if (job.runtime === "claude") return claudeSessionOf(job.path);
+  if (job.runtime === "antigravity") return antigravitySessionOf(job.path);
+  return undefined;
+};
+
 /**
  * Counts the parse work of one read for its progress events: for each runtime, the share of its
  * work, and the sessions whose sources it read out of the sessions to read. A database source
@@ -43,7 +50,7 @@ export const createUsageProgressTracker = (
   const states: JobState[] = jobs.map((job) => ({
     job,
     finished: false,
-    session: job.runtime === "claude" ? claudeSessionOf(job.path) : undefined,
+    session: sessionOfPath(job),
     inside: null,
   }));
   const runtimes = [...new Set(jobs.map((job) => job.runtime))];

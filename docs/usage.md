@@ -1,6 +1,6 @@
 # Usage
 
-The Usage page shows how much the user used Claude Code, Codex, and OpenCode on one host. It reads the native history of each runtime, including sessions that started outside OpenDucktor.
+The Usage page shows how much the user used Claude Code, Codex, OpenCode, and Antigravity on one host. It reads the native history of each runtime, including sessions that started outside OpenDucktor.
 
 This document gives the data flow, the sources, the counting rules, the rates, and the index.
 
@@ -41,7 +41,7 @@ flowchart TD
 - Up to 4 parser threads read sources, and at most half of the cores. They claim jobs through a shared counter, so they never wait for a commit.
 - The largest sources start first. The OpenCode database is one long job.
 - A canceled read stops new jobs. Jobs in progress finish and commit.
-- A read that parses sources sends its progress to the host thread: for each runtime, the share of its parse work and the sessions that it finished out of the sessions to read. A Claude session comes from the transcript path. A Codex rollout names its root session in its first line, which the index worker reads beside the parse. The OpenCode reader reports its own share and sessions: it digests each message table in one pass, which also finds the newest update, then scans both tables in alternating row ID windows of 5,000 rows. A first read digests each window in the same pass, so it reads each table once. A root session is read once the scan of each table passed its last row; a first read gets these last rows from the session index in about 50 ms. A file counts its bytes, a compressed rollout 10 times its size, and each runtime counts alike in the overall share. The tracker sends the runtimes first, then at most one update every 250 ms, and the last update of a burst at the end of the interval. The host publishes it on the `openducktor://usage-index-progress` event channel, with its own replay buffer `usage`. The host publishes the progress of a canceled read until the read ends, because the next read starts after it. After the parse, a full rollup builds in batches of 31 days and reports its share in `summarized`.
+- A read that parses sources sends its progress to the host thread: for each runtime, the share of its parse work and the sessions that it finished out of the sessions to read. A Claude session comes from the transcript path. An Antigravity session is the conversation of the file, so a sub-agent counts as its own session in the progress. A Codex rollout names its root session in its first line, which the index worker reads beside the parse. The OpenCode reader reports its own share and sessions: it digests each message table in one pass, which also finds the newest update, then scans both tables in alternating row ID windows of 5,000 rows. A first read digests each window in the same pass, so it reads each table once. A root session is read once the scan of each table passed its last row; a first read gets these last rows from the session index in about 50 ms. A file counts its bytes, a compressed rollout 10 times its size, and each runtime counts alike in the overall share. The tracker sends the runtimes first, then at most one update every 250 ms, and the last update of a burst at the end of the interval. The host publishes it on the `openducktor://usage-index-progress` event channel, with its own replay buffer `usage`. The host publishes the progress of a canceled read until the read ends, because the next read starts after it. After the parse, a full rollup builds in batches of 31 days and reports its share in `summarized`.
 - The first read of an empty index reads all history of all runtimes, whatever the range and runtime of the page. A range or runtime that the user picks during it then finds its history read. A first read never stops early: a cancel only ends the wait of its caller, because every later read needs that history.
 - A later read of a range or of one runtime skips older sources and other runtimes. After it answers, the index worker parses that skipped history in the background, so the next range or runtime reads in about 0.2 s instead of the 7 to 13 s of a first read. A new read stops the catch-up: no job starts after it, and the catch-up resumes after the read. One complete catch-up is enough for the life of the threads, because an older source that changes gets a recent modification time.
 
@@ -52,12 +52,15 @@ flowchart TD
 | Claude Code | `<claude-home>/projects/<project>/*.jsonl` and `<project>/<session>/subagents/*.jsonl` | `CLAUDE_CONFIG_DIR`, else `~/.claude` |
 | Codex | `<codex-home>/sessions/**` and `<codex-home>/archived_sessions/**`, `.jsonl` and `.jsonl.zst` | `CODEX_HOME`, else `~/.codex` |
 | OpenCode | `<data-home>/opencode/opencode*.db` | `XDG_DATA_HOME`, else `~/.local/share`; `OPENCODE_DB` names one file |
+| Antigravity | `~/.gemini/antigravity-cli/conversations/*.db`, one SQLite database for each conversation and sub-agent | None. The CLI reads no variable that moves this folder |
 
 The usage index adapter reads the variables from the environment of the login shell at each read. Parsers open native history read-only. They never write or migrate it.
 
 A folder or file that the host cannot read gives an `unreadable` issue for its runtime. The readable sources of that runtime stay in the report, and the index keeps the stored sources under the unreadable paths until the host can read them again.
 
 When `x.jsonl` and `x.jsonl.zst` both exist, Codex reads the plain file, and so does Usage.
+
+Usage reads the history of the Antigravity CLI, which OpenDucktor runs. The Antigravity app keeps its own conversations in `~/.gemini/antigravity/conversations`, and Usage does not read them. A conversation database writes to its write-ahead log first, so the log is part of its fingerprint, as for OpenCode. A changed conversation is read again in full, because it is small.
 
 ## Dates
 
@@ -77,6 +80,7 @@ A unit is one model request. Copies of one request share a unit identity.
 | Codex before 0.153 | `token_count` snapshot with a new total | Turn ID and the cumulative total | Root thread from `session_meta` |
 | Codex response without a usage record | Run of model output | `turn:`, the turn ID, and the response number | As above |
 | OpenCode | Settled assistant or compaction message | Creation time, provider, model, and tokens | Root of `parent_id` |
+| Antigravity | `gen_metadata` row with a model | `request_id` label, else conversation and row index | `root_cascade_id` label, which is the root for sub-agents |
 
 - One Claude response has one line for each content block. All lines form one unit.
 - A Codex file of CLI 0.153 or later counts only `token_usage_record`. The `token_count` lines repeat the same numbers.
@@ -92,6 +96,11 @@ A unit is one model request. Copies of one request share a unit identity.
 - An OpenCode fork copies messages with new IDs and the same creation time and tokens. The content identity makes the copies one unit.
 - An OpenCode assistant message settles with `time.completed` or an error. A compaction settles with `status` `completed` or `failed`. A running message waits for a later read.
 - A Claude response without `usage`, or a settled OpenCode message without tokens, is model activity without a measurement. It counts as an unmeasured request.
+- Antigravity stores each model call as a protocol buffer in `gen_metadata`, without a published schema. The reader decodes the fields that the CLI 1.5.14 writes: the usage message, the model ID, and the labels. The token sums of these fields match the usage that ACP reports for the same turn. A row that is not a message counts as a malformed record.
+- An Antigravity call takes the creation time of the first step that it produced, from `steps`, or of the step before it when it produced none. The working folder comes from the first workspace of the conversation metadata.
+- An Antigravity call without a model ID failed before the model answered, for example on a quota error, so it is not a request.
+- An Antigravity call gets its provider from its labels: `used_claude` is `anthropic`, and `used_non_gemini_model` set to `false` is `google`. Antigravity names no provider for its other models, such as GPT-OSS, so their calls have no rate.
+- Antigravity records model IDs with variants, such as a thinking level or a routing suffix (`claude-opus-5-5-high`, `gemini-3.8-flash-n`). A provider and model that Antigravity records takes the rates of its longest prefix that models.dev lists for that provider. Other names match exactly.
 - OpenCode 2 stores messages in `session_message`. The frozen OpenCode 1 `message` table keeps a few messages that the version 2 copy skipped, so Usage reads both.
 
 ## Tokens
@@ -101,6 +110,7 @@ A unit is one model request. Copies of one request share a unit identity.
 | Claude Code | `input_tokens` | `cache_read_input_tokens` | `cache_creation_input_tokens`, with the 1-hour part | `output_tokens`, with thinking |
 | Codex | Input minus cached input and cache writes | `cached_input_tokens` | `cache_write_input_tokens` | `output_tokens`, with reasoning |
 | OpenCode | `tokens.input` | `tokens.cache.read` | `tokens.cache.write` | `tokens.output` plus `tokens.reasoning` |
+| Antigravity | Usage field 2 | Usage field 5 | None recorded | Usage field 3, with thinking |
 
 - OpenCode before 1.3.16 stored output with reasoning in it. Usage detects these rows from the OpenCode 1 `tokens.total`, else from the session version.
 - A missing token field makes the unit unmeasured. A known zero stays zero.

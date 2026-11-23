@@ -103,6 +103,7 @@ describe("createUsageIndexReader", () => {
         claude: path.join(directory, "claude"),
         codex: [path.join(directory, "codex")],
         opencode: { directory: path.join(directory, "opencode"), databaseFile: null },
+        antigravity: path.join(directory, "antigravity"),
       },
     };
     const pricing = { pricer: createUsagePricer({}), updatedAtMs: null, failure: null };

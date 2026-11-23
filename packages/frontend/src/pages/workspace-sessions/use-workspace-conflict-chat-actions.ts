@@ -46,11 +46,7 @@ export function useWorkspaceConflictChatActions(input: {
       readiness: input.readiness,
       readModel: readModel.sessionReadModelLoadState,
       readOnlyReason: input.readOnlyReason,
-      pending:
-        actions.isSending ||
-        actions.isStarting ||
-        actions.isSavingModel ||
-        actions.isResumingSession,
+      pending: actions.isSending || actions.isStarting || actions.isResumingSession,
       isDraft: record.externalSessionId === null,
     });
   const sendRef = useRef(actions.sendStandaloneMessage);

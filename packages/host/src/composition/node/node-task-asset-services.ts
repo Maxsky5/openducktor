@@ -1,4 +1,6 @@
 import { getScopedRepoConfig } from "../../application/workspaces/scoped-repo-config";
+import type { AgentSessionTurnStorePort } from "../../ports/agent-session-turn-store-port";
+import { createSqliteAgentSessionTurnStore } from "../../adapters/sqlite/sqlite-agent-session-turn-store";
 import { Effect } from "effect";
 import { createNodeTaskAssetFilePort } from "../../adapters/node/filesystem-task-asset-file-port";
 import { createSqliteTaskAssetRegistry } from "../../adapters/sqlite/sqlite-task-asset-registry";
@@ -59,6 +61,7 @@ const unsupportedIssueImportStore: IssueImportStorePort = {
 
 export type NodeTaskAssetServices = {
   workspaceSessionStore: WorkspaceSessionStorePort;
+  agentSessionTurnStore: AgentSessionTurnStorePort;
   taskOwnership: TaskOwnershipReader;
   startupSweep: () => Effect.Effect<void, TaskStoreError>;
   taskAssetReadService: TaskAssetReadService;
@@ -153,6 +156,7 @@ export const createNodeTaskAssetServices = ({
   const taskAssetRecoveryService = createTaskAssetRecoveryService(recoveryServiceInput);
 
   return {
+    agentSessionTurnStore: createSqliteAgentSessionTurnStore(contextManager),
     workspaceSessionStore: createSqliteWorkspaceSessionStore({
       contextProvider,
       workspacesProvider,

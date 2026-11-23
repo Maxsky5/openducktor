@@ -1,4 +1,8 @@
 import { Effect } from "effect";
+import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
+import type { AgentSessionLiveRef } from "@openducktor/contracts";
+import { createAgentSessionTurnRecorder } from "../../application/agent-sessions/agent-session-turn-recorder";
+import type { AgentSessionTurnStorePort } from "../../ports/agent-session-turn-store-port";
 import { normalizePathForComparison } from "../../domain/path-comparison";
 import type { WorkspaceSettingsService } from "../../application/workspaces/workspace-settings-model";
 import { createLiveSessionRootRefsReader } from "./live-session-root-refs";
@@ -25,17 +29,27 @@ export const createNodeWorkspaceSessionPersistence = ({
   eventBus,
   faultLog,
   taskStore,
-  store,
+  stores: { workspaceSessionStore: store, agentSessionTurnStore: sessionTurns },
   naming,
   ...dependencies
 }: Omit<
   Parameters<typeof createWorkspaceSessionRuntimePersistence>[0],
-  "publishUpdated" | "operationGate" | "sessionTitleGate" | "reportRenameFailure" | "naming"
+  | "publishUpdated"
+  | "operationGate"
+  | "sessionTitleGate"
+  | "reportRenameFailure"
+  | "naming"
+  | "store"
 > & {
   naming: NamingService;
   eventBus: HostEventBusPort | undefined;
   faultLog: AgentSessionLiveFaultLogger;
   taskStore: Pick<TaskStorePort, "recordAgentSessionActivity">;
+  /** The saved Workspace Sessions and the turns of every runtime session. */
+  stores: {
+    workspaceSessionStore: WorkspaceSessionStorePort;
+    agentSessionTurnStore: AgentSessionTurnStorePort;
+  };
   settings: Pick<WorkspaceSettingsService, "getWorkspaceCatalog" | "getRepoConfig">;
 }) => {
   const readSessionRootRefs = createLiveSessionRootRefsReader({
@@ -72,10 +86,16 @@ export const createNodeWorkspaceSessionPersistence = ({
   const reportRenameFailure: WorkspaceSessionRenameFailureReporter = (ref, message, operation) =>
     Effect.try({
       try: () => {
+        // Callers can pass a send input. The fault names only the session.
         publishLiveEnvelope({
           type: "fault",
           repoPath: ref.repoPath,
-          ref,
+          ref: {
+            repoPath: ref.repoPath,
+            runtimeKind: ref.runtimeKind,
+            workingDirectory: ref.workingDirectory,
+            externalSessionId: ref.externalSessionId,
+          },
           operation: operation ?? "workspaceSession.accepted-message.rename",
           message,
         });
@@ -100,33 +120,31 @@ export const createNodeWorkspaceSessionPersistence = ({
       git: dependencies.git,
     },
   });
-  const persistence = {
-    ...workspacePersistence,
-    ...createAgentSessionActivityPersistence({
-      tasks: taskStore,
-      // Saved sessions can receive activity after their task closes.
-      readTaskWorkspace: (ref) =>
-        dependencies.settings.getWorkspaceCatalog().pipe(
-          Effect.map((catalog) => {
-            const workspace = catalog.openWorkspaces.find(
-              (candidate) =>
-                normalizePathForComparison(candidate.repoPath) ===
-                normalizePathForComparison(ref.repoPath),
-            );
-            return workspace
-              ? { workspaceId: workspace.workspaceId, repoPath: ref.repoPath }
-              : null;
-          }),
-        ),
-      workspace: workspacePersistence,
-      publishTaskRecords: (scope, records) =>
-        Effect.try({
-          try: () =>
-            publishLiveEnvelope({ type: "task_session_records_updated", ...scope, ...records }),
-          catch: (cause) => toHostOperationError(cause, "agent-session.persist-activity.publish"),
-        }),
-    }),
-  };
+  // Saved sessions can receive activity after their task closes.
+  const readOpenWorkspace = (ref: AgentSessionLiveRef) =>
+    dependencies.settings.getWorkspaceCatalog().pipe(
+      Effect.map((catalog) => {
+        const workspace = catalog.openWorkspaces.find(
+          (candidate) =>
+            normalizePathForComparison(candidate.repoPath) ===
+            normalizePathForComparison(ref.repoPath),
+        );
+        return workspace ? { workspaceId: workspace.workspaceId, repoPath: ref.repoPath } : null;
+      }),
+    );
+  const activityPersistence = createAgentSessionActivityPersistence({
+    tasks: taskStore,
+    readTaskWorkspace: readOpenWorkspace,
+    workspace: workspacePersistence,
+    turns: createAgentSessionTurnRecorder(sessionTurns),
+    publishTaskRecords: (scope, records) =>
+      Effect.try({
+        try: () =>
+          publishLiveEnvelope({ type: "task_session_records_updated", ...scope, ...records }),
+        catch: (cause) => toHostOperationError(cause, "agent-session.persist-activity.publish"),
+      }),
+  });
+  const persistence = { ...workspacePersistence, ...activityPersistence };
   return {
     persistence,
     store,

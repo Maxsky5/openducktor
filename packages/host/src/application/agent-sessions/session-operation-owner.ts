@@ -1,9 +1,10 @@
-import type {
-  AcceptedAgentInput,
-  AgentMessageTarget,
-  AgentSessionAuthorizedRoot,
-  AgentSessionLiveRef,
-  SessionOperationObservation,
+import {
+  type AcceptedAgentInput,
+  type AgentMessageTarget,
+  type AgentSessionAuthorizedRoot,
+  type AgentSessionLiveRef,
+  isAcceptedUserMessage,
+  type SessionOperationObservation,
 } from "@openducktor/contracts";
 import { agentSessionRefKey, agentSessionScopesEqual, isSameSelection } from "@openducktor/core";
 import { Cause, Context, Effect } from "effect";
@@ -399,7 +400,7 @@ export const createSessionOperationOwner = (deps: {
         return Effect.void;
       }),
     observe: (envelope: import("@openducktor/contracts").AgentSessionLiveEnvelope) => {
-      if (envelope.type === "transcript_event" && envelope.event.type === "user_message") {
+      if (envelope.type === "transcript_event" && isAcceptedUserMessage(envelope.event)) {
         const session = sessions.get(agentSessionRefKey(envelope.event.sessionRef));
         if (!session) return;
         const running = session.active;

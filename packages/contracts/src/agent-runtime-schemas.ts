@@ -6,10 +6,13 @@ import {
   agentToolNameSchema,
 } from "./agent-workflow-schemas";
 import { ODT_WORKFLOW_AGENT_TOOL_NAMES } from "./odt-tool-names";
+import { type KnownRuntimeKind, knownRuntimeKindSchema } from "./runtime-kind-schemas";
 
-export const knownRuntimeKindValues = ["opencode", "codex", "claude"] as const;
-export const knownRuntimeKindSchema = z.enum(knownRuntimeKindValues);
-export type KnownRuntimeKind = z.infer<typeof knownRuntimeKindSchema>;
+export {
+  type KnownRuntimeKind,
+  knownRuntimeKindSchema,
+  knownRuntimeKindValues,
+} from "./runtime-kind-schemas";
 
 export const codexReasoningEffortValues = [
   "none",
@@ -876,6 +879,8 @@ export const runtimeDescriptorSchema = z
     capabilityLimits: z.array(runtimeCapabilityLimitSchema).default([]),
     /** How the user updates the runtime, as one sentence, for example "Run `opencode upgrade`." */
     updateAction: z.string().trim().min(1),
+    /** A discovery that finds a valid executable turns the runtime on. */
+    enableOnDiscovery: z.boolean(),
   })
   .strict();
 export type RuntimeDescriptor = z.infer<typeof runtimeDescriptorSchema>;

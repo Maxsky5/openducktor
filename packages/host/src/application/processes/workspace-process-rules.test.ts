@@ -24,6 +24,7 @@ describe("isAgentRuntimeServer", () => {
     ["/Users/me/.opencode/bin/opencode", ["opencode", "serve", "--stdio", "--port", "0"]],
     ["/Users/me/.opencode/bin/opencode", ["opencode", "serve", "--service"]],
     ["/usr/local/bin/codex", ["codex", "app-server"]],
+    ["/Users/me/.local/bin/agy", ["agy", "acp"]],
     [
       "/Users/me/.local/share/claude/versions/2.1.330",
       [
@@ -41,6 +42,7 @@ describe("isAgentRuntimeServer", () => {
   test.each([
     ["/Users/me/.opencode/bin/opencode", ["opencode"]],
     ["/usr/local/bin/codex", ["codex", "exec", "fix the build"]],
+    ["/Users/me/.local/bin/agy", ["agy", "--print", "fix the build"]],
     ["/Users/me/.local/share/claude/versions/2.1.330", ["/Users/me/.local/bin/claude"]],
     ["/usr/local/bin/node", ["node", "serve"]],
   ])("treats %s %j as a command", (executable, args) => {

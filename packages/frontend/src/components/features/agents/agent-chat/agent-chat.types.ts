@@ -86,7 +86,6 @@ export type AgentChatComposerModel = {
   ) => Promise<AgentChatSendResult>;
   isSending: boolean;
   isStarting: boolean;
-  isSavingModel?: boolean;
   isSessionWorking: boolean;
   foregroundTurnActive?: boolean | undefined;
   isWaitingInput: boolean;

@@ -1,0 +1,202 @@
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { sep } from "node:path";
+import type { DirItem, FileFinder, FileItem, MixedSearchResult } from "@ff-labs/fff-node";
+import {
+  type AgentFileSearchResult,
+  detectAgentFileReferenceKind,
+  type SearchAgentFilesInput,
+} from "@openducktor/core";
+import {
+  basenameForPath,
+  normalizePathSeparators,
+  trimTrailingPathSeparators,
+} from "@openducktor/path-support";
+
+export const FILE_SEARCH_LIMIT = 30;
+const FILE_FINDER_CACHE_LIMIT = 3;
+const FILE_FINDER_SCAN_TIMEOUT_MS = 5_000;
+const ASAR_SEGMENT = `${sep}app.asar${sep}`;
+
+export type WorkspaceFileFinder = {
+  search(query: string): Promise<AgentFileSearchResult[]>;
+  destroy(): void;
+};
+
+export type WorkspaceFileSearch = {
+  prewarm(workingDirectory: string): void;
+  release(workingDirectory: string): void;
+  search(input: SearchAgentFilesInput): Promise<AgentFileSearchResult[]>;
+  dispose(): void;
+};
+
+type CachedFileFinder = {
+  finder: WorkspaceFileFinder;
+  released: boolean;
+  searchesInFlight: number;
+};
+
+export const toFileSearchResults = (result: MixedSearchResult): AgentFileSearchResult[] =>
+  result.items
+    .map((entry) =>
+      entry.type === "directory" ? toDirectoryResult(entry.item) : toFileResult(entry.item),
+    )
+    .filter((entry) => entry.path.length > 0)
+    .slice(0, FILE_SEARCH_LIMIT);
+
+const toFileResult = (item: FileItem): AgentFileSearchResult => {
+  const path = normalizePathSeparators(item.relativePath);
+  return {
+    id: path,
+    path,
+    name: item.fileName,
+    kind: detectAgentFileReferenceKind({ filePath: path }),
+  };
+};
+
+const toDirectoryResult = (item: DirItem): AgentFileSearchResult => {
+  const path = trimTrailingPathSeparators(normalizePathSeparators(item.relativePath));
+  return {
+    id: path,
+    path,
+    name: basenameForPath(path),
+    kind: "directory",
+  };
+};
+
+export const resolveUnpackedAsarModulePath = (modulePath: string): string => {
+  if (!modulePath.includes(ASAR_SEGMENT)) {
+    return modulePath;
+  }
+  const unpackedPath = modulePath.replace(ASAR_SEGMENT, `${sep}app.asar.unpacked${sep}`);
+  if (!existsSync(unpackedPath)) {
+    throw new Error(
+      `Missing unpacked file search module at '${unpackedPath}'. Reinstall OpenDucktor.`,
+    );
+  }
+  return unpackedPath;
+};
+
+const loadFileFinderModule = (): typeof import("@ff-labs/fff-node") => {
+  // fff loads its native library next to the package. ffi-rs cannot open that
+  // path inside an Electron asar archive, so load the unpacked copy.
+  const require = createRequire(import.meta.url);
+  const modulePath = resolveUnpackedAsarModulePath(require.resolve("@ff-labs/fff-node"));
+  // SAFETY: The resolved path is the CommonJS entry of @ff-labs/fff-node, so the
+  // loaded value has the package API type.
+  return require(modulePath) as typeof import("@ff-labs/fff-node");
+};
+
+export const waitForFileScan = async (
+  finder: Pick<FileFinder, "waitForScan">,
+  workingDirectory: string,
+): Promise<void> => {
+  const completed = await finder.waitForScan(FILE_FINDER_SCAN_TIMEOUT_MS);
+  if (!completed.ok) {
+    throw new Error(`File search could not index '${workingDirectory}': ${completed.error}`);
+  }
+  if (!completed.value) {
+    throw new Error(
+      `File search is still indexing '${workingDirectory}'. Search again after indexing finishes.`,
+    );
+  }
+};
+
+export const createNativeFileFinder = (workingDirectory: string): WorkspaceFileFinder => {
+  const { FileFinder } = loadFileFinderModule();
+  const created = FileFinder.create({ basePath: workingDirectory });
+  if (!created.ok) {
+    throw new Error(`File search could not index '${workingDirectory}': ${created.error}`);
+  }
+  const finder = created.value;
+  return {
+    search: async (query) => {
+      await waitForFileScan(finder, workingDirectory);
+      const result = finder.mixedSearch(query, { pageSize: FILE_SEARCH_LIMIT });
+      if (!result.ok) {
+        throw new Error(`File search failed in '${workingDirectory}': ${result.error}`);
+      }
+      return toFileSearchResults(result.value);
+    },
+    destroy: () => finder.destroy(),
+  };
+};
+
+export const createWorkspaceFileSearch = ({
+  createFinder = createNativeFileFinder,
+  cacheLimit = FILE_FINDER_CACHE_LIMIT,
+}: {
+  createFinder?: (workingDirectory: string) => WorkspaceFileFinder;
+  cacheLimit?: number;
+} = {}): WorkspaceFileSearch => {
+  const findersByDirectory = new Map<string, CachedFileFinder>();
+
+  const destroyCachedFinder = (cached: CachedFileFinder): void => {
+    if (cached.searchesInFlight > 0) {
+      cached.released = true;
+      return;
+    }
+    cached.finder.destroy();
+  };
+
+  const destroyEvictedFinders = (): void => {
+    while (findersByDirectory.size > cacheLimit) {
+      const oldest = findersByDirectory.entries().next().value;
+      if (!oldest) {
+        return;
+      }
+      const [workingDirectory, cached] = oldest;
+      findersByDirectory.delete(workingDirectory);
+      destroyCachedFinder(cached);
+    }
+  };
+
+  const ensureFinder = (workingDirectory: string): CachedFileFinder => {
+    const existing = findersByDirectory.get(workingDirectory);
+    if (existing) {
+      findersByDirectory.delete(workingDirectory);
+      findersByDirectory.set(workingDirectory, existing);
+      return existing;
+    }
+    const cached: CachedFileFinder = {
+      finder: createFinder(workingDirectory),
+      released: false,
+      searchesInFlight: 0,
+    };
+    findersByDirectory.set(workingDirectory, cached);
+    destroyEvictedFinders();
+    return cached;
+  };
+
+  return {
+    prewarm: (workingDirectory) => {
+      ensureFinder(workingDirectory);
+    },
+    release: (workingDirectory) => {
+      const cached = findersByDirectory.get(workingDirectory);
+      if (!cached) {
+        return;
+      }
+      findersByDirectory.delete(workingDirectory);
+      destroyCachedFinder(cached);
+    },
+    dispose: () => {
+      for (const cached of findersByDirectory.values()) {
+        destroyCachedFinder(cached);
+      }
+      findersByDirectory.clear();
+    },
+    search: async (input) => {
+      const cached = ensureFinder(input.workingDirectory);
+      cached.searchesInFlight += 1;
+      try {
+        return await cached.finder.search(input.query);
+      } finally {
+        cached.searchesInFlight -= 1;
+        if (cached.released && cached.searchesInFlight === 0) {
+          cached.finder.destroy();
+        }
+      }
+    },
+  };
+};

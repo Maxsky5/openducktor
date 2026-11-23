@@ -392,6 +392,19 @@ describe("agent message delivery: unknown acceptance", () => {
     expect(harness.calls).toHaveLength(3);
   });
 
+  test("keeps an unknown delivery when a pending message names its message ID", async () => {
+    const harness = createHarness();
+    harness.outcomes.push("unknown");
+    await harness.submit("first");
+
+    // A pending message is sent but not admitted, so it proves nothing about delivery.
+    harness.userMessage("message-first", "submission-first", "pending");
+
+    expect(harness.queueTexts()).toEqual(["first:acceptance_unknown"]);
+    harness.userMessage("message-first", "submission-first");
+    expect(harness.queueTexts()).toEqual([]);
+  });
+
   test("keeps an immediate send with an unknown result in the queue, where nobody can remove it", async () => {
     const harness = createHarness();
     harness.outcomes.push("unknown");

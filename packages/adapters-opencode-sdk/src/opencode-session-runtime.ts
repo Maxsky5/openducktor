@@ -896,7 +896,7 @@ export const createPrepareOpencodeSessionRuntime =
       if (event.type === "session.revert.staged") binding.detail.revert = event.data.revert;
       if (event.type === "session.revert.cleared" || event.type === "session.revert.committed")
         delete binding.detail.revert;
-      for (let projected of projector.apply(event)) {
+      for (let projected of projector.apply(event, !nativeRunning.has(externalSessionId))) {
         if (projected.type === "session_status" && projected.status.type !== "idle") {
           nativeRunning.add(externalSessionId);
           background.replyStarted(externalSessionId);
@@ -1156,7 +1156,12 @@ export const createPrepareOpencodeSessionRuntime =
           ]),
         );
         return Promise.race([sending, aborted])
-          .then((receipt) => {
+          .then((sentReceipt) => {
+            // Nothing runs ahead of a message that an idle session takes, so it shows as read.
+            const receipt =
+              !working && sentReceipt.type === "user_message" && sentReceipt.state === "queued"
+                ? { ...sentReceipt, state: "read" as const }
+                : sentReceipt;
             const accepted = processing.then(() => {
               const inputId = receipt.type === "user_message" ? receipt.messageId : receipt.inputId;
               if (inputId !== undefined) {

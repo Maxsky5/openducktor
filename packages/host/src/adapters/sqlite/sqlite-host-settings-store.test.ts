@@ -363,8 +363,8 @@ describe("shared host settings", () => {
         ),
       });
       const imported = await measureSettingsEdits(session, (current) => current, config);
-      expect(imported.rows).toBe(1055);
-      expect(imported.requests).toBeLessThanOrEqual(19);
+      expect(imported.rows).toBe(1056);
+      expect(imported.requests).toBeLessThanOrEqual(20);
       const mixed = await measureSettingsEdits(session, (current) => {
         const next = current;
         const workspace = next.workspaces.one!;
@@ -628,6 +628,10 @@ describe("shared host settings", () => {
         claude: {
           defaults: config.agentRuntimes.claude.defaults,
           roleOverrides: config.agentRuntimes.claude.roleOverrides,
+        },
+        antigravity: {
+          defaults: config.agentRuntimes.antigravity.defaults,
+          roleOverrides: config.agentRuntimes.antigravity.roleOverrides,
         },
         custom: null,
       });
@@ -894,6 +898,28 @@ describe("shared host settings", () => {
         expect(result.failure.message).toContain("claude");
         expect(result.failure.message).toContain("Restore a valid database");
       }
+    });
+  });
+
+  test("reads a database from before Antigravity with the default Antigravity settings", async () => {
+    await withDatabase(async ({ session }) => {
+      const config = createDefaultGlobalConfig();
+      await Effect.runPromise(
+        session.transaction("test.import", (transaction) =>
+          importHostSharedConfig(transaction, config),
+        ),
+      );
+      await Effect.runPromise(
+        session.execute(
+          (db) =>
+            db
+              .delete(agentRuntimeSettings)
+              .where(eq(agentRuntimeSettings.runtimeKind, "antigravity")),
+          "test.removeAntigravity",
+        ),
+      );
+      const read = await Effect.runPromise(readHostSharedConfig(session));
+      expect(read.agentRuntimes).toEqual(config.agentRuntimes);
     });
   });
 

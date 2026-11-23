@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { createMemoryAgentSessionTurnStore } from "../../ports/agent-session-turn-store.test-support";
 import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -149,6 +150,7 @@ const historyHarness = async (
     worktreeReads: createTaskSessionLifecycleCoordinator(),
     worktreeFiles: createWorktreeFileAdapter(),
     deniedToolParts: createDeniedToolPartRecords(),
+    sessionTurns: createMemoryAgentSessionTurnStore().store,
   };
   return {
     root,

@@ -1040,6 +1040,7 @@ describe("createElectronHostCommandRouter", () => {
         { kind: "opencode" },
         { kind: "codex" },
         { kind: "claude" },
+        { kind: "antigravity" },
       ]);
 
       await router.initialize();

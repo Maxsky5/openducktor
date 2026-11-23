@@ -321,6 +321,7 @@ const buildTheme = (scheme: "light" | "dark") => {
       runtimeOpencode: desktop.odtRuntimeAccentOpencode,
       runtimeCodex: desktop.odtRuntimeAccentCodex,
       runtimeClaude: desktop.odtRuntimeAccentClaude,
+      runtimeAntigravity: desktop.odtRuntimeAccentAntigravity,
       terminalSurface: desktop.terminalSurface,
       terminalPanel: desktop.terminalPanel,
       terminalBorder: desktop.terminalBorder,

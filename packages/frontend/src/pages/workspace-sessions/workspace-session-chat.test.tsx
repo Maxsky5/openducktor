@@ -704,7 +704,7 @@ test.each([OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME
 );
 
 test.each(["model", "effort", "profile"] as const)(
-  "keeps the workspace draft editor active and gates supported Resume controls while saving %s",
+  "keeps the workspace draft editor, Send, Resume, and settings active while saving %s",
   async (control) => {
     const descriptor =
       control === "profile" ? OPENCODE_RUNTIME_DESCRIPTOR : CLAUDE_RUNTIME_DESCRIPTOR;
@@ -713,7 +713,7 @@ test.each(["model", "effort", "profile"] as const)(
     const [initialModel, nextModel] = modelIds;
     const providerId = descriptor.kind === "claude" ? "anthropic" : "openai";
     const modelTrigger = `Select model, ${descriptor.label}, ${initialModel}`;
-    const { Harness, workspace, entry, session, operations, definitions } =
+    const { Harness, workspace, entry, session, store, operations, definitions } =
       createPresentationScenario(descriptor.kind, [
         buildMessage("user", "Continue the interrupted turn", { id: "interrupted-user" }),
       ]);
@@ -753,6 +753,8 @@ test.each(["model", "effort", "profile"] as const)(
     let updateRecord = (_record: WorkspaceSession): void => {};
     const updateModel = mock<AgentOperationsContextValue["updateAgentSessionModel"]>(
       async (_identity, selection) => {
+        // The session store shows the change at once, as the orchestrator does.
+        store.updateSession(session, (current) => ({ ...current, selectedModel: selection }));
         await save.promise;
         updateRecord({
           ...entry,
@@ -812,24 +814,26 @@ test.each(["model", "effort", "profile"] as const)(
         externalSessionId: session.externalSessionId,
         workingDirectory: session.workingDirectory,
       });
+      // The change saves in the background, so nothing in the composer locks.
       expect(editor.getAttribute("contenteditable")).toBe("true");
       expect(editor.getAttribute("aria-disabled")).toBe("false");
       expect(card?.className).toBe(cardClass);
       expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
-        true,
+        false,
       );
       if (resume) {
         expect(resume.isConnected).toBe(true);
-        expect(resume.hasAttribute("disabled")).toBe(true);
-        await act(async () => fireEvent.click(resume));
+        expect(resume.hasAttribute("disabled")).toBe(false);
       }
-      expect(resumeTurn).not.toHaveBeenCalled();
       expect(
-        view.queryByText("Wait for the current send or session change before resuming."),
-      ).toBeNull();
-      expect(view.getByRole("button", { name: modelTrigger }).getAttribute("aria-disabled")).toBe(
-        "true",
-      );
+        view
+          .getAllByRole("button")
+          .some(
+            (button) =>
+              button.getAttribute("aria-disabled") === "true" &&
+              button.getAttribute("aria-label")?.startsWith("Select model"),
+          ),
+      ).toBe(false);
       typeIntoComposer(view.container, "Unsent draft edited while saving");
       await act(async () => save.resolve());
       expect(editor.isConnected).toBe(true);

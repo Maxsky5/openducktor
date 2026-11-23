@@ -10,7 +10,7 @@ import {
   STANDARD_SPEED,
   withSpeed,
 } from "@openducktor/core";
-import { useCallback, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import type { ModelPickerValue } from "./model-picker-model";
 import { useClientConnection } from "../../connection/client-connection-react";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
@@ -18,10 +18,6 @@ import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import { reportModelUpdateError } from "./model-update-error";
 
 type SelectionChange = (current: AgentModelSelection | null) => AgentModelSelection | null;
-type PendingSelectionUpdates = {
-  selection: AgentModelSelection | null;
-  settled: Promise<void>;
-};
 
 export const useModelSelectionActions = ({
   loadedSessionIdentity,
@@ -47,41 +43,25 @@ export const useModelSelectionActions = ({
     (cause: unknown): void => reportModelUpdateError(feedback, cause),
     [feedback],
   );
-  const pendingUpdates = useRef(new Map<string, PendingSelectionUpdates>());
+  // The newest selection, so a quick second change builds on the first before the next render.
+  const latestSelection = useRef(selectedModelSelection);
+  const sessionKey = loadedSessionIdentity ? agentSessionIdentityKey(loadedSessionIdentity) : null;
+  useLayoutEffect(() => {
+    latestSelection.current = selectedModelSelection;
+  }, [selectedModelSelection, sessionKey]);
   const applySelection = useCallback(
     async (change: SelectionChange): Promise<void> => {
+      const selection = change(latestSelection.current);
+      if (!selection) return;
+      latestSelection.current = selection;
       if (!loadedSessionIdentity) {
-        const selection = change(selectedModelSelection);
-        if (selection) applyDraftSelection(selection);
+        applyDraftSelection(selection);
         return;
       }
-      const key = agentSessionIdentityKey(loadedSessionIdentity);
-      const queues = pendingUpdates.current;
-      const queue = queues.get(key) ?? {
-        selection: selectedModelSelection,
-        settled: Promise.resolve(),
-      };
-      queues.set(key, queue);
-
-      // Resolve each change after the prior write, using only accepted selections.
-      const update = queue.settled.then(async () => {
-        const selection = change(queue.selection);
-        if (!selection) return;
-        await updateAgentSessionModel(loadedSessionIdentity, selection);
-        queue.selection = selection;
-      });
-      // A rejected write still reaches its caller. It must not poison the next change.
-      const settled = update.then(
-        () => {},
-        () => {},
-      );
-      queue.settled = settled;
-      void settled.then(() => {
-        if (queue.settled === settled) queues.delete(key);
-      });
-      await update;
+      // The change shows at once. The session writes it after the earlier changes.
+      await updateAgentSessionModel(loadedSessionIdentity, selection);
     },
-    [applyDraftSelection, loadedSessionIdentity, selectedModelSelection, updateAgentSessionModel],
+    [applyDraftSelection, loadedSessionIdentity, updateAgentSessionModel],
   );
 
   const handleSelectAgentProfile = useCallback(

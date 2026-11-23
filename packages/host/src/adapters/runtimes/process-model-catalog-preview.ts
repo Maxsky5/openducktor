@@ -1,6 +1,7 @@
 import type { ModelCatalogPreviewReader } from "../../application/runtimes/model-catalog-preview-service";
 import type { SettingsConfigPort } from "../../ports/settings-config-port";
 import type { ToolDiscoveryPort } from "../../ports/tool-discovery-port";
+import { createAntigravityModelCatalogPreview } from "../antigravity/antigravity-model-catalog-preview";
 import { createClaudeModelCatalogPreview } from "../claude/claude-model-catalog-preview";
 import { createCodexModelCatalogPreview } from "../codex/codex-model-catalog-preview";
 import { createOpenCodeModelCatalogPreview } from "../opencode/opencode-model-catalog-preview";
@@ -28,6 +29,11 @@ export const createNodeModelCatalogPreview = ({
     toolDiscovery,
     readEnv,
   });
+  const readAntigravity = createAntigravityModelCatalogPreview({
+    settingsConfig,
+    toolDiscovery,
+    readEnv,
+  });
   return ({ repoPath, runtimeKind }) => {
     switch (runtimeKind) {
       case "claude":
@@ -36,6 +42,8 @@ export const createNodeModelCatalogPreview = ({
         return readCodex(repoPath);
       case "opencode":
         return readOpenCode(repoPath);
+      case "antigravity":
+        return readAntigravity(repoPath);
     }
   };
 };

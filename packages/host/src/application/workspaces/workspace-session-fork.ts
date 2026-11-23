@@ -34,7 +34,7 @@ import {
   type WorkspaceSessionTargetCreationDependencies,
   type WorkspaceSessionTargetValidationDependencies,
 } from "./workspace-session-target";
-import { titleSyncNeedsTurn } from "./workspace-session-runtime-title-sync";
+import { syncsTitleAfterTurn } from "./workspace-session-runtime-title-sync";
 import type { GitPort } from "../../ports/git-port";
 import type { RuntimeAdmissionPort } from "../../ports/runtime-admission-port";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
@@ -283,7 +283,7 @@ const forkAndSave = (
             target: { kind: "workspace", record: saved.value, runtimeSession: child },
           }),
         );
-        if (titleSyncNeedsTurn(input.source.runtimeKind))
+        if (syncsTitleAfterTurn(input.source.runtimeKind))
           deps.markTitleSyncPending(toRef(input.repoPath, child));
         return { record: saved.value, runtimeSession: child };
       }

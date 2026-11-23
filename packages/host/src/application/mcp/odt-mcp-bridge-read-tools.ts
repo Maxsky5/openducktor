@@ -18,10 +18,12 @@ import {
   parseToolInput,
   toMcpTaskArtifact,
 } from "./odt-mcp-bridge-model";
-import type {
-  OdtMcpBridgeError,
-  OdtMcpReadToolName,
-  OdtMcpToolContext,
+import {
+  type OdtMcpBridgeError,
+  type OdtMcpReadToolName,
+  type OdtMcpToolContext,
+  resolveTaskCaller,
+  splitBridgeCaller,
 } from "./odt-mcp-bridge-tool-context";
 
 const RESPONSE_SCHEMAS = ODT_HOST_BRIDGE_RESPONSE_SCHEMAS;
@@ -39,6 +41,29 @@ export const executeOdtMcpReadTool = (
   input: JSONType,
 ): Effect.Effect<OdtMcpReadToolResult, OdtMcpBridgeError> =>
   READ_TOOL_HANDLERS[toolName](context, input);
+
+type OdtMcpTaskReadToolName = Exclude<OdtMcpReadToolName, "odt_search_tasks">;
+
+/**
+ * Parses a task-bound read and resolves its task. A managed task session can read only its own
+ * task, and a Workspace Session or user client can read any task of the workspace.
+ */
+const readTaskInput = <
+  Input extends { readonly workspaceId?: string | undefined; readonly taskId: string },
+>(
+  context: OdtMcpToolContext,
+  toolName: OdtMcpTaskReadToolName,
+  schema: z.ZodType<Input>,
+  body: JSONType,
+) =>
+  Effect.gen(function* () {
+    const { caller, input } = yield* splitBridgeCaller(toolName, body);
+    const parsed = yield* parseToolInput(toolName, schema, input);
+    const workspaceId = parsed.workspaceId ?? "";
+    const scope = yield* context.taskScopeForWorkspace(workspaceId, parsed.taskId);
+    yield* resolveTaskCaller(context, toolName, caller, workspaceId, scope.task.id, "read tasks");
+    return { parsed, ...scope };
+  });
 
 const executeSearchTasks: OdtMcpReadToolHandler = (context, input) =>
   Effect.gen(function* () {
@@ -79,14 +104,13 @@ const executeSearchTasks: OdtMcpReadToolHandler = (context, input) =>
 
 const executeReadTaskAssets: OdtMcpReadToolHandler = (context, input) =>
   Effect.gen(function* () {
-    const { taskAssetReadService, taskForWorkspace } = context;
-    const parsed = yield* parseToolInput(
+    const { parsed, task } = yield* readTaskInput(
+      context,
       "odt_read_task_assets",
       ODT_TOOL_SCHEMAS.odt_read_task_assets,
       input,
     );
-    const task = yield* taskForWorkspace(parsed.workspaceId ?? "", parsed.taskId);
-    const batch = yield* taskAssetReadService
+    const batch = yield* context.taskAssetReadService
       .readBatch({
         workspaceId: parsed.workspaceId ?? "",
         taskId: task.id,
@@ -143,10 +167,11 @@ const executeReadTaskAssets: OdtMcpReadToolHandler = (context, input) =>
 
 const executeReadTask: OdtMcpReadToolHandler = (context, input) =>
   Effect.gen(function* () {
-    const parsed = yield* parseToolInput("odt_read_task", ODT_TOOL_SCHEMAS.odt_read_task, input);
-    const { workspaceId, repoPath, task } = yield* context.taskScopeForWorkspace(
-      parsed.workspaceId ?? "",
-      parsed.taskId,
+    const { workspaceId, repoPath, task } = yield* readTaskInput(
+      context,
+      "odt_read_task",
+      ODT_TOOL_SCHEMAS.odt_read_task,
+      input,
     );
     const collection = yield* context.taskService.listTaskArtifacts({
       workspaceId,
@@ -164,14 +189,11 @@ const executeReadTask: OdtMcpReadToolHandler = (context, input) =>
 
 const executeReadTaskArtifacts: OdtMcpReadToolHandler = (context, input) =>
   Effect.gen(function* () {
-    const parsed = yield* parseToolInput(
+    const { parsed, workspaceId, repoPath, task } = yield* readTaskInput(
+      context,
       "odt_read_task_artifacts",
       ODT_TOOL_SCHEMAS.odt_read_task_artifacts,
       input,
-    );
-    const { workspaceId, repoPath, task } = yield* context.taskScopeForWorkspace(
-      parsed.workspaceId ?? "",
-      parsed.taskId,
     );
     const workflow = context.taskWorkflows.forTask(task);
     const listedArtifacts = parsed.codes.some((code) => !workflow.artifact(code))

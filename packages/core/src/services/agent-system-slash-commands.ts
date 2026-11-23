@@ -28,7 +28,10 @@ const RESERVED_SYSTEM_SLASH_COMMANDS = [
   { descriptor: GOAL_SLASH_COMMAND, matches: isGoalSlashCommand },
 ] as const;
 
-/** Only OpenDucktor provides these triggers, so no runtime or prompt command can use them. */
+/**
+ * The triggers of the OpenDucktor system commands. A reusable prompt never uses one. A runtime
+ * catalog command uses one only when OpenDucktor does not run that trigger for its runtime.
+ */
 export const RESERVED_SYSTEM_SLASH_COMMAND_TRIGGERS: ReadonlySet<string> = new Set(
   RESERVED_SYSTEM_SLASH_COMMANDS.map(({ descriptor }) => descriptor.trigger),
 );
@@ -36,11 +39,21 @@ export const RESERVED_SYSTEM_SLASH_COMMAND_TRIGGERS: ReadonlySet<string> = new S
 export const reservedSystemSlashCommandMessage = (trigger: string): string =>
   `/${trigger} is a reserved system slash command.`;
 
+/** A command of a runtime catalog. OpenDucktor and reusable prompts use `system` and `custom`. */
+const isRuntimeCatalogCommand = (command: SlashCommandDescriptor): boolean =>
+  command.source !== "system" && command.source !== "custom";
+
+/**
+ * A command that copies a reserved system command. A runtime catalog command can use a reserved
+ * trigger, and it reaches the runtime as a native command.
+ */
 const isReservedLookalike = (command: SlashCommandDescriptor): boolean =>
   RESERVED_SYSTEM_SLASH_COMMANDS.some(
     ({ descriptor, matches }) =>
-      (command.trigger.toLowerCase() === descriptor.trigger || command.id === descriptor.id) &&
-      !matches(command),
+      !matches(command) &&
+      (command.id === descriptor.id ||
+        (command.trigger.toLowerCase() === descriptor.trigger &&
+          !isRuntimeCatalogCommand(command))),
   );
 
 /** Why a trimmed goal objective is too long, or `null`. Every goal input uses this limit. */

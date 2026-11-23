@@ -40,7 +40,7 @@ import type { ClaudeBackgroundToolState } from "./claude-agent-sdk-background-to
 import type { ClaudeEventSession } from "./claude-agent-sdk-event-session";
 import type { ClaudeNativeActivityState } from "./claude-agent-sdk-activity";
 import type { ClaudeProtocolObject } from "./claude-agent-sdk-ingress-schemas";
-import type { ClaudeWorkspaceFileSearch } from "./claude-agent-sdk-file-search";
+import type { WorkspaceFileSearch } from "../file-search/workspace-file-search";
 import type { ClaudeToolDenialRecord } from "./claude-agent-sdk-tool-denials";
 
 export type ClaudeMcpBridgeConnectionResolver = (
@@ -52,7 +52,7 @@ export type CreateClaudeAgentSdkServiceInput = {
   claudeExecutablePath: string;
   launchPolicy: ClaudeLaunchPolicyPort;
   emit?: ClaudeLiveEventEmitter;
-  fileSearch?: ClaudeWorkspaceFileSearch;
+  fileSearch?: WorkspaceFileSearch;
   onBackgroundFailure: (failure: HostOperationErrorAggregate) => Effect.Effect<void, never>;
   processEnv?: NodeJS.ProcessEnv;
   historyStorage?: "memory" | "disk";

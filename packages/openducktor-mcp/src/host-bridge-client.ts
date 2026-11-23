@@ -4,7 +4,7 @@ import {
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_MCP_BRIDGE_VERSION,
   ODT_TOOL_SCHEMAS,
-  type OdtBrowserCaller,
+  type OdtCaller,
   type OdtBrowserToolName,
   type OdtBrowserToolResult,
   type OdtHostBridgeReady,
@@ -23,10 +23,10 @@ type ToolOutput<Name extends OdtToolName> = z.infer<
 >;
 /** Workspace task tools. Managed artifact writes and workflow events also send their native caller. */
 export type WorkspaceTaskToolName = Exclude<WorkspaceScopedOdtToolName, OdtBrowserToolName>;
-type OdtToolInput = ToolInput<OdtToolName> & { caller?: OdtBrowserCaller };
+type OdtToolInput = ToolInput<OdtToolName> & { caller?: OdtCaller };
 type BrowserBridgeBody = ToolInput<OdtBrowserToolName> & {
   workspaceId: string;
-  caller: OdtBrowserCaller;
+  caller: OdtCaller;
 };
 type BridgeRequestHeaders = {
   Accept: "application/json";
@@ -41,14 +41,14 @@ export type OdtHostBridgeClientPort = {
     toolName: Name,
     workspaceId: string,
     input: ToolInput<Name>,
-    caller?: OdtBrowserCaller,
+    caller?: OdtCaller,
   ): Promise<ToolOutput<Name>>;
   /** The host resolves the task or Workspace Session of the call from `caller`. */
   callBrowserTool<Name extends OdtBrowserToolName>(
     toolName: Name,
     workspaceId: string,
     input: ToolInput<Name>,
-    caller: OdtBrowserCaller,
+    caller: OdtCaller,
   ): Promise<OdtBrowserToolResult>;
 };
 
@@ -218,7 +218,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     toolName: Name,
     workspaceId: string,
     input: ToolInput<Name>,
-    caller?: OdtBrowserCaller,
+    caller?: OdtCaller,
   ): Promise<ToolOutput<Name>> {
     const body: OdtToolInput = {
       ...input,
@@ -234,7 +234,7 @@ export class OdtHostBridgeClient implements OdtHostBridgeClientPort {
     toolName: Name,
     workspaceId: string,
     input: ToolInput<Name>,
-    caller: OdtBrowserCaller,
+    caller: OdtCaller,
   ): Promise<OdtBrowserToolResult> {
     const body: BrowserBridgeBody = { ...input, workspaceId, caller };
     return this.invokeJson(toolName, body, ODT_BROWSER_BRIDGE_TIMEOUT_MS);

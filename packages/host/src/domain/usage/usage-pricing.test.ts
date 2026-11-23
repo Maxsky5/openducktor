@@ -37,6 +37,15 @@ describe("createUsagePricer", () => {
     expect(pricer.stepsFor("anthropic", "claude-opus-5-5-preview", null)).toBeNull();
   });
 
+  test("prices a variant ID at the rates of its longest listed prefix", () => {
+    expect(
+      pricer.stepsForVariant("anthropic", "claude-opus-5-5-high", null)?.[0]?.rates.input,
+    ).toBe(4);
+    expect(pricer.stepsForVariant("anthropic", "claude-opus-5-5", null)).not.toBeNull();
+    expect(pricer.stepsForVariant("anthropic", "claude-haiku-5-5-high", null)).toBeNull();
+    expect(pricer.stepsForVariant("google", "claude-opus-5-5-high", null)).toBeNull();
+  });
+
   test("prices the standard tiers at the base rates and other tiers at their own rates", () => {
     expect(pricer.stepsFor("anthropic", "claude-opus-5-5", "standard")?.[0]?.rates.input).toBe(4);
     expect(pricer.stepsFor("openai", "gpt-6.2-sol", "default")?.[0]?.rates.input).toBe(2);

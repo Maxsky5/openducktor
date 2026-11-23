@@ -10,6 +10,7 @@ describe("createRuntimeDefinitionsService", () => {
       "opencode",
       "codex",
       "claude",
+      "antigravity",
     ]);
     expect(definitions[0]?.capabilities.promptInput.supportsAttachments).toBe(true);
     expect(definitions[0]?.capabilities.workflow.supportsOdtWorkflowTools).toBe(true);
@@ -36,7 +37,7 @@ describe("createRuntimeDefinitionsService", () => {
     expect(definitions[2]?.capabilities.promptInput.supportsSubagentReferences).toBe(false);
   });
 
-  test("reports interrupted-turn resume for every runtime", () => {
+  test("reports interrupted-turn resume only for runtimes that can continue a turn", () => {
     const service = createRuntimeDefinitionsService();
 
     const definitions = service.listRuntimeDefinitions();
@@ -45,6 +46,6 @@ describe("createRuntimeDefinitionsService", () => {
       definitions.map(
         (definition) => definition.capabilities.sessionLifecycle.supportsInterruptedTurnResume,
       ),
-    ).toEqual([true, true, true]);
+    ).toEqual([true, true, true, false]);
   });
 });

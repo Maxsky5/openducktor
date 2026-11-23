@@ -45,6 +45,21 @@ describe("session runtime policy", () => {
     });
   });
 
+  test("gives an Antigravity session a policy without settings", () => {
+    expect(
+      resolveAgentSessionRuntimePolicyFromSnapshot({
+        runtimeKind: "antigravity",
+        sessionScope: {
+          kind: "workflow",
+          workspaceId: "workspace-1",
+          taskId: "task-1",
+          role: "qa",
+        },
+        snapshot: createSettingsSnapshotFixture(),
+      }),
+    ).toEqual({ kind: "antigravity" });
+  });
+
   test("does not infer repository scope for an unbound session", async () => {
     const ref = await resolveRuntimeSessionContextRef(
       "/repo",

@@ -99,7 +99,7 @@ export function WorkspaceSessionChat({
     runtimeReadiness.state === "ready" && readModel.sessionReadModelLoadState.kind === "ready",
     visitKey,
   );
-  const { isStarting, isSavingModel } = actions;
+  const { isStarting } = actions;
   const recordsError = readModel.workspaceSessionRecordsError;
   const fault = readModel.getSessionFault(identity);
   const chatState = useMemo(
@@ -142,7 +142,10 @@ export function WorkspaceSessionChat({
     repoPath: workspace.repoPath,
     record,
     identity,
-    selection: chatState.selectedModel,
+    // A draft model that still saves shows over the saved record.
+    selection: actions.pendingDraftModel
+      ? actions.pendingDraftModel.selection
+      : chatState.selectedModel,
     updateDraft: actions.updateDraftModel,
     updateSpeed: actions.updateSpeed,
     update: actions.updateSessionModel,
@@ -327,7 +330,6 @@ export function WorkspaceSessionChat({
     },
     interruptedTurnResume: buildWorkspaceInterruptedTurnResume({
       canResume: canResumeSession,
-      isSavingModel,
       identity,
       session,
       actions,

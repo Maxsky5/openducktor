@@ -1,4 +1,5 @@
 import {
+  RUNTIME_DESCRIPTORS_BY_KIND,
   globalConfigSchema,
   knownRuntimeKindValues,
   type PersistedGlobalConfigV2,
@@ -57,13 +58,14 @@ export const createRuntimeConfigInitializer =
 
       const config = createDefaultGlobalConfig();
       const agentRuntimes = Object.fromEntries(
-        Object.entries(config.agentRuntimes).map(([kind, runtime]) => {
+        knownRuntimeKindValues.map((kind) => {
           const executablePath = executablePaths[kind] ?? "";
           return [
             kind,
             {
-              ...runtime,
-              enabled: executablePath.length > 0,
+              ...config.agentRuntimes[kind],
+              enabled:
+                executablePath.length > 0 && RUNTIME_DESCRIPTORS_BY_KIND[kind].enableOnDiscovery,
               executablePath,
             },
           ];

@@ -6,16 +6,24 @@ OpenDucktor stores shared workspace data and execution settings in `<config-root
 
 | Store | Data |
 |---|---|
-| `database.sqlite` | Workspace registration, settings and lifecycle; task data; custom roles; prompt overrides and appends; runtime policies; Git defaults; Autopilot policy; host identity; remote-access settings. |
+| `database.sqlite` | Workspace registration, settings and lifecycle; task data; agent session turns; custom roles; prompt overrides and appends; runtime policies; Git defaults; Autopilot policy; host identity; remote-access settings. |
 | `config.json` | Theme, appearance, chat, Kanban, general UI, notifications, reusable prompts, model favorites, preferred Open In tool, active workspace, order, recent workspaces, and Agent Studio state. |
 | `usage-index.sqlite` | A disposable cache of the native runtime history and the last downloaded API rates for the Usage page. Deleting it costs one rebuild. See [Usage](usage.md#index). |
 | Existing external files | Asset bytes and owner markers, worktrees, browser permissions and saved tabs, MCP discovery, logs, Electron profiles, and keychain secrets. |
 
 The settings adapter composes reads from both stores. Saves contain edited fields. Shared edits commit first; preference edits follow. A preference failure after a shared commit reports the saved shared fields and retains the failed preference edits.
 
-Runtime permission policies use `agent_runtime_settings.policy_json`. Known runtimes store their existing `defaults` and `roleOverrides` objects. Other runtimes keep this column NULL. Reads and writes validate the payload and preserve omitted fields, empty collections, false values, rule order, and duplicates.
+Runtime permission policies use `agent_runtime_settings.policy_json`. Known runtimes, Antigravity included, store their `defaults` and `roleOverrides` objects. An Antigravity row stored before its policy existed has a NULL policy, and a read gives it the default policy. Other runtimes keep this column NULL. Reads and writes validate the payload and preserve omitted fields, empty collections, false values, rule order, and duplicates.
 
 Workspace removal deletes only the target registration and owned rows. It keeps the database file and other workspaces.
+
+### Agent session turns
+
+- `agent_session_turns` stores one row for each user message that a runtime accepted, for every runtime. The runtime kind, the native session ID, and the user message ID are its key. A steer has its own row.
+- The host writes the rows from the ordered live stream, not from adapters. A row keeps the user message time, a fingerprint of its text, and the model. The row of the last message of a run also keeps the end time, the duration since the first message of the run, the outcome, the final reply ID, and the stop notice of a run that the user stopped.
+- A history read adds the saved facts where the runtime history has only approximate times. A row applies only when the history has its user message ID with the same text fingerprint.
+- Each row keeps the runtime and the model of its turn, so turns of several runtime sessions can form one conversation.
+- Workspace removal deletes the rows of the workspace. Task and Workspace Session deletion keep them, because the native session stays in the runtime.
 
 ### GitLab accounts
 

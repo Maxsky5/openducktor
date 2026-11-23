@@ -9,13 +9,11 @@ import type { useWorkspaceSessionChatActions } from "./use-workspace-session-cha
 /** The resume notice of a workspace chat, or undefined when the turn offers no Resume. */
 export const buildWorkspaceInterruptedTurnResume = ({
   canResume,
-  isSavingModel,
   identity,
   session,
   actions,
 }: {
   canResume: boolean;
-  isSavingModel: boolean;
   identity: AgentSessionIdentity | null;
   session: AgentSessionState | null;
   actions: Pick<
@@ -30,7 +28,7 @@ export const buildWorkspaceInterruptedTurnResume = ({
   const autoResume = session?.usageLimitAutoResume;
   return {
     isPending: actions.isResumingSession,
-    isDisabled: isSavingModel,
+    isDisabled: false,
     error: actions.resumeSessionError,
     usageLimit: latestTurnUsageLimit(session?.messages.items ?? []),
     autoResume,

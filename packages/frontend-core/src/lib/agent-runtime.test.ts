@@ -268,6 +268,12 @@ describe("agent-runtime capability policies", () => {
           },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: true },
           claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
+          antigravity: {
+            enabled: false,
+            executablePath: "",
+            defaults: { mode: "auto" },
+            roleOverrides: {},
+          },
         },
       }).map((definition) => definition.kind),
     ).toEqual(["codex"]);
@@ -284,6 +290,12 @@ describe("agent-runtime capability policies", () => {
           },
           codex: { ...DEFAULT_AGENT_RUNTIMES.codex, enabled: false },
           claude: { enabled: false, executablePath: "", defaults: {}, roleOverrides: {} },
+          antigravity: {
+            enabled: false,
+            executablePath: "",
+            defaults: { mode: "auto" },
+            roleOverrides: {},
+          },
         },
       }).map((definition) => definition.kind),
     ).toEqual([]);

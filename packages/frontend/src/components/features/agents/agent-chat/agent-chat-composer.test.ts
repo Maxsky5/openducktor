@@ -409,7 +409,6 @@ describe("AgentChatComposer", () => {
     ["pending input", { isSessionWorking: true, isWaitingInput: true }, false],
     ["starting", { isStarting: true }, true],
     ["submitting", { isSending: true }, true],
-    ["saving settings", { isSavingModel: true }, true],
     ["read-only", { isReadOnly: true }, true],
     ["unavailable", { isInteractionEnabled: false }, true],
   ])("sets settings availability during %s", (_name, state, disabled) => {
@@ -612,7 +611,7 @@ describe("AgentChatComposer", () => {
   });
 
   test.each([false, true])(
-    "shows the speed control and blocks send while pending=%s",
+    "shows the speed control and keeps send open while pending=%s",
     (pending) => {
       const html = renderToStaticMarkup(
         createElement(AgentChatComposer, {
@@ -636,7 +635,8 @@ describe("AgentChatComposer", () => {
       );
 
       expect(html).toContain('aria-label="Speed: Fast"');
-      expect(html.includes('aria-label="Send message" disabled')).toBe(pending);
+      // The send waits for the speed write itself, so a pending change does not block it.
+      expect(html).not.toContain('aria-label="Send message" disabled');
       // A speed change must not lock the model and effort controls.
       expect(html).not.toContain("Model selection is unavailable right now.");
     },

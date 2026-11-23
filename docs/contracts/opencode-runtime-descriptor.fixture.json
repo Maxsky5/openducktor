@@ -165,6 +165,7 @@
     }
   },
   "updateAction": "Run `opencode upgrade`.",
+  "enableOnDiscovery": true,
   "capabilityLimits": [
     {
       "scope": "runtime",

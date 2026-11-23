@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type antigravityRuntimeConfigSchema,
   type codexRuntimeConfigSchema,
   globalConfigSchema,
   notificationSettingsSchema,
@@ -177,6 +178,21 @@ describe("applyTaskWorkflowSettings", () => {
     expect(
       applyTaskWorkflowSettings(codex("editor"), reviewWorkflows).agentRuntimes.codex.roleOverrides,
     ).toEqual({ editor: { sandboxMode: "read-only" } });
+  });
+
+  test("accepts any Antigravity mode for a read-only role", () => {
+    const runtime: z.input<typeof antigravityRuntimeConfigSchema> = {
+      enabled: true,
+      executablePath: "/bin/agy",
+      roleOverrides: { editor: { mode: "auto" } },
+    };
+
+    expect(
+      applyTaskWorkflowSettings(
+        config({ agentRuntimes: { antigravity: runtime } }),
+        reviewWorkflows,
+      ).agentRuntimes.antigravity.roleOverrides,
+    ).toEqual({ editor: { mode: "auto" } });
   });
 });
 

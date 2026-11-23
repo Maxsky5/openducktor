@@ -374,15 +374,23 @@ const eventBaseFields = {
 export const agentTurnOutcomeSchema = z.enum(["completed", "interrupted", "failed"]);
 export type AgentTurnOutcome = z.infer<typeof agentTurnOutcomeSchema>;
 
+export const agentUserMessageStateSchema = z.enum(["pending", "queued", "read"]);
+export type AgentUserMessageState = z.infer<typeof agentUserMessageStateSchema>;
+
 const transcriptEventSchema = <Fields extends ZodSchemaFields>(fields: Fields) =>
   z.object({ ...eventBaseFields, ...fields }).strict();
 
-export const agentUserMessageEventSchema = transcriptEventSchema({
+const agentUserMessageFields = {
   type: z.literal("user_message"),
   messageId: z.string(),
   message: z.string(),
   parts: z.array(agentUserMessageDisplayPartSchema),
-  state: z.enum(["queued", "read"]),
+  /**
+   * `pending`: sent, and the runtime has not admitted it yet. No reader treats it as accepted, and a
+   * later `read` message or a retraction replaces it. `queued`: the runtime holds it in its inbox.
+   * `read`: the runtime works on it.
+   */
+  state: agentUserMessageStateSchema,
   model: agentModelSelectionSchema.optional(),
   resolvedQuestionRequestIds: z.array(z.string().trim().min(1)).optional(),
   /**
@@ -390,7 +398,22 @@ export const agentUserMessageEventSchema = transcriptEventSchema({
    * the accepted message in one step. It is live only and never part of stored history.
    */
   submissionId: z.string().trim().min(1).optional(),
+};
+
+export const agentUserMessageEventSchema = transcriptEventSchema(agentUserMessageFields).refine(
+  (event) => event.state !== "pending" || event.submissionId === undefined,
+  {
+    message: "A pending user message names no submission, because the runtime has not admitted it.",
+    path: ["submissionId"],
+  },
+);
+
+/** A receipt names a message that the runtime admitted, so it is never `pending`. */
+export const acceptedAgentUserMessageSchema = transcriptEventSchema({
+  ...agentUserMessageFields,
+  state: z.enum(["queued", "read"]),
 });
+export type AcceptedAgentUserMessage = z.infer<typeof acceptedAgentUserMessageSchema>;
 
 const agentSessionTurnFinishedEventSchema = transcriptEventSchema({
   type: z.literal("session_turn_finished"),

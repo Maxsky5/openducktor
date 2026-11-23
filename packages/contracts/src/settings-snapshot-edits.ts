@@ -210,6 +210,10 @@ const globalRule = object(
         codex: object({ defaults: object(), roleOverrides: keyed(object({}, optional())) }),
         claude: object({ defaults: claudeRule, roleOverrides: keyed(claudeRule) }),
         opencode: object({ defaults: object(), roleOverrides: keyed(object()) }),
+        antigravity: object({
+          defaults: object(),
+          roleOverrides: keyed(object({}, optional())),
+        }),
       },
       object(),
     ),

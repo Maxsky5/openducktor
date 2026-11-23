@@ -24,10 +24,7 @@ import { Clock, Effect } from "effect";
 import { HostOperationError, HostValidationError } from "../../effect/host-errors";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { TerminalService } from "../terminals/terminal-service";
-import {
-  planRuntimeTitleRename,
-  runtimeTitleWithManualTitle,
-} from "../../domain/workspace-sessions/workspace-session-title";
+import { runtimeTitleWithManualTitle } from "../../domain/workspace-sessions/workspace-session-title";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 import type { createWorkspaceSessionOperationGate } from "./workspace-session-operation-gate";
@@ -47,7 +44,7 @@ import {
 } from "./workspace-session-worktree-lifecycle";
 
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
-import { titleSyncNeedsTurn } from "./workspace-session-runtime-title-sync";
+import { planNativeRename, syncsTitleAfterTurn } from "./workspace-session-runtime-title-sync";
 import { readWorktreeOwners, requireNoWorktreeOwners } from "./workspace-session-worktree-owners";
 import { listWorkspaceSessionWorktrees } from "./workspace-session-existing-worktree";
 import {
@@ -185,13 +182,9 @@ export const createWorkspaceSessionService = (
                   }),
                 );
               }
-              const plannedRename =
-                planRuntimeTitleRename(session, nextTitle) ??
-                (titleSyncNeedsTurn(session.runtimeKind) &&
-                session.externalSessionId !== null &&
-                nextTitle !== null
-                  ? { externalSessionId: session.externalSessionId, title: nextTitle }
-                  : null);
+              const plannedRename = planNativeRename(session, nextTitle, {
+                resendUnchanged: true,
+              });
               // Codex may write the native name before it reports a failed rename.
               // Keep the saved title so the next attach or rename can try again.
               const saved = yield* Effect.result(
@@ -200,7 +193,7 @@ export const createWorkspaceSessionService = (
               if (saved._tag === "Failure") return yield* Effect.fail(saved.failure);
               if (plannedRename === null) return saved.success;
               if (
-                titleSyncNeedsTurn(session.runtimeKind) &&
+                syncsTitleAfterTurn(session.runtimeKind) &&
                 dependencies.isTitleSyncPending({
                   repoPath: ref.repoPath,
                   runtimeKind: session.runtimeKind,

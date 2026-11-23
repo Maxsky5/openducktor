@@ -1073,7 +1073,8 @@ export const useRepoSessionReadModel = ({
         );
         commitTranscriptActivity(envelope);
         handleTranscriptEvent(envelope.event, envelope.provenance);
-        // An accepted message leaves its queue after it joins the transcript, in the same step.
+        // An accepted message leaves its queue after it joins the transcript, in the same step. The
+        // contract gives no submission ID to a pending message.
         if (envelope.event.type === "user_message" && envelope.event.submissionId) {
           messageQueues.removeAccepted(envelope.event.sessionRef, envelope.event.submissionId);
         }

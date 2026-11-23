@@ -84,6 +84,26 @@ describe("agent-orchestrator/support/messages", () => {
     expect(sessionMessageAt(createSession(replaced), 0)?.content).toBe("updated");
   });
 
+  test("replaces a pending user message with its read message and never downgrades it", () => {
+    const userMessage = (state: "pending" | "read"): AgentChatMessage => ({
+      id: "u1",
+      role: "user",
+      content: "Hello",
+      timestamp: "2026-02-22T08:00:00.000Z",
+      meta: { kind: "user", state, parts: [{ kind: "text", text: "Hello" }] },
+    });
+
+    const read = upsertSessionMessage(createSession([userMessage("pending")]), userMessage("read"));
+    const late = upsertSessionMessage(createSession(read), userMessage("pending"));
+
+    for (const messages of [read, late]) {
+      const session = createSession(messages);
+      expect(getSessionMessageCount(session)).toBe(1);
+      const message = sessionMessageAt(session, 0);
+      expect(message?.meta?.kind === "user" ? message.meta.state : null).toBe("read");
+    }
+  });
+
   test("commits a revision when only timestamp accuracy changes", () => {
     const message: AgentChatMessage = {
       id: "m1",

@@ -97,7 +97,7 @@ A film puts scenes of the package together in one long video, for social media a
 4. Play each change of the UI at the speed of the app. A film can play a wait faster, with no speed badge: a rest with no change on the screen, a wait for the host or a model, such as the startup steps, a detection, or the model that writes a goal, a travel of the pointer to its target, and the work of an agent as a time lapse. A wait shows no new behavior of the product, and at the speed of the app it makes the film too long for social media. A film can also play a rest slower, so that a camera move ends before the next change. Put a mark at the start and at the end of each part that changes its speed in the scene, with a short margin to the changes of the screen. Hold the camera still between its moves: a slow drift makes small text shimmer.
 5. A film imports the views of its scenes. `mountFilm` loads the builders of its sets from the registry.
 6. Write the words of a film in `captions.ts`, in the language of its audience. Each sentence states only what the product does.
-7. `src/films.test.ts` builds each film from its view and plays it to its end: a missing mark, a missing part, or two captions that show together fail the test. The document of the test has no layout, so play the film in the video tool to check the motion and the framing.
+7. Films have no tests. Play a film in the video tool to check its motion, framing, and captions.
 
 ## Public modules
 
