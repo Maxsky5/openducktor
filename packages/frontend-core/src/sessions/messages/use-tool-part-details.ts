@@ -18,6 +18,8 @@ export type ToolPartDetails = {
   meta: ToolMeta;
   /** Why the full details could not be read. */
   error: string | null;
+  /** True while this row asks for the full details and the read has not finished. */
+  loading: boolean;
   /** Reads the full details again after a failure. */
   retry: () => void;
 };
@@ -43,6 +45,7 @@ export const useToolPartDetails = (meta: ToolMeta, read: boolean): ToolPartDetai
     data: part,
     error,
     refetch,
+    isLoading,
   } = useQuery({
     ...sessionToolPartQueryOptions(
       { ...session, ...meta.sourceSession },
@@ -56,6 +59,7 @@ export const useToolPartDetails = (meta: ToolMeta, read: boolean): ToolPartDetai
   return {
     meta: merged,
     error: error ? errorMessage(error) : null,
+    loading: read && isLoading,
     retry: () => void refetch(),
   };
 };

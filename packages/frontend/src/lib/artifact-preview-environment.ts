@@ -31,11 +31,15 @@ export const browserArtifactPreviewEnvironment = (
     : /\b(?:Chrome|Chromium)\/(\d+(?:\.\d+)*)/.exec(engine.userAgent)?.[1];
   const ios = /\b(?:iPhone|iPad|iPod)\b/.test(engine.userAgent);
   const base = new URL(endpoint);
-  base.pathname = `${base.pathname.replace(/\/$/, "")}/artifact-preview-bootstrap`;
+  const root = base.pathname.replace(/\/$/, "");
+  base.pathname = `${root}/artifact-preview-bootstrap`;
   base.search = "";
   base.hash = "";
+  const htmlPreview = new URL(base);
+  htmlPreview.pathname = `${root}/html-preview-bootstrap`;
   return {
     bootstrapUrl: base.href,
+    htmlPreviewBootstrapUrl: htmlPreview.href,
     scriptedHtml: chromiumArtifactPreviewSupport(ios ? undefined : version),
   };
 };

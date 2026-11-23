@@ -2297,5 +2297,54 @@ describe("AgentChatThread", () => {
         cleanup();
       }
     });
+
+    test("keeps the transcript still when only the frame width changes", () => {
+      const rectSpy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+        () => new DOMRect(0, 0, 800, 600),
+      );
+      let commits = 0;
+      const view = render(
+        createElement(
+          Profiler,
+          {
+            id: "minimap-width",
+            onRender: () => {
+              commits += 1;
+            },
+          },
+          createElement(
+            AgentChatSettingsProvider,
+            { value: createChatSettingsFixture({ showConversationMinimap: true }) },
+            createElement(AgentChatThreadComponent, {
+              model: completeThreadModel({
+                ...buildBaseModel(),
+                transcript: buildSessionTranscript(buildSession({ messages: twoUserMessages() })),
+              }),
+            }),
+          ),
+        ),
+      );
+      try {
+        const scrollRegion = document.querySelector<HTMLElement>(".agent-chat-scroll-region");
+        const frame = scrollRegion?.parentElement;
+        if (!scrollRegion || !frame) throw new Error("Missing the transcript frame");
+        const frameObserver = [...mockResizeObserverControllers].find((controller) =>
+          controller.observedElements.has(frame),
+        );
+        if (!frameObserver) throw new Error("Missing the transcript frame observer");
+        expect(view.getByRole("listbox", { name: "User messages" })).toBeTruthy();
+
+        // A panel drag changes the width at the same height, so the rail height does not change.
+        const commitsBefore = commits;
+        rectSpy.mockImplementation(() => new DOMRect(0, 0, 780, 600));
+        act(() => frameObserver.callback([], frameObserver.observer));
+
+        expect(commits).toBe(commitsBefore);
+        expect(scrollRegion.style.paddingLeft).toBe("40px");
+      } finally {
+        view.unmount();
+        rectSpy.mockRestore();
+      }
+    });
   });
 });

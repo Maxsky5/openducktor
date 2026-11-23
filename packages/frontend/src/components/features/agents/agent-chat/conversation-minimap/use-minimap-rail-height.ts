@@ -1,14 +1,16 @@
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useNarrowWindow } from "@/features/session-panels/use-narrow-window";
 import { useAgentChatSettings } from "../agent-chat-settings-context";
 import { MINIMAP_MIN_FRAME_WIDTH_PX, MINIMAP_RAIL_INSET_PX } from "./constants";
-
-type FrameSize = { width: number; height: number };
 
 /**
  * Gives the maximum rail height when the minimap shows, or null when it does not. It shows when
  * the setting is on, the transcript has 2 or more user messages, and the transcript frame is wide
  * enough. A narrow window, where one panel fills the page, is always too narrow.
+ *
+ * Only the rail height is state. A horizontal panel resize changes the frame width, and a state
+ * update for the width would render the whole transcript on every drag step. The width only
+ * selects whether the rail shows.
  *
  * The frame does not change with the minimap gutter, so the gutter cannot toggle the minimap.
  */
@@ -20,7 +22,8 @@ export function useMinimapRailHeight(
   const isEnabled = useAgentChatSettings()?.showConversationMinimap === true;
   const isNarrowWindow = useNarrowWindow();
   const canShow = isEnabled && messageCount >= 2 && !isNarrowWindow;
-  const [frameSize, setFrameSize] = useState<FrameSize | null>(null);
+  const [railHeight, setRailHeight] = useState<number | null>(null);
+  const railHeightRef = useRef<number | null>(null);
 
   // The first read runs before paint, so the gutter does not appear one frame late.
   useLayoutEffect(() => {
@@ -28,20 +31,19 @@ export function useMinimapRailHeight(
       return;
     }
 
-    const readFrameSize = () => {
+    const readRailHeight = () => {
       const { width, height } = frame.getBoundingClientRect();
-      setFrameSize((current) =>
-        current?.width === width && current.height === height ? current : { width, height },
-      );
+      const next =
+        width < MINIMAP_MIN_FRAME_WIDTH_PX ? null : Math.max(0, height - MINIMAP_RAIL_INSET_PX * 2);
+      if (railHeightRef.current === next) return;
+      railHeightRef.current = next;
+      setRailHeight(next);
     };
-    readFrameSize();
-    const observer = new ResizeObserver(readFrameSize);
+    readRailHeight();
+    const observer = new ResizeObserver(readRailHeight);
     observer.observe(frame);
     return () => observer.disconnect();
   }, [frame, canShow]);
 
-  if (!canShow || !frameSize || frameSize.width < MINIMAP_MIN_FRAME_WIDTH_PX) {
-    return null;
-  }
-  return Math.max(0, frameSize.height - MINIMAP_RAIL_INSET_PX * 2);
+  return canShow ? railHeight : null;
 }

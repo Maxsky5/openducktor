@@ -4,6 +4,10 @@ import {
   ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
   artifactPreviewBootstrapResponse,
 } from "@openducktor/remote-host/artifact-preview-bootstrap";
+import {
+  HTML_PREVIEW_BOOTSTRAP_PATH,
+  htmlPreviewBootstrapResponse,
+} from "@openducktor/remote-host/html-preview-bootstrap";
 
 const read = (file: string) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 
@@ -62,13 +66,28 @@ describe("client/_headers", () => {
     expect(html).not.toMatch(/<script(?![^>]*\ssrc=)[^>]*>/);
   });
 
-  // The bootstrap replaces the site headers with the policy of its isolated preview document.
-  test("gives the artifact preview bootstrap only its own response headers", () => {
-    const dedicated = [...artifactPreviewBootstrapResponse().headers].flatMap(([name, value]) => [
-      `  ! ${name}`,
-      `  ${name}: ${value}`,
+  // Each bootstrap replaces the site headers with the policy of its isolated preview document.
+  test("gives each preview bootstrap only its own response headers", () => {
+    const dedicatedHeaders = (response: Response) =>
+      Object.fromEntries([...response.headers].map(([name, value]) => [name.toLowerCase(), value]));
+    const blockHeaders = (block: string) =>
+      Object.fromEntries(
+        block
+          .split("\n")
+          .filter((line) => line.startsWith("  ") && !line.trimStart().startsWith("!"))
+          .map((line) => {
+            const separator = line.indexOf(":");
+            return [line.slice(0, separator).trim(), line.slice(separator + 1).trim()];
+          }),
+      );
+    expect(blocks.slice(1).map((block) => block.split("\n")[0])).toEqual([
+      ARTIFACT_PREVIEW_BOOTSTRAP_PATH,
+      HTML_PREVIEW_BOOTSTRAP_PATH,
     ]);
-    expect(blocks.slice(1)).toEqual([[ARTIFACT_PREVIEW_BOOTSTRAP_PATH, ...dedicated].join("\n")]);
+    expect(blockHeaders(blocks[1] ?? "")).toEqual(
+      dedicatedHeaders(artifactPreviewBootstrapResponse()),
+    );
+    expect(blockHeaders(blocks[2] ?? "")).toEqual(dedicatedHeaders(htmlPreviewBootstrapResponse()));
   });
 
   test("sends HSTS for a year, no MIME sniffing, and no referrer", () => {

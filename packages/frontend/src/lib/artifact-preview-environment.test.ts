@@ -17,6 +17,7 @@ test("scripted preview admission requires a recognized Chromium version with Con
   });
   expect(recognized).toEqual({
     bootstrapUrl: "https://host.test/proxy/remote/artifact-preview-bootstrap",
+    htmlPreviewBootstrapUrl: "https://host.test/proxy/remote/html-preview-bootstrap",
     scriptedHtml: { supported: true },
   });
   for (const userAgent of [

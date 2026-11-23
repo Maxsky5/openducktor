@@ -3,8 +3,13 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import WebSocket from "ws";
 import { artifactPreviewBootstrapResponse } from "./artifact-preview-bootstrap";
+import {
+  type Evaluation,
+  type FrameTree,
+  type Target,
+  connectChromeDevTools as connect,
+} from "./test-support/chrome-cdp";
 
 const executable = process.env.ODT_ARTIFACT_PREVIEW_CHROME;
 
@@ -167,7 +172,7 @@ test.skipIf(executable === undefined)(
         ),
       ).toBe(true);
       const follow = (id: string) =>
-        evaluate<Fragment>(
+        evaluate<{ hash: string; scroll: number; target?: string; text: string }>(
           `(async () => {
         document.getElementById(${JSON.stringify(id)}).click();
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -232,82 +237,3 @@ test.skipIf(executable === undefined)(
   },
   30_000,
 );
-
-type CdpMessage = {
-  id?: number;
-  method?: string;
-  params?: { context?: { id: number; auxData?: { isDefault?: boolean; frameId: string } } };
-  result?: unknown;
-  error?: { message: string };
-};
-
-type Target = { targetId: string; type: string; url: string };
-type FrameTree = { frame: { id: string; url: string }; childFrames?: FrameTree[] };
-type Evaluation = {
-  result: { value: unknown };
-  exceptionDetails?: { exception?: { description?: string }; text: string };
-};
-type Fragment = { hash: string; scroll: number; target?: string; text: string };
-type CdpParameters = Record<string, string | number | boolean | undefined>;
-
-const connect = async (endpoint: string) => {
-  const socket = new WebSocket(endpoint);
-  await new Promise<void>((resolve, reject) => {
-    socket.once("open", resolve);
-    socket.once("error", reject);
-  });
-  let sequence = 0;
-  const pending = new Map<number, (message: CdpMessage) => void>();
-  const listeners = new Set<(message: CdpMessage) => void>();
-  const contexts = new Map<string, number>();
-  socket.on("message", (data) => {
-    const message: CdpMessage = JSON.parse(String(data));
-    if (message.id !== undefined) pending.get(message.id)?.(message);
-    if (message.method === "Runtime.executionContextCreated") {
-      const context = message.params?.context;
-      if (context?.auxData?.isDefault) contexts.set(context.auxData.frameId, context.id);
-    }
-    for (const listener of listeners) listener(message);
-  });
-  return {
-    contexts,
-    close: () => socket.close(),
-    send: <T = unknown>(
-      method: string,
-      params: CdpParameters = {},
-      sessionId?: string,
-    ): Promise<T> => {
-      const id = ++sequence;
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          pending.delete(id);
-          reject(new Error(`Chrome did not answer ${method}.`));
-        }, 5_000);
-        pending.set(id, (message) => {
-          clearTimeout(timer);
-          pending.delete(id);
-          if (message.error) reject(new Error(message.error.message));
-          else {
-            // SAFETY: Each test call names the response type of its CDP method.
-            resolve(message.result as T);
-          }
-        });
-        socket.send(JSON.stringify({ id, method, params, sessionId }));
-      });
-    },
-    next: (method: string): Promise<void> =>
-      new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          listeners.delete(listener);
-          reject(new Error(`Chrome did not emit ${method}.`));
-        }, 5_000);
-        const listener = (message: CdpMessage) => {
-          if (message.method !== method) return;
-          clearTimeout(timer);
-          listeners.delete(listener);
-          resolve();
-        };
-        listeners.add(listener);
-      }),
-  };
-};

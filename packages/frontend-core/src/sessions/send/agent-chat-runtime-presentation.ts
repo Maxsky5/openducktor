@@ -1,5 +1,6 @@
 import {
   isOdtBrowserToolName,
+  ODT_HTML_PREVIEW_TOOL_NAME,
   type OdtToolName,
   type RuntimeDescriptor,
   type RuntimeKind,
@@ -84,6 +85,11 @@ const buildRuntimePresentation = ({
       }
       if (odtTool === "odt_read_task_artifacts") {
         return { kind: "regular", displayName: "read_task_artifacts" };
+      }
+      // A completed publication replaces this row with a preview. A failed or running call keeps
+      // the regular row with this display name.
+      if (odtTool === ODT_HTML_PREVIEW_TOOL_NAME) {
+        return { kind: "regular", displayName: "HTML Preview" };
       }
       const odtCard = odtTool === null ? undefined : ODT_TOOL_CARDS.get(odtTool);
       if (odtCard) {

@@ -46,6 +46,7 @@ const createFixture = async () => {
   await writeFile(path.join(staticRoot, "assets/app.js"), "unhashed first");
   await writeFile(path.join(staticRoot, "assets/page-Ab_c-D12.html"), "hash-like HTML");
   await writeFile(path.join(staticRoot, "favicon.svg"), "<svg />");
+  await writeFile(path.join(staticRoot, "html-preview-bootstrap"), "<!doctype html><p>static</p>");
   await writeFile(path.join(packageRoot, "secret.txt"), "outside the shell");
   const config = createBrowserRuntimeConfigState();
   config.publish('{"backendUrl":"http://127.0.0.1:1","appToken":"first"}');
@@ -188,6 +189,14 @@ test("keeps config fresh and rejects hosts and paths before cache validation", (
         filePath,
       );
     }
+    const bootstrapGet = await request("/html-preview-bootstrap");
+    assert.equal(bootstrapGet.status, 200);
+    assert.ok(bootstrapGet.headers["content-security-policy"]);
+    assert.ok(bootstrapGet.headers["permissions-policy"]);
+    const bootstrapHead = await request("/html-preview-bootstrap", {}, "HEAD");
+    assert.equal(bootstrapHead.status, 405);
+    assert.equal(bootstrapHead.headers.allow, "GET");
+    assert.equal((await request("/html-preview-bootstrap?x=1")).status, 404);
   }));
 
 test("loads changed hashes after a build and reports broken asset reads", () =>

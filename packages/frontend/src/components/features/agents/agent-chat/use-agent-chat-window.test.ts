@@ -3314,6 +3314,24 @@ describe("useAgentChatWindow", () => {
 
       await harness.unmount();
     });
+
+    test("unpins a pinned transcript on upward scroll when an embedded iframe is visible and layout is steady", async () => {
+      const pinned = await mountPinnedTranscript();
+      const iframe = document.createElement("iframe");
+      Object.defineProperty(iframe, "getBoundingClientRect", {
+        configurable: true,
+        value: () => new DOMRect(0, 20, 600, 240),
+      });
+      pinned.container.appendChild(iframe);
+      await act(async () => {
+        pinned.container.scrollTop = 100;
+        await dispatchScroll(pinned.container);
+      });
+      expect(pinned.container.scrollTop).toBe(100);
+      await growContent(pinned.extraContentHeightPx);
+      expect(pinned.container.scrollTop).toBe(100);
+      await pinned.harness.unmount();
+    });
   });
 
   test("appending rows while pinned updates the row window in one render without flickering isNearBottom", async () => {
