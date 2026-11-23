@@ -32,6 +32,7 @@ Use this index to find the document for your task.
 - [Remote host protocol](remote-host-protocol.md) defines Electron and web enablement, discovery, compatibility, native transport, and recovery.
 - [Mobile app](../apps/mobile/README.md) defines the iOS and Android client architecture, setup, commands, native dependencies, tests, and release.
 - [Browser tabs](browser-tabs.md) defines browser tab ownership, engines, the CDP proxy, agent tools, annotations, and security.
+- [HTML previews](html-previews.md) defines publication, transcript rows, isolation, failure behavior, and client delivery.
 - [Web runner](web-runner.md) defines the local browser runner and its release package.
 - [Architecture decision records](adr/) record accepted and superseded technical decisions.
 

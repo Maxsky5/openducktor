@@ -96,6 +96,12 @@ Workflow tools on the same server:
 - `odt_apply_workflow_event`
 - `odt_set_pull_request`
 
+Session tools on the same server:
+
+- `odt_publish_html`
+
+`odt_publish_html` publishes a titled HTML preview in the calling session from inline `html` or a local `.html` file `path`. The host validates the HTML, inlines referenced local images, and stores the preview as a workspace-scoped file under the OpenDucktor config directory. Only sessions that OpenDucktor starts get it. [HTML previews](html-previews.md) describes the viewer and its isolation rules.
+
 Task-bound sessions with the Spec Agent, Planner Agent, Builder Agent, or QA Agent role do not get `odt_get_workspaces`. They can call `odt_create_task`, `odt_search_tasks`, and `odt_update_task` in their startup workspace and omit `workspaceId`. `odt_update_task` is the only task-bound tool that may target a task other than the session task.
 
 `odt_set_task_artifact` saves both workflow and free artifacts. Managed workflow sessions can write only the workflow codes assigned to their root role:
@@ -113,13 +119,13 @@ Every role can write free artifacts. The host resolves the native caller to its 
 
 `odt_read_task`, `odt_read_task_artifacts`, `odt_read_task_assets`, `odt_set_task_artifact`, `odt_delete_task_artifact`, and `odt_apply_workflow_event` send the native caller of a managed session to the host. The host resolves the caller to its root session. A task session can act only on its own task.
 
-External clients do not get the `odt_browser_*` tools. [Browser tools](#browser-tools) describes them.
+External clients do not get the `odt_browser_*` tools or `odt_publish_html`. [Browser tools](#browser-tools) describes the browser tools.
 
 ## Tool listing
 
 The tool list keeps tool descriptions short, because runtimes send the whole list to the model.
 
-- `annotations.readOnlyHint: true` marks the tools that change nothing. A client can run them without an approval.
+- `annotations.readOnlyHint: true` marks tools that change no repository files, task fields, workflow status, or task artifacts. A client can run them without an approval. This includes `odt_publish_html`, which stores only the rendered preview for the calling session.
 - A server that forbids `workspaceId` input hides `workspaceId` in the tool schemas. It sends no server instructions, because Codex repeats them in front of each tool description. Other servers send one sentence about `workspaceId`.
 - The listed input and output schemas omit the `$schema` URL, UUID patterns, and size limits. The server still checks each input with the full schema.
 - `issueType` lists the fixed issue types. The `status` filter of `odt_search_tasks` lists the states other than `closed` in the host workflows, from the `odt_mcp_ready` reply. The host checks each value against the workflow of the task.
