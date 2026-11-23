@@ -11,6 +11,7 @@ import {
   readAntigravityCommandOutput,
   readAntigravityExitCode,
   readAntigravityMcpCall,
+  readAntigravityTaskAction,
   readAntigravityToolInput,
 } from "./antigravity-native-payloads";
 
@@ -128,6 +129,9 @@ export const toAntigravityToolPart = (
     toolType: managedMcp ? "workflow" : toolTypeForKind(state.kind),
     status: "running",
   };
+  // A `manage_task` call checks or stops a background command. It runs no command of its own.
+  const taskAction = readAntigravityTaskAction(state);
+  if (state.name === "manage_task") part.toolType = "generic";
   const displayLabel = mcp ? undefined : DISPLAY_LABELS.get(tool);
   if (displayLabel) part.displayLabel = displayLabel;
   // A file tool has the title "File <path from the home directory>", and a managed or other
@@ -140,6 +144,7 @@ export const toAntigravityToolPart = (
   ) {
     part.title = state.title;
   }
+  if (taskAction) part.title = taskAction;
   const input = mcp ? mcp.args : readAntigravityToolInput(state);
   if (input) part.input = input;
   if (output) part.output = output;

@@ -195,6 +195,32 @@ describe("AntigravityTranscript", () => {
     });
   });
 
+  test("shows a background task check as its action and task, not as a command", () => {
+    const transcript = createTranscript();
+    transcript.addLiveUserMessage({ message: { text: "Check it", displayParts: [] } });
+    const events = transcript.applyUpdate(
+      {
+        sessionUpdate: "tool_call",
+        toolCallId: "call-2",
+        title: "Run manage_task",
+        name: "manage_task",
+        kind: "execute",
+        status: "completed",
+        rawInput: { Action: "status", TaskId: "session-1/task-820" },
+      },
+      "live",
+    );
+
+    const tool = events.flatMap((event) =>
+      event.type === "assistant_part" && event.part.kind === "tool" ? [event.part] : [],
+    );
+    expect(tool.at(-1)).toMatchObject({
+      tool: "manage_task",
+      toolType: "generic",
+      title: "status task-820",
+    });
+  });
+
   test("streams text as deltas and confirms the final reply of a completed turn", () => {
     const transcript = createTranscript();
     transcript.addLiveUserMessage({ message: { text: "Hi", displayParts: [] } });

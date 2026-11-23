@@ -159,6 +159,22 @@ export const readAntigravityBackgroundCommand = (
   return parsed.success && parsed.data.IsDaemon !== true ? parsed.data.CommandLine : null;
 };
 
+const taskActionSchema = z.object({ Action: nonEmptyString, TaskId: nonEmptyString });
+
+/**
+ * The action and the task of a `manage_task` call, such as `status task-3`. The agent checks or
+ * stops its background commands with it. The task ID starts with the conversation ID, which the
+ * row leaves out.
+ */
+export const readAntigravityTaskAction = (
+  toolCall: Pick<NativeToolCall, "name" | "rawInput">,
+): string | null => {
+  if (toolCall.name !== "manage_task") return null;
+  const parsed = taskActionSchema.safeParse(toolCall.rawInput);
+  if (!parsed.success) return null;
+  return `${parsed.data.Action} ${parsed.data.TaskId.split("/").at(-1)}`;
+};
+
 /** The exit code of a finished command. */
 export const readAntigravityExitCode = (
   toolCall: Pick<NativeToolCall, "rawOutput">,
