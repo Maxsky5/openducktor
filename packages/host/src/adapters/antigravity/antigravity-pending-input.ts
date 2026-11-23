@@ -238,3 +238,38 @@ export const toAntigravityQuestionResponse = (
   }
   return { action: "accept", content };
 };
+
+/**
+ * Shows a new pending request and waits for the user. When the native request is aborted, a
+ * request that is still pending gets the cancelled reply and leaves the live view.
+ */
+export const waitForAntigravityReply = <Response>({
+  signal,
+  cancelled,
+  add,
+  remove,
+  changed,
+}: {
+  readonly signal: AbortSignal;
+  readonly cancelled: Response;
+  /** Stores the pending request with the function that answers it. */
+  readonly add: (resolve: (response: Response) => void) => void;
+  /** Removes the pending request. False when a reply already removed it. */
+  readonly remove: () => boolean;
+  /** Publishes the changed pending requests. */
+  readonly changed: () => void;
+}): Promise<Response> => {
+  const { promise, resolve } = Promise.withResolvers<Response>();
+  add(resolve);
+  signal.addEventListener(
+    "abort",
+    () => {
+      if (!remove()) return;
+      resolve(cancelled);
+      changed();
+    },
+    { once: true },
+  );
+  changed();
+  return promise;
+};

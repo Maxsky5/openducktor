@@ -33,10 +33,7 @@ import {
   replayAntigravitySession,
 } from "./antigravity-native-sessions";
 import { readAntigravityUserBlocks, toAntigravityUserMessage } from "./antigravity-prompt";
-import {
-  setAntigravitySessionMode,
-  toAntigravitySessionApprovals,
-} from "./antigravity-session-mode";
+import { toAntigravitySessionApprovals } from "./antigravity-session-mode";
 import type { AntigravitySessionRegistry } from "./antigravity-session-registry";
 import { AntigravityTranscript } from "./antigravity-transcript";
 
@@ -113,14 +110,14 @@ export class AntigravitySessionController {
   private createSession({
     mode,
     ...input
-  }: Omit<AntigravityLiveSessionInput, "readOnly" | "transcript" | "approvesRequests"> & {
+  }: Omit<AntigravityLiveSessionInput, "readOnly" | "transcript" | "approvals"> & {
     mode: AntigravityMode;
   }): AntigravityLiveSession {
     const readOnly = this.isReadOnly(input.sessionScope);
     const session = new AntigravityLiveSession(
       {
         ...input,
-        approvesRequests: toAntigravitySessionApprovals(mode, readOnly).approvesRequests,
+        approvals: toAntigravitySessionApprovals(mode, readOnly),
         readOnly,
         transcript: this.newTranscript(input.ref.externalSessionId, input.ref.workingDirectory),
       },
@@ -207,12 +204,7 @@ export class AntigravitySessionController {
     session.open(response.configOptions);
     for (const notification of earlyUpdates) session.applyUpdate(notification.update);
     return this.finishSetup(session, async () => {
-      await setAntigravitySessionMode(
-        this.connection,
-        response.sessionId,
-        toAntigravitySessionApprovals(input.mode, this.isReadOnly(input.sessionScope)).nativeMode,
-        response.configOptions,
-      );
+      await session.applyMode(response.configOptions);
       await session.completeSetup(input.model, {
         admittedRoot: { ...ref, sessionScope: input.sessionScope },
       });
@@ -261,12 +253,7 @@ export class AntigravitySessionController {
         );
         session.open(loaded.configOptions);
         session.finishReplay();
-        await setAntigravitySessionMode(
-          this.connection,
-          input.externalSessionId,
-          toAntigravitySessionApprovals(input.mode, this.isReadOnly(input.sessionScope)).nativeMode,
-          loaded.configOptions,
-        );
+        await session.applyMode(loaded.configOptions);
         // The session stays in setup until its saved model applies, so no update publishes it.
         await session.completeSetup(input.model, { provenance: "baseline" });
       });

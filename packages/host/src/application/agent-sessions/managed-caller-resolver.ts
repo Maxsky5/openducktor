@@ -6,7 +6,7 @@ import {
 } from "@openducktor/contracts";
 import { agentSessionRefsShareRuntimeStream } from "@openducktor/core";
 import { Effect } from "effect";
-import { type HostError, HostOperationError, HostValidationError } from "../../effect/host-errors";
+import { type HostError, HostValidationError } from "../../effect/host-errors";
 import type {
   AgentSessionLiveAdapterBinding,
   AgentSessionLiveAdapterPort,
@@ -68,12 +68,8 @@ export const createManagedCallerResolver = ({
       if (RUNTIME_HOST_TRAITS_BY_KIND[caller.runtime].mcpCaller.source !== "process_binding")
         return yield* unmanagedCaller(caller, `names a caller binding, but ${label} uses none`);
       for (const source of liveSessions.list()) {
-        if (source.binding.runtimeKind !== caller.runtime) continue;
-        if (!source.resolveCallerBinding)
-          return yield* new HostOperationError({
-            operation: "managedCaller.resolve",
-            message: `The ${label} live adapter cannot resolve a caller binding. Update OpenDucktor, then restart ${label}.`,
-          });
+        // Only the live adapter of a runtime that uses caller bindings resolves them.
+        if (source.binding.runtimeKind !== caller.runtime || !source.resolveCallerBinding) continue;
         const ref = yield* source.resolveCallerBinding(caller.callerBindingId);
         if (ref) return { runtime: caller.runtime, runtimeSessionId: ref.externalSessionId };
       }

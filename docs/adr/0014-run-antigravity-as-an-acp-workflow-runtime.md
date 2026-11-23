@@ -41,7 +41,7 @@ The system prompt extension is not in the public Antigravity documentation. If a
 
 The managed MCP process starts before `session/new` returns the session ID, so the MCP server names a caller binding instead of the session. The live adapter resolves the binding for each tool call that needs the calling session.
 
-Read-only roles are best effort. The adapter refuses permission requests for file changes, but Antigravity's `auto` mode can approve workspace edits without a request, and shell commands follow the native permissions.
+Read-only roles always run in native `default` mode, so Antigravity asks before each action. The adapter refuses edit, delete, and move requests. It approves other requests when the policy mode is `auto` or `bypass-permissions`, so a shell command of a read-only role can still change files.
 
 ACP history has no message times, approval decisions, or stop markers. The host saves the times, model, and outcome of each turn of every runtime in the `agent_session_turns` table, and a history read adds them to the replay. A turn that ran in another client has approximate times, and a tool that Stop interrupted shows as failed.
 

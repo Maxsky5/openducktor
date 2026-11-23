@@ -450,7 +450,6 @@ export class AntigravityTurns {
     settleEndWaiters(turn);
   }
 
-  /** Removes the pending row of a message from the live view. Its ID never entered the transcript. */
   /**
    * Antigravity sends nothing while it compacts, so the end of the `/compact` turn is the end of the
    * compaction. A turn that does not complete shows the `/compact` message again.

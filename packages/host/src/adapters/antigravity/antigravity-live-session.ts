@@ -47,8 +47,13 @@ import {
   toAntigravityPermissionResponse,
   toAntigravityQuestionForm,
   toAntigravityQuestionResponse,
+  waitForAntigravityReply,
 } from "./antigravity-pending-input";
 
+import {
+  type AntigravitySessionApprovals,
+  setAntigravitySessionMode,
+} from "./antigravity-session-mode";
 import { AntigravitySessionModel } from "./antigravity-session-model";
 import {
   changesAntigravitySnapshot,
@@ -79,8 +84,7 @@ export type AntigravityLiveSessionInput = {
   readonly startedAt: string;
   readonly callerBindingId: string;
   readonly readOnly: boolean;
-  /** True when the mode setting approves the permission requests that the session gets. */
-  readonly approvesRequests: boolean;
+  readonly approvals: AntigravitySessionApprovals;
   readonly transcript: AntigravityTranscript;
 };
 
@@ -102,7 +106,7 @@ export class AntigravityLiveSession {
   private readonly startedAt: string;
   private readonly systemPrompt: string;
   private readonly readOnly: boolean;
-  private readonly approvesRequests: boolean;
+  private readonly approvals: AntigravitySessionApprovals;
   private readonly transcript: AntigravityTranscript;
   private title: string;
   /** The last command list of the session. The setup publish sends it. */
@@ -125,7 +129,7 @@ export class AntigravityLiveSession {
     this.startedAt = input.startedAt;
     this.systemPrompt = input.systemPrompt;
     this.readOnly = input.readOnly;
-    this.approvesRequests = input.approvesRequests;
+    this.approvals = input.approvals;
     this.transcript = input.transcript;
     this.title = input.title;
     this.model = new AntigravitySessionModel(connection, input.ref.externalSessionId);
@@ -215,6 +219,16 @@ export class AntigravityLiveSession {
   /** Keeps the native model values that `session/new` or `session/load` reported. */
   open(configOptions: readonly SessionConfigOption[] | null | undefined): void {
     this.model.open(configOptions);
+  }
+
+  /** Sets the native mode that the mode setting of the session gives. */
+  applyMode(configOptions: readonly SessionConfigOption[] | null | undefined): Promise<void> {
+    return setAntigravitySessionMode(
+      this.connection,
+      this.ref.externalSessionId,
+      this.approvals.nativeMode,
+      configOptions,
+    );
   }
 
   /** Ends the `session/load` replay of the transcript. */
@@ -328,28 +342,25 @@ export class AntigravityLiveSession {
       ]);
       return Promise.resolve(rejectAntigravityPermission(params));
     }
-    if (this.approvesRequests) return Promise.resolve(allowAntigravityPermissionOnce(params));
+    if (this.approvals.approvesRequests)
+      return Promise.resolve(allowAntigravityPermissionOnce(params));
     // The row of a file edit shows its change while the user decides.
     const preview = this.transcript.previewFileEdit(params.toolCall);
     if (preview.length > 0) this.publishInBackground(preview);
     const requestId = randomUUID();
-    const { promise, resolve } = Promise.withResolvers<RequestPermissionResponse>();
-    this.pendingApprovals.set(requestId, {
-      request: params,
-      approval: toAntigravityApprovalRequest(requestId, params),
-      resolve,
-    });
-    signal.addEventListener(
-      "abort",
-      () => {
-        if (!this.pendingApprovals.delete(requestId)) return;
-        resolve({ outcome: { outcome: "cancelled" } });
-        this.publishInBackground([]);
+    return waitForAntigravityReply<RequestPermissionResponse>({
+      signal,
+      cancelled: { outcome: { outcome: "cancelled" } },
+      add: (resolve) => {
+        this.pendingApprovals.set(requestId, {
+          request: params,
+          approval: toAntigravityApprovalRequest(requestId, params),
+          resolve,
+        });
       },
-      { once: true },
-    );
-    this.publishInBackground([]);
-    return promise;
+      remove: () => this.pendingApprovals.delete(requestId),
+      changed: () => this.publishInBackground([]),
+    });
   }
 
   /** Shows an `elicitation/create` form as a question request, or declines a form it cannot show. */
@@ -373,19 +384,15 @@ export class AntigravityLiveSession {
       ]);
       return Promise.resolve({ action: "decline" });
     }
-    const { promise, resolve } = Promise.withResolvers<CreateElicitationResponse>();
-    this.pendingQuestions.set(requestId, { form, resolve });
-    signal.addEventListener(
-      "abort",
-      () => {
-        if (!this.pendingQuestions.delete(requestId)) return;
-        resolve({ action: "cancel" });
-        this.publishInBackground([]);
+    return waitForAntigravityReply<CreateElicitationResponse>({
+      signal,
+      cancelled: { action: "cancel" },
+      add: (resolve) => {
+        this.pendingQuestions.set(requestId, { form, resolve });
       },
-      { once: true },
-    );
-    this.publishInBackground([]);
-    return promise;
+      remove: () => this.pendingQuestions.delete(requestId),
+      changed: () => this.publishInBackground([]),
+    });
   }
 
   pendingApproval(requestId: string): AgentSessionLivePendingApprovalRequest {

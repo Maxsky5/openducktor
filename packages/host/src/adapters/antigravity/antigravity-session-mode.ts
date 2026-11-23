@@ -10,22 +10,35 @@ const offeredValues = (option: Extract<SessionConfigOption, { type: "select" }>)
     "options" in entry ? entry.options.map((value) => value.value) : [entry.value],
   );
 
+/** The native modes of Antigravity. `bypass-permissions` is an OpenDucktor setting only. */
+type AntigravityNativeMode = Exclude<AntigravityMode, "bypass-permissions">;
+
+export type AntigravitySessionApprovals = {
+  readonly nativeMode: AntigravityNativeMode;
+  /** True when the session approves the permission requests that Antigravity sends. */
+  readonly approvesRequests: boolean;
+};
+
 /**
  * How a session applies its mode setting. A read-only role runs in `default`, so Antigravity asks
  * before each action: the session refuses file edits, and approves the other actions in `auto` and
- * `bypass-permissions`. Another role runs in the native mode, and `bypass-permissions` approves
- * each request that Antigravity still sends.
+ * `bypass-permissions`. Another role runs in the native mode. Antigravity has no mode that asks for
+ * nothing, so `bypass-permissions` runs in `auto` and approves each request that `auto` still sends.
  */
 export const toAntigravitySessionApprovals = (
   mode: AntigravityMode,
   readOnly: boolean,
-): { readonly nativeMode: AntigravityMode; readonly approvesRequests: boolean } =>
-  readOnly
-    ? {
-        nativeMode: "default",
-        approvesRequests: mode === "auto" || mode === "bypass-permissions",
-      }
-    : { nativeMode: mode, approvesRequests: mode === "bypass-permissions" };
+): AntigravitySessionApprovals => {
+  if (readOnly) {
+    return {
+      nativeMode: "default",
+      approvesRequests: mode === "auto" || mode === "bypass-permissions",
+    };
+  }
+  return mode === "bypass-permissions"
+    ? { nativeMode: "auto", approvesRequests: true }
+    : { nativeMode: mode, approvesRequests: false };
+};
 
 /**
  * Sets the mode of a native session, which decides what Antigravity approves without asking. It
@@ -36,11 +49,9 @@ export const toAntigravitySessionApprovals = (
 export const setAntigravitySessionMode = async (
   connection: AntigravityAgentConnection,
   sessionId: string,
-  setting: AntigravityMode,
+  mode: AntigravityNativeMode,
   configOptions: readonly SessionConfigOption[] | null | undefined,
 ): Promise<void> => {
-  // Antigravity has no mode that asks for nothing. The session approves what `auto` still asks.
-  const mode = setting === "bypass-permissions" ? "auto" : setting;
   const option = configOptions?.find((candidate) => candidate.id === MODE_CONFIG_ID);
   if (configOptions && (option?.type !== "select" || !offeredValues(option).includes(mode))) {
     throw new Error(
