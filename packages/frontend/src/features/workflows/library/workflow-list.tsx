@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 import { useWorkspaceState } from "@/state";
 import { ActionMenu, type MenuCommand } from "../action-menu";
 import { workflowPath } from "../workflow-routes";
-import { type StatusText, StatusPill, workflowStatus } from "../workflow-status";
+import { StatusPill } from "../workflow-status";
+import { type StatusText, workflowStatus } from "../workflow-status-text";
 import { StatePipeline } from "./state-pipeline";
 import { availabilitySummary, availableNowhere } from "./workflow-availability";
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { workflowStatus } from "./workflow-status";
+import { workflowStatus } from "./workflow-status-text";
 
 const status = (hasDraft: boolean, latestVersion: number | null) =>
   workflowStatus({ builtin: false, routeVersion: null, hasDraft, latestVersion });

@@ -8,15 +8,6 @@ export type ReadyPreview = Extract<WorkflowImportPreview, { outcome: "ready" }>;
 export type Target = "new" | "update";
 export type RoleChoice = "host" | "new";
 
-export const invalidLocation = (
-  preview: Extract<WorkflowImportPreview, { outcome: "invalid" }>,
-) => {
-  if (preview.line === null) return "";
-  return preview.column === null
-    ? ` (line ${preview.line})`
-    : ` (line ${preview.line}, column ${preview.column})`;
-};
-
 function ChoiceGroup<Value extends string>({
   label,
   value,

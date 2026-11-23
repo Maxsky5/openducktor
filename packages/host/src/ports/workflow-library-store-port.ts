@@ -125,7 +125,10 @@ export type WorkflowLibraryReads = {
   readonly tasksOfWorkflow: (
     workflowId: string,
   ) => Effect.Effect<StoredWorkflowTask[], WorkflowLibraryStoreError>;
-  /** The workflows whose versions or draft bind the role, ordered by workflow ID. */
+  /**
+   * The workflows whose versions or draft bind the role, ordered by workflow ID. A deleted
+   * workflow counts only the versions that tasks still use.
+   */
   readonly roleBindings: (
     roleId: string,
   ) => Effect.Effect<StoredRoleBinding[], WorkflowLibraryStoreError>;

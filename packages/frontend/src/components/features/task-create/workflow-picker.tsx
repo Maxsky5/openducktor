@@ -3,7 +3,8 @@ import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { type ReactElement, useId } from "react";
 import { Badge } from "@/components/ui/badge";
 import { OptionCard, OptionCardMark } from "@/components/ui/option-card";
-import { WorkflowTrack, type WorkflowTrackModel, workflowTrackModel } from "./workflow-track";
+import { WorkflowTrack } from "./workflow-track";
+import { type WorkflowTrackModel, workflowTrackModel } from "./workflow-track-model";
 
 function WorkflowOption({
   workflow,

@@ -8,7 +8,7 @@ import {
   promptTemplatesOfDocument,
   specPlanBuildWorkflow,
 } from "@openducktor/workflows";
-import { workflowTrackModel } from "./workflow-track";
+import { workflowTrackModel } from "./workflow-track-model";
 
 const labels = (track: ReturnType<typeof workflowTrackModel>) =>
   track.stations.map(({ label }) => label);

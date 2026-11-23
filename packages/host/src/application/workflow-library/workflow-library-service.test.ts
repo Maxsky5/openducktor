@@ -78,6 +78,14 @@ const setup = async () => {
       database.close();
     }
   };
+  const deleteTask = (taskId: string) => {
+    const database = new Database(harness.databasePath);
+    try {
+      database.run("delete from tasks where id = ?", [taskId]);
+    } finally {
+      database.close();
+    }
+  };
   const taskVersion = (taskId: string) => {
     const database = new Database(harness.databasePath);
     try {
@@ -111,6 +119,7 @@ const setup = async () => {
     run,
     fail,
     insertTask,
+    deleteTask,
     taskVersion,
     publishedWithDraft,
   };
@@ -238,6 +247,24 @@ describe("workflow library service", () => {
     expect(failure.message).toContain('"design" does not exist in the new version');
     expect(taskVersion("t-open")).toBe(1);
     expect((await run(service.document({ workflowId }))).kind).toBe("draft");
+  });
+
+  test("blocks a move to a version without the issue type of the task", async () => {
+    const { service, run, fail, insertTask, harness } = await setup();
+    const { workflowId } = await run(service.create({ name: "Design flow" }));
+    await run(service.publish({ workflowId, moveTasks: [] }));
+    insertTask("t-open", "open", workflowId, 1);
+    const draft = (await run(service.document({ workflowId }))).document;
+    draft.definition.issueTypes = draft.definition.issueTypes.filter(({ id }) => id !== "task");
+    await run(service.saveDraft({ workflowId, document: draft }));
+
+    const failure = await fail(
+      service.publish({
+        workflowId,
+        moveTasks: [{ workspaceId: harness.workspaceId, taskId: "t-open" }],
+      }),
+    );
+    expect(failure.message).toContain('issue type "task"');
   });
 
   test("blocks a move while a session of a role that the target does not bind runs", async () => {
@@ -450,6 +477,26 @@ describe("workflow library service", () => {
     ]);
 
     await run(service.discardDraft({ workflowId }));
+    await run(service.deleteRole({ roleId: "designer" }));
+    expect((await run(service.library())).roles.map(({ role }) => role.id)).not.toContain(
+      "designer",
+    );
+  });
+
+  test("role delete ignores the versions of a deleted workflow that no task uses", async () => {
+    const { service, run, fail, insertTask, deleteTask } = await setup();
+    await run(service.saveRole({ role: designer(), mode: "create" }));
+    const { workflowId } = await run(service.create({ name: "Design flow" }));
+    const document = (await run(service.document({ workflowId }))).document;
+    document.definition.roles.push({ id: "designer", writes: [] });
+    await run(service.saveDraft({ workflowId, document }));
+    await run(service.publish({ workflowId, moveTasks: [] }));
+    insertTask("t-closed", "closed", workflowId, 1);
+    await run(service.deleteWorkflow({ workflowId }));
+
+    const failure = await fail(service.deleteRole({ roleId: "designer" }));
+    expect(failure.message).toContain("delete those tasks first");
+    deleteTask("t-closed");
     await run(service.deleteRole({ roleId: "designer" }));
     expect((await run(service.library())).roles.map(({ role }) => role.id)).not.toContain(
       "designer",

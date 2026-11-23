@@ -2,7 +2,7 @@ import { type LucideIcon, SlidersHorizontal } from "lucide-react";
 import { type ReactElement, type ReactNode, useState } from "react";
 import { Disclosure } from "../../disclosure";
 import { useEditorState } from "../editor-context";
-import type { KindColor } from "../kind-theme";
+import type { KindColor } from "../kind-styles";
 import { CollapsibleCard } from "./panel-card";
 
 /**
@@ -64,20 +64,6 @@ export function MoreRules({
     </CollapsibleCard>
   );
 }
-
-/** Whether a problem path starts with one of the roots, such as `guards` or `agent`. */
-export const hasProblemUnder = (
-  problemPaths: ReadonlySet<string>,
-  roots: readonly string[],
-  except: ReadonlySet<string> = new Set(),
-): boolean =>
-  [...problemPaths].some(
-    (path) =>
-      !except.has(path) &&
-      roots.some(
-        (root) => path === root || path.startsWith(`${root}.`) || path.startsWith(`${root}[`),
-      ),
-  );
 
 /** A titled group inside More rules, with a plain help line. */
 export function RuleGroup({

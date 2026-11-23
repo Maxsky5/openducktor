@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { workflowPath, workflowVersionPath } from "../workflow-routes";
-import { STATUS_PILL_CLASS, StatusMark, type StatusText } from "../workflow-status";
+import { STATUS_PILL_CLASS, StatusMark } from "../workflow-status";
+import type { StatusText } from "../workflow-status-text";
 import { publishedAtText } from "./published-at";
 
 function MenuHeading({ children }: { children: string }): ReactElement {

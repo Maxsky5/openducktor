@@ -48,7 +48,8 @@ import { toneAccentClass } from "../../state-tone";
 import { ToolbarSearchField } from "@/components/ui/search-field";
 import { useEditor, useEditorState, useEditorView } from "../editor-context";
 import type { ProblemLevel } from "../model/canvas-graph";
-import { IconTile, KIND_THEME, KindTile } from "../kind-theme";
+import { IconTile, KindTile } from "../kind-theme";
+import { KIND_THEME } from "../kind-styles";
 import { swapInList } from "../model/swap-in-list";
 import { addAction, addState } from "../model/create-elements";
 import {
@@ -82,14 +83,8 @@ import {
   LINK_BUTTON_CLASS,
   NewElementButton,
 } from "./new-element-button";
-import {
-  Dot,
-  OUTLINE_ROW_CLASS,
-  OutlineSearchContext,
-  OutlineSection,
-  outlineItems,
-  RowIcon,
-} from "./outline-group";
+import { Dot, OUTLINE_ROW_CLASS, OutlineSection, RowIcon } from "./outline-group";
+import { OutlineSearchContext, outlineItems } from "./outline-items";
 import { ProblemMarker } from "./problem-marker";
 
 type Create = (make: (current: WorkflowDocument) => CreatedElement) => void;

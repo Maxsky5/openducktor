@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { columnWorkflowsText } from "./kanban-column";
+import { columnWorkflowsText } from "./kanban-column-workflows";
 
 describe("columnWorkflowsText", () => {
   test("names the workflows that use a column", () => {

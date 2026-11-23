@@ -8,7 +8,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { KIND_ICON_CLASSES } from "../kind-theme";
+import { KIND_ICON_CLASSES } from "../kind-styles";
 import type { ReactElement } from "react";
 import { eventRouteLabel, eventRowNames } from "../model/document-elements";
 import { eventSenders } from "../model/event-senders";

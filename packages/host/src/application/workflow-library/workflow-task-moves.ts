@@ -13,16 +13,16 @@ export type RunningTaskSession = {
   readonly role: string;
 };
 
-/** The states and roles of the version that tasks move to. */
-export type TaskMoveTarget = Pick<WorkflowDocumentDefinition, "states" | "roles">;
+/** The states, roles, and issue types of the version that tasks move to. */
+export type TaskMoveTarget = Pick<WorkflowDocumentDefinition, "states" | "roles" | "issueTypes">;
 
 const sameTask = (left: WorkflowTaskRef, right: WorkflowTaskRef) =>
   left.workspaceId === right.workspaceId && left.taskId === right.taskId;
 
 /**
  * Why a task on an older version cannot move to the target, or null when it can. A task can move
- * when its state exists in the target and no running session on this host has a role that the
- * target does not bind. Closed tasks never move.
+ * when its state and its issue type exist in the target and no running session on this host has a
+ * role that the target does not bind. Closed tasks never move.
  */
 const taskMoveBlocker = (
   task: StoredWorkflowTask,
@@ -31,6 +31,8 @@ const taskMoveBlocker = (
 ): string | null => {
   if (!target.states.some(({ id }) => id === task.status))
     return `Its state "${task.status}" does not exist in the new version.`;
+  if (!target.issueTypes.some(({ id }) => id === task.issueType))
+    return `Its issue type "${task.issueType}" does not exist in the new version.`;
   const unbound = running.find(
     (session) => sameTask(session, task) && !target.roles.some(({ id }) => id === session.role),
   );

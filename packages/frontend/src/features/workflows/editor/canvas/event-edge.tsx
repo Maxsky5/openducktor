@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useEditor, useEditorState } from "../editor-context";
 import type { EventEdgeData } from "../model/canvas-graph";
 import { ProblemMarker } from "../panels/problem-marker";
-import { KIND_ICON_CLASSES } from "../kind-theme";
+import { KIND_ICON_CLASSES } from "../kind-styles";
 import { roleIconsOf, senderLook } from "../sender-icon";
 import {
   edgeTitle,

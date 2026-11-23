@@ -2,7 +2,8 @@ import { ChevronRight, type LucideIcon } from "lucide-react";
 import { type ReactElement, type ReactNode, useId } from "react";
 import { CssPresenceReveal } from "@/components/ui/css-presence-reveal";
 import { cn } from "@/lib/utils";
-import { IconTile, type KindColor } from "../kind-theme";
+import { IconTile } from "../kind-theme";
+import type { KindColor } from "../kind-styles";
 
 type CardHeading = {
   title: string;

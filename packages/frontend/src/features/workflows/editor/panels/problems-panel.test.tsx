@@ -11,7 +11,8 @@ import { updateElement } from "../model/document-edits";
 import type { EditorCheckContext } from "../model/editor-derivation";
 import { createViewOf } from "../use-editor-derivation";
 import { createEditorStore, type EditorStore } from "../model/editor-store";
-import { ProblemsPanel, readiness } from "./problems-panel";
+import { ProblemsPanel } from "./problems-panel";
+import { readiness } from "./readiness";
 
 const CONTEXT: EditorCheckContext = {
   roles: builtinCompiledCatalogFixture.roles,

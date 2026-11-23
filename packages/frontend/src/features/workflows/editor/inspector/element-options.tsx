@@ -11,7 +11,7 @@ import type { ReactNode } from "react";
 import { WORKFLOW_ICONS } from "@/lib/agent-role-presentation";
 import { cn } from "@/lib/utils";
 import { toneAccentClass } from "../../state-tone";
-import { KIND_ICON_CLASSES, type KindColor } from "../kind-theme";
+import { KIND_ICON_CLASSES, type KindColor } from "../kind-styles";
 import { newStepRole } from "../model/document-edits";
 import { eventNames, eventRouteLabel } from "../model/document-elements";
 import { Dot } from "../panels/outline-group";

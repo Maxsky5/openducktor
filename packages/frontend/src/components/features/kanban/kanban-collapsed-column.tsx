@@ -4,7 +4,7 @@ import {
   KANBAN_COLLAPSED_LANE_WIDTH_CLASS,
   KANBAN_LANE_HEADER_HEIGHT_CLASS,
 } from "@/components/features/kanban/kanban-layout";
-import { columnWorkflowsText } from "@/components/features/kanban/kanban-column";
+import { columnWorkflowsText } from "@/components/features/kanban/kanban-column-workflows";
 import { laneTheme } from "@/components/features/kanban/kanban-theme";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";

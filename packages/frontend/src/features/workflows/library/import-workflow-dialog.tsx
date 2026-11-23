@@ -21,7 +21,8 @@ import {
   usePreviewImport,
 } from "../use-workflow-library-commands";
 import { WORKFLOW_DIALOG } from "../workflow-dialog";
-import { ImportSummary, invalidLocation, type RoleChoice, type Target } from "./import-summary";
+import { invalidLocation } from "./import-location";
+import { ImportSummary, type RoleChoice, type Target } from "./import-summary";
 
 const YAML_PLACEHOLDER = `# Example
 formatVersion: ${WORKFLOW_FILE_FORMAT_VERSION}

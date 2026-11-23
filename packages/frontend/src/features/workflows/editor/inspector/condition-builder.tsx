@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import { TooltipButton } from "../../tooltip-button";
-import { KIND_TILE_CLASSES } from "../kind-theme";
+import { KIND_TILE_CLASSES } from "../kind-styles";
 import {
   CONDITION_KIND_LABELS,
   CONDITION_KINDS,

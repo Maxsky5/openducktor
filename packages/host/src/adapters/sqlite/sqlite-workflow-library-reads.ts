@@ -3,7 +3,7 @@ import {
   workflowDocumentSchema,
   workflowVersionDocumentSchema,
 } from "@openducktor/contracts";
-import { and, asc, count, eq, isNotNull, lt, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, eq, exists, isNotNull, isNull, lt, or, type SQL, sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { Effect } from "effect";
 import type { z } from "zod";
@@ -312,7 +312,27 @@ export const createWorkflowLibraryReads = (session: HostDatabaseSession): Workfl
           db
             .select({ workflowId: workflowVersions.workflowId, version: workflowVersions.version })
             .from(workflowVersions)
-            .where(bindsRole(workflowVersions.documentJson, roleId))
+            .innerJoin(workflows, eq(workflows.workflowId, workflowVersions.workflowId))
+            .where(
+              and(
+                bindsRole(workflowVersions.documentJson, roleId),
+                // A deleted workflow keeps a version only for the tasks that still use it.
+                or(
+                  isNull(workflows.deletedAtMs),
+                  exists(
+                    db
+                      .select({ id: tasks.id })
+                      .from(tasks)
+                      .where(
+                        and(
+                          eq(tasks.workflowId, workflowVersions.workflowId),
+                          eq(tasks.workflowVersion, workflowVersions.version),
+                        ),
+                      ),
+                  ),
+                ),
+              ),
+            )
             .orderBy(asc(workflowVersions.workflowId), asc(workflowVersions.version)),
         "workflowLibrary.roleBindings.versions",
       );

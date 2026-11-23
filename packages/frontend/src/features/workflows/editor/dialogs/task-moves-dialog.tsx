@@ -18,7 +18,8 @@ import {
 import { cn } from "@/lib/utils";
 import { WORKFLOW_DIALOG } from "../../workflow-dialog";
 import { useEditorState } from "../editor-context";
-import { movableTasks, selectedMoves, TaskMovesList, taskRefKey } from "./task-moves-list";
+import { movableTasks, selectedMoves, taskRefKey } from "./task-move-selection";
+import { TaskMovesList } from "./task-moves-list";
 
 type TaskMovesDialogProps = {
   open: boolean;

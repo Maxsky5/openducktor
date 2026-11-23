@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
-import type { KindColor } from "../kind-theme";
+import type { KindColor } from "../kind-styles";
 import { PanelCard } from "./panel-card";
 
 /** A group of fields in the details panel, as a card. The main fields can go without a title. */

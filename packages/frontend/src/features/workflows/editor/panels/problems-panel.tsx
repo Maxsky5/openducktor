@@ -6,55 +6,13 @@ import { Button } from "@/components/ui/button";
 import { CssPresenceReveal } from "@/components/ui/css-presence-reveal";
 import { cn } from "@/lib/utils";
 import { useEditor, useEditorState, useEditorView } from "../editor-context";
-import type { ProblemLevel } from "../model/canvas-graph";
 import { addBoardButton } from "../model/create-elements";
 import { elementKindLabel, elementName, findElement } from "../model/document-elements";
 import type { LocatedProblem } from "../model/editor-derivation";
 import { messageParts } from "../model/problem-message";
 import { ProblemText } from "../problem-text";
 import { ProblemMarker } from "./problem-marker";
-
-export type Readiness = {
-  /** The worst problem, or null when nothing needs a look. */
-  readonly level: ProblemLevel | null;
-  readonly title: string;
-  readonly detail: string | null;
-};
-
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
-const thingsToCheck = (count: number) => `${count} to check`;
-
-/**
- * "Ready to publish" without problems, the number to check with only warnings, or the number of
- * errors to fix. A published workflow without a draft has nothing to publish.
- */
-export const readiness = ({
-  errorCount,
-  warningCount,
-  hasDraft,
-}: {
-  errorCount: number;
-  warningCount: number;
-  hasDraft: boolean;
-}): Readiness => {
-  if (errorCount > 0)
-    return {
-      level: "error",
-      title: `${plural(errorCount, "problem")} to fix`,
-      detail:
-        warningCount > 0
-          ? thingsToCheck(warningCount)
-          : `Fix ${errorCount === 1 ? "it" : "them"} to publish.`,
-    };
-  if (warningCount > 0)
-    return {
-      level: "warning",
-      title: hasDraft ? thingsToCheck(warningCount) : "Published",
-      detail: hasDraft ? null : thingsToCheck(warningCount),
-    };
-  if (hasDraft) return { level: null, title: "Ready to publish", detail: null };
-  return { level: null, title: "Published", detail: "Your next change starts a draft." };
-};
+import { readiness } from "./readiness";
 
 /** The event that a "nothing triggers" warning names, which a board button fixes in one click. */
 const untriggeredEvent = (

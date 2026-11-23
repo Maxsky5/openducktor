@@ -1,7 +1,7 @@
 import type { WorkflowIcon, WorkflowLibraryRole } from "@openducktor/contracts";
 import { Bot, FileCheck2, type LucideIcon, MousePointerClick, Play, Scale } from "lucide-react";
 import { roleIconForHint, WORKFLOW_ICONS } from "@/lib/agent-role-presentation";
-import type { KindColor } from "./kind-theme";
+import type { KindColor } from "./kind-styles";
 import type { EventSender } from "./model/event-senders";
 
 const SENDER_ICONS = {

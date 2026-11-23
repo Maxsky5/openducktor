@@ -23,6 +23,7 @@ import { useKanbanVirtualization } from "@/components/features/kanban/use-kanban
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { columnWorkflowsText } from "./kanban-column-workflows";
 
 type CardProps = ComponentProps<typeof KanbanTaskCard>;
 type TaskSessions = NonNullable<CardProps["taskSessions"]>;
@@ -223,12 +224,6 @@ const MeasuredCard = memo(function MeasuredCard({
 });
 
 type KanbanLaneTheme = ReturnType<typeof laneTheme>;
-
-/** "Used by Bug triage and Spec, Plan, Build". */
-export const columnWorkflowsText = (workflows: readonly string[]): string =>
-  workflows.length < 2
-    ? `Used by ${workflows.join("")}`
-    : `Used by ${workflows.slice(0, -1).join(", ")} and ${workflows[workflows.length - 1]}`;
 
 function LaneHeader({
   theme,

@@ -22,7 +22,8 @@ import { fieldCoalesceKey, useInspector } from "./inspector-context";
 import { ChipsField } from "./toggle-chips";
 import { InspectorSection } from "./inspector-section";
 import { LaunchActionFields } from "./launch-action-fields";
-import { hasProblemUnder, MoreRules, RuleGroup } from "./more-rules";
+import { MoreRules, RuleGroup } from "./more-rules";
+import { hasProblemUnder } from "./problem-paths";
 import { LINK_BUTTON_CLASS } from "../panels/new-element-button";
 import { useElementEdit } from "./use-element-edit";
 

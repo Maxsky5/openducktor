@@ -10,7 +10,8 @@ import { SelectField } from "./reference-fields";
 import { IdField, OptionalTextField, TextField } from "./text-fields";
 import { useInspector } from "./inspector-context";
 import { InspectorSection } from "./inspector-section";
-import { hasProblemUnder, MoreRules } from "./more-rules";
+import { MoreRules } from "./more-rules";
+import { hasProblemUnder } from "./problem-paths";
 import { useElementEdit } from "./use-element-edit";
 
 export function ArtifactInspector({
