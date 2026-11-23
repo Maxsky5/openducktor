@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  methods,
   type CreateElicitationRequest,
   type CreateElicitationResponse,
   type RequestPermissionRequest,
@@ -9,7 +10,6 @@ import {
 } from "@agentclientprotocol/sdk/unstable";
 import {
   type AgentSessionContextUsage,
-  type AgentSessionGoal,
   type AgentSessionLivePendingApprovalRequest,
   type AgentSessionLiveRef,
   type AgentSessionLiveSnapshot,
@@ -27,10 +27,12 @@ import {
   type AgentSessionHistoryMessage,
   type AgentSessionSummary,
   classifyAgentSessionActivity,
+  setSnapshotBackgroundWork,
 } from "@openducktor/core";
 import { withSystemPromptHistoryMessage } from "../agent-sessions/system-prompt-history-message";
 import type { AntigravityAgentConnection } from "./antigravity-agent-connection";
-import { ANTIGRAVITY_GOAL_STOP_MESSAGE } from "./antigravity-goal";
+import { AntigravityBackgroundCommands } from "./antigravity-background-commands";
+import { ANTIGRAVITY_GOAL_STOP_MESSAGE, toAntigravityGoalSnapshot } from "./antigravity-goal";
 import {
   type AntigravityLivePublisher,
   type AntigravityPublishOptions,
@@ -39,15 +41,11 @@ import {
 
 import {
   allowAntigravityPermissionOnce,
-  type AntigravityQuestionForm,
+  AntigravityPendingRequests,
   classifyAntigravityPermission,
   isManagedMcpPermission,
   rejectAntigravityPermission,
-  toAntigravityApprovalRequest,
-  toAntigravityPermissionResponse,
   toAntigravityQuestionForm,
-  toAntigravityQuestionResponse,
-  waitForAntigravityReply,
 } from "./antigravity-pending-input";
 
 import {
@@ -63,17 +61,6 @@ import {
 } from "./antigravity-session-updates";
 import type { AntigravityTranscript } from "./antigravity-transcript";
 import { type AntigravitySendInput, AntigravityTurns } from "./antigravity-turn";
-
-type AntigravityPendingApproval = {
-  readonly request: RequestPermissionRequest;
-  readonly approval: AgentSessionLivePendingApprovalRequest;
-  readonly resolve: (response: RequestPermissionResponse) => void;
-};
-
-type AntigravityPendingQuestion = {
-  readonly form: AntigravityQuestionForm;
-  readonly resolve: (response: CreateElicitationResponse) => void;
-};
 
 /** The identity and setup values of a session that the runtime opens. */
 export type AntigravityLiveSessionInput = {
@@ -112,9 +99,9 @@ export class AntigravityLiveSession {
   /** The last command list of the session. The setup publish sends it. */
   private latestSlashCommands: SlashCommandCatalog | null = null;
   private usage: AgentSessionContextUsage | null = null;
-  private readonly pendingApprovals = new Map<string, AntigravityPendingApproval>();
-  private readonly pendingQuestions = new Map<string, AntigravityPendingQuestion>();
+  private readonly pending = new AntigravityPendingRequests(() => this.publishInBackground([]));
   private readonly turns: AntigravityTurns;
+  private readonly background = new AntigravityBackgroundCommands();
   /** True while the stop message of a goal clear runs, so the goal no longer shows as active. */
   private goalClearing = false;
 
@@ -140,12 +127,16 @@ export class AntigravityLiveSession {
       model: this.model,
       publish: (events) => this.publishInBackground(events),
       cancelPendingInput: () => this.cancelPendingInput(),
+      background: this.background,
     });
   }
 
-  /** True when the runtime holds the session with an open prompt. ACP has no status read. */
+  /**
+   * True while the runtime holds the session with an open prompt or runs its background commands.
+   * ACP has no status read.
+   */
   get running(): boolean {
-    return this.turns.running;
+    return this.turns.running || this.background.active;
   }
 
   get contextUsage(): AgentSessionContextUsage | null {
@@ -153,12 +144,12 @@ export class AntigravityLiveSession {
   }
 
   snapshot(): AgentSessionLiveSnapshot {
-    const pendingApprovals = [...this.pendingApprovals.values()].map((entry) => entry.approval);
-    const pendingQuestions = [...this.pendingQuestions.values()].map((entry) => entry.form.request);
+    const pendingApprovals = this.pending.approvalRequests;
+    const pendingQuestions = this.pending.questionRequests;
     const snapshot: AgentSessionLiveSnapshot = {
       ref: this.ref,
       activity: classifyAgentSessionActivity({
-        runtimeActivity: this.turns.running ? "running" : "idle",
+        runtimeActivity: this.running ? "running" : "idle",
         pendingApprovals,
         pendingQuestions,
       }),
@@ -170,27 +161,17 @@ export class AntigravityLiveSession {
     };
     if (this.sessionScope.kind === "repository") snapshot.repositoryScope = this.sessionScope;
     if (this.model.selection) snapshot.model = this.model.selection;
-    const goal = this.goalSnapshot();
+    const goal = toAntigravityGoalSnapshot(
+      this.transcript.goal,
+      this.turns.running && !this.goalClearing,
+    );
     if (goal) snapshot.goal = goal;
+    if (this.background.active) {
+      // The commands that outlived their turn keep the session running without a reply.
+      snapshot.foregroundTurnActive = this.turns.running;
+      setSnapshotBackgroundWork(snapshot, { tasks: this.background.tasks, resultPending: false });
+    }
     return snapshot;
-  }
-
-  /**
-   * The goal state that the snapshot shows. Antigravity continues a goal only while it works, or
-   * with the next user message. A goal that the agent completed is complete, and a goal that it
-   * cancelled without the stop message of OpenDucktor ended.
-   */
-  private goalSnapshot(): AgentSessionGoal | undefined {
-    const goal = this.transcript.goal;
-    if (!goal) return undefined;
-    const { objective } = goal;
-    if (goal.end === "met") return { objective, status: "complete" };
-    if (goal.end === "cancelled")
-      return { objective, status: "ended", reason: "The agent cancelled the goal." };
-    return {
-      objective,
-      status: this.turns.running && !this.goalClearing ? "active" : "waiting_for_message",
-    };
   }
 
   summary(): AgentSessionSummary {
@@ -201,7 +182,7 @@ export class AntigravityLiveSession {
       title: this.title,
       sessionAssociation: this.sessionScope,
       startedAt: this.startedAt,
-      status: this.turns.running ? "running" : "idle",
+      status: this.running ? "running" : "idle",
     };
     if (this.model.selection) summary.model = this.model.selection;
     return summary;
@@ -268,7 +249,16 @@ export class AntigravityLiveSession {
     if (isAntigravityTurnContent(update)) this.turns.acceptStart();
     const slashCommandsChanged = this.applyState(update);
     const events = this.transcript.applyUpdate(update, "live");
-    if (events.length === 0 && !slashCommandsChanged && !changesAntigravitySnapshot(update)) return;
+    const backgroundEnded = this.background.apply(update);
+    // The end of the last background command after its turn ends the work of the session.
+    if (backgroundEnded && !this.running) events.push(this.idleEvent());
+    if (
+      events.length === 0 &&
+      !slashCommandsChanged &&
+      !backgroundEnded &&
+      !changesAntigravitySnapshot(update)
+    )
+      return;
     this.publishInBackground(events, {}, slashCommandsChanged);
   }
 
@@ -347,20 +337,7 @@ export class AntigravityLiveSession {
     // The row of a file edit shows its change while the user decides.
     const preview = this.transcript.previewFileEdit(params.toolCall);
     if (preview.length > 0) this.publishInBackground(preview);
-    const requestId = randomUUID();
-    return waitForAntigravityReply<RequestPermissionResponse>({
-      signal,
-      cancelled: { outcome: { outcome: "cancelled" } },
-      add: (resolve) => {
-        this.pendingApprovals.set(requestId, {
-          request: params,
-          approval: toAntigravityApprovalRequest(requestId, params),
-          resolve,
-        });
-      },
-      remove: () => this.pendingApprovals.delete(requestId),
-      changed: () => this.publishInBackground([]),
-    });
+    return this.pending.waitForApproval(params, signal);
   }
 
   /** Shows an `elicitation/create` form as a question request, or declines a form it cannot show. */
@@ -384,55 +361,28 @@ export class AntigravityLiveSession {
       ]);
       return Promise.resolve({ action: "decline" });
     }
-    return waitForAntigravityReply<CreateElicitationResponse>({
-      signal,
-      cancelled: { action: "cancel" },
-      add: (resolve) => {
-        this.pendingQuestions.set(requestId, { form, resolve });
-      },
-      remove: () => this.pendingQuestions.delete(requestId),
-      changed: () => this.publishInBackground([]),
-    });
+    return this.pending.waitForAnswer(requestId, form, signal);
   }
 
   pendingApproval(requestId: string): AgentSessionLivePendingApprovalRequest {
-    const pending = this.pendingApprovals.get(requestId);
-    if (!pending) throw new Error(`Antigravity approval '${requestId}' is no longer pending.`);
-    return pending.approval;
+    return this.pending.approval(requestId);
   }
 
   /** Replies to the exact native request of a pending approval. */
   replyApproval(requestId: string, outcome: RuntimeApprovalReplyOutcome): Promise<void> {
-    const pending = this.pendingApprovals.get(requestId);
-    if (!pending) throw new Error(`Antigravity approval '${requestId}' is no longer pending.`);
-    const response = toAntigravityPermissionResponse(pending.request, outcome);
-    this.pendingApprovals.delete(requestId);
-    const events =
-      outcome === "reject"
-        ? this.transcript.markToolDeclined(pending.request.toolCall.toolCallId)
-        : [];
-    pending.resolve(response);
-    return this.publish(events);
+    const toolCallId = this.pending.replyApproval(requestId, outcome);
+    return this.publish(outcome === "reject" ? this.transcript.markToolDeclined(toolCallId) : []);
   }
 
   /** Replies to the exact native request of a pending question. */
   replyQuestion(requestId: string, answers: string[][]): Promise<void> {
-    const pending = this.pendingQuestions.get(requestId);
-    if (!pending) throw new Error(`Antigravity question '${requestId}' is no longer pending.`);
-    const response = toAntigravityQuestionResponse(pending.form, answers);
-    this.pendingQuestions.delete(requestId);
-    pending.resolve(response);
+    this.pending.replyQuestion(requestId, answers);
     return this.publish([]);
   }
 
   /** Closes the pending approvals and questions of the session without a user reply. */
   private cancelPendingInput(): void {
-    for (const pending of this.pendingApprovals.values()) {
-      pending.resolve({ outcome: { outcome: "cancelled" } });
-    }
-    this.pendingApprovals.clear();
-    for (const pending of this.pendingQuestions.values()) pending.resolve({ action: "cancel" });
-    this.pendingQuestions.clear();
+    this.pending.cancelAll();
   }
 
   /** Sends one message as a new turn or as a steer of the running turn. */
@@ -484,17 +434,37 @@ export class AntigravityLiveSession {
   }
 
   /** Stops the running turn and waits until the runtime ends it, within the deadline. */
-  stop(deadlineMs: number): Promise<void> {
-    return this.turns.stop(deadlineMs);
+  async stop(deadlineMs: number): Promise<void> {
+    if (this.turns.running) await this.turns.stop(deadlineMs);
+    else if (this.background.active) {
+      // `session/cancel` stops the background commands also when no prompt runs.
+      const agent = this.connection.agent();
+      await this.connection.request(() =>
+        agent.notify(methods.agent.session.cancel, { sessionId: this.ref.externalSessionId }),
+      );
+    }
+    await this.background.waitForEnd(deadlineMs);
   }
 
   /** Drops the running turn of a session that leaves the runtime. */
   close(reason: string): void {
     this.turns.close(reason);
+    this.background.clear();
   }
 
-  /** The terminal events of a turn that the runtime stopped running. */
+  /** The terminal events of a turn or background work that the runtime stopped running. */
   settle(reason: string): AgentSessionTranscriptEvent[] {
-    return this.turns.settle(reason);
+    const waiting = this.background.active && !this.turns.running;
+    this.background.clear();
+    if (!waiting) return this.turns.settle(reason);
+    return toTranscriptEvents(this.ref, [this.idleEvent()]);
+  }
+
+  private idleEvent(): AgentEvent {
+    return {
+      type: "session_idle",
+      externalSessionId: this.ref.externalSessionId,
+      timestamp: this.connection.now(),
+    };
   }
 }

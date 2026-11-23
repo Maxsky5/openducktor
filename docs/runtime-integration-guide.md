@@ -548,6 +548,7 @@ An agent can start work that continues after its reply ends: a background shell 
 | Claude | Registered nonambient background run | Terminal `task_updated`, `task_notification`, or snapshot removal | Later native Idle or process exit | `query.stopTask(task_id)` |
 | OpenCode | Running `shell` tool with `shellID`; running `subagent` tool with child `sessionID` | `shell` or `subagent` notice in the session inbox | `session.inbox.delivered` | `shell.remove`; `session.interrupt` on the child |
 | Codex | `commandExecution` still `inProgress` at its `turn/completed` | Late `item/completed` of that item | No pending state | `thread/backgroundTerminals/terminate`, Codex `0.140.0` or later |
+| Antigravity | `run_command` call that is not a daemon and still runs at the `end_turn` answer of its prompt | Late `tool_call_update` with `completed` or `failed` | No pending state | Not supported |
 
 #### Stop one task
 
@@ -558,6 +559,7 @@ The `agent_session_background_task_stop` command calls `stopBackgroundTask` on t
 - A native failure while the task still runs fails with a typed `HostError` and the runtime reason. A failure for a task that already ended gives success. The host does not retry.
 - Claude: a run that ends as `stopped` or `killed` after the host requested its stop adds no pending delivery. The session therefore leaves the Background state without a later native Idle.
 - Codex below `0.140.0`, or with an unknown version, reports `stop.allowed: false`.
+- Antigravity has no ACP call that stops one command, so its tasks report `stop.allowed: false`.
 - OpenCode: `shell.remove` ends an agent background shell as `error`, delivers its notice to the session inbox, and wakes the session, so the agent replies. `shell.remove` has no option that skips the notice or the wake, so OpenDucktor keeps this runtime behavior.
 - Codex: a command that waited for an approval or an auto-review starts with no `processId`, and Codex sends no later start with it. Stop then reads `thread/backgroundTerminals/list` of the thread once and takes the `processId` of the item. A command that the list does not show fails the stop.
 
@@ -567,6 +569,8 @@ The `agent_session_background_task_stop` command calls `stopBackgroundTask` on t
 - OpenCode root `session.interrupt` does not cancel background jobs. Stop session starts watching the tree before it interrupts the root. It stops each task of the tree, and interrupts each session that takes a task notice, also a session that took one before Stop began, then waits for the end event of that execution. It cancels each undelivered notice and waits for its `delivered` or `cancelled` event, then checks the tree again. Tasks that started during cleanup are stopped in the next round, for at most 3 rounds. A tree that does not settle fails Stop session and keeps its tasks listed. An unreadable task item fails the cleanup waits of its session with the reason, and Stop session fails while any session of the tree has lost its task tracking.
 - Codex `turn/interrupt` keeps background terminals. Stop session sends `thread/backgroundTerminals/clean` for each thread of the tree with a running command. `clean` returns before the processes exit, so Stop session watches, from before `clean`, for the late `item/completed` of each command. It then checks the tree again, in the order of the runtime events, and cleans commands that started meanwhile, for at most 3 rounds. The last check and the release run as one step on the runtime event queue. A release, an unreadable event of the thread, no confirmation within 10 seconds, or a tree that does not settle fails Stop session, and the unconfirmed terminals stay listed.
 - Codex emits session Idle only when the current foreground turn and all background terminals have ended. A `turn/completed` of an older turn does not end a newer turn.
+- Antigravity `session/cancel` stops the background commands of the session, also when no prompt runs. Stop session sends it and waits for the `failed` update of each command.
+- Antigravity keeps a prompt open until its commands end, unless the agent marked a command as a daemon. A prompt can still end while a command runs. When that command ends, Antigravity wakes the agent and sends its work as session updates with no open prompt. ACP gives no signal for the end of that work, so the session shows Idle once the last command ended.
 - A failed step fails Stop session with the runtime reason. The tasks that still run stay in the list, so the session does not show Idle.
 
 ## Import existing runtime sessions

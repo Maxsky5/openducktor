@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   CreateElicitationRequest,
   CreateElicitationResponse,
@@ -97,7 +98,7 @@ export const toAntigravityApprovalRequest = (
 };
 
 /** The ACP reply of an approval. Fails when the request did not offer that outcome. */
-export const toAntigravityPermissionResponse = (
+const toAntigravityPermissionResponse = (
   request: RequestPermissionRequest,
   outcome: RuntimeApprovalReplyOutcome,
 ): RequestPermissionResponse => {
@@ -243,7 +244,7 @@ export const toAntigravityQuestionResponse = (
  * Shows a new pending request and waits for the user. When the native request is aborted, a
  * request that is still pending gets the cancelled reply and leaves the live view.
  */
-export const waitForAntigravityReply = <Response>({
+const waitForAntigravityReply = <Response>({
   signal,
   cancelled,
   add,
@@ -273,3 +274,104 @@ export const waitForAntigravityReply = <Response>({
   changed();
   return promise;
 };
+
+type PendingApproval = {
+  readonly request: RequestPermissionRequest;
+  readonly approval: AgentSessionLivePendingApprovalRequest;
+  readonly resolve: (response: RequestPermissionResponse) => void;
+};
+
+type PendingQuestion = {
+  readonly form: AntigravityQuestionForm;
+  readonly resolve: (response: CreateElicitationResponse) => void;
+};
+
+/**
+ * The approvals and questions of one session that wait for the user. Each one answers the exact
+ * native request that it shows.
+ */
+export class AntigravityPendingRequests {
+  private readonly approvals = new Map<string, PendingApproval>();
+  private readonly questions = new Map<string, PendingQuestion>();
+
+  /** `changed` publishes the session after its pending requests change. */
+  constructor(private readonly changed: () => void) {}
+
+  get approvalRequests(): AgentSessionLivePendingApprovalRequest[] {
+    return [...this.approvals.values()].map((entry) => entry.approval);
+  }
+
+  get questionRequests(): AgentSessionLivePendingQuestionRequest[] {
+    return [...this.questions.values()].map((entry) => entry.form.request);
+  }
+
+  waitForApproval(
+    request: RequestPermissionRequest,
+    signal: AbortSignal,
+  ): Promise<RequestPermissionResponse> {
+    const requestId = randomUUID();
+    return waitForAntigravityReply<RequestPermissionResponse>({
+      signal,
+      cancelled: { outcome: { outcome: "cancelled" } },
+      add: (resolve) => {
+        const approval = toAntigravityApprovalRequest(requestId, request);
+        this.approvals.set(requestId, { request, approval, resolve });
+      },
+      remove: () => this.approvals.delete(requestId),
+      changed: this.changed,
+    });
+  }
+
+  waitForAnswer(
+    requestId: string,
+    form: AntigravityQuestionForm,
+    signal: AbortSignal,
+  ): Promise<CreateElicitationResponse> {
+    return waitForAntigravityReply<CreateElicitationResponse>({
+      signal,
+      cancelled: { action: "cancel" },
+      add: (resolve) => {
+        this.questions.set(requestId, { form, resolve });
+      },
+      remove: () => this.questions.delete(requestId),
+      changed: this.changed,
+    });
+  }
+
+  approval(requestId: string): AgentSessionLivePendingApprovalRequest {
+    return this.pendingApproval(requestId).approval;
+  }
+
+  /** Answers a pending approval and returns the tool call of its request. */
+  replyApproval(requestId: string, outcome: RuntimeApprovalReplyOutcome): string {
+    const pending = this.pendingApproval(requestId);
+    const response = toAntigravityPermissionResponse(pending.request, outcome);
+    this.approvals.delete(requestId);
+    pending.resolve(response);
+    return pending.request.toolCall.toolCallId;
+  }
+
+  replyQuestion(requestId: string, answers: string[][]): void {
+    const pending = this.questions.get(requestId);
+    if (!pending) throw new Error(`Antigravity question '${requestId}' is no longer pending.`);
+    const response = toAntigravityQuestionResponse(pending.form, answers);
+    this.questions.delete(requestId);
+    pending.resolve(response);
+  }
+
+  /** Closes every pending request without a user reply. */
+  cancelAll(): void {
+    for (const pending of this.approvals.values()) {
+      pending.resolve({ outcome: { outcome: "cancelled" } });
+    }
+    this.approvals.clear();
+    for (const pending of this.questions.values()) pending.resolve({ action: "cancel" });
+    this.questions.clear();
+  }
+
+  private pendingApproval(requestId: string): PendingApproval {
+    const pending = this.approvals.get(requestId);
+    if (!pending) throw new Error(`Antigravity approval '${requestId}' is no longer pending.`);
+    return pending;
+  }
+}

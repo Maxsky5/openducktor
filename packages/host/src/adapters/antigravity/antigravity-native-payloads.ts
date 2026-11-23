@@ -142,6 +142,23 @@ export const readAntigravityCommandLine = (
   return parsed.success ? parsed.data.CommandLine : null;
 };
 
+const backgroundCommandSchema = z.object({
+  CommandLine: nonEmptyString,
+  IsDaemon: z.boolean().optional(),
+});
+
+/**
+ * The command line of a `run_command` call that can run in the background and hold the work of
+ * the session. A daemon, such as a dev server, does not: Antigravity does not wait for it.
+ */
+export const readAntigravityBackgroundCommand = (
+  toolCall: Pick<NativeToolCall, "name" | "rawInput">,
+): string | null => {
+  if (toolCall.name !== "run_command") return null;
+  const parsed = backgroundCommandSchema.safeParse(toolCall.rawInput);
+  return parsed.success && parsed.data.IsDaemon !== true ? parsed.data.CommandLine : null;
+};
+
 /** The exit code of a finished command. */
 export const readAntigravityExitCode = (
   toolCall: Pick<NativeToolCall, "rawOutput">,

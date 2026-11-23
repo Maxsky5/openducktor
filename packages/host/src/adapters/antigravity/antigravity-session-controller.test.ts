@@ -1,7 +1,12 @@
 import { MANUAL_SESSION_COMPACTION_SLASH_COMMAND } from "@openducktor/contracts";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { methods, type PermissionOption, RequestError } from "@agentclientprotocol/sdk/unstable";
+import {
+  methods,
+  type PermissionOption,
+  RequestError,
+  type SessionUpdate,
+} from "@agentclientprotocol/sdk/unstable";
 import { type AgentSessionScope, slashCommandCatalogSchema } from "@openducktor/contracts";
 import { AgentSessionMessageRefusedError, AgentSessionTurnActiveError } from "@openducktor/core";
 import { createConnectedController } from "./antigravity-test-agent.test-support";
@@ -712,6 +717,89 @@ describe("AntigravitySessionController", () => {
       role: "system",
       notice: { tone: "cancelled", reason: "session_interrupted" },
     });
+  });
+
+  test("keeps the session running while a command runs after its turn, and ends it with the command", async () => {
+    const harness = await createConnectedController();
+    const { ref } = await startBuildSession(harness);
+    void sendText(harness, ref, "Run the checks");
+    const prompt = await harness.fake.waitForPrompts(1);
+    const update = (value: SessionUpdate) =>
+      prompt.client.notify(methods.client.session.update, {
+        sessionId: ref.externalSessionId,
+        update: value,
+      });
+    const command = (toolCallId: string, CommandLine: string, IsDaemon = false) =>
+      update({
+        sessionUpdate: "tool_call",
+        toolCallId,
+        title: CommandLine,
+        kind: "execute",
+        status: "in_progress",
+        name: "run_command",
+        rawInput: { CommandLine, WaitMsBeforeAsync: 10000, IsDaemon },
+      });
+    await command("checks", "bun run test");
+    // Antigravity does not wait for a daemon, so it does not keep the session running.
+    await command("server", "bun run dev", true);
+    prompt.respond({ stopReason: "end_turn" });
+    await settle();
+
+    expect(eventTypes(harness).at(-1)).toBe("session_turn_finished");
+    expect(lastSnapshot(harness)).toMatchObject({
+      activity: "running",
+      foregroundTurnActive: false,
+      backgroundTasks: [
+        {
+          taskId: "checks",
+          kind: "command",
+          title: "bun run test",
+          stop: { allowed: false },
+        },
+      ],
+    });
+
+    await update({ sessionUpdate: "tool_call_update", toolCallId: "checks", status: "completed" });
+    await settle();
+
+    const idle = harness.changes.flatMap((change) => change.events).at(-1);
+    expect(idle?.type).toBe("session_idle");
+    expect(idle?.type === "session_idle" ? idle.turnOutcome : null).toBeUndefined();
+    expect(lastSnapshot(harness)?.activity).toBe("idle");
+    expect(lastSnapshot(harness)?.backgroundTasks).toBeUndefined();
+  });
+
+  test("stops the background commands of a session with no running turn", async () => {
+    const harness = await createConnectedController();
+    const { ref } = await startBuildSession(harness);
+    void sendText(harness, ref, "Run the checks");
+    const prompt = await harness.fake.waitForPrompts(1);
+    await prompt.client.notify(methods.client.session.update, {
+      sessionId: ref.externalSessionId,
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "checks",
+        title: "bun run test",
+        kind: "execute",
+        status: "in_progress",
+        name: "run_command",
+        rawInput: { CommandLine: "bun run test" },
+      },
+    });
+    prompt.respond({ stopReason: "end_turn" });
+    await settle();
+
+    const stopped = harness.controller.stopSession(ref);
+    await settle();
+    expect(harness.fake.cancelled).toEqual([ref.externalSessionId]);
+    await prompt.client.notify(methods.client.session.update, {
+      sessionId: ref.externalSessionId,
+      update: { sessionUpdate: "tool_call_update", toolCallId: "checks", status: "failed" },
+    });
+    await stopped;
+
+    expect(eventTypes(harness).at(-1)).toBe("session_idle");
+    expect(lastSnapshot(harness)?.activity).toBe("idle");
   });
 
   test("interrupts a running turn when the runtime stops, with the reason as its notice", async () => {

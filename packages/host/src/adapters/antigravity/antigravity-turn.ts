@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { methods, type PromptResponse, RequestError } from "@agentclientprotocol/sdk/unstable";
 import type {
   AgentSessionLiveRef,
@@ -14,6 +15,7 @@ import {
   type AgentUserMessagePart,
 } from "@openducktor/core";
 import type { AntigravityAgentConnection } from "./antigravity-agent-connection";
+import type { AntigravityBackgroundCommands } from "./antigravity-background-commands";
 import { toTranscriptEvents } from "./antigravity-live-change";
 import { describeAntigravityRequestError } from "./antigravity-native-contract";
 import { encodeAntigravityPrompt, toAntigravityUserMessage } from "./antigravity-prompt";
@@ -123,6 +125,8 @@ type AntigravityTurnContext = {
   readonly publish: (events: AgentEvent[]) => void;
   /** Closes the pending approvals and questions of the session without a user reply. */
   readonly cancelPendingInput: () => void;
+  /** The commands of the session that can outlive a turn. */
+  readonly background: Pick<AntigravityBackgroundCommands, "holdAfterTurn">;
 };
 
 /**
@@ -355,20 +359,32 @@ export class AntigravityTurns {
         message: errorMessage,
       });
     }
-    const idle: Extract<AgentEvent, { type: "session_idle" }> = {
-      type: "session_idle",
-      externalSessionId: this.context.ref.externalSessionId,
-      timestamp,
-      turnOutcome: outcome,
-    };
-    // A turn that Stop ended gets the stop notice in the live view and in history alike.
-    if (outcome === "interrupted" && turn.stopRequested) {
-      idle.interruption = this.context.transcript.addInterruptionNotice(
-        timestamp,
-        "Session stopped at your request.",
-      );
+    const base = { externalSessionId: this.context.ref.externalSessionId, timestamp };
+    // Antigravity can end a turn while its commands still run. The session then keeps working.
+    if (this.context.background.holdAfterTurn(turn.stopRequested)) {
+      const completionId = randomUUID();
+      events.push({
+        ...base,
+        type: "session_turn_finished",
+        completionId,
+        messageIds: [],
+        turnOutcome: outcome,
+      });
+    } else {
+      const idle: Extract<AgentEvent, { type: "session_idle" }> = {
+        ...base,
+        type: "session_idle",
+        turnOutcome: outcome,
+      };
+      // A turn that Stop ended gets the stop notice in the live view and in history alike.
+      if (outcome === "interrupted" && turn.stopRequested) {
+        idle.interruption = this.context.transcript.addInterruptionNotice(
+          timestamp,
+          "Session stopped at your request.",
+        );
+      }
+      events.push(idle);
     }
-    events.push(idle);
     this.context.publish(events);
     settleEndWaiters(turn);
   }

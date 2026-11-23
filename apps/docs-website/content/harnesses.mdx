@@ -71,6 +71,7 @@ With an API key sign-in, Codex cannot tell when the account works again, so a Co
 - A new session shows its slash commands after its first message. OpenDucktor runs `/goal` as goal mode and `/compact` as compaction. `/swarm` is not available: its workers run in conversations that only Antigravity shows.
 - OpenDucktor offers every model of your account. Only Gemini models have a thinking level.
 - In the **Auto** [session mode](/settings-reference/#harnesses-antigravity-session-mode), Antigravity asks before each tool call of a global MCP server. **Bypass permissions** runs these calls without asking.
+- A command that still runs when Antigravity ends its turn shows in the background task list. You cannot stop one command: **Stop** stops all of them. When the command ends, Antigravity can continue on its own, and that work shows while the session shows **Idle**.
 - Attachments reach the agent as file links that it reads with its own tools.
 - Antigravity does not report the results of OpenDucktor tool calls, so their rows show what the agent asked for.
 - Spec, Planner, and QA never change files with the Antigravity file tools: OpenDucktor refuses their file edits in every [session mode](/settings-reference/#harnesses-antigravity-session-mode). Their shell commands follow the mode, so a command can still change a file.

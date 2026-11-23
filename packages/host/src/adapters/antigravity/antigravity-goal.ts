@@ -1,4 +1,4 @@
-import { GOAL_SLASH_COMMAND } from "@openducktor/contracts";
+import { type AgentSessionGoal, GOAL_SLASH_COMMAND } from "@openducktor/contracts";
 
 /**
  * Antigravity tells the agent of a `/goal` request to end its reply with one of these markers. ACP
@@ -72,4 +72,21 @@ export const pendingAntigravityGoalMarkerLength = (text: string): number => {
     for (const marker of GOAL_END_MARKERS.values()) if (marker.startsWith(tail)) return length;
   }
   return 0;
+};
+
+/**
+ * The goal state that a session snapshot shows. Antigravity continues a goal only while it works,
+ * or with the next user message. A goal that the agent completed is complete, and a goal that it
+ * cancelled without the stop message of OpenDucktor ended.
+ */
+export const toAntigravityGoalSnapshot = (
+  goal: AntigravityGoal | null,
+  working: boolean,
+): AgentSessionGoal | undefined => {
+  if (!goal) return undefined;
+  const { objective } = goal;
+  if (goal.end === "met") return { objective, status: "complete" };
+  if (goal.end === "cancelled")
+    return { objective, status: "ended", reason: "The agent cancelled the goal." };
+  return { objective, status: working ? "active" : "waiting_for_message" };
 };
