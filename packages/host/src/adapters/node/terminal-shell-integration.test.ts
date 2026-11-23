@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -102,13 +102,7 @@ for (const [name, config] of [
           LC_ALL: "C.UTF-8",
         };
         if (name === "zsh") {
-          const plain = spawnSync(shell!, args, {
-            cwd: root,
-            env,
-            input: "fc -ln 1\nexit\n",
-            encoding: "utf8",
-            timeout: 2000,
-          });
+          const plain = runShell(shell!, args, root, env, "fc -ln 1\nexit\n");
           expect(plain.status).toBe(0);
           expect(plain.stdout).toContain(historyCommand);
         }
@@ -190,13 +184,7 @@ for (const [name, config] of [
           child.stdin!.end("exit\n");
           await exited;
           if (config !== "non-login") expect(output).toContain("user-logout");
-          const reopened = spawnSync(shell!, args, {
-            cwd: root,
-            env,
-            input: "fc -ln 1\nexit\n",
-            encoding: "utf8",
-            timeout: 2000,
-          });
+          const reopened = runShell(shell!, args, root, env, "fc -ln 1\nexit\n");
           expect(reopened.status).toBe(0);
           expect(reopened.stdout).toContain(historyCommand);
           expect(reopened.stdout).toContain(text);
@@ -274,13 +262,13 @@ test.skipIf(process.platform === "win32" || bash === null)(
         commandNonce: "login-test",
       };
       const run = (launch: TerminalPtyLaunchPlan) =>
-        spawnSync(launch.shell, [...launch.args], {
-          cwd: launch.cwd,
-          env: launch.env,
-          input: "history\nprintf 'saved-after-terminal\\n'\nlogout\n",
-          encoding: "utf8",
-          timeout: 2000,
-        });
+        runShell(
+          launch.shell,
+          launch.args,
+          launch.cwd,
+          launch.env,
+          "history\nprintf 'saved-after-terminal\\n'\nlogout\n",
+        );
       const native = run(plan);
       expect(native.status).toBe(0);
       prepared = await Effect.runPromise(prepareTerminalShell(plan));
@@ -320,6 +308,27 @@ test("removes temporary startup files and leaves unsupported shells unchanged", 
   const unsupported = { ...plan, shell: "/bin/unsupported" };
   expect((await Effect.runPromise(prepareTerminalShell(unsupported))).plan).toBe(unsupported);
 });
+
+// An interactive shell reads commands from the controlling terminal of the test runner, when it
+// has one, and ignores SIGTERM. A new session without a terminal makes the shell read the input,
+// and SIGKILL stops it at the time limit, so a failure cannot block the test worker.
+function runShell(
+  shell: string,
+  args: readonly string[],
+  cwd: string,
+  env: Record<string, string | undefined>,
+  input: string,
+) {
+  const result = Bun.spawnSync([shell, ...args], {
+    cwd,
+    env,
+    stdin: Buffer.from(input),
+    detached: true,
+    timeout: 2000,
+    killSignal: "SIGKILL",
+  });
+  return { status: result.exitCode, stdout: result.stdout.toString() };
+}
 
 async function waitUntil(check: () => boolean, detail?: () => string): Promise<void> {
   const deadline = Date.now() + 2000;
