@@ -90,3 +90,38 @@ export const toAntigravityGoalSnapshot = (
     return { objective, status: "ended", reason: "The agent cancelled the goal." };
   return { objective, status: working ? "active" : "waiting_for_message" };
 };
+
+/**
+ * The goal of a session, from its user messages and the goal markers of the replies. A `/goal`
+ * message sets the goal, and a new one replaces the goal before it. The stop message of
+ * OpenDucktor asks the agent to cancel the goal, so its cancel removes the goal.
+ */
+export class AntigravityGoalTracker {
+  private state: AntigravityGoal | null = null;
+  /** True when the last user message asked the agent to stop its goal. */
+  private stopAsked = false;
+
+  get goal(): AntigravityGoal | null {
+    return this.state;
+  }
+
+  /** Removes a goal that the agent already ended. It returns false when no ended goal is set. */
+  forgetEnded(): boolean {
+    if (!this.state?.end) return false;
+    this.state = null;
+    return true;
+  }
+
+  noteMessage(text: string): void {
+    const objective = readAntigravityGoalObjective(text);
+    if (objective) this.state = { objective };
+    this.stopAsked = objective === null && text.trim() === ANTIGRAVITY_GOAL_STOP_MESSAGE;
+  }
+
+  noteEnds(ends: readonly AntigravityGoalEnd[]): void {
+    for (const end of ends) {
+      if (!this.state || this.state.end) continue;
+      this.state = end === "cancelled" && this.stopAsked ? null : { ...this.state, end };
+    }
+  }
+}

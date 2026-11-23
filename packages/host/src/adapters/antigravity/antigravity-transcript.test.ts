@@ -269,7 +269,7 @@ describe("AntigravityTranscript", () => {
     transcript.addLiveUserMessage({
       message: { text: "/goal Make the tests pass", displayParts: [] },
     });
-    expect(transcript.goal).toEqual({ objective: "Make the tests pass" });
+    expect(transcript.goals.goal).toEqual({ objective: "Make the tests pass" });
     const events = [
       ...transcript.applyUpdate(text("agent_message_chunk", "All pass. <!-- GOAL_"), "live"),
       ...transcript.applyUpdate(text("agent_message_chunk", "COMPLETE -->"), "live"),
@@ -282,7 +282,7 @@ describe("AntigravityTranscript", () => {
     );
     expect(deltas.join("")).toBe("All pass. ");
     expect(events.at(-1)).toMatchObject({ type: "assistant_message", message: "All pass. " });
-    expect(transcript.goal).toEqual({ objective: "Make the tests pass", end: "met" });
+    expect(transcript.goals.goal).toEqual({ objective: "Make the tests pass", end: "met" });
   });
 
   test("rebuilds the goal from a replay, and the stop message removes a cancelled goal", () => {
@@ -300,12 +300,12 @@ describe("AntigravityTranscript", () => {
     replay.finishReplay();
 
     // A cancel without the stop message of OpenDucktor ends the goal and keeps it to show.
-    expect(replay.goal).toEqual({ objective: "Ship it again", end: "cancelled" });
+    expect(replay.goals.goal).toEqual({ objective: "Ship it again", end: "cancelled" });
     expect(replay.history.map(({ text: body }) => body)).not.toContain(
       expect.stringContaining("GOAL_"),
     );
-    expect(replay.forgetEndedGoal()).toBe(true);
-    expect(replay.goal).toBeNull();
+    expect(replay.goals.forgetEnded()).toBe(true);
+    expect(replay.goals.goal).toBeNull();
   });
 
   test("shows a declined tool as cancelled, and an interrupted turn has no final reply", () => {

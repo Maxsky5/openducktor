@@ -802,7 +802,7 @@ describe("AntigravitySessionController", () => {
     expect(lastSnapshot(harness)?.activity).toBe("idle");
   });
 
-  test("interrupts a running turn when the runtime stops, with the reason as its notice", async () => {
+  test("interrupts a running turn and its tools when the runtime stops, with the reason as its notice", async () => {
     const harness = await createConnectedController();
     const { ref } = await startBuildSession(harness);
     void sendText(harness, ref, "Work");
@@ -811,10 +811,30 @@ describe("AntigravitySessionController", () => {
       sessionId: ref.externalSessionId,
       update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Working" } },
     });
+    await prompt.client.notify(methods.client.session.update, {
+      sessionId: ref.externalSessionId,
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "read-1",
+        title: "File app.ts",
+        name: "read_file",
+        kind: "read",
+        status: "in_progress",
+        rawInput: { Path: "/repo/worktree/app.ts" },
+      },
+    });
     await settle();
     const history = await harness.controller.loadHistory(ref);
 
     const events = harness.controller.settleRuntime("The Antigravity runtime stopped.");
+
+    // The runtime ran the tool, so the tool ends with it.
+    const tool = events.flatMap((event) =>
+      event.type === "assistant_part" && event.part.kind === "tool" ? [event.part] : [],
+    );
+    expect(tool).toMatchObject([
+      { callId: "read-1", status: "error", error: "The Antigravity runtime stopped." },
+    ]);
 
     const idle = events.at(-1);
     expect(idle).toMatchObject({

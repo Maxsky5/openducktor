@@ -14,11 +14,8 @@ import type {
 } from "@openducktor/core";
 import { ANTIGRAVITY_COMPACT_COMMAND, compactionNotice } from "./antigravity-compaction";
 import {
-  ANTIGRAVITY_GOAL_STOP_MESSAGE,
-  type AntigravityGoal,
-  type AntigravityGoalEnd,
+  AntigravityGoalTracker,
   pendingAntigravityGoalMarkerLength,
-  readAntigravityGoalObjective,
   stripAntigravityGoalMarkers,
 } from "./antigravity-goal";
 import {
@@ -72,9 +69,7 @@ export class AntigravityTranscript {
   private readonly declinedTools = new Set<string>();
   /** True while the transcript applies a `session/load` replay. */
   private replaying = false;
-  private goalState: AntigravityGoal | null = null;
-  /** True when the last user message asked the agent to stop its goal. */
-  private goalStopAsked = false;
+  readonly goals = new AntigravityGoalTracker();
 
   constructor(
     private readonly sessionId: string,
@@ -96,7 +91,7 @@ export class AntigravityTranscript {
     const closedItems = this.closeOpenItem();
     const messageId = this.startTurn();
     const timestamp = input.sentAt ?? this.now();
-    this.noteGoalMessage(input.message.text);
+    this.goals.noteMessage(input.message.text);
     const event: AcceptedAgentUserMessage = {
       type: "user_message",
       externalSessionId: this.sessionId,
@@ -119,36 +114,6 @@ export class AntigravityTranscript {
     if (input.model) history.model = input.model;
     this.history.push(history);
     return { closedItems, userMessage: event };
-  }
-
-  /** The goal of the session, from its user messages and the goal markers of the replies. */
-  get goal(): AntigravityGoal | null {
-    return this.goalState;
-  }
-
-  /** Removes a goal that the agent already ended. It returns false when no ended goal is set. */
-  forgetEndedGoal(): boolean {
-    if (!this.goalState?.end) return false;
-    this.goalState = null;
-    return true;
-  }
-
-  /**
-   * A `/goal` message sets the goal, and a new one replaces the goal before it. The stop message
-   * of OpenDucktor asks the agent to cancel the goal, so its cancel removes the goal.
-   */
-  private noteGoalMessage(text: string): void {
-    const objective = readAntigravityGoalObjective(text);
-    if (objective) this.goalState = { objective };
-    this.goalStopAsked = objective === null && text.trim() === ANTIGRAVITY_GOAL_STOP_MESSAGE;
-  }
-
-  private noteGoalEnds(ends: readonly AntigravityGoalEnd[]): void {
-    for (const end of ends) {
-      if (!this.goalState || this.goalState.end) continue;
-      this.goalState =
-        end === "cancelled" && this.goalStopAsked ? null : { ...this.goalState, end };
-    }
   }
 
   /**
@@ -185,6 +150,20 @@ export class AntigravityTranscript {
     const entry = this.tools.get(toolCallId);
     if (!entry) return [];
     return [this.publishTool(entry.state, entry.messageId)];
+  }
+
+  /** Ends the tools that still run when the runtime stops, each one failed with the reason. */
+  failRunningTools(reason: string): AgentEvent[] {
+    const message = { type: "text" as const, text: reason };
+    return [...this.tools.values()]
+      .filter(({ state }) => state.status !== "completed" && state.status !== "failed")
+      .flatMap(({ state }) =>
+        this.applyTool({
+          toolCallId: state.toolCallId,
+          status: "failed",
+          content: [{ type: "content", content: message }],
+        }),
+      );
   }
 
   /** Applies one update. `replay` updates come from `session/load`. */
@@ -292,7 +271,7 @@ export class AntigravityTranscript {
     if (!open) return;
     this.openUserMessage = null;
     const message = this.readUserChunks(open.blocks);
-    this.noteGoalMessage(message.text);
+    this.goals.noteMessage(message.text);
     // History keeps a finished compaction as its notice, as the live view shows it.
     if (message.text.trim() === ANTIGRAVITY_COMPACT_COMMAND) {
       this.history.push(
@@ -395,7 +374,7 @@ export class AntigravityTranscript {
   private streamText(item: OpenItem, chunk: string): void {
     item.raw += chunk;
     const { text, ends } = stripAntigravityGoalMarkers(item.raw);
-    this.noteGoalEnds(ends.slice(item.markers));
+    this.goals.noteEnds(ends.slice(item.markers));
     item.markers = ends.length;
     item.text = text.slice(0, text.length - pendingAntigravityGoalMarkerLength(text));
   }

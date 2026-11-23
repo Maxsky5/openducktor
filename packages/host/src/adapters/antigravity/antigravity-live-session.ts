@@ -162,7 +162,7 @@ export class AntigravityLiveSession {
     if (this.sessionScope.kind === "repository") snapshot.repositoryScope = this.sessionScope;
     if (this.model.selection) snapshot.model = this.model.selection;
     const goal = toAntigravityGoalSnapshot(
-      this.transcript.goal,
+      this.transcript.goals.goal,
       this.turns.running && !this.goalClearing,
     );
     if (goal) snapshot.goal = goal;
@@ -414,11 +414,11 @@ export class AntigravityLiveSession {
       });
       return;
     }
-    if (this.transcript.forgetEndedGoal()) {
+    if (this.transcript.goals.forgetEnded()) {
       await this.publish([]);
       return;
     }
-    if (!this.transcript.goal) return;
+    if (!this.transcript.goals.goal) return;
     this.goalClearing = true;
     try {
       await this.turns.send({
@@ -454,10 +454,12 @@ export class AntigravityLiveSession {
 
   /** The terminal events of a turn or background work that the runtime stopped running. */
   settle(reason: string): AgentSessionTranscriptEvent[] {
+    // The runtime process ran the tools and the background commands, so none of them runs now.
+    const tools = toTranscriptEvents(this.ref, this.transcript.failRunningTools(reason));
     const waiting = this.background.active && !this.turns.running;
     this.background.clear();
-    if (!waiting) return this.turns.settle(reason);
-    return toTranscriptEvents(this.ref, [this.idleEvent()]);
+    if (!waiting) return [...tools, ...this.turns.settle(reason)];
+    return [...tools, ...toTranscriptEvents(this.ref, [this.idleEvent()])];
   }
 
   private idleEvent(): AgentEvent {
