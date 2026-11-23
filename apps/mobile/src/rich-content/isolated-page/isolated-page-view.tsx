@@ -35,14 +35,11 @@ import { StyleSheet } from "react-native-unistyles";
 import { appActivitySource } from "@/host-session/device-sources";
 import { showKeyboard } from "../../../modules/openducktor-keyboard";
 import { motion } from "@/theme/tokens";
-import {
-  WebView,
-  type WebViewMessageEvent,
-  type WebViewNavigation,
-  type WebViewProps,
-} from "react-native-webview";
+import { WebView, type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
+import { LOCKED_WEB_VIEW_PROPS } from "./locked-web-view-props";
 import { type IsolatedPage, useIsolatedPageHtml } from "./page-asset";
 import { decodePageToAppMessage, encodePageMessage, type PageChannel } from "./page-channel";
+import { PAGE_BASE_URL } from "./web-view-bases";
 
 export type IsolatedPageHandle<Inbound> = {
   /** Sends a message to the page. Call it only after `onReady`. */
@@ -93,12 +90,6 @@ export type IsolatedPageViewProps<Inbound, Outbound> = {
 // The WebView class adds its type argument to its props, and its default `undefined` empties them.
 type NoExtraProps = Record<never, never>;
 type PageWebView = WebView<NoExtraProps>;
-
-// Every request must reach `allowRequest`, which blocks it. With a shorter list,
-// react-native-webview opens each other URL with `Linking.openURL`, outside the app link policy.
-const ALL_ORIGINS = ["*"];
-const NO_DATA_DETECTORS: NonNullable<WebViewProps["dataDetectorTypes"]> = ["none"];
-const PAGE_BASE_URL = "about:blank";
 
 export function IsolatedPageView<Inbound, Outbound>({
   page,
@@ -186,7 +177,6 @@ export function IsolatedPageView<Inbound, Outbound>({
       <WebView<NoExtraProps>
         ref={webView}
         source={{ html: pageHtml.html, baseUrl: PAGE_BASE_URL }}
-        originWhitelist={ALL_ORIGINS}
         onShouldStartLoadWithRequest={allowRequest}
         onLoadEnd={markLoaded}
         onMessage={receive}
@@ -195,41 +185,15 @@ export function IsolatedPageView<Inbound, Outbound>({
         onError={(event) =>
           onFailure(`The ${page.name} page did not load: ${event.nativeEvent.description}`)
         }
-        javaScriptEnabled
-        javaScriptCanOpenWindowsAutomatically={false}
-        setSupportMultipleWindows={false}
-        allowFileAccess={false}
-        allowFileAccessFromFileURLs={false}
-        allowUniversalAccessFromFileURLs={false}
-        domStorageEnabled={false}
-        cacheEnabled={false}
-        // iOS gives the page a data store of its own. On Android the prop clears the cookies and
-        // the cache of the whole app on the main thread at each mount. The page loads from a
-        // string, with no network and no storage, so it needs no such reset.
-        incognito={Platform.OS === "ios"}
-        thirdPartyCookiesEnabled={false}
-        sharedCookiesEnabled={false}
-        geolocationEnabled={false}
-        mixedContentMode="never"
-        allowsLinkPreview={false}
         keyboardDisplayRequiresUserAction={!keyboardInput}
         hideKeyboardAccessoryView={keyboardInput}
-        // An array: the Android wrapper passes a string unchanged, and the shared native prop parser
-        // reads only an array. A string crashes the app when the view mounts.
-        dataDetectorTypes={NO_DATA_DETECTORS}
-        mediaPlaybackRequiresUserAction
-        saveFormDataDisabled
-        // The page scales its text with the font scale in its messages, so Android must not scale it again.
-        textZoom={100}
-        webviewDebuggingEnabled={__DEV__}
         scrollEnabled={scrollEnabled}
-        bounces={false}
-        overScrollMode="never"
         // On Android, a nested-scroll WebView keeps every touch from its parent list. A page that
         // does not scroll must let the list take the drag.
         nestedScrollEnabled={nestedScrollEnabled}
         showsVerticalScrollIndicator={scrollEnabled}
         style={styles.webView}
+        {...LOCKED_WEB_VIEW_PROPS}
       />
     </Animated.View>
   );

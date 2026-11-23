@@ -182,11 +182,23 @@ export function TranscriptList({
   // stays single, so a fast second press does not push a second screen.
   const openFullView = useCallback(
     (view: TranscriptFullView) => {
-      if (view.kind !== "tool") {
-        setFullView(view);
+      if (view.kind === "tool") {
+        router.push(routes.toolCall(identity, view.messageId, view.title), SINGLE_SHEET);
         return;
       }
-      router.push(routes.toolCall(identity, view.messageId, view.title), SINGLE_SHEET);
+      if (view.kind === "html_preview") {
+        router.push(
+          routes.htmlPreview(identity, {
+            partId: view.partId,
+            callId: view.callId,
+            title: view.title,
+            mode: view.mode,
+          }),
+          SINGLE_SHEET,
+        );
+        return;
+      }
+      setFullView(view);
     },
     [identity, router],
   );

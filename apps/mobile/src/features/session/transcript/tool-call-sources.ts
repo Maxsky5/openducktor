@@ -77,16 +77,35 @@ export const usePublishToolCallSource = (sessionKey: string, source: ToolCallSou
   }, [sessionKey, source, sources]);
 };
 
+/** The live call that matches in the rows of a transcript, or null when they lack it. */
+const findToolCallMatching = (
+  rows: readonly AgentChatTranscriptRow[],
+  matches: (call: ShownToolCall) => boolean,
+): ShownToolCall | null => {
+  // Recent calls are near the end, so the search starts there.
+  const row = rows.findLast(
+    (item) =>
+      item.kind === "message" &&
+      item.message.meta?.kind === "tool" &&
+      matches({ message: item.message, meta: item.message.meta }),
+  );
+  if (row?.kind !== "message" || row.message.meta?.kind !== "tool") return null;
+  return { message: row.message, meta: row.message.meta };
+};
+
 /** The live call with this message ID in the rows of a transcript, or null when they lack it. */
 export const findToolCall = (
   rows: readonly AgentChatTranscriptRow[],
   messageId: string,
-): ShownToolCall | null => {
-  // Recent calls are near the end, so the search starts there.
-  const row = rows.findLast((item) => item.kind === "message" && item.message.id === messageId);
-  if (row?.kind !== "message" || row.message.meta?.kind !== "tool") return null;
-  return { message: row.message, meta: row.message.meta };
-};
+): ShownToolCall | null => findToolCallMatching(rows, ({ message }) => message.id === messageId);
+
+/** The live call with these part and call IDs in the rows of a transcript, or null. */
+export const findHtmlPreviewCall = (
+  rows: readonly AgentChatTranscriptRow[],
+  partId: string,
+  callId: string,
+): ShownToolCall | null =>
+  findToolCallMatching(rows, ({ meta }) => meta.partId === partId && meta.callId === callId);
 
 /** The session facts of a transcript, and the live message of one of its calls. */
 export type LiveToolCall = {
@@ -95,10 +114,13 @@ export type LiveToolCall = {
 };
 
 /**
- * The session facts of a transcript and the live message of one of its calls, for the tool call
- * screen. Streamed text changes the rows often, so each value changes only when it changes.
+ * The session facts of a transcript and the live message of one of its calls. Streamed text
+ * changes the rows often, so each value changes only when it changes.
  */
-export const useToolCallSource = (sessionKey: string, messageId: string): LiveToolCall => {
+const useLiveToolCall = (
+  sessionKey: string,
+  findCall: (rows: readonly AgentChatTranscriptRow[]) => ShownToolCall | null,
+): LiveToolCall => {
   const sources = useToolCallSources();
   const subscribe = useCallback(
     (listener: () => void) => sources.subscribe(sessionKey, listener),
@@ -107,7 +129,18 @@ export const useToolCallSource = (sessionKey: string, messageId: string): LiveTo
   const context = useSyncExternalStore(subscribe, () => sources.get(sessionKey)?.context ?? null);
   const message = useSyncExternalStore(subscribe, () => {
     const source = sources.get(sessionKey);
-    return source ? (findToolCall(source.rows, messageId)?.message ?? null) : null;
+    return source ? (findCall(source.rows)?.message ?? null) : null;
   });
   return { context, message };
 };
+
+/** The live message of one call, for the tool call screen. */
+export const useToolCallSource = (sessionKey: string, messageId: string): LiveToolCall =>
+  useLiveToolCall(sessionKey, (rows) => findToolCall(rows, messageId));
+
+/** The live message of a published HTML preview, addressed by its tool part. */
+export const useHtmlPreviewSource = (
+  sessionKey: string,
+  partId: string,
+  callId: string,
+): LiveToolCall => useLiveToolCall(sessionKey, (rows) => findHtmlPreviewCall(rows, partId, callId));

@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
-import { createToolCallSources, findToolCall, type ToolCallSource } from "./tool-call-sources";
+import {
+  createToolCallSources,
+  findHtmlPreviewCall,
+  findToolCall,
+  type ToolCallSource,
+} from "./tool-call-sources";
 import type { TranscriptRowsContextValue } from "./transcript-rows-context";
 
 const toolRow = (id: string, status: "running" | "completed"): AgentChatTranscriptRow => ({
@@ -39,6 +44,16 @@ describe("findToolCall", () => {
     expect(findToolCall(rows, "call")?.meta.status).toBe("running");
     expect(findToolCall(rows, "answer")).toBeNull();
     expect(findToolCall(rows, "missing")).toBeNull();
+  });
+});
+
+describe("findHtmlPreviewCall", () => {
+  test("finds a live call by its part and call IDs, and nothing for other IDs", () => {
+    const rows = [toolRow("call", "running")];
+
+    expect(findHtmlPreviewCall(rows, "call-part", "call-call")?.message.id).toBe("call");
+    expect(findHtmlPreviewCall(rows, "other-part", "call-call")).toBeNull();
+    expect(findHtmlPreviewCall(rows, "call-part", "other-call")).toBeNull();
   });
 });
 

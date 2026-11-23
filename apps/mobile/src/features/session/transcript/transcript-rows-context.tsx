@@ -18,7 +18,14 @@ import type { VisibleRowsStore } from "./transcript-visibility";
 export type TranscriptFullView =
   | { kind: "diff"; title: string; rows: readonly DiffRow[] }
   | { kind: "content"; title: string; code: string; language: CodeLanguage | null }
-  | { kind: "tool"; title: string; messageId: string };
+  | { kind: "tool"; title: string; messageId: string }
+  | {
+      kind: "html_preview";
+      title: string;
+      partId: string;
+      callId: string;
+      mode: "preview" | "source";
+    };
 
 /**
  * The session facts and actions that transcript rows share. The values change only when the
