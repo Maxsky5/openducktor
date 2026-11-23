@@ -29,6 +29,9 @@ export type AntigravityToolState = {
   content?: ToolCallContent[] | undefined;
   rawInput?: ToolCallUpdate["rawInput"];
   rawOutput?: ToolCallUpdate["rawOutput"];
+  /** When a live call started and ended. ACP sends no tool times, and a replay has none. */
+  startedAtMs?: number | undefined;
+  endedAtMs?: number | undefined;
 };
 
 /**
@@ -158,6 +161,8 @@ export const toAntigravityToolPart = (
     part.title = state.title;
   }
   if (taskAction) part.title = taskAction;
+  if (state.startedAtMs !== undefined) part.startedAtMs = state.startedAtMs;
+  if (state.endedAtMs !== undefined) part.endedAtMs = state.endedAtMs;
   const input = mcp ? mcp.args : readAntigravityToolInput(state);
   if (input) part.input = input;
   if (output) part.output = output;

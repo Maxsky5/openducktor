@@ -460,9 +460,21 @@ export class AntigravityTranscript {
       );
     }
     const state = mergeAntigravityToolState(existing?.state, update);
+    if (!this.replaying) this.timeLiveTool(state, existing === undefined);
     this.tools.set(update.toolCallId, { state, messageId });
     events.push(this.publishTool(state, messageId));
     return events;
+  }
+
+  /**
+   * ACP sends no tool times, so a live call starts when its first update shows it running, and it
+   * ends at the update that finishes it. A call that shows up finished has no start time.
+   */
+  private timeLiveTool(state: AntigravityToolState, first: boolean): void {
+    const at = Date.parse(this.now());
+    const ended = state.status === "completed" || state.status === "failed";
+    if (first && !ended) state.startedAtMs = at;
+    if (ended && state.startedAtMs !== undefined) state.endedAtMs ??= at;
   }
 
   private publishTool(state: AntigravityToolState, messageId: string): AgentEvent {

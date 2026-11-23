@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
+import type { AgentStreamPart } from "@openducktor/core";
 import { AntigravityTranscript } from "./antigravity-transcript";
 
 const NOW = "2026-11-21T10:00:00.000Z";
@@ -77,12 +78,18 @@ describe("AntigravityTranscript", () => {
     for (const update of replayUpdates) replay.applyUpdate(update, "replay");
     replay.finishReplay();
 
+    // Only a live tool call has times, because ACP sends none.
+    const withoutToolTimes = (part: AgentStreamPart): AgentStreamPart => {
+      if (part.kind !== "tool") return part;
+      const { startedAtMs: _startedAtMs, endedAtMs: _endedAtMs, ...rest } = part;
+      return rest;
+    };
     const historyRows = (transcript: AntigravityTranscript) =>
       transcript.history.map((message) => ({
         messageId: message.messageId,
         role: message.role,
         text: message.text,
-        parts: message.parts,
+        parts: message.parts?.map(withoutToolTimes),
       }));
     expect(historyRows(live)).toEqual(historyRows(replay));
     // A replay has no times, so each of its entries has an approximate time. Live times are exact.
@@ -244,6 +251,39 @@ describe("AntigravityTranscript", () => {
       event.type === "assistant_part" && event.part.kind === "tool" ? [event.part] : [],
     );
     expect(tool.at(-1)).toMatchObject(entry.part);
+  });
+
+  test("times a live tool call from its first running update to the update that ends it", () => {
+    let now = Date.parse("2026-11-23T20:00:00.000Z");
+    const transcript = new AntigravityTranscript(
+      "session-1",
+      () => ({ text: "", displayParts: [] }),
+      () => new Date(now).toISOString(),
+    );
+    const call = (status: "in_progress" | "completed", mode: "live" | "replay" = "live") =>
+      transcript
+        .applyUpdate(
+          {
+            sessionUpdate: "tool_call",
+            toolCallId: `call-${mode}`,
+            title: "File a.ts",
+            name: "read_file",
+            kind: "read",
+            status,
+          },
+          mode,
+        )
+        .flatMap((event) =>
+          event.type === "assistant_part" && event.part.kind === "tool" ? [event.part] : [],
+        )
+        .at(-1);
+
+    const started = now;
+    expect(call("in_progress")).toMatchObject({ status: "running", startedAtMs: started });
+    now += 1500;
+    expect(call("completed")).toMatchObject({ startedAtMs: started, endedAtMs: started + 1500 });
+    // A replay and a call that shows up finished have no times.
+    expect(call("completed", "replay")).not.toHaveProperty("startedAtMs");
   });
 
   test("streams text as deltas and confirms the final reply of a completed turn", () => {
