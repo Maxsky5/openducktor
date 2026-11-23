@@ -1011,6 +1011,18 @@ describe("AppShell", () => {
     expect(collapsedSettingsButton.textContent?.trim()).toBe("");
   });
 
+  test("shows the Usage and Workflows links only in the expanded sidebar", async () => {
+    renderAppShellForTest();
+
+    await waitFor(() => expect(screen.getByRole("link", { name: "Workflows" })).toBeTruthy());
+    expect(screen.getByRole("link", { name: "Usage" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide sidebar" }));
+
+    expect(screen.queryByRole("link", { name: "Usage" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Workflows" })).toBeNull();
+  });
+
   test("keeps diagnostics available as a status-colored collapsed sidebar trigger", async () => {
     globalThis.localStorage.setItem(LEFT_SIDEBAR_STORAGE_KEY, "collapsed");
 
@@ -1852,6 +1864,17 @@ describe("AppShell command palette", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull(),
     );
+  });
+
+  test.each([
+    ["Usage", "/usage"],
+    ["Workflows", "/workflows"],
+  ] as const)("goes to the %s page from the palette", async (page, route) => {
+    renderPalette();
+    const palette = await openPalette();
+    search(palette, page);
+    fireEvent.click(actionOption(palette, `Go to ${page}`));
+    await waitFor(() => expect(screen.getByTestId("current-route").textContent).toBe(route));
   });
 
   test("opens from the sidebar search button and returns focus to it on Escape", async () => {

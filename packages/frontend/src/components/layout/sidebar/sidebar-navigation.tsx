@@ -3,6 +3,7 @@ import { type MouseEvent, type ReactElement, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { cn } from "@/lib/utils";
 import { useShortcutTitle } from "@/features/shortcuts/shortcut-controls";
+import { WORKFLOWS_ROUTE } from "@/features/workflows/workflow-routes";
 import { USAGE_PATH } from "@/pages";
 
 const KANBAN_ROUTE = "/kanban";
@@ -122,7 +123,7 @@ function SidebarPageLinks({
   );
 }
 
-/** The page links. Sessions have their own list, so the sidebar keeps no page links for them. */
+/** The Kanban link. Sessions have their own list, so the sidebar keeps no page links for them. */
 export function SidebarNavigation({
   compact = false,
   onBeforeNavigate,
@@ -131,11 +132,7 @@ export function SidebarNavigation({
   return (
     <SidebarPageLinks
       label="Pages"
-      links={[
-        { route: KANBAN_ROUTE, label: "Kanban", title: kanbanTitle, icon: Columns3 },
-        { route: "/workflows", label: "Workflows", title: "Workflows", icon: Workflow },
-      ]}
-      className="flex flex-col gap-1"
+      links={[{ route: KANBAN_ROUTE, label: "Kanban", title: kanbanTitle, icon: Columns3 }]}
       iconOnly={compact}
       linkClassName={compact ? "size-9 justify-center" : "h-9 gap-2 px-3"}
       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
@@ -144,21 +141,21 @@ export function SidebarNavigation({
   );
 }
 
-const FOOTER_LINKS: readonly SidebarPageLink[] = [
-  { route: USAGE_PATH, label: "Usage", title: "Usage", icon: ChartSpline },
-];
-
-/** The icon links of the sidebar footer, beside Settings. */
+/** The icon links of the expanded sidebar footer, beside Settings. The collapsed sidebar has none. */
 export function SidebarFooterLinks({
-  compact = false,
   onBeforeNavigate,
-}: SidebarNavigationProps): ReactElement {
+}: Pick<SidebarNavigationProps, "onBeforeNavigate">): ReactElement {
+  const usageTitle = useShortcutTitle("usage", "Usage");
+  const workflowsTitle = useShortcutTitle("workflows", "Workflows");
   return (
     <SidebarPageLinks
       label="More pages"
-      links={FOOTER_LINKS}
+      links={[
+        { route: USAGE_PATH, label: "Usage", title: usageTitle, icon: ChartSpline },
+        { route: WORKFLOWS_ROUTE, label: "Workflows", title: workflowsTitle, icon: Workflow },
+      ]}
       iconOnly
-      className={cn("flex gap-1", compact ? "flex-col" : "items-center")}
+      className="flex items-center gap-1"
       linkClassName="size-9 justify-center"
       // A quiet tile beside the icon buttons of the footer.
       activeClassName="bg-accent text-accent-foreground ring-1 ring-border"

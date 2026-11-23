@@ -400,7 +400,6 @@ export function WorkspaceSidebar({
                 triggerSize="icon"
                 triggerIconOnly
               />
-              <SidebarFooterLinks compact onBeforeNavigate={guardTransition} />
             </div>
           </div>
         )}

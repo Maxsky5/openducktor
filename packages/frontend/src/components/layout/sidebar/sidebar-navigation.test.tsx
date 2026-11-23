@@ -94,29 +94,41 @@ describe("SidebarNavigation", () => {
   });
 
   test.each([
-    ["expanded", false, ["Kanban", "Workflows"]],
-    ["collapsed", true, ["", ""]],
-  ] as const)("keeps accessible page links with %s sidebar labels", (_mode, compact, texts) => {
+    ["expanded", false, "Kanban"],
+    ["collapsed", true, ""],
+  ] as const)("keeps an accessible Kanban link with %s sidebar labels", (_mode, compact, text) => {
     render(
       <MemoryRouter initialEntries={["/kanban"]}>
         <SidebarNavigation compact={compact} />
       </MemoryRouter>,
     );
 
-    expect(screen.getAllByRole("link")).toHaveLength(2);
-    expect(screen.getByRole("link", { name: "Kanban" }).textContent).toBe(texts[0]);
-    expect(screen.getByRole("link", { name: "Workflows" }).textContent).toBe(texts[1]);
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Kanban" }).textContent).toBe(text);
   });
 
-  test("selects Workflows on the editor routes of a workflow", () => {
+  test("shows Usage, then Workflows, as footer icon links", () => {
     render(
-      <MemoryRouter initialEntries={["/workflows/review-flow/versions/2"]}>
-        <SidebarNavigation />
+      <MemoryRouter initialEntries={["/kanban"]}>
+        <SidebarFooterLinks />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: "Workflows" }).className).toContain(
-      "bg-sidebar-accent",
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.getAttribute("aria-label"))).toEqual(["Usage", "Workflows"]);
+    expect(links.map((link) => link.textContent)).toEqual(["", ""]);
+  });
+
+  test("selects the Workflows footer link on the editor routes of a workflow", () => {
+    render(
+      <MemoryRouter initialEntries={["/workflows/review-flow/versions/2"]}>
+        <SidebarNavigation />
+        <SidebarFooterLinks />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Workflows" }).className.split(" ")).toContain(
+      "bg-accent",
     );
     expect(screen.getByRole("link", { name: "Kanban" }).className).not.toContain(
       "bg-sidebar-accent",
