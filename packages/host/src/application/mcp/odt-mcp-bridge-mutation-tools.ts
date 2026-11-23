@@ -2,6 +2,7 @@ import {
   type ApplyWorkflowEventResult,
   ODT_HOST_BRIDGE_RESPONSE_SCHEMAS,
   ODT_TOOL_SCHEMAS,
+  odtCallerSchema,
 } from "@openducktor/contracts";
 import { Effect } from "effect";
 import type { JSONType, z } from "zod";
@@ -189,6 +190,37 @@ const executeSetPullRequest: OdtMcpMutationHandler = (context, input) =>
     });
   });
 
+const executePublishHtml: OdtMcpMutationHandler = (context, body) =>
+  Effect.gen(function* () {
+    const { caller: rawCaller, input: toolBody } = yield* splitBridgeCaller(
+      "odt_publish_html",
+      body,
+    );
+    const caller = yield* parseToolInput("odt_publish_html", odtCallerSchema, rawCaller ?? null);
+    const parsed = yield* parseToolInput(
+      "odt_publish_html",
+      ODT_TOOL_SCHEMAS.odt_publish_html,
+      toolBody,
+    );
+    if (parsed.workspaceId === undefined) {
+      return yield* new HostValidationError({
+        field: "workspaceId",
+        message: "odt_publish_html needs the workspaceId of the calling session.",
+      });
+    }
+    const source =
+      parsed.path !== undefined
+        ? ({ kind: "path", path: parsed.path } as const)
+        : ({ kind: "html", html: parsed.html ?? "" } as const);
+    const published = yield* context.sessionHtmlPreviews.publish({
+      workspaceId: parsed.workspaceId,
+      caller,
+      title: parsed.title,
+      source,
+    });
+    return yield* parseResponse("odt_publish_html", RESPONSE_SCHEMAS.odt_publish_html, published);
+  });
+
 const MUTATION_HANDLERS = {
   odt_set_task_artifact: executeSetTaskArtifact,
   odt_delete_task_artifact: executeDeleteTaskArtifact,
@@ -197,4 +229,5 @@ const MUTATION_HANDLERS = {
   odt_update_task: executeUpdateTask,
   odt_apply_workflow_event: executeApplyWorkflowEvent,
   odt_set_pull_request: executeSetPullRequest,
+  odt_publish_html: executePublishHtml,
 } satisfies Record<OdtMcpMutationToolName, OdtMcpMutationHandler>;

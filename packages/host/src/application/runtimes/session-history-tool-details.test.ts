@@ -116,6 +116,33 @@ describe("withToolDetailsOnDemand", () => {
     );
   });
 
+  test("keeps the output of odt_publish_html whole while compacting large inline input", () => {
+    for (const tool of [
+      "odt_publish_html",
+      "openducktor_odt_publish_html",
+      "functions.openducktor_odt_publish_html",
+      "mcp__openducktor__odt_publish_html",
+    ])
+      expect(
+        compactPart(
+          toolPart({
+            tool,
+            toolType: "workflow",
+            input: { title: "Budget report", html: long },
+            output: long,
+          }),
+        ),
+      ).toEqual(
+        toolPart({
+          tool,
+          toolType: "workflow",
+          input: { title: "Budget report", html: preview },
+          output: long,
+          detailsOmitted: { input: true },
+        }),
+      );
+  });
+
   test("leaves system messages unchanged", () => {
     const system: AgentSessionHistoryMessage = {
       messageId: "system",

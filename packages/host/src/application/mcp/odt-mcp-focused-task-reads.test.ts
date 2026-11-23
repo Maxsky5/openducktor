@@ -365,6 +365,9 @@ describe("focused MCP task reads", () => {
       browserCallers: {
         resolve: () => Effect.die(new Error("Task reads never resolve a browser caller.")),
       },
+      sessionHtmlPreviews: {
+        publish: () => Effect.die(new Error("Task reads never publish HTML previews.")),
+      },
       taskService: {
         ...createTaskService({ taskWorkflows: builtinTaskWorkflows, taskStore: store }),
       },

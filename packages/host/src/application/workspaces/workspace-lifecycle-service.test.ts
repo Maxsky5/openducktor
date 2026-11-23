@@ -236,6 +236,7 @@ const createService = ({
     removeWorkspaceTaskAssets,
     removeWorkspaceCredentials,
     removeWorkspaceBrowserData: () => Effect.void,
+    removeWorkspaceSessionHtmlPreviews: () => Effect.void,
     releaseWorkspaceAccounts: () => Effect.void,
   };
   return createWorkspaceLifecycleService({

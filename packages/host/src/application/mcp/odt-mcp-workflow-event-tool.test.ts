@@ -83,6 +83,7 @@ const setup = (
           : Effect.succeed(options.owner),
     },
     taskAssetReadService: { readBatch: () => Effect.die("Unexpected task asset read") },
+    sessionHtmlPreviews: { publish: () => Effect.die("Unexpected HTML preview publish") },
     taskService,
     workspaceSettingsService,
   });

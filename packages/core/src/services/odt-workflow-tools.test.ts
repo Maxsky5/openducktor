@@ -51,6 +51,7 @@ describe("odt workflow tools", () => {
     expect(isOdtWorkflowMutationToolName("odt_read_task_assets")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_read_task_artifacts")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_search_tasks")).toBe(false);
+    expect(isOdtWorkflowMutationToolName("odt_publish_html")).toBe(false);
     expect(isOdtWorkflowMutationToolName("odt_create_task")).toBe(true);
     expect(isOdtWorkflowMutationToolName("odt_update_task")).toBe(true);
   });

@@ -311,6 +311,27 @@ export const startMockBridge = async (
       return;
     }
 
+    if (url === "/invoke/odt_publish_html") {
+      const body = await readJsonBody(request);
+      requests.push({ url, body });
+      const input = z
+        .object({
+          title: z.string(),
+          html: z.string().optional(),
+          path: z.string().optional(),
+        })
+        .parse(body);
+      const byteSize = input.html !== undefined ? Buffer.byteLength(input.html, "utf8") : 42;
+      writeJson(response, {
+        htmlPreview: {
+          previewId: "11111111-1111-4111-8111-111111111111",
+          title: input.title.trim(),
+          byteSize,
+        },
+      });
+      return;
+    }
+
     if (url === "/invoke/odt_apply_workflow_event") {
       requests.push({ url, body: await readJsonBody(request) });
       writeJson(

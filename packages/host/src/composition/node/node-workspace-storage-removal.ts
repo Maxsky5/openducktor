@@ -5,6 +5,7 @@ import type { WorkspaceStoragePort } from "../../application/workspaces/workspac
 import { HostOperationError } from "../../effect/host-errors";
 import type { AzureDevOpsConnectionPort } from "../../ports/azure-devops-connection-port";
 import type { GitlabConnectionPort } from "../../ports/gitlab-connection-port";
+import type { SessionHtmlPreviewStorePort } from "../../ports/session-html-preview-store-port";
 
 /** The workspace data that workspace removal deletes beside its registration. */
 export const createNodeWorkspaceStorageRemoval = ({
@@ -12,11 +13,13 @@ export const createNodeWorkspaceStorageRemoval = ({
   azureDevOpsConnection,
   gitlabConnection,
   browserService,
+  sessionHtmlPreviewStore,
 }: {
   taskAssets: Pick<WorkspaceStoragePort, "removeWorkspaceTaskAssets">;
   azureDevOpsConnection: AzureDevOpsConnectionPort | undefined;
   gitlabConnection: Pick<GitlabConnectionPort, "release">;
   browserService: Pick<BrowserService, "removeWorkspace">;
+  sessionHtmlPreviewStore: Pick<SessionHtmlPreviewStorePort, "removeWorkspace">;
 }): WorkspaceStoragePort => ({
   removeWorkspaceTaskAssets: taskAssets.removeWorkspaceTaskAssets,
   removeWorkspaceCredentials: (repoConfig) => {
@@ -54,6 +57,17 @@ export const createNodeWorkspaceStorageRemoval = ({
           new HostOperationError({
             operation: "workspace.removeWorkspace.browser",
             message: `Failed to remove the browser data of the workspace: ${cause.message} Retry removal to continue.`,
+            cause,
+          }),
+      ),
+    ),
+  removeWorkspaceSessionHtmlPreviews: (workspaceId) =>
+    sessionHtmlPreviewStore.removeWorkspace(workspaceId).pipe(
+      Effect.mapError(
+        (cause) =>
+          new HostOperationError({
+            operation: "workspace.removeWorkspace.sessionHtmlPreviews",
+            message: `Failed to remove the HTML previews of the workspace: ${cause.message} Retry removal to continue.`,
             cause,
           }),
       ),

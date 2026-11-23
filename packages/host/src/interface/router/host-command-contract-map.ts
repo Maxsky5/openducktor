@@ -28,6 +28,7 @@ import type { createPullRequestReviewCommandHandlers } from "../commands/pull-re
 import type { createRuntimeDefinitionsCommandHandlers } from "../commands/runtime-definitions-command-handlers";
 import type { createRuntimeExecutableCommandHandlers } from "../commands/runtime-executable-command-handlers";
 import type { createRuntimeCommandHandlers } from "../commands/runtime-command-handlers";
+import type { createSessionHtmlPreviewCommandHandlers } from "../commands/session-html-preview-command-handlers";
 import type { createSystemDiagnosticsCommandHandlers } from "../commands/system-diagnostics-command-handlers";
 import type { createSystemPlatformCommandHandlers } from "../commands/system-platform-command-handlers";
 import type { createTaskAssetCommandHandlers } from "../commands/task-asset-command-handlers";
@@ -72,6 +73,7 @@ type AllHostCommandHandlers = ReturnType<typeof createWorkflowReadCommandHandler
   ReturnType<typeof createRuntimeDefinitionsCommandHandlers> &
   ReturnType<typeof createRuntimeExecutableCommandHandlers> &
   ReturnType<typeof createRuntimeCommandHandlers> &
+  ReturnType<typeof createSessionHtmlPreviewCommandHandlers> &
   ReturnType<typeof createSystemDiagnosticsCommandHandlers> &
   ReturnType<typeof createSystemPlatformCommandHandlers> &
   ReturnType<typeof createTaskAssetCommandHandlers> &

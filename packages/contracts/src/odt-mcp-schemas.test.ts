@@ -99,6 +99,7 @@ describe("odt mcp public task schemas", () => {
       [
         "odt_apply_workflow_event",
         "odt_create_task",
+        "odt_publish_html",
         "odt_read_task",
         "odt_read_task_assets",
         "odt_read_task_artifacts",
@@ -130,9 +131,11 @@ describe("odt mcp public task schemas", () => {
       "odt_update_task",
       "odt_apply_workflow_event",
       "odt_set_pull_request",
+      "odt_publish_html",
       ...ODT_BROWSER_TOOL_NAMES,
     ]);
     expect(ODT_EXTERNAL_MCP_TOOL_NAMES).toEqual(ODT_MCP_TOOL_NAMES.slice(0, 11));
+    expect(ODT_EXTERNAL_MCP_TOOL_NAMES).not.toContain("odt_publish_html");
     expect(allTools).toEqual(new Set([...workflowTools, ...blockedTools]));
     expect(allTools).toEqual(new Set(Object.keys(ODT_TOOL_SCHEMAS)));
     expect(Object.keys(ODT_WORKFLOW_TOOL_SCHEMAS)).toEqual([...ODT_WORKFLOW_AGENT_TOOL_NAMES]);

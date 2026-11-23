@@ -10,6 +10,7 @@
     "odt_update_task",
     "odt_apply_workflow_event",
     "odt_set_pull_request",
+    "odt_publish_html",
     "odt_browser_list",
     "odt_browser_open",
     "odt_browser_navigate",

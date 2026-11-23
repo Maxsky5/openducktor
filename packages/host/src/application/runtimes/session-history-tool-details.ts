@@ -1,4 +1,5 @@
 import {
+  ODT_HTML_PREVIEW_TOOL_NAME,
   toClaudeOdtToolAliases,
   toOpencodeExposedOdtToolIds,
   type AgentToolData,
@@ -19,9 +20,13 @@ const WHOLE_TOOL_TYPES = new Set<AgentToolPart["toolType"]>(["question", "todo",
 
 /** Their rows parse the output as JSON. The set holds each name as every runtime calls it. */
 const WHOLE_OUTPUT_TOOLS = new Set(
-  ["odt_search_tasks", "odt_create_task", "odt_update_task", "odt_set_task_artifact"].flatMap(
-    (name) => [...toOpencodeExposedOdtToolIds(name), ...toClaudeOdtToolAliases(name)],
-  ),
+  [
+    "odt_search_tasks",
+    "odt_create_task",
+    "odt_update_task",
+    "odt_set_task_artifact",
+    ODT_HTML_PREVIEW_TOOL_NAME,
+  ].flatMap((name) => [...toOpencodeExposedOdtToolIds(name), ...toClaudeOdtToolAliases(name)]),
 );
 
 /**
@@ -96,8 +101,11 @@ export const findSessionToolPart = (
 ): AgentToolPart | null => {
   for (const message of history) {
     if (message.role === "system") continue;
-    for (const part of message.parts)
-      if (part.kind === "tool" && part.partId === partId && part.callId === callId) return part;
+    const match = message.parts.find(
+      (part): part is AgentToolPart =>
+        part.kind === "tool" && part.partId === partId && part.callId === callId,
+    );
+    if (match) return match;
   }
   return null;
 };

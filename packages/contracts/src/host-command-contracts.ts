@@ -109,6 +109,7 @@ export const HOST_COMMAND_NAMES = [
   "runtime_restart",
   "runtime_restart_impact",
   "runtime_status",
+  "session_html_preview_read",
   "set_theme",
   "system_get_platform",
   "system_list_open_in_tools",

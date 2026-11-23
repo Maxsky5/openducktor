@@ -20,6 +20,7 @@
       "openducktor_odt_set_pull_request",
       "functions.openducktor_odt_set_pull_request"
     ],
+    "odt_publish_html": ["openducktor_odt_publish_html", "functions.openducktor_odt_publish_html"],
     "odt_browser_list": ["openducktor_odt_browser_list", "functions.openducktor_odt_browser_list"],
     "odt_browser_open": ["openducktor_odt_browser_open", "functions.openducktor_odt_browser_open"],
     "odt_browser_navigate": [

@@ -378,6 +378,11 @@ const ODT_TOOL_DEFINITIONS = [
     description:
       "Save the pull request of a task by its number, after you create or update it. The host reads its details from the repository provider.",
   }),
+  defineOdtTool("odt_publish_html", {
+    description:
+      "Show a finished HTML page (report, chart, mockup) inline in this session's transcript, above your final reply. Pass inline html or an absolute path to a local .html file; local image paths referenced in the HTML are inlined automatically. Do not announce or restate it. The page is the item: leave the outer element without a card, border, banner title, or side padding, and let content set the height. Do not use viewport height units such as vh or Tailwind classes such as min-h-screen or h-screen. The page background already matches the transcript. Use var(--foreground), var(--muted-foreground), var(--card), var(--border), var(--primary), and var(--radius) for themed elements. Desktop, web, and mobile fit the page height to its content. It can load HTTPS assets with standard tags. Clicking external http/https links opens them in the system browser; the page cannot navigate itself, open popups, or show modal dialogs.",
+    execute: (store, input, meta) => store.publishHtml(input, meta),
+  }),
   ...ODT_BROWSER_TOOL_NAMES.map(defineBrowserTool),
 ] satisfies readonly OdtToolDefinition[];
 

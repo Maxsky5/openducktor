@@ -21,6 +21,7 @@ import {
   ODT_WORKFLOW_AGENT_BLOCKED_TOOL_NAMES,
   ODT_WORKSPACE_DISCOVERY_TOOL_NAME,
 } from "./odt-tool-names";
+import { OdtPublishHtmlInputSchema, odtPublishHtmlResultSchema } from "./odt-html-preview-schemas";
 import {
   TASK_ASSET_MAX_DESCRIPTION_ASSETS,
   TASK_ASSET_MAX_FILE_BYTES,
@@ -227,6 +228,7 @@ export const ODT_TOOL_SCHEMAS = {
   odt_update_task: UpdateTaskInputSchema,
   odt_apply_workflow_event: ApplyWorkflowEventInputSchema,
   odt_set_pull_request: SetPullRequestInputSchema,
+  odt_publish_html: OdtPublishHtmlInputSchema,
   ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const satisfies Record<OdtToolName, z.ZodTypeAny>;
 
@@ -241,6 +243,7 @@ export const ODT_WORKFLOW_TOOL_SCHEMAS = {
   odt_update_task: ODT_TOOL_SCHEMAS.odt_update_task,
   odt_apply_workflow_event: ODT_TOOL_SCHEMAS.odt_apply_workflow_event,
   odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
+  odt_publish_html: ODT_TOOL_SCHEMAS.odt_publish_html,
   ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const;
 
@@ -274,6 +277,7 @@ export const ODT_WORKSPACE_SCOPED_TOOL_SCHEMAS = {
   odt_update_task: ODT_TOOL_SCHEMAS.odt_update_task,
   odt_apply_workflow_event: ODT_TOOL_SCHEMAS.odt_apply_workflow_event,
   odt_set_pull_request: ODT_TOOL_SCHEMAS.odt_set_pull_request,
+  odt_publish_html: ODT_TOOL_SCHEMAS.odt_publish_html,
   ...ODT_BROWSER_TOOL_SCHEMAS,
 } as const;
 
@@ -393,5 +397,6 @@ export const ODT_HOST_BRIDGE_RESPONSE_SCHEMAS = {
   odt_update_task: taskSummarySchema,
   odt_apply_workflow_event: applyWorkflowEventResultSchema,
   odt_set_pull_request: setPullRequestResultSchema,
+  odt_publish_html: odtPublishHtmlResultSchema,
   ...ODT_BROWSER_TOOL_RESPONSE_SCHEMAS,
 } as const;

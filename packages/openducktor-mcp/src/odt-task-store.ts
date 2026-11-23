@@ -33,7 +33,7 @@ export type CallerToolName =
   | "odt_apply_workflow_event";
 export type PlainWorkspaceToolName = Exclude<
   WorkspaceTaskToolName,
-  "odt_set_task_artifact" | CallerToolName
+  "odt_set_task_artifact" | "odt_publish_html" | CallerToolName
 >;
 
 export class OdtTaskStore {
@@ -107,6 +107,12 @@ export class OdtTaskStore {
     }
     const workspaceId = this.resolveWorkspaceId("odt_set_task_artifact", input);
     return this.client.call("odt_set_task_artifact", workspaceId, bridgeInput, caller);
+  }
+
+  async publishHtml(input: ToolInput<"odt_publish_html">, meta: RequestMeta | undefined) {
+    const caller = requireRuntimeCaller(this.resolveCaller, meta);
+    const workspaceId = this.resolveWorkspaceId("odt_publish_html", input);
+    return this.client.call("odt_publish_html", workspaceId, input, caller);
   }
 }
 
