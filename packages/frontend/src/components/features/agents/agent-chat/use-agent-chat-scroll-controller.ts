@@ -9,6 +9,7 @@ type UseAgentChatScrollControllerInput = {
   pinnedRef: RefObject<boolean>;
   // Only the latest row window contains the transcript end, so only it can stay pinned.
   canPin: boolean;
+  onUnpin?: (() => void) | undefined;
 };
 
 type UseAgentChatScrollControllerResult = {
@@ -87,8 +88,10 @@ export function useAgentChatScrollController({
   messagesContentRef,
   pinnedRef,
   canPin,
+  onUnpin,
 }: UseAgentChatScrollControllerInput): UseAgentChatScrollControllerResult {
   const canPinRef = useRef(canPin);
+  const onUnpinRef = useRef(onUnpin);
   const isPointerPressedRef = useRef(false);
   const lastPointerDownTargetRef = useRef<EventTarget | null>(null);
   const lastScrollTopRef = useRef(0);
@@ -101,7 +104,8 @@ export function useAgentChatScrollController({
   // The caller runs its scroll effects after this one, so they use the committed row window.
   useLayoutEffect(() => {
     canPinRef.current = canPin;
-  }, [canPin]);
+    onUnpinRef.current = onUnpin;
+  }, [canPin, onUnpin]);
 
   const refreshEdges = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -122,6 +126,9 @@ export function useAgentChatScrollController({
   const setPinned = useCallback(
     (pinned: boolean) => {
       pinnedRef.current = pinned;
+      if (!pinned) {
+        onUnpinRef.current?.();
+      }
       const container = messagesContainerRef.current;
       if (container) {
         // Scroll anchoring keeps the reading position, which only an unpinned transcript needs.

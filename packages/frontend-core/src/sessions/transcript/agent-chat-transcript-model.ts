@@ -336,8 +336,16 @@ export function updateAgentChatTranscriptModelFromPrefix({
     }
   }
 
-  const rows = previousTranscriptModel.rows.slice(0, firstTailRowIndex);
-  const metadata = buildMetadataFromRows(rows);
+  const isAppendMode = mode === "append";
+  const rows = isAppendMode ? [] : previousTranscriptModel.rows.slice(0, firstTailRowIndex);
+  const metadata = isAppendMode
+    ? {
+        hasAttachmentMessages: previousTranscriptModel.hasAttachmentMessages,
+        lastUserMessageKey: previousTranscriptModel.lastUserMessageKey,
+        activeStreamingAssistantMessageId:
+          previousTranscriptModel.activeStreamingAssistantMessageId,
+      }
+    : buildMetadataFromRows(rows);
 
   const occurrences = new Map<string, number>();
   forEachSessionMessageFrom(session, startMessageIndex, (message) => {
@@ -362,7 +370,23 @@ export function updateAgentChatTranscriptModelFromPrefix({
     }
   });
 
-  const visibleRows = placeInitialSystemPrompt(rows);
+  if (isAppendMode && rows.length === 0) {
+    if (
+      metadata.hasAttachmentMessages === previousTranscriptModel.hasAttachmentMessages &&
+      metadata.lastUserMessageKey === previousTranscriptModel.lastUserMessageKey &&
+      metadata.activeStreamingAssistantMessageId ===
+        previousTranscriptModel.activeStreamingAssistantMessageId
+    ) {
+      return previousTranscriptModel;
+    }
+    return {
+      ...previousTranscriptModel,
+      ...metadata,
+    };
+  }
+
+  const nextRows = isAppendMode ? [...previousTranscriptModel.rows, ...rows] : rows;
+  const visibleRows = placeInitialSystemPrompt(nextRows);
   return {
     rows: visibleRows,
     turnAnchors: buildAgentChatTurnAnchors(visibleRows),

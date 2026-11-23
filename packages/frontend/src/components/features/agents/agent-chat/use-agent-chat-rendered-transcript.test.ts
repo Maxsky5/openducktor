@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createElement, createRef, type MutableRefObject, type PropsWithChildren } from "react";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
+import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
 import { createHookHarness } from "@openducktor/frontend-core/test-support/react-hook-harness";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { AgentChatSettingsProvider } from "./agent-chat-settings-context";
@@ -246,6 +247,61 @@ describe("getTurnActiveStreamingAssistantMessageId", () => {
     await harness.update({ tick: 1 });
 
     expect(harness.getLatest().renderedTurns).toBe(initialRenderedTurns);
+    await harness.unmount();
+  });
+
+  test("keeps earlier rendered turn objects stable when a new user turn appends", async () => {
+    const firstTurnMessages = [
+      buildMessage("user", "First question", { id: "user-1" }),
+      buildMessage("assistant", "First answer", {
+        id: "assistant-1",
+        meta: { kind: "assistant", isFinal: true },
+      }),
+    ];
+    const makeSession = (messages: ReturnType<typeof buildMessage>[], version: number) => ({
+      // Preserve message references across updates; buildSession clones its message fixture.
+      ...buildSession({
+        externalSessionId: "session-turn-stability",
+        status: "running",
+      }),
+      messages: createSessionMessagesState("session-turn-stability", messages, version),
+    });
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const scrollToBottomOnSendRef: MutableRefObject<(() => void) | null> = { current: null };
+    const harness = createHookHarness(
+      (props: { session: ReturnType<typeof buildSession> }) =>
+        useAgentChatRenderedTranscript({
+          transcript: {
+            kind: "session",
+            session: props.session,
+            target: props.session,
+            repoPath: "/repo",
+            displayedSessionKey: agentSessionIdentityKey(props.session),
+            shouldResetWindow: false,
+            notice: null,
+          },
+          runtimePresentation: RUNTIME_PRESENTATION,
+          messagesContainerRef,
+          scrollToBottomOnSendRef,
+          toolRunFolds,
+        }),
+      { session: makeSession(firstTurnMessages, 1) },
+      { wrapper: settingsWrapper },
+    );
+
+    await harness.mount();
+    const initialFirstTurn = harness.getLatest().renderedTurns[0];
+    expect(initialFirstTurn).toBeDefined();
+
+    await harness.update({
+      session: makeSession(
+        [...firstTurnMessages, buildMessage("user", "Second question", { id: "user-2" })],
+        2,
+      ),
+    });
+
+    expect(harness.getLatest().renderedTurns).toHaveLength(2);
+    expect(harness.getLatest().renderedTurns[0]).toBe(initialFirstTurn);
     await harness.unmount();
   });
 });

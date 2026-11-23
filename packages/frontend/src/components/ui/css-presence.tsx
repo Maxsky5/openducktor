@@ -2,6 +2,7 @@ import { AnimatePresence, usePresence } from "motion/react";
 import {
   createContext,
   type ReactElement,
+  type RefObject,
   useCallback,
   useContext,
   useLayoutEffect,
@@ -10,7 +11,7 @@ import {
 } from "react";
 import { afterTransitions } from "./css-transitions";
 
-const AnimationReadyContext = createContext<boolean | null>(null);
+const AnimationReadyContext = createContext<RefObject<boolean> | null>(null);
 
 /** True while the lists of a subtree change without motion. Nested lists inherit it. */
 const InstantContext = createContext(false);
@@ -30,15 +31,17 @@ export function CssPresenceList({
   instant?: boolean;
 }): ReactElement {
   const inherited = useContext(InstantContext);
-  const [ready, setReady] = useState(false);
+  // Children only read readiness at mount. Storing it in a ref avoids a nested re-render of every
+  // mounted list and its children right after mount.
+  const readyRef = useRef(false);
   useLayoutEffect(() => {
-    if (!isLoading) setReady(true);
+    if (!isLoading) readyRef.current = true;
   }, [isLoading]);
   // No motion component measures layout here. With the default, each list render gives every
   // child a new presence context, so all children render again.
   return (
     <InstantContext value={instant ?? inherited}>
-      <AnimationReadyContext.Provider value={ready}>
+      <AnimationReadyContext.Provider value={readyRef}>
         <AnimatePresence presenceAffectsLayout={false}>{children}</AnimatePresence>
       </AnimationReadyContext.Provider>
     </InstantContext>
@@ -52,11 +55,11 @@ export function CssPresenceList({
  * technology.
  */
 export function useCssPresence() {
-  const ready = useContext(AnimationReadyContext);
-  if (ready === null) throw new Error("useCssPresence requires CssPresenceList.");
+  const readyRef = useContext(AnimationReadyContext);
+  if (readyRef === null) throw new Error("useCssPresence requires CssPresenceList.");
   const instant = useContext(InstantContext);
   // Capture the mount state. Later readiness changes must not animate initial content.
-  const [animateEntry] = useState(ready && !instant);
+  const [animateEntry] = useState(() => readyRef.current && !instant);
   const [isPresent, safeToRemove] = usePresence();
   const elementRef = useRef<HTMLElement | null>(null);
   // A callback ref fits each element type, so one consumer can render different tags.

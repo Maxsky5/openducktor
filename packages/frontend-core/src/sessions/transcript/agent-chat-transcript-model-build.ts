@@ -136,8 +136,29 @@ const planUpdate = (
     !previousMessage ||
     !message ||
     previousMessage.id !== message.id ||
+    !hasSamePrefix(previous, session, startIndex)
+  ) {
+    return null;
+  }
+  if (
+    !isVisibleTranscriptMessage(previousMessage, showThinkingMessages) &&
+    !isVisibleTranscriptMessage(message, showThinkingMessages)
+  ) {
+    // Hidden thinking messages streaming at the tail leave previous.rows intact when no later
+    // visible message existed in the previous tail.
+    for (let index = startIndex + 1; index < previousCount; index += 1) {
+      const laterPreviousMessage = previous.session.messages.items[index];
+      if (
+        laterPreviousMessage &&
+        isVisibleTranscriptMessage(laterPreviousMessage, showThinkingMessages)
+      ) {
+        return null;
+      }
+    }
+    return { mode: "append", startIndex };
+  }
+  if (
     !isVisibleTranscriptMessage(message, showThinkingMessages) ||
-    !hasSamePrefix(previous, session, startIndex) ||
     hasMessageInPrefix(previous.session.messages, message.id, startIndex)
   ) {
     return null;

@@ -18,16 +18,20 @@ type UseAgentChatWindowInput = {
   shouldResetForTranscriptLoad: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
+  onUnpin?: () => void;
 };
 
 type UseAgentChatWindowResult = {
   visibleRows: AgentChatTranscriptRow[];
   visibleTurnAnchors: AgentChatTurnAnchor[];
   windowStart: number;
+  isLatestWindow: boolean;
+  isPinned: () => boolean;
   isNearBottom: boolean;
   isNearTop: boolean;
   scrollToBottom: () => void;
   scrollToTop: () => void;
+  syncScrollPosition: () => void;
   navigation: AgentChatTranscriptNavigation;
 };
 
@@ -38,6 +42,7 @@ export function useAgentChatWindow({
   shouldResetForTranscriptLoad,
   messagesContainerRef,
   messagesContentRef,
+  onUnpin,
 }: UseAgentChatWindowInput): UseAgentChatWindowResult {
   const prevSessionKeyRef = useRef<string | null>(null);
   const prevShouldResetForTranscriptLoadRef = useRef(shouldResetForTranscriptLoad);
@@ -68,6 +73,7 @@ export function useAgentChatWindow({
       messagesContentRef,
       pinnedRef,
       canPin: isLatestWindow,
+      onUnpin,
     });
   // The scroll position depends on whether the row window is the latest one, so that also counts.
   const committedRowWindowVersion = `${windowStart}:${visibleRows.length}:${isLatestWindow}`;
@@ -139,10 +145,13 @@ export function useAgentChatWindow({
     visibleRows,
     visibleTurnAnchors,
     windowStart,
+    isLatestWindow,
+    isPinned,
     isNearBottom: isNearBottom && isLatestWindow,
     isNearTop: isNearTop && windowStart === 0,
     scrollToBottom,
     scrollToTop,
+    syncScrollPosition,
     navigation,
   };
 }

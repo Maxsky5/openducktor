@@ -6,6 +6,7 @@ import { AgentChatThread } from "./agent-chat-thread";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 
 type Thread = { key: string; model: AgentChatThreadModel };
+type ThreadState = { activeKey: string; retained: Thread[] };
 
 /** Retains visited transcripts within the same limit as the parsed transcript cache. */
 export function AgentChatThreads({
@@ -15,18 +16,31 @@ export function AgentChatThreads({
   model: AgentChatThreadModel;
   visitKey: number;
 }) {
-  const [threads, setThreads] = useState<Thread[]>([]);
   const session = model.transcript.session;
   const key = JSON.stringify([
     model.transcript.repoPath,
     session ? agentSessionIdentityKey(session) : null,
   ]);
-  const retained = threads
-    .filter((thread) => thread.key !== key && thread.model.transcript.session !== null)
-    .slice(-(MAX_CACHED_TRANSCRIPTS - 1));
+  // Keep only inactive sessions in state. Storing the active session's latest committed model in a
+  // ref avoids a render-time state update on every streaming token of the active thread.
+  const [state, setState] = useState<ThreadState>(() => ({ activeKey: key, retained: [] }));
+  const activeThreadRef = useRef<Thread>({ key, model });
+  useLayoutEffect(() => {
+    activeThreadRef.current = { key, model };
+  }, [key, model]);
+
+  let retained = state.retained;
+  if (state.activeKey !== key) {
+    const previousActive = activeThreadRef.current;
+    retained = [
+      ...state.retained.filter((thread) => thread.key !== key && thread.key !== previousActive.key),
+      ...(previousActive.key === state.activeKey && previousActive.model.transcript.session !== null
+        ? [previousActive]
+        : []),
+    ].slice(-(MAX_CACHED_TRANSCRIPTS - 1));
+    setState({ activeKey: key, retained });
+  }
   const shown = [...retained, { key, model }];
-  const last = threads.at(-1);
-  if (last?.key !== key || last.model !== model) setThreads(shown);
   return (
     <div className="min-h-0 flex-1 overflow-hidden">
       {shown

@@ -53,6 +53,17 @@ type SessionRowRange = {
   lastRowKey: string | null;
 };
 
+type CommittedRowWindow = SessionRowRange & {
+  rowCount: number;
+  pendingLatestReset: boolean;
+  overrideId: number;
+};
+
+type RangeOverride = SessionRowRange & {
+  id: number;
+  rowCount: number;
+};
+
 // A mounted row, with its index among the mounted rows and its distance from the viewport top.
 type RowAnchor = {
   rowKey: string;
@@ -152,6 +163,53 @@ const followRangeRows = (
 const rowCountForRange = (range: RowRange): number =>
   Math.max(0, range.endRowExclusive - range.startRow);
 
+const hasHiddenRowsForRange = (range: RowRange, rowCount: number): boolean =>
+  range.startRow > 0 || range.endRowExclusive < rowCount;
+
+const resolveWindowRange = ({
+  base,
+  rows,
+  displayedSessionKey,
+  isFollowingLatestWindow,
+}: {
+  base: CommittedRowWindow;
+  rows: AgentChatTranscriptRow[];
+  displayedSessionKey: string | null;
+  isFollowingLatestWindow: () => boolean;
+}): RowRange => {
+  if (base.sessionKey !== displayedSessionKey) {
+    return latestRange(rows.length);
+  }
+
+  if (base.pendingLatestReset && rows.length > 0) {
+    return latestRange(rows.length);
+  }
+
+  if (
+    rows.length !== base.rowCount &&
+    isFollowingLatestWindow() &&
+    base.range.endRowExclusive === base.rowCount
+  ) {
+    return latestRange(rows.length);
+  }
+
+  if (rows.length > 0 && base.range.startRow >= rows.length) {
+    return latestRange(rows.length);
+  }
+
+  const followed = followRangeRows(base, rows);
+  // Keep every row mounted in a single-window transcript unless history was prepended above it.
+  if (
+    followed.startRow === 0 &&
+    base.range.endRowExclusive === base.rowCount &&
+    rows.length <= AGENT_CHAT_ROW_WINDOW_SIZE
+  ) {
+    return { startRow: 0, endRowExclusive: rows.length };
+  }
+
+  return followed;
+};
+
 const trimRowCount = (range: RowRange): number =>
   Math.max(0, rowCountForRange(range) - MAX_MOUNTED_ROW_COUNT);
 
@@ -195,61 +253,108 @@ export function useAgentChatRowWindow({
   isFollowingLatestWindow,
   messagesContainerRef,
 }: UseAgentChatRowWindowInput): UseAgentChatRowWindowResult {
-  const [sessionRange, setSessionRange] = useState<SessionRowRange>(() =>
-    sessionRowRange(displayedSessionKey, latestRange(rows.length), rows),
-  );
-  const didSessionChange = sessionRange.sessionKey !== displayedSessionKey;
-  const range = didSessionChange ? latestRange(rows.length) : followRangeRows(sessionRange, rows);
-  const rangeRef = useRef(range);
-  const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
-  const previousRowsLengthRef = useRef(rows.length);
+  const [initialCommitted] = useState<CommittedRowWindow>(() => ({
+    ...sessionRowRange(displayedSessionKey, latestRange(rows.length), rows),
+    rowCount: rows.length,
+    pendingLatestReset: shouldResetForTranscriptLoad && rows.length === 0,
+    overrideId: 0,
+  }));
+  const committedRef = useRef<CommittedRowWindow>(initialCommitted);
+  const nextOverrideIdRef = useRef(0);
+  const [rangeOverride, setRangeOverride] = useState<RangeOverride | null>(null);
+  const committed = committedRef.current;
+  const hasPendingOverride =
+    rangeOverride !== null &&
+    rangeOverride.id > committed.overrideId &&
+    rangeOverride.sessionKey === displayedSessionKey;
+  const base: CommittedRowWindow = hasPendingOverride
+    ? {
+        ...rangeOverride,
+        pendingLatestReset: false,
+        overrideId: rangeOverride.id,
+      }
+    : committed;
+  const didSessionChange = committed.sessionKey !== displayedSessionKey;
+  const range = resolveWindowRange({
+    base,
+    rows,
+    displayedSessionKey,
+    isFollowingLatestWindow,
+  });
+  const effectiveRange = clampRange(range, rows.length);
+  const effectiveStartRow = effectiveRange.startRow;
+  const effectiveEndRowExclusive = effectiveRange.endRowExclusive;
+  const isFullTranscriptVisible =
+    effectiveStartRow === 0 && effectiveEndRowExclusive === rows.length;
+  const latestInputsRef = useRef({ rows, displayedSessionKey, shouldResetForTranscriptLoad });
+  const rangeRef = useRef(effectiveRange);
   // A row that stays mounted while rows mount or unmount above it, to keep it in place.
   const pendingRowAnchorRef = useRef<RowAnchor | null>(null);
   const shouldTrimBottomAfterPrependRef = useRef(false);
   const shouldTrimTopAfterAppendRef = useRef(false);
   const lastScrollTopRef = useRef(0);
 
+  // Record the committed window before anchor/trim effects and event handlers read it.
   useLayoutEffect(() => {
-    if (!didSessionChange) {
+    latestInputsRef.current = { rows, displayedSessionKey, shouldResetForTranscriptLoad };
+    rangeRef.current = effectiveRange;
+    const previousCommitted = committedRef.current;
+    if (didSessionChange) {
+      pendingRowAnchorRef.current = null;
+      shouldTrimBottomAfterPrependRef.current = false;
+      shouldTrimTopAfterAppendRef.current = false;
+    }
+    committedRef.current = {
+      ...sessionRowRange(displayedSessionKey, effectiveRange, rows),
+      rowCount: rows.length,
+      pendingLatestReset: didSessionChange
+        ? shouldResetForTranscriptLoad && rows.length === 0
+        : rows.length > 0
+          ? false
+          : (previousCommitted?.pendingLatestReset ?? false),
+      overrideId: hasPendingOverride ? rangeOverride.id : (previousCommitted?.overrideId ?? 0),
+    };
+  });
+
+  const setRange = useCallback((nextRange: RowRange) => {
+    const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
+    const clampedRange = clampRange(nextRange, currentRows.length);
+    const next = sessionRowRange(currentSessionKey, clampedRange, currentRows);
+    const currentCommitted = committedRef.current;
+    if (
+      currentCommitted !== null &&
+      currentCommitted.sessionKey === next.sessionKey &&
+      areRangesEqual(rangeRef.current, next.range) &&
+      currentCommitted.firstRowKey === next.firstRowKey &&
+      currentCommitted.lastRowKey === next.lastRowKey
+    ) {
       return;
     }
-
-    const nextRange = latestRange(rows.length);
-    rangeRef.current = nextRange;
-    pendingLatestResetRef.current = shouldResetForTranscriptLoad && rows.length === 0;
-    previousRowsLengthRef.current = rows.length;
-    setSessionRange(sessionRowRange(displayedSessionKey, nextRange, rows));
-  }, [didSessionChange, displayedSessionKey, rows, shouldResetForTranscriptLoad]);
-
-  const setRange = useCallback(
-    (nextRange: RowRange) => {
-      const clampedRange = clampRange(nextRange, rows.length);
-      rangeRef.current = clampedRange;
-      const next = sessionRowRange(displayedSessionKey, clampedRange, rows);
-      setSessionRange((current) =>
-        current.sessionKey === next.sessionKey &&
-        areRangesEqual(current.range, next.range) &&
-        current.firstRowKey === next.firstRowKey &&
-        current.lastRowKey === next.lastRowKey
-          ? current
-          : next,
-      );
-    },
-    [displayedSessionKey, rows],
-  );
+    nextOverrideIdRef.current += 1;
+    rangeRef.current = clampedRange;
+    setRangeOverride({
+      id: nextOverrideIdRef.current,
+      ...next,
+      rowCount: currentRows.length,
+    });
+  }, []);
 
   const selectFirstRowWindow = useCallback(() => {
-    setRange(firstRange(rows.length));
-  }, [rows.length, setRange]);
+    setRange(firstRange(latestInputsRef.current.rows.length));
+  }, [setRange]);
 
   const selectLatestRowWindow = useCallback(() => {
-    if (shouldResetForTranscriptLoad && rows.length === 0) {
-      pendingLatestResetRef.current = true;
+    const { rows: currentRows, shouldResetForTranscriptLoad: currentShouldReset } =
+      latestInputsRef.current;
+    if (currentShouldReset && currentRows.length === 0) {
+      if (committedRef.current) {
+        committedRef.current.pendingLatestReset = true;
+      }
       return;
     }
 
-    setRange(latestRange(rows.length));
-  }, [rows.length, setRange, shouldResetForTranscriptLoad]);
+    setRange(latestRange(currentRows.length));
+  }, [setRange]);
 
   // A jump mounts a full row window with its target near the start. The pending anchor and trims
   // belong to the previous row window, so the jump drops them.
@@ -258,9 +363,9 @@ export function useAgentChatRowWindow({
       pendingRowAnchorRef.current = null;
       shouldTrimBottomAfterPrependRef.current = false;
       shouldTrimTopAfterAppendRef.current = false;
-      setRange(rangeAround(rowIndex, rows.length));
+      setRange(rangeAround(rowIndex, latestInputsRef.current.rows.length));
     },
-    [rows.length, setRange],
+    [setRange],
   );
 
   // Rows that mount or unmount above the viewport move every row below them.
@@ -280,7 +385,7 @@ export function useAgentChatRowWindow({
 
       // A prepend that did not commit yet keeps its anchor, because the rows it adds are not mounted.
       if (!pendingRowAnchorRef.current) {
-        anchorRow(rows[currentRange.startRow]?.key);
+        anchorRow(latestInputsRef.current.rows[currentRange.startRow]?.key);
       }
       shouldTrimBottomAfterPrependRef.current = options?.trimBottomAfterPrepend !== false;
       setRange({
@@ -289,25 +394,26 @@ export function useAgentChatRowWindow({
       });
       return true;
     },
-    [anchorRow, rows, setRange],
+    [anchorRow, setRange],
   );
 
   const expandAfter = useCallback(
     (options?: ExpandAfterOptions) => {
       const currentRange = rangeRef.current;
-      if (currentRange.endRowExclusive >= rows.length) return false;
+      const rowCount = latestInputsRef.current.rows.length;
+      if (currentRange.endRowExclusive >= rowCount) return false;
 
       shouldTrimTopAfterAppendRef.current = options?.trimTopAfterAppend !== false;
       setRange({
         startRow: currentRange.startRow,
         endRowExclusive: Math.min(
-          rows.length,
+          rowCount,
           currentRange.endRowExclusive + AGENT_CHAT_ROW_WINDOW_SIZE,
         ),
       });
       return true;
     },
-    [rows.length, setRange],
+    [setRange],
   );
 
   // Adds rows below without a trim, for a jump target that cannot reach the top yet.
@@ -364,12 +470,13 @@ export function useAgentChatRowWindow({
     if (rowsToTrim <= 0) return;
 
     const startRow = currentRange.startRow + rowsToTrim;
-    anchorRow(rows[startRow]?.key);
+    anchorRow(latestInputsRef.current.rows[startRow]?.key);
     setRange({ startRow, endRowExclusive: currentRange.endRowExclusive });
   });
 
   const fillViewport = useEffectEvent(() => {
     const currentRange = rangeRef.current;
+    if (!hasHiddenRowsForRange(currentRange, latestInputsRef.current.rows.length)) return;
     if (rowCountForRange(currentRange) >= MAX_MOUNTED_ROW_COUNT) return;
 
     const container = messagesContainerRef.current;
@@ -391,6 +498,7 @@ export function useAgentChatRowWindow({
   const fillFrameRef = useRef<number | null>(null);
   const scheduleFillViewport = useEffectEvent(() => {
     if (fillFrameRef.current !== null) return;
+    if (!hasHiddenRowsForRange(rangeRef.current, latestInputsRef.current.rows.length)) return;
     if (rowCountForRange(rangeRef.current) >= MAX_MOUNTED_ROW_COUNT) return;
     fillFrameRef.current = requestAnimationFrame(() => {
       fillFrameRef.current = null;
@@ -405,10 +513,12 @@ export function useAgentChatRowWindow({
       }
     };
   }, []);
-  // Row content can shrink without a range change, so fill again when the rows change.
+  // Row content can shrink without a range change, so fill again when hidden rows remain.
   useEffect(() => {
-    scheduleFillViewport();
-  }, [range, rows]);
+    if (!isFullTranscriptVisible) {
+      scheduleFillViewport();
+    }
+  }, [effectiveEndRowExclusive, effectiveStartRow, isFullTranscriptVisible, rows]);
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -418,41 +528,6 @@ export function useAgentChatRowWindow({
     observer.observe(container);
     return () => observer.disconnect();
   }, [messagesContainerRef]);
-
-  useLayoutEffect(() => {
-    const previousRowsLength = previousRowsLengthRef.current;
-    const previousRange = rangeRef.current;
-    previousRowsLengthRef.current = rows.length;
-
-    if (didSessionChange) {
-      return;
-    }
-
-    if (pendingLatestResetRef.current && rows.length > 0) {
-      pendingLatestResetRef.current = false;
-      setRange(latestRange(rows.length));
-      return;
-    }
-
-    if (
-      rows.length !== previousRowsLength &&
-      isFollowingLatestWindow() &&
-      previousRange.endRowExclusive === previousRowsLength
-    ) {
-      setRange(latestRange(rows.length));
-      return;
-    }
-
-    if (rows.length > 0 && previousRange.startRow >= rows.length) {
-      setRange(latestRange(rows.length));
-      return;
-    }
-
-    if (range !== sessionRange.range) {
-      // Keep the range that followed its moved rows, with the keys of its new edge rows.
-      setRange(range);
-    }
-  }, [didSessionChange, isFollowingLatestWindow, range, rows, sessionRange.range, setRange]);
 
   // A prepend commits after a scroll, so its anchor follows the scroll until then.
   const rereadRowAnchor = useCallback(() => {
@@ -468,7 +543,9 @@ export function useAgentChatRowWindow({
 
     const previousScrollTop = lastScrollTopRef.current;
     lastScrollTopRef.current = container.scrollTop;
-    if (isFollowingLatestWindow() && rangeRef.current.endRowExclusive === rows.length) return;
+    const rowCount = latestInputsRef.current.rows.length;
+    if (!hasHiddenRowsForRange(rangeRef.current, rowCount)) return;
+    if (isFollowingLatestWindow() && rangeRef.current.endRowExclusive === rowCount) return;
 
     const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
     const isScrollingUp = container.scrollTop < previousScrollTop;
@@ -499,20 +576,20 @@ export function useAgentChatRowWindow({
     return () => container.removeEventListener("scroll", onScroll);
   }, [messagesContainerRef]);
 
-  const effectiveRange = clampRange(range, rows.length);
-  const effectiveStartRow = effectiveRange.startRow;
-  const effectiveEndRowExclusive = effectiveRange.endRowExclusive;
   const visibleRows = useMemo(
-    () => rows.slice(effectiveStartRow, effectiveEndRowExclusive),
-    [effectiveEndRowExclusive, effectiveStartRow, rows],
+    () =>
+      isFullTranscriptVisible ? rows : rows.slice(effectiveStartRow, effectiveEndRowExclusive),
+    [effectiveEndRowExclusive, effectiveStartRow, isFullTranscriptVisible, rows],
   );
   const visibleTurnAnchors = useMemo(
     () =>
-      selectTurnAnchorsForWindow(turnAnchors, {
-        startRow: effectiveStartRow,
-        endRowExclusive: effectiveEndRowExclusive,
-      }),
-    [effectiveEndRowExclusive, effectiveStartRow, turnAnchors],
+      isFullTranscriptVisible
+        ? turnAnchors
+        : selectTurnAnchorsForWindow(turnAnchors, {
+            startRow: effectiveStartRow,
+            endRowExclusive: effectiveEndRowExclusive,
+          }),
+    [effectiveEndRowExclusive, effectiveStartRow, isFullTranscriptVisible, turnAnchors],
   );
 
   return {

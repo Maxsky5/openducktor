@@ -101,6 +101,8 @@ export function AgentChatThread({
   const [toolRunFolds] = useState(createToolRunFoldStore);
   const {
     messagesContentRef,
+    turnsClipRef,
+    turnsRef,
     renderedTurns,
     transcriptNotice: renderedTranscriptNotice,
     isNearBottom,
@@ -158,6 +160,8 @@ export function AgentChatThread({
                         runtimePresentation={runtimePresentation}
                         messagesContainerRef={messagesContainerRef}
                         messagesContentRef={messagesContentRef}
+                        turnsClipRef={turnsClipRef}
+                        turnsRef={turnsRef}
                         renderedTurns={renderedTurns}
                         transcriptNotice={renderedTranscriptNotice}
                         userMessageAnchors={userMessageAnchors}
@@ -294,6 +298,8 @@ type AgentChatTranscriptProps = {
   subagentPendingQuestionCountBySessionKey: AgentChatThreadModel["subagentPendingQuestionCountBySessionKey"];
   messagesContainerRef: AgentChatThreadModel["messagesContainerRef"];
   messagesContentRef: RefObject<HTMLDivElement | null>;
+  turnsClipRef: RefObject<HTMLDivElement | null>;
+  turnsRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
   transcriptNotice: AgentChatThreadModel["transcript"]["notice"];
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
@@ -403,6 +409,8 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
   subagentPendingQuestionCountBySessionKey,
   messagesContainerRef,
   messagesContentRef,
+  turnsClipRef,
+  turnsRef,
   renderedTurns,
   transcriptNotice,
   runtimePresentation,
@@ -451,18 +459,24 @@ const AgentChatTranscript = memo(function AgentChatTranscript({
             </div>
           ) : null}
 
-          <div>
-            {renderedTurns.map((turn) => (
-              <AgentChatTurnGroup
-                key={turn.key}
-                turn={turn}
-                modelCatalog={modelCatalog}
-                transcriptTarget={transcriptTarget}
-                runtimePresentation={runtimePresentation}
-                subagentPendingApprovalCountBySessionKey={subagentPendingApprovalCountBySessionKey}
-                subagentPendingQuestionCountBySessionKey={subagentPendingQuestionCountBySessionKey}
-              />
-            ))}
+          <div ref={turnsClipRef}>
+            <div ref={turnsRef}>
+              {renderedTurns.map((turn) => (
+                <AgentChatTurnGroup
+                  key={turn.key}
+                  turn={turn}
+                  modelCatalog={modelCatalog}
+                  transcriptTarget={transcriptTarget}
+                  runtimePresentation={runtimePresentation}
+                  subagentPendingApprovalCountBySessionKey={
+                    subagentPendingApprovalCountBySessionKey
+                  }
+                  subagentPendingQuestionCountBySessionKey={
+                    subagentPendingQuestionCountBySessionKey
+                  }
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>

@@ -3314,4 +3314,132 @@ describe("useAgentChatWindow", () => {
       await harness.unmount();
     });
   });
+
+  test("appending rows while pinned updates the row window in one render without flickering isNearBottom", async () => {
+    const observations: HookResult[] = [];
+    const singleWindowInitial = createSingleTurnRows(5);
+    const singleWindowNext = createSingleTurnRows(6);
+    const harness = await mountHarness(
+      {
+        rows: singleWindowInitial,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      {
+        attachDom: true,
+        onResult: (result) => observations.push(result),
+      },
+    );
+
+    observations.length = 0;
+    await harness.update({
+      rows: singleWindowNext,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(observations).toHaveLength(1);
+    expect(observations[0]?.visibleRows.at(-1)?.key).toBe(singleWindowNext.at(-1)?.key);
+    expect(observations[0]?.isNearBottom).toBe(true);
+
+    const multiWindowInitial = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 25);
+    const multiWindowNext = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE + 26);
+    await harness.update({
+      rows: multiWindowInitial,
+      displayedSessionKey: "multi-turn-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    observations.length = 0;
+    await harness.update({
+      rows: multiWindowNext,
+      displayedSessionKey: "multi-turn-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(observations).toHaveLength(1);
+    expect(observations[0]?.windowStart).toBe(26);
+    expect(observations[0]?.visibleRows.at(-1)?.key).toBe(multiWindowNext.at(-1)?.key);
+    expect(observations[0]?.isNearBottom).toBe(true);
+
+    await harness.unmount();
+  });
+
+  test("appending rows in a single-window unpinned transcript mounts new rows immediately", async () => {
+    const initialRows = createSingleTurnRows(6);
+    const nextRows = createSingleTurnRows(7);
+    const harness = await mountHarness(
+      {
+        rows: initialRows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      {
+        attachDom: true,
+        containerClientHeight: 100,
+        rowHeightPx: 60,
+      },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    const trigger = document.createElement("button");
+    trigger.scrollIntoView = () => {};
+    container.appendChild(trigger);
+    await act(async () => {
+      // Clicking a tool run control dispatches revealElement, unpinning at the bottom edge.
+      revealElement(trigger);
+      await flush();
+    });
+
+    await harness.update({
+      rows: nextRows,
+      displayedSessionKey: "single-turn-session",
+      shouldResetForTranscriptLoad: false,
+    });
+
+    expect(harness.getLatestResult().windowStart).toBe(0);
+    expect(harness.getLatestResult().visibleRows).toHaveLength(7);
+    expect(harness.getLatestResult().visibleRows.at(-1)?.key).toBe(nextRows.at(-1)?.key);
+
+    await harness.unmount();
+  });
+
+  test("does not schedule viewport fill frames when all transcript rows are already mounted", async () => {
+    const initialRows = createSingleTurnRows(6);
+    const harness = await mountHarness(
+      {
+        rows: initialRows,
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+    await animationFrameDriver.flushFrames();
+
+    let scheduledFrames = 0;
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (callback) => {
+      scheduledFrames += 1;
+      return originalRequestAnimationFrame(callback);
+    };
+    try {
+      await harness.update({
+        rows: createSingleTurnRows(7),
+        displayedSessionKey: "single-turn-session",
+        shouldResetForTranscriptLoad: false,
+      });
+      await act(async () => {
+        triggerResizeObservers(harness.messagesContainerRef.current ?? undefined);
+        await flush();
+      });
+
+      expect(scheduledFrames).toBe(0);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      await harness.unmount();
+    }
+  });
 });

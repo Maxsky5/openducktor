@@ -367,6 +367,11 @@ type ToolRunLineProps = {
   workingDirectory: string | null;
 };
 
+const areToolRunLinePropsEqual = (previous: ToolRunLineProps, next: ToolRunLineProps): boolean =>
+  previous.row === next.row &&
+  previous.runtimePresentation === next.runtimePresentation &&
+  previous.workingDirectory === next.workingDirectory;
+
 const ToolRunLine = memo(function ToolRunLine({
   row,
   entersWithMotion,
@@ -399,7 +404,7 @@ const ToolRunLine = memo(function ToolRunLine({
       )}
     </li>
   );
-});
+}, areToolRunLinePropsEqual);
 
 const ToolRunLineContent = ({
   row,

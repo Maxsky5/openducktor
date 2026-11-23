@@ -123,6 +123,10 @@ describe("buildToolRunWindowRows", () => {
     expect(foldUserMessageAnchors(anchors, "1:2,5:3")).toBe(folded);
     // A run before a user message that grows moves the message.
     expect(foldUserMessageAnchors(anchors, "1:3").map((anchor) => anchor.rowIndex)).toEqual([0, 3]);
+
+    // When the first run starts after the only user message, no anchor moves so the input stays.
+    const singleAnchor = [{ rowKey: "row:ask", rowIndex: 0, message: buildMessage("user", "ask") }];
+    expect(foldUserMessageAnchors(singleAnchor, "1:1")).toBe(singleAnchor);
   });
 });
 

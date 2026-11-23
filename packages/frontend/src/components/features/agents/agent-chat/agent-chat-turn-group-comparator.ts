@@ -213,28 +213,36 @@ export const areAgentChatTurnGroupPropsEqual = (
   previousProps: AgentChatTurnGroupProps,
   nextProps: AgentChatTurnGroupProps,
 ): boolean => {
-  // Pending input maps can be rebuilt as active sessions stream. Compare the counts that affect
-  // this turn instead of invalidating every visible subagent row on map identity alone.
-  return (
-    previousProps.turn.key === nextProps.turn.key &&
-    previousProps.turn.isActive === nextProps.turn.isActive &&
-    previousProps.turn.activeStreamingAssistantMessageId ===
-      nextProps.turn.activeStreamingAssistantMessageId &&
+  const sharedContextEqual =
     previousProps.modelCatalog === nextProps.modelCatalog &&
     areAgentSessionTranscriptTargetsEqual(
       previousProps.transcriptTarget,
       nextProps.transcriptTarget,
     ) &&
-    previousProps.runtimePresentation === nextProps.runtimePresentation &&
-    areTurnRowsEquivalent(previousProps.turn.rows, nextProps.turn.rows) &&
-    areTurnItemsEquivalent(previousProps.turn.items, nextProps.turn.items) &&
-    areTurnSubagentPendingCountsEquivalent({
-      rows: nextProps.turn.rows,
-      previousApprovalCounts: previousProps.subagentPendingApprovalCountBySessionKey,
-      nextApprovalCounts: nextProps.subagentPendingApprovalCountBySessionKey,
-      previousQuestionCounts: previousProps.subagentPendingQuestionCountBySessionKey,
-      nextQuestionCounts: nextProps.subagentPendingQuestionCountBySessionKey,
-      sessionIdentity: nextProps.transcriptTarget,
-    })
-  );
+    previousProps.runtimePresentation === nextProps.runtimePresentation;
+  if (!sharedContextEqual) {
+    return false;
+  }
+
+  const sameTurn =
+    previousProps.turn === nextProps.turn ||
+    (previousProps.turn.key === nextProps.turn.key &&
+      previousProps.turn.activeStreamingAssistantMessageId ===
+        nextProps.turn.activeStreamingAssistantMessageId &&
+      areTurnRowsEquivalent(previousProps.turn.rows, nextProps.turn.rows) &&
+      areTurnItemsEquivalent(previousProps.turn.items, nextProps.turn.items));
+  if (!sameTurn) {
+    return false;
+  }
+
+  // Pending input maps can be rebuilt as active sessions stream. Compare the counts that affect
+  // this turn instead of invalidating every visible subagent row on map identity alone.
+  return areTurnSubagentPendingCountsEquivalent({
+    rows: nextProps.turn.rows,
+    previousApprovalCounts: previousProps.subagentPendingApprovalCountBySessionKey,
+    nextApprovalCounts: nextProps.subagentPendingApprovalCountBySessionKey,
+    previousQuestionCounts: previousProps.subagentPendingQuestionCountBySessionKey,
+    nextQuestionCounts: nextProps.subagentPendingQuestionCountBySessionKey,
+    sessionIdentity: nextProps.transcriptTarget,
+  });
 };

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { act, createElement, createRef } from "react";
+import { act, createElement, createRef, Profiler } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
@@ -29,6 +29,7 @@ import {
   buildSession,
 } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
+import { AgentChatThreads } from "./agent-chat-threads";
 
 enableReactActEnvironment();
 
@@ -1734,6 +1735,352 @@ describe("AgentChatThread", () => {
     ]);
     animate.mockRestore();
     rendered.unmount();
+  });
+
+  test("slides an overflowing pinned transcript smoothly when live rows appear in ungrouped mode and cancels on upward wheel", async () => {
+    setGlobalWindow(window);
+    type RecordedAnimation = {
+      element: HTMLElement;
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null;
+      cancelled: boolean;
+    };
+    const recorded: RecordedAnimation[] = [];
+    const runAnimation = HTMLElement.prototype.animate;
+    const animate = spyOn(HTMLElement.prototype, "animate").mockImplementation(function (
+      this: HTMLElement,
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      const animation = runAnimation.call(this, keyframes, options);
+      const deferred = Promise.withResolvers<Animation>();
+      const entry: RecordedAnimation = {
+        element: this,
+        keyframes,
+        cancelled: false,
+      };
+      Object.defineProperty(animation, "finished", {
+        configurable: true,
+        value: deferred.promise,
+      });
+      animation.cancel = () => {
+        entry.cancelled = true;
+        deferred.reject(new DOMException("Cancelled", "AbortError"));
+      };
+      recorded.push(entry);
+      return animation;
+    });
+    const rectSpy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.hasAttribute("data-row-key")) {
+          return new DOMRect(0, 0, 600, 40);
+        }
+        return new DOMRect(0, 0, 600, 200);
+      },
+    );
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const ungroupedSettings = createChatSettingsFixture({
+      groupToolCalls: false,
+      collapseFinishedToolCalls: false,
+    });
+    const baseModel = buildBaseModel();
+    const bashMessage = (id: string) =>
+      buildMessage("tool", `Tool ${id}`, {
+        id,
+        meta: {
+          kind: "tool",
+          partId: `${id}-part`,
+          callId: `${id}-call`,
+          tool: "bash",
+          toolType: "bash",
+          status: "completed",
+          input: { command: `echo ${id}` },
+        },
+      });
+    const loaded = [
+      buildMessage("user", "Run checks", { id: "user-1" }),
+      ...Array.from({ length: 8 }, (_, index) => bashMessage(`initial-${index}`)),
+    ];
+    let version = 1;
+    const renderMessages = (messages: ReturnType<typeof buildMessage>[]) => {
+      version += 1;
+      const session = {
+        // Keep message object references intact across updates; buildSession clones messages.
+        ...buildSession({ externalSessionId: "session-ungrouped-slide" }),
+        messages: createSessionMessagesState("session-ungrouped-slide", messages, version),
+      };
+      return createElement(
+        AgentChatSettingsProvider,
+        { value: ungroupedSettings },
+        createElement(AgentChatThreadComponent, {
+          model: completeThreadModel({
+            ...baseModel,
+            messagesContainerRef,
+            transcript: buildSessionTranscript(session),
+          }),
+        }),
+      );
+    };
+
+    const rendered = render(renderMessages(loaded));
+    await act(flush);
+    const container = messagesContainerRef.current;
+    if (!container) throw new Error("Expected messages container");
+    let scrollTopValue = 160;
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+    Object.defineProperty(container, "scrollHeight", {
+      configurable: true,
+      get: () => container.querySelectorAll("[data-row-key]").length * 40,
+    });
+    Object.defineProperty(container, "scrollTop", {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        const max = Math.max(0, container.scrollHeight - container.clientHeight);
+        scrollTopValue = Math.max(0, Math.min(value, max));
+      },
+    });
+    const firstRow = container.querySelector<HTMLElement>("[data-row-key]");
+    const turnsElement = firstRow?.parentElement?.parentElement ?? null;
+    const turnsClipElement = turnsElement?.parentElement ?? null;
+    if (!turnsElement || !turnsClipElement) throw new Error("Expected turns wrapper elements");
+
+    try {
+      const withLiveOne = [...loaded, bashMessage("live-1")];
+      rendered.rerender(renderMessages(withLiveOne));
+      await act(flush);
+
+      expect(container.scrollTop).toBe(container.scrollHeight - container.clientHeight);
+      expect(turnsClipElement.style.overflowY).toBe("clip");
+      const firstSlide = recorded.find((entry) => entry.element === turnsElement);
+      const firstRowFade = recorded.find((entry) =>
+        entry.element.getAttribute("data-row-key")?.includes("live-1"),
+      );
+      expect(firstSlide?.keyframes).toEqual([
+        { transform: "translateY(40px)" },
+        { transform: "none" },
+      ]);
+      expect(firstRowFade?.keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+
+      // A second live row arriving mid-slide composes from the in-flight offset.
+      turnsElement.style.transform = "matrix(1, 0, 0, 1, 0, 18)";
+      recorded.length = 0;
+      rendered.rerender(renderMessages([...withLiveOne, bashMessage("live-2")]));
+      await act(flush);
+      turnsElement.style.transform = "";
+
+      expect(firstSlide?.cancelled).toBe(true);
+      const composedSlide = recorded.find((entry) => entry.element === turnsElement);
+      expect(composedSlide?.keyframes).toEqual([
+        { transform: "translateY(58px)" },
+        { transform: "none" },
+      ]);
+
+      // Upward user scroll immediately cancels the slide and clears overflow clipping.
+      await act(async () => {
+        container.dispatchEvent(new WheelEvent("wheel", { deltaY: -24 }));
+        await flush();
+      });
+
+      expect(composedSlide?.cancelled).toBe(true);
+      expect(turnsClipElement.style.overflowY).toBe("");
+    } finally {
+      rectSpy.mockRestore();
+      animate.mockRestore();
+      rendered.unmount();
+    }
+  });
+
+  test("appending live messages in grouped mode commits once per update and slides open tool runs", async () => {
+    setGlobalWindow(window);
+    const animatedKeyframes: Array<{
+      isRow: boolean;
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null;
+    }> = [];
+    const runAnimation = HTMLElement.prototype.animate;
+    const animate = spyOn(HTMLElement.prototype, "animate").mockImplementation(function (
+      this: HTMLElement,
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      animatedKeyframes.push({ isRow: this.hasAttribute("data-row-key"), keyframes });
+      return runAnimation.call(this, keyframes, options);
+    });
+    const rectSpy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.tagName === "LI") return new DOMRect(0, 0, 600, 26);
+        if (this.hasAttribute("data-row-key")) return new DOMRect(0, 0, 600, 56);
+        return new DOMRect(0, 0, 600, 180);
+      },
+    );
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const groupedSettings = createChatSettingsFixture({
+      groupToolCalls: true,
+      collapseFinishedToolCalls: true,
+      showThinkingMessages: false,
+    });
+    const baseModel = buildBaseModel();
+    const bashMessage = (id: string, status: "running" | "completed" = "completed") =>
+      buildMessage("tool", `Tool ${id}`, {
+        id,
+        meta: {
+          kind: "tool",
+          partId: `${id}-part`,
+          callId: `${id}-call`,
+          tool: "bash",
+          toolType: "bash",
+          status,
+          input: { command: `echo ${id}` },
+        },
+      });
+    let commits = 0;
+    let nestedCommits = 0;
+    let version = 1;
+    const renderTree = (messages: ReturnType<typeof buildMessage>[]) => {
+      version += 1;
+      const session = {
+        // Keep message object references intact across updates; buildSession clones messages.
+        ...buildSession({
+          externalSessionId: "session-grouped-commits",
+          status: "running",
+        }),
+        messages: createSessionMessagesState("session-grouped-commits", messages, version),
+      };
+      return createElement(
+        Profiler,
+        {
+          id: "grouped-transcript",
+          onRender: (_id: string, phase: "mount" | "update" | "nested-update") => {
+            commits += 1;
+            if (phase === "nested-update") nestedCommits += 1;
+          },
+        },
+        createElement(
+          AgentChatSettingsProvider,
+          { value: groupedSettings },
+          createElement(AgentChatThreads, {
+            visitKey: 0,
+            model: completeThreadModel({
+              ...baseModel,
+              messagesContainerRef,
+              transcript: buildSessionTranscript(session),
+            }),
+          }),
+        ),
+      );
+    };
+
+    const messages = [
+      buildMessage("user", "Q1", { id: "u1" }),
+      buildMessage("assistant", "A1", { id: "a1", meta: { kind: "assistant", isFinal: true } }),
+      buildMessage("user", "Q2", { id: "u2" }),
+      buildMessage("assistant", "A2", { id: "a2", meta: { kind: "assistant", isFinal: true } }),
+      buildMessage("user", "Q3", { id: "u3" }),
+      buildMessage("assistant", "Working", {
+        id: "a3",
+        meta: { kind: "assistant", isFinal: false },
+      }),
+    ];
+    const rendered = render(renderTree(messages));
+    await act(flush);
+
+    const container = messagesContainerRef.current;
+    if (!container) throw new Error("Expected messages container");
+    let scrollTopValue = 156;
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 180 });
+    Object.defineProperty(container, "scrollHeight", {
+      configurable: true,
+      get: () =>
+        container.querySelectorAll("[data-row-key]").length * 56 +
+        container.querySelectorAll("li").length * 26,
+    });
+    Object.defineProperty(container, "scrollTop", {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        const max = Math.max(0, container.scrollHeight - container.clientHeight);
+        scrollTopValue = Math.max(0, Math.min(value, max));
+      },
+    });
+    // Sync initial overflow edges (nearTop=false) before profiling live updates.
+    await act(async () => {
+      container.dispatchEvent(new Event("scroll"));
+      await flush();
+    });
+
+    try {
+      // Mounting a brand-new ToolRunGroup (with CssPresenceReveal) commits once with zero nested renders.
+      commits = 0;
+      nestedCommits = 0;
+      messages.push(bashMessage("t1", "running"));
+      rendered.rerender(renderTree([...messages]));
+      await act(flush);
+      expect(commits).toBe(1);
+      expect(nestedCommits).toBe(0);
+
+      // Adding call 2 to the open tail run commits once and slides the transcript by the new line height.
+      commits = 0;
+      nestedCommits = 0;
+      animatedKeyframes.length = 0;
+      messages.push(bashMessage("t2", "running"));
+      rendered.rerender(renderTree([...messages]));
+      await act(flush);
+      expect(commits).toBe(1);
+      expect(nestedCommits).toBe(0);
+      expect(container.scrollTop).toBe(container.scrollHeight - container.clientHeight);
+      expect(animatedKeyframes).toContainEqual({
+        isRow: false,
+        keyframes: [{ transform: "translateY(26px)" }, { transform: "none" }],
+      });
+    } finally {
+      rectSpy.mockRestore();
+      animate.mockRestore();
+      rendered.unmount();
+    }
+  });
+
+  test("skips transcript slide and row entry motion when reduced motion is preferred", async () => {
+    setGlobalWindow(window);
+    const animate = spyOn(HTMLElement.prototype, "animate");
+    const originalMatchMedia = window.matchMedia.bind(window);
+    const matchMedia = spyOn(window, "matchMedia").mockImplementation((query: string) => {
+      const list = originalMatchMedia(query);
+      Object.defineProperty(list, "matches", {
+        configurable: true,
+        value: query === "(prefers-reduced-motion: reduce)",
+      });
+      return list;
+    });
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const sessionOf = (messages: ReturnType<typeof buildMessage>[]) =>
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          messagesContainerRef,
+          transcript: buildSessionTranscript(
+            buildSession({ externalSessionId: "session-reduced-motion", messages }),
+          ),
+        },
+      });
+    const loaded = [
+      buildMessage("user", "Hello", { id: "user-hello" }),
+      buildMessage("assistant", "Hi", { id: "assistant-hi" }),
+    ];
+    const rendered = render(sessionOf(loaded));
+    await act(flush);
+    animate.mockClear();
+
+    try {
+      rendered.rerender(
+        sessionOf([...loaded, buildMessage("assistant", "Next", { id: "assistant-next" })]),
+      );
+      await act(flush);
+
+      expect(animate).not.toHaveBeenCalled();
+    } finally {
+      matchMedia.mockRestore();
+      animate.mockRestore();
+      rendered.unmount();
+    }
   });
 
   test("a finished tool run folds once a message follows it, and stays open once opened", async () => {
