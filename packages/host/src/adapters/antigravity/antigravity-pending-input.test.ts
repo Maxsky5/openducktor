@@ -79,6 +79,31 @@ describe("Antigravity questions", () => {
     });
   });
 
+  test("matches a choice value before a label that reads like another value", () => {
+    const form = toAntigravityQuestionForm("request-1", {
+      ...questionRequest,
+      requestedSchema: {
+        type: "object",
+        properties: {
+          q1: {
+            type: "string",
+            title: "Which level?",
+            oneOf: [
+              { const: "1", title: "2" },
+              { const: "2", title: "3" },
+            ],
+          },
+        },
+      },
+    });
+    if (!form) throw new Error("Expected a question form.");
+
+    expect(toAntigravityQuestionResponse(form, [["2"]])).toEqual({
+      action: "accept",
+      content: { q1: "2" },
+    });
+  });
+
   test("cancels the form for Cancel Question and skips a question with no answer", () => {
     const form = toAntigravityQuestionForm("request-1", questionRequest);
     if (!form) throw new Error("Expected a question form.");

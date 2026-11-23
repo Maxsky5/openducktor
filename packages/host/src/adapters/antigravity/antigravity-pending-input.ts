@@ -221,9 +221,10 @@ export const toAntigravityQuestionResponse = (
     const known: string[] = [];
     const custom: string[] = [];
     for (const entry of answer) {
-      const option = field.options.find(
-        (candidate) => candidate.label === entry || candidate.value === entry,
-      );
+      // The client sends the value of a choice. A typed answer can name a choice by its label.
+      const option =
+        field.options.find((candidate) => candidate.value === entry) ??
+        field.options.find((candidate) => candidate.label === entry);
       if (option) known.push(option.value);
       else custom.push(entry);
     }
