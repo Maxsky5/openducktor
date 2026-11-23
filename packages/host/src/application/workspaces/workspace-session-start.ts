@@ -17,7 +17,7 @@ import {
   validateWorkspaceSessionTarget,
   type WorkspaceSessionTargetValidationDependencies,
 } from "./workspace-session-target";
-import { titleSyncMode } from "./workspace-session-runtime-title-sync";
+import { syncsTitleAfterTurn } from "./workspace-session-runtime-title-sync";
 import type { WorkspaceSessionStorePort } from "../../ports/workspace-session-store-port";
 import type { RuntimeRegistryPort } from "../../ports/runtime-registry-port";
 import type { AgentSessionLiveStateService } from "../agent-sessions/agent-session-live-state-service";
@@ -132,7 +132,7 @@ export const createWorkspaceSessionStart = (
                   target: { kind: "workspace", record: saved.value, runtimeSession },
                 }),
               );
-              if (titleSyncMode(session.runtimeKind) === "after_turn")
+              if (syncsTitleAfterTurn(session.runtimeKind))
                 dependencies.markTitleSyncPending({
                   repoPath: ref.repoPath,
                   runtimeKind: session.runtimeKind,

@@ -44,7 +44,7 @@ import {
 } from "./workspace-session-worktree-lifecycle";
 
 import type { TaskSessionLifecycleCoordinator } from "../tasks/worktrees/task-session-lifecycle-coordinator";
-import { planNativeRename, titleSyncMode } from "./workspace-session-runtime-title-sync";
+import { planNativeRename, syncsTitleAfterTurn } from "./workspace-session-runtime-title-sync";
 import { readWorktreeOwners, requireNoWorktreeOwners } from "./workspace-session-worktree-owners";
 import { listWorkspaceSessionWorktrees } from "./workspace-session-existing-worktree";
 import {
@@ -193,7 +193,7 @@ export const createWorkspaceSessionService = (
               if (saved._tag === "Failure") return yield* Effect.fail(saved.failure);
               if (plannedRename === null) return saved.success;
               if (
-                titleSyncMode(session.runtimeKind) === "after_turn" &&
+                syncsTitleAfterTurn(session.runtimeKind) &&
                 dependencies.isTitleSyncPending({
                   repoPath: ref.repoPath,
                   runtimeKind: session.runtimeKind,

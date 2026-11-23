@@ -95,6 +95,10 @@ export const syncTitleAfterTurn = (
 export const titleSyncMode = (runtimeKind: RuntimeKind): "immediate" | "after_turn" | "none" =>
   RUNTIME_HOST_TRAITS_BY_KIND[runtimeKind].sessionTitleSync;
 
+/** True for a runtime that gets the Workspace Session title only after the first turn. */
+export const syncsTitleAfterTurn = (runtimeKind: RuntimeKind): boolean =>
+  titleSyncMode(runtimeKind) === "after_turn";
+
 /**
  * The native rename that gives a runtime session a new effective title, or null when there is none.
  * A runtime without rename keeps its native title. `resendUnchanged` sends the title again to a

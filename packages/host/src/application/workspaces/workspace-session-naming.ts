@@ -40,7 +40,7 @@ import type {
 import {
   planNativeRename,
   type TitleSyncState,
-  titleSyncMode,
+  syncsTitleAfterTurn,
 } from "./workspace-session-runtime-title-sync";
 import type { WorkspaceSettingsService } from "./workspace-settings-model";
 
@@ -126,7 +126,7 @@ export const createWorkspaceSessionNaming = ({
         // A sync that waits for the end of the turn reads the saved title then.
         const sync = titleSync.get(agentSessionRefKey(runtimeRef));
         if (
-          titleSyncMode(runtimeRef.runtimeKind) === "after_turn" &&
+          syncsTitleAfterTurn(runtimeRef.runtimeKind) &&
           (sync === "pending" || sync === "queued")
         )
           return;

@@ -42,6 +42,7 @@ import {
   planNativeRename,
   syncTitleAfterTurn,
   type TitleSyncState,
+  syncsTitleAfterTurn,
   titleSyncMode,
 } from "./workspace-session-runtime-title-sync";
 import {
@@ -213,7 +214,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const { input, runtimeRename } = plan;
-        if (titleSyncMode(runtimeRef.runtimeKind) === "after_turn")
+        if (syncsTitleAfterTurn(runtimeRef.runtimeKind))
           return yield* restore(saveMessage(runtimeRef, known, input));
         // Rename before saving so a failed native rename leaves the saved title alone.
         if (runtimeRename !== null) {
@@ -291,7 +292,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
       const known = yield* find(runtimeRef);
       if (!known) return;
       const plan = yield* planAcceptedMessage(known, runtimeRef, message);
-      if (titleSyncMode(runtimeRef.runtimeKind) === "after_turn")
+      if (syncsTitleAfterTurn(runtimeRef.runtimeKind))
         return yield* saveMessage(runtimeRef, known, plan.input);
       // Defer observed renames because a manual rename can hold the gate during live publication.
       const renamePending = plan.runtimeRename !== null || sessionTitleGate.isActive(known.ref);
@@ -468,7 +469,7 @@ export const createWorkspaceSessionRuntimePersistence = ({
         } else if (
           (event.type === "session_idle" || event.type === "session_turn_finished") &&
           event.turnOutcome !== undefined &&
-          titleSyncMode(event.sessionRef.runtimeKind) === "after_turn"
+          syncsTitleAfterTurn(event.sessionRef.runtimeKind)
         ) {
           yield* syncTitleAfterTurn(event.sessionRef, {
             state: titleSync,
