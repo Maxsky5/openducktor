@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import { AntigravityTranscript } from "./antigravity-transcript";
 
@@ -128,6 +130,31 @@ describe("AntigravityTranscript", () => {
       messageId: "session-1:t1:user",
       notice: { reason: "session_compacted", title: "Compacted" },
     });
+  });
+
+  test("starts a new replayed message when the message after /compact starts with a file", () => {
+    const replay = createTranscript();
+    replay.applyUpdate(text("user_message_chunk", "/compact"), "replay");
+    replay.applyUpdate(
+      {
+        sessionUpdate: "user_message_chunk",
+        content: {
+          type: "resource_link",
+          uri: pathToFileURL(resolve("/repo/foo.ts")).href,
+          name: "foo.ts",
+        },
+      },
+      "replay",
+    );
+    replay.applyUpdate(text("user_message_chunk", " explain it"), "replay");
+    replay.applyUpdate(text("agent_message_chunk", "Done"), "replay");
+    replay.finishReplay();
+
+    expect(replay.history.map(({ role, messageId }) => ({ role, messageId }))).toEqual([
+      { role: "system", messageId: "session-1:t1:user" },
+      { role: "user", messageId: "session-1:t2:user" },
+      { role: "assistant", messageId: expect.stringContaining("session-1:t2:") },
+    ]);
   });
 
   test("keeps a replayed slash command and its arguments in one message", () => {

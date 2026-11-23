@@ -118,7 +118,9 @@ export const applyWorkspaceSessionRecords = (
           ? session.sessionAssociation
           : { kind: "repository", workspaceId },
       title: workspaceSessionTitle(record),
-      selectedModel: record.selectedModel ?? session.selectedModel,
+      selectedModel: session.modelUpdatePending
+        ? session.selectedModel
+        : (record.selectedModel ?? session.selectedModel),
     };
     collection = replaceAgentSession(collection, next);
   }

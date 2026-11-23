@@ -79,6 +79,25 @@ test("saves each accepted message and the end of the run on its last message", a
   ]);
 });
 
+test("ends the running turn on its own message while a later message waits in the inbox", async () => {
+  const { send, turns } = setup();
+  await send({ type: "user_message", messageId: "u1", message: "Hi", parts: [], state: "read" }, 2);
+  // The user cancels this queued message before the runtime reads it.
+  await send(
+    { type: "user_message", messageId: "u2", message: "Later", parts: [], state: "queued" },
+    3,
+  );
+  await send({ type: "transcript_retracted", messageIds: ["u2"] }, 4);
+  await send({ type: "assistant_message", messageId: "a1", message: "Done" }, 6);
+  await send({ type: "session_idle", turnOutcome: "completed" }, 6);
+
+  expect(await turns()).toMatchObject([
+    { userMessageId: "u1", end: { outcome: "completed", durationMs: 4000 } },
+    { userMessageId: "u2", startedAt: new Date(3000).toISOString() },
+  ]);
+  expect((await turns())[1]).not.toHaveProperty("end");
+});
+
 test("saves the stop notice of a stopped run with no final reply", async () => {
   const { send, turns } = setup();
   await send({ type: "user_message", messageId: "u1", message: "Hi", parts: [], state: "read" }, 2);

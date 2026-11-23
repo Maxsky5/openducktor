@@ -49,6 +49,9 @@ export const createAgentSessionTurnRecorder = (
           startedAt: message.timestamp,
           model: message.model,
         });
+        // A queued message waits in the runtime inbox. It joins a run when the runtime reads it, so
+        // the running turn does not end on a message that the user can still cancel.
+        if (message.state === "queued") return;
         if (run) {
           run.lastUserMessageId = message.messageId;
           run.saved.add(message.messageId);

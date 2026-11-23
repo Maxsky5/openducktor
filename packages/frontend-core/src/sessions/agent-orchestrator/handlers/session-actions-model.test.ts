@@ -248,9 +248,12 @@ describe("agent-orchestrator/handlers/session-actions model", () => {
     });
 
     expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
+    // A saved record does not replace the shown model while the change saves.
+    expect(getSession(sessionsRef)?.modelUpdatePending).toBe(true);
     runtimeAnswer.resolve();
     await update;
     expect(getSession(sessionsRef)?.selectedModel?.modelId).toBe("gpt-5");
+    expect(getSession(sessionsRef)?.modelUpdatePending).toBeUndefined();
   });
 
   test("shows the confirmed model again when the last pending write fails", async () => {

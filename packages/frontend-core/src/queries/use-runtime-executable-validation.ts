@@ -46,8 +46,8 @@ const useKindsValidatingOtherPaths = (inputs: ExecutableInput[]): ReadonlySet<Ru
       .join(" ");
   const busyKinds = useSyncExternalStore(subscribe, readBusyKinds, readBusyKinds);
   return useMemo(() => {
-    const busy = busyKinds.split(" ");
-    return new Set(knownRuntimeKindValues.filter((kind) => busy.includes(kind)));
+    const busy = new Set(busyKinds.split(" "));
+    return new Set(knownRuntimeKindValues.filter((kind) => busy.has(kind)));
   }, [busyKinds]);
 };
 

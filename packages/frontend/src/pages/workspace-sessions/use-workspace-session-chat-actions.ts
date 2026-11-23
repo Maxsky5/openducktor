@@ -64,15 +64,20 @@ export function useWorkspaceSessionChatActions(
   const latestRecord = useRef(record);
   const recipientVersion = useRef(0);
   const latestWorkspace = useRef(workspace);
-  // The draft model writes of the record. The record shows each one at once, and the runtime start
-  // waits for the newest one.
+  // The newest draft model while its saves run. A saved record of an earlier save does not replace
+  // it, and a failed save changes no record.
+  const [pendingDraftModel, setPendingDraftModel] = useState<{
+    readonly selection: AgentModelSelection | null;
+  } | null>(null);
+  // The draft model saves run in order, and the runtime start waits for the newest one.
   const draftModelWrites = useMemo(
     () =>
-      createOptimisticWrites<WorkspaceSession>({
-        show: (shown) => updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, shown),
-        readConfirmed: () => latestRecord.current,
+      createOptimisticWrites<AgentModelSelection | null>({
+        show: (selection) => setPendingDraftModel({ selection }),
+        readConfirmed: () => latestRecord.current.selectedModel ?? null,
+        onIdle: () => setPendingDraftModel(null),
       }),
-    [queryClient, workspace.workspaceId],
+    [],
   );
   useLayoutEffect(() => {
     const previous = latestRecord.current;
@@ -189,20 +194,22 @@ export function useWorkspaceSessionChatActions(
     }
   };
 
-  /** Saves a draft model in the background. The record shows it at once. */
+  /** Shows a draft model at once and saves it in the background. */
   const saveDraftModel = useCallback(
     (selection: AgentModelSelection): Promise<void> => {
       const shown = latestRecord.current;
       const selectedModel = { ...selection, runtimeKind: shown.runtimeKind };
-      return draftModelWrites.write({ ...shown, selectedModel }, () =>
-        host.workspaceSessionSetDraftModel({
+      return draftModelWrites.write(selectedModel, async () => {
+        const saved = await host.workspaceSessionSetDraftModel({
           workspaceId: workspace.workspaceId,
           sessionId: shown.id,
           selectedModel,
-        }),
-      );
+        });
+        updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved);
+        return saved.selectedModel ?? null;
+      });
     },
-    [draftModelWrites, host, workspace.workspaceId],
+    [draftModelWrites, host, queryClient, workspace.workspaceId],
   );
 
   const updateDraftModel = useCallback(
@@ -351,6 +358,7 @@ export function useWorkspaceSessionChatActions(
     isStarting,
     error: error ?? preparation.error,
     updateDraftModel,
+    pendingDraftModel,
     updateSessionModel,
     updateSpeed,
     sendTarget,

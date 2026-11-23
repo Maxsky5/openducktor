@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtemp } from "node:fs/promises";
@@ -6,6 +7,9 @@ import path from "node:path";
 import { Effect } from "effect";
 import { removeTestDirectory } from "../../test-support/temp-directory";
 import { antigravityRateModel, readAntigravityUsage } from "./usage-antigravity-reader";
+
+// A resolved path, so its file URL is absolute on Windows too.
+const PROJECT = path.resolve("/repo/app");
 
 /** A protocol buffer field: a varint, or bytes of a string, packed varints, or a message. */
 type Field =
@@ -92,7 +96,10 @@ const createConversation = (id: string, rows: Uint8Array[]) => {
   database
     .query("INSERT INTO trajectory_metadata_blob (id, data) VALUES ('main', ?)")
     .run(
-      encode([msg(1, [str(1, "file:///repo/app"), str(4, "main")]), timestamp(2, 1_795_370_290)]),
+      encode([
+        msg(1, [str(1, pathToFileURL(PROJECT).href), str(4, "main")]),
+        timestamp(2, 1_795_370_290),
+      ]),
     );
   const step = database.query(
     "INSERT INTO steps (idx, step_type, status, metadata) VALUES (?, 14, 3, ?)",
@@ -145,7 +152,7 @@ describe("readAntigravityUsage", () => {
           session: "root",
           provider: "anthropic",
           model: "claude-sonnet-4-6",
-          project: "/repo/app",
+          project: PROJECT,
           serviceTier: null,
           tokens: { input: 23528, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 182 },
         },
@@ -156,7 +163,7 @@ describe("readAntigravityUsage", () => {
           session: "child",
           provider: "google",
           model: "gemini-3.8-flash",
-          project: "/repo/app",
+          project: PROJECT,
           serviceTier: null,
           // The output includes the thinking tokens.
           tokens: { input: 952, cacheRead: 23031, cacheWrite5m: 0, cacheWrite1h: 0, output: 159 },

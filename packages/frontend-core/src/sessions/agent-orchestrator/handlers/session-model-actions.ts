@@ -68,10 +68,19 @@ export const createSessionModelActions = ({
       show: (selection) => {
         const session = readSessionSnapshot(identity);
         if (session)
-          updateSession(session, (current) => ({ ...current, selectedModel: selection }));
+          updateSession(session, (current) => ({
+            ...current,
+            selectedModel: selection,
+            modelUpdatePending: true,
+          }));
       },
       readConfirmed: () => readSessionSnapshot(identity)?.selectedModel ?? null,
-      onIdle: () => writesBySession.delete(key),
+      onIdle: () => {
+        writesBySession.delete(key);
+        const session = readSessionSnapshot(identity);
+        if (session)
+          updateSession(session, (current) => ({ ...current, modelUpdatePending: undefined }));
+      },
     });
     writesBySession.set(key, writes);
     return writes;

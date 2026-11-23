@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { AgentUserMessagePart } from "@openducktor/core";
 import {
   encodeAntigravityPrompt,
@@ -6,7 +8,10 @@ import {
   toAntigravityUserMessage,
 } from "./antigravity-prompt";
 
-const STAGE = "/tmp/openducktor-local-attachments";
+// Resolved paths, so the file URLs and their replay match on Windows too.
+const REPO = resolve("/repo");
+const STAGE = resolve("/tmp/openducktor-local-attachments");
+const fileUrl = (path: string): string => pathToFileURL(path).href;
 
 const parts: AgentUserMessagePart[] = [
   {
@@ -24,7 +29,7 @@ const parts: AgentUserMessagePart[] = [
     kind: "attachment",
     attachment: {
       id: "shot",
-      path: `${STAGE}/shot.png`,
+      path: join(STAGE, "shot.png"),
       name: "shot.png",
       kind: "image",
       mime: "image/png",
@@ -34,15 +39,15 @@ const parts: AgentUserMessagePart[] = [
 
 describe("Antigravity prompt parts", () => {
   test("encodes commands as text and references as file links", () => {
-    expect(encodeAntigravityPrompt(parts, "/repo")).toEqual([
+    expect(encodeAntigravityPrompt(parts, REPO)).toEqual([
       // Text next to text is one block, so a replay can tell the messages apart.
       { type: "text", text: "/plan read " },
-      { type: "resource_link", uri: "file:///repo/src/app.ts", name: "app.ts" },
+      { type: "resource_link", uri: fileUrl(join(REPO, "src", "app.ts")), name: "app.ts" },
       { type: "text", text: " and " },
-      { type: "resource_link", uri: "file:///repo/docs/", name: "docs" },
+      { type: "resource_link", uri: `${fileUrl(join(REPO, "docs"))}/`, name: "docs" },
       {
         type: "resource_link",
-        uri: `file://${STAGE}/shot.png`,
+        uri: fileUrl(join(STAGE, "shot.png")),
         name: "shot.png",
         mimeType: "image/png",
       },
@@ -50,11 +55,7 @@ describe("Antigravity prompt parts", () => {
   });
 
   test("rebuilds the same user message from a replay", () => {
-    const replayed = readAntigravityUserBlocks(
-      encodeAntigravityPrompt(parts, "/repo"),
-      "/repo",
-      STAGE,
-    );
+    const replayed = readAntigravityUserBlocks(encodeAntigravityPrompt(parts, REPO), REPO, STAGE);
     const live = toAntigravityUserMessage(parts);
     const history = toAntigravityUserMessage(replayed);
 
@@ -74,13 +75,13 @@ describe("Antigravity prompt parts", () => {
     };
     const typed: AgentUserMessagePart[] = [plan, { kind: "text", text: "fix it" }, reference, plan];
 
-    const blocks = encodeAntigravityPrompt(typed, "/repo");
+    const blocks = encodeAntigravityPrompt(typed, REPO);
     expect(blocks.filter((block) => block.type === "text")).toEqual([
       { type: "text", text: "/plan fix it" },
       { type: "text", text: "/plan" },
     ]);
     const live = toAntigravityUserMessage(typed);
-    const history = toAntigravityUserMessage(readAntigravityUserBlocks(blocks, "/repo", STAGE));
+    const history = toAntigravityUserMessage(readAntigravityUserBlocks(blocks, REPO, STAGE));
     expect(live.displayParts[0]).toEqual({ kind: "text", text: "/plan fix it" });
     expect(history.displayParts).toEqual(live.displayParts);
   });
@@ -90,11 +91,11 @@ describe("Antigravity prompt parts", () => {
       [
         {
           type: "resource_link",
-          uri: `file://${STAGE}/18a6e02d-c5ab-4408-ac3c-8b30a4b4e550-red.png`,
+          uri: fileUrl(join(STAGE, "18a6e02d-c5ab-4408-ac3c-8b30a4b4e550-red.png")),
           name: "18a6e02d-c5ab-4408-ac3c-8b30a4b4e550-red.png",
         },
       ],
-      "/repo",
+      REPO,
       STAGE,
     );
 
@@ -110,12 +111,12 @@ describe("Antigravity prompt parts", () => {
       { kind: "text", text: "review this" },
     ];
 
-    expect(encodeAntigravityPrompt(skillParts, "/repo")).toEqual([
+    expect(encodeAntigravityPrompt(skillParts, REPO)).toEqual([
       { type: "text", text: "/clean-code review this" },
     ]);
     const live = toAntigravityUserMessage(skillParts);
     const history = toAntigravityUserMessage(
-      readAntigravityUserBlocks(encodeAntigravityPrompt(skillParts, "/repo"), "/repo", STAGE),
+      readAntigravityUserBlocks(encodeAntigravityPrompt(skillParts, REPO), REPO, STAGE),
     );
     expect(live.text).toBe("/clean-code review this");
     // The skill shows as a skill, and a built-in command stays text.
@@ -139,7 +140,7 @@ describe("Antigravity prompt parts", () => {
     expect(() =>
       encodeAntigravityPrompt(
         [{ kind: "subagent_reference", subagent: { id: "explore", name: "explore" } }],
-        "/repo",
+        REPO,
       ),
     ).toThrow("Antigravity cannot send subagent_reference message parts.");
   });

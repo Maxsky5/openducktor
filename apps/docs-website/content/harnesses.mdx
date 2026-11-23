@@ -58,7 +58,7 @@ All four harnesses run every agent role. Each one supports questions, permission
 | Subagents in the background | Yes | No | Yes | No. A subagent shows as a tool call. |
 | Mention a subagent with `@` | Yes | No | No | No |
 | [Goal mode](/coding-sessions/#goal-mode) | Yes | Yes | Yes | Yes |
-| Naming model | Yes | Yes | Yes | No |
+| Naming model | Yes | Yes | Yes | Yes. Each request saves a conversation in your Antigravity history. |
 | [Permission replies](/coding-sessions/#answer-a-permission-request) | <Action>Approve once</Action>, <Action>Allow for project</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Approve for session</Action>, <Action>Always allow</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> | <Action>Approve once</Action>, <Action>Reject</Action> |
 
 With an API key sign-in, Codex cannot tell when the account works again, so a Codex session needs a manual **Resume** after a usage limit.
@@ -90,7 +90,7 @@ With an older harness, the **Goal mode** switch is off and names the version to 
 
 ## Control what agents can do [#permissions]
 
-OpenCode, Codex, and Claude Code have their own permission settings in **Agent runtimes**. Antigravity uses its native permission settings and has no OpenDucktor permission settings.
+Each harness has its own permission settings in **Agent runtimes**. Antigravity also applies its native permission rules.
 
 <Steps>
 <Step>In **Agent runtimes**, select the harness.</Step>
@@ -110,6 +110,7 @@ OpenCode, Codex, and Claude Code have their own permission settings in **Agent r
 | Codex | [Command network access](/settings-reference/#harnesses-codex-command-network-access) | Lets commands in sandboxed turns use the network. |
 | Claude Code | [Approval mode](/settings-reference/#harnesses-claude-approval-mode) | Sets when Claude Code asks you. |
 | Claude Code | [Bash sandbox](/settings-reference/#harnesses-claude-bash-sandbox) | Runs shell commands in a sandbox. |
+| Antigravity | [Session mode](/settings-reference/#harnesses-antigravity-session-mode) | Sets what Antigravity approves without asking you. |
 
 The settings apply in this order:
 

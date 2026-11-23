@@ -263,17 +263,22 @@ export class AntigravityTranscript {
 
   private applyUserChunk(block: ContentBlock): void {
     // OpenDucktor sends the text of one message as one block, so a second text block in a row
-    // starts the next message, for example after a `/compact` turn that replays no output.
-    // Antigravity replays a slash command and its arguments as two blocks: `/name`, then the
-    // arguments after a space. A sent message never starts with a space.
-    const previous = this.openUserMessage?.blocks.at(-1);
-    if (
-      block.type === "text" &&
+    // starts the next message. Antigravity replays a slash command and its arguments as two blocks:
+    // `/name`, then the arguments after a space. A sent message never starts with a space. A lone
+    // `/compact` replays no output, so any block after it starts the next message.
+    const open = this.openUserMessage?.blocks;
+    const previous = open?.at(-1);
+    const afterCompaction =
+      open?.length === 1 &&
       previous?.type === "text" &&
-      !(SLASH_COMMAND_ONLY.test(previous.text) && /^\s/.test(block.text))
-    ) {
+      previous.text.trim() === ANTIGRAVITY_COMPACT_COMMAND;
+    if (
+      afterCompaction ||
+      (block.type === "text" &&
+        previous?.type === "text" &&
+        !(SLASH_COMMAND_ONLY.test(previous.text) && /^\s/.test(block.text)))
+    )
       this.flushUserMessage();
-    }
     if (!this.openUserMessage) {
       this.closeOpenItem();
       this.markLastTextFinal();
