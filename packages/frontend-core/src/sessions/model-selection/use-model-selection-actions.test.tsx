@@ -507,7 +507,7 @@ describe("useModelSelectionActions", () => {
     },
   );
 
-  test("keeps pending changes bound to the full session identity across navigation", async () => {
+  test("builds each change on the selection of the shown session across navigation", async () => {
     const firstUpdate = Promise.withResolvers<void>();
     const updateAgentSessionModel = mock(async () => {
       if (updateAgentSessionModel.mock.calls.length === 1) await firstUpdate.promise;
@@ -531,8 +531,11 @@ describe("useModelSelectionActions", () => {
         speed: "fast",
       });
 
-      // Returning to the first session builds on its pending changes.
-      await harness.update(props);
+      // Returning to the first session builds on the pending changes that its store shows.
+      await harness.update({
+        ...props,
+        selectedModelSelection: { ...claudeSelection, variant: "xhigh", speed: "fast" },
+      });
       await harness.run((state) => {
         void state.handleSelectVariant("low");
       });

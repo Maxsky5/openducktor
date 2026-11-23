@@ -102,7 +102,8 @@ export function projectWorkspaceSessionChatState({
   }
   return {
     sessionKey: identity ? agentSessionIdentityKey(identity) : null,
-    selectedModel: record.selectedModel ?? session?.selectedModel ?? null,
+    // A loaded session holds the live model, which shows each change at once.
+    selectedModel: session?.selectedModel ?? record.selectedModel ?? null,
     transcriptSession:
       session && identity
         ? {

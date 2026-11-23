@@ -5,6 +5,7 @@ import type {
 } from "@openducktor/core";
 import { agentSessionIdentityKey } from "../../../lib/agent-session-identity";
 import { errorMessage } from "../../../lib/errors";
+import { createOptimisticWrites, type OptimisticWrites } from "../../../lib/optimistic-writes";
 import type { AgentSessionIdentity, AgentSessionState } from "../../../types/agent-orchestrator";
 import type { UpdateSession } from "../events/session-event-types";
 import {
@@ -47,14 +48,6 @@ const toSessionModelSettings = (
   return model;
 };
 
-/** The model writes of one session: they run in order, and the last confirmed selection. */
-type SessionModelWrites = {
-  confirmed: AgentModelSelection | null;
-  /** The newest write. A send waits for it. */
-  latest: Promise<void>;
-  pending: number;
-};
-
 /**
  * Model changes show at once. Each session writes its changes to the runtime in order, in the
  * background. A failed write shows the last confirmed selection again, unless a later change waits.
@@ -65,14 +58,23 @@ export const createSessionModelActions = ({
   readSessionSnapshot,
   updateSession,
 }: SessionModelActionDependencies) => {
-  const writesBySession = new Map<string, SessionModelWrites>();
+  const writesBySession = new Map<string, OptimisticWrites<AgentModelSelection | null>>();
 
-  const showSelection = (
-    identity: AgentSessionIdentity,
-    selection: AgentModelSelection | null,
-  ): void => {
-    const session = readSessionSnapshot(identity);
-    if (session) updateSession(session, (current) => ({ ...current, selectedModel: selection }));
+  const writesOf = (identity: AgentSessionIdentity) => {
+    const key = agentSessionIdentityKey(identity);
+    const existing = writesBySession.get(key);
+    if (existing) return existing;
+    const writes = createOptimisticWrites<AgentModelSelection | null>({
+      show: (selection) => {
+        const session = readSessionSnapshot(identity);
+        if (session)
+          updateSession(session, (current) => ({ ...current, selectedModel: selection }));
+      },
+      readConfirmed: () => readSessionSnapshot(identity)?.selectedModel ?? null,
+      onIdle: () => writesBySession.delete(key),
+    });
+    writesBySession.set(key, writes);
+    return writes;
   };
 
   const updateAgentSessionModel = async (
@@ -87,31 +89,10 @@ export const createSessionModelActions = ({
       sessionScope,
       model,
     };
-    const key = agentSessionIdentityKey(identity);
-    const writes = writesBySession.get(key) ?? {
-      confirmed: session.selectedModel ?? null,
-      latest: Promise.resolve(),
-      pending: 0,
-    };
-    writesBySession.set(key, writes);
-
-    showSelection(identity, selection);
-    const write = writes.latest.then(
-      () => adapter.updateSessionModel(input),
-      () => adapter.updateSessionModel(input),
-    );
-    writes.latest = write;
-    writes.pending += 1;
-    try {
-      await write;
-      writes.confirmed = selection;
-    } catch (cause) {
-      if (writes.pending === 1) showSelection(identity, writes.confirmed);
-      throw cause;
-    } finally {
-      writes.pending -= 1;
-      if (writes.pending === 0) writesBySession.delete(key);
-    }
+    await writesOf(identity).write(selection, async () => {
+      await adapter.updateSessionModel(input);
+      return selection;
+    });
   };
 
   /**
@@ -119,9 +100,9 @@ export const createSessionModelActions = ({
    * shows. Fails when the newest write failed.
    */
   const settleModelUpdates = async (identity: AgentSessionIdentity): Promise<void> => {
-    const writes = writesBySession.get(agentSessionIdentityKey(identity));
-    if (!writes) return;
-    await writes.latest.catch((cause: unknown) => {
+    const newest = writesBySession.get(agentSessionIdentityKey(identity))?.settled();
+    if (!newest) return;
+    await newest.catch((cause: unknown) => {
       throw new Error(
         `The model change failed, so the message was not sent. Check the model, then send again. ${errorMessage(cause)}`,
       );

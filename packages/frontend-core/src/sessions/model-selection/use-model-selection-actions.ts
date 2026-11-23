@@ -10,7 +10,7 @@ import {
   STANDARD_SPEED,
   withSpeed,
 } from "@openducktor/core";
-import { useCallback, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import type { ModelPickerValue } from "./model-picker-model";
 import { useClientConnection } from "../../connection/client-connection-react";
 import { agentSessionIdentityKey } from "../../lib/agent-session-identity";
@@ -18,11 +18,6 @@ import type { AgentSessionIdentity } from "../../types/agent-orchestrator";
 import { reportModelUpdateError } from "./model-update-error";
 
 type SelectionChange = (current: AgentModelSelection | null) => AgentModelSelection | null;
-/** The newest selection of a session while its changes write, so quick changes build on it. */
-type PendingSelectionUpdates = {
-  selection: AgentModelSelection | null;
-  pending: number;
-};
 
 export const useModelSelectionActions = ({
   loadedSessionIdentity,
@@ -48,31 +43,25 @@ export const useModelSelectionActions = ({
     (cause: unknown): void => reportModelUpdateError(feedback, cause),
     [feedback],
   );
-  const pendingUpdates = useRef(new Map<string, PendingSelectionUpdates>());
+  // The newest selection, so a quick second change builds on the first before the next render.
+  const latestSelection = useRef(selectedModelSelection);
+  const sessionKey = loadedSessionIdentity ? agentSessionIdentityKey(loadedSessionIdentity) : null;
+  useLayoutEffect(() => {
+    latestSelection.current = selectedModelSelection;
+  }, [selectedModelSelection, sessionKey]);
   const applySelection = useCallback(
     async (change: SelectionChange): Promise<void> => {
+      const selection = change(latestSelection.current);
+      if (!selection) return;
+      latestSelection.current = selection;
       if (!loadedSessionIdentity) {
-        const selection = change(selectedModelSelection);
-        if (selection) applyDraftSelection(selection);
+        applyDraftSelection(selection);
         return;
       }
-      const key = agentSessionIdentityKey(loadedSessionIdentity);
-      const queues = pendingUpdates.current;
-      const queue = queues.get(key) ?? { selection: selectedModelSelection, pending: 0 };
-      const selection = change(queue.selection);
-      if (!selection) return;
       // The change shows at once. The session writes it after the earlier changes.
-      queue.selection = selection;
-      queue.pending += 1;
-      queues.set(key, queue);
-      try {
-        await updateAgentSessionModel(loadedSessionIdentity, selection);
-      } finally {
-        queue.pending -= 1;
-        if (queue.pending === 0) queues.delete(key);
-      }
+      await updateAgentSessionModel(loadedSessionIdentity, selection);
     },
-    [applyDraftSelection, loadedSessionIdentity, selectedModelSelection, updateAgentSessionModel],
+    [applyDraftSelection, loadedSessionIdentity, updateAgentSessionModel],
   );
 
   const handleSelectAgentProfile = useCallback(

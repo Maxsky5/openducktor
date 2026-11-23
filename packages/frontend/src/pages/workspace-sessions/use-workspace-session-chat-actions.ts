@@ -2,12 +2,13 @@ import type { WorkspaceSession } from "@openducktor/contracts";
 import { type AgentModelSelection, type AgentUserMessagePart } from "@openducktor/core";
 import { HostInvokeError } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useInterruptedTurnResume } from "@openducktor/frontend-core/sessions/session-view/use-interrupted-turn-resume";
 import { hasSettledLatestTurn } from "@openducktor/frontend-core/lib/agent-session-interrupted-turn";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
+import { createOptimisticWrites } from "@openducktor/frontend-core/lib/optimistic-writes";
 import type { AgentChatSendTarget } from "@openducktor/frontend-core/sessions/send/use-agent-chat-send";
 import { useAsyncActivityTracker } from "@openducktor/frontend-core/lib/use-async-activity-tracker";
 import { getAgentSessionResumeFailureNotice } from "@openducktor/frontend-core/sessions/agent-runtime-services";
@@ -59,12 +60,20 @@ export function useWorkspaceSessionChatActions(
   const { hasInFlight } = activity;
   const isSendInFlight = useCallback(() => hasInFlight(activityKey), [hasInFlight, activityKey]);
   const resuming = useRef(false);
-  /** The newest pending draft model write. The runtime start waits for it. */
-  const draftModelWrite = useRef<Promise<void> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const latestRecord = useRef(record);
   const recipientVersion = useRef(0);
   const latestWorkspace = useRef(workspace);
+  // The draft model writes of the record. The record shows each one at once, and the runtime start
+  // waits for the newest one.
+  const draftModelWrites = useMemo(
+    () =>
+      createOptimisticWrites<WorkspaceSession>({
+        show: (shown) => updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, shown),
+        readConfirmed: () => latestRecord.current,
+      }),
+    [queryClient, workspace.workspaceId],
+  );
   useLayoutEffect(() => {
     const previous = latestRecord.current;
     if (
@@ -107,7 +116,8 @@ export function useWorkspaceSessionChatActions(
   );
 
   const prepare = useCallback(async () => {
-    if (draftModelWrite.current) await draftModelWrite.current.catch(() => undefined);
+    const draftModelWrite = draftModelWrites.settled();
+    if (draftModelWrite) await draftModelWrite.catch(() => undefined);
     await startWorkspaceSessionRuntime({
       host,
       store,
@@ -115,7 +125,15 @@ export function useWorkspaceSessionChatActions(
       workspace: { workspaceId: workspace.workspaceId, repoPath: workspace.repoPath },
       sessionId: record.id,
     });
-  }, [host, queryClient, record.id, store, workspace.repoPath, workspace.workspaceId]);
+  }, [
+    draftModelWrites,
+    host,
+    queryClient,
+    record.id,
+    store,
+    workspace.repoPath,
+    workspace.workspaceId,
+  ]);
   const preparation = useChatSessionPreparation({
     repoPath: workspace.repoPath,
     identity: recordIdentity,
@@ -171,45 +189,20 @@ export function useWorkspaceSessionChatActions(
     }
   };
 
-  /**
-   * Shows a draft model at once and saves it in the background, after the earlier saves. A failed
-   * save shows the saved model again, unless a later save waits.
-   */
+  /** Saves a draft model in the background. The record shows it at once. */
   const saveDraftModel = useCallback(
     (selection: AgentModelSelection): Promise<void> => {
       const shown = latestRecord.current;
       const selectedModel = { ...selection, runtimeKind: shown.runtimeKind };
-      updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, {
-        ...shown,
-        selectedModel,
-      });
-      const write: Promise<void> = (draftModelWrite.current ?? Promise.resolve())
-        .catch(() => undefined)
-        .then(() =>
-          host.workspaceSessionSetDraftModel({
-            workspaceId: workspace.workspaceId,
-            sessionId: shown.id,
-            selectedModel,
-          }),
-        )
-        .then(
-          (saved) => {
-            if (draftModelWrite.current !== write) return;
-            draftModelWrite.current = null;
-            updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, saved);
-          },
-          (cause: unknown) => {
-            if (draftModelWrite.current === write) {
-              draftModelWrite.current = null;
-              updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, shown);
-            }
-            throw cause;
-          },
-        );
-      draftModelWrite.current = write;
-      return write;
+      return draftModelWrites.write({ ...shown, selectedModel }, () =>
+        host.workspaceSessionSetDraftModel({
+          workspaceId: workspace.workspaceId,
+          sessionId: shown.id,
+          selectedModel,
+        }),
+      );
     },
-    [host, queryClient, workspace.workspaceId],
+    [draftModelWrites, host, workspace.workspaceId],
   );
 
   const updateDraftModel = useCallback(
@@ -237,37 +230,13 @@ export function useWorkspaceSessionChatActions(
     },
     [saveDraftModel, updateAgentSessionModel, isSendInFlight],
   );
-  // The record shows the model, so it changes at once too. A failed last change shows the
-  // confirmed selection again, which the session store holds after its own rollback.
-  const sessionModelWrites = useRef(0);
   const updateSessionModel = useCallback(
     async (identity: AgentSessionIdentity, selection: AgentModelSelection | null) => {
       if (isSendInFlight() || resuming.current)
         throw new Error("Wait for the current send or session change before changing the model.");
-      const shown = latestRecord.current;
-      updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, {
-        ...shown,
-        selectedModel: selection ? { ...selection, runtimeKind: shown.runtimeKind } : null,
-      });
-      sessionModelWrites.current += 1;
-      try {
-        await updateAgentSessionModel(identity, selection);
-      } catch (cause) {
-        if (sessionModelWrites.current === 1) {
-          const confirmed = store.getSessionSnapshot(identity)?.selectedModel;
-          updateWorkspaceSessionQueries(queryClient, workspace.workspaceId, {
-            ...latestRecord.current,
-            selectedModel: confirmed
-              ? { ...confirmed, runtimeKind: shown.runtimeKind }
-              : shown.selectedModel,
-          });
-        }
-        throw cause;
-      } finally {
-        sessionModelWrites.current -= 1;
-      }
+      await updateAgentSessionModel(identity, selection);
     },
-    [updateAgentSessionModel, isSendInFlight, queryClient, store, workspace.workspaceId],
+    [updateAgentSessionModel, isSendInFlight],
   );
 
   const sendTarget = useCallback(

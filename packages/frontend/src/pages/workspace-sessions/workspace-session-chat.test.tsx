@@ -713,7 +713,7 @@ test.each(["model", "effort", "profile"] as const)(
     const [initialModel, nextModel] = modelIds;
     const providerId = descriptor.kind === "claude" ? "anthropic" : "openai";
     const modelTrigger = `Select model, ${descriptor.label}, ${initialModel}`;
-    const { Harness, workspace, entry, session, operations, definitions } =
+    const { Harness, workspace, entry, session, store, operations, definitions } =
       createPresentationScenario(descriptor.kind, [
         buildMessage("user", "Continue the interrupted turn", { id: "interrupted-user" }),
       ]);
@@ -753,6 +753,8 @@ test.each(["model", "effort", "profile"] as const)(
     let updateRecord = (_record: WorkspaceSession): void => {};
     const updateModel = mock<AgentOperationsContextValue["updateAgentSessionModel"]>(
       async (_identity, selection) => {
+        // The session store shows the change at once, as the orchestrator does.
+        store.updateSession(session, (current) => ({ ...current, selectedModel: selection }));
         await save.promise;
         updateRecord({
           ...entry,
