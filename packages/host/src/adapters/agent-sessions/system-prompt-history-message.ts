@@ -31,3 +31,7 @@ export const withSystemPromptHistoryMessage = (
     ...history,
   ];
 };
+
+/** The last `limit` entries of a history, or all of them with no limit. */
+export const historyTail = <Entry>(history: readonly Entry[], limit: number | undefined): Entry[] =>
+  history.slice(limit ? -limit : undefined);

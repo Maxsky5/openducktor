@@ -141,6 +141,28 @@ describe("AntigravitySessionController", () => {
     expect(reply?.role === "assistant" ? reply.durationMs : null).toBeGreaterThanOrEqual(0);
   });
 
+  test("reads the requested tail of the history, after the instructions", async () => {
+    const harness = await createConnectedController();
+    const { ref } = await startBuildSession(harness);
+    void sendText(harness, ref, "Hello");
+    const prompt = await harness.fake.waitForPrompts(1);
+    await prompt.client.notify(methods.client.session.update, {
+      sessionId: ref.externalSessionId,
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Hi there" } },
+    });
+    prompt.respond({ stopReason: "end_turn" });
+    await settle();
+
+    const all = await harness.controller.loadHistory(ref);
+    const tail = await harness.controller.loadHistory({ ...ref, limit: 1 });
+
+    const ids = all.map(({ messageId }) => messageId);
+    expect(ids.length).toBeGreaterThan(2);
+    expect(tail.map(({ messageId }) => messageId)).toEqual(
+      [ids[0], ids.at(-1)].flatMap((id) => (id === undefined ? [] : [id])),
+    );
+  });
+
   test("refuses a new turn while a turn runs, and joins a steer to it", async () => {
     const harness = await createConnectedController();
     const { ref } = await startBuildSession(harness);

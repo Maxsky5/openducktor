@@ -19,6 +19,7 @@ import type {
 } from "@openducktor/core";
 import {
   type SystemPromptHistoryContext,
+  historyTail,
   withSystemPromptHistoryMessage,
 } from "../agent-sessions/system-prompt-history-message";
 import type { AntigravityAgentConnection } from "./antigravity-agent-connection";
@@ -265,11 +266,14 @@ export class AntigravitySessionController {
    * MCP servers and closes it again. The caller checked the saved directory of the session.
    */
   replayHistory(
-    input: AgentSessionLiveRef & { systemPromptContext?: SystemPromptHistoryContext | undefined },
+    input: AgentSessionLiveRef & {
+      systemPromptContext?: SystemPromptHistoryContext | undefined;
+      limit?: number | undefined;
+    },
   ): Promise<AgentSessionHistoryMessage[]> {
     return this.sessions.withGate(input.externalSessionId, async () => {
       const held = this.sessions.find(input);
-      if (held) return held.history();
+      if (held) return held.history(input.limit);
       // A load and close here would end the live session that another ref holds.
       this.sessions.assertNotHeldElsewhere(input);
       const transcript = this.newTranscript(input.externalSessionId, input.workingDirectory);
@@ -277,7 +281,7 @@ export class AntigravitySessionController {
       return withSystemPromptHistoryMessage(
         `antigravity-system-prompt:${input.externalSessionId}`,
         input.systemPromptContext,
-        transcript.history,
+        historyTail(transcript.history, input.limit),
       );
     });
   }

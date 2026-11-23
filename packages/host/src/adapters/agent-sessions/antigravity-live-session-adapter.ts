@@ -247,7 +247,7 @@ export const createAntigravityLiveSessionAdapterPreparer =
         loadSessionHistory: (input) =>
           Effect.suspend(() => {
             const live = sessions.find(input);
-            if (live) return Effect.succeed(live.history());
+            if (live) return Effect.succeed(live.history(input.limit));
             return readNativeSession(input, "antigravity-live-session.load-history").pipe(
               Effect.andThen(
                 run("antigravity-live-session.load-history", input, () =>

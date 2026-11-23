@@ -273,8 +273,8 @@ export const createConnectedController = async (
         nativeSession: await findListedAntigravitySession(agentConnection, input.externalSessionId),
         managedMcpServer: managedMcpServer(input.sessionScope.workspaceId),
       }),
-    loadHistory: (ref: AgentSessionLiveRef) =>
-      sessions.find(ref)?.history() ?? controller.replayHistory(ref),
+    loadHistory: (ref: AgentSessionLiveRef & { limit?: number }) =>
+      sessions.find(ref)?.history(ref.limit) ?? controller.replayHistory(ref),
     sendUserMessage: (input: AgentSessionLiveRef & AntigravitySendInput) =>
       sessions.require(input).send(input),
     updateModel: (ref: AgentSessionLiveRef, model: AgentModelSelection | null) =>

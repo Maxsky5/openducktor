@@ -29,7 +29,10 @@ import {
   classifyAgentSessionActivity,
   setSnapshotBackgroundWork,
 } from "@openducktor/core";
-import { withSystemPromptHistoryMessage } from "../agent-sessions/system-prompt-history-message";
+import {
+  historyTail,
+  withSystemPromptHistoryMessage,
+} from "../agent-sessions/system-prompt-history-message";
 import type { AntigravityAgentConnection } from "./antigravity-agent-connection";
 import { AntigravityBackgroundCommands } from "./antigravity-background-commands";
 import { ANTIGRAVITY_GOAL_STOP_MESSAGE, toAntigravityGoalSnapshot } from "./antigravity-goal";
@@ -189,11 +192,11 @@ export class AntigravityLiveSession {
   }
 
   /** The live projection of the history, with the initial instructions first. */
-  history(): AgentSessionHistoryMessage[] {
+  history(limit?: number): AgentSessionHistoryMessage[] {
     return withSystemPromptHistoryMessage(
       `antigravity-system-prompt:${this.ref.externalSessionId}`,
       { systemPrompt: this.systemPrompt, startedAt: this.startedAt },
-      structuredClone(this.transcript.history),
+      structuredClone(historyTail(this.transcript.history, limit)),
     );
   }
 
