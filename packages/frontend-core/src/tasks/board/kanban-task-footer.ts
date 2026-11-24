@@ -98,15 +98,21 @@ export const getTaskFooter = ({
   const primarySession = sessions.find(
     (session) => session.action === workflowActions.primaryAction,
   );
+  // A link for each agent step role with a session, also without an Open button in the workflow.
   const shortcuts = !taskHasSessionPage(task)
     ? []
-    : sessions.flatMap((session) => {
+    : task.taskWorkflow.sessionLinks.flatMap((link) => {
+        const linkOptions = resolveSessionTargetOptions(
+          historicalSessions,
+          taskSessions,
+          link.role,
+        );
         if (
-          !session.options ||
-          matchesAgentSessionIdentity(session.options.session, primarySession?.options?.session)
+          !linkOptions ||
+          matchesAgentSessionIdentity(linkOptions.session, primarySession?.options?.session)
         )
           return [];
-        return [{ ...session, options: session.options }];
+        return [{ ...link, options: linkOptions }];
       });
   const secondaryActions = workflowActions.secondaryActions.filter((action) => {
     const target = sessions.find((session) => session.action === action)?.options?.session;
@@ -201,7 +207,8 @@ type RoleSession = { role: string; action: string; label: string } & {
 
 type Footer = {
   sessions: RoleSession[];
-  shortcuts: (RoleSession & { options: SessionTargetOptions })[];
+  /** A link to the session of each agent step role, without the main session of the card. */
+  shortcuts: { role: string; label: string; options: SessionTargetOptions }[];
   actions: ReturnType<typeof resolveTaskCardActions>;
   /** The core action that leads before every workflow action, such as Close Task when merged. */
   leadingCoreAction: CoreTaskAction | null;

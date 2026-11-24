@@ -42,6 +42,7 @@ type LaunchSurface = "studio" | "git_conflict";
 type StepDisplay = Pick<WorkflowStepDisplayRule, "completion" | "attention">;
 /** A view action that opens the latest session of its step role. */
 type TaskWorkflowSessionView = { action: string; role: string; label: string };
+type TaskWorkflowSessionLink = { role: string; label: string };
 /** A launch action as a workflow step or the core pull request launch declares it. */
 type TaskWorkflowLaunchDefinition = AgentStep["launchActions"][number];
 export type TaskWorkflowLaunchAction = TaskWorkflowLaunchDefinition & { role: string };
@@ -182,6 +183,11 @@ export type TaskWorkflow = {
   /** The role whose session a view action with a step opens. */
   viewActionRole(actionId: string): string | undefined;
   readonly sessionViews: readonly TaskWorkflowSessionView[];
+  /**
+   * One link to the sessions of each role of an agent step, in step order. A task card shows the
+   * links of the roles that have a session, also without an Open button in the workflow.
+   */
+  readonly sessionLinks: readonly TaskWorkflowSessionLink[];
   /** The launch actions that show as extra controls for available steps. */
   surfaceLaunches(
     task: TaskCardFacts & Pick<TaskCard, "workflowSteps">,
@@ -346,6 +352,12 @@ export const createTaskWorkflow = (
       label: role(roleId).label,
     })),
   );
+  const sessionLinks = deepFreeze(
+    [...new Set(agentSteps.map(({ roleId }) => roleId))].map((roleId) => ({
+      role: roleId,
+      label: role(roleId).label,
+    })),
+  );
   const compileSurfaceLaunches = (surface: LaunchSurface) =>
     agentSteps.flatMap((step) =>
       step.launchActions
@@ -489,6 +501,7 @@ export const createTaskWorkflow = (
     agentStep: (roleId) => stepByRole.get(roleId),
     viewActionRole: (actionId) => viewActionRoles.get(actionId),
     sessionViews,
+    sessionLinks,
     surfaceLaunches: (task, surface) => {
       const candidates = launchesBySurface[surface];
       if (candidates.length === 0) return [];
