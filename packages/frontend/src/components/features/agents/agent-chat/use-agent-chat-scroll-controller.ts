@@ -219,7 +219,7 @@ export function useAgentChatScrollController({
     };
 
     const handleWheel = (event: WheelEvent) => {
-      if (isUpwardWheel(event)) {
+      if (!event.ctrlKey && isUpwardWheel(event)) {
         unpinForUserScroll(event.target);
       }
     };

@@ -42,7 +42,7 @@ export type TranscriptSlideController = {
   reset: (elements: TranscriptSlideElements) => void;
 };
 
-export const readCurrentTranslateY = (element: HTMLElement): number => {
+const readCurrentTranslateY = (element: HTMLElement): number => {
   const transform = getComputedStyle(element).transform;
   if (!transform || transform === "none") return 0;
   const Matrix = globalThis.DOMMatrixReadOnly;

@@ -3394,6 +3394,7 @@ describe("useAgentChatWindow", () => {
       revealElement(trigger);
       await flush();
     });
+    const scrollTopBeforeAppend = container.scrollTop;
 
     await harness.update({
       rows: nextRows,
@@ -3401,6 +3402,8 @@ describe("useAgentChatWindow", () => {
       shouldResetForTranscriptLoad: false,
     });
 
+    expect(container.scrollTop).toBe(scrollTopBeforeAppend);
+    expect(getMaxScrollTop(container)).toBeGreaterThan(scrollTopBeforeAppend);
     expect(harness.getLatestResult().windowStart).toBe(0);
     expect(harness.getLatestResult().visibleRows).toHaveLength(7);
     expect(harness.getLatestResult().visibleRows.at(-1)?.key).toBe(nextRows.at(-1)?.key);
@@ -3519,6 +3522,22 @@ describe("useAgentChatWindow", () => {
       shouldResetForTranscriptLoad: false,
     });
     expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
+
+    await harness.unmount();
+  });
+
+  test("keeps following content growth after a Ctrl+wheel pinch gesture over the transcript", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+
+    await act(async () => {
+      const pinch = new WheelEvent("wheel", { bubbles: true, deltaY: -40 });
+      Object.defineProperty(pinch, "ctrlKey", { value: true });
+      container.dispatchEvent(pinch);
+      await flush();
+    });
+    await growContent(extraContentHeightPx);
+
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
 
     await harness.unmount();
   });
