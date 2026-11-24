@@ -46,6 +46,7 @@ type UseAgentStudioSendTargetArgs = {
   scheduleQueryUpdate: (updates: QueryUpdate) => void;
   selectedSessionIdentity: AgentSessionIdentity | null;
   isCatalogLoading: boolean;
+  speedBlockedReason?: string | null;
   assertCanPrepareSession: (identity: AgentSessionIdentity) => void;
   agentStudioReady: boolean;
   isStarting: boolean;
@@ -64,6 +65,7 @@ export function useAgentStudioSendTarget({
   scheduleQueryUpdate,
   selectedSessionIdentity,
   isCatalogLoading,
+  speedBlockedReason = null,
   assertCanPrepareSession,
   agentStudioReady,
   isStarting,
@@ -91,7 +93,8 @@ export function useAgentStudioSendTarget({
       activityKey,
       capture: () => isCurrentContext,
       canSend: () => {
-        if (isStarting || !agentStudioReady || taskId.length === 0) return false;
+        if (isStarting || speedBlockedReason !== null || !agentStudioReady || taskId.length === 0)
+          return false;
         if (selectedSessionIdentity !== null) return true;
         return (
           canStartSession &&
@@ -104,6 +107,7 @@ export function useAgentStudioSendTarget({
       },
       resolve: async (parts) => {
         if (!isCurrentContext()) return null;
+        if (speedBlockedReason !== null) throw new Error(speedBlockedReason);
         requireSystemCommandTarget(parts, selectedSessionIdentity);
         if (selectedSessionIdentity) {
           assertCanPrepareSession(selectedSessionIdentity);
@@ -202,6 +206,7 @@ export function useAgentStudioSendTarget({
       isStarting,
       launchActionId,
       role,
+      speedBlockedReason,
       startPreparedSession,
       scheduleQueryUpdate,
       selectedTask,

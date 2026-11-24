@@ -65,6 +65,7 @@ type UseAgentStudioSessionActionsArgs = {
   runtimeDefinitions: RuntimeDescriptor[];
   selectedModelDescriptor?: AgentModelCatalog["models"][number] | null;
   isSelectionCatalogLoading: boolean;
+  speedBlockedReason?: string | null;
   supportsAttachments: boolean;
   sessionsForTask: AgentSessionSummary[];
   selectedTask: TaskCard | null;
@@ -131,6 +132,7 @@ export function useAgentStudioSessionActions({
   runtimeDefinitions,
   selectedModelDescriptor,
   isSelectionCatalogLoading,
+  speedBlockedReason = null,
   supportsAttachments,
   sessionsForTask,
   selectedTask,
@@ -205,6 +207,7 @@ export function useAgentStudioSessionActions({
     role,
     selectedSessionIdentity: stableSelectedSessionIdentity,
     isCatalogLoading: isSelectionCatalogLoading,
+    speedBlockedReason,
     launchActionId,
     selectionForNewSession,
     selectedTask,

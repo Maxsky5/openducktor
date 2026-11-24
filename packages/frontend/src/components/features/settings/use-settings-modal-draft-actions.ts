@@ -11,6 +11,7 @@ import {
 } from "@openducktor/workflows";
 import { useMemo } from "react";
 import type { RepoAgentDefaultInput } from "@/types/state-slices";
+import { applyRepoAgentDefaultField } from "@/components/features/repository/model-defaults/model-defaults-model";
 import { ensureDraftAgentDefault, updateRepoDefaultModel } from "./settings-modal-model";
 import type { PromptSettingsLayersUpdater } from "./settings-prompt-layers";
 import type { SettingsSnapshotDraftUpdater } from "./use-settings-modal-snapshot-state";
@@ -96,10 +97,13 @@ const createDraftActions = ({
     ): void => {
       updateSelectedRepoConfig((repoConfig) => {
         const currentRoleDefault = repoConfig.agentDefaults[role];
-        const nextRoleDefault = {
-          ...ensureDraftAgentDefault(currentRoleDefault),
-          runtimeKind: currentRoleDefault?.runtimeKind ?? repoConfig.defaultModel?.runtimeKind,
-        };
+        const resolvedRuntimeKind =
+          currentRoleDefault?.runtimeKind ?? repoConfig.defaultModel?.runtimeKind;
+        const baseRoleDefault = ensureDraftAgentDefault(currentRoleDefault);
+        if (resolvedRuntimeKind) {
+          baseRoleDefault.runtimeKind = resolvedRuntimeKind;
+        }
+        const nextRoleDefault = applyRepoAgentDefaultField(baseRoleDefault, field, value);
 
         return {
           ...repoConfig,
@@ -107,7 +111,7 @@ const createDraftActions = ({
             ...repoConfig.agentDefaults,
             // SAFETY: the draft can hold a default without runtimeKind. prepareModelDefaultsForSave
             // rejects that default before the save.
-            [role]: { ...nextRoleDefault, [field]: value } as AgentModelDefault,
+            [role]: nextRoleDefault as AgentModelDefault,
           },
         };
       });

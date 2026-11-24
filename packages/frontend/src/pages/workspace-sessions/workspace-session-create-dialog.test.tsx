@@ -351,7 +351,7 @@ test.each(["roles", "branches", "defaults", "models"] as const)(
       if (read === "defaults") {
         const picker = view.getByRole("button", { name: "Select model, Select a model" });
         fireEvent.click(picker);
-        fireEvent.click(await view.findByRole("button", { name: "Select Test model model" }));
+        fireEvent.doubleClick(await view.findByRole("button", { name: "Select Test model model" }));
         await waitFor(() => expect(document.activeElement === picker).toBe(true), { timeout: 800 });
       }
       name.focus();
@@ -486,7 +486,7 @@ async function selectModel(view: Awaited<ReturnType<typeof renderCreation>>) {
     { name: "Select Test model model" },
     { timeout: 800 },
   );
-  fireEvent.click(choice);
+  fireEvent.doubleClick(choice);
   await waitFor(
     () =>
       expect(view.getByRole("button", { name: "Create session" }).hasAttribute("disabled")).toBe(
@@ -625,8 +625,6 @@ test("uses the task modal label-to-control gap for every form field", async () =
     const fields = [
       view.getByLabelText("Name optional").parentElement,
       view.getByText("Runtime and model").parentElement,
-      view.getByText("Effort", { selector: "label" }).parentElement,
-      view.getByText("Runtime profile", { selector: "label" }).parentElement,
       view.getByText("Custom role", { exact: false, selector: "label" }).parentElement,
     ];
     for (const field of fields) {
@@ -698,7 +696,9 @@ test("a current-checkout creation keeps disabled choices pending and failure fee
     );
     expect(
       view
-        .getByRole("button", { name: "Select model, OpenCode, Test model" })
+        .getByRole("button", {
+          name: "Select model, OpenCode, runtime-profile, Test model, Effort low",
+        })
         .getAttribute("aria-disabled"),
     ).toBe("false");
     expect(created).toBe(0);
@@ -859,10 +859,18 @@ test("creation keeps Role, Runtime Profile, Effort and location separate and blo
       "Zeta",
     ]);
     fireEvent.click(view.getByRole("option", { name: "Alpha" }));
-    fireEvent.click(view.getByRole("button", { name: "Runtime profile" }));
-    fireEvent.click(view.getByRole("option", { name: "runtime-profile" }));
-    fireEvent.click(view.getByRole("button", { name: "Effort" }));
-    fireEvent.click(view.getByRole("option", { name: "high" }));
+    fireEvent.click(
+      view.getByRole("button", {
+        name: "Select model, OpenCode, runtime-profile, Test model, Effort low",
+      }),
+    );
+    const profileSection = view.getByRole("region", { name: "Agent profile" });
+    expect(within(profileSection).getByRole("button", { name: "Profile" }).textContent).toContain(
+      "runtime-profile",
+    );
+    const effortSlider = view.getByRole("slider", { name: "Effort" });
+    fireEvent.keyDown(effortSlider, { key: "ArrowRight" });
+    fireEvent.keyDown(effortSlider, { key: "Escape" });
     fireEvent.change(view.getByLabelText("Name optional"), { target: { value: "My session" } });
     fireEvent.click(view.getByRole("radio", { name: /New worktree/ }));
     fireEvent.change(view.getByLabelText("Worktree name"), { target: { value: "my-feature" } });

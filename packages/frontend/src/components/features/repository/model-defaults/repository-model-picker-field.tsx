@@ -1,7 +1,10 @@
 import type { RuntimeDescriptor } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { type ReactElement, useMemo } from "react";
-import { ModelPicker } from "@/components/features/agents/model-picker";
+import {
+  ModelPicker,
+  type ModelPickerOptionsPane,
+} from "@/components/features/agents/model-picker";
 import {
   type ModelPickerFavoriteState,
   modelPickerResourceFromCatalogQuery,
@@ -17,6 +20,7 @@ type RepositoryModelPickerFieldProps = {
   catalogResources: RuntimeModelCatalogQueryResource[];
   value: ModelPickerValue | null;
   favoriteState: ModelPickerFavoriteState;
+  options: ModelPickerOptionsPane;
   isReadOnly: boolean;
   isLoadingCatalog: boolean;
   onSelect: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
@@ -27,6 +31,7 @@ export function RepositoryModelPickerField({
   catalogResources,
   value,
   favoriteState,
+  options,
   isReadOnly,
   isLoadingCatalog,
   onSelect,
@@ -40,9 +45,11 @@ export function RepositoryModelPickerField({
     <div className="grid min-w-0 gap-1">
       <Label className="text-xs">Runtime and model</Label>
       <ModelPicker
+        triggerVariant="form"
         runtimes={runtimes}
         value={value}
         favoriteState={favoriteState}
+        options={options}
         selectionPolicy={
           isReadOnly
             ? { kind: "read_only", reason: "Settings are being saved or loaded." }

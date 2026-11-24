@@ -50,6 +50,10 @@ const resource = (
   ...overrides,
 });
 
+const emptyOptions = {
+  effort: { options: [], value: undefined, onSelect: () => {} },
+};
+
 test("selects a cached settings model without a refresh notice", async () => {
   const onSelect = mock(() => {});
   render(
@@ -58,6 +62,7 @@ test("selects a cached settings model without a refresh notice", async () => {
       catalogResources={[resource()]}
       value={null}
       favoriteState={favoriteState}
+      options={emptyOptions}
       isReadOnly={false}
       isLoadingCatalog={false}
       onSelect={onSelect}
@@ -86,6 +91,7 @@ test("keeps cached settings models selectable after a catalog failure", async ()
       catalogResources={[resource({ error: "Catalog refresh failed" })]}
       value={null}
       favoriteState={favoriteState}
+      options={emptyOptions}
       isReadOnly={false}
       isLoadingCatalog={false}
       onSelect={onSelect}

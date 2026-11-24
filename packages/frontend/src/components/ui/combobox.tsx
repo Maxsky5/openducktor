@@ -48,8 +48,8 @@ type ComboboxProps = {
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
-  triggerAriaLabelledBy?: string;
-  triggerAriaDescribedBy?: string;
+  triggerAriaLabelledBy?: string | undefined;
+  triggerAriaDescribedBy?: string | undefined;
   wrapLabels?: boolean;
   wrapTriggerLabel?: boolean;
   wrapOptionLabels?: boolean;

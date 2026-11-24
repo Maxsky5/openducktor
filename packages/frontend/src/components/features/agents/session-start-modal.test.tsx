@@ -316,15 +316,13 @@ describe("SessionStartModal", () => {
     }
   });
 
-  test("places Effort beside Runtime and model without changing variant selection", () => {
+  test("renders one full-width unified model picker replacing separate effort and profile fields", () => {
     const view = render(<SessionStartModal model={createModel()} />);
     try {
       const modelField = view.getByTestId("session-start-model-picker-field");
-      const variantField = view.getByTestId("session-start-variant-field");
-      expect(modelField.parentElement).toBe(variantField.parentElement);
-      expect(modelField.parentElement?.classList.contains("sm:grid-cols-2")).toBe(true);
-      expect(view.getByRole("button", { name: "Effort" })).toBeTruthy();
-      expect(view.queryByText("Variant")).toBeNull();
+      expect(modelField).toBeTruthy();
+      expect(view.queryByTestId("session-start-variant-field")).toBeNull();
+      expect(view.queryByTestId("session-start-runtime-profile-field")).toBeNull();
       expect(view.getByRole("dialog").classList.contains("sm:max-w-2xl")).toBe(true);
     } finally {
       view.unmount();
@@ -532,10 +530,14 @@ describe("SessionStartModal", () => {
       }),
     );
 
-    const speed = screen.getByRole("button", { name: "Speed" });
-    expect(speed.textContent).toContain("Fast");
-    await act(async () => fireEvent.click(speed));
-    await act(async () => fireEvent.click(screen.getByRole("option", { name: "Standard" })));
+    const trigger = getFieldButton("session-start-model-picker-field");
+    expect(trigger.textContent).toContain("Fast");
+    expect(trigger.getAttribute("aria-disabled")).toBe("false");
+    await act(async () => fireEvent.click(trigger));
+    const speedSlider = screen.getByRole("slider", { name: "Speed" });
+    expect(document.activeElement).toBe(speedSlider);
+    await act(async () => fireEvent.keyDown(speedSlider, { key: "ArrowLeft" }));
+    await act(async () => fireEvent.keyDown(speedSlider, { key: "Escape" }));
     fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 
     expect(onConfirm).toHaveBeenCalledWith({
@@ -562,12 +564,9 @@ describe("SessionStartModal", () => {
     );
 
     const sourceCombobox = getFieldButton("session-start-source-field");
-    const runtimeProfileCombobox = getFieldButton("session-start-runtime-profile-field");
     const modelPicker = getFieldButton("session-start-model-picker-field");
-    const variantCombobox = getFieldButton("session-start-variant-field");
 
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
-    expect(runtimeProfileCombobox.hasAttribute("disabled")).toBe(true);
     expect(modelPicker.hasAttribute("disabled")).toBe(false);
     expect(modelPicker.getAttribute("aria-disabled")).toBe("true");
     const reasonId = modelPicker.getAttribute("aria-describedby");
@@ -575,7 +574,6 @@ describe("SessionStartModal", () => {
     expect(document.getElementById(reasonId ?? "")?.textContent).toBe(
       "Reuse mode keeps the source session runtime and model.",
     );
-    expect(variantCombobox.hasAttribute("disabled")).toBe(true);
 
     await act(async () => {
       modelPicker.focus();
@@ -727,7 +725,7 @@ describe("SessionStartModal", () => {
     },
   );
 
-  test("shows reuse helper text even when catalog is loading", () => {
+  test("keeps reuse trigger read-only for OpenCode even while catalog is loading", () => {
     const { unmount } = render(
       createElement(SessionStartModal, {
         model: createModel({
@@ -741,11 +739,9 @@ describe("SessionStartModal", () => {
       }),
     );
 
-    expect(
-      screen.getByText("Reuse mode keeps the previous session runtime profile, model, and effort."),
-    ).toBeTruthy();
-    expect(screen.getByText("Runtime profile")).toBeTruthy();
-    expect(screen.queryByText("Loading profiles for the selected runtime.")).toBeNull();
+    const trigger = getFieldButton("session-start-model-picker-field");
+    expect(trigger.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByText("No profiles are available for this runtime.")).toBeNull();
 
     unmount();
   });
@@ -855,7 +851,7 @@ describe("SessionStartModal", () => {
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
       await waitFor(() => {
         expect(
-          screen.getByRole("button", { name: "Select model, OpenCode, GPT-5.4" }),
+          screen.getByRole("button", { name: /Select model, OpenCode, Builder, GPT-5\.4/ }),
         ).toBeTruthy();
       });
       expect(settingsAttempts).toBe(2);
@@ -887,23 +883,22 @@ describe("SessionStartModal", () => {
     unmount();
   });
 
-  test("disables the runtime profile selector when no model is selected", () => {
+  test("prompts to select a model inside the unified picker when no model is selected", async () => {
     const { unmount } = render(
       createElement(SessionStartModal, {
         model: createModel({ selectedModelSelection: null }),
       }),
     );
 
-    expect(getFieldButton("session-start-runtime-profile-field").hasAttribute("disabled")).toBe(
-      true,
-    );
-    expect(getFieldButton("session-start-variant-field").hasAttribute("disabled")).toBe(true);
-    expect(getFieldButton("session-start-model-picker-field").hasAttribute("disabled")).toBe(false);
+    const modelPicker = getFieldButton("session-start-model-picker-field");
+    expect(modelPicker.hasAttribute("disabled")).toBe(false);
+    await act(async () => fireEvent.click(modelPicker));
+    expect(screen.getByText("Select a model first to configure options.")).toBeTruthy();
 
     unmount();
   });
 
-  test("keeps existing-session selection visible and model controls enabled in fork mode", () => {
+  test("keeps existing-session selection visible and unified model picker enabled in fork mode", () => {
     const { unmount } = render(
       createElement(SessionStartModal, {
         model: createModel({
@@ -921,14 +916,11 @@ describe("SessionStartModal", () => {
     expect(screen.getByText("Existing session")).toBeTruthy();
 
     const sourceCombobox = getFieldButton("session-start-source-field");
-    const runtimeProfileCombobox = getFieldButton("session-start-runtime-profile-field");
     const modelPicker = getFieldButton("session-start-model-picker-field");
-    const variantCombobox = getFieldButton("session-start-variant-field");
 
     expect(sourceCombobox.hasAttribute("disabled")).toBe(false);
-    expect(runtimeProfileCombobox.hasAttribute("disabled")).toBe(false);
     expect(modelPicker.hasAttribute("disabled")).toBe(false);
-    expect(variantCombobox.hasAttribute("disabled")).toBe(false);
+    expect(modelPicker.getAttribute("aria-disabled")).toBe("false");
 
     unmount();
   });

@@ -171,8 +171,6 @@ const createBaseArgs = (): BuildArgs => {
       retrySlashCommands: null,
       retrySkills: null,
       retrySubagents: null,
-      onAgentSelectorOpen: () => {},
-      onVariantSelectorOpen: () => {},
       onCatalogMenuOpen: () => {},
       searchFiles: async () => [],
       agentProfileOptions: [],
@@ -413,10 +411,16 @@ describe("task chat speed", () => {
     );
     const container = document.createElement("div");
     container.innerHTML = html;
+    const trigger = container.querySelector('button[aria-label^="Select model,"]');
+    expect(trigger).not.toBeNull();
     if (label === null) {
-      expect(container.querySelector('[aria-label^="Speed:"]')).toBeNull();
+      expect(trigger?.getAttribute("aria-label")).not.toContain("Speed ");
+      expect(container.querySelector('[data-slot="trigger-speed"]')).toBeNull();
     } else {
-      expect(container.querySelector(`[aria-label="Speed: ${label}"]`)).not.toBeNull();
+      expect(trigger?.getAttribute("aria-label")).toContain(`Speed ${label}`);
+      expect(container.querySelector('[data-slot="trigger-speed"]') !== null).toBe(
+        label !== "Standard",
+      );
     }
   });
 });

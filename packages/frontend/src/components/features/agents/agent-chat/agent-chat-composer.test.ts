@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CHAT_SETTINGS, OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CODEX_RUNTIME_DESCRIPTOR,
+  DEFAULT_CHAT_SETTINGS,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { act, createElement, createRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -65,8 +69,6 @@ const buildModel = () => ({
   retrySlashCommands: null,
   retrySkills: null,
   retrySubagents: null,
-  onAgentSelectorOpen: () => {},
-  onVariantSelectorOpen: () => {},
   onCatalogMenuOpen: () => {},
   searchFiles: async () => [],
   agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],
@@ -162,67 +164,49 @@ const buildCodexModelSelectionWithoutProfile = () => {
 };
 
 describe("AgentChatComposer", () => {
-  test.each(["Select model, OpenCode, GPT-5.3 Codex", "high", "Speed: Standard"])(
-    "keeps %s opening above the composer when there is little space above",
-    async (name) => {
-      const view = render(
-        createElement(AgentChatComposer, {
-          model: {
-            ...buildModel(),
-            speed: {
-              key: "session",
-              choice: "standard",
-              levels: [{ id: "fast", label: "Fast" }],
-              blockedReason: undefined,
-              pending: false,
-              disabled: false,
-              error: null,
-              onChange: () => {},
-            },
-          },
-        }),
+  test("keeps the unified model picker opening above the composer when there is little space above", async () => {
+    const view = render(
+      createElement(AgentChatComposer, {
+        model: buildModel(),
+      }),
+    );
+    const viewport = document.documentElement;
+    const heightDescriptor = Object.getOwnPropertyDescriptor(viewport, "clientHeight");
+    Object.defineProperty(viewport, "clientHeight", { configurable: true, value: 768 });
+    try {
+      await waitFor(
+        () =>
+          expect(
+            document.activeElement === view.container.querySelector("[data-composer-editor]"),
+          ).toBe(true),
+        { timeout: 300 },
       );
-      const viewport = document.documentElement;
-      const heightDescriptor = Object.getOwnPropertyDescriptor(viewport, "clientHeight");
-      Object.defineProperty(viewport, "clientHeight", { configurable: true, value: 768 });
-      try {
-        await waitFor(
-          () =>
-            expect(
-              document.activeElement === view.container.querySelector("[data-composer-editor]"),
-            ).toBe(true),
+      const trigger = view.container.querySelector<HTMLButtonElement>(
+        'button[aria-label^="Select model,"]',
+      );
+      if (!trigger) throw new Error("Expected the unified model picker trigger");
+      for (let opening = 0; opening < 2; opening += 1) {
+        await act(async () => fireEvent.click(trigger));
+        const popup = await waitFor(
+          () => {
+            const content = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+            if (!content) throw new Error("Expected an open composer picker");
+            expect(content.parentElement?.style.transform).not.toBe("translate(0, -200%)");
+            expect(content.getAttribute("data-side")).toBe("top");
+            return content;
+          },
           { timeout: 300 },
         );
-        // The trigger is at y=0 in Happy DOM, with room below in this viewport.
-        const trigger = Array.from(view.container.querySelectorAll("button")).find(
-          (button) => button.getAttribute("aria-label") === name || button.textContent === name,
-        );
-        if (!trigger) throw new Error(`Expected the ${name} picker trigger`);
-        for (let opening = 0; opening < 2; opening += 1) {
-          await act(async () => fireEvent.click(trigger));
-          const popup = await waitFor(
-            () => {
-              const content = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
-              if (!content) throw new Error("Expected an open composer picker");
-              // Radix uses this transform until positioning finishes. Wait before checking data-side,
-              // so the initial "top" value cannot hide a later collision flip.
-              expect(content.parentElement?.style.transform).not.toBe("translate(0, -200%)");
-              expect(content.getAttribute("data-side")).toBe("top");
-              return content;
-            },
-            { timeout: 300 },
-          );
-          await act(async () => fireEvent.keyDown(popup, { key: "Escape" }));
-        }
-      } finally {
-        view.unmount();
-        if (heightDescriptor) Object.defineProperty(viewport, "clientHeight", heightDescriptor);
-        else Reflect.deleteProperty(viewport, "clientHeight");
+        await act(async () => fireEvent.keyDown(popup, { key: "Escape" }));
       }
-    },
-  );
+    } finally {
+      view.unmount();
+      if (heightDescriptor) Object.defineProperty(viewport, "clientHeight", heightDescriptor);
+      else Reflect.deleteProperty(viewport, "clientHeight");
+    }
+  });
 
-  test("renders the runtime-aware model picker and send controls", () => {
+  test("renders the unified model picker and send controls", () => {
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: buildModel(),
@@ -232,27 +216,24 @@ describe("AgentChatComposer", () => {
     expect(html).toContain("Send message");
     expect(html).toContain("Stop session");
     expect(html).toContain('aria-label="Session context: 22.5% used, 45K tokens"');
-    expect(html).toContain("Select model, OpenCode, GPT-5.3 Codex");
+    expect(html).toContain(
+      "Select model, OpenCode, Hephaestus (Deep Agent), GPT-5.3 Codex, Effort high",
+    );
     expect(html).toContain('viewBox="0 0 512 512"');
-    expect(html).toContain("lucide-brain-cog");
     expect(html).toContain("high");
   });
 
-  test("shows keyboard focus on the borderless selectors with a neutral ring", () => {
+  test("shows keyboard focus on the borderless model trigger with a neutral ring", () => {
     const view = render(createElement(AgentChatComposer, { model: buildModel() }));
     try {
-      const triggers = Array.from(view.container.querySelectorAll("button")).filter(
-        (button) =>
-          ["Hephaestus (Deep Agent)", "high"].includes(button.textContent ?? "") ||
-          button.getAttribute("aria-label") === "Select model, OpenCode, GPT-5.3 Codex",
+      const trigger = view.container.querySelector<HTMLButtonElement>(
+        'button[aria-label^="Select model,"]',
       );
-      expect(triggers).toHaveLength(3);
-      for (const trigger of triggers) {
-        expect(trigger.className).toContain("!border-transparent");
-        expect(trigger.className).toContain("focus-visible:ring-2");
-        expect(trigger.className).toContain("focus-visible:ring-ring");
-        expect(trigger.className).not.toContain("focus-visible:ring-0");
-      }
+      expect(trigger).not.toBeNull();
+      expect(trigger?.className).toContain("!border-transparent");
+      expect(trigger?.className).toContain("focus-visible:ring-2");
+      expect(trigger?.className).toContain("focus-visible:ring-ring");
+      expect(trigger?.className).not.toContain("focus-visible:ring-0");
     } finally {
       view.unmount();
     }
@@ -341,12 +322,45 @@ describe("AgentChatComposer", () => {
     expect(html).not.toContain("Session context:");
   });
 
-  test("hides the agent profile selector when runtime profiles are unsupported", () => {
+  test("hides the agent profile label when runtime profiles are unsupported", () => {
+    const base = buildModel();
     const html = renderToStaticMarkup(
       createElement(AgentChatComposer, {
         model: {
-          ...buildModel(),
+          ...base,
           supportsProfiles: false,
+          selectedModelSelection: buildCodexModelSelectionWithoutProfile(),
+          modelPicker: {
+            ...base.modelPicker,
+            runtimes: [
+              {
+                descriptor: CODEX_RUNTIME_DESCRIPTOR,
+                isEnabledForFavorites: true,
+                resource: {
+                  status: "ready" as const,
+                  catalog: {
+                    runtime: CODEX_RUNTIME_DESCRIPTOR,
+                    models: [
+                      {
+                        id: "openai/gpt-5.3-codex",
+                        providerId: "openai",
+                        providerName: "OpenAI",
+                        modelId: "gpt-5.3-codex",
+                        modelName: "GPT-5.3 Codex",
+                        variants: ["high"],
+                      },
+                    ],
+                    defaultModelsByProvider: { openai: "gpt-5.3-codex" },
+                  },
+                },
+              },
+            ],
+            value: {
+              runtimeKind: "codex" as const,
+              providerId: "openai",
+              modelId: "gpt-5.3-codex",
+            },
+          },
         },
       }),
     );
@@ -440,20 +454,8 @@ describe("AgentChatComposer", () => {
       }),
     );
     const card = readComposerCard(html);
-    const buttons = Array.from(card.querySelectorAll("button"));
-    const profile = buttons.find((button) =>
-      button.textContent?.includes("Hephaestus (Deep Agent)"),
-    );
-    const effort = buttons.find((button) => button.textContent === "high");
-    const speed = card.querySelector('[aria-label="Speed: Standard"]');
-    for (const control of [profile, effort, speed]) {
-      expect(control?.hasAttribute("disabled")).toBe(disabled);
-    }
-    expect(
-      card
-        .querySelector('[aria-label="Select model, OpenCode, GPT-5.3 Codex"]')
-        ?.getAttribute("aria-disabled"),
-    ).toBe(String(disabled));
+    const trigger = card.querySelector('button[aria-label^="Select model,"]');
+    expect(trigger?.getAttribute("aria-disabled")).toBe(String(disabled));
     if (state.isSessionWorking) {
       expect(card.querySelector('[aria-label="Stop session"]')?.hasAttribute("disabled")).toBe(
         false,
@@ -611,12 +613,46 @@ describe("AgentChatComposer", () => {
   });
 
   test.each([false, true])(
-    "shows the speed control and keeps send open while pending=%s",
+    "shows the speed icon in the merged trigger and keeps send open while pending=%s",
     (pending) => {
+      const base = buildModel();
       const html = renderToStaticMarkup(
         createElement(AgentChatComposer, {
           model: {
-            ...buildModel(),
+            ...base,
+            selectedModelSelection: buildCodexModelSelectionWithoutProfile(),
+            modelPicker: {
+              ...base.modelPicker,
+              runtimes: [
+                {
+                  descriptor: CODEX_RUNTIME_DESCRIPTOR,
+                  isEnabledForFavorites: true,
+                  resource: {
+                    status: "ready" as const,
+                    catalog: {
+                      runtime: CODEX_RUNTIME_DESCRIPTOR,
+                      models: [
+                        {
+                          id: "openai/gpt-5.3-codex",
+                          providerId: "openai",
+                          providerName: "OpenAI",
+                          modelId: "gpt-5.3-codex",
+                          modelName: "GPT-5.3 Codex",
+                          variants: ["high"],
+                          speedLevels: [{ id: "fast", label: "Fast" }],
+                        },
+                      ],
+                      defaultModelsByProvider: { openai: "gpt-5.3-codex" },
+                    },
+                  },
+                },
+              ],
+              value: {
+                runtimeKind: "codex" as const,
+                providerId: "openai",
+                modelId: "gpt-5.3-codex",
+              },
+            },
             pendingSendItems: [
               { key: "review_comments", count: 1, accessibleLabel: "1 pending review comment" },
             ],
@@ -634,10 +670,11 @@ describe("AgentChatComposer", () => {
         }),
       );
 
-      expect(html).toContain('aria-label="Speed: Fast"');
+      expect(html).toContain("Speed Fast");
+      expect(html).toContain('data-slot="trigger-speed"');
       // The send waits for the speed write itself, so a pending change does not block it.
       expect(html).not.toContain('aria-label="Send message" disabled');
-      // A speed change must not lock the model and effort controls.
+      // A speed change must not lock the unified trigger.
       expect(html).not.toContain("Model selection is unavailable right now.");
     },
   );

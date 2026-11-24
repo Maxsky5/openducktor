@@ -2,12 +2,14 @@ import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { type ReactElement, useMemo } from "react";
+import { toast } from "sonner";
 import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { filterRuntimeDefinitionsForDefaultSelection } from "@openducktor/frontend-core/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
+import type { RepoAgentDefaultField } from "./model-defaults-model";
 import { RepositoryModelBlock } from "./repository-model-block";
-import { selectPickedModel } from "./repository-agent-selection";
+import { applyPickedModelDraft, REPOSITORY_SPEED_RESET_NOTICE } from "./repository-agent-selection";
 
 type RepositoryDefaultModelBlockProps = {
   presentation?: "settings" | "creation";
@@ -24,10 +26,7 @@ type RepositoryDefaultModelBlockProps = {
   onUpdateSelectedRepoConfig: (
     updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft,
   ) => void;
-  onUpdateSelectedRepoDefaultModel: (
-    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
-    value: string,
-  ) => void;
+  onUpdateSelectedRepoDefaultModel: (field: RepoAgentDefaultField, value: string) => void;
   onClearSelectedRepoDefaultModel: () => void;
 };
 
@@ -58,7 +57,7 @@ export function RepositoryDefaultModelBlock({
       title="Default model"
       description="Used for new sessions and for task sessions that have no role default."
       presentation={presentation}
-      showProfile
+      optionScope="full"
       value={selectedRepoConfig.defaultModel ?? null}
       runtimeDefinitions={runtimeDefinitions}
       catalogResources={catalogResources}
@@ -67,9 +66,16 @@ export function RepositoryDefaultModelBlock({
       getCatalogForRuntime={getCatalogForRuntime}
       isCatalogLoadingForRuntime={isCatalogLoadingForRuntime}
       onSelectModel={(value, targetCatalog) =>
-        onUpdateSelectedRepoConfig((repoConfig) => {
-          const nextDefault = selectPickedModel(repoConfig.defaultModel, value, targetCatalog);
-          return nextDefault ? { ...repoConfig, defaultModel: nextDefault } : repoConfig;
+        applyPickedModelDraft({
+          currentConfig: selectedRepoConfig,
+          readCurrent: (config) => config.defaultModel,
+          resolveRuntimeKind: (config) => config.defaultModel?.runtimeKind ?? null,
+          getCatalogForRuntime,
+          targetCatalog,
+          value,
+          applyNext: (config, next) => ({ ...config, defaultModel: next }),
+          updateConfig: onUpdateSelectedRepoConfig,
+          onSpeedReset: () => toast.info(REPOSITORY_SPEED_RESET_NOTICE),
         })
       }
       onUpdateField={onUpdateSelectedRepoDefaultModel}

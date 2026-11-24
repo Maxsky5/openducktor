@@ -50,8 +50,6 @@ export const buildModel = () => ({
   retrySlashCommands: null,
   retrySkills: null,
   retrySubagents: null,
-  onAgentSelectorOpen: () => {},
-  onVariantSelectorOpen: () => {},
   onCatalogMenuOpen: () => {},
   searchFiles: async () => [],
   agentOptions: [{ value: "Hephaestus (Deep Agent)", label: "Hephaestus (Deep Agent)" }],

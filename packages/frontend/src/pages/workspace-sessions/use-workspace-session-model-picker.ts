@@ -1,4 +1,4 @@
-import { type AgentModelSelection, type RuntimeKind, withSpeed } from "@openducktor/core";
+import type { AgentModelSelection, RuntimeKind } from "@openducktor/core";
 import { useCallback, useMemo } from "react";
 import {
   selectableModelPickerCatalog,
@@ -92,6 +92,14 @@ export function useWorkspaceSessionModelPicker(repoPath: string, session: Sessio
   );
   const { catalog, runtimes, runtimeKind, sessionRuntimeKind, supportsProfiles, isLoading } =
     projected;
+  const actions = useModelSelectionActions({
+    loadedSessionIdentity: session.identity,
+    updateAgentSessionModel: session.update,
+    applyDraftSelection: session.updateDraft,
+    selectedModelSelection: selection,
+    selectionCatalog: catalog,
+    selectedRuntimeKind: runtimeKind,
+  });
   const options = useMemo(
     () =>
       resolveModelSelectionOptions({
@@ -101,31 +109,15 @@ export function useWorkspaceSessionModelPicker(repoPath: string, session: Sessio
       }),
     [liveSession, catalog, selection],
   );
-  const actions = useModelSelectionActions({
-    loadedSessionIdentity: session.identity,
-    updateAgentSessionModel: session.update,
-    applyDraftSelection: session.updateDraft,
-    selectedModelSelection: selection,
-    selectionCatalog: catalog,
-    selectedRuntimeKind: runtimeKind,
-  });
   const { handleSelectModelPair, handleSelectSpeed } = actions;
-  const updateSpeed = session.updateSpeed;
   const identity = session.identity;
-  const selectSpeed = useCallback(
-    async (speed: string) => {
-      if (!updateSpeed || !selection) return handleSelectSpeed(speed);
-      await updateSpeed(identity, withSpeed(selection, speed));
-    },
-    [handleSelectSpeed, identity, selection, updateSpeed],
-  );
   const speed = useSpeedControl({
     key: identity?.externalSessionId ?? repoPath,
     runtimeKind,
     catalog,
     selection,
     disabled: false,
-    onSelect: selectSpeed,
+    onSelect: handleSelectSpeed,
   });
   const onValueChange = useCallback(
     (value: ModelPickerValue) => {

@@ -2,10 +2,9 @@ import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { ReactElement } from "react";
+import { toast } from "sonner";
 import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { Button } from "@/components/ui/button";
-import { Combobox } from "@/components/ui/combobox";
-import { Label } from "@/components/ui/label";
 import {
   filterRuntimeDefinitionsForRole,
   findRuntimeDefinition,
@@ -13,13 +12,17 @@ import {
 import { cn } from "@/lib/utils";
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
-import { buildRepositoryAgentControls } from "./repository-agent-controls";
-import { resolveRepoAgentDefaultModelPickerSelection } from "./repository-agent-selection";
+import {
+  buildRepositoryAgentControls,
+  toRepositoryModelPickerOptions,
+} from "./repository-agent-controls";
+import { applyPickedModelDraft, REPOSITORY_SPEED_RESET_NOTICE } from "./repository-agent-selection";
 import { RepositoryDefaultModelBlock } from "./repository-default-model";
 import { RepositoryModelPickerField } from "./repository-model-picker-field";
 import { RepositoryNamingModelBlock } from "./repository-naming-model";
 import {
   ensureDraftAgentDefault,
+  type RepoAgentDefaultField,
   resolveRepoAgentDefaultRuntimeKind,
 } from "./model-defaults-model";
 
@@ -44,14 +47,11 @@ export type RepositoryModelDefaultsFieldsProps = {
   ) => void;
   onUpdateSelectedRepoAgentDefault: (
     role: string,
-    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
+    field: RepoAgentDefaultField,
     value: string,
   ) => void;
   onClearSelectedRepoAgentDefault: (role: string) => void;
-  onUpdateSelectedRepoDefaultModel: (
-    field: "runtimeKind" | "providerId" | "modelId" | "variant" | "profileId",
-    value: string,
-  ) => void;
+  onUpdateSelectedRepoDefaultModel: (field: RepoAgentDefaultField, value: string) => void;
   onClearSelectedRepoDefaultModel: () => void;
   /** Shows the naming model. Only the settings show it. */
   showNamingModel?: boolean;
@@ -160,7 +160,12 @@ export function RepositoryModelDefaultsFields({
             isCatalogLoadingForRuntime,
           });
           const { value, isCatalogLoading: isRoleCatalogLoading } = roleViewModel;
-          const controls = buildRepositoryAgentControls({ ...roleViewModel, isSaving });
+          const controls = buildRepositoryAgentControls({
+            ...roleViewModel,
+            isSaving,
+            includeSpeed: true,
+            onSelectSpeed: (speed) => onUpdateSelectedRepoAgentDefault(role, "speed", speed),
+          });
 
           return (
             <div
@@ -185,72 +190,42 @@ export function RepositoryModelDefaultsFields({
                 </Button>
               </div>
 
-              <div className="grid gap-3 @2xl:grid-cols-3">
-                <div className="min-w-0">
-                  <RepositoryModelPickerField
-                    runtimeDefinitions={runtimeDefinitions}
-                    catalogResources={catalogResources}
-                    value={controls.selectedPickerValue}
-                    favoriteState={favoriteState}
-                    isReadOnly={isSaving || isLoadingSettings}
-                    isLoadingCatalog={isRoleCatalogLoading}
-                    onSelect={(selectedValue, targetCatalog) => {
-                      onUpdateSelectedRepoConfig((repoConfig) => {
-                        const currentValue = repoConfig.agentDefaults[role] ?? null;
-                        const currentRuntimeKind = resolveRepoAgentDefaultRuntimeKind({
-                          selectedRepoConfig: repoConfig,
-                          runtimeDefinitions,
-                          role,
-                        });
-                        const nextDefault = resolveRepoAgentDefaultModelPickerSelection({
-                          currentValue: currentValue ? ensureDraftAgentDefault(currentValue) : null,
-                          currentRuntimeKind,
-                          targetCatalog,
-                          value: selectedValue,
-                        });
-                        if (!nextDefault) {
-                          return repoConfig;
-                        }
-                        return {
-                          ...repoConfig,
-                          agentDefaults: {
-                            ...repoConfig.agentDefaults,
-                            [role]: nextDefault,
-                          },
-                        };
-                      });
-                    }}
-                  />
-                </div>
-
-                <div className="grid min-w-0 gap-1">
-                  <Label className="text-xs">Agent profile</Label>
-                  <Combobox
-                    value={value.profileId}
-                    options={controls.profile.options}
-                    placeholder={controls.profile.placeholder}
-                    disabled={controls.profile.disabled}
-                    className="w-full min-w-0"
-                    onValueChange={(profileId) =>
-                      onUpdateSelectedRepoAgentDefault(role, "profileId", profileId)
-                    }
-                  />
-                </div>
-
-                <div className="grid min-w-0 gap-1">
-                  <Label className="text-xs">Effort</Label>
-                  <Combobox
-                    value={value.variant}
-                    options={controls.variant.options}
-                    placeholder={controls.variant.placeholder}
-                    disabled={controls.variant.disabled}
-                    className="w-full min-w-0"
-                    onValueChange={(variant) =>
-                      onUpdateSelectedRepoAgentDefault(role, "variant", variant)
-                    }
-                  />
-                </div>
-              </div>
+              <RepositoryModelPickerField
+                runtimeDefinitions={runtimeDefinitions}
+                catalogResources={catalogResources}
+                value={controls.selectedPickerValue}
+                favoriteState={favoriteState}
+                options={toRepositoryModelPickerOptions({
+                  controls,
+                  value,
+                  optionScope: "full",
+                  onUpdateField: (field, nextValue) =>
+                    onUpdateSelectedRepoAgentDefault(role, field, nextValue),
+                })}
+                isReadOnly={isSaving || isLoadingSettings}
+                isLoadingCatalog={isRoleCatalogLoading}
+                onSelect={(selectedValue, targetCatalog) =>
+                  applyPickedModelDraft({
+                    currentConfig: selectedRepoConfig,
+                    readCurrent: (config) => config.agentDefaults[role],
+                    resolveRuntimeKind: (config) =>
+                      resolveRepoAgentDefaultRuntimeKind({
+                        selectedRepoConfig: config,
+                        runtimeDefinitions,
+                        role,
+                      }),
+                    getCatalogForRuntime,
+                    targetCatalog,
+                    value: selectedValue,
+                    applyNext: (config, next) => ({
+                      ...config,
+                      agentDefaults: { ...config.agentDefaults, [role]: next },
+                    }),
+                    updateConfig: onUpdateSelectedRepoConfig,
+                    onSpeedReset: () => toast.info(REPOSITORY_SPEED_RESET_NOTICE),
+                  })
+                }
+              />
             </div>
           );
         })}

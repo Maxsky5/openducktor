@@ -1,5 +1,5 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelCatalog } from "@openducktor/core";
+import { type AgentModelCatalog, STANDARD_SPEED } from "@openducktor/core";
 import { catalogModelOptionValue } from "@openducktor/frontend-core/sessions/model-selection/catalog-select-options";
 import type { ComboboxOption } from "@/components/ui/combobox";
 import { resolveRuntimeKindSelection } from "@openducktor/frontend-core/lib/agent-runtime";
@@ -18,6 +18,14 @@ export type RepoAgentDefaultsInput = Partial<
   Record<RepoDefaultRole, RepoAgentDefaultDraft | null | undefined>
 >;
 
+export type RepoAgentDefaultField =
+  | "runtimeKind"
+  | "providerId"
+  | "modelId"
+  | "variant"
+  | "profileId"
+  | "speed";
+
 export const ensureDraftAgentDefault = (
   value: RepoAgentDefaultDraft | null | undefined,
 ): RepoAgentDefaultInput => {
@@ -28,7 +36,26 @@ export const ensureDraftAgentDefault = (
     profileId: value?.profileId ?? "",
   };
   if (value?.runtimeKind) draft.runtimeKind = value.runtimeKind;
+  const speed = value?.speed?.trim();
+  if (speed && speed !== STANDARD_SPEED) draft.speed = speed;
   return draft;
+};
+
+export const applyRepoAgentDefaultField = <T extends RepoAgentDefaultDraft>(
+  current: T,
+  field: RepoAgentDefaultField,
+  value: string,
+): T => {
+  if (field === "speed") {
+    const trimmed = value.trim();
+    const next: T = { ...current };
+    delete next.speed;
+    if (trimmed && trimmed !== STANDARD_SPEED) {
+      next.speed = trimmed;
+    }
+    return next;
+  }
+  return { ...current, [field]: value };
 };
 
 export const selectedModelKey = (value: { providerId: string; modelId: string } | null): string => {

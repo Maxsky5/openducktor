@@ -1,4 +1,7 @@
-import { ensureDraftAgentDefault } from "@/components/features/repository/model-defaults/model-defaults-model";
+import {
+  applyRepoAgentDefaultField,
+  ensureDraftAgentDefault,
+} from "@/components/features/repository/model-defaults/model-defaults-model";
 import type {
   RepoAgentDefaultDraft,
   ModelDefaultDraft,
@@ -45,5 +48,5 @@ export const updateRepoDefaultModel = (
   if (!runtimeKind) {
     return null;
   }
-  return { ...draft, runtimeKind, [field]: value };
+  return applyRepoAgentDefaultField({ ...draft, runtimeKind }, field, value);
 };

@@ -1,6 +1,5 @@
-import { SpeedSelect } from "@/components/features/agents/speed-select";
+import type { ReactElement } from "react";
 import { ModelPicker } from "@/components/features/agents/model-picker";
-import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import type { useWorkspaceSessionCreateModelPicker } from "./use-workspace-session-model-picker";
 
@@ -10,52 +9,42 @@ export function WorkspaceSessionModelFields({
 }: {
   model: ReturnType<typeof useWorkspaceSessionCreateModelPicker>;
   disabled: boolean;
-}) {
+}): ReactElement {
   return (
-    <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="grid gap-1.5">
-          <Label>Runtime and model</Label>
-          <ModelPicker
-            {...model.modelPicker}
-            selectionPolicy={
-              disabled
-                ? { kind: "read_only", reason: "Creating session." }
-                : model.modelPicker.selectionPolicy
-            }
-            triggerClassName="w-full justify-between"
-          />
-        </div>
-        <div className="flex items-end gap-2">
-          <div className="grid min-w-0 flex-1 gap-1.5">
-            <Label id="workspace-session-effort">Effort</Label>
-            <Combobox
-              triggerAriaLabelledBy="workspace-session-effort"
-              value={model.selection?.variant ?? ""}
-              onValueChange={model.handleSelectVariant}
-              onOpenChange={model.onCatalogSelectorOpen}
-              options={model.variantOptions}
-              disabled={disabled || model.variantOptions.length === 0}
-              placeholder="Not supported"
-            />
-          </div>
-          <SpeedSelect model={model.speed && { ...model.speed, disabled }} label="Speed" />
-        </div>
-      </div>
-      {model.supportsProfiles && (
-        <div className="grid gap-1.5">
-          <Label id="workspace-session-profile">Runtime profile</Label>
-          <Combobox
-            triggerAriaLabelledBy="workspace-session-profile"
-            value={model.selection?.profileId ?? ""}
-            onValueChange={model.handleSelectAgentProfile}
-            onOpenChange={model.onCatalogSelectorOpen}
-            options={model.agentProfileOptions}
-            disabled={disabled}
-            placeholder="Runtime default"
-          />
-        </div>
-      )}
-    </>
+    <div className="grid gap-1.5">
+      <Label>Runtime and model</Label>
+      <ModelPicker
+        {...model.modelPicker}
+        triggerVariant="form"
+        selectionPolicy={
+          disabled
+            ? { kind: "read_only", reason: "Creating session." }
+            : model.modelPicker.selectionPolicy
+        }
+        options={{
+          effort: {
+            options: model.variantOptions,
+            value: model.selection?.variant,
+            onSelect: model.handleSelectVariant,
+          },
+          profile: {
+            options: model.agentProfileOptions,
+            value: model.selection?.profileId,
+            onSelect: model.handleSelectAgentProfile,
+          },
+          speed: {
+            control: model.speed
+              ? { ...model.speed, disabled: disabled || model.speed.disabled }
+              : null,
+          },
+        }}
+        triggerClassName="w-full justify-between"
+      />
+      {model.speedBlockedReason ? (
+        <p role="alert" className="text-sm text-destructive">
+          {model.speedBlockedReason}
+        </p>
+      ) : null}
+    </div>
   );
 }

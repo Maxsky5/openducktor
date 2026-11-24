@@ -1,7 +1,10 @@
 import { ArrowLeft, ArrowRight, FolderOpen, LoaderCircle } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { DefaultTargetBranchField } from "./default-target-branch-field";
-import { ensureDraftAgentDefault } from "@/components/features/repository/model-defaults/model-defaults-model";
+import {
+  applyRepoAgentDefaultField,
+  ensureDraftAgentDefault,
+} from "@/components/features/repository/model-defaults/model-defaults-model";
 import { RepositoryModelDefaultsFields } from "@/components/features/repository/model-defaults/repository-model-defaults-fields";
 import { WorkspaceIdentityFields } from "@/components/features/workspace-identity/workspace-identity-fields";
 import { Button } from "@/components/ui/button";
@@ -316,11 +319,14 @@ function WorkspaceModelsFields({
               ...current,
               agentDefaults: {
                 ...current.agentDefaults,
-                [role]: {
-                  ...ensureDraftAgentDefault(roleDefault),
-                  runtimeKind,
-                  [field]: value,
-                },
+                [role]: applyRepoAgentDefaultField(
+                  {
+                    ...ensureDraftAgentDefault(roleDefault),
+                    runtimeKind,
+                  },
+                  field,
+                  value,
+                ),
               },
             };
           })
@@ -335,7 +341,7 @@ function WorkspaceModelsFields({
           controller.updateModelDraft((current) => ({
             ...current,
             defaultModel: current.defaultModel
-              ? { ...current.defaultModel, [field]: value }
+              ? applyRepoAgentDefaultField(current.defaultModel, field, value)
               : current.defaultModel,
           }))
         }

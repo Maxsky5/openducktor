@@ -11,7 +11,6 @@ export function useWorkspaceSessionModelTarget({
   identity,
   selection,
   updateDraft,
-  updateSpeed,
   update,
 }: {
   repoPath: string;
@@ -19,7 +18,6 @@ export function useWorkspaceSessionModelTarget({
   identity: SessionModelTarget["identity"];
   selection: SessionModelTarget["selection"];
   updateDraft: NonNullable<SessionModelTarget["updateDraft"]>;
-  updateSpeed: NonNullable<SessionModelTarget["updateSpeed"]>;
   update: SessionModelTarget["update"];
 }): SessionModelTarget {
   const runtimeKind = record.runtimeKind;
@@ -39,7 +37,6 @@ export function useWorkspaceSessionModelTarget({
       runtimeKind,
       runtimeRef,
       updateDraft,
-      updateSpeed,
       selection,
       catalog,
       isLoading,
@@ -52,7 +49,6 @@ export function useWorkspaceSessionModelTarget({
       runtimeKind,
       runtimeRef,
       updateDraft,
-      updateSpeed,
       selection,
       catalog,
       isLoading,

@@ -14,7 +14,7 @@ import {
   type WorkspaceSession,
 } from "@openducktor/contracts";
 import { act, type ReactElement, type ReactNode, useState } from "react";
-import { fireEvent, render, renderHook, waitFor } from "@testing-library/react";
+import { fireEvent, render, renderHook, waitFor, within } from "@testing-library/react";
 import { useIsFetching } from "@tanstack/react-query";
 import * as messageContent from "@/components/features/agents/agent-chat/agent-chat-message-card-content";
 import { buildMessage } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
@@ -668,7 +668,11 @@ test.each([OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME
     );
     const view = render(chat(entry, 0));
     try {
-      await view.findByRole("button", { name: `Select model, ${descriptor.label}, first` });
+      const triggerNameFor = (modelId: string, effort: string, speed: string): string =>
+        descriptor.kind === "opencode"
+          ? `Select model, ${descriptor.label}, ${modelId}, Effort ${effort}`
+          : `Select model, ${descriptor.label}, ${modelId}, Effort ${effort}, Speed ${speed}`;
+      await view.findByRole("button", { name: triggerNameFor("first", "low", "Standard") });
       await waitFor(() => expect(view.getByLabelText("Pending queries").textContent).toBe("0"));
       const editor = view.getByRole("combobox", { name: "Message composer" });
       const card = editor.closest(".rounded-xl");
@@ -683,14 +687,15 @@ test.each([OPENCODE_RUNTIME_DESCRIPTOR, CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME
         expect(editor.getAttribute("contenteditable")).toBe("true");
         expect(card?.className).toBe(cardClass);
         expect(view.queryByText("Preparing the session...") === null).toBe(true);
-        for (const name of [
-          `Select model, ${descriptor.label}, ${record.selectedModel!.modelId}`,
-          effort,
-          `Session context: ${context}`,
-          ...(descriptor.kind === "opencode" ? [] : [`Speed: ${speed}`]),
-        ]) {
-          expect(view.getByRole("button", { name }).hasAttribute("disabled")).toBe(false);
-        }
+        const trigger = view.getByRole("button", {
+          name: triggerNameFor(record.selectedModel!.modelId, effort, speed),
+        });
+        expect(trigger.getAttribute("aria-disabled")).toBe("false");
+        expect(
+          view
+            .getByRole("button", { name: `Session context: ${context}` })
+            .hasAttribute("disabled"),
+        ).toBe(false);
         typeIntoComposer(view.container, `Draft for ${record.id}`);
         expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
           true,
@@ -712,7 +717,10 @@ test.each(["model", "effort", "profile"] as const)(
       descriptor.kind === "claude" ? ["sonnet", "opus"] : ["gpt-5", "gpt-6"];
     const [initialModel, nextModel] = modelIds;
     const providerId = descriptor.kind === "claude" ? "anthropic" : "openai";
-    const modelTrigger = `Select model, ${descriptor.label}, ${initialModel}`;
+    const initialTriggerName =
+      control === "profile"
+        ? `Select model, ${descriptor.label}, build, ${initialModel}, Effort low`
+        : `Select model, ${descriptor.label}, ${initialModel}, Effort low`;
     const { Harness, workspace, entry, session, store, operations, definitions } =
       createPresentationScenario(descriptor.kind, [
         buildMessage("user", "Continue the interrupted turn", { id: "interrupted-user" }),
@@ -797,24 +805,31 @@ test.each(["model", "effort", "profile"] as const)(
       const card = editor.closest(".rounded-xl");
       expect(card).not.toBeNull();
       const cardClass = card?.className;
-      const triggerName = {
-        model: modelTrigger,
-        effort: "low",
-        profile: "build",
-      }[control];
-      await act(async () => fireEvent.click(view.getByRole("button", { name: triggerName })));
-      const option =
-        control === "model"
-          ? await view.findByRole("button", { name: `Select ${nextModel} model` })
-          : await view.findByRole("option", { name: control === "effort" ? "high" : "review" });
-      await act(async () => fireEvent.click(option));
+      await act(async () =>
+        fireEvent.click(view.getByRole("button", { name: initialTriggerName })),
+      );
+      if (control === "model") {
+        const option = await view.findByRole("button", { name: `Select ${nextModel} model` });
+        await act(async () => fireEvent.click(option));
+      } else if (control === "effort") {
+        const slider = await view.findByRole("slider", { name: "Effort" });
+        await act(async () => fireEvent.keyDown(slider, { key: "ArrowRight" }));
+      } else {
+        const profileSection = await view.findByRole("region", { name: "Agent profile" });
+        await act(async () =>
+          fireEvent.click(within(profileSection).getByRole("button", { name: "Profile" })),
+        );
+        const reviewOption = await view.findByRole("option", { name: "review" });
+        await act(async () => fireEvent.click(reviewOption));
+      }
       expect(updateModel).toHaveBeenCalledTimes(1);
       expect(updateModel.mock.calls[0]?.[0]).toMatchObject({
         runtimeKind: session.runtimeKind,
         externalSessionId: session.externalSessionId,
         workingDirectory: session.workingDirectory,
       });
-      // The change saves in the background, so nothing in the composer locks.
+      // The change saves in the background, so the open popover stays open and nothing in the composer locks.
+      expect(view.getByPlaceholderText("Search models...")).toBeTruthy();
       expect(editor.getAttribute("contenteditable")).toBe("true");
       expect(editor.getAttribute("aria-disabled")).toBe("false");
       expect(card?.className).toBe(cardClass);
@@ -826,14 +841,20 @@ test.each(["model", "effort", "profile"] as const)(
         expect(resume.hasAttribute("disabled")).toBe(false);
       }
       expect(
-        view
-          .getAllByRole("button")
-          .some(
-            (button) =>
-              button.getAttribute("aria-disabled") === "true" &&
-              button.getAttribute("aria-label")?.startsWith("Select model"),
-          ),
-      ).toBe(false);
+        view.queryByText("Wait for the current send or session change before resuming."),
+      ).toBeNull();
+      // Close the popover while saving: closed trigger shows the new selection immediately and stays enabled.
+      await act(async () =>
+        fireEvent.keyDown(view.getByPlaceholderText("Search models..."), { key: "Escape" }),
+      );
+      const nextTriggerBase = {
+        model: `Select model, ${descriptor.label}, ${nextModel}, Effort low`,
+        effort: `Select model, ${descriptor.label}, ${initialModel}, Effort high`,
+        profile: `Select model, ${descriptor.label}, review, ${initialModel}, Effort low`,
+      }[control];
+      expect(
+        view.getByRole("button", { name: nextTriggerBase }).getAttribute("aria-disabled"),
+      ).toBe("false");
       typeIntoComposer(view.container, "Unsent draft edited while saving");
       await act(async () => save.resolve());
       expect(editor.isConnected).toBe(true);
@@ -846,15 +867,7 @@ test.each(["model", "effort", "profile"] as const)(
       expect(view.getByRole("button", { name: "Send message" }).hasAttribute("disabled")).toBe(
         false,
       );
-      expect(
-        view.getByRole("button", {
-          name: {
-            model: `Select model, ${descriptor.label}, ${nextModel}`,
-            effort: "high",
-            profile: "review",
-          }[control],
-        }),
-      ).toBeTruthy();
+      expect(view.getByRole("button", { name: nextTriggerBase })).toBeTruthy();
       if (resume) {
         await act(async () => fireEvent.click(resume));
         expect(resumeTurn).toHaveBeenCalledTimes(1);
@@ -1305,8 +1318,7 @@ test.each(["retry", "streaming", "record-failure"] as const)(
         });
         const completedRenders = renderCounts.get("assistant-1");
         const currentRenders = renderCounts.get("assistant-2") ?? 0;
-        const catalogBuilds = buildPickerItems.mock.calls.length;
-        expect(catalogBuilds).toBeGreaterThan(0);
+        expect(buildPickerItems).toHaveBeenCalledTimes(0);
         expect(completedRenders).toBeGreaterThan(0);
         await act(async () => {
           store.replaceSession({
@@ -1324,7 +1336,7 @@ test.each(["retry", "streaming", "record-failure"] as const)(
         await view.findByText("Current answer with another token", {}, { timeout: 2000 });
         expect(renderCounts.get("assistant-2")).toBeGreaterThan(currentRenders);
         expect(renderCounts.get("assistant-1")).toBe(completedRenders);
-        expect(buildPickerItems).toHaveBeenCalledTimes(catalogBuilds);
+        expect(buildPickerItems).toHaveBeenCalledTimes(0);
         const composer = view.getByLabelText("Message composer");
         await act(async () => {
           store.replaceSession({

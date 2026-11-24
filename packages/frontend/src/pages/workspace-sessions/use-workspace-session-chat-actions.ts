@@ -213,30 +213,27 @@ export function useWorkspaceSessionChatActions(
   );
 
   const updateDraftModel = useCallback(
-    (selection: AgentModelSelection | null) => {
-      if (isSendInFlight() || resuming.current) return;
+    async (selection: AgentModelSelection | null): Promise<void> => {
+      if (isSendInFlight() || resuming.current) {
+        throw new Error("Wait for the current send or session change before changing the model.");
+      }
       if (!selection) {
-        setError("Select a model before saving the draft model.");
-        return;
+        const message = "Select a model before saving the draft model.";
+        setError(message);
+        throw new Error(message);
       }
       setError(null);
-      void saveDraftModel(selection).catch((cause: unknown) => {
+      try {
+        await saveDraftModel(selection);
+      } catch (cause: unknown) {
         setError(errorMessage(cause));
-      });
+        throw cause;
+      }
     },
     [saveDraftModel, isSendInFlight],
   );
 
   const { updateAgentSessionModel } = operations;
-  // The speed control shows its own failure.
-  const updateSpeed = useCallback(
-    async (identity: AgentSessionIdentity | null, selection: AgentModelSelection) => {
-      if (isSendInFlight() || resuming.current)
-        throw new Error("Wait for the current send or session change before changing the speed.");
-      await (identity ? updateAgentSessionModel(identity, selection) : saveDraftModel(selection));
-    },
-    [saveDraftModel, updateAgentSessionModel, isSendInFlight],
-  );
   const updateSessionModel = useCallback(
     async (identity: AgentSessionIdentity, selection: AgentModelSelection | null) => {
       if (isSendInFlight() || resuming.current)
@@ -360,7 +357,6 @@ export function useWorkspaceSessionChatActions(
     updateDraftModel,
     pendingDraftModel,
     updateSessionModel,
-    updateSpeed,
     sendTarget,
     sendStandaloneMessage,
     isResumingSession,

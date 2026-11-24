@@ -136,7 +136,7 @@ describe("RepositoryAgentsSection", () => {
     });
   });
 
-  test("disables the agent selector instead of hiding it when runtime profiles are unsupported", () => {
+  test("renders one unified model picker per card with warnings when runtime profiles are unsupported", () => {
     const html = renderToStaticMarkup(
       createElement(RepositoryAgentsSection, {
         selectedRepoConfig: repoConfig,
@@ -181,10 +181,9 @@ describe("RepositoryAgentsSection", () => {
       }),
     );
 
-    expect(html).toContain("Agent profile");
-    expect(html).toContain("Not supported by runtime");
-    expect(html).toContain("disabled");
+    expect(html).not.toContain("Not supported by runtime");
     expect(html).toContain("o3");
+    expect(html).toContain("low");
     expect(html).toContain("Default Model runtime &quot;Codex&quot; is disabled.");
   });
 });

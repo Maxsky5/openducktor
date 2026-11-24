@@ -707,7 +707,7 @@ describe("workspace creation", () => {
     await skipProvider();
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "Renamed" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
-    expect(screen.getAllByText("Effort")).toHaveLength(5);
+    expect(screen.getAllByText("Runtime and model")).toHaveLength(5);
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByLabelText<HTMLInputElement>("Workspace name").value).toBe("Renamed");
     fireEvent.click(screen.getByRole("button", { name: "Back" }));

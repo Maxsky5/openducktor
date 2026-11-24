@@ -1,5 +1,5 @@
 import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import {
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
@@ -7,9 +7,11 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { fireEvent, screen, within } from "@testing-library/react";
-import { act } from "react";
+import { act, useReducer } from "react";
+import { toast } from "sonner";
 import { enableReactActEnvironment } from "@/pages/agents/agent-studio-test-utils";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
+import { REPOSITORY_SPEED_RESET_NOTICE } from "./repository-agent-selection";
 import { RepositoryModelDefaultsFields } from "./repository-model-defaults-fields";
 
 enableReactActEnvironment();
@@ -96,21 +98,36 @@ const namingCard = (): HTMLElement => {
   return card;
 };
 
-test("settings show a naming model with no agent profile, and creation hides it", () => {
+test("settings show a naming model with no agent profile or speed, and creation hides it", async () => {
   const creation = renderNamingFields({ presentation: "creation" });
   expect(screen.queryByRole("heading", { name: "Naming model" })).toBeNull();
   creation.unmount();
 
-  renderNamingFields({ presentation: "settings" });
+  renderNamingFields({
+    presentation: "settings",
+    selectedRepoConfig: {
+      agentDefaults: {},
+      namingModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "codex-model",
+        variant: "low",
+      },
+    },
+  });
   const card = namingCard();
   expect(
     within(card).getByText(
       "Writes short session titles and branch names. When empty, task branches use the task title, and new chat worktrees need a name.",
     ),
   ).toBeTruthy();
-  expect(within(card).queryByText("Agent profile")).toBeNull();
-  expect(within(card).getByText("Effort")).toBeTruthy();
-  expect(within(card).getByRole("button", { name: "Clear" }).hasAttribute("disabled")).toBe(true);
+  expect(within(card).getByRole("button", { name: "Clear" }).hasAttribute("disabled")).toBe(false);
+  await act(async () => {
+    fireEvent.click(within(card).getByRole("button", { name: /Select model, Codex, Codex model/ }));
+  });
+  expect(screen.getByRole("slider", { name: "Effort" })).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "Agent profile" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "Speed" })).toBeNull();
 });
 
 test("the naming model picker saves a runtime and model without a profile", async () => {
@@ -251,4 +268,110 @@ test("role model pickers show only runtimes that support that role", async () =>
 
   expect(screen.getByRole("button", { name: "Select Codex model model" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Select OpenCode model model" })).toBeNull();
+});
+
+test("emits the speed reset notice when switching a role default through a reducer-backed updater", async () => {
+  const infoSpy = spyOn(toast, "info").mockImplementation(() => "");
+  const speedCodexCatalog: AgentModelCatalog = {
+    runtime: CODEX_RUNTIME_DESCRIPTOR,
+    models: [
+      {
+        id: "openai/gpt-5-fast",
+        providerId: "openai",
+        providerName: "OpenAI",
+        modelId: "gpt-5-fast",
+        modelName: "GPT-5 Fast",
+        variants: ["high"],
+        speedLevels: [{ id: "priority", label: "Fast" }],
+      },
+      {
+        id: "openai/gpt-5-plain",
+        providerId: "openai",
+        providerName: "OpenAI",
+        modelId: "gpt-5-plain",
+        modelName: "GPT-5 Plain",
+        variants: ["high"],
+        speedLevels: [],
+      },
+    ],
+    defaultModelsByProvider: {},
+  };
+
+  function ReducerBackedRoleDefaults() {
+    const [draft, dispatch] = useReducer(
+      (
+        state: WorkspaceModelDefaultsDraft,
+        updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft,
+      ) => updater(state),
+      {
+        agentDefaults: {
+          spec: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5-fast",
+            variant: "high",
+            profileId: "",
+            speed: "priority",
+          },
+        },
+      },
+    );
+    return (
+      <RepositoryModelDefaultsFields
+        selectedRepoConfig={draft}
+        availableRuntimeDefinitions={[CODEX_RUNTIME_DESCRIPTOR]}
+        catalogResources={[
+          {
+            runtimeKind: "codex",
+            catalog: speedCodexCatalog,
+            isLoading: false,
+            unavailableReason: null,
+            isEnabled: true,
+            error: null,
+            retry: async () => {},
+          },
+        ]}
+        favoriteState={{
+          favorites: [],
+          isLoading: false,
+          readError: null,
+          isMutationPending: false,
+          mutationError: null,
+          canMutate: true,
+          toggleFavorite: () => {},
+          retryRead: () => {},
+          retryMutation: () => {},
+        }}
+        loadingState={{
+          isLoadingRuntimeDefinitions: false,
+          isLoadingCatalog: false,
+          isLoadingSettings: false,
+          isSaving: false,
+        }}
+        runtimeDefinitionsError={null}
+        modelWarnings={[]}
+        getCatalogForRuntime={() => speedCodexCatalog}
+        isCatalogLoadingForRuntime={() => false}
+        onUpdateSelectedRepoConfig={(updater) => dispatch(updater)}
+        onUpdateSelectedRepoAgentDefault={() => {}}
+        onClearSelectedRepoAgentDefault={() => {}}
+        onUpdateSelectedRepoDefaultModel={() => {}}
+        onClearSelectedRepoDefaultModel={() => {}}
+      />
+    );
+  }
+
+  try {
+    render(<ReducerBackedRoleDefaults />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, Codex, GPT-5 Fast/ }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select GPT-5 Plain model" }));
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith(REPOSITORY_SPEED_RESET_NOTICE);
+  } finally {
+    infoSpy.mockRestore();
+  }
 });
