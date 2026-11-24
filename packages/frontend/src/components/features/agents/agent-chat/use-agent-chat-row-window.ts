@@ -308,14 +308,16 @@ export function useAgentChatRowWindow({
       shouldTrimBottomAfterPrependRef.current = false;
       shouldTrimTopAfterAppendRef.current = false;
     }
+    let pendingLatestReset = previousCommitted.pendingLatestReset;
+    if (didSessionChange) {
+      pendingLatestReset = shouldResetForTranscriptLoad && rows.length === 0;
+    } else if (rows.length > 0) {
+      pendingLatestReset = false;
+    }
     committedRef.current = {
       ...sessionRowRange(displayedSessionKey, effectiveRange, rows),
       rowCount: rows.length,
-      pendingLatestReset: didSessionChange
-        ? shouldResetForTranscriptLoad && rows.length === 0
-        : rows.length > 0
-          ? false
-          : previousCommitted.pendingLatestReset,
+      pendingLatestReset,
       overrideId: hasPendingOverride ? rangeOverride.id : previousCommitted.overrideId,
     };
   }, [

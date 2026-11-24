@@ -32,12 +32,16 @@ export function AgentChatThreads({
   let retained = state.retained;
   if (state.activeKey !== key) {
     const previousActive = activeThreadRef.current;
-    retained = [
-      ...state.retained.filter((thread) => thread.key !== key && thread.key !== previousActive.key),
-      ...(previousActive.key === state.activeKey && previousActive.model.transcript.session !== null
-        ? [previousActive]
-        : []),
-    ].slice(-(MAX_CACHED_TRANSCRIPTS - 1));
+    const nextRetained = state.retained.filter(
+      (thread) => thread.key !== key && thread.key !== previousActive.key,
+    );
+    if (
+      previousActive.key === state.activeKey &&
+      previousActive.model.transcript.session !== null
+    ) {
+      nextRetained.push(previousActive);
+    }
+    retained = nextRetained.slice(-(MAX_CACHED_TRANSCRIPTS - 1));
     setState({ activeKey: key, retained });
   }
   const shown = [...retained, { key, model }];

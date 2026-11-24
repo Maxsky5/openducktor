@@ -112,6 +112,63 @@ export const getTurnActiveStreamingAssistantMessageId = (
     : null;
 };
 
+const buildRenderedTurn = ({
+  turn,
+  previous,
+  visibleRows,
+  windowRows,
+  folds,
+  collapseFinishedRuns,
+  sessionStreamingAssistantMessageId,
+}: {
+  turn: AgentChatTurnAnchor;
+  previous: AgentChatRenderedTurn | undefined;
+  visibleRows: readonly AgentChatTranscriptRow[];
+  windowRows: ReturnType<typeof buildToolRunWindowRows>;
+  folds: ReturnType<typeof useToolRunFolds>;
+  collapseFinishedRuns: boolean;
+  sessionStreamingAssistantMessageId: string | null;
+}): AgentChatRenderedTurn => {
+  if (
+    previous &&
+    areTurnRowsIdentical(previous.rows, visibleRows, turn.startRow, turn.endRowExclusive)
+  ) {
+    const activeStreamingAssistantMessageId = getTurnActiveStreamingAssistantMessageId(
+      previous.rows,
+      sessionStreamingAssistantMessageId,
+    );
+    const hasToolRunInTurn =
+      previous.items.some((item) => item.kind === "tool_run") ||
+      previous.rows.some((row) => windowRows.runs.has(row.key));
+    const items = hasToolRunInTurn
+      ? buildTurnItems(previous.rows, windowRows, folds, collapseFinishedRuns)
+      : previous.items;
+    if (
+      previous.activeStreamingAssistantMessageId === activeStreamingAssistantMessageId &&
+      (items === previous.items || areTurnItemsIdentical(previous.items, items))
+    ) {
+      return previous;
+    }
+    return {
+      key: turn.key,
+      rows: previous.rows,
+      items,
+      activeStreamingAssistantMessageId,
+    };
+  }
+
+  const rows = visibleRows.slice(turn.startRow, turn.endRowExclusive);
+  return {
+    key: turn.key,
+    rows,
+    items: buildTurnItems(rows, windowRows, folds, collapseFinishedRuns),
+    activeStreamingAssistantMessageId: getTurnActiveStreamingAssistantMessageId(
+      rows,
+      sessionStreamingAssistantMessageId,
+    ),
+  };
+};
+
 type UseAgentChatRenderedTranscriptArgs = {
   transcript: AgentChatThreadModel["transcript"];
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
@@ -217,48 +274,17 @@ export function useAgentChatRenderedTranscript({
     }
 
     const previousByKey = previousTurnsByKeyRef.current;
-    const turns = visibleTurnAnchors.map((turn) => {
-      const previous = previousByKey.get(turn.key);
-      if (
-        previous &&
-        areTurnRowsIdentical(previous.rows, visibleRows, turn.startRow, turn.endRowExclusive)
-      ) {
-        const activeStreamingAssistantMessageId = getTurnActiveStreamingAssistantMessageId(
-          previous.rows,
-          transcriptModelState.activeStreamingAssistantMessageId,
-        );
-        const hasToolRunInTurn =
-          previous.items.some((item) => item.kind === "tool_run") ||
-          previous.rows.some((row) => windowRows.runs.has(row.key));
-        const items = hasToolRunInTurn
-          ? buildTurnItems(previous.rows, windowRows, folds, collapseFinishedRuns)
-          : previous.items;
-        if (
-          previous.activeStreamingAssistantMessageId === activeStreamingAssistantMessageId &&
-          (items === previous.items || areTurnItemsIdentical(previous.items, items))
-        ) {
-          return previous;
-        }
-        return {
-          key: turn.key,
-          rows: previous.rows,
-          items,
-          activeStreamingAssistantMessageId,
-        };
-      }
-
-      const rows = visibleRows.slice(turn.startRow, turn.endRowExclusive);
-      const activeStreamingAssistantMessageId = getTurnActiveStreamingAssistantMessageId(
-        rows,
-        transcriptModelState.activeStreamingAssistantMessageId,
-      );
-      return {
-        key: turn.key,
-        rows,
-        items: buildTurnItems(rows, windowRows, folds, collapseFinishedRuns),
-        activeStreamingAssistantMessageId,
-      };
-    });
+    const turns = visibleTurnAnchors.map((turn) =>
+      buildRenderedTurn({
+        turn,
+        previous: previousByKey.get(turn.key),
+        visibleRows,
+        windowRows,
+        folds,
+        collapseFinishedRuns,
+        sessionStreamingAssistantMessageId: transcriptModelState.activeStreamingAssistantMessageId,
+      }),
+    );
     const previousTurns = previousTurnsRef.current;
     if (
       previousTurns.length === turns.length &&
