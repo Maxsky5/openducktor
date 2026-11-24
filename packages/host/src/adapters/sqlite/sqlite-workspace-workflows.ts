@@ -39,8 +39,10 @@ import {
 import { workflows, workflowVersions } from "./sqlite-workflow-library-schema";
 
 /**
- * The compiled latest version of each custom workflow, by workflow ID. It reads the version numbers
- * and stamps, and only the documents that the cache lacks or holds from another stored version.
+ * The compiled latest version of each custom workflow that the library lists, by workflow ID. A
+ * deleted workflow keeps versions only for the closed tasks that use them, and the task reads load
+ * those. It reads the version numbers and stamps, and only the documents that the cache lacks or
+ * holds from another stored version.
  */
 const readLatestWorkflows = (session: HostDatabaseSession, cache: TaskWorkflowVersionCache) =>
   Effect.gen(function* () {
@@ -53,7 +55,8 @@ const readLatestWorkflows = (session: HostDatabaseSession, cache: TaskWorkflowVe
             workflowPublishedAtMs: workflowVersions.publishedAtMs,
           })
           .from(workflowVersions)
-          .where(isLatestVersion)
+          .innerJoin(workflows, eq(workflows.workflowId, workflowVersions.workflowId))
+          .where(and(isLatestVersion, isNull(workflows.deletedAtMs)))
           .orderBy(asc(workflowVersions.workflowId)),
       "workspaceWorkflows.latestVersions",
     );

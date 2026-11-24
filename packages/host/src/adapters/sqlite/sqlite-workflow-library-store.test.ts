@@ -241,6 +241,27 @@ describe("workflow library store", () => {
     expect(rolePrompt).toContain("editor");
   });
 
+  test("reads without the kept version of a deleted workflow after its role is deleted", async () => {
+    await run(publishReviewWorkflow(library));
+    sql(
+      "INSERT INTO tasks (workspace_id, id, title, status, issue_type, priority, created_at_ms, updated_at_ms, workflow_id, workflow_version) VALUES (?, 'old', 'Old', 'closed', 'feature', 2, 1, 1, 'review', 1)",
+      harness.workspaceId,
+    );
+    await run(
+      library.transact("test.delete", (store) =>
+        store.deleteWorkflowKeepingVersions({ workflowId: "review", nowMs: 1 }),
+      ),
+    );
+    sql("DELETE FROM tasks WHERE id = 'old'");
+    await run(library.transact("test.deleteRole", (store) => store.deleteRole("editor")));
+
+    const reads = workspaceWorkflows(createTaskWorkflowVersionCache());
+    const catalog = await run(reads.catalog());
+    expect(catalog.workflows.map(({ definition }) => definition.id)).not.toContain("review");
+    expect((await run(reads.context(harness.scope))).newTaskWorkflows).toHaveLength(1);
+    expect((await run(reads.settingsOwners())).latest).toHaveLength(1);
+  });
+
   test("clears the read-only Codex sandbox of a role that becomes a write role", async () => {
     await run(publishReviewWorkflow(library));
     sql(
