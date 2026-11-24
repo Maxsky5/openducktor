@@ -1,7 +1,12 @@
-import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { type RefObject, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
-import { MOTION_EASE_OUT, prefersReducedMotion } from "@/components/ui/motion";
-import type { AgentChatScrollUnpinOptions } from "./use-agent-chat-scroll-controller";
+import { prefersReducedMotion } from "@/components/ui/motion";
+import {
+  createTranscriptSlideController,
+  ENTRY_TIMING,
+  type TranscriptSlideController,
+  type TranscriptSlideElements,
+} from "./agent-chat-transcript-slide-controller";
 
 /** The rows of the transcript of a session that the hook saw at its last commit. */
 type KnownRows = {
@@ -17,19 +22,6 @@ export type TailOpenToolRun = {
   callCount: number;
 };
 
-export type AgentChatRowEntryMotionControls = {
-  cancelSlide: (options?: AgentChatScrollUnpinOptions) => void;
-  onPinnedResize: () => void;
-};
-
-type ActiveEntryMotion = {
-  /** Turns container slide animation when overflowing, or the entering row animation before overflow. */
-  animation: Animation;
-  isSlide: boolean;
-  scrollTop: number;
-  scrollHeight: number;
-};
-
 type EnteringRows = {
   /**
    * "append": rows added after the previous final row (autoscroll shifts prior rows up).
@@ -40,6 +32,11 @@ type EnteringRows = {
   keys: readonly string[];
 };
 
+type ShownEnteringRows = {
+  entering: EnteringRows;
+  keys: Set<string>;
+};
+
 const NO_ENTERING_ROWS: EnteringRows = { mode: "append", keys: [] };
 
 const ENTRY_KEYFRAMES: Keyframe[] = [
@@ -47,7 +44,6 @@ const ENTRY_KEYFRAMES: Keyframe[] = [
   { opacity: 1, transform: "none" },
 ];
 const ENTRY_FADE_KEYFRAMES: Keyframe[] = [{ opacity: 0 }, { opacity: 1 }];
-const ENTRY_TIMING: KeyframeAnimationOptions = { duration: 200, easing: MOTION_EASE_OUT };
 
 /**
  * The rows that a live update added at the end of the transcript. A row that a session load gives,
@@ -120,49 +116,12 @@ const rememberRows = (
   return known;
 };
 
-const readCurrentTranslateY = (element: HTMLElement): number => {
-  const transform = getComputedStyle(element).transform;
-  if (!transform || transform === "none") return 0;
-  const Matrix = globalThis.DOMMatrixReadOnly;
-  if (Matrix) {
-    const value = new Matrix(transform).m42;
-    return Number.isFinite(value) ? Math.max(0, value) : 0;
-  }
-  const match = /matrix\(([^)]+)\)/.exec(transform);
-  const parts = match?.[1]?.split(",");
-  const ty = parts ? Number(parts[5]) : Number.NaN;
-  return Number.isFinite(ty) ? Math.max(0, ty) : 0;
-};
-
 const measureVerticalSpan = (elements: readonly HTMLElement[]): number => {
   const first = elements[0];
   const last = elements.at(-1);
   if (!first || !last) return 0;
   if (first === last) return Math.max(0, first.getBoundingClientRect().height);
   return Math.max(0, last.getBoundingClientRect().bottom - first.getBoundingClientRect().top);
-};
-
-const measureAppendedToolRunLinesHeight = (
-  root: HTMLElement,
-  runKey: string,
-  addedCount: number,
-): number => {
-  const runElement = root.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(runKey)}"]`);
-  const list = runElement?.querySelector("ul");
-  if (!list) return 0;
-  const visibleItems: HTMLElement[] = [];
-  for (const child of list.children) {
-    if (child instanceof HTMLElement && child.getAttribute("aria-hidden") !== "true") {
-      visibleItems.push(child);
-    }
-  }
-  if (visibleItems.length === 0) return 0;
-  return measureVerticalSpan(visibleItems.slice(-addedCount));
-};
-
-type ShownEnteringRows = {
-  entering: EnteringRows;
-  keys: Set<string>;
 };
 
 const collectUnshownEnteringRows = (
@@ -186,8 +145,25 @@ const collectUnshownEnteringRows = (
   return newlyMounted;
 };
 
+type UseAgentChatRowEntryMotionInput = {
+  sessionKey: string | null;
+  isGrouped: boolean;
+  rows: readonly AgentChatTranscriptRow[];
+  containerRef: RefObject<HTMLDivElement | null>;
+  turnsClipRef: RefObject<HTMLDivElement | null> | undefined;
+  turnsRef: RefObject<HTMLDivElement | null> | undefined;
+  /** The rows in the row window. A new value means that the window mounted other rows. */
+  mountedRows: readonly AgentChatTranscriptRow[];
+  /** The open tool run at the end of the transcript while it grows below the latest-5 cap. */
+  tailOpenRun: TailOpenToolRun | null;
+  isPinned: () => boolean;
+  isLatestWindow: boolean;
+  syncScrollPosition: () => void;
+  slideController?: TranscriptSlideController;
+};
+
 /**
- * Brings the rows that a live update adds in with smooth motion so autoscroll does not snap
+ * Brings the rows that a live update adds in with short motion so autoscroll does not snap
  * existing messages upward. When pinned to an overflowing transcript, slides the turns container
  * via GPU transform (FLIP) while fading entering rows in; otherwise fades and rises entering rows.
  */
@@ -203,21 +179,10 @@ export function useAgentChatRowEntryMotion({
   isPinned,
   isLatestWindow,
   syncScrollPosition,
-}: {
-  sessionKey: string | null;
-  isGrouped: boolean;
-  rows: readonly AgentChatTranscriptRow[];
-  containerRef: RefObject<HTMLDivElement | null>;
-  turnsClipRef: RefObject<HTMLDivElement | null>;
-  turnsRef: RefObject<HTMLDivElement | null>;
-  /** The rows in the row window. A new value means that the window mounted other rows. */
-  mountedRows: readonly AgentChatTranscriptRow[];
-  /** The open tool run at the end of the transcript while it grows below the latest-5 cap. */
-  tailOpenRun: TailOpenToolRun | null;
-  isPinned: () => boolean;
-  isLatestWindow: boolean;
-  syncScrollPosition: () => void;
-}): AgentChatRowEntryMotionControls {
+  slideController: externalSlideController,
+}: UseAgentChatRowEntryMotionInput): TranscriptSlideController {
+  const [ownSlideController] = useState(createTranscriptSlideController);
+  const slideController = externalSlideController ?? ownSlideController;
   const knownRef = useRef<KnownRows | null>(null);
   // The known rows change only after a commit, so a render reads the rows of the last commit.
   const entering = useMemo(
@@ -228,154 +193,56 @@ export function useAgentChatRowEntryMotion({
     entering: NO_ENTERING_ROWS,
     keys: new Set(),
   });
-  const activeEntryRef = useRef<ActiveEntryMotion | null>(null);
   const previousTailOpenRunRef = useRef<(TailOpenToolRun & { sessionKey: string | null }) | null>(
     null,
   );
 
-  const cancelSlide = useCallback(
-    (options?: AgentChatScrollUnpinOptions) => {
-      const activeEntry = activeEntryRef.current;
-      const turns = turnsRef.current;
-      const container = containerRef.current;
-      const remainingOffsetPx =
-        activeEntry?.isSlide && turns && options?.preserveVisualPosition
-          ? readCurrentTranslateY(turns)
-          : 0;
-      if (activeEntry) {
-        activeEntryRef.current = null;
-        if (activeEntry.isSlide) {
-          activeEntry.animation.cancel();
-        }
-      }
-      const turnsClip = turnsClipRef.current;
-      if (turnsClip) {
-        turnsClip.style.overflowY = "";
-      }
-      if (container && remainingOffsetPx > 0) {
-        container.scrollTop = Math.max(0, container.scrollTop - remainingOffsetPx);
-      }
-    },
-    [containerRef, turnsClipRef, turnsRef],
-  );
-
-  const slideTranscript = useCallback(
-    (addedHeightPx: number): boolean => {
-      const container = containerRef.current;
-      const turnsClip = turnsClipRef.current;
-      const turns = turnsRef.current;
-      if (!container || !turnsClip || !turns || addedHeightPx <= 0) return false;
-      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-      if (maxScrollTop <= 0) return false;
-
-      const activeEntry = activeEntryRef.current;
-      const existingOffsetPx = activeEntry?.isSlide ? readCurrentTranslateY(turns) : 0;
-      // Start from the full scroll displacement (bounded only by maxScrollTop) so tall appends
-      // preserve the prior row position on frame 0 and unpinning can absorb the remaining offset.
-      const totalOffsetPx = Math.min(existingOffsetPx + addedHeightPx, maxScrollTop);
-      if (totalOffsetPx <= 0.5) return false;
-
-      if (activeEntry?.isSlide) {
-        activeEntryRef.current = null;
-        activeEntry.animation.cancel();
-      }
-      turnsClip.style.overflowY = "clip";
-      const animation = turns.animate(
-        [{ transform: `translateY(${totalOffsetPx}px)` }, { transform: "none" }],
-        ENTRY_TIMING,
-      );
-      const nextEntry: ActiveEntryMotion = {
-        animation,
-        isSlide: true,
-        scrollTop: container.scrollTop,
-        scrollHeight: container.scrollHeight,
-      };
-      activeEntryRef.current = nextEntry;
-      const cleanup = (): void => {
-        if (activeEntryRef.current !== nextEntry) return;
-        activeEntryRef.current = null;
-        turnsClip.style.overflowY = "";
-      };
-      void animation.finished?.then(cleanup, cleanup);
-      return true;
-    },
-    [containerRef, turnsClipRef, turnsRef],
-  );
-
-  const readActiveGrowthPx = useCallback((): number => {
-    const activeEntry = activeEntryRef.current;
-    const container = containerRef.current;
-    if (!activeEntry || !container) return 0;
-    const scrollDeltaPx = container.scrollTop - activeEntry.scrollTop;
-    const heightDeltaPx = container.scrollHeight - activeEntry.scrollHeight;
-    return Math.min(scrollDeltaPx, heightDeltaPx);
-  }, [containerRef]);
-
-  const syncActiveEntryBaseline = useCallback(() => {
-    const activeEntry = activeEntryRef.current;
-    const container = containerRef.current;
-    if (!activeEntry || !container) return;
-    activeEntry.scrollTop = container.scrollTop;
-    activeEntry.scrollHeight = container.scrollHeight;
-  }, [containerRef]);
-
-  const trackPendingEntry = useCallback(
-    (animation: Animation) => {
-      const container = containerRef.current;
-      if (!container) return;
-      // Track non-overflowing entry so a streamed reply that crosses overflow mid-entry slides.
-      const pendingEntry: ActiveEntryMotion = {
-        animation,
-        isSlide: false,
-        scrollTop: container.scrollTop,
-        scrollHeight: container.scrollHeight,
-      };
-      activeEntryRef.current = pendingEntry;
-      const cleanupPending = (): void => {
-        if (activeEntryRef.current === pendingEntry) {
-          activeEntryRef.current = null;
-        }
-      };
-      void animation.finished?.then(cleanupPending, cleanupPending);
-    },
-    [containerRef],
-  );
-
-  const onPinnedResize = useCallback(() => {
-    const activeEntry = activeEntryRef.current;
-    if (!activeEntry || !isPinned() || !isLatestWindow || prefersReducedMotion()) {
-      return;
-    }
-    const growthPx = readActiveGrowthPx();
-    if (growthPx <= 0.5) {
-      // Keep the baseline aligned when only viewport height changed or content shrank.
-      syncActiveEntryBaseline();
-      return;
-    }
-    slideTranscript(growthPx);
-  }, [isLatestWindow, isPinned, readActiveGrowthPx, slideTranscript, syncActiveEntryBaseline]);
-
   useLayoutEffect(() => {
     void sessionKey;
-    cancelSlide();
-  }, [cancelSlide, sessionKey]);
+    void isGrouped;
+    slideController.reset({
+      container: containerRef.current,
+      turnsClip: turnsClipRef?.current ?? null,
+      turns: turnsRef?.current ?? null,
+    });
+  }, [containerRef, isGrouped, sessionKey, slideController, turnsClipRef, turnsRef]);
 
-  useEffect(() => () => cancelSlide(), [cancelSlide]);
+  useLayoutEffect(
+    () => () => {
+      // Reset refs and active slides when hidden in <Activity> or unmounted so returning to a
+      // retained thread never slides background messages or leaves overflow-y: clip stranded.
+      slideController.reset({
+        container: containerRef.current,
+        turnsClip: turnsClipRef?.current ?? null,
+        turns: turnsRef?.current ?? null,
+      });
+      knownRef.current = null;
+      previousTailOpenRunRef.current = null;
+    },
+    [containerRef, slideController, turnsClipRef, turnsRef],
+  );
 
   useLayoutEffect(() => {
     knownRef.current = rememberRows(knownRef.current, sessionKey, isGrouped, rows);
   }, [isGrouped, rows, sessionKey]);
 
   useLayoutEffect(() => {
-    void mountedRows;
     const previousTailRun = previousTailOpenRunRef.current;
     previousTailOpenRunRef.current = tailOpenRun ? { sessionKey, ...tailOpenRun } : null;
 
-    const turns = turnsRef.current;
-    if (!turns || prefersReducedMotion()) return;
-    const isFollowingTail = isPinned() && isLatestWindow;
+    const elements: TranscriptSlideElements = {
+      container: containerRef.current,
+      turnsClip: turnsClipRef?.current ?? null,
+      turns: turnsRef?.current ?? null,
+    };
+    const firstMountedKey = mountedRows[0]?.key ?? null;
+    if (!elements.turns || prefersReducedMotion()) {
+      slideController.syncBaseline(elements.container, firstMountedKey);
+      return;
+    }
 
-    const newlyMounted = collectUnshownEnteringRows(turns, entering, shownRef);
+    const isFollowingTail = isPinned() && isLatestWindow;
+    const newlyMounted = collectUnshownEnteringRows(elements.turns, entering, shownRef);
     if (newlyMounted.length > 0) {
       if (entering.mode === "inserted-before-tail") {
         // Following the bottom keeps the existing answer below this separator stationary. Fade
@@ -383,39 +250,40 @@ export function useAgentChatRowEntryMotion({
         for (const row of newlyMounted) {
           row.animate(ENTRY_FADE_KEYFRAMES, ENTRY_TIMING);
         }
-        const activeEntry = activeEntryRef.current;
-        if (activeEntry) {
-          const tailGrowthPx = readActiveGrowthPx() - measureVerticalSpan(newlyMounted);
-          if (activeEntry.isSlide && isFollowingTail && tailGrowthPx > 0.5) {
-            slideTranscript(tailGrowthPx);
-          } else {
-            syncActiveEntryBaseline();
-          }
+        const netGrowthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
+        const tailGrowthPx =
+          netGrowthPx !== null ? netGrowthPx - measureVerticalSpan(newlyMounted) : 0;
+        if (slideController.isSliding() && isFollowingTail && tailGrowthPx > 0.5) {
+          slideController.slide(elements, tailGrowthPx, firstMountedKey);
+        } else {
+          slideController.syncBaseline(elements.container, firstMountedKey);
         }
         return;
       }
 
-      const addedHeightPx = activeEntryRef.current
-        ? readActiveGrowthPx()
-        : measureVerticalSpan(newlyMounted);
-      const didSlide = isFollowingTail ? slideTranscript(addedHeightPx) : false;
+      const measuredGrowthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
+      const addedHeightPx =
+        measuredGrowthPx !== null ? measuredGrowthPx : measureVerticalSpan(newlyMounted);
+      const didSlide = isFollowingTail
+        ? slideController.slide(elements, addedHeightPx, firstMountedKey)
+        : false;
       const rowKeyframes = didSlide ? ENTRY_FADE_KEYFRAMES : ENTRY_KEYFRAMES;
       let lastRowAnimation: Animation | null = null;
       for (const row of newlyMounted) {
         lastRowAnimation = row.animate(rowKeyframes, ENTRY_TIMING);
       }
-      if (!didSlide && isFollowingTail) {
-        if (activeEntryRef.current) {
-          // Keep an active slide owned and align its baseline when net scroll height did not grow.
-          syncActiveEntryBaseline();
-        } else if (lastRowAnimation) {
-          trackPendingEntry(lastRowAnimation);
-        }
+      if (!didSlide && isFollowingTail && lastRowAnimation && !slideController.isSliding()) {
+        slideController.trackPendingEntry(lastRowAnimation, elements.container, firstMountedKey);
+      } else if (!didSlide) {
+        slideController.syncBaseline(elements.container, firstMountedKey);
       }
       return;
     }
 
-    if (!isFollowingTail) return;
+    if (!isFollowingTail) {
+      slideController.syncBaseline(elements.container, firstMountedKey);
+      return;
+    }
 
     if (
       tailOpenRun &&
@@ -425,36 +293,41 @@ export function useAgentChatRowEntryMotion({
       tailOpenRun.callCount > previousTailRun.callCount
     ) {
       syncScrollPosition();
-      const addedCount = tailOpenRun.callCount - previousTailRun.callCount;
-      const addedHeightPx = activeEntryRef.current
-        ? readActiveGrowthPx()
-        : measureAppendedToolRunLinesHeight(turns, tailOpenRun.runKey, addedCount);
-      if (!slideTranscript(addedHeightPx) && activeEntryRef.current) {
-        syncActiveEntryBaseline();
+      const growthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
+      if (growthPx !== null && growthPx > 0.5) {
+        slideController.slide(elements, growthPx, firstMountedKey);
+      } else {
+        slideController.syncBaseline(elements.container, firstMountedKey);
       }
       return;
     }
 
     // Keep an active entry motion aligned when a streamed reply grows on the same row.
-    if (activeEntryRef.current) {
+    if (slideController.isActive()) {
       syncScrollPosition();
-      onPinnedResize();
+      const growthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
+      if (growthPx !== null && growthPx > 0.5) {
+        slideController.slide(elements, growthPx, firstMountedKey);
+      } else {
+        slideController.syncBaseline(elements.container, firstMountedKey);
+      }
+      return;
     }
+
+    slideController.syncBaseline(elements.container, firstMountedKey);
   }, [
+    containerRef,
     entering,
     isLatestWindow,
     isPinned,
     mountedRows,
-    onPinnedResize,
-    readActiveGrowthPx,
     sessionKey,
-    slideTranscript,
-    syncActiveEntryBaseline,
+    slideController,
     syncScrollPosition,
     tailOpenRun,
-    trackPendingEntry,
+    turnsClipRef,
     turnsRef,
   ]);
 
-  return useMemo(() => ({ cancelSlide, onPinnedResize }), [cancelSlide, onPinnedResize]);
+  return slideController;
 }

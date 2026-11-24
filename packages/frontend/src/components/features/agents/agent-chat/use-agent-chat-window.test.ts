@@ -10,6 +10,7 @@ import {
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { buildAgentChatTurnAnchors } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { revealElement } from "@/lib/reveal-element";
+import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import {
   JUMP_HIGHLIGHT_ATTRIBUTE,
   JUMP_TOP_MARGIN_PX,
@@ -3425,6 +3426,9 @@ describe("useAgentChatWindow", () => {
       scheduledFrames += 1;
       return originalRequestAnimationFrame(callback);
     };
+    const dispose = restoreAfterTestBody(() => {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    });
     try {
       await harness.update({
         rows: createSingleTurnRows(7),
@@ -3438,8 +3442,84 @@ describe("useAgentChatWindow", () => {
 
       expect(scheduledFrames).toBe(0);
     } finally {
-      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
       await harness.unmount();
+      dispose();
     }
+  });
+
+  test("does not re-pin when an async scroll event fires without moving down within the bottom threshold", async () => {
+    const { harness, container, extraContentHeightPx } = await mountPinnedTranscript();
+    const initialMaxScrollTop = getMaxScrollTop(container);
+
+    // Unpin via upward wheel while staying within the 48px bottom threshold (20px above max).
+    container.scrollTop = initialMaxScrollTop - 20;
+    await act(async () => {
+      await dispatchWheelUp(container);
+      // Sync baseline without firing scroll yet (mirrors a layout/resize sync before queued scroll).
+      triggerResizeObservers(container);
+      await flush();
+    });
+
+    // Queued async scroll event fires at the same scrollTop (not moving downward).
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+
+    // Content grows: because the transcript stayed unpinned, scrollTop must NOT jump to bottom.
+    extraContentHeightPx.current = 120;
+    await act(async () => {
+      triggerResizeObservers(container);
+      await flush();
+    });
+    expect(container.scrollTop).toBe(initialMaxScrollTop - 20);
+
+    // An actual downward scroll to the bottom edge re-pins and resumes following content growth.
+    container.scrollTop = getMaxScrollTop(container);
+    await act(async () => {
+      await dispatchScroll(container);
+    });
+    extraContentHeightPx.current = 240;
+    await act(async () => {
+      triggerResizeObservers(container);
+      await flush();
+    });
+    expect(container.scrollTop).toBe(getMaxScrollTop(container));
+
+    await harness.unmount();
+  });
+
+  test("resets an anchored row window when switching session A to B and back to A", async () => {
+    const sessionARows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 3, "session-a");
+    const sessionBRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE * 3, "session-b");
+    const harness = await mountHarness(
+      {
+        rows: sessionARows,
+        displayedSessionKey: "session-a",
+        shouldResetForTranscriptLoad: false,
+      },
+      { attachDom: true },
+    );
+
+    await act(async () => {
+      harness.getLatestResult().scrollToTop();
+      await flush();
+    });
+    expect(harness.getLatestResult().windowStart).toBe(0);
+
+    await harness.update({
+      rows: sessionBRows,
+      displayedSessionKey: "session-b",
+      shouldResetForTranscriptLoad: false,
+    });
+    expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
+
+    await harness.update({
+      rows: sessionARows,
+      displayedSessionKey: "session-a",
+      shouldResetForTranscriptLoad: false,
+    });
+    expect(harness.getLatestResult().windowStart).toBe(AGENT_CHAT_ROW_WINDOW_SIZE * 2);
+
+    await harness.unmount();
   });
 });

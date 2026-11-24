@@ -33,7 +33,7 @@ export function AgentChatThreads({
   if (state.activeKey !== key) {
     const previousActive = activeThreadRef.current;
     const nextRetained = state.retained.filter(
-      (thread) => thread.key !== key && thread.key !== previousActive.key,
+      (thread) => thread.key !== key && thread.key !== state.activeKey,
     );
     if (
       previousActive.key === state.activeKey &&

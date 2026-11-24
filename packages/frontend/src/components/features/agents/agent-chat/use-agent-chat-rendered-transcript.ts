@@ -1,4 +1,5 @@
-import { type RefObject, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { type RefObject, useLayoutEffect, useMemo, useRef } from "react";
+import { arraysEqual } from "@/lib/arrays-equal";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import type { AgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
@@ -11,18 +12,19 @@ import type {
 import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
 import type { AgentChatTranscriptNavigation } from "./use-agent-chat-transcript-navigation";
 import { useAgentChatWindow } from "./use-agent-chat-window";
-import type { AgentChatScrollUnpinOptions } from "./use-agent-chat-scroll-controller";
+import type { TailOpenToolRun } from "./use-agent-chat-row-entry-motion";
 import {
-  type AgentChatRowEntryMotionControls,
-  type TailOpenToolRun,
-  useAgentChatRowEntryMotion,
-} from "./use-agent-chat-row-entry-motion";
-import { groupToolRuns } from "@openducktor/frontend-core/sessions/transcript/tool-runs";
+  groupToolRuns,
+  NO_TOOL_RUNS,
+  readEarlierCalls,
+} from "@openducktor/frontend-core/sessions/transcript/tool-runs";
 import {
   type AgentChatTurnItem,
   buildToolRunWindowRows,
   buildTurnItems,
   foldUserMessageAnchors,
+  type ToolRunFolds,
+  type ToolRunWindowRows,
 } from "./agent-chat-tool-run-layout";
 import { buildAgentChatTurnAnchors } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import {
@@ -54,16 +56,14 @@ const areTurnAnchorsEqual = (
   left: readonly AgentChatTurnAnchor[],
   right: readonly AgentChatTurnAnchor[],
 ): boolean =>
-  left.length === right.length &&
-  left.every((anchor, index) => {
-    const next = right[index];
-    return (
-      next !== undefined &&
+  arraysEqual(
+    left,
+    right,
+    (anchor, next) =>
       anchor.key === next.key &&
       anchor.startRow === next.startRow &&
-      anchor.endRowExclusive === next.endRowExclusive
-    );
-  });
+      anchor.endRowExclusive === next.endRowExclusive,
+  );
 
 const areTurnRowsIdentical = (
   previousRows: readonly AgentChatTranscriptRow[],
@@ -83,14 +83,25 @@ const areTurnItemsIdentical = (
   previousItems: readonly AgentChatTurnItem[],
   nextItems: readonly AgentChatTurnItem[],
 ): boolean =>
-  previousItems.length === nextItems.length &&
-  previousItems.every((item, index) => {
-    const nextItem = nextItems[index];
-    if (!nextItem || item.kind !== nextItem.kind) return false;
+  arraysEqual(previousItems, nextItems, (item, nextItem) => {
+    if (item.kind !== nextItem.kind) return false;
     return item.kind === "row"
       ? nextItem.kind === "row" && item.row === nextItem.row
       : item === nextItem;
   });
+
+const readTailOpenToolRun = (
+  windowRows: ToolRunWindowRows,
+  folds: ToolRunFolds,
+): TailOpenToolRun | null => {
+  const lastRow = windowRows.rows.at(-1);
+  if (!lastRow) return null;
+  const run = windowRows.runs.get(lastRow.key);
+  if (!run || folds.choices.get(run.runKey) === "folded") return null;
+  const earlier = readEarlierCalls(run.rows.length, folds.keptHidden.get(run.runKey));
+  if (earlier.earlierCallCount > 0) return null;
+  return { runKey: run.runKey, callCount: run.rows.length };
+};
 
 export const getTurnActiveStreamingAssistantMessageId = (
   rows: AgentChatTranscriptRow[],
@@ -204,13 +215,6 @@ export function useAgentChatRenderedTranscript({
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
   const turnsClipRef = useRef<HTMLDivElement | null>(null);
   const turnsRef = useRef<HTMLDivElement | null>(null);
-  const entryMotionRef = useRef<AgentChatRowEntryMotionControls | null>(null);
-  const cancelEntryMotion = useCallback((options?: AgentChatScrollUnpinOptions) => {
-    entryMotionRef.current?.cancelSlide(options);
-  }, []);
-  const handlePinnedResize = useCallback(() => {
-    entryMotionRef.current?.onPinnedResize();
-  }, []);
   const { transcriptState: transcriptModelState, isTranscriptModelMissing } =
     useAgentChatTranscriptModel({
       session,
@@ -245,16 +249,14 @@ export function useAgentChatRenderedTranscript({
     () => foldUserMessageAnchors(transcriptModelState.userMessageAnchors, windowRows.layoutKey),
     [transcriptModelState.userMessageAnchors, windowRows.layoutKey],
   );
+  const tailOpenRun = useMemo(() => readTailOpenToolRun(windowRows, folds), [folds, windowRows]);
   const {
     visibleRows,
     visibleTurnAnchors,
-    isLatestWindow,
-    isPinned,
     isNearBottom,
     isNearTop,
     scrollToBottom,
     scrollToTop,
-    syncScrollPosition,
     navigation,
   } = useAgentChatWindow({
     rows: windowRows.rows,
@@ -263,8 +265,10 @@ export function useAgentChatRenderedTranscript({
     shouldResetForTranscriptLoad: effectiveShouldResetTranscriptWindow,
     messagesContainerRef,
     messagesContentRef,
-    onUnpin: cancelEntryMotion,
-    onPinnedResize: handlePinnedResize,
+    turnsClipRef,
+    turnsRef,
+    isGrouped: classify !== NO_TOOL_RUNS,
+    tailOpenRun,
   });
   const previousTurnsRef = useRef<AgentChatRenderedTurn[]>([]);
   const previousTurnsByKeyRef = useRef<Map<string, AgentChatRenderedTurn>>(new Map());
@@ -286,13 +290,9 @@ export function useAgentChatRenderedTranscript({
       }),
     );
     const previousTurns = previousTurnsRef.current;
-    if (
-      previousTurns.length === turns.length &&
-      turns.every((turn, index) => turn === previousTurns[index])
-    ) {
-      return previousTurns;
-    }
-    return turns;
+    return arraysEqual(previousTurns, turns, (previousTurn, nextTurn) => previousTurn === nextTurn)
+      ? previousTurns
+      : turns;
   }, [
     collapseFinishedRuns,
     folds,
@@ -307,32 +307,6 @@ export function useAgentChatRenderedTranscript({
     previousTurnsRef.current = renderedTurns;
     previousTurnsByKeyRef.current = new Map(renderedTurns.map((turn) => [turn.key, turn]));
   }, [renderedTurns, turnAnchors]);
-
-  const tailOpenRun = useMemo<TailOpenToolRun | null>(() => {
-    const lastItem = renderedTurns.at(-1)?.items.at(-1);
-    if (lastItem?.kind === "tool_run" && !lastItem.folded && lastItem.earlierCallCount === 0) {
-      return { runKey: lastItem.runKey, callCount: lastItem.callCount };
-    }
-    return null;
-  }, [renderedTurns]);
-
-  const entryMotion = useAgentChatRowEntryMotion({
-    sessionKey: displayedSessionKey,
-    isGrouped: classify !== null,
-    rows: windowRows.rows,
-    containerRef: messagesContainerRef,
-    turnsClipRef,
-    turnsRef,
-    mountedRows: visibleRows,
-    tailOpenRun,
-    isPinned,
-    isLatestWindow,
-    syncScrollPosition,
-  });
-
-  useLayoutEffect(() => {
-    entryMotionRef.current = entryMotion;
-  }, [entryMotion]);
 
   // A transcript that follows its end stops following, so the run stays where the reader pressed
   // it. Scroll anchoring then keeps the content in view while the run changes its height.

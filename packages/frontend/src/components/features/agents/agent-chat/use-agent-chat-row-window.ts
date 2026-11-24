@@ -35,6 +35,8 @@ type UseAgentChatRowWindowResult = {
   visibleTurnAnchors: AgentChatTurnAnchor[];
   selectFirstRowWindow: () => void;
   selectLatestRowWindow: () => void;
+  anchorCurrentRowWindow: () => void;
+  followLatestOnAppend: () => void;
   selectRowWindowAround: (rowIndex: number) => void;
   expandRowWindowEnd: () => void;
   rereadRowAnchor: () => void;
@@ -53,16 +55,18 @@ type SessionRowRange = {
   lastRowKey: string | null;
 };
 
-type CommittedRowWindow = SessionRowRange & {
+type AnchoredWindowMode = SessionRowRange & {
+  kind: "anchored";
   rowCount: number;
-  pendingLatestReset: boolean;
-  overrideId: number;
+  followOnAppend: boolean;
 };
 
-type RangeOverride = SessionRowRange & {
-  id: number;
-  rowCount: number;
-};
+type WindowMode =
+  | {
+      kind: "latest";
+      sessionKey: string | null;
+    }
+  | AnchoredWindowMode;
 
 // A mounted row, with its index among the mounted rows and its distance from the viewport top.
 type RowAnchor = {
@@ -166,48 +170,78 @@ const rowCountForRange = (range: RowRange): number =>
 const hasHiddenRowsForRange = (range: RowRange, rowCount: number): boolean =>
   range.startRow > 0 || range.endRowExclusive < rowCount;
 
-const resolveWindowRange = ({
-  base,
-  rows,
-  displayedSessionKey,
-  isFollowingLatestWindow,
-}: {
-  base: CommittedRowWindow;
-  rows: AgentChatTranscriptRow[];
-  displayedSessionKey: string | null;
-  isFollowingLatestWindow: () => boolean;
-}): RowRange => {
-  if (base.sessionKey !== displayedSessionKey) {
-    return latestRange(rows.length);
+const shouldFollowLatestAppend = (mode: AnchoredWindowMode, rowCount: number): boolean =>
+  mode.followOnAppend && rowCount !== mode.rowCount && mode.range.endRowExclusive === mode.rowCount;
+
+type ResolvedWindowMode = {
+  mode: WindowMode;
+  range: RowRange;
+};
+
+const resolveWindowMode = (
+  mode: WindowMode,
+  displayedSessionKey: string | null,
+  rows: AgentChatTranscriptRow[],
+): ResolvedWindowMode => {
+  if (mode.sessionKey !== displayedSessionKey) {
+    return {
+      mode: { kind: "latest", sessionKey: displayedSessionKey },
+      range: latestRange(rows.length),
+    };
   }
 
-  if (base.pendingLatestReset && rows.length > 0) {
-    return latestRange(rows.length);
+  if (mode.kind === "latest") {
+    return { mode, range: latestRange(rows.length) };
   }
 
+  if (shouldFollowLatestAppend(mode, rows.length)) {
+    return {
+      mode: { kind: "latest", sessionKey: displayedSessionKey },
+      range: latestRange(rows.length),
+    };
+  }
+
+  let nextRange: RowRange;
+  if (rows.length > 0 && mode.range.startRow >= rows.length) {
+    nextRange = latestRange(rows.length);
+  } else {
+    const followed = followRangeRows(mode, rows);
+    // Keep every row mounted in a single-window transcript unless history was prepended above it.
+    if (
+      followed.startRow === 0 &&
+      mode.range.endRowExclusive === mode.rowCount &&
+      rows.length <= AGENT_CHAT_ROW_WINDOW_SIZE
+    ) {
+      nextRange = { startRow: 0, endRowExclusive: rows.length };
+    } else {
+      nextRange = followed;
+    }
+  }
+
+  const clamped = clampRange(nextRange, rows.length);
+  const next = sessionRowRange(displayedSessionKey, clamped, rows);
+  const shouldSyncSingleWindowGrowth =
+    clamped.startRow === 0 &&
+    clamped.endRowExclusive === rows.length &&
+    mode.rowCount !== rows.length;
   if (
-    rows.length !== base.rowCount &&
-    isFollowingLatestWindow() &&
-    base.range.endRowExclusive === base.rowCount
+    !areRangesEqual(mode.range, next.range) ||
+    mode.firstRowKey !== next.firstRowKey ||
+    mode.lastRowKey !== next.lastRowKey ||
+    shouldSyncSingleWindowGrowth
   ) {
-    return latestRange(rows.length);
+    return {
+      mode: {
+        kind: "anchored",
+        ...next,
+        rowCount: rows.length,
+        followOnAppend: mode.followOnAppend,
+      },
+      range: clamped,
+    };
   }
 
-  if (rows.length > 0 && base.range.startRow >= rows.length) {
-    return latestRange(rows.length);
-  }
-
-  const followed = followRangeRows(base, rows);
-  // Keep every row mounted in a single-window transcript unless history was prepended above it.
-  if (
-    followed.startRow === 0 &&
-    base.range.endRowExclusive === base.rowCount &&
-    rows.length <= AGENT_CHAT_ROW_WINDOW_SIZE
-  ) {
-    return { startRow: 0, endRowExclusive: rows.length };
-  }
-
-  return followed;
+  return { mode, range: clamped };
 };
 
 const trimRowCount = (range: RowRange): number =>
@@ -253,37 +287,17 @@ export function useAgentChatRowWindow({
   isFollowingLatestWindow,
   messagesContainerRef,
 }: UseAgentChatRowWindowInput): UseAgentChatRowWindowResult {
-  const [initialCommitted] = useState<CommittedRowWindow>(() => ({
-    ...sessionRowRange(displayedSessionKey, latestRange(rows.length), rows),
-    rowCount: rows.length,
-    pendingLatestReset: shouldResetForTranscriptLoad && rows.length === 0,
-    overrideId: 0,
+  const [mode, setMode] = useState<WindowMode>(() => ({
+    kind: "latest",
+    sessionKey: displayedSessionKey,
   }));
-  const committedRef = useRef<CommittedRowWindow>(initialCommitted);
-  const nextOverrideIdRef = useRef(0);
-  const [rangeOverride, setRangeOverride] = useState<RangeOverride | null>(null);
-  const committed = committedRef.current;
-  const hasPendingOverride =
-    rangeOverride !== null &&
-    rangeOverride.id > committed.overrideId &&
-    rangeOverride.sessionKey === displayedSessionKey;
-  const base: CommittedRowWindow = hasPendingOverride
-    ? {
-        ...rangeOverride,
-        pendingLatestReset: false,
-        overrideId: rangeOverride.id,
-      }
-    : committed;
-  const didSessionChange = committed.sessionKey !== displayedSessionKey;
-  const range = resolveWindowRange({
-    base,
-    rows,
-    displayedSessionKey,
-    isFollowingLatestWindow,
-  });
-  const clampedRange = clampRange(range, rows.length);
-  const effectiveStartRow = clampedRange.startRow;
-  const effectiveEndRowExclusive = clampedRange.endRowExclusive;
+  const resolved = resolveWindowMode(mode, displayedSessionKey, rows);
+  if (resolved.mode !== mode) {
+    setMode(resolved.mode);
+  }
+
+  const effectiveStartRow = resolved.range.startRow;
+  const effectiveEndRowExclusive = resolved.range.endRowExclusive;
   const effectiveRange = useMemo<RowRange>(
     () => ({ startRow: effectiveStartRow, endRowExclusive: effectiveEndRowExclusive }),
     [effectiveStartRow, effectiveEndRowExclusive],
@@ -298,74 +312,105 @@ export function useAgentChatRowWindow({
   const shouldTrimTopAfterAppendRef = useRef(false);
   const lastScrollTopRef = useRef(0);
 
-  // Record the committed window before anchor/trim effects and event handlers read it.
+  useLayoutEffect(() => {
+    void displayedSessionKey;
+    pendingRowAnchorRef.current = null;
+    shouldTrimBottomAfterPrependRef.current = false;
+    shouldTrimTopAfterAppendRef.current = false;
+  }, [displayedSessionKey]);
+
+  // Keep imperative handlers current after each committed window.
   useLayoutEffect(() => {
     latestInputsRef.current = { rows, displayedSessionKey, shouldResetForTranscriptLoad };
     rangeRef.current = effectiveRange;
-    const previousCommitted = committedRef.current;
-    if (didSessionChange) {
-      pendingRowAnchorRef.current = null;
-      shouldTrimBottomAfterPrependRef.current = false;
-      shouldTrimTopAfterAppendRef.current = false;
-    }
-    let pendingLatestReset = previousCommitted.pendingLatestReset;
-    if (didSessionChange) {
-      pendingLatestReset = shouldResetForTranscriptLoad && rows.length === 0;
-    } else if (rows.length > 0) {
-      pendingLatestReset = false;
-    }
-    committedRef.current = {
-      ...sessionRowRange(displayedSessionKey, effectiveRange, rows),
-      rowCount: rows.length,
-      pendingLatestReset,
-      overrideId: hasPendingOverride ? rangeOverride.id : previousCommitted.overrideId,
-    };
-  }, [
-    didSessionChange,
-    displayedSessionKey,
-    effectiveRange,
-    hasPendingOverride,
-    rangeOverride,
-    rows,
-    shouldResetForTranscriptLoad,
-  ]);
+  }, [displayedSessionKey, effectiveRange, rows, shouldResetForTranscriptLoad]);
 
-  const setRange = useCallback((nextRange: RowRange) => {
-    const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
-    const nextClampedRange = clampRange(nextRange, currentRows.length);
-    const next = sessionRowRange(currentSessionKey, nextClampedRange, currentRows);
-    const currentCommitted = committedRef.current;
-    if (
-      currentCommitted.sessionKey === next.sessionKey &&
-      areRangesEqual(rangeRef.current, next.range) &&
-      currentCommitted.firstRowKey === next.firstRowKey &&
-      currentCommitted.lastRowKey === next.lastRowKey
-    ) {
-      return;
-    }
-    nextOverrideIdRef.current += 1;
-    rangeRef.current = nextClampedRange;
-    setRangeOverride({
-      id: nextOverrideIdRef.current,
-      ...next,
-      rowCount: currentRows.length,
-    });
-  }, []);
+  const setRange = useCallback(
+    (nextRange: RowRange) => {
+      const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
+      const nextClampedRange = clampRange(nextRange, currentRows.length);
+      const next = sessionRowRange(currentSessionKey, nextClampedRange, currentRows);
+      rangeRef.current = nextClampedRange;
+      setMode((current) => {
+        const nextFollowOnAppend =
+          isFollowingLatestWindow() && next.range.endRowExclusive === currentRows.length;
+        if (
+          current.kind === "anchored" &&
+          current.sessionKey === next.sessionKey &&
+          areRangesEqual(current.range, next.range) &&
+          current.firstRowKey === next.firstRowKey &&
+          current.lastRowKey === next.lastRowKey &&
+          current.rowCount === currentRows.length &&
+          current.followOnAppend === nextFollowOnAppend
+        ) {
+          return current;
+        }
+        return {
+          kind: "anchored",
+          ...next,
+          rowCount: currentRows.length,
+          followOnAppend: nextFollowOnAppend,
+        };
+      });
+    },
+    [isFollowingLatestWindow],
+  );
 
   const selectFirstRowWindow = useCallback(() => {
     setRange(firstRange(latestInputsRef.current.rows.length));
   }, [setRange]);
 
   const selectLatestRowWindow = useCallback(() => {
-    const { rows: currentRows, shouldResetForTranscriptLoad: currentShouldReset } =
-      latestInputsRef.current;
-    if (currentShouldReset && currentRows.length === 0) {
-      committedRef.current.pendingLatestReset = true;
-      return;
-    }
+    const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
+    rangeRef.current = latestRange(currentRows.length);
+    setMode((current) =>
+      current.kind === "latest" && current.sessionKey === currentSessionKey
+        ? current
+        : { kind: "latest", sessionKey: currentSessionKey },
+    );
+  }, []);
 
-    setRange(latestRange(currentRows.length));
-  }, [setRange]);
+  const anchorCurrentRowWindow = useCallback(() => {
+    const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
+    const currentRange = clampRange(rangeRef.current, currentRows.length);
+    const next = sessionRowRange(currentSessionKey, currentRange, currentRows);
+    setMode((current) => {
+      if (
+        current.kind === "anchored" &&
+        current.sessionKey === currentSessionKey &&
+        !current.followOnAppend &&
+        areRangesEqual(current.range, next.range) &&
+        current.firstRowKey === next.firstRowKey &&
+        current.lastRowKey === next.lastRowKey &&
+        current.rowCount === currentRows.length
+      ) {
+        return current;
+      }
+      return {
+        kind: "anchored",
+        ...next,
+        rowCount: currentRows.length,
+        followOnAppend: false,
+      };
+    });
+  }, []);
+
+  const followLatestOnAppend = useCallback(() => {
+    const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
+    setMode((current) => {
+      if (current.kind !== "anchored" || current.sessionKey !== currentSessionKey) {
+        return current;
+      }
+      if (current.range.endRowExclusive !== currentRows.length || current.followOnAppend) {
+        return current;
+      }
+      return {
+        ...current,
+        rowCount: currentRows.length,
+        followOnAppend: true,
+      };
+    });
+  }, []);
 
   // A jump mounts a full row window with its target near the start. The pending anchor and trims
   // belong to the previous row window, so the jump drops them.
@@ -610,6 +655,8 @@ export function useAgentChatRowWindow({
     visibleTurnAnchors,
     selectFirstRowWindow,
     selectLatestRowWindow,
+    anchorCurrentRowWindow,
+    followLatestOnAppend,
     selectRowWindowAround,
     expandRowWindowEnd,
     rereadRowAnchor,

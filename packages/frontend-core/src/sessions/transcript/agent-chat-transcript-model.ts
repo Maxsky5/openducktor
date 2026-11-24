@@ -337,7 +337,9 @@ export function updateAgentChatTranscriptModelFromPrefix({
   }
 
   const isAppendMode = mode === "append";
-  const rows = isAppendMode ? [] : previousTranscriptModel.rows.slice(0, firstTailRowIndex);
+  const prefixRows = isAppendMode
+    ? previousTranscriptModel.rows
+    : previousTranscriptModel.rows.slice(0, firstTailRowIndex);
   const metadata = isAppendMode
     ? {
         hasAttachmentMessages: previousTranscriptModel.hasAttachmentMessages,
@@ -345,7 +347,8 @@ export function updateAgentChatTranscriptModelFromPrefix({
         activeStreamingAssistantMessageId:
           previousTranscriptModel.activeStreamingAssistantMessageId,
       }
-    : buildMetadataFromRows(rows);
+    : buildMetadataFromRows(prefixRows);
+  const tailRows: AgentChatTranscriptRow[] = [];
 
   const occurrences = new Map<string, number>();
   forEachSessionMessageFrom(session, startMessageIndex, (message) => {
@@ -364,13 +367,19 @@ export function updateAgentChatTranscriptModelFromPrefix({
     if (!isVisibleTranscriptMessage(message, showThinkingMessages)) {
       return;
     }
-    const rowKey = appendMessageRows(rows, sessionKey, message, occurrence, showThinkingMessages);
+    const rowKey = appendMessageRows(
+      tailRows,
+      sessionKey,
+      message,
+      occurrence,
+      showThinkingMessages,
+    );
     if (message.role === "user") {
       metadata.lastUserMessageKey = rowKey;
     }
   });
 
-  if (isAppendMode && rows.length === 0) {
+  if (isAppendMode && tailRows.length === 0) {
     if (
       metadata.hasAttachmentMessages === previousTranscriptModel.hasAttachmentMessages &&
       metadata.lastUserMessageKey === previousTranscriptModel.lastUserMessageKey &&
@@ -385,8 +394,7 @@ export function updateAgentChatTranscriptModelFromPrefix({
     };
   }
 
-  const nextRows = isAppendMode ? [...previousTranscriptModel.rows, ...rows] : rows;
-  const visibleRows = placeInitialSystemPrompt(nextRows);
+  const visibleRows = placeInitialSystemPrompt([...prefixRows, ...tailRows]);
   return {
     rows: visibleRows,
     turnAnchors: buildAgentChatTurnAnchors(visibleRows),

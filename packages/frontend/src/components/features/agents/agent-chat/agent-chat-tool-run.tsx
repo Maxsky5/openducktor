@@ -367,6 +367,7 @@ type ToolRunLineProps = {
   workingDirectory: string | null;
 };
 
+// `entersWithMotion` is intentionally omitted because `ToolRunLine` captures it once at mount via `useValueAtMount`.
 const areToolRunLinePropsEqual = (previous: ToolRunLineProps, next: ToolRunLineProps): boolean =>
   previous.row === next.row &&
   previous.runtimePresentation === next.runtimePresentation &&

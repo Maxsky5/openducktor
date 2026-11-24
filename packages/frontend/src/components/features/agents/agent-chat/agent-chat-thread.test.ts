@@ -8,6 +8,7 @@ import {
   createAnimationFrameTestDriver,
   withAnimationFrameTestDriver,
 } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
+import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -1737,405 +1738,6 @@ describe("AgentChatThread", () => {
     rendered.unmount();
   });
 
-  type RecordedMotionAnimation = {
-    element: HTMLElement;
-    keyframes: Keyframe[] | PropertyIndexedKeyframes | null;
-    cancelled: boolean;
-    finish: () => void;
-  };
-
-  const mountEntryMotionThread = async ({
-    sessionId,
-    initialMessages,
-    groupToolCalls = false,
-    clientHeight,
-    initialScrollTop,
-    rowHeightFor,
-    syncInitialScroll = false,
-  }: {
-    sessionId: string;
-    initialMessages: ReturnType<typeof buildMessage>[];
-    groupToolCalls?: boolean;
-    clientHeight: number;
-    initialScrollTop: number;
-    rowHeightFor: (element: Element) => number;
-    syncInitialScroll?: boolean;
-  }) => {
-    setGlobalWindow(window);
-    const recorded: RecordedMotionAnimation[] = [];
-    const runAnimation = HTMLElement.prototype.animate;
-    const animate = spyOn(HTMLElement.prototype, "animate").mockImplementation(function (
-      this: HTMLElement,
-      keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
-      options?: number | KeyframeAnimationOptions,
-    ) {
-      const animation = runAnimation.call(this, keyframes, options);
-      const deferred = Promise.withResolvers<Animation>();
-      const entry: RecordedMotionAnimation = {
-        element: this,
-        keyframes,
-        cancelled: false,
-        finish: () => deferred.resolve(animation),
-      };
-      Object.defineProperty(animation, "finished", {
-        configurable: true,
-        value: deferred.promise,
-      });
-      animation.cancel = () => {
-        entry.cancelled = true;
-        deferred.reject(new DOMException("Cancelled", "AbortError"));
-      };
-      recorded.push(entry);
-      return animation;
-    });
-    const rectSpy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      function (this: HTMLElement) {
-        if (this.hasAttribute("data-row-key")) {
-          return new DOMRect(0, 0, 600, rowHeightFor(this));
-        }
-        return new DOMRect(0, 0, 600, clientHeight);
-      },
-    );
-    const messagesContainerRef = createRef<HTMLDivElement>();
-    const settings = createChatSettingsFixture({
-      groupToolCalls,
-      collapseFinishedToolCalls: false,
-    });
-    const baseModel = buildBaseModel();
-    let version = 1;
-    const buildTree = (messages: ReturnType<typeof buildMessage>[]) => {
-      version += 1;
-      const session = {
-        // Keep message object references intact across updates; buildSession clones messages.
-        ...buildSession({ externalSessionId: sessionId, status: "running" }),
-        messages: createSessionMessagesState(sessionId, messages, version),
-      };
-      return createElement(
-        AgentChatSettingsProvider,
-        { value: settings },
-        createElement(AgentChatThreadComponent, {
-          model: completeThreadModel({
-            ...baseModel,
-            messagesContainerRef,
-            transcript: buildSessionTranscript(session),
-          }),
-        }),
-      );
-    };
-
-    const rendered = render(buildTree(initialMessages));
-    await act(flush);
-    const container = messagesContainerRef.current;
-    if (!container) throw new Error("Expected messages container");
-    let scrollTopValue = initialScrollTop;
-    Object.defineProperty(container, "clientHeight", { configurable: true, value: clientHeight });
-    Object.defineProperty(container, "scrollHeight", {
-      configurable: true,
-      get: () =>
-        Array.from(container.querySelectorAll("[data-row-key]")).reduce(
-          (sum, row) => sum + rowHeightFor(row),
-          0,
-        ),
-    });
-    Object.defineProperty(container, "scrollTop", {
-      configurable: true,
-      get: () => scrollTopValue,
-      set: (value: number) => {
-        const max = Math.max(0, container.scrollHeight - container.clientHeight);
-        scrollTopValue = Math.max(0, Math.min(value, max));
-      },
-    });
-    if (syncInitialScroll) {
-      await act(async () => {
-        container.dispatchEvent(new Event("scroll"));
-        await flush();
-      });
-    }
-    const firstRow = container.querySelector<HTMLElement>("[data-row-key]");
-    const turnsElement = firstRow?.parentElement?.parentElement ?? null;
-    const turnsClipElement = turnsElement?.parentElement ?? null;
-    if (!turnsElement || !turnsClipElement) throw new Error("Expected turns wrapper elements");
-
-    return {
-      container,
-      turnsElement,
-      turnsClipElement,
-      recorded,
-      rerenderMessages: async (messages: ReturnType<typeof buildMessage>[]) => {
-        rendered.rerender(buildTree(messages));
-        await act(flush);
-      },
-      cleanup: () => {
-        rectSpy.mockRestore();
-        animate.mockRestore();
-        rendered.unmount();
-      },
-    };
-  };
-
-  test("slides an overflowing pinned transcript smoothly when live rows appear in ungrouped mode and cancels on upward wheel", async () => {
-    const bashMessage = (id: string) =>
-      buildMessage("tool", `Tool ${id}`, {
-        id,
-        meta: {
-          kind: "tool",
-          partId: `${id}-part`,
-          callId: `${id}-call`,
-          tool: "bash",
-          toolType: "bash",
-          status: "completed",
-          input: { command: `echo ${id}` },
-        },
-      });
-    const loaded = [
-      buildMessage("user", "Run checks", { id: "user-1" }),
-      ...Array.from({ length: 8 }, (_, index) => bashMessage(`initial-${index}`)),
-    ];
-    const harness = await mountEntryMotionThread({
-      sessionId: "session-ungrouped-slide",
-      initialMessages: loaded,
-      clientHeight: 200,
-      initialScrollTop: 160,
-      rowHeightFor: () => 40,
-    });
-    const { container, turnsElement, turnsClipElement, recorded, rerenderMessages } = harness;
-
-    try {
-      const withLiveOne = [...loaded, bashMessage("live-1")];
-      await rerenderMessages(withLiveOne);
-
-      expect(container.scrollTop).toBe(container.scrollHeight - container.clientHeight);
-      expect(turnsClipElement.style.overflowY).toBe("clip");
-      const firstSlide = recorded.find((entry) => entry.element === turnsElement);
-      const firstRowFade = recorded.find((entry) =>
-        entry.element.getAttribute("data-row-key")?.includes("live-1"),
-      );
-      expect(firstSlide?.keyframes).toEqual([
-        { transform: "translateY(40px)" },
-        { transform: "none" },
-      ]);
-      expect(firstRowFade?.keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
-
-      // A second live row arriving mid-slide composes from the in-flight offset.
-      turnsElement.style.transform = "matrix(1, 0, 0, 1, 0, 18)";
-      recorded.length = 0;
-      await rerenderMessages([...withLiveOne, bashMessage("live-2")]);
-      turnsElement.style.transform = "";
-
-      expect(firstSlide?.cancelled).toBe(true);
-      const composedSlide = recorded.find((entry) => entry.element === turnsElement);
-      expect(composedSlide?.keyframes).toEqual([
-        { transform: "translateY(58px)" },
-        { transform: "none" },
-      ]);
-
-      // Upward user scroll stops the slide and absorbs its remaining offset into scrollTop so
-      // visible rows do not jump before native wheel scrolling runs.
-      const scrollTopBeforeWheel = container.scrollTop;
-      turnsElement.style.transform = "matrix(1, 0, 0, 1, 0, 30)";
-      await act(async () => {
-        container.dispatchEvent(new WheelEvent("wheel", { deltaY: -24 }));
-        turnsElement.style.transform = "";
-        container.dispatchEvent(new Event("scroll"));
-        await flush();
-      });
-
-      expect(composedSlide?.cancelled).toBe(true);
-      expect(turnsClipElement.style.overflowY).toBe("");
-      expect(container.scrollTop).toBe(scrollTopBeforeWheel - 30);
-    } finally {
-      harness.cleanup();
-    }
-  });
-
-  test("preserves full displacement for tall appends, keeps finalized answers stationary when duration inserts, and lets scrollToTop cancel cleanly", async () => {
-    const loaded = Array.from({ length: 10 }, (_, index) =>
-      index % 2 === 1
-        ? buildMessage("assistant", `Message ${index}`, {
-            id: `initial-${index}`,
-            meta: { kind: "assistant", isFinal: true },
-          })
-        : buildMessage("user", `Message ${index}`, { id: `initial-${index}` }),
-    );
-    const harness = await mountEntryMotionThread({
-      sessionId: "session-tall-and-duration",
-      initialMessages: loaded,
-      clientHeight: 400,
-      initialScrollTop: 200,
-      syncInitialScroll: true,
-      rowHeightFor: (element) => {
-        const key = element.getAttribute("data-row-key") ?? "";
-        if (key.includes(":duration")) return 28;
-        if (key.includes("tall-answer")) return 300;
-        return 60;
-      },
-    });
-    const { container, turnsElement, turnsClipElement, recorded, rerenderMessages } = harness;
-
-    try {
-      // 1. Tall 300px append in a 400px viewport starts at the full 300px displacement.
-      const streamingTall = buildMessage("assistant", "Long answer", {
-        id: "tall-answer",
-        meta: { kind: "assistant", isFinal: false },
-      });
-      await rerenderMessages([...loaded, streamingTall]);
-
-      const tallSlide = recorded.find((entry) => entry.element === turnsElement);
-      expect(tallSlide?.keyframes).toEqual([
-        { transform: "translateY(300px)" },
-        { transform: "none" },
-      ]);
-
-      // Finish the tall slide before finalizing with duration.
-      tallSlide?.finish();
-      await act(flush);
-      recorded.length = 0;
-
-      // 2. Finalizing the answer inserts a turn_duration separator before it; the separator
-      // fades in place without sliding or clipping the stationary answer below it.
-      const finalizedTall = buildMessage("assistant", "Long answer", {
-        id: "tall-answer",
-        meta: { kind: "assistant", isFinal: true, durationMs: 3_000 },
-      });
-      await rerenderMessages([...loaded, finalizedTall]);
-
-      expect(recorded.some((entry) => entry.element === turnsElement)).toBe(false);
-      expect(turnsClipElement.style.overflowY).toBe("");
-      const durationFade = recorded.find((entry) =>
-        entry.element.getAttribute("data-row-key")?.includes(":duration"),
-      );
-      expect(durationFade?.keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
-
-      // 3. Explicit scrollToTop during a slide cancels it and moves straight to scrollTop 0.
-      recorded.length = 0;
-      const followUp = buildMessage("user", "Follow up", { id: "follow-up" });
-      await rerenderMessages([...loaded, finalizedTall, followUp]);
-      const followUpSlide = recorded.find((entry) => entry.element === turnsElement);
-      expect(followUpSlide?.keyframes).toEqual([
-        { transform: "translateY(60px)" },
-        { transform: "none" },
-      ]);
-
-      turnsElement.style.transform = "matrix(1, 0, 0, 1, 0, 40)";
-      const scrollToTopButton = screen.getByRole("button", { name: "Scroll to top" });
-      fireEvent.click(scrollToTopButton);
-      await act(flush);
-      turnsElement.style.transform = "";
-
-      expect(followUpSlide?.cancelled).toBe(true);
-      expect(turnsClipElement.style.overflowY).toBe("");
-      expect(container.scrollTop).toBe(0);
-    } finally {
-      harness.cleanup();
-    }
-  });
-
-  test("extends an active entry slide when a streaming reply grows in grouped and ungrouped modes", async () => {
-    const loaded = Array.from({ length: 10 }, (_, index) =>
-      index % 2 === 1
-        ? buildMessage("assistant", `Message ${index}`, {
-            id: `initial-${index}`,
-            meta: { kind: "assistant", isFinal: true },
-          })
-        : buildMessage("user", `Message ${index}`, { id: `initial-${index}` }),
-    );
-    for (const groupToolCalls of [false, true]) {
-      let streamingReplyHeight = 58;
-      let shrinkablePriorHeight = 60;
-      const harness = await mountEntryMotionThread({
-        sessionId: groupToolCalls ? "session-stream-grouped" : "session-stream-ungrouped",
-        initialMessages: loaded,
-        groupToolCalls,
-        clientHeight: 400,
-        initialScrollTop: 200,
-        syncInitialScroll: true,
-        rowHeightFor: (element) => {
-          const key = element.getAttribute("data-row-key") ?? "";
-          if (key.includes("stream-reply")) return streamingReplyHeight;
-          if (key.includes("initial-9")) return shrinkablePriorHeight;
-          return 60;
-        },
-      });
-      const { container, turnsElement, turnsClipElement, recorded, rerenderMessages } = harness;
-
-      try {
-        // Initial one-paragraph streaming reply enters and starts a 58px slide.
-        const paragraphOne = buildMessage("assistant", "Paragraph one.", {
-          id: "stream-reply",
-          meta: { kind: "assistant", isFinal: false },
-        });
-        await rerenderMessages([...loaded, paragraphOne]);
-
-        const initialSlide = recorded.find((entry) => entry.element === turnsElement);
-        expect(initialSlide?.keyframes).toEqual([
-          { transform: "translateY(58px)" },
-          { transform: "none" },
-        ]);
-        expect(container.scrollTop).toBe(258);
-
-        // Mid-slide (42px remaining), the same reply grows to four paragraphs (+102px).
-        turnsElement.style.transform = "matrix(1, 0, 0, 1, 0, 42)";
-        recorded.length = 0;
-        streamingReplyHeight = 160;
-        const fourParagraphs = buildMessage(
-          "assistant",
-          "Paragraph one.\n\nParagraph two.\n\nParagraph three.\n\nParagraph four.",
-          {
-            id: "stream-reply",
-            meta: { kind: "assistant", isFinal: false },
-          },
-        );
-        await rerenderMessages([...loaded, fourParagraphs]);
-        turnsElement.style.transform = "";
-
-        expect(initialSlide?.cancelled).toBe(true);
-        expect(container.scrollTop).toBe(360);
-        const extendedSlide = recorded.find((entry) => entry.element === turnsElement);
-        expect(extendedSlide?.keyframes).toEqual([
-          { transform: "translateY(144px)" },
-          { transform: "none" },
-        ]);
-
-        // Simultaneous shrink (-20px) and append (+60px) mid-slide extends by the net 40px delta.
-        turnsElement.style.transform = "matrix(1, 0, 0, 1, 0, 50)";
-        recorded.length = 0;
-        shrinkablePriorHeight = 40;
-        const nextUser = buildMessage("user", "Next prompt", { id: "next-prompt" });
-        await rerenderMessages([...loaded, fourParagraphs, nextUser]);
-        turnsElement.style.transform = "";
-
-        expect(extendedSlide?.cancelled).toBe(true);
-        expect(container.scrollTop).toBe(400);
-        const netSlide = recorded.find((entry) => entry.element === turnsElement);
-        expect(netSlide?.keyframes).toEqual([
-          { transform: "translateY(90px)" },
-          { transform: "none" },
-        ]);
-
-        // Once the slide finishes, later streaming growth does not start a fresh entry slide.
-        netSlide?.finish();
-        await act(flush);
-        expect(turnsClipElement.style.overflowY).toBe("");
-        recorded.length = 0;
-        streamingReplyHeight = 220;
-        const fiveParagraphs = buildMessage(
-          "assistant",
-          "Paragraph one.\n\nParagraph two.\n\nParagraph three.\n\nParagraph four.\n\nParagraph five.",
-          {
-            id: "stream-reply",
-            meta: { kind: "assistant", isFinal: false },
-          },
-        );
-        await rerenderMessages([...loaded, fiveParagraphs, nextUser]);
-
-        expect(recorded.some((entry) => entry.element === turnsElement)).toBe(false);
-        expect(turnsClipElement.style.overflowY).toBe("");
-      } finally {
-        harness.cleanup();
-      }
-    }
-  });
-
   test("appending live messages in grouped mode commits once per update and slides open tool runs", async () => {
     setGlobalWindow(window);
     const animatedKeyframes: Array<{
@@ -2181,7 +1783,10 @@ describe("AgentChatThread", () => {
     let commits = 0;
     let nestedCommits = 0;
     let version = 1;
-    const renderTree = (messages: ReturnType<typeof buildMessage>[]) => {
+    const renderTree = (
+      messages: ReturnType<typeof buildMessage>[],
+      settings = groupedSettings,
+    ) => {
       version += 1;
       const session = {
         // Keep message object references intact across updates; buildSession clones messages.
@@ -2202,7 +1807,7 @@ describe("AgentChatThread", () => {
         },
         createElement(
           AgentChatSettingsProvider,
-          { value: groupedSettings },
+          { value: settings },
           createElement(AgentChatThreads, {
             visitKey: 0,
             model: completeThreadModel({
@@ -2227,33 +1832,39 @@ describe("AgentChatThread", () => {
       }),
     ];
     const rendered = render(renderTree(messages));
-    await act(flush);
-
-    const container = messagesContainerRef.current;
-    if (!container) throw new Error("Expected messages container");
-    let scrollTopValue = 156;
-    Object.defineProperty(container, "clientHeight", { configurable: true, value: 180 });
-    Object.defineProperty(container, "scrollHeight", {
-      configurable: true,
-      get: () =>
-        container.querySelectorAll("[data-row-key]").length * 56 +
-        container.querySelectorAll("li").length * 26,
-    });
-    Object.defineProperty(container, "scrollTop", {
-      configurable: true,
-      get: () => scrollTopValue,
-      set: (value: number) => {
-        const max = Math.max(0, container.scrollHeight - container.clientHeight);
-        scrollTopValue = Math.max(0, Math.min(value, max));
-      },
-    });
-    // Sync initial overflow edges (nearTop=false) before profiling live updates.
-    await act(async () => {
-      container.dispatchEvent(new Event("scroll"));
-      await flush();
+    const dispose = restoreAfterTestBody(() => {
+      rectSpy.mockRestore();
+      animate.mockRestore();
+      rendered.unmount();
     });
 
     try {
+      await act(flush);
+
+      const container = messagesContainerRef.current;
+      if (!container) throw new Error("Expected messages container");
+      let scrollTopValue = 156;
+      Object.defineProperty(container, "clientHeight", { configurable: true, value: 180 });
+      Object.defineProperty(container, "scrollHeight", {
+        configurable: true,
+        get: () =>
+          container.querySelectorAll("[data-row-key]").length * 56 +
+          container.querySelectorAll("li").length * 26,
+      });
+      Object.defineProperty(container, "scrollTop", {
+        configurable: true,
+        get: () => scrollTopValue,
+        set: (value: number) => {
+          const max = Math.max(0, container.scrollHeight - container.clientHeight);
+          scrollTopValue = Math.max(0, Math.min(value, max));
+        },
+      });
+      // Sync initial overflow edges (nearTop=false) before profiling live updates.
+      await act(async () => {
+        container.dispatchEvent(new Event("scroll"));
+        await flush();
+      });
+
       // Mounting a brand-new ToolRunGroup (with CssPresenceReveal) commits once with zero nested renders.
       commits = 0;
       nestedCommits = 0;
@@ -2277,10 +1888,19 @@ describe("AgentChatThread", () => {
         isRow: false,
         keyframes: [{ transform: "translateY(26px)" }, { transform: "none" }],
       });
+
+      // Toggling groupToolCalls off expands the run into individual rows without animating history.
+      animatedKeyframes.length = 0;
+      const ungroupedSettings = createChatSettingsFixture({
+        groupToolCalls: false,
+        collapseFinishedToolCalls: true,
+        showThinkingMessages: false,
+      });
+      rendered.rerender(renderTree([...messages], ungroupedSettings));
+      await act(flush);
+      expect(animatedKeyframes).toEqual([]);
     } finally {
-      rectSpy.mockRestore();
-      animate.mockRestore();
-      rendered.unmount();
+      dispose();
     }
   });
 
@@ -2312,10 +1932,16 @@ describe("AgentChatThread", () => {
       buildMessage("assistant", "Hi", { id: "assistant-hi" }),
     ];
     const rendered = render(sessionOf(loaded));
-    await act(flush);
-    animate.mockClear();
+    const dispose = restoreAfterTestBody(() => {
+      matchMedia.mockRestore();
+      animate.mockRestore();
+      rendered.unmount();
+    });
 
     try {
+      await act(flush);
+      animate.mockClear();
+
       rendered.rerender(
         sessionOf([...loaded, buildMessage("assistant", "Next", { id: "assistant-next" })]),
       );
@@ -2323,9 +1949,7 @@ describe("AgentChatThread", () => {
 
       expect(animate).not.toHaveBeenCalled();
     } finally {
-      matchMedia.mockRestore();
-      animate.mockRestore();
-      rendered.unmount();
+      dispose();
     }
   });
 
