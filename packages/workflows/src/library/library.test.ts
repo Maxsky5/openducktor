@@ -210,6 +210,15 @@ describe("workflow references", () => {
     expect(renamed.layout.states).toEqual({ checking: { x: 10, y: 20 } });
   });
 
+  test("a role swap also renames the roles whose sessions a reset clears", () => {
+    const renamed = renameWorkflowElement(builtinWorkflowDocument(), "role", "build", "engineer");
+    const cleared = renamed.definition.events.flatMap(({ effects = [] }) =>
+      effects.flatMap(({ clearsSessionsOf }) => clearsSessionsOf),
+    );
+    expect(cleared).toContain("engineer");
+    expect(cleared).not.toContain("build");
+  });
+
   test("indexes what each element names and what names it", () => {
     const index = workflowReferenceIndex(withReview().definition);
     expect([...index.names.get("event:submit")!]).toEqual(["state:open", "state:in_review"]);

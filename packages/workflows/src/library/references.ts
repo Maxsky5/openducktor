@@ -227,6 +227,8 @@ export const visitWorkflowReferences = (
     const owner = elementKey("event", event.id);
     visitList(event.from, owner, "state", visit);
     if (event.agent) visitList(event.agent.roles, owner, "role", visit);
+    for (const effect of event.effects ?? [])
+      visitList(effect.clearsSessionsOf, owner, "role", visit);
     for (const guard of event.guards) visitCondition(guard.when, owner, visit);
     for (const outcome of event.outcomes) {
       ref(owner, "state", outcome.to ?? undefined, (id) => {
