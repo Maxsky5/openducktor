@@ -48,6 +48,8 @@ export type WorkspaceSessionCreateModel = {
   selection: AgentModelSelection | null;
   /** True when the runtime catalog lists the selected model. */
   selectedModelAvailable: boolean;
+  /** Account speed block reason when a non-standard speed is active, or null. */
+  speedBlockedReason?: string | null | undefined;
 };
 
 /** Reads the repository config, whose Default Model seeds the model of a new chat. */
@@ -239,6 +241,7 @@ export function useWorkspaceSessionCreate({
         targetBranch,
         selection: model.selection,
         selectedModelAvailable: model.selectedModelAvailable,
+        speedBlockedReason: model.speedBlockedReason ?? null,
         rolesReady: roles.isSuccess,
         availableBranches: branches.isSuccess ? branches.data : null,
         hasNamingModel,

@@ -36,6 +36,7 @@ export type RepoAgentDefaultInput = {
   modelId: string;
   variant: string;
   profileId: string;
+  speed?: string | undefined;
 };
 
 export type RepoSettingsInput = {

@@ -5,6 +5,7 @@ import {
   type AgentRuntimeCatalog,
   coerceVisibleSelectionToCatalog,
   type RuntimeWorkingDirectoryRef,
+  STANDARD_SPEED,
 } from "@openducktor/core";
 import { resolveRuntimeCatalogSurface } from "../queries/runtime-catalog";
 import { findRuntimeDefinition } from "../lib/agent-runtime";
@@ -37,6 +38,9 @@ const toAgentModelSelection = (value: RepoAgentDefaultDraft): RuntimeBoundModelS
   }
   if (value.profileId) {
     selection.profileId = value.profileId;
+  }
+  if (value.speed && value.speed !== STANDARD_SPEED) {
+    selection.speed = value.speed;
   }
   return selection;
 };
@@ -119,6 +123,18 @@ export const resolveRequiredDefaultSessionSelection = async ({
     !savedVariantAndProfileAreAvailable(savedDefaultSelection, validatedSelection)
   ) {
     throw new Error(unavailableSessionDefaultModelError({ role: roleLabel, runtimeKind }));
+  }
+  if (savedDefaultSelection.speed !== undefined) {
+    if (validatedSelection.speed !== savedDefaultSelection.speed) {
+      throw new Error(
+        `The saved ${roleLabel} default speed '${savedDefaultSelection.speed}' is not supported by model '${validatedSelection.providerId}/${validatedSelection.modelId}' on runtime ${runtimeKind}. Update it in Settings > Repositories > Agents.`,
+      );
+    }
+    if (catalog.speedAvailability?.status === "blocked") {
+      throw new Error(
+        `The saved ${roleLabel} default speed '${savedDefaultSelection.speed}' cannot be used on runtime ${runtimeKind}: ${catalog.speedAvailability.reason.message} Update it in Settings > Repositories > Agents.`,
+      );
+    }
   }
   return { ...validatedSelection, runtimeKind };
 };

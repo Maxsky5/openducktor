@@ -79,15 +79,32 @@ export function useSessionStartModalRuntimeState({
     initialCatalog !== undefined &&
     (initialCatalog === null || initialCatalog.runtime?.kind === selectedRuntimeKind);
   // The catalog hook reads each requested kind only when that kind is ready.
+  const reuseNeedsSpeedCatalog =
+    selectedStartMode === "reuse" &&
+    selectedRuntimeKind !== null &&
+    selectedRuntimeDescriptor?.capabilities.speed.support !== "none";
   const enabledRuntimeKinds = useMemo(() => {
-    if (!isOpen || selectedStartMode === "reuse") {
+    if (!isOpen) {
       return EMPTY_RUNTIME_KINDS;
+    }
+    if (selectedStartMode === "reuse") {
+      if (!reuseNeedsSpeedCatalog || !selectedRuntimeKind || usesInitialCatalog) {
+        return EMPTY_RUNTIME_KINDS;
+      }
+      return [selectedRuntimeKind];
     }
     if (!usesInitialCatalog || !selectedRuntimeKind) {
       return eligibleRuntimeKinds;
     }
     return eligibleRuntimeKinds.filter((runtimeKind) => runtimeKind !== selectedRuntimeKind);
-  }, [eligibleRuntimeKinds, isOpen, selectedRuntimeKind, selectedStartMode, usesInitialCatalog]);
+  }, [
+    eligibleRuntimeKinds,
+    isOpen,
+    reuseNeedsSpeedCatalog,
+    selectedRuntimeKind,
+    selectedStartMode,
+    usesInitialCatalog,
+  ]);
   const { resources } = useRuntimeModelCatalogs({
     repoPath: workspaceRepoPath,
     runtimeKinds: eligibleRuntimeKinds,
@@ -119,7 +136,7 @@ export function useSessionStartModalRuntimeState({
     catalogError: selectedResource?.catalog ? null : (selectedResource?.error ?? null),
     isCatalogLoading:
       isOpen &&
-      selectedStartMode !== "reuse" &&
+      (selectedStartMode !== "reuse" || reuseNeedsSpeedCatalog) &&
       selectedRuntimeKind !== null &&
       selectedResource?.isLoading === true,
     eligibleRuntimeDefinitions,

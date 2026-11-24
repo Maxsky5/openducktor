@@ -1,5 +1,5 @@
 import type { NamingModel, RuntimeKind, SettingsRepoConfig } from "@openducktor/contracts";
-import type { AgentModelSelection } from "@openducktor/core";
+import { type AgentModelSelection, STANDARD_SPEED } from "@openducktor/core";
 import type { RepoSettingsInput } from "../types/session-slices";
 
 export type RepoAgentDefaultRole = string;
@@ -10,12 +10,13 @@ export type RepoAgentDefaultDraft = {
   modelId: string;
   variant?: string | undefined;
   profileId?: string | undefined;
+  speed?: string | undefined;
 };
 
 export type ModelDefaultDraft = RepoAgentDefaultDraft & { runtimeKind: RuntimeKind };
 
-/** The naming model of a workspace while the user edits it. It has no profile. */
-export type NamingModelDraft = Omit<ModelDefaultDraft, "profileId">;
+/** The naming model of a workspace while the user edits it. It has no profile or speed. */
+export type NamingModelDraft = Omit<ModelDefaultDraft, "profileId" | "speed">;
 
 export type RuntimeBoundModelSelection = AgentModelSelection & { runtimeKind: RuntimeKind };
 
@@ -54,11 +55,22 @@ const normalizeRepoDefaultModelForSave = (
 
 /**
  * The naming model to save: trimmed, without an empty effort, and undefined without a model. The
- * draft has no profile, so the selection has none.
+ * draft has no profile or speed, so the selection has neither.
  */
 export const normalizeNamingModelForSave = (
   entry: NamingModelDraft | null | undefined,
-): NamingModel | undefined => prepareModelDefault(entry, NAMING_MODEL_RUNTIME_KIND_ERROR);
+): NamingModel | undefined => {
+  if (!entry) return undefined;
+  return prepareModelDefault(
+    {
+      runtimeKind: entry.runtimeKind,
+      providerId: entry.providerId,
+      modelId: entry.modelId,
+      variant: entry.variant,
+    },
+    NAMING_MODEL_RUNTIME_KIND_ERROR,
+  );
+};
 
 export const prepareModelDefaultsForSave = (draft: {
   defaultModel?: RepoAgentDefaultDraft | null | undefined;
@@ -92,6 +104,7 @@ const prepareModelDefault = (
 
   const variant = trimOrNull(entry.variant);
   const profileId = trimOrNull(entry.profileId);
+  const speed = trimOrNull(entry.speed);
 
   const selection: RuntimeBoundModelSelection = {
     runtimeKind: entry.runtimeKind,
@@ -103,6 +116,9 @@ const prepareModelDefault = (
   }
   if (entry.runtimeKind === "opencode" && profileId) {
     selection.profileId = profileId;
+  }
+  if (speed && speed !== STANDARD_SPEED) {
+    selection.speed = speed;
   }
   return selection;
 };

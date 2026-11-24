@@ -148,4 +148,40 @@ describe("useComposerPolicy", () => {
   test("closes send when the chat cannot send now", async () => {
     expect((await resolve({ model: model({ canSend: false }) })).sendDisabled).toBe(true);
   });
+
+  test("blocks send when a non-standard speed is blocked by account availability", async () => {
+    const blocked = await resolve({
+      model: model({
+        speed: {
+          key: "session-1",
+          choice: "fast",
+          levels: [{ id: "fast", label: "Fast" }],
+          blockedReason: "Fast mode requires an active plan.",
+          pending: false,
+          disabled: false,
+          error: null,
+          onChange: () => {},
+        },
+      }),
+    });
+    expect(blocked.sendDisabled).toBe(true);
+    expect(blocked.sendBlockedReason).toBe("Fast mode requires an active plan.");
+
+    const standard = await resolve({
+      model: model({
+        speed: {
+          key: "session-1",
+          choice: "standard",
+          levels: [{ id: "fast", label: "Fast" }],
+          blockedReason: "Fast mode requires an active plan.",
+          pending: false,
+          disabled: false,
+          error: null,
+          onChange: () => {},
+        },
+      }),
+    });
+    expect(standard.sendDisabled).toBe(false);
+    expect(standard.sendBlockedReason).toBeNull();
+  });
 });

@@ -7,6 +7,7 @@ import {
   draftHasMeaningfulContent,
   draftHasSlashCommandSegment,
 } from "../../drafts/agent-chat-composer-draft";
+import { blockedSpeedReason } from "../model-selection/model-picker-presentation";
 import type { SpeedControlModel } from "../model-selection/use-speed-control";
 import {
   draftSteerBlockedReason,
@@ -81,6 +82,63 @@ export type ComposerPolicyInput = {
   steerShortcutLabel: string | null;
 };
 
+const deriveComposerPolicy = ({
+  model,
+  draft,
+  primaryMode,
+  settingsReady,
+  steerShortcutLabel,
+  defaultAttachmentErrors,
+  attachmentErrors,
+  steersTurn,
+}: ComposerPolicyInput & {
+  defaultAttachmentErrors: Record<string, string>;
+  attachmentErrors: Record<string, string>;
+  steersTurn: boolean;
+}): ComposerPolicy => {
+  const isSubmitting = composerIsSubmitting(model);
+  const isComposerInputDisabled = composerInputDisabledFor(model);
+  const hasBlockingAttachments = Object.keys(defaultAttachmentErrors).length > 0;
+  const hasSlashAttachmentConflict =
+    (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
+  const pendingSendBlockedReason = pendingSendBlockedReasonFor(model, draft, steersTurn);
+  const speedBlockedReason = blockedSpeedReason(model.speed);
+
+  const sendInputBlocked =
+    model.canSend === false ||
+    isSubmitting ||
+    isComposerInputDisabled ||
+    hasSlashAttachmentConflict ||
+    pendingSendBlockedReason !== null ||
+    speedBlockedReason !== null ||
+    !hasComposerSendContent(draft, model.pendingSendItems);
+  const defaultSendDisabled = sendInputBlocked || hasBlockingAttachments;
+  const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
+  const sendBlockedReason = !settingsReady
+    ? "Load session settings before sending. Use Retry settings if the read failed."
+    : (speedBlockedReason ?? steerBlockedReason);
+  const sendDisabled =
+    !settingsReady ||
+    sendInputBlocked ||
+    steerBlockedReason !== null ||
+    Object.keys(attachmentErrors).length > 0;
+  const placeholder = composerPlaceholderFor(model, primaryMode, settingsReady, steerShortcutLabel);
+
+  return {
+    isSubmitting,
+    isComposerInputDisabled,
+    placeholder: placeholder.text,
+    placeholderHints: placeholder.hints,
+    attachmentErrors,
+    hasSlashAttachmentConflict,
+    sendInputBlocked,
+    defaultSendDisabled,
+    sendDisabled,
+    sendBlockedReason,
+    pendingSendBlockedReason,
+  };
+};
+
 /** Decides the placeholder and which composer actions are open for the draft. */
 export function useComposerPolicy({
   model,
@@ -114,45 +172,16 @@ export function useComposerPolicy({
       defaultAttachmentErrors,
     ],
   );
-  const isSubmitting = composerIsSubmitting(model);
-  const isComposerInputDisabled = composerInputDisabledFor(model);
-  const hasBlockingAttachments = Object.keys(defaultAttachmentErrors).length > 0;
-  const hasSlashAttachmentConflict =
-    (draft.attachments ?? []).length > 0 && draftHasSlashCommandSegment(draft);
-  const pendingSendBlockedReason = pendingSendBlockedReasonFor(model, draft, steersTurn);
-
-  const sendInputBlocked =
-    model.canSend === false ||
-    isSubmitting ||
-    isComposerInputDisabled ||
-    hasSlashAttachmentConflict ||
-    pendingSendBlockedReason !== null ||
-    !hasComposerSendContent(draft, model.pendingSendItems);
-  const defaultSendDisabled = sendInputBlocked || hasBlockingAttachments;
-  const steerBlockedReason = steersTurn ? draftSteerBlockedReason(draft, model) : null;
-  const sendBlockedReason = settingsReady
-    ? steerBlockedReason
-    : "Load session settings before sending. Use Retry settings if the read failed.";
-  const sendDisabled =
-    !settingsReady ||
-    sendInputBlocked ||
-    steerBlockedReason !== null ||
-    Object.keys(attachmentErrors).length > 0;
-  const placeholder = composerPlaceholderFor(model, primaryMode, settingsReady, steerShortcutLabel);
-
-  return {
-    isSubmitting,
-    isComposerInputDisabled,
-    placeholder: placeholder.text,
-    placeholderHints: placeholder.hints,
+  return deriveComposerPolicy({
+    model,
+    draft,
+    primaryMode,
+    settingsReady,
+    steerShortcutLabel,
+    defaultAttachmentErrors,
     attachmentErrors,
-    hasSlashAttachmentConflict,
-    sendInputBlocked,
-    defaultSendDisabled,
-    sendDisabled,
-    sendBlockedReason,
-    pendingSendBlockedReason,
-  };
+    steersTurn,
+  });
 }
 
 /** The placeholder text, and the hints that it lists, or null for a state message. */

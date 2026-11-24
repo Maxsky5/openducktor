@@ -1,5 +1,9 @@
 import type { RuntimeKind } from "@openducktor/contracts";
-import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
+import {
+  type AgentModelSelection,
+  type AgentSessionStartMode,
+  STANDARD_SPEED,
+} from "@openducktor/core";
 import type { SelectOption } from "../../lib/select-option";
 import { selectableModelPickerCatalog } from "../model-selection/model-picker-model";
 import type {
@@ -67,6 +71,8 @@ export type SessionStartModalModel = {
   backgroundConfirmLabel?: string;
   cancelLabel?: string;
   selectedModelSelection: AgentModelSelection | null;
+  /** Uncoerced initial fresh-session speed from explicit launch intent or saved repo/role defaults. */
+  initialFreshSpeed?: string | undefined;
   selectedRuntimeKind: RuntimeKind | null;
   modelPickerRuntimes: ModelPickerRuntime[];
   favoriteState: ModelPickerFavoriteState;
@@ -130,6 +136,7 @@ const sessionStartBlockedReason = (
   model: SessionStartModalModel,
   kickoffInvalid: boolean,
   goalError: string | null,
+  speedBlockedReason: string | null,
 ): string | null => {
   if (model.isStarting) return null;
   const reuse = model.selectedStartMode === "reuse";
@@ -163,6 +170,7 @@ const sessionStartBlockedReason = (
   ) {
     return "Choose a source session to start.";
   }
+  if (speedBlockedReason) return speedBlockedReason;
   if (kickoffInvalid) return "Write the custom instructions, or turn them off.";
   return goalError;
 };
@@ -174,7 +182,15 @@ const sessionStartBlockedReason = (
  */
 export const resolveSessionStartAvailability = (
   model: SessionStartModalModel,
-  { kickoffInvalid, goalError = null }: { kickoffInvalid: boolean; goalError?: string | null },
+  {
+    kickoffInvalid,
+    goalError = null,
+    speedBlockedReason = null,
+  }: {
+    kickoffInvalid: boolean;
+    goalError?: string | null;
+    speedBlockedReason?: string | null;
+  },
 ): SessionStartAvailability => {
   const {
     existingSessionOptions,
@@ -189,7 +205,12 @@ export const resolveSessionStartAvailability = (
   const hasExistingSessionOptions = existingSessionOptions.length > 0;
   const isReuseMode = selectedStartMode === "reuse";
   const requiresExistingSession = selectedStartMode === "reuse" || selectedStartMode === "fork";
-  const blockedReason = sessionStartBlockedReason(model, kickoffInvalid, goalError);
+  const blockedReason = sessionStartBlockedReason(
+    model,
+    kickoffInvalid,
+    goalError,
+    speedBlockedReason,
+  );
   const confirmDisabled = isStarting || blockedReason !== null;
   const runtimeProfileDisabled =
     isStarting ||
@@ -216,11 +237,12 @@ export const resolveSessionStartAvailability = (
   };
 };
 
-/** The confirm input of the current choices. A start sends only the speed and prompt it changed. */
+/** The confirm input of the current choices. Fresh/fork sends non-standard effective speed; reuse sends only explicit changes. */
 export const buildSessionStartConfirmDraft = ({
   model,
   requiresExistingSession,
-  speedChange,
+  effectiveSpeed,
+  reuseSpeedChange,
   kickoffPrompt,
   goalObjective,
 }: {
@@ -232,7 +254,8 @@ export const buildSessionStartConfirmDraft = ({
     | "selectedTargetBranch"
   >;
   requiresExistingSession: boolean;
-  speedChange: string | undefined;
+  effectiveSpeed: string;
+  reuseSpeedChange: string | undefined;
   kickoffPrompt: string | undefined;
   goalObjective?: string | undefined;
 }): SessionStartModalConfirmDraft => {
@@ -240,7 +263,13 @@ export const buildSessionStartConfirmDraft = ({
     startMode: model.selectedStartMode,
     sourceSessionOptionValue: requiresExistingSession ? model.selectedSourceSessionValue : null,
   };
-  if (speedChange !== undefined) confirmInput.speed = speedChange;
+  const speed =
+    model.selectedStartMode === "reuse"
+      ? reuseSpeedChange
+      : effectiveSpeed !== STANDARD_SPEED
+        ? effectiveSpeed
+        : undefined;
+  if (speed !== undefined) confirmInput.speed = speed;
   if (kickoffPrompt !== undefined) confirmInput.kickoffPrompt = kickoffPrompt;
   if (goalObjective !== undefined) confirmInput.goalObjective = goalObjective;
   if (model.showTargetBranchSelector) {

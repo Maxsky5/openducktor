@@ -156,6 +156,12 @@ const buildSourceSelectionDraft = ({
     ...sourceSelection.selectedModel,
     runtimeKind,
   };
+  if (startMode === "reuse") {
+    return {
+      runtimeKind,
+      selection: sourceModel,
+    };
+  }
   const matchingCatalog = catalog?.runtime?.kind === runtimeKind ? catalog : null;
   return {
     runtimeKind,

@@ -7,6 +7,7 @@ import {
   type AgentModelCatalog,
   type AgentModelSelection,
   findCatalogModel,
+  resolveSavedModelAlias,
   STANDARD_SPEED,
 } from "@openducktor/core";
 import { useState } from "react";
@@ -50,7 +51,10 @@ export function useSpeedControl({
   )
     return null;
   const current = change?.key === key ? change : null;
-  const model = catalog && selection ? findCatalogModel(catalog, selection) : null;
+  const model =
+    catalog && selection
+      ? findCatalogModel(catalog, resolveSavedModelAlias(catalog, selection))
+      : null;
   const availability = catalog?.speedAvailability;
   return {
     key,

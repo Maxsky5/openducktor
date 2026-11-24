@@ -78,33 +78,55 @@ const createHarness = (model: SessionStartModalModel) => {
 };
 
 describe("useSessionStartSpeed", () => {
-  test("keeps the source speed of a reused session and sends no change", async () => {
+  test("keeps the source speed of a reused session and sends no change until edited", async () => {
     const { feedback, harness } = createHarness(createModel([{ id: "fast", label: "Fast" }]));
     await harness.mount();
     try {
       expect(harness.getLatest().control?.choice).toBe("fast");
-      expect(harness.getLatest().change).toBeUndefined();
+      expect(harness.getLatest().effectiveSpeed).toBe("fast");
+      expect(harness.getLatest().reuseSpeedChange).toBeUndefined();
       await harness.run((speed) => speed.control?.onChange("standard"));
-      await harness.waitFor((speed) => speed.change === "standard");
+      await harness.waitFor((speed) => speed.reuseSpeedChange === "standard");
+      expect(harness.getLatest().effectiveSpeed).toBe("standard");
       expect(feedback.shown).toEqual([]);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("keeps a chosen speed with the same label on a model of another runtime", async () => {
+  test("keeps an unlisted source speed in reuse mode without auto-resetting", async () => {
+    const { feedback, harness } = createHarness(createModel([]));
+    await harness.mount();
+    try {
+      expect(harness.getLatest().control?.choice).toBe("fast");
+      expect(harness.getLatest().effectiveSpeed).toBe("fast");
+      expect(harness.getLatest().reuseSpeedChange).toBeUndefined();
+      expect(feedback.shown).toEqual([]);
+
+      await harness.run((speed) => speed.control?.onChange("standard"));
+      await harness.waitFor((speed) => speed.reuseSpeedChange === "standard");
+      expect(harness.getLatest().effectiveSpeed).toBe("standard");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("inherits fresh default speed, latches its label across runtimes, and resets unsupported fresh speed", async () => {
     const fresh: Partial<SessionStartModalModel> = {
       selectedStartMode: "fresh",
       existingSessionOptions: [],
+      initialFreshSpeed: "fast",
     };
     const { feedback, harness } = createHarness(
       createModel([{ id: "fast", label: "Fast" }], fresh),
     );
     await harness.mount();
     try {
-      await harness.run((speed) => speed.control?.onChange("fast"));
-      await harness.waitFor((speed) => speed.change === "fast");
-      // Codex calls the "Fast" level `priority`.
+      expect(harness.getLatest().control?.choice).toBe("fast");
+      expect(harness.getLatest().effectiveSpeed).toBe("fast");
+      expect(harness.getLatest().reuseSpeedChange).toBeUndefined();
+
+      // Codex calls the "Fast" level `priority`, preserved even before a manual speed edit.
       await harness.update(
         createModel([], {
           ...fresh,
@@ -138,22 +160,49 @@ describe("useSessionStartSpeed", () => {
       );
 
       expect(harness.getLatest().control?.choice).toBe("priority");
-      expect(harness.getLatest().change).toBe("priority");
+      expect(harness.getLatest().effectiveSpeed).toBe("priority");
       expect(feedback.shown).toEqual([]);
+
+      // Switching to a model with no speed levels resets to Standard and notifies.
+      await harness.update(createModel([], fresh));
+      await harness.waitFor((speed) => speed.effectiveSpeed === "standard");
+      expect(feedback.shownOf("info").map((entry) => entry.message)).toEqual([
+        "Speed was set to Standard because this model does not support the previous level.",
+      ]);
     } finally {
       await harness.unmount();
     }
   });
 
-  test("resets a speed that the selected model cannot use and tells the user", async () => {
-    const { feedback, harness } = createHarness(createModel([]));
+  test("exposes blockedReason when account speed access is blocked on a non-standard speed", async () => {
+    const { harness } = createHarness(
+      createModel([{ id: "fast", label: "Fast" }], {
+        selectedStartMode: "fresh",
+        existingSessionOptions: [],
+        initialFreshSpeed: "fast",
+        modelPickerRuntimes: [
+          {
+            descriptor: CLAUDE_RUNTIME_DESCRIPTOR,
+            isEnabledForFavorites: true,
+            resource: {
+              status: "ready",
+              catalog: {
+                ...catalog([{ id: "fast", label: "Fast" }]),
+                speedAvailability: {
+                  status: "blocked",
+                  reason: { code: "plan_required", message: "Fast mode requires Pro." },
+                },
+              },
+            },
+          },
+        ],
+      }),
+    );
     await harness.mount();
     try {
-      await harness.waitFor((speed) => speed.control?.choice === "standard");
-      expect(harness.getLatest().change).toBe("standard");
-      expect(feedback.shownOf("info").map((entry) => entry.message)).toEqual([
-        "Speed was set to Standard because this model does not support the previous level.",
-      ]);
+      expect(harness.getLatest().blockedReason).toBe("Fast mode requires Pro.");
+      await harness.run((speed) => speed.control?.onChange("standard"));
+      await harness.waitFor((speed) => speed.blockedReason === null);
     } finally {
       await harness.unmount();
     }
