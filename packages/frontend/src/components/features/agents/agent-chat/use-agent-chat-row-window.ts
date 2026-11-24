@@ -281,9 +281,13 @@ export function useAgentChatRowWindow({
     displayedSessionKey,
     isFollowingLatestWindow,
   });
-  const effectiveRange = clampRange(range, rows.length);
-  const effectiveStartRow = effectiveRange.startRow;
-  const effectiveEndRowExclusive = effectiveRange.endRowExclusive;
+  const clampedRange = clampRange(range, rows.length);
+  const effectiveStartRow = clampedRange.startRow;
+  const effectiveEndRowExclusive = clampedRange.endRowExclusive;
+  const effectiveRange = useMemo<RowRange>(
+    () => ({ startRow: effectiveStartRow, endRowExclusive: effectiveEndRowExclusive }),
+    [effectiveStartRow, effectiveEndRowExclusive],
+  );
   const isFullTranscriptVisible =
     effectiveStartRow === 0 && effectiveEndRowExclusive === rows.length;
   const latestInputsRef = useRef({ rows, displayedSessionKey, shouldResetForTranscriptLoad });
@@ -311,18 +315,25 @@ export function useAgentChatRowWindow({
         ? shouldResetForTranscriptLoad && rows.length === 0
         : rows.length > 0
           ? false
-          : (previousCommitted?.pendingLatestReset ?? false),
-      overrideId: hasPendingOverride ? rangeOverride.id : (previousCommitted?.overrideId ?? 0),
+          : previousCommitted.pendingLatestReset,
+      overrideId: hasPendingOverride ? rangeOverride.id : previousCommitted.overrideId,
     };
-  });
+  }, [
+    didSessionChange,
+    displayedSessionKey,
+    effectiveRange,
+    hasPendingOverride,
+    rangeOverride,
+    rows,
+    shouldResetForTranscriptLoad,
+  ]);
 
   const setRange = useCallback((nextRange: RowRange) => {
     const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
-    const clampedRange = clampRange(nextRange, currentRows.length);
-    const next = sessionRowRange(currentSessionKey, clampedRange, currentRows);
+    const nextClampedRange = clampRange(nextRange, currentRows.length);
+    const next = sessionRowRange(currentSessionKey, nextClampedRange, currentRows);
     const currentCommitted = committedRef.current;
     if (
-      currentCommitted !== null &&
       currentCommitted.sessionKey === next.sessionKey &&
       areRangesEqual(rangeRef.current, next.range) &&
       currentCommitted.firstRowKey === next.firstRowKey &&
@@ -331,7 +342,7 @@ export function useAgentChatRowWindow({
       return;
     }
     nextOverrideIdRef.current += 1;
-    rangeRef.current = clampedRange;
+    rangeRef.current = nextClampedRange;
     setRangeOverride({
       id: nextOverrideIdRef.current,
       ...next,
@@ -347,9 +358,7 @@ export function useAgentChatRowWindow({
     const { rows: currentRows, shouldResetForTranscriptLoad: currentShouldReset } =
       latestInputsRef.current;
     if (currentShouldReset && currentRows.length === 0) {
-      if (committedRef.current) {
-        committedRef.current.pendingLatestReset = true;
-      }
+      committedRef.current.pendingLatestReset = true;
       return;
     }
 

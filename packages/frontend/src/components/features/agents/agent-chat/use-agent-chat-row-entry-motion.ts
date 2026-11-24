@@ -337,50 +337,58 @@ export function useAgentChatRowEntryMotion({
         shown.add(key);
         newlyMounted.push(row);
       }
-      if (newlyMounted.length === 0) return;
 
-      if (entering.mode === "inserted-before-tail") {
-        // Following the bottom keeps the existing answer below this separator stationary. Fade
-        // the separator in place without shifting or clipping the answer that follows it.
-        for (const row of newlyMounted) {
-          row.animate(ENTRY_FADE_KEYFRAMES, ENTRY_TIMING);
+      if (newlyMounted.length > 0) {
+        if (entering.mode === "inserted-before-tail") {
+          // Following the bottom keeps the existing answer below this separator stationary. Fade
+          // the separator in place without shifting or clipping the answer that follows it.
+          for (const row of newlyMounted) {
+            row.animate(ENTRY_FADE_KEYFRAMES, ENTRY_TIMING);
+          }
+          const activeEntry = activeEntryRef.current;
+          if (activeEntry) {
+            const tailGrowthPx = readActiveGrowthPx() - measureVerticalSpan(newlyMounted);
+            if (activeEntry.isSlide && isPinned() && isLatestWindow && tailGrowthPx > 0.5) {
+              slideTranscript(tailGrowthPx);
+            } else {
+              syncActiveEntryBaseline();
+            }
+          }
+          return;
         }
-        const activeEntry = activeEntryRef.current;
-        if (activeEntry) {
-          const tailGrowthPx = readActiveGrowthPx() - measureVerticalSpan(newlyMounted);
-          if (activeEntry.isSlide && isPinned() && isLatestWindow && tailGrowthPx > 0.5) {
-            slideTranscript(tailGrowthPx);
-          } else {
+
+        const addedHeightPx = activeEntryRef.current
+          ? readActiveGrowthPx()
+          : measureVerticalSpan(newlyMounted);
+        const didSlide = isPinned() && isLatestWindow ? slideTranscript(addedHeightPx) : false;
+        const rowKeyframes = didSlide ? ENTRY_FADE_KEYFRAMES : ENTRY_KEYFRAMES;
+        let lastRowAnimation: Animation | null = null;
+        for (const row of newlyMounted) {
+          lastRowAnimation = row.animate(rowKeyframes, ENTRY_TIMING);
+        }
+        if (!didSlide && isPinned() && isLatestWindow) {
+          if (activeEntryRef.current) {
+            // Keep an active slide owned and align its baseline when net scroll height did not grow.
             syncActiveEntryBaseline();
+          } else if (lastRowAnimation && containerRef.current) {
+            // Track non-overflowing entry so a streamed reply that crosses overflow mid-entry slides.
+            const pendingEntry: ActiveEntryMotion = {
+              animation: lastRowAnimation,
+              isSlide: false,
+              scrollTop: containerRef.current.scrollTop,
+              scrollHeight: containerRef.current.scrollHeight,
+            };
+            activeEntryRef.current = pendingEntry;
+            const cleanupPending = (): void => {
+              if (activeEntryRef.current === pendingEntry) {
+                activeEntryRef.current = null;
+              }
+            };
+            void lastRowAnimation.finished?.then(cleanupPending, cleanupPending);
           }
         }
         return;
       }
-
-      const addedHeightPx = Math.max(measureVerticalSpan(newlyMounted), readActiveGrowthPx());
-      const didSlide = isPinned() && isLatestWindow ? slideTranscript(addedHeightPx) : false;
-      const rowKeyframes = didSlide ? ENTRY_FADE_KEYFRAMES : ENTRY_KEYFRAMES;
-      let lastRowAnimation: Animation | null = null;
-      for (const row of newlyMounted) {
-        lastRowAnimation = row.animate(rowKeyframes, ENTRY_TIMING);
-      }
-      if (!didSlide && isPinned() && isLatestWindow && lastRowAnimation && containerRef.current) {
-        // Track non-overflowing entry so a streamed reply that crosses overflow mid-entry slides.
-        const pendingEntry: ActiveEntryMotion = {
-          animation: lastRowAnimation,
-          isSlide: false,
-          scrollTop: containerRef.current.scrollTop,
-          scrollHeight: containerRef.current.scrollHeight,
-        };
-        activeEntryRef.current = pendingEntry;
-        const cleanupPending = (): void => {
-          if (activeEntryRef.current === pendingEntry) {
-            activeEntryRef.current = null;
-          }
-        };
-        void lastRowAnimation.finished?.then(cleanupPending, cleanupPending);
-      }
-      return;
     }
 
     if (
@@ -394,11 +402,12 @@ export function useAgentChatRowEntryMotion({
     ) {
       syncScrollPosition();
       const addedCount = tailOpenRun.callCount - previousTailRun.callCount;
-      const addedHeightPx = Math.max(
-        measureAppendedToolRunLinesHeight(turns, tailOpenRun.runKey, addedCount),
-        readActiveGrowthPx(),
-      );
-      slideTranscript(addedHeightPx);
+      const addedHeightPx = activeEntryRef.current
+        ? readActiveGrowthPx()
+        : measureAppendedToolRunLinesHeight(turns, tailOpenRun.runKey, addedCount);
+      if (!slideTranscript(addedHeightPx) && activeEntryRef.current) {
+        syncActiveEntryBaseline();
+      }
       return;
     }
 
