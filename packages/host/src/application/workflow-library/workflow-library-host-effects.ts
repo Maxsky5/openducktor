@@ -13,7 +13,9 @@ import type { RunningTaskSession } from "./workflow-task-moves";
 
 /**
  * Reads the agent sessions that run on this host for tasks, with the role of each. A session runs
- * when the live state of this host holds it; its saved root gives the task and the role.
+ * when its live activity on this host is not idle, as for the workspace activity check. A session
+ * that waits on background work reports a running activity. Its saved root gives the task and the
+ * role.
  */
 export const createRunningTaskSessionsReader =
   ({
@@ -33,9 +35,11 @@ export const createRunningTaskSessionsReader =
       const repoPaths = [...new Set(catalog.openWorkspaces.map(({ repoPath }) => repoPath))];
       const running = yield* Effect.forEach(repoPaths, (repoPath) =>
         Effect.gen(function* () {
-          const snapshots = yield* live.list({ repoPath });
-          if (snapshots.length === 0) return [];
-          const liveKeys = new Set(snapshots.map(({ ref }) => agentSessionRefKey(ref)));
+          const working = (yield* live.list({ repoPath })).filter(
+            ({ activity }) => activity !== "idle",
+          );
+          if (working.length === 0) return [];
+          const liveKeys = new Set(working.map(({ ref }) => agentSessionRefKey(ref)));
           const roots = yield* readSessionRootRefs(repoPath);
           return roots.flatMap(({ sessionScope, ...ref }) =>
             sessionScope.kind === "workflow" && liveKeys.has(agentSessionRefKey(ref))
