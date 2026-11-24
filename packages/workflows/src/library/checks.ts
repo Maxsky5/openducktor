@@ -82,9 +82,8 @@ export const eventsWithSenders = (
   definition: Pick<CompiledWorkflowDefinition, "actions" | "artifacts" | "steps" | "events">,
 ): ReadonlySet<string> => {
   const sent = new Set<string>();
-  for (const action of definition.actions)
-    if ((action.kind === "event" || action.kind === "session") && action.eventId !== undefined)
-      sent.add(action.eventId);
+  // A session button only checks its event. The start event of its step moves the task.
+  for (const action of definition.actions) if (action.kind === "event") sent.add(action.eventId);
   for (const artifact of definition.artifacts) {
     if (artifact.kind === "document") {
       if (artifact.saveEventId !== undefined) sent.add(artifact.saveEventId);

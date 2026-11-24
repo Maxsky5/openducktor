@@ -78,11 +78,18 @@ export function ActionKindFields({ action }: { action: Action }): ReactElement |
   return (
     <>
       <SelectField
-        label="Moves with"
+        // A session button does not send its transition. The transition only shows the button
+        // while it can run, and the start transition of the agent step moves the task.
+        label={moves ? "Moves with" : "Needs the transition"}
         path={["eventId"]}
         value={action.eventId}
         options={options.events}
-        {...(moves ? {} : { noneLabel: "Does not move the task" })}
+        {...(moves
+          ? {}
+          : {
+              noneLabel: "None",
+              hint: "The button shows only while this transition can run. A session start moves the task with the start transition of its agent step.",
+            })}
         onChange={(eventId) =>
           edit((current) => {
             if (current.kind === "event") return eventId ? { ...current, eventId } : current;

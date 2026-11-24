@@ -177,6 +177,16 @@ describe("board button inspector", () => {
   });
 });
 
+describe("session button inspector", () => {
+  test("says that the transition only shows the button and that the step moves the task", () => {
+    const { document } = addAction(finishDocument(), "Start", "session");
+    renderInspector(document, elementKey("action", "start"));
+    expect(screen.getByText("Needs the transition")).toBeTruthy();
+    expect(screen.getByText(/start transition of its agent step/)).toBeTruthy();
+    expect(screen.queryByText("Moves with")).toBeNull();
+  });
+});
+
 describe("workflow inspector", () => {
   test("names the first supported issue type and shows who can create the pull request", () => {
     const document = finishDocument();

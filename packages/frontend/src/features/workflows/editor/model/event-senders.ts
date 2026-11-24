@@ -25,8 +25,9 @@ export const eventSenders = (
   definition: WorkflowDocumentDefinition,
 ): ReadonlyMap<string, readonly EventSender[]> => {
   const senders = new Map<string, EventSender[]>();
+  // A session button only checks its event. The start event of its step sends it.
   for (const action of definition.actions)
-    if ((action.kind === "event" || action.kind === "session") && action.eventId)
+    if (action.kind === "event")
       add(senders, action.eventId, {
         kind: "action",
         label: action.label || action.id,
