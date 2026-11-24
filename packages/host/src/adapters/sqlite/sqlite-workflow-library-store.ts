@@ -151,10 +151,39 @@ const createWrites = (
       "workflowLibrary.deleteDraft",
     ),
   renameWorkflow: ({ from, to }) =>
-    session.execute(
-      (db) => db.update(workflows).set({ workflowId: to }).where(eq(workflows.workflowId, from)),
-      "workflowLibrary.renameWorkflow",
-    ),
+    Effect.gen(function* () {
+      const operation = "workflowLibrary.renameWorkflow";
+      yield* session.execute(
+        (db) => db.update(workflows).set({ workflowId: to }).where(eq(workflows.workflowId, from)),
+        operation,
+      );
+      // The availability rule has no foreign key to the workflow, so the rename moves it here.
+      const [rule] = yield* session.execute(
+        (db) =>
+          db
+            .select({ mode: workflowAvailability.mode })
+            .from(workflowAvailability)
+            .where(eq(workflowAvailability.workflowId, from)),
+        operation,
+      );
+      if (!rule) return;
+      yield* session.execute(
+        (db) => db.insert(workflowAvailability).values({ workflowId: to, mode: rule.mode }),
+        operation,
+      );
+      yield* session.execute(
+        (db) =>
+          db
+            .update(workflowAvailabilityWorkspaces)
+            .set({ workflowId: to })
+            .where(eq(workflowAvailabilityWorkspaces.workflowId, from)),
+        operation,
+      );
+      yield* session.execute(
+        (db) => db.delete(workflowAvailability).where(eq(workflowAvailability.workflowId, from)),
+        operation,
+      );
+    }),
   insertVersion: ({ workflowId, version, nowMs, document }) =>
     session.execute(
       (db) =>

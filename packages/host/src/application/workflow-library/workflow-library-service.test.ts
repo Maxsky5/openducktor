@@ -395,6 +395,21 @@ describe("workflow library service", () => {
     expect((await run(service.create({ name: "Design flow" }))).workflowId).not.toBe(workflowId);
   });
 
+  test("a rename before the first publication keeps the availability rule", async () => {
+    const { service, run } = await setup();
+    const { workflowId } = await run(service.create({ name: "Design flow" }));
+    await run(
+      service.setAvailability({ workflowId, availability: { mode: "only", workspaceIds: [] } }),
+    );
+    const document = (await run(service.document({ workflowId }))).document;
+    const renamed = { ...document, definition: { ...document.definition, id: "renamed" } };
+
+    await run(service.saveDraft({ workflowId, document: renamed }));
+
+    const entry = (await run(service.library())).workflows.find(({ id }) => id === "renamed");
+    expect(entry?.availability).toEqual({ mode: "only", workspaceIds: [] });
+  });
+
   test("draft save renames a workflow only before its first publication", async () => {
     const { service, run, fail } = await setup();
     const { workflowId } = await run(service.create({ name: "Design flow" }));

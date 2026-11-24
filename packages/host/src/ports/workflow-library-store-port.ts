@@ -148,7 +148,10 @@ export type WorkflowLibraryWrites = {
     document: WorkflowDocument;
   }) => Effect.Effect<void, WorkflowLibraryStoreError>;
   readonly deleteDraft: (workflowId: string) => Effect.Effect<void, WorkflowLibraryStoreError>;
-  /** Changes the ID of a workflow without a version. The draft follows the new ID. */
+  /**
+   * Changes the ID of a workflow without a version. The draft and the availability rule follow
+   * the new ID.
+   */
   readonly renameWorkflow: (input: {
     from: string;
     to: string;
