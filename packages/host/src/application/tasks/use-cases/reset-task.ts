@@ -15,9 +15,7 @@ import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roo
 import {
   collectResetWorktreePaths,
   runTaskLocalCleanup,
-  selectWorkflowCleanupSessionRecords,
-  taskHasSessionsForRoles,
-  workflowRoleIds,
+  taskCleanupRoles,
 } from "../support/task-cleanup-support";
 import { enrichTask } from "../support/task-workflow-helpers";
 import { acquireRemovableWorktrees } from "../support/task-worktree-owner-guard";
@@ -54,15 +52,15 @@ export const createTaskFullResetUseCase = ({
       );
       const current = yield* taskStore.getTask(input);
       const workflow = taskWorkflows.forTask(current);
-      const workflowRoles = workflowRoleIds(workflow);
       // A reset of an open task keeps the status and still clears the task.
       yield* Effect.fromResult(decideCoreTaskAction("reset", current));
       yield* requireNoUnpublishedDirectMerge(taskStore, input, current.status);
       const currentSessions = yield* loadTaskSessions(taskStore, input);
+      const workflowRoles = taskCleanupRoles(workflow, currentSessions);
       const repoConfig = yield* getScopedRepoConfig(dependencies.workspaceSettingsService, input);
       const effectiveRepoPath = yield* dependencies.gitPort.canonicalizePath(repoConfig.repoPath);
       const taskRef = { workspaceId: input.workspaceId, repoPath: effectiveRepoPath, taskId };
-      const hasWorkflowSessions = taskHasSessionsForRoles(currentSessions, workflowRoles);
+      const hasWorkflowSessions = currentSessions.length > 0;
       if (hasWorkflowSessions && !activityGuard) {
         return yield* Effect.fail(
           new HostDependencyError({
@@ -111,7 +109,7 @@ export const createTaskFullResetUseCase = ({
           taskSessions: [
             {
               taskId,
-              sessions: selectWorkflowCleanupSessionRecords(workflow, currentSessions),
+              sessions: currentSessions,
             },
           ],
         });

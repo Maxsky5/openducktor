@@ -59,7 +59,6 @@ export const closeMergedTask = (
                 taskStore,
                 lifecycle: services.taskSessionLifecycleCoordinator,
                 repoPath,
-                workflow: services.workflow,
                 task: current,
                 // Direct merge requires a clean worktree, so a dirty one fails the close.
                 worktreeCleanup: { remove: input.removeWorktree, force: false },

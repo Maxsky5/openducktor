@@ -77,7 +77,6 @@ export const createTaskWorktreeUseCases = ({
         yield* collectCloseWorktreePaths(
           dependencies,
           effectiveRepoPath,
-          taskWorkflows.forTask(task),
           task,
           metadata.agentSessions,
           input.workspaceId,
@@ -115,7 +114,6 @@ export const createTaskWorktreeUseCases = ({
     const { repoPath, taskId } = input;
     return Effect.gen(function* () {
       const task = yield* taskStore.getTask(input);
-      const workflow = taskWorkflows.forTask(task);
       if (task.status !== TASK_CLOSED_STATE) {
         return yield* new HostValidationError({
           field: "taskId",
@@ -147,7 +145,6 @@ export const createTaskWorktreeUseCases = ({
         worktreeOwners,
         repoPath: effectiveRepoPath,
         repoConfig,
-        workflow,
         task,
         sessions: metadata.agentSessions,
         operationLabel: "remove the worktree of",

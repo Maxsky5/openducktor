@@ -1,5 +1,5 @@
 import { getScopedRepoConfig } from "../../workspaces/scoped-repo-config";
-import type { TaskWorkflow, TaskWorkflowRole } from "@openducktor/workflows";
+import type { TaskWorkflowRole } from "@openducktor/workflows";
 import { Effect } from "effect";
 import { canonicalPathsEqual } from "../../../domain/path-comparison";
 import { HostDependencyError, HostValidationError } from "../../../effect/host-errors";
@@ -17,11 +17,7 @@ import type { TaskSessionLifecycleCoordinator } from "../worktrees/task-session-
 import type { TaskWorktreeService } from "../worktrees/task-worktree-service";
 import { loadRemoveWorktreeOnClose } from "./task-workflow-helpers";
 import { createTaskCleanupProgressState } from "./task-cleanup-progress";
-import {
-  removeTaskWorktree,
-  runTaskRuntimeCleanup,
-  selectWorkflowCleanupSessionRecords,
-} from "./task-cleanup-support";
+import { removeTaskWorktree, runTaskRuntimeCleanup } from "./task-cleanup-support";
 import type { TaskWorktreeOwnerReader } from "../../../ports/task-worktree-owner-port";
 import { acquireRemovableWorktrees } from "./task-worktree-owner-guard";
 
@@ -87,8 +83,6 @@ type MergedTaskCleanupServices = {
   workspaceSettingsService: WorkspaceSettingsService;
   worktreeFiles?: WorktreeFilePort;
   worktreeOwners: TaskWorktreeOwnerReader | undefined;
-  /** The task workflow of the task. Its roles own the sessions and worktrees to clean. */
-  workflow: TaskWorkflow;
 };
 /**
  * A live session keeps its working directory, so a later runtime read of a removed worktree
@@ -99,8 +93,6 @@ export const releaseMergedTaskSessions = (
   dependencies: {
     gitPort: GitPort;
     taskActivityGuard?: TaskActivityGuardPort | undefined;
-    /** The task workflow of the task. Its roles own the sessions to release. */
-    workflow: TaskWorkflow;
   },
   taskStore: Pick<TaskStorePort, "getTaskMetadata">,
   repoPath: string,
@@ -109,10 +101,8 @@ export const releaseMergedTaskSessions = (
 ) =>
   Effect.gen(function* () {
     const metadata = yield* taskStore.getTaskMetadata({ workspaceId, repoPath, taskId });
-    const workflowSessions = selectWorkflowCleanupSessionRecords(
-      dependencies.workflow,
-      metadata.agentSessions,
-    );
+    // Every session of the task, also of a role that the task version no longer binds.
+    const workflowSessions = metadata.agentSessions;
     if (workflowSessions.length === 0) {
       return;
     }

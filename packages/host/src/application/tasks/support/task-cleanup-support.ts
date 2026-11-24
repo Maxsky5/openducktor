@@ -27,9 +27,19 @@ import type { TaskTerminalCleanupPort } from "../task-service";
 import { type TaskCleanupOperation, type TaskCleanupProgressState } from "./task-cleanup-progress";
 import type { OwnerCheckedWorktreePaths } from "./task-worktree-owner-guard";
 import { type BeforeWorktreeRemovalScript, runBeforeWorktreeRemovalScript } from "./workflow-hooks";
-/** The roles of the task workflow. Cleanup stops and removes only their sessions. */
-export const workflowRoleIds = (workflow: TaskWorkflow): Set<string> =>
-  new Set(workflow.definition.roles.map(({ id }) => id));
+/**
+ * The roles that a whole-task cleanup stops and removes: the roles of the task workflow and the
+ * roles of the task sessions. A task that moved to a version without a role keeps the sessions of
+ * that role, and the cleanup releases them too.
+ */
+export const taskCleanupRoles = (
+  workflow: TaskWorkflow,
+  sessions: readonly AgentSessionRecord[],
+): Set<string> =>
+  new Set([
+    ...workflow.definition.roles.map(({ id }) => id),
+    ...sessions.map(({ role }) => role.trim()),
+  ]);
 export type TaskSessionRecords = {
   taskId: string;
   sessions: AgentSessionRecord[];
@@ -191,7 +201,7 @@ export const collectDeleteWorktreePaths = (
     managedWorktreeBasePath,
     targetTaskSessions.map(({ workflow, ...target }) => ({
       ...target,
-      sessionRoles: workflowRoleIds(workflow),
+      sessionRoles: taskCleanupRoles(workflow, target.sessions),
     })),
     "delete",
   );
@@ -422,13 +432,3 @@ export const runTaskLocalCleanup = ({
       progress.deletedBranches.push(branchName);
     }
   });
-
-export const taskHasSessionsForRoles = (
-  sessions: AgentSessionRecord[],
-  roles: Set<string>,
-): boolean => sessions.some((session) => roles.has(session.role.trim()));
-
-export const selectWorkflowCleanupSessionRecords = (
-  workflow: TaskWorkflow,
-  sessions: AgentSessionRecord[],
-): AgentSessionRecord[] => sessions.filter((session) => workflow.hasRole(session.role.trim()));

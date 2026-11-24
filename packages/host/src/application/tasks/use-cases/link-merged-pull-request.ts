@@ -137,7 +137,6 @@ export const createTaskLinkMergedPullRequestUseCase = ({
                   taskStore,
                   lifecycle: taskSessionLifecycleCoordinator,
                   repoPath,
-                  workflow,
                   task: current,
                   // The confirmation showed the uncommitted files that removal deletes.
                   worktreeCleanup: { remove: removeWorktree, force: true },

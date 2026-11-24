@@ -830,6 +830,50 @@ describe("TaskService.closeTask", () => {
     expect(calls[0]).toBe("close task:/repo:1 sessions");
   });
 
+  test("releases a session of a role that the task version no longer binds", async () => {
+    const calls: string[] = [];
+    const qaSession: AgentSessionRecord = {
+      externalSessionId: "session-1",
+      role: "designer",
+      runtimeKind: "opencode",
+      startedAt: "2026-05-10T10:00:00.000Z",
+      workingDirectory: "/worktrees/repo/task-1",
+      selectedModel: null,
+    };
+    const activityGuard: TaskActivityGuardPort = {
+      countLiveSessions: () => Effect.succeed({ liveSessionCount: 0 }),
+      cleanupTaskSessions: (input) => {
+        calls.push(
+          `close task:${input.repoPath}:${input.taskSessions[0]?.sessions.length ?? 0} sessions`,
+        );
+        return Effect.succeed({ stoppedSessionCount: 0 });
+      },
+    };
+    const service = createTaskService({
+      taskWorkflows: builtinTaskWorkflows,
+      workspaceWorkflows: testWorkspaceWorkflows(builtinTaskWorkflows),
+      taskStore: createTaskStore([task()], calls, { "task-1": [qaSession] }),
+      taskActivityGuard: activityGuard,
+      gitPort: createGitPort({ calls }),
+      settingsConfig: createSettingsConfig(),
+      taskWorktreeService: createTaskWorktreeService(null),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      worktreeOwners: noWorktreeOwners,
+      worktreeFiles: createWorktreeFiles(calls),
+    });
+
+    await run(
+      service.closeTask({
+        workspaceId: "workspace-1",
+        repoPath: "/repo",
+        taskId: "task-1",
+        removeWorktree: true,
+      }),
+    );
+
+    expect(calls[0]).toBe("close task:/repo:1 sessions");
+  });
+
   test("aborts destructive cleanup when task terminal termination fails", async () => {
     const calls: string[] = [];
     const service = createTaskService({

@@ -383,7 +383,6 @@ describe("task worktree cleanup", () => {
         cleanupMergedTaskState(
           {
             ...noRemovalScriptServices,
-            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -445,7 +444,6 @@ describe("task worktree cleanup", () => {
               repoPath: "/repo",
               hooks: { beforeWorktreeRemoval: ["make clean"] },
             }),
-            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: {
@@ -491,7 +489,6 @@ describe("task worktree cleanup", () => {
           cleanupMergedTaskState(
             {
               ...noRemovalScriptServices,
-              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {
@@ -586,7 +583,6 @@ describe("task worktree cleanup", () => {
         cleanupMergedTaskState(
           {
             ...noRemovalScriptServices,
-            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -654,7 +650,6 @@ describe("task worktree cleanup", () => {
           cleanupMergedTaskState(
             {
               ...noRemovalScriptServices,
-              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: { [worktreePath]: { name: "odt/task-1", detached: false } },
@@ -691,7 +686,6 @@ describe("task worktree cleanup", () => {
         cleanupMergedTaskState(
           {
             ...noRemovalScriptServices,
-            workflow: specPlanBuildWorkflow,
             gitPort: createDirectMergeGitPort({
               calls,
               canonicalPaths: {
@@ -756,7 +750,6 @@ describe("task worktree cleanup", () => {
           cleanupMergedTaskState(
             {
               ...noRemovalScriptServices,
-              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 canonicalPaths: {
@@ -830,7 +823,6 @@ describe("task worktree cleanup", () => {
                 repoPath,
                 hooks: emptyHooks,
               }),
-              workflow: specPlanBuildWorkflow,
               gitPort: extendGitPort(baseGitPort, {
                 removeWorktree(repoPath, targetWorktreePath, force) {
                   return baseGitPort.removeWorktree(repoPath, targetWorktreePath, force).pipe(
@@ -878,7 +870,6 @@ describe("task worktree cleanup", () => {
           cleanupMergedTaskState(
             {
               ...noRemovalScriptServices,
-              workflow: specPlanBuildWorkflow,
               gitPort: createDirectMergeGitPort({
                 calls,
                 currentBranches: {

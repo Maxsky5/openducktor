@@ -17,7 +17,7 @@ import { managedWorktreeBaseForRepoConfig } from "../../git/managed-worktree-roo
 import {
   collectDeleteWorktreePaths,
   collectResetWorktreePaths,
-  workflowRoleIds,
+  taskCleanupRoles,
 } from "./task-cleanup-support";
 
 export type RemovedWorktreeOperation = Exclude<TaskWorktreeOwnersOperation, "reset_implementation">;
@@ -65,7 +65,7 @@ export const collectRemovedWorktreePaths = (
           managedWorktreeBasePath,
           taskId,
           sessions,
-          workflowRoleIds(workflow),
+          taskCleanupRoles(workflow, sessions),
           "reset task",
         ),
       );
@@ -80,11 +80,10 @@ export const collectRemovedWorktreePaths = (
       operation === "remove_worktree"
         ? targets
         : targets.filter(({ task }) => task.status !== TASK_CLOSED_STATE),
-      ({ task, sessions, workflow }) =>
+      ({ task, sessions }) =>
         collectCloseWorktreePaths(
           closeDependencies,
           repoPath,
-          workflow,
           task,
           sessions,
           repoConfig.workspaceId,

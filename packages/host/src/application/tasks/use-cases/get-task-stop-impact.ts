@@ -3,7 +3,6 @@ import {
   type AgentSessionRecord,
   type RepoConfig,
   type TaskStopImpact,
-  type TaskStopImpactOperation,
   type TaskStopImpactRequest,
 } from "@openducktor/contracts";
 import type { TaskWorkflow } from "@openducktor/workflows";
@@ -22,7 +21,6 @@ import {
   requireDependencies,
   requireTaskStopImpactDependencies,
 } from "../support/required-task-dependencies";
-import { selectWorkflowCleanupSessionRecords } from "../support/task-cleanup-support";
 import {
   collectRemovedWorktreePaths,
   countExistingWorktrees,
@@ -42,18 +40,6 @@ type StopImpactTarget = {
   workflow: TaskWorkflow;
 };
 
-// Keep this filter in step with each stop path.
-const selectStopCandidates = (
-  workflow: TaskWorkflow,
-  operation: TaskStopImpactOperation,
-  sessions: AgentSessionRecord[],
-): AgentSessionRecord[] => {
-  if (operation === "reset_task" || operation === "close" || operation === "delete") {
-    return selectWorkflowCleanupSessionRecords(workflow, sessions);
-  }
-  return sessions;
-};
-
 const countStoppableSessions = (
   dependencies: TaskStopImpactDependencies,
   taskActivityGuard: TaskActivityGuardPort | undefined,
@@ -66,7 +52,8 @@ const countStoppableSessions = (
     const tasksWithSessions = targets.filter((target) => target.sessions.length > 0);
     const previewTasks: { taskId: string; sessions: AgentSessionRecord[] }[] = [];
     for (const { taskId, sessions, workflow } of tasksWithSessions) {
-      let candidates = selectStopCandidates(workflow, input.operation, sessions);
+      // Each stop path stops every session of the task, also of a role that its version dropped.
+      let candidates = sessions;
       if (input.operation === "reset_implementation") {
         const { sessionState } = yield* collectImplementationResetSessionState(
           dependencies,

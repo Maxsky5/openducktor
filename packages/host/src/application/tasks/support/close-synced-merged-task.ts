@@ -36,13 +36,12 @@ export const closeSyncedMergedTask = (
     const { taskStore, taskWorkflows, taskSessionLifecycleCoordinator } = services;
     const { workspaceId, repoPath, taskId } = input;
     const current = yield* taskStore.getTask({ workspaceId, repoPath, taskId });
-    const workflow = taskWorkflows.forTask(current);
     const decision = yield* Effect.fromResult(decideCoreTaskAction("close", current));
     if (decision.kind === "unchanged") return;
     yield* completeTaskClosure({
       workspaceId,
       cleanup: cleanupMergedTaskState(
-        { ...services, workflow },
+        services,
         taskStore,
         repoPath,
         taskId,
