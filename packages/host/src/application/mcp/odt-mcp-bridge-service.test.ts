@@ -135,6 +135,7 @@ type TestOdtMcpBridgeServiceInput = Omit<
 > & {
   taskService: OdtTaskService;
   taskAssetReadService?: TaskAssetReadService;
+  workspaceWorkflows?: Parameters<typeof createOdtMcpBridgeService>[0]["workspaceWorkflows"];
 };
 const createOdtMcpBridgeServiceForTest = (input: TestOdtMcpBridgeServiceInput) =>
   createOdtMcpBridgeService({
@@ -180,6 +181,29 @@ describe("createOdtMcpBridgeService", () => {
     await expect(Effect.runPromise(service.getWorkspaces({}))).resolves.toMatchObject({
       workspaces: [{ workspaceId: "repo", repoPath: "/repo" }],
     });
+  });
+  test("reports the active states of the versions that tasks still use", async () => {
+    const base = testWorkspaceWorkflows(builtinTaskWorkflows);
+    const catalog = await Effect.runPromise(base.catalog());
+    const builtin = catalog.workflows[0]!;
+    const older = {
+      ...builtin,
+      definition: {
+        ...builtin.definition,
+        id: "older-flow",
+        states: [...builtin.definition.states, { id: "legacy", label: "Legacy" }],
+      },
+    };
+    const service = createOdtMcpBridgeServiceForTest({
+      taskService: createTaskServiceTestDouble({}),
+      workspaceSettingsService: createWorkspaceSettingsService(),
+      workspaceWorkflows: {
+        ...base,
+        catalog: () => Effect.succeed({ ...catalog, workflows: [...catalog.workflows, older] }),
+      },
+    });
+
+    expect((await Effect.runPromise(service.ready())).activeStatuses).toContain("legacy");
   });
   test("reads a requested asset batch in caller order through the owned task scope", async () => {
     const firstAssetId = "28cb7c3d-5ec4-47e8-bffe-090223eae3b7";

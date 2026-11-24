@@ -71,7 +71,7 @@ type OdtMcpWorkspaceSettingsService = Pick<
 
 export type CreateOdtMcpToolContextInput = {
   taskWorkflows: TaskWorkflowResolver;
-  workspaceWorkflows: Pick<WorkspaceWorkflowPort, "context" | "settingsOwners">;
+  workspaceWorkflows: Pick<WorkspaceWorkflowPort, "context" | "catalog">;
   browserAgentTools: Pick<BrowserService, "runAgentTool">;
   browserCallers: BrowserCallerResolver;
   managedCallers: ManagedCallerResolver;
