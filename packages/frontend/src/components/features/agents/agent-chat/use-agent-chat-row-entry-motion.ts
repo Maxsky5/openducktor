@@ -13,6 +13,7 @@ type KnownRows = {
   sessionKey: string | null;
   isGrouped: boolean;
   count: number;
+  firstKey: string | null;
   lastKey: string | null;
   keys: Set<string>;
 };
@@ -71,18 +72,30 @@ const readEnteringRows = (
     return keys.length > 0 ? { mode: "append", keys } : NO_ENTERING_ROWS;
   }
 
-  // Turn duration separator inserted immediately before the already-mounted final assistant row.
-  const durationCandidate = rows[rows.length - 2];
-  if (
-    rows.length === known.count + 1 &&
-    rows.at(-1)?.key === known.lastKey &&
-    durationCandidate?.kind === "turn_duration" &&
-    !known.keys.has(durationCandidate.key)
-  ) {
-    return { mode: "inserted-before-tail", keys: [durationCandidate.key] };
+  // Do not animate history prepended above the previously known start of the transcript.
+  if (known.firstKey === null || rows[0]?.key !== known.firstKey) {
+    return NO_ENTERING_ROWS;
   }
 
-  return NO_ENTERING_ROWS;
+  // Rows inserted before an already-mounted final row (e.g., turn duration separator or a
+  // timestamp-ordered tool row arriving after the current tail row).
+  if (rows.at(-1)?.key === known.lastKey) {
+    const keys: string[] = [];
+    for (let index = 1; index < rows.length - 1; index += 1) {
+      const key = rows[index]?.key;
+      if (key !== undefined && !known.keys.has(key)) keys.push(key);
+    }
+    return keys.length > 0 ? { mode: "inserted-before-tail", keys } : NO_ENTERING_ROWS;
+  }
+
+  // Tail append coinciding with an in-place id swap earlier in the transcript (e.g., a streaming
+  // assistant message adopting part identity or a confirmed optimistic user message).
+  const appendedKeys: string[] = [];
+  for (let index = known.count; index < rows.length; index += 1) {
+    const key = rows[index]?.key;
+    if (key !== undefined && !known.keys.has(key)) appendedKeys.push(key);
+  }
+  return appendedKeys.length > 0 ? { mode: "append", keys: appendedKeys } : NO_ENTERING_ROWS;
 };
 
 const rememberRows = (
@@ -103,6 +116,7 @@ const rememberRows = (
       sessionKey,
       isGrouped,
       count: rows.length,
+      firstKey: rows[0]?.key ?? null,
       lastKey: rows.at(-1)?.key ?? null,
       keys: new Set(rows.map((row) => row.key)),
     };
@@ -110,6 +124,9 @@ const rememberRows = (
   for (let index = known.count; index < rows.length; index += 1) {
     const key = rows[index]?.key;
     if (key !== undefined) known.keys.add(key);
+  }
+  if (known.firstKey === null) {
+    known.firstKey = rows[0]?.key ?? null;
   }
   known.count = rows.length;
   known.lastKey = rows.at(-1)?.key ?? null;
@@ -196,6 +213,11 @@ export function useAgentChatRowEntryMotion({
   const previousTailOpenRunRef = useRef<(TailOpenToolRun & { sessionKey: string | null }) | null>(
     null,
   );
+  const previousLastRowRef = useRef<{
+    sessionKey: string | null;
+    isGrouped: boolean;
+    row: AgentChatTranscriptRow | null;
+  } | null>(null);
 
   useLayoutEffect(() => {
     void sessionKey;
@@ -218,6 +240,7 @@ export function useAgentChatRowEntryMotion({
       });
       knownRef.current = null;
       previousTailOpenRunRef.current = null;
+      previousLastRowRef.current = null;
     },
     [containerRef, slideController, turnsClipRef, turnsRef],
   );
@@ -229,6 +252,9 @@ export function useAgentChatRowEntryMotion({
   useLayoutEffect(() => {
     const previousTailRun = previousTailOpenRunRef.current;
     previousTailOpenRunRef.current = tailOpenRun ? { sessionKey, ...tailOpenRun } : null;
+    const previousLastRow = previousLastRowRef.current;
+    const currentLastRow = rows.at(-1) ?? null;
+    previousLastRowRef.current = { sessionKey, isGrouped, row: currentLastRow };
 
     const elements: TranscriptSlideElements = {
       container: containerRef.current,
@@ -245,8 +271,8 @@ export function useAgentChatRowEntryMotion({
     const newlyMounted = collectUnshownEnteringRows(elements.turns, entering, shownRef);
     if (newlyMounted.length > 0) {
       if (entering.mode === "inserted-before-tail") {
-        // Following the bottom keeps the existing answer below this separator stationary. Fade
-        // the separator in place without shifting or clipping the answer that follows it.
+        // Following the bottom keeps the existing answer below this row stationary. Fade the
+        // inserted row in place without shifting or clipping the tail row that follows it.
         for (const row of newlyMounted) {
           row.animate(ENTRY_FADE_KEYFRAMES, ENTRY_TIMING);
         }
@@ -285,42 +311,41 @@ export function useAgentChatRowEntryMotion({
       return;
     }
 
-    if (
+    const didTailOpenRunGrow = Boolean(
       tailOpenRun &&
       previousTailRun &&
       previousTailRun.sessionKey === sessionKey &&
       previousTailRun.runKey === tailOpenRun.runKey &&
-      tailOpenRun.callCount > previousTailRun.callCount
-    ) {
-      syncScrollPosition();
-      const growthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
-      if (growthPx !== null && growthPx > 0.5) {
-        slideController.slide(elements, growthPx, firstMountedKey);
-      } else {
-        slideController.syncBaseline(elements.container, firstMountedKey);
-      }
-      return;
-    }
+      tailOpenRun.callCount > previousTailRun.callCount,
+    );
+    const didTailRowUpdate = Boolean(
+      previousLastRow &&
+      previousLastRow.sessionKey === sessionKey &&
+      previousLastRow.isGrouped === isGrouped &&
+      previousLastRow.row !== null &&
+      currentLastRow !== null &&
+      previousLastRow.row.key === currentLastRow.key &&
+      previousLastRow.row !== currentLastRow,
+    );
 
-    // Keep an active entry motion aligned when a streamed reply grows on the same row.
-    if (slideController.isActive()) {
-      syncScrollPosition();
+    syncScrollPosition();
+    if (didTailOpenRunGrow || didTailRowUpdate || slideController.isActive()) {
       const growthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
       if (growthPx !== null && growthPx > 0.5) {
         slideController.slide(elements, growthPx, firstMountedKey);
-      } else {
-        slideController.syncBaseline(elements.container, firstMountedKey);
+        return;
       }
-      return;
     }
 
     slideController.syncBaseline(elements.container, firstMountedKey);
   }, [
     containerRef,
     entering,
+    isGrouped,
     isLatestWindow,
     isPinned,
     mountedRows,
+    rows,
     sessionKey,
     slideController,
     syncScrollPosition,

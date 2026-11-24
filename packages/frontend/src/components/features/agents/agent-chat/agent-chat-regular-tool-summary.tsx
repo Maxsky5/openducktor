@@ -50,7 +50,7 @@ export const RegularToolSummary = ({
   const filePath = readToolCallFilePath(meta, sessionWorkingDirectory);
   const { durationMs } = readRegularToolTiming(meta, messageTimestamp);
   // A summary or an error that a new state of the call brings fades or opens in.
-  const mountPhase = useValueAtMount(lifecyclePhase);
+  const mountSummaryText = useValueAtMount(summary.text);
   const mountHadError = useValueAtMount(summary.errorPreview !== null);
   return (
     <span
@@ -71,7 +71,7 @@ export const RegularToolSummary = ({
             data-slot="tool-summary"
             className={cn(
               "flex min-w-0 flex-1 items-center gap-1.5",
-              lifecyclePhase !== mountPhase && "tool-line-swap-in",
+              summary.text !== mountSummaryText && "tool-line-swap-in",
             )}
           >
             {filePath ? <FileTypeIcon filePath={filePath} /> : null}

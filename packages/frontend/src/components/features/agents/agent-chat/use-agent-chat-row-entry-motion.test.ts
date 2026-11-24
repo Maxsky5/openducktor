@@ -967,4 +967,114 @@ describe("useAgentChatRowEntryMotion", () => {
       harness.dispose();
     }
   });
+
+  test("slides same-commit id swap plus append, fades non-tail inserts without sliding, ignores history prepends, and slides idle tail-row growth", async () => {
+    const initialRows = Array.from({ length: 8 }, (_, index) => createMessageRow(`r-${index}`));
+    let toolHeight = 28;
+    const harness = await mountMotionHarness({
+      initialProps: {
+        sessionKey: "session-live-variants",
+        isGrouped: false,
+        rows: initialRows,
+        mountedRows: initialRows,
+      },
+      clientHeight: 300,
+      initialScrollTop: 180,
+      rowHeightFor: (key) => {
+        if (key === "tool-after" || key === "tool-earlier") return toolHeight;
+        return 60;
+      },
+    });
+    const { container, turns } = harness.getElements();
+
+    try {
+      // 1. Replacing the last row's id while appending a new tool row slides smoothly and fades only the new row.
+      const swappedAndAppended = [
+        ...initialRows.slice(0, -1),
+        createMessageRow("r-7:part-1"),
+        createMessageRow("tool-after"),
+      ];
+      await harness.rerender({
+        sessionKey: "session-live-variants",
+        isGrouped: false,
+        rows: swappedAndAppended,
+        mountedRows: swappedAndAppended,
+      });
+
+      const swapSlide = harness.recorded.find((entry) => entry.element === turns);
+      expect(swapSlide?.keyframes).toEqual([
+        { transform: "translateY(28px)" },
+        { transform: "none" },
+      ]);
+      expect(
+        harness.recorded
+          .filter((entry) => entry.element !== turns)
+          .map((entry) => entry.element.getAttribute("data-row-key")),
+      ).toEqual(["tool-after"]);
+
+      swapSlide?.finish();
+      await act(flush);
+      harness.recorded.length = 0;
+
+      // 2. Tail row growing after the slide finished (e.g., completed file_edit diff card) slides smoothly.
+      toolHeight = 108;
+      const expandedTail = [
+        ...swappedAndAppended.slice(0, -1),
+        createMessageRow("tool-after", "assistant", "diff"),
+      ];
+      await harness.rerender({
+        sessionKey: "session-live-variants",
+        isGrouped: false,
+        rows: expandedTail,
+        mountedRows: expandedTail,
+      });
+
+      const tailGrowthSlide = harness.recorded.find((entry) => entry.element === turns);
+      expect(tailGrowthSlide?.keyframes).toEqual([
+        { transform: "translateY(80px)" },
+        { transform: "none" },
+      ]);
+      expect(container.scrollTop).toBe(container.scrollHeight - container.clientHeight);
+
+      tailGrowthSlide?.finish();
+      await act(flush);
+      harness.recorded.length = 0;
+
+      // 3. A timestamp-ordered tool inserted before the tail fades in place without bouncing the tail row.
+      toolHeight = 28;
+      const insertedBeforeTail = [
+        ...expandedTail.slice(0, -1),
+        createMessageRow("tool-earlier"),
+        expandedTail.at(-1)!,
+      ];
+      await harness.rerender({
+        sessionKey: "session-live-variants",
+        isGrouped: false,
+        rows: insertedBeforeTail,
+        mountedRows: insertedBeforeTail,
+      });
+
+      expect(harness.recorded.some((entry) => entry.element === turns)).toBe(false);
+      expect(
+        harness.recorded.find(
+          (entry) => entry.element.getAttribute("data-row-key") === "tool-earlier",
+        )?.keyframes,
+      ).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+
+      harness.recorded.length = 0;
+
+      // 4. History prepended before the first known row never animates or slides.
+      const withPrependedHistory = [createMessageRow("older-0"), ...insertedBeforeTail];
+      await harness.rerender({
+        sessionKey: "session-live-variants",
+        isGrouped: false,
+        rows: withPrependedHistory,
+        mountedRows: withPrependedHistory,
+      });
+
+      expect(harness.recorded).toEqual([]);
+    } finally {
+      harness.dispose();
+    }
+  });
 });

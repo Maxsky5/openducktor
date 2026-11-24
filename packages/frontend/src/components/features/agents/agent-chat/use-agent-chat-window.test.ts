@@ -3541,4 +3541,90 @@ describe("useAgentChatWindow", () => {
 
     await harness.unmount();
   });
+
+  test("keeps the expanded latest row budget across appends when 20 compact rows do not fill the viewport", async () => {
+    const initialRows = createSingleTurnRows(AGENT_CHAT_ROW_WINDOW_SIZE);
+    const tallRowKeys = new Set([initialRows[0]?.key, initialRows[1]?.key]);
+    const harness = await mountHarness(
+      {
+        rows: initialRows,
+        displayedSessionKey: "compact-ungrouped-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      {
+        attachDom: true,
+        containerClientHeight: 700,
+        getRowHeightPx: (row) => (tallRowKeys.has(row.key) ? 180 : 28),
+      },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    try {
+      await animationFrameDriver.flushFrames();
+      const scrollTopAt20 = container.scrollTop;
+      expect(scrollTopAt20).toBeGreaterThan(0);
+
+      for (
+        let count = AGENT_CHAT_ROW_WINDOW_SIZE + 1;
+        count <= AGENT_CHAT_ROW_WINDOW_SIZE + 3;
+        count += 1
+      ) {
+        await harness.update({
+          rows: createSingleTurnRows(count),
+          displayedSessionKey: "compact-ungrouped-session",
+          shouldResetForTranscriptLoad: false,
+        });
+        await animationFrameDriver.flushFrames();
+
+        expect(harness.getLatestResult().windowStart).toBe(0);
+        expect(harness.getLatestResult().visibleRows).toHaveLength(count);
+        expect(container.scrollTop).toBeGreaterThan(scrollTopAt20);
+        expect(container.scrollTop).toBe(getMaxScrollTop(container));
+      }
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("preserves a viewport-filled latest row limit across subsequent appends", async () => {
+    const initialCount = AGENT_CHAT_ROW_WINDOW_SIZE + 5;
+    const harness = await mountHarness(
+      {
+        rows: createSingleTurnRows(initialCount),
+        displayedSessionKey: "filled-latest-session",
+        shouldResetForTranscriptLoad: false,
+      },
+      {
+        attachDom: true,
+        containerClientHeight: 700,
+        rowHeightPx: 28,
+      },
+    );
+    const container = harness.messagesContainerRef.current;
+    if (!container) {
+      throw new Error("Expected messages container");
+    }
+
+    try {
+      await animationFrameDriver.flushFrames();
+      expect(harness.getLatestResult().windowStart).toBe(0);
+      expect(harness.getLatestResult().visibleRows).toHaveLength(initialCount);
+
+      await harness.update({
+        rows: createSingleTurnRows(initialCount + 1),
+        displayedSessionKey: "filled-latest-session",
+        shouldResetForTranscriptLoad: false,
+      });
+
+      // Must keep the grown latest limit immediately instead of collapsing back to 20 rows.
+      expect(harness.getLatestResult().windowStart).toBe(0);
+      expect(harness.getLatestResult().visibleRows).toHaveLength(initialCount + 1);
+      expect(container.scrollTop).toBe(getMaxScrollTop(container));
+    } finally {
+      await harness.unmount();
+    }
+  });
 });

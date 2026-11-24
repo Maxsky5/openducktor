@@ -838,3 +838,143 @@ describe("createToolDetailsStore", () => {
     expect(store.read().message).toBe(ended);
   });
 });
+
+describe("tool row transition stability", () => {
+  test("does not blink unchanged summaries or remount RegularToolSummary when a running tool completes", () => {
+    const store = createToolDetailsStore();
+    const runningBash = toolMessage("bash-1", {
+      status: "running",
+      input: { command: "bun test" },
+    });
+    const runningZeroArg = toolMessage("zero-1", {
+      tool: "list_tabs",
+      toolType: "generic",
+      status: "running",
+    });
+    const source: ToolCallSource = {
+      key: "session-1",
+      workingDirectory: "/repo",
+      runtimePresentation: PRESENTATION,
+      toolPartSession: null,
+      chatSettings: null,
+    };
+    const renderRows = (bash: AgentChatMessage, zeroArg: AgentChatMessage) => {
+      const session = {
+        externalSessionId: "session-1",
+        messages: createSessionMessagesState("session-1", [bash, zeroArg]),
+      };
+      return (
+        <ToolDetailsStoreContext value={store}>
+          <ToolCallSourceContext value={{ source, sessionRef: { current: session } }}>
+            <div data-testid="bash-row">
+              {bash.meta?.kind === "tool" ? (
+                <RegularToolMessage
+                  meta={bash.meta}
+                  messageId={bash.id}
+                  messageContent={bash.content}
+                  messageTimestamp={bash.timestamp}
+                  timeLabel="08:00"
+                  sessionWorkingDirectory="/repo"
+                  displayName="bash"
+                />
+              ) : null}
+            </div>
+            <div data-testid="zero-row">
+              {zeroArg.meta?.kind === "tool" ? (
+                <RegularToolMessage
+                  meta={zeroArg.meta}
+                  messageId={zeroArg.id}
+                  messageContent={zeroArg.content}
+                  messageTimestamp={zeroArg.timestamp}
+                  timeLabel="08:00"
+                  sessionWorkingDirectory="/repo"
+                  displayName="list_tabs"
+                />
+              ) : null}
+            </div>
+          </ToolCallSourceContext>
+        </ToolDetailsStoreContext>
+      );
+    };
+
+    const view = render(renderRows(runningBash, runningZeroArg));
+    try {
+      const bashSummaryBefore = view
+        .getByTestId("bash-row")
+        .querySelector('[data-slot="tool-summary"]');
+      const zeroLineBefore = view.getByTestId("zero-row").querySelector('[data-slot="tool-line"]');
+      const zeroButtonBefore = view.getByTestId("zero-row").querySelector("button");
+      expect(bashSummaryBefore?.classList.contains("tool-line-swap-in")).toBe(false);
+      expect(zeroButtonBefore?.disabled).toBe(true);
+      expect(zeroButtonBefore?.hasAttribute("aria-pressed")).toBe(false);
+
+      const completedBash = toolMessage("bash-1", {
+        status: "completed",
+        input: { command: "bun test" },
+        output: "all passed",
+      });
+      const completedZeroArg = toolMessage("zero-1", {
+        tool: "list_tabs",
+        toolType: "generic",
+        status: "completed",
+        output: "3 tabs",
+      });
+      view.rerender(renderRows(completedBash, completedZeroArg));
+
+      const bashSummaryAfter = view
+        .getByTestId("bash-row")
+        .querySelector('[data-slot="tool-summary"]');
+      const zeroLineAfter = view.getByTestId("zero-row").querySelector('[data-slot="tool-line"]');
+      const zeroSummaryAfter = view
+        .getByTestId("zero-row")
+        .querySelector('[data-slot="tool-summary"]');
+      const zeroButtonAfter = view.getByTestId("zero-row").querySelector("button");
+      expect(bashSummaryAfter).toBe(bashSummaryBefore);
+      expect(bashSummaryAfter?.classList.contains("tool-line-swap-in")).toBe(false);
+      expect(zeroLineAfter).toBe(zeroLineBefore);
+      expect(zeroButtonAfter).toBe(zeroButtonBefore);
+      expect(zeroButtonAfter?.disabled).toBe(false);
+      expect(zeroButtonAfter?.getAttribute("aria-pressed")).toBe("false");
+      // Summary text genuinely changed from empty/default to "3 tabs", so it swaps in cleanly.
+      expect(zeroSummaryAfter?.classList.contains("tool-line-swap-in")).toBe(true);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("does not blink unchanged command text in grouped tool runs on completion, while fading in preparing commands", () => {
+    const runningCall = toolMessage("run-1", {
+      status: "running",
+      input: { command: "bun test" },
+    });
+    const preparingCall = toolMessage("prep-1", {
+      status: "pending",
+      inputStreaming: true,
+    });
+    const view = render(<Transcript messages={[runningCall, preparingCall]} />);
+    try {
+      const commandWrapperBefore = screen.getByText("bun test").parentElement;
+      expect(commandWrapperBefore?.classList.contains("tool-line-swap-in")).toBe(false);
+
+      const completedCall = toolMessage("run-1", {
+        status: "completed",
+        input: { command: "bun test" },
+        output: "ok",
+      });
+      const readyCall = toolMessage("prep-1", {
+        status: "running",
+        inputStreaming: false,
+        input: { command: "bun run lint" },
+      });
+      view.rerender(<Transcript messages={[completedCall, readyCall]} />);
+
+      const commandWrapperAfter = screen.getByText("bun test").parentElement;
+      const readyWrapper = screen.getByText("bun run lint").parentElement;
+      expect(commandWrapperAfter).toBe(commandWrapperBefore);
+      expect(commandWrapperAfter?.classList.contains("tool-line-swap-in")).toBe(false);
+      expect(readyWrapper?.classList.contains("tool-line-swap-in")).toBe(true);
+    } finally {
+      view.unmount();
+    }
+  });
+});
