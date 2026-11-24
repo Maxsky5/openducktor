@@ -376,6 +376,35 @@ describe("agent-studio-quick-actions", () => {
     ]);
   });
 
+  test("leads with the session start that the board offers when the workflow sets no launch order", () => {
+    const task = withEditedTaskWorkflow(
+      buildTask({
+        id: "task-1",
+        status: "ready_for_dev",
+        availableActions: ["build_start"],
+        agentWorkflows: {
+          spec: { required: true, canSkip: false, available: true, completed: true },
+          planner: { required: true, canSkip: false, available: true, completed: true },
+          build: { required: true, canSkip: false, available: true, completed: false },
+          qa: { required: true, canSkip: false, available: false, completed: false },
+        },
+      }),
+      (definition) => {
+        // One fixed button order that starts with Spec, and no launch order, as in Code health.
+        definition.launchOrder = [];
+        definition.actionPriority = [];
+        definition.actionOrder = [{ when: true, actions: definition.actions.map(({ id }) => id) }];
+      },
+    );
+    const options = buildSessionQuickActions({
+      selectedTask: task,
+      sessionsForTask: [],
+      roleEnabledByTask: buildRoleEnabledMapForTask(task),
+      createSessionDisabled: false,
+    });
+    expect(selectPrimaryAgentStudioQuickAction(options)).toMatchObject({ role: "build" });
+  });
+
   test("keeps completed workflow roles in the dropdown while prioritizing current work", () => {
     const task = buildTask({
       id: "task-1",
