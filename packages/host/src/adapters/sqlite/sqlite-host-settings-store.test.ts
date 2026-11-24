@@ -1057,4 +1057,57 @@ describe("shared host settings", () => {
       );
     });
   });
+
+  test("persists, updates, and clears optional speed on default and role models", async () => {
+    await withDatabase(async ({ session }) => {
+      const config = createDefaultGlobalConfig();
+      config.workspaces.one = repoConfigFixture({
+        workspaceId: "one",
+        workspaceName: "One",
+        repoPath: "/one",
+        defaultModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+          speed: "priority",
+        },
+        agentDefaults: {
+          build: {
+            runtimeKind: "claude",
+            providerId: "anthropic",
+            modelId: "claude-opus-4",
+            speed: "fast",
+          },
+          qa: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5",
+          },
+        },
+      });
+      await Effect.runPromise(
+        session.transaction("test.import", (transaction) =>
+          importHostSharedConfig(
+            transaction,
+            applyTaskWorkflowSettings(config, builtinWorkflowSettingsOwners, "read"),
+          ),
+        ),
+      );
+      const stored = await Effect.runPromise(readHostSharedConfig(session));
+      expect(stored.workspaces.one?.defaultModel?.speed).toBe("priority");
+      expect(stored.workspaces.one?.agentDefaults.build?.speed).toBe("fast");
+      expect(stored.workspaces.one?.agentDefaults.qa?.speed).toBeUndefined();
+
+      await measureSettingsEdits(session, (current) => {
+        delete current.workspaces.one!.defaultModel!.speed;
+        current.workspaces.one!.agentDefaults.build!.speed = "ultrafast";
+        current.workspaces.one!.agentDefaults.qa!.speed = "priority";
+        return current;
+      });
+      const updated = await Effect.runPromise(readHostSharedConfig(session));
+      expect(updated.workspaces.one?.defaultModel?.speed).toBeUndefined();
+      expect(updated.workspaces.one?.agentDefaults.build?.speed).toBe("ultrafast");
+      expect(updated.workspaces.one?.agentDefaults.qa?.speed).toBe("priority");
+    });
+  });
 });

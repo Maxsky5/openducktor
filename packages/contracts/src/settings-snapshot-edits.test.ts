@@ -263,4 +263,44 @@ describe("settings snapshot edits", () => {
         ),
       ).toThrow("Runtime extra is no longer configured");
   });
+
+  test("diffs and applies optional speed on workspace default and role defaults", () => {
+    const before = settingsSnapshotSchema.parse({
+      theme: "light",
+      workspaces: {
+        repo: {
+          workspaceId: "repo",
+          workspaceName: "Repo",
+          repoPath: "/repo",
+          defaultTargetBranch: { remote: "origin", branch: "main" },
+          defaultModel: {
+            runtimeKind: "codex",
+            providerId: "openai",
+            modelId: "gpt-5",
+            speed: "priority",
+          },
+          agentDefaults: {
+            build: {
+              runtimeKind: "claude",
+              providerId: "anthropic",
+              modelId: "claude-opus-4",
+            },
+          },
+        },
+      },
+    });
+    const after = structuredClone(before);
+    delete after.workspaces.repo!.defaultModel!.speed;
+    after.workspaces.repo!.agentDefaults.build!.speed = "fast";
+
+    const edits = diffSettingsSnapshot(before, after);
+    expect(edits.workspaces?.repo?.defaultModel).toEqual({
+      type: "set",
+      value: { speed: { type: "clear" } },
+    });
+    expect(edits.workspaces?.repo?.agentDefaults).toEqual({
+      update: { build: { speed: { type: "set", value: "fast" } } },
+    });
+    expect(applySettingsSnapshotPatch(before, edits, { preferences: true })).toEqual(after);
+  });
 });

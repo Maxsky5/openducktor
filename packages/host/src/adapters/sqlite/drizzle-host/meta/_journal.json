@@ -50,6 +50,13 @@
       "when": 1795476088489,
       "tag": "0006_workflow_library",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1795606340870,
+      "tag": "0007_workspace_default_model_speed",
+      "breakpoints": true
     }
   ]
 }
