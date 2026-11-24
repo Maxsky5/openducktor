@@ -1,6 +1,13 @@
-import type { AgentMessageSubmitMode } from "@openducktor/contracts";
+import {
+  type AgentMessageSubmitMode,
+  RUNTIME_DESCRIPTORS_BY_KIND,
+  type RuntimeDescriptor,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
-import { agentModelInfoParts } from "@openducktor/frontend-core/lib/agent-model-presentation";
+import {
+  type ModelSpeedTone,
+  resolveModelTriggerSummary,
+} from "@openducktor/frontend-core/sessions/model-selection/model-picker-presentation";
 import { resolveModelSelectionOptions } from "@openducktor/frontend-core/sessions/model-selection/model-selection-options";
 
 /** The placeholder of the message field and the hint that a screen reader reads with it. */
@@ -85,42 +92,55 @@ export const composerCardState = ({
   return inputDisabled && !isSubmitting ? "muted" : "active";
 };
 
-/** The text of the model control: the model name, its effort level, and the model facts. */
+/** The text of the model control: runtime profile, model name, effort, speed tone, and a11y label. */
 export type ComposerModelText = {
   label: string;
+  /** The OpenCode profile label, which the model control shows before the model name. */
+  profile: string | null;
   /** The effort level, which the model control shows after the model name. */
   effort: string | null;
-  /** The profile, provider, and model, for a screen reader. */
-  info: string | null;
+  /** The active speed tone; non-standard tones show a colored zap icon. */
+  speedTone: ModelSpeedTone;
+  /** The full accessible label including runtime, profile, model, effort, and speed. */
+  accessibilityLabel: string;
 };
 
 export const composerModelText = ({
   selectedModel,
   modelName,
   catalog,
+  runtime,
 }: {
   selectedModel: AgentModelSelection | null;
   /** The catalog name of the selected model, when the catalog has the model. */
   modelName: string | undefined;
   catalog: AgentModelCatalog | null;
+  runtime?: RuntimeDescriptor | null | undefined;
 }): ComposerModelText => {
-  if (!selectedModel) return { label: "Model", effort: null, info: null };
-  const { variant } = selectedModel;
-  const { selectedModelEntry, variantOptions } = resolveModelSelectionOptions({
-    liveSession: true,
-    selectionCatalog: catalog,
-    selectedModelSelection: selectedModel,
+  const resolvedRuntime =
+    runtime ??
+    catalog?.runtime ??
+    (selectedModel?.runtimeKind ? RUNTIME_DESCRIPTORS_BY_KIND[selectedModel.runtimeKind] : null);
+  const options = selectedModel
+    ? resolveModelSelectionOptions({
+        liveSession: true,
+        selectionCatalog: catalog,
+        selectedModelSelection: selectedModel,
+      })
+    : null;
+  const summary = resolveModelTriggerSummary({
+    runtime: resolvedRuntime,
+    catalog,
+    selection: selectedModel,
+    profileOptions: options?.agentProfileOptions,
+    effortOptions: options?.variantOptions,
+    placeholder: "Model",
   });
-  // A model that the catalog lists without effort levels shows no effort, also when the runtime
-  // names one, such as `default`.
-  const hasEfforts = !selectedModelEntry || selectedModelEntry.variants.length > 0;
-  const effort =
-    variant && hasEfforts
-      ? (variantOptions.find((option) => option.value === variant)?.label ?? variant)
-      : null;
   return {
-    label: modelName ?? selectedModel.modelId,
-    effort,
-    info: agentModelInfoParts(selectedModel, catalog).join(" · "),
+    label: selectedModel ? (modelName ?? summary.modelLabel) : "Model",
+    profile: summary.profileLabel,
+    effort: summary.effortLabel,
+    speedTone: summary.speedTone,
+    accessibilityLabel: selectedModel ? summary.ariaLabel : "Select model",
   };
 };

@@ -115,6 +115,14 @@ function SessionOptions({
     () => refreshStaleCatalog(runtimeRef),
     [refreshStaleCatalog, runtimeRef],
   );
+  const actions = useModelSelectionActions({
+    loadedSessionIdentity: identity,
+    updateAgentSessionModel,
+    applyDraftSelection: noDraftSelection,
+    selectedModelSelection: facts.selectedModel,
+    selectionCatalog: catalog,
+    selectedRuntimeKind: runtimeKind,
+  });
   const selection = facts.selectedModel;
   const descriptor =
     allRuntimeDefinitions.find((definition) => definition.kind === runtimeKind) ?? null;
@@ -122,14 +130,6 @@ function SessionOptions({
     liveSession: true,
     selectionCatalog: catalog,
     selectedModelSelection: selection,
-  });
-  const actions = useModelSelectionActions({
-    loadedSessionIdentity: identity,
-    updateAgentSessionModel,
-    applyDraftSelection: noDraftSelection,
-    selectedModelSelection: selection,
-    selectionCatalog: catalog,
-    selectedRuntimeKind: runtimeKind,
   });
   const disabled = !gate.open;
   const speed = useSpeedControl({

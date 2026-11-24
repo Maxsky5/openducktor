@@ -1,3 +1,4 @@
+import type { ModelSpeedTone } from "@openducktor/frontend-core/sessions/model-selection/model-picker-presentation";
 import { memo, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -59,8 +60,10 @@ export const QuietIconControl = memo(function QuietIconControl({
  */
 export const QuietSelector = memo(function QuietSelector({
   leading,
+  profile,
   label,
   detail,
+  speedTone = "standard",
   accessibilityLabel,
   accessibilityHint,
   disabled,
@@ -68,9 +71,13 @@ export const QuietSelector = memo(function QuietSelector({
   fixed = false,
 }: {
   leading: ReactNode;
+  /** The OpenCode profile shown before the model name; truncates after the model name. */
+  profile?: string | null | undefined;
   label: string;
   /** A short value after the label, such as the effort, that stays whole while the label shrinks. */
   detail?: string | null | undefined;
+  /** Non-standard speed tones show a colored zap icon after the effort. */
+  speedTone?: ModelSpeedTone | undefined;
   accessibilityLabel: string;
   accessibilityHint: string;
   disabled: boolean;
@@ -79,6 +86,14 @@ export const QuietSelector = memo(function QuietSelector({
   fixed?: boolean | undefined;
 }): ReactElement {
   const theme = useAppTheme();
+  const speedIconColor =
+    speedTone === "ultrafast"
+      ? theme.scheme === "dark"
+        ? theme.palette.violet400
+        : theme.palette.violet600
+      : theme.scheme === "dark"
+        ? theme.palette.amber400
+        : theme.palette.amber600;
   return (
     <Touchable
       feedback="opacity"
@@ -93,6 +108,16 @@ export const QuietSelector = memo(function QuietSelector({
       style={styles.selector}
     >
       {leading}
+      {profile ? (
+        <>
+          <Text variant="footnote" numberOfLines={1} style={styles.selectorProfile}>
+            {profile}
+          </Text>
+          <Text variant="footnote" numberOfLines={1} style={styles.selectorSeparator}>
+            /
+          </Text>
+        </>
+      ) : null}
       <Text variant="footnote" numberOfLines={1} style={styles.selectorLabel}>
         {label}
       </Text>
@@ -101,6 +126,7 @@ export const QuietSelector = memo(function QuietSelector({
           {`· ${detail}`}
         </Text>
       ) : null}
+      {speedTone !== "standard" ? <Icon name="zap" size={14} colorValue={speedIconColor} /> : null}
       <Icon name="chevron-up-down" size={14} colorValue={theme.desktop.mutedForeground} />
     </Touchable>
   );
@@ -315,7 +341,9 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.lg,
     borderCurve: "continuous",
   },
-  selectorLabel: { flexShrink: 1, color: theme.desktop.mutedForeground },
+  selectorProfile: { flexShrink: 1, minWidth: 0, color: theme.desktop.mutedForeground },
+  selectorSeparator: { flexShrink: 0, color: theme.desktop.mutedForeground },
+  selectorLabel: { flexShrink: 1000, minWidth: 0, color: theme.desktop.mutedForeground },
   selectorDetail: { flexShrink: 0, color: theme.desktop.mutedForeground },
   square: {
     width: 32,

@@ -195,6 +195,7 @@ export function SessionStartForm({
   const availability = resolveSessionStartAvailability(model, {
     kickoffInvalid: kickoff.invalid,
     goalError: goal.blockedReason,
+    speedBlockedReason: speed.blockedReason,
   });
 
   const sections = startFormSections(model);
@@ -210,7 +211,8 @@ export function SessionStartForm({
       ...buildSessionStartConfirmDraft({
         model,
         requiresExistingSession: availability.requiresExistingSession,
-        speedChange: speed.change,
+        effectiveSpeed: speed.effectiveSpeed,
+        reuseSpeedChange: speed.reuseSpeedChange,
         kickoffPrompt: kickoff.value,
         goalObjective: goal.value,
       }),

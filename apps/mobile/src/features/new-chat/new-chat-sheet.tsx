@@ -53,7 +53,11 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
   });
   const form = useWorkspaceSessionCreate({
     workspace,
-    model: { selection: model.selection, selectedModelAvailable: model.state.kind === "ready" },
+    model: {
+      selection: model.selection,
+      selectedModelAvailable: model.state.kind === "ready",
+      speedBlockedReason: model.speedBlockedReason,
+    },
     onCreated: (record, attemptId) =>
       visibleHandoff(() => {
         if (!navigation.isFocused()) return;
@@ -81,6 +85,7 @@ export function NewChatSheet({ workspace }: { workspace: WorkspaceRecord }): Rea
     targetPending: form.branches.isPending || repoConfig.isPending,
     selection: model.selection,
     model: model.state,
+    speedBlockedReason: model.speedBlockedReason,
     rolesReady: form.roles.isSuccess,
     branches: form.branches.isSuccess ? form.branches.data : null,
     branchPrefix,
