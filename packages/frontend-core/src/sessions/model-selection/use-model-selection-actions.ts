@@ -86,17 +86,27 @@ export const useModelSelectionActions = ({
 
   const applySelection = useCallback(
     async (change: SelectionChange): Promise<void> => {
-      const resolved = change(latestSelection.current, latestCatalog.current);
+      const previousSelection = latestSelection.current;
+      const previousCatalog = latestCatalog.current;
+      const resolved = change(previousSelection, previousCatalog);
       if (!resolved) return;
       latestSelection.current = resolved.selection;
       if (resolved.catalog !== undefined) {
         latestCatalog.current = resolved.catalog;
       }
-      if (!loadedSessionIdentity) {
-        await applyDraftSelection(resolved.selection);
-      } else {
-        // The change shows at once. The session writes it after the earlier changes.
-        await updateAgentSessionModel(loadedSessionIdentity, resolved.selection);
+      try {
+        if (!loadedSessionIdentity) {
+          await applyDraftSelection(resolved.selection);
+        } else {
+          // The change shows at once. The session writes it after the earlier changes.
+          await updateAgentSessionModel(loadedSessionIdentity, resolved.selection);
+        }
+      } catch (error) {
+        if (latestSelection.current === resolved.selection) {
+          latestSelection.current = previousSelection;
+          latestCatalog.current = previousCatalog;
+        }
+        throw error;
       }
       resolved.onAccepted?.();
     },

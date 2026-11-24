@@ -124,22 +124,6 @@ function StepTrackSvg({
       className="pointer-events-none absolute inset-0 overflow-visible"
     >
       <defs>
-        <linearGradient id={`${gradientId}-shell`} x1="0" y1="0" x2="0" y2="1">
-          <stop
-            offset="0%"
-            style={{
-              stopColor: "var(--step-track-shell-top)",
-              stopOpacity: "var(--step-track-shell-top-opacity)",
-            }}
-          />
-          <stop
-            offset="100%"
-            style={{
-              stopColor: "var(--step-track-shell-bottom)",
-              stopOpacity: "var(--step-track-shell-bottom-opacity)",
-            }}
-          />
-        </linearGradient>
         {fills.map((fill, index) => (
           <linearGradient
             // The fills list maps 1:1 to stop indices for smooth cross-fade blending.
@@ -161,12 +145,11 @@ function StepTrackSvg({
           animator.nodes.shellPath = node;
         }}
         d={initialShellD}
-        fill={`url(#${gradientId}-shell)`}
+        fill="var(--step-track-shell)"
         strokeLinejoin="round"
         strokeWidth={0.75}
         style={{
           stroke: "var(--step-track-line)",
-          strokeOpacity: "var(--step-track-line-opacity)",
         }}
       />
       {fills.map((fill, index) => (

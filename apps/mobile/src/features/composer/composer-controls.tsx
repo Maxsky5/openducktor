@@ -54,6 +54,17 @@ export const QuietIconControl = memo(function QuietIconControl({
   );
 });
 
+const resolveSpeedIconColor = (
+  theme: ReturnType<typeof useAppTheme>,
+  speedTone: ModelSpeedTone,
+): string => {
+  const isDark = theme.scheme === "dark";
+  if (speedTone === "ultrafast") {
+    return isDark ? theme.palette.violet400 : theme.palette.violet600;
+  }
+  return isDark ? theme.palette.amber400 : theme.palette.amber600;
+};
+
 /**
  * A quiet selector, as the desktop model, agent, and effort triggers: a leading mark, a 12-point
  * muted label that truncates, and the up and down chevrons.
@@ -86,14 +97,7 @@ export const QuietSelector = memo(function QuietSelector({
   fixed?: boolean | undefined;
 }): ReactElement {
   const theme = useAppTheme();
-  const speedIconColor =
-    speedTone === "ultrafast"
-      ? theme.scheme === "dark"
-        ? theme.palette.violet400
-        : theme.palette.violet600
-      : theme.scheme === "dark"
-        ? theme.palette.amber400
-        : theme.palette.amber600;
+  const speedIconColor = resolveSpeedIconColor(theme, speedTone);
   return (
     <Touchable
       feedback="opacity"

@@ -72,6 +72,31 @@ export type AgentChatComposerHandle = {
   addFiles: (files: File[]) => void;
 };
 
+const resolveModelPickerReadOnlyReason = ({
+  isReadOnly,
+  readOnlyReason,
+  isSubmitting,
+  isInteractionEnabled,
+  isRuntimeLocked,
+}: {
+  isReadOnly: boolean;
+  readOnlyReason: string | null | undefined;
+  isSubmitting: boolean;
+  isInteractionEnabled: boolean;
+  isRuntimeLocked: boolean;
+}): string | null => {
+  if (isReadOnly) {
+    return readOnlyReason ?? "Model selection is unavailable right now.";
+  }
+  if (isSubmitting) {
+    return "Wait for the current submission to finish.";
+  }
+  if (!isInteractionEnabled && isRuntimeLocked) {
+    return "Model selection is unavailable right now.";
+  }
+  return null;
+};
+
 export function AgentChatComposer({
   model,
   ref,
@@ -180,13 +205,13 @@ export function AgentChatComposer({
     draftRef.current = draft;
   }, [draft]);
 
-  const hardModelPickerReadOnlyReason = isReadOnly
-    ? (model.readOnlyReason ?? "Model selection is unavailable right now.")
-    : isSubmitting
-      ? "Wait for the current submission to finish."
-      : !isInteractionEnabled && model.modelPicker.selectionPolicy.kind === "runtime_locked"
-        ? "Model selection is unavailable right now."
-        : null;
+  const hardModelPickerReadOnlyReason = resolveModelPickerReadOnlyReason({
+    isReadOnly,
+    readOnlyReason: model.readOnlyReason,
+    isSubmitting,
+    isInteractionEnabled,
+    isRuntimeLocked: model.modelPicker.selectionPolicy.kind === "runtime_locked",
+  });
   const closedModelPickerDisabledReason = null;
 
   const scheduleComposerFocus = useAgentChatComposerFocus({

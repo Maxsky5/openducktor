@@ -23,14 +23,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   findAdjacentSelectableModelIndex,
   findSelectableModelIndex,
+  recoverPendingModelFocus,
+  useModelPickerFocusRecovery,
+} from "./model-picker-focus";
+import { ModelPickerFocusContext } from "./model-picker-focus-context";
+import {
   ModelPickerFavoriteNotice,
   ModelPickerList,
   ModelPickerLoadingNotice,
   ModelPickerResourceNotice,
-  recoverPendingModelFocus,
-  useModelPickerFocusRecovery,
 } from "./model-picker-list";
-import { ModelPickerFocusContext } from "./model-picker-focus-context";
 import { ModelPickerOptionsPane } from "./model-picker-options-pane";
 import { ModelPickerRail } from "./model-picker-rail";
 import { ModelPickerTrigger } from "./model-picker-trigger";

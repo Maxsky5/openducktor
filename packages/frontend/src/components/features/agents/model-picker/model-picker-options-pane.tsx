@@ -41,6 +41,15 @@ const resolveEffortSectionStatus = (
   return null;
 };
 
+const resolveProfileSectionStatus = (
+  isCatalogLoading: boolean,
+  optionCount: number,
+): string | null => {
+  if (isCatalogLoading && optionCount === 0) return "Loading agent profiles…";
+  if (optionCount === 0) return "No visible agent profiles are available.";
+  return null;
+};
+
 const shouldUseEffortSlider = (
   options: readonly SelectOption[],
   value: string | undefined,
@@ -111,19 +120,23 @@ function EffortFallbackSection({
   descriptionId: string;
 }): ReactElement {
   const activeLabel = effort.options.find((option) => option.value === effort.value)?.label;
+  let headerDetail: ReactElement | null = null;
+  if (statusText) {
+    headerDetail = (
+      <p className="truncate text-xs text-muted-foreground" role="status">
+        {statusText}
+      </p>
+    );
+  } else if (activeLabel) {
+    headerDetail = (
+      <span className="ml-auto truncate text-xs font-medium text-foreground">{activeLabel}</span>
+    );
+  }
   return (
     <section aria-label="Effort" className="flex min-w-0 flex-col gap-1.5 pt-2">
       <div className="flex items-center gap-2.5">
         <span className="shrink-0 text-xs font-medium text-muted-foreground">Effort</span>
-        {statusText ? (
-          <p className="truncate text-xs text-muted-foreground" role="status">
-            {statusText}
-          </p>
-        ) : activeLabel ? (
-          <span className="ml-auto truncate text-xs font-medium text-foreground">
-            {activeLabel}
-          </span>
-        ) : null}
+        {headerDetail}
       </div>
       {!statusText ? (
         <OptionList
@@ -224,12 +237,7 @@ function ProfileSection({
     lockedReason ??
     profile.disabledReason ??
     (allLiveLocked ? LIVE_LOCKED_PROFILE_DESCRIPTION : null);
-  const statusText =
-    isCatalogLoading && options.length === 0
-      ? "Loading agent profiles…"
-      : options.length === 0
-        ? "No visible agent profiles are available."
-        : null;
+  const statusText = resolveProfileSectionStatus(isCatalogLoading, options.length);
   const comboboxOptions = useMemo(
     () =>
       options.map((option) =>

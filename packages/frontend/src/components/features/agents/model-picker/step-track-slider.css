@@ -1,31 +1,30 @@
 :root,
 .light {
-  --step-track-shell-top: #e2e4e9;
-  --step-track-shell-top-opacity: 0.82;
-  --step-track-shell-bottom: #eceef2;
-  --step-track-shell-bottom-opacity: 0.72;
-  --step-track-line: #0f172a;
-  --step-track-line-opacity: 0.11;
-  --step-track-label: #1e293b;
-  --step-track-tick: rgba(15, 23, 42, 0.24);
-  --step-track-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(15, 23, 42, 0.09);
+  --step-track-shell: color-mix(in oklch, var(--foreground) 8%, var(--popover));
+  --step-track-line: color-mix(in oklch, var(--foreground) 12%, transparent);
+  --step-track-label: var(--foreground);
+  --step-track-tick: color-mix(in oklch, var(--foreground) 26%, transparent);
+  --step-track-tick-on-thumb: color-mix(in oklch, var(--foreground) 45%, transparent);
+  --step-track-thumb-bg: var(--primary-foreground);
+  --step-track-thumb-shadow:
+    0 1px 3px color-mix(in oklch, var(--foreground) 18%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent);
   --step-track-shake-distance: 6px;
   --step-track-shake-overshoot: 4px;
   --step-track-shake-dur-a: 80ms;
   --step-track-shake-dur-b: 60ms;
-  --step-track-ease: var(--motion-ease-out, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 .dark {
-  --step-track-shell-top: #ffffff;
-  --step-track-shell-top-opacity: 0.095;
-  --step-track-shell-bottom: #ffffff;
-  --step-track-shell-bottom-opacity: 0.065;
-  --step-track-line: #ffffff;
-  --step-track-line-opacity: 0.13;
-  --step-track-label: #f8fafc;
-  --step-track-tick: rgba(255, 255, 255, 0.28);
-  --step-track-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.36), 0 0 0 1px rgba(255, 255, 255, 0.14);
+  --step-track-shell: color-mix(in oklch, var(--foreground) 9%, var(--popover));
+  --step-track-line: color-mix(in oklch, var(--foreground) 14%, transparent);
+  --step-track-label: var(--foreground);
+  --step-track-tick: color-mix(in oklch, var(--foreground) 30%, transparent);
+  --step-track-tick-on-thumb: color-mix(in oklch, var(--background) 55%, transparent);
+  --step-track-thumb-bg: var(--primary-foreground);
+  --step-track-thumb-shadow:
+    0 1px 3px color-mix(in oklch, var(--background) 65%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent);
 }
 
 .step-track-slider {
@@ -34,7 +33,7 @@
 }
 
 .step-track-thumb {
-  background: linear-gradient(180deg, #ffffff, #f5f5f5);
+  background: var(--step-track-thumb-bg);
   box-shadow: var(--step-track-thumb-shadow);
   will-change: transform;
 }
@@ -44,11 +43,11 @@
 }
 
 .step-track-label-swap {
-  animation: step-track-label-swap 180ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  animation: step-track-label-swap 180ms var(--motion-ease-out);
 }
 
 .step-track-streak {
-  background: rgba(255, 255, 255, 0.9);
+  background: color-mix(in oklch, var(--primary-foreground) 90%, transparent);
   transform-origin: right center;
 }
 
@@ -78,19 +77,19 @@
 @keyframes step-track-shake {
   0% {
     transform: translateX(0);
-    animation-timing-function: var(--step-track-ease);
+    animation-timing-function: var(--motion-ease-out);
   }
   28.57% {
     transform: translateX(var(--step-track-shake-distance));
-    animation-timing-function: var(--step-track-ease);
+    animation-timing-function: var(--motion-ease-out);
   }
   57.14% {
     transform: translateX(calc(var(--step-track-shake-distance) * -1));
-    animation-timing-function: var(--step-track-ease);
+    animation-timing-function: var(--motion-ease-out);
   }
   78.57% {
     transform: translateX(var(--step-track-shake-overshoot));
-    animation-timing-function: var(--step-track-ease);
+    animation-timing-function: var(--motion-ease-out);
   }
   100% {
     transform: translateX(0);

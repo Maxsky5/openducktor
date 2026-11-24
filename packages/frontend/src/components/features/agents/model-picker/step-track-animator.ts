@@ -1,3 +1,4 @@
+import { MOTION_EASE_OUT_POINTS } from "@/components/ui/motion";
 import {
   centerFor,
   clamp,
@@ -23,7 +24,7 @@ export type StepTrackFillLike = {
 
 export const DEFAULT_TRACK_WIDTH = 200;
 export const INITIAL_LABEL_WIDTH = 44;
-export const TICK_ON_THUMB = "rgba(0, 0, 0, 0.45)";
+const TICK_ON_THUMB = "var(--step-track-tick-on-thumb)";
 
 export const SPEED_STREAKS = [
   { y: -6, width: 12, delay: 0.1 },
@@ -43,7 +44,54 @@ const FILL_FADE_STOP_SPAN = 0.35;
 export const fillStrengthFor = (pos: number, stopCount: number): number =>
   stopCount > 1 ? clamp(pos / FILL_FADE_STOP_SPAN, 0, 1) : 1;
 
-const easeOutCubic = (t: number): number => 1 - (1 - clamp(t, 0, 1)) ** 3;
+const [EASE_X1, EASE_Y1, EASE_X2, EASE_Y2] = MOTION_EASE_OUT_POINTS;
+
+const sampleBezier = (u: number, p1: number, p2: number): number =>
+  ((1 - 3 * p2 + 3 * p1) * u + (3 * p2 - 6 * p1)) * u * u + 3 * p1 * u;
+
+const sampleBezierSlope = (u: number, p1: number, p2: number): number =>
+  (3 * (1 - 3 * p2 + 3 * p1) * u + 2 * (3 * p2 - 6 * p1)) * u + 3 * p1;
+
+/** Evaluates the shared `MOTION_EASE_OUT_POINTS` cubic-bezier curve for rAF channels. */
+const easeMotionOut = (t: number): number => {
+  const x = clamp(t, 0, 1);
+  if (x === 0 || x === 1) {
+    return x;
+  }
+  let u = x;
+  for (let i = 0; i < 4; i += 1) {
+    const slope = sampleBezierSlope(u, EASE_X1, EASE_X2);
+    if (Math.abs(slope) < 1e-6) {
+      break;
+    }
+    u = clamp(u - (sampleBezier(u, EASE_X1, EASE_X2) - x) / slope, 0, 1);
+  }
+  return sampleBezier(u, EASE_Y1, EASE_Y2);
+};
+
+const resolveTickOpacity = (
+  onThumb: boolean,
+  hideTickOnThumb: boolean,
+  isStopDisabled: boolean,
+): string => {
+  if (onThumb && hideTickOnThumb) {
+    return "0";
+  }
+  if (isStopDisabled) {
+    return "0.28";
+  }
+  return "1";
+};
+
+const resolveTickColor = (onThumb: boolean, active: boolean, fillTick: string): string => {
+  if (onThumb) {
+    return TICK_ON_THUMB;
+  }
+  if (active) {
+    return fillTick;
+  }
+  return "var(--step-track-tick)";
+};
 
 /** Critically underdamped spring curve matching mobile's dampingRatio 0.55 return to 1. */
 const easeSpringBack = (t: number): number => {
@@ -111,14 +159,14 @@ const stepChannel = (channel: AnimChannel, now: number): boolean => {
       continue;
     }
     const rawT = Math.max(0, elapsed) / seg.duration;
-    const eased = seg.easing === "spring" ? easeSpringBack(rawT) : easeOutCubic(rawT);
+    const eased = seg.easing === "spring" ? easeSpringBack(rawT) : easeMotionOut(rawT);
     channel.value = channel.from + (seg.to - channel.from) * eased;
     return true;
   }
   return false;
 };
 
-export type StepTrackDomNodes = {
+type StepTrackDomNodes = {
   shellPath: SVGPathElement | null;
   fillRects: Array<SVGRectElement | null>;
   thumb: HTMLDivElement | null;
@@ -128,7 +176,7 @@ export type StepTrackDomNodes = {
   label: HTMLDivElement | null;
 };
 
-export type StepTrackAnimatorSync = {
+type StepTrackAnimatorSync = {
   stops: readonly StepTrackStopLike[];
   fills: readonly StepTrackFillLike[];
   hideTickOnThumb: boolean;
@@ -245,12 +293,8 @@ export function createStepTrackAnimator(initialIndex: number): StepTrackAnimator
       const active = nearest === i && !onThumb;
       const isStopDisabled = stops[i]?.disabled === true;
       const fillTick = (fills[i] ?? fills[0])?.tick ?? "var(--step-track-tick)";
-      tick.style.opacity = onThumb && hideTickOnThumb ? "0" : isStopDisabled ? "0.28" : "1";
-      tick.style.backgroundColor = onThumb
-        ? TICK_ON_THUMB
-        : active
-          ? fillTick
-          : "var(--step-track-tick)";
+      tick.style.opacity = resolveTickOpacity(onThumb, hideTickOnThumb, isStopDisabled);
+      tick.style.backgroundColor = resolveTickColor(onThumb, active, fillTick);
     }
 
     if (hideTickOnThumb) {

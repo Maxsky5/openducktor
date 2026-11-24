@@ -1,8 +1,2 @@
 export { ModelPicker } from "./model-picker";
-export type {
-  ModelPickerEffortOptions,
-  ModelPickerOptionsPane,
-  ModelPickerProfileOptions,
-  ModelPickerProps,
-  ModelPickerSpeedOptions,
-} from "./model-picker-types";
+export type { ModelPickerOptionsPane } from "./model-picker-types";

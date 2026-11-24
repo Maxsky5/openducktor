@@ -28,11 +28,11 @@
 /** The height of the track pill. */
 export const TRACK_HEIGHT = 28;
 /** The corner radius of the track and distance from each end to the first/last stop. */
-export const TRACK_RADIUS = TRACK_HEIGHT / 2;
+const TRACK_RADIUS = TRACK_HEIGHT / 2;
 /** The space above the track where the label shoulder grows out of its top edge. */
 export const BUMP_HEIGHT = 20;
-export const REST_WIDTH = 24;
-export const DRAG_WIDTH = 30;
+const REST_WIDTH = 24;
+const DRAG_WIDTH = 30;
 /** The height of the thumb pill. */
 export const THUMB_HEIGHT = 24;
 /** The inset between the thumb and the track edge. */

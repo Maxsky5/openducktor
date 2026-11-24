@@ -738,4 +738,109 @@ describe("useModelSelectionActions", () => {
       await harness.unmount();
     }
   });
+
+  test("restores optimistic selection refs on rejection so retrying without a prop change succeeds", async () => {
+    const feedback = createFeedbackFake();
+    const opencodeSession: AgentSessionIdentity = {
+      externalSessionId: "opencode-session-retry",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+    };
+    const opencodeCatalog: AgentModelCatalog = {
+      runtime: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      models: [
+        {
+          id: "anthropic/claude-opus-4-6",
+          providerId: "anthropic",
+          providerName: "Anthropic",
+          modelId: "claude-opus-4-6",
+          modelName: "Claude Opus 4.6",
+          variants: ["medium", "high"],
+          liveSessionUpdates: { profile: true },
+        },
+        {
+          id: "anthropic/claude-sonnet-4-6",
+          providerId: "anthropic",
+          providerName: "Anthropic",
+          modelId: "claude-sonnet-4-6",
+          modelName: "Claude Sonnet 4.6",
+          variants: ["medium", "high"],
+          liveSessionUpdates: { profile: true },
+        },
+      ],
+      defaultModelsByProvider: { anthropic: "claude-opus-4-6" },
+      profiles: [
+        { name: "primary", mode: "primary" },
+        { name: "builder", mode: "primary" },
+      ],
+    };
+    const initialSelection: AgentModelSelection = {
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-opus-4-6",
+      variant: "medium",
+      profileId: "primary",
+    };
+    let rejectNext = true;
+    const updateAgentSessionModel = mock(async () => {
+      if (rejectNext) {
+        rejectNext = false;
+        throw new Error("busy");
+      }
+    });
+    const harness = createHarness(
+      createBaseProps({
+        loadedSessionIdentity: opencodeSession,
+        selectedRuntimeKind: "opencode",
+        selectedModelSelection: initialSelection,
+        selectionCatalog: opencodeCatalog,
+        updateAgentSessionModel,
+      }),
+      feedback,
+    );
+
+    try {
+      await harness.mount();
+
+      // Reject model change without updating props, then retry the exact same model.
+      await harness.run((state) => {
+        state.handleSelectModelPair(
+          { runtimeKind: "opencode", providerId: "anthropic", modelId: "claude-sonnet-4-6" },
+          opencodeCatalog,
+        );
+      });
+      await harness.waitFor(() => feedback.shownOf("error").length === 1);
+      await harness.run((state) => {
+        state.handleSelectModelPair(
+          { runtimeKind: "opencode", providerId: "anthropic", modelId: "claude-sonnet-4-6" },
+          opencodeCatalog,
+        );
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(2);
+
+      // Reset to initial selection via rejected effort change, then retry effort.
+      rejectNext = true;
+      await harness.run((state) => {
+        void state.handleSelectVariant("high");
+      });
+      await harness.waitFor(() => feedback.shownOf("error").length === 2);
+      await harness.run((state) => {
+        void state.handleSelectVariant("high");
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(4);
+
+      // Reject profile change, then retry the same profile without prop changes.
+      rejectNext = true;
+      await harness.run((state) => {
+        state.handleSelectAgentProfile("builder");
+      });
+      await harness.waitFor(() => feedback.shownOf("error").length === 3);
+      await harness.run((state) => {
+        state.handleSelectAgentProfile("builder");
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(6);
+    } finally {
+      await harness.unmount();
+    }
+  });
 });
