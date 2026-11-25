@@ -28,16 +28,6 @@ const source = <Value>(initial: Value) => {
   };
 };
 
-const deferred = () => {
-  let resolve!: () => void;
-  let reject!: (cause: Error) => void;
-  const promise = new Promise<void>((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return { promise, resolve, reject };
-};
-
 const setup = (
   activity: AppActivity = "foreground",
   online = true,
@@ -54,7 +44,7 @@ const setup = (
   };
   const calls: string[] = [];
   const connection = source<RemoteConnectionState>({ status: "connected", generation: 1 });
-  let save = deferred();
+  let save = Promise.withResolvers<void>();
   const failures: unknown[] = [];
   let retryFailure: Error | null = null;
   let streamCheck = Promise.resolve(true);
@@ -107,13 +97,13 @@ const setup = (
     resolveSave() {
       save.resolve();
       const current = save;
-      save = deferred();
+      save = Promise.withResolvers<void>();
       return current.promise;
     },
     rejectSave(cause: Error) {
       save.reject(cause);
       const current = save;
-      save = deferred();
+      save = Promise.withResolvers<void>();
       return current.promise.catch(() => {});
     },
   };

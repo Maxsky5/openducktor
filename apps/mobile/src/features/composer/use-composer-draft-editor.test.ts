@@ -6,7 +6,7 @@ import {
   createSlashCommandSegment,
   createTextSegment,
 } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { layoutComposerDraft } from "./composer-text";
 import { useComposerDraftEditor } from "./use-composer-draft-editor";
 
@@ -82,12 +82,11 @@ describe("useComposerDraftEditor", () => {
     const chip = layoutComposerDraft(draft).spans[1];
     if (!chip) throw new Error("The draft has no chip.");
     const { result } = renderEditor(draft);
-    act(() => result.current.select(chip.start + 2, chip.start + 2));
-
-    // The snap waits one frame for the text change of the same edit.
-    await waitFor(() =>
-      expect(result.current.selectionRequest).toMatchObject({ position: chip.end }),
-    );
+    await act(async () => {
+      result.current.select(chip.start + 2, chip.start + 2);
+      await new Promise<number>((resolve) => requestAnimationFrame(resolve));
+    });
+    expect(result.current.selectionRequest).toMatchObject({ position: chip.end });
     expect(result.current.caret).toEqual({ segmentId: "text-8", offset: 0 });
   });
 

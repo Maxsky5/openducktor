@@ -150,14 +150,6 @@ const seedChatDraft = (session: ActiveHostSession, file?: string) =>
       : [],
   });
 
-const deferred = <Value>() => {
-  let resolve!: (value: Value) => void;
-  const promise = new Promise<Value>((yes) => {
-    resolve = yes;
-  });
-  return { promise, resolve };
-};
-
 const waitForStatus = (
   session: {
     remote: {
@@ -271,12 +263,8 @@ describe("host session owner", () => {
         hostId: "20000000-0000-4000-8000-000000000001",
       },
     });
-    const state = owner.getState();
-    expect(state.status).toBe("active");
-    if (state.status === "active" && state.session.kind === "remote") {
-      expect(state.session.remote.remote.readState().status).toBe("connected");
-    }
-    expect(JSON.parse(appStore.getString(SAVED_HOSTS_KEY) ?? "null")).toEqual({
+    expect(activeSession(owner).remote.remote.readState().status).toBe("connected");
+    expect(storedHosts(appStore)).toEqual({
       activeHostId: "host-1",
       hosts: [result.host],
     });
@@ -330,32 +318,13 @@ describe("host session owner", () => {
     );
   });
 
-  test("adds a host without the unsaved drafts of the current host only after consent", async () => {
-    const { owner, staged } = setup({
-      [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),
-    });
-    owner.start();
-    const first = owner.getState();
-    seedChatDraft(activeSession(owner), "notes.pdf");
-
-    const failure = await owner.addHost("http://100.64.0.8:14328").catch((cause) => cause);
-    expect(failure).toBeInstanceOf(DraftSaveBeforeSwitchError);
-    expect(String(failure.message)).toContain("notes.pdf could not be uploaded.");
-    expect(owner.getState()).toBe(first);
-
-    const result = await owner.addHost("http://100.64.0.8:14328", { discardUnsavedDrafts: true });
-    expect(result.kind).toBe("added");
-    expect(activeSession(owner).host.id).toBe(result.host.id);
-    // The discarded draft does not try its upload again.
-    expect(staged).toEqual(["notes.pdf"]);
-  });
-
   test.each(["added", "selected", "moved"] as const)(
     "keeps one-use approval through draft-loss confirmation for a %s host",
     async (kind) => {
       const f = await setupDraftLossPairing(kind);
       const confirmDraftLoss = mock(async (cause: DraftSaveBeforeSwitchError) => {
         expect(cause).toBeInstanceOf(DraftSaveBeforeSwitchError);
+        expect(cause.message).toContain("notes.pdf could not be uploaded.");
         expect(activeSession(f.owner)).toBe(f.previous);
         return true;
       });
@@ -377,8 +346,8 @@ describe("host session owner", () => {
     "%s during draft-loss confirmation keeps the current host and cleans the candidate",
     async (action) => {
       const f = await setupDraftLossPairing("added");
-      const entered = deferred<void>();
-      const choice = deferred<boolean>();
+      const entered = Promise.withResolvers<void>();
+      const choice = Promise.withResolvers<boolean>();
       const cancellation = new AbortController();
       const operation = f.owner
         .addHost(f.endpoint, {
@@ -477,8 +446,8 @@ describe("host session owner", () => {
     await releaseDemoTree(owner, () => owner.exitDemo());
   });
 
-  test("removing the active host uploads no attachment of its drafts", async () => {
-    const { owner, staged } = setup({
+  test("removing the active host clears its data without uploading draft attachments", async () => {
+    const { owner, staged, hostStores, appStore } = setup({
       [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),
     });
     owner.start();
@@ -487,7 +456,9 @@ describe("host session owner", () => {
     await owner.removeHost("saved-1");
 
     expect(staged).toEqual([]);
-    expect(owner.getState().status).toBe("no_host");
+    expect(hostStores.deleted).toEqual(["saved-1"]);
+    expect(owner.getState()).toEqual({ status: "no_host", hosts: [], damagedHosts: [] });
+    expect(storedHosts(appStore)).toEqual({ activeHostId: null, hosts: [] });
   });
 
   test("a canceled add before admission deletes the candidate and keeps the current host", async () => {
@@ -495,6 +466,7 @@ describe("host session owner", () => {
       [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),
     });
     owner.start();
+    await waitForStatus(activeSession(owner), "connected");
     const first = owner.getState();
     const record = appStore.getString(SAVED_HOSTS_KEY);
     const controller = new AbortController();
@@ -510,10 +482,16 @@ describe("host session owner", () => {
   });
 
   test("a cancel during the draft save of the current host keeps that host", async () => {
-    const upload = deferred<string>();
-    const { owner, hostStores, appStore, staged } = setup(
+    const uploadStarted = Promise.withResolvers<void>();
+    const upload = Promise.withResolvers<string>();
+    const { owner, hostStores, appStore } = setup(
       { [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]) },
-      { stageAttachment: () => upload.promise },
+      {
+        stageAttachment: () => {
+          uploadStarted.resolve();
+          return upload.promise;
+        },
+      },
     );
     owner.start();
     const first = owner.getState();
@@ -523,7 +501,7 @@ describe("host session owner", () => {
     const controller = new AbortController();
 
     const added = owner.addHost("http://100.64.0.8:14328", { signal: controller.signal });
-    while (staged.length === 0) await new Promise((resolve) => setTimeout(resolve, 5));
+    await uploadStarted.promise;
     controller.abort(new Error("The user closed Add Host."));
     upload.resolve("/host/staged/notes.pdf");
     const failure = await added.catch((cause) => cause);
@@ -555,16 +533,6 @@ describe("host session owner", () => {
     expect(result.kind).toBe("selected");
     expect(result.host.id).toBe("saved-1");
     expect(owner.getState().status).toBe("active");
-  });
-
-  test("saves the stable ID of a new host", async () => {
-    const { owner, appStore } = setup(undefined, {
-      hostId: "20000000-0000-4000-8000-000000000001",
-    });
-    owner.start();
-    const result = await owner.addHost("http://100.64.0.7:14328");
-    expect(result.host.hostId).toBe("20000000-0000-4000-8000-000000000001");
-    expect(storedHosts(appStore).hosts[0].hostId).toBe("20000000-0000-4000-8000-000000000001");
   });
 
   test("moves a saved host to the new address of the same host and keeps its name and store", async () => {
@@ -635,20 +603,6 @@ describe("host session owner", () => {
     const before = owner.getState();
     await owner.selectHost("saved-1");
     expect(owner.getState()).toBe(before);
-  });
-
-  test("removing the active host deletes its local data and its record", async () => {
-    const { owner, hostStores, appStore } = setup({
-      [SAVED_HOSTS_KEY]: savedRecord("saved-1", ["http://100.64.0.7:14328"]),
-    });
-    owner.start();
-    await owner.removeHost("saved-1");
-    expect(hostStores.deleted).toEqual(["saved-1"]);
-    expect(owner.getState()).toEqual({ status: "no_host", hosts: [], damagedHosts: [] });
-    expect(JSON.parse(appStore.getString(SAVED_HOSTS_KEY) ?? "null")).toEqual({
-      activeHostId: null,
-      hosts: [],
-    });
   });
 
   test("removing another host keeps the active session", async () => {
@@ -903,8 +857,8 @@ test.each(["new", "existing", "moved"] as const)(
     );
     f.owner.start();
     await waitForStatus(activeSession(f.owner), "connected");
-    const entered = deferred<void>();
-    const gate = deferred<void>();
+    const entered = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
     if (kind === "moved") {
       const remove = f.dependencies.deleteHostStore;
       f.dependencies.deleteHostStore = async (id) => {

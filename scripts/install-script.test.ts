@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  linkSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -13,53 +14,89 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+  createLoadTimeFixtureFolder,
+  writeCheckedExecutable,
+} from "../packages/host/src/test-support/checked-executable";
 
 const script = resolve(import.meta.dir, "../install.sh");
 const roots: string[] = [];
 const unixTest = process.platform === "win32" ? test.skip : test;
+const PROCESS_TIMEOUT_MS = 15_000;
+
+function runInstallerTestCommand(command: string, args: string[], env = process.env) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    env,
+    timeout: PROCESS_TIMEOUT_MS,
+    killSignal: "SIGKILL",
+  });
+  if (result.error)
+    throw new Error(`Could not run ${command} for the installer test.`, { cause: result.error });
+  return result;
+}
+
 // The installer refuses to touch an OpenDucktor app that a machine already has, from
 // /Applications or from Homebrew, so these cases run only on a Mac without one.
-const homebrewManagesOpenDucktor = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].some(
-  (brew) =>
-    existsSync(brew) &&
-    spawnSync(brew, ["list", "--cask", "--versions"], { encoding: "utf8" })
-      .stdout.split("\n")
-      .some((line) => line.startsWith("openducktor ")),
-);
+const homebrewManagesOpenDucktor = () =>
+  ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].some((brew) => {
+    if (!existsSync(brew)) return false;
+    const result = runInstallerTestCommand(brew, ["list", "--cask", "--versions"]);
+    if (result.status !== 0)
+      throw new Error(`Homebrew could not list its installed apps. ${result.stderr}`);
+    return result.stdout.split("\n").some((line) => line.startsWith("openducktor "));
+  });
 const macTest =
   process.platform === "darwin" &&
   !existsSync("/Applications/OpenDucktor.app") &&
-  !homebrewManagesOpenDucktor
+  !homebrewManagesOpenDucktor()
     ? test
     : test.skip;
 
+// The test commands keep separate inputs and reuse one macOS executable check.
+const commandLauncher = join(
+  await createLoadTimeFixtureFolder("openducktor-install-commands-"),
+  "run",
+);
+await writeCheckedExecutable(commandLauncher, '#!/bin/sh\n. "$0.fixture"\n');
+
 // Each case runs the installer as a child process. On a busy machine one run can take over five
 // seconds, which is the default test timeout.
-setDefaultTimeout(15_000);
+setDefaultTimeout(PROCESS_TIMEOUT_MS);
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-macTest.each(["arm64", "x86_64"])("macOS %s installs and updates the matching ZIP", (arch) => {
+macTest.each(["arm64", "x86_64"])("macOS %s installs the matching ZIP", (arch) => {
   const setup = fixture("Darwin", arch);
   expect(setup.run().status).toBe(0);
-  expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
-  expect(setup.run().status).toBe(0);
-  expect(readFileSync(setup.installed, "utf8")).toBe("installed app\n");
+  expect(readFileSync(setup.installed, "utf8")).toBe("verified ZIP fixture\n");
+  if (arch === "arm64") {
+    const update = "updated ZIP fixture\n";
+    writeFileSync(setup.assetPath, update);
+    setup.asset.digest = `sha256:${createHash("sha256").update(update).digest("hex")}`;
+    setup.saveRelease();
+    expect(setup.run().status).toBe(0);
+    expect(readFileSync(setup.installed, "utf8")).toBe(update);
+  }
 });
 
 macTest("a failed Spotlight search stops the macOS install", () => {
   const setup = fixture("Darwin", "arm64");
-  writeFileSync(join(setup.bin, "mdfind"), "#!/bin/sh\nexit 7\n", { mode: 0o755 });
+  setup.stub("mdfind", "exit 7");
   const result = setup.run();
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain("Could not search for other OpenDucktor apps");
   expect(existsSync(setup.installed)).toBe(false);
 });
 
-unixTest("Linux installs and updates one AppImage with a desktop launcher", () => {
-  const setup = fixture("Linux", "x86_64");
+unixTest("Linux installs and updates staged files with a special-character launcher path", () => {
+  const setup = fixture("Linux", "x86_64", 'home %f $ \\ " `');
+  setup.stub(
+    "mv",
+    'case "$2" in "$HOME/.local/bin/OpenDucktor.AppImage"|"$HOME/.local/share/applications/openducktor.desktop"|"$HOME/.local/share/icons/openducktor.png") case "$1" in "$HOME/.local/"*) ;; *) exit 8 ;; esac ;; esac\nexec /bin/mv "$@"',
+  );
   expect(setup.run().status).toBe(0);
   expect(readFileSync(setup.installed, "utf8")).toContain("verified AppImage fixture");
   const desktop = readFileSync(
@@ -67,46 +104,26 @@ unixTest("Linux installs and updates one AppImage with a desktop launcher", () =
     "utf8",
   );
   const icon = join(setup.home, ".local/share/icons/openducktor.png");
-  expect(desktop).toContain(`Exec="${setup.installed}"`);
-  expect(desktop).toContain(`Icon=${icon}`);
-  expect(readFileSync(icon, "utf8")).toBe("icon for verified AppImage fixture\n");
-  expect(setup.run().status).toBe(0);
-  expect(readFileSync(icon, "utf8")).toBe("icon for verified AppImage fixture\n");
-});
-
-unixTest("Linux stages the app and launcher beside their install paths", () => {
-  const setup = fixture("Linux", "x86_64");
-  writeFileSync(
-    join(setup.bin, "mv"),
-    '#!/bin/sh\ncase "$2" in "$HOME/.local/bin/OpenDucktor.AppImage"|"$HOME/.local/share/applications/openducktor.desktop"|"$HOME/.local/share/icons/openducktor.png") case "$1" in "$HOME/.local/"*) ;; *) exit 8 ;; esac ;; esac\nexec /bin/mv "$@"\n',
-    { mode: 0o755 },
-  );
-  expect(setup.run().status).toBe(0);
-  expect(readFileSync(setup.installed, "utf8")).toContain("verified AppImage");
-});
-
-unixTest("Linux escapes special characters in a desktop launcher path", () => {
-  const setup = fixture("Linux", "x86_64", 'home %f $ \\ " `');
-  expect(setup.run().status).toBe(0);
-  const desktop = readFileSync(
-    join(setup.home, ".local/share/applications/openducktor.desktop"),
-    "utf8",
-  );
   const exec = desktop.match(/^Exec="(.*)"$/m)?.[1];
-  expect(exec).toBeDefined();
+  expect(exec).toEndWith("/.local/bin/OpenDucktor.AppImage");
   expect(exec).toContain("%%f");
   expect(exec).toContain("\\\\$");
   expect(exec).toContain("\\\\\\\\");
   expect(exec).toContain('\\\\"');
   expect(exec).toContain("\\\\`");
-  expect(desktop).toContain(
-    `Icon=${setup.home.replaceAll("\\", "\\\\")}/.local/share/icons/openducktor.png`,
-  );
+  expect(desktop).toContain(`Icon=${icon.replaceAll("\\", "\\\\")}`);
+  expect(readFileSync(icon, "utf8")).toBe("icon for verified AppImage fixture\n");
+  const update = linuxPayload("updated AppImage fixture");
+  writeFileSync(setup.assetPath, update);
+  setup.asset.digest = `sha256:${createHash("sha256").update(update).digest("hex")}`;
+  setup.saveRelease();
+  expect(setup.run().status).toBe(0);
+  expect(readFileSync(setup.installed)).toEqual(update);
+  expect(readFileSync(icon, "utf8")).toBe("icon for updated AppImage fixture\n");
 });
 
 unixTest("a changed download leaves the previous Linux install and launcher intact", () => {
-  const setup = fixture("Linux", "x86_64");
-  expect(setup.run().status).toBe(0);
+  const setup = installedLinuxFixture();
   const desktopPath = join(setup.home, ".local/share/applications/openducktor.desktop");
   const previous = readFileSync(setup.installed);
   const previousDesktop = readFileSync(desktopPath);
@@ -122,10 +139,9 @@ unixTest("a changed download leaves the previous Linux install and launcher inta
 });
 
 unixTest("a failed hash leaves the previous Linux install intact", () => {
-  const setup = fixture("Linux", "x86_64");
-  expect(setup.run().status).toBe(0);
+  const setup = installedLinuxFixture();
   const previous = readFileSync(setup.installed);
-  writeFileSync(join(setup.bin, "sha256sum"), "#!/bin/sh\nexit 7\n", { mode: 0o755 });
+  setup.stub("sha256sum", "exit 7");
   const result = setup.run();
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain("Could not hash the downloaded asset");
@@ -134,8 +150,7 @@ unixTest("a failed hash leaves the previous Linux install intact", () => {
 });
 
 unixTest("a failed rollback removal keeps the old app and restores the launcher", () => {
-  const setup = fixture("Linux", "x86_64");
-  expect(setup.run().status).toBe(0);
+  const setup = installedLinuxFixture();
   const previous = readFileSync(setup.installed);
   const desktopPath = join(setup.home, ".local/share/applications/openducktor.desktop");
   const iconPath = join(setup.home, ".local/share/icons/openducktor.png");
@@ -145,15 +160,13 @@ unixTest("a failed rollback removal keeps the old app and restores the launcher"
   writeFileSync(setup.assetPath, next);
   setup.asset.digest = `sha256:${createHash("sha256").update(next).digest("hex")}`;
   setup.saveRelease();
-  writeFileSync(
-    join(setup.bin, "mv"),
-    '#!/bin/sh\ncase "$1" in */.openducktor.desktop.stage.*) exit 7 ;; esac\nexec /bin/mv "$@"\n',
-    { mode: 0o755 },
+  setup.stub(
+    "mv",
+    'case "$1" in */.openducktor.desktop.stage.*) exit 7 ;; esac\nexec /bin/mv "$@"',
   );
-  writeFileSync(
-    join(setup.bin, "rm"),
-    '#!/bin/sh\ncase "$1:$2" in -rf:"$HOME/.local/bin/OpenDucktor.AppImage") exit 7 ;; esac\nexec /bin/rm "$@"\n',
-    { mode: 0o755 },
+  setup.stub(
+    "rm",
+    'case "$1:$2" in -rf:"$HOME/.local/bin/OpenDucktor.AppImage") exit 7 ;; esac\nexec /bin/rm "$@"',
   );
   const result = setup.run();
   expect(result.status).not.toBe(0);
@@ -169,17 +182,15 @@ unixTest("a failed rollback removal keeps the old app and restores the launcher"
 });
 
 unixTest("a failed launcher install restores the previous Linux app and launcher", () => {
-  const setup = fixture("Linux", "x86_64");
-  expect(setup.run().status).toBe(0);
+  const setup = installedLinuxFixture();
   const desktopPath = join(setup.home, ".local/share/applications/openducktor.desktop");
   const previous = readFileSync(setup.installed);
   const previousDesktop = readFileSync(desktopPath);
   const iconPath = join(setup.home, ".local/share/icons/openducktor.png");
   const previousIcon = readFileSync(iconPath);
-  writeFileSync(
-    join(setup.bin, "mv"),
-    '#!/bin/sh\ncase "$1" in */.openducktor.desktop.stage.*) exit 7 ;; esac\nexec /bin/mv "$@"\n',
-    { mode: 0o755 },
+  setup.stub(
+    "mv",
+    'case "$1" in */.openducktor.desktop.stage.*) exit 7 ;; esac\nexec /bin/mv "$@"',
   );
   const result = setup.run();
   expect(result.status).not.toBe(0);
@@ -190,16 +201,14 @@ unixTest("a failed launcher install restores the previous Linux app and launcher
 });
 
 unixTest("a failed backup cleanup keeps the new Linux app and launcher", () => {
-  const setup = fixture("Linux", "x86_64");
-  expect(setup.run().status).toBe(0);
+  const setup = installedLinuxFixture();
   const next = linuxPayload("new AppImage fixture");
   writeFileSync(setup.assetPath, next);
   setup.asset.digest = `sha256:${createHash("sha256").update(next).digest("hex")}`;
   setup.saveRelease();
-  writeFileSync(
-    join(setup.bin, "rm"),
-    '#!/bin/sh\ncase "$1:$2" in -f:*/.openducktor.desktop.backup.*) exit 7 ;; esac\nexec /bin/rm "$@"\n',
-    { mode: 0o755 },
+  setup.stub(
+    "rm",
+    'case "$1:$2" in -f:*/.openducktor.desktop.backup.*) exit 7 ;; esac\nexec /bin/rm "$@"',
   );
   const result = setup.run();
   expect(result.status).not.toBe(0);
@@ -215,17 +224,15 @@ unixTest("a failed backup cleanup keeps the new Linux app and launcher", () => {
 });
 
 unixTest("a terminal hangup restores the previous Linux app", () => {
-  const setup = fixture("Linux", "x86_64");
-  expect(setup.run().status).toBe(0);
+  const setup = installedLinuxFixture();
   const previous = readFileSync(setup.installed);
   const desktopPath = join(setup.home, ".local/share/applications/openducktor.desktop");
   const previousDesktop = readFileSync(desktopPath);
   const iconPath = join(setup.home, ".local/share/icons/openducktor.png");
   const previousIcon = readFileSync(iconPath);
-  writeFileSync(
-    join(setup.bin, "mv"),
-    '#!/bin/sh\ncase "$2" in */.OpenDucktor.AppImage.backup.*) /bin/mv "$@" || exit; kill -HUP "$(ps -o ppid= -p "$$" | tr -d "[:space:]")"; exit 0 ;; esac\nexec /bin/mv "$@"\n',
-    { mode: 0o755 },
+  setup.stub(
+    "mv",
+    'case "$2" in */.OpenDucktor.AppImage.backup.*) /bin/mv "$@" || exit; kill -HUP "$(ps -o ppid= -p "$$" | tr -d "[:space:]")"; exit 0 ;; esac\nexec /bin/mv "$@"',
   );
   const result = setup.run();
   expect(result.status).toBe(129);
@@ -235,8 +242,7 @@ unixTest("a terminal hangup restores the previous Linux app", () => {
 });
 
 unixTest("Linux rejects an AppImage without an icon before changing the installed app", () => {
-  const setup = fixture("Linux", "x86_64");
-  expect(setup.run().status).toBe(0);
+  const setup = installedLinuxFixture();
   const previous = readFileSync(setup.installed);
   const iconPath = join(setup.home, ".local/share/icons/openducktor.png");
   const previousIcon = readFileSync(iconPath);
@@ -274,6 +280,7 @@ unixTest("an unmanaged install and an unsupported processor fail without changes
 unixTest("a missing process check stops installation", () => {
   const setup = fixture("Linux", "x86_64");
   symlinkSync("/bin/sh", join(setup.bin, "sh"));
+  setup.stub("sha256sum", "exit 7");
   rmSync(join(setup.bin, "pgrep"));
   const result = setup.run({ PATH: setup.bin });
   expect(result.status).not.toBe(0);
@@ -282,8 +289,7 @@ unixTest("a missing process check stops installation", () => {
 });
 
 unixTest("a running Linux app blocks an update without changing the installed file", () => {
-  const setup = fixture("Linux", "x86_64");
-  expect(setup.run().status).toBe(0);
+  const setup = installedLinuxFixture();
   const previous = readFileSync(setup.installed);
   const result = setup.run({ ODT_TEST_RUNNING: "0" });
   expect(result.status).not.toBe(0);
@@ -291,30 +297,17 @@ unixTest("a running Linux app blocks an update without changing the installed fi
   expect(readFileSync(setup.installed)).toEqual(previous);
 });
 
-unixTest(
-  "a failed process check leaves the Linux app intact",
-  () => {
-    const setup = fixture("Linux", "x86_64", "home[");
-    expect(setup.run().status).toBe(0);
-    const previous = readFileSync(setup.installed);
-    const patternPath = join(setup.home, "pgrep-pattern");
-    writeFileSync(
-      join(setup.bin, "pgrep"),
-      '#!/bin/sh\nprintf "%s\\n" "$2" > "$ODT_TEST_PGREP_PATTERN"\nexit "$ODT_TEST_PGREP_STATUS"\n',
-      { mode: 0o755 },
-    );
-    const result = setup.run({ ODT_TEST_PGREP_PATTERN: patternPath, ODT_TEST_PGREP_STATUS: "2" });
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("Could not check if OpenDucktor is running");
-    expect(readFileSync(setup.installed)).toEqual(previous);
-    expect(readFileSync(patternPath, "utf8")).toContain("\\[");
-    expect(
-      setup.run({ ODT_TEST_PGREP_PATTERN: patternPath, ODT_TEST_PGREP_STATUS: "1" }).status,
-    ).toBe(0);
-  },
-  // The test starts the real install script three times.
-  15_000,
-);
+unixTest("a failed process check leaves the Linux app intact", () => {
+  const setup = installedLinuxFixture("home[");
+  const previous = readFileSync(setup.installed);
+  const patternPath = join(setup.home, "pgrep-pattern");
+  setup.stub("pgrep", 'printf "%s\\n" "$2" > "$ODT_TEST_PGREP_PATTERN"\nexit 2');
+  const result = setup.run({ ODT_TEST_PGREP_PATTERN: patternPath });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("Could not check if OpenDucktor is running");
+  expect(readFileSync(setup.installed)).toEqual(previous);
+  expect(readFileSync(patternPath, "utf8")).toContain("\\[");
+});
 
 type ReleaseFixture = {
   tag_name: string;
@@ -363,8 +356,9 @@ function fixture(os: "Darwin" | "Linux", arch: string, homeName = "home") {
   const saveRelease = () => writeFileSync(releasePath, JSON.stringify(release));
   saveRelease();
   const stub = (name: string, body: string) => {
-    const path = join(bin, name);
-    writeFileSync(path, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+    const command = join(bin, name);
+    writeFileSync(`${command}.fixture`, `${body}\n`);
+    if (!existsSync(command)) linkSync(commandLauncher, command);
   };
   stub(
     "uname",
@@ -391,23 +385,15 @@ function fixture(os: "Darwin" | "Linux", arch: string, homeName = "home") {
     ].join("\n"),
   );
   stub("pgrep", 'exit "${ODT_TEST_RUNNING:-1}"');
-  stub("mdfind", "exit 0");
-  stub(
-    "sha256sum",
-    [
-      "python3 - \"$1\" <<'PY'",
-      "import hashlib,sys",
-      "p=sys.argv[1]",
-      'print(hashlib.sha256(open(p,"rb").read()).hexdigest(),p)',
-      "PY",
-    ].join("\n"),
-  );
-  stub(
-    "ditto",
-    'mkdir -p "$4/OpenDucktor.app"; printf "installed app\\n" > "$4/OpenDucktor.app/contents"',
-  );
-  stub("codesign", "exit 0");
-  stub("spctl", "exit 0");
+  if (os === "Darwin") {
+    stub("mdfind", "exit 0");
+    stub("ditto", 'mkdir -p "$4/OpenDucktor.app" && cp "$3" "$4/OpenDucktor.app/contents"');
+    stub("codesign", "exit 0");
+    stub("spctl", "exit 0");
+  } else if (process.platform === "darwin" && !Bun.which("sha256sum")) {
+    // Older macOS releases have shasum but no native sha256sum for the Linux installer.
+    stub("sha256sum", 'exec shasum -a 256 "$@"');
+  }
   const env = {
     ...process.env,
     HOME: home,
@@ -418,16 +404,30 @@ function fixture(os: "Darwin" | "Linux", arch: string, homeName = "home") {
     ODT_TEST_ASSET: assetPath,
   };
   const run = (extra: Record<string, string> = {}) =>
-    spawnSync("sh", [script], { encoding: "utf8", env: { ...env, ...extra } });
+    runInstallerTestCommand("sh", [script], { ...env, ...extra });
   const installed =
     os === "Linux"
       ? join(home, ".local/bin/OpenDucktor.AppImage")
       : join(home, "Applications/OpenDucktor.app/contents");
-  return { asset, assetPath, bin, home, installed, release, run, saveRelease };
+  return { asset, assetPath, bin, home, installed, release, run, saveRelease, stub };
 }
 
 function linuxPayload(name: string) {
   return Buffer.from(
     `#!/bin/sh\nif [ "$1" = --appimage-extract ]; then\n  mkdir -p squashfs-root\n  printf 'icon for ${name}\\n' > squashfs-root/.DirIcon\n  exit 0\nfi\n# ${name}\n`,
   );
+}
+
+function installedLinuxFixture(homeName?: string) {
+  const setup = fixture("Linux", "x86_64", homeName);
+  const applications = join(setup.home, ".local/share/applications");
+  const icons = join(setup.home, ".local/share/icons");
+  mkdirSync(join(setup.home, ".local/bin"), { recursive: true });
+  mkdirSync(applications, { recursive: true });
+  mkdirSync(icons, { recursive: true });
+  writeFileSync(setup.installed, linuxPayload("previous AppImage"), { mode: 0o755 });
+  writeFileSync(join(applications, "openducktor.desktop"), "previous launcher\n");
+  writeFileSync(join(applications, ".openducktor-script-install"), "Installed by install.sh\n");
+  writeFileSync(join(icons, "openducktor.png"), "previous icon\n");
+  return setup;
 }

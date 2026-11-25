@@ -333,74 +333,64 @@ test("sends a command result as the reply body", async () => {
   expect(socket.result(id)).toBe("linux");
 });
 
-/** A host whose commands run until their signal aborts, and record that abort. */
 const createBlockingHost = () => {
-  const aborted: string[] = [];
-  const settled: string[] = [];
+  const commands = new Map<string, { signal: AbortSignal; finish(): void }>();
   const host = createHost({
     invoke: (command, _args, signal) =>
       new Promise((resolve) => {
-        signal.addEventListener(
-          "abort",
-          () => {
-            aborted.push(command);
-            resolve({ result: null });
-          },
-          { once: true },
-        );
-        setTimeout(() => {
-          settled.push(command);
-          resolve({ result: "done" });
-        }, 20);
+        commands.set(command, { signal, finish: () => resolve({ result: "done" }) });
       }),
   });
-  return { host, aborted, settled };
+  return { host, commands };
 };
 
-test("interrupts a cancelled host read and sends no answer", async () => {
-  const { host, aborted } = createBlockingHost();
-  const socket = host.connect();
-  const id = socket.request({
-    method: "invoke",
-    command: "workspace_get_git_provider_context",
-    args: {},
-  });
-  socket.raw(JSON.stringify({ type: "cancel", id }));
-  await waitFor(() => aborted.length === 1, "the interrupted read");
-  await Bun.sleep(30);
+const readCommand = "workspace_get_git_provider_context";
+const writeCommand = "workspace_update_sidebar_session_grouping";
 
-  expect(aborted).toEqual(["workspace_get_git_provider_context"]);
+test("interrupts a cancelled host read and ignores its late result", async () => {
+  const { host, commands } = createBlockingHost();
+  const socket = host.connect();
+  const id = socket.request({ method: "invoke", command: readCommand, args: {} });
+  socket.raw(JSON.stringify({ type: "cancel", id }));
+  const read = commands.get(readCommand)!;
+  expect(read.signal.aborted).toBe(true);
+
+  read.finish();
+  // The handler is already awaiting the command's result. Let that continuation run.
+  await Promise.resolve();
   expect(socket.reply(id)).toBeUndefined();
 });
 
 test("keeps running a cancelled command that can change host state", async () => {
-  const { host, aborted, settled } = createBlockingHost();
+  const { host, commands } = createBlockingHost();
   const socket = host.connect();
   const id = socket.request({
     method: "invoke",
-    command: "workspace_update_sidebar_session_grouping",
+    command: writeCommand,
     args: { grouping: "none" },
   });
   socket.raw(JSON.stringify({ type: "cancel", id }));
-  await waitFor(() => socket.reply(id) !== undefined, "the command result");
+  const write = commands.get(writeCommand)!;
+  expect(write.signal.aborted).toBe(false);
 
-  expect(aborted).toEqual([]);
-  expect(settled).toEqual(["workspace_update_sidebar_session_grouping"]);
+  write.finish();
+  await Promise.resolve();
+  expect(socket.result(id)).toBe("done");
 });
 
-test("interrupts running host reads when the socket closes", async () => {
-  const { host, aborted } = createBlockingHost();
+test("interrupts running reads and keeps running writes when the socket closes", async () => {
+  const { host, commands } = createBlockingHost();
   const socket = host.connect();
-  socket.request({ method: "invoke", command: "workspace_get_git_provider_context", args: {} });
-  socket.request({
-    method: "invoke",
-    command: "workspace_update_sidebar_session_grouping",
-    args: { grouping: "none" },
-  });
+  socket.request({ method: "invoke", command: readCommand, args: {} });
+  socket.request({ method: "invoke", command: writeCommand, args: { grouping: "none" } });
   socket.disconnect();
-  await waitFor(() => aborted.length === 1, "the interrupted read");
-
-  expect(aborted).toEqual(["workspace_get_git_provider_context"]);
+  const read = commands.get(readCommand)!;
+  const write = commands.get(writeCommand)!;
+  expect(read.signal.aborted).toBe(true);
+  expect(write.signal.aborted).toBe(false);
+  read.finish();
+  write.finish();
+  await Promise.resolve();
 });
 
 test("refuses a command while the host refuses work, without running it", async () => {

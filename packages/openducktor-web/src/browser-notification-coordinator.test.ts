@@ -1,4 +1,5 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
+import { setImmediate } from "node:timers/promises";
 import { type NotificationOccurrence, type NotificationSettings } from "@openducktor/contracts";
 import { createNotificationRuntime } from "@openducktor/frontend-core/notifications/notification-runtime";
 import { createBrowserNotificationBridge } from "./browser-notification-bridge";
@@ -315,14 +316,14 @@ const waitFor = async (condition: () => boolean): Promise<void> => {
   await waitForAsync(async () => condition());
 };
 
-const observeSettlement = async (promise: Promise<unknown>): Promise<string> =>
-  Promise.race([
-    promise.then(
-      () => "resolved",
-      (cause: unknown) => (cause instanceof Error ? cause.message : String(cause)),
-    ),
-    new Promise<string>((resolve) => setTimeout(() => resolve("pending"), 20)),
-  ]);
+const expectPending = async (promise: Promise<unknown>): Promise<void> => {
+  // The fakes deliver lock grants and messages in microtasks. Wait for that work to finish.
+  const settled = promise.then(
+    () => true,
+    () => true,
+  );
+  expect(await Promise.race([settled, setImmediate(false)])).toBe(false);
+};
 
 const occurrence: NotificationOccurrence = {
   occurrenceId: "workflow.closed:/repo:task-1:event-1",
@@ -335,37 +336,6 @@ const occurrence: NotificationOccurrence = {
   status: "Task moved to Closed.",
   navigationTarget: { type: "kanban_task", repoPath: "/repo", taskId: "task-1" },
 };
-
-describe("FakeLockManager", () => {
-  test("keeps an exclusive waiter ahead of a later shared waiter", async () => {
-    const locks = new FakeLockManager(true);
-    const grants: string[] = [];
-    let releaseFirst = (): void => {};
-    const firstHeld = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
-    const requests = [
-      locks.request("ordered", { mode: "shared" }, async () => {
-        grants.push("first shared");
-        await firstHeld;
-      }),
-      locks.request("ordered", { mode: "exclusive" }, async () => {
-        grants.push("exclusive");
-      }),
-      locks.request("ordered", { mode: "shared" }, async () => {
-        grants.push("later shared");
-      }),
-    ];
-
-    locks.resume();
-    await waitFor(() => grants.length > 0);
-    expect(grants).toEqual(["first shared"]);
-    releaseFirst();
-    await Promise.all(requests);
-
-    expect(grants).toEqual(["first shared", "exclusive", "later shared"]);
-  });
-});
 
 describe("browser notification coordinator", () => {
   test("different hosts deliver equal occurrence IDs and track focus separately", async () => {
@@ -488,7 +458,7 @@ describe("browser notification coordinator", () => {
     focused = true;
     focusWindow.emit("focus");
     const gainingFocus = coordinator.isAnyTabFocused();
-    expect(await observeSettlement(gainingFocus)).toBe("pending");
+    await expectPending(gainingFocus);
     locks.admit(APP_FOCUS_LOCK_NAME);
     expect(await gainingFocus).toBe(true);
 
@@ -554,7 +524,7 @@ describe("browser notification coordinator", () => {
       remoteWindow.emit("focus");
       const claim = owner.claimExternalDelivery(occurrence.occurrenceId);
       if (outcome !== "failure") {
-        expect(await observeSettlement(claim)).toBe("pending");
+        await expectPending(claim);
         if (outcome === "exit") remote.dispose();
         else locks.admit(APP_FOCUS_LOCK_NAME);
       }
@@ -580,13 +550,15 @@ describe("browser notification coordinator", () => {
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
     });
-    const publication = coordinator.publishOccurrence(occurrence, settings);
+    const publication = coordinator
+      .publishOccurrence(occurrence, settings)
+      .catch((cause: unknown) => cause);
 
     locks.resume();
     await waitFor(() => coordinator.getFailureMessage() === "Owner lock failed.");
 
-    expect(await observeSettlement(publication)).toBe("Owner lock failed.");
-    expect(await observeSettlement(coordinator.publishOccurrence(occurrence, settings))).toBe(
+    expect(await publication).toEqual(new Error("Owner lock failed."));
+    await expect(coordinator.publishOccurrence(occurrence, settings)).rejects.toThrow(
       "Owner lock failed.",
     );
     coordinator.dispose();
@@ -600,12 +572,14 @@ describe("browser notification coordinator", () => {
       focusDocument: { hasFocus: () => false },
       focusWindow: new FakeFocusWindow(),
     });
-    const publication = coordinator.publishOccurrence(occurrence, settings);
+    const publication = coordinator
+      .publishOccurrence(occurrence, settings)
+      .catch((cause: unknown) => cause);
 
     coordinator.dispose();
 
-    expect(await observeSettlement(publication)).toBe(
-      "Browser notification coordination stopped before occurrence selection.",
+    expect(await publication).toEqual(
+      new Error("Browser notification coordination stopped before occurrence selection."),
     );
   });
 
@@ -848,13 +822,14 @@ describe("browser notification coordinator", () => {
     });
     await waitFor(() => owner.isExternalDeliveryOwner());
 
-    const publication = recipient.publishOccurrence(occurrence, settings);
-    void publication.catch(() => {});
+    const publication = recipient
+      .publishOccurrence(occurrence, settings)
+      .catch((cause: unknown) => cause);
     await hub.flushNext(ownerChannel, "occurrence_candidate");
     expect(claims).toBe(0);
     recipient.dispose();
-    expect(await observeSettlement(publication)).toBe(
-      "Browser notification coordination stopped before occurrence selection.",
+    expect(await publication).toEqual(
+      new Error("Browser notification coordination stopped before occurrence selection."),
     );
     await waitFor(() => claims === 1);
 

@@ -8,7 +8,7 @@ import {
   type FakeHostChannelOptions,
   type FakeHostChannelReply,
 } from "./test-support/host-channel";
-import { expect, spyOn, test } from "bun:test";
+import { expect, onTestFinished, spyOn, test } from "bun:test";
 import {
   HOST_CHANNEL_SILENCE_LIMIT_MS,
   HOST_CHANNEL_SUBPROTOCOL,
@@ -164,10 +164,31 @@ const spyOnClearTimeout = (implementation: (timer: Timer | undefined) => void) =
     implementation as typeof clearTimeout,
   );
 
+/** Runs the first reconnect on the next timer task and leaves transport deadlines intact. */
+const skipReconnectDelay = () => {
+  const original = globalThis.setTimeout;
+  const timers = spyOnSetTimeout((callback, delay, ...args) =>
+    original(callback, delay === 500 ? 0 : delay, ...args),
+  );
+  onTestFinished(() => {
+    timers.mockRestore();
+  });
+};
+
 const helloWith = (...optionalCapabilities: string[]): RemoteClientHello => ({
   ...hello,
   optionalCapabilities,
 });
+const waitForConnectionState = (
+  remote: ReturnType<typeof createRemoteHostClient>,
+  status: ReturnType<typeof remote.readState>["status"],
+): Promise<void> => {
+  const reached = Promise.withResolvers<void>();
+  const unsubscribe = remote.subscribeState((state) => {
+    if (state.status === status) reached.resolve();
+  });
+  return reached.promise.finally(unsubscribe);
+};
 const runtimeEvent: HostEventEnvelope = {
   channel: "openducktor://runtime-changed",
   payload: { type: "runtime_impact_changed", runtimeKinds: ["opencode"] },
@@ -235,6 +256,23 @@ test.each(["recovery read", "host restart"])(
     }
   },
 );
+
+test("an already canceled connection stays idle without contacting the host", async () => {
+  const f = fixture();
+  const remote = createRemoteHostClient("https://host.example", hello, f.transport, async () => {});
+  const statuses: string[] = [];
+  const unsubscribe = remote.subscribeState((state) => statuses.push(state.status));
+  const reason = new Error("The user canceled the connection.");
+  try {
+    await expect(remote.connect({ signal: AbortSignal.abort(reason) })).rejects.toBe(reason);
+    expect(statuses).toEqual(["idle"]);
+    expect(f.requests).toEqual([]);
+    expect(f.sockets).toEqual([]);
+  } finally {
+    unsubscribe();
+    await remote.disconnect();
+  }
+});
 
 test("a canceled negotiation releases its admission without disturbing the next connection", async () => {
   const f = fixture();
@@ -1144,25 +1182,22 @@ test("an invalid frame on an open channel ends the connection", async () => {
 
 test("a channel that the host closes reconnects, and requests work again", async () => {
   const f = fixture();
-  const states: string[] = [];
   const remote = createRemoteHostClient(
     "https://host.example/remote",
     hello,
     f.transport,
     async () => {},
   );
-  remote.subscribeState((state) => states.push(state.status));
+  skipReconnectDelay();
   try {
     await remote.connect();
+    const disconnected = waitForConnectionState(remote, "disconnected");
     f.channel.closeAll();
-    await until(() => states.includes("disconnected"));
+    await disconnected;
     expect(remote.readState().failure).toMatchObject({ message: "The host channel closed." });
-    // The scheduled attempt negotiates a new admission, and requests work again.
-    for (let wait = 0; wait < 100 && states.at(-1) !== "connected"; wait += 1)
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(states.at(-1)).toBe("connected");
+    await waitForConnectionState(remote, "connected");
     expect(f.connections()).toBe(2);
-    await expect(remote.client.setTheme("dark")).resolves.toBeUndefined();
+    expect(await remote.client.setTheme("dark")).toBeUndefined();
   } finally {
     await remote.disconnect();
   }
@@ -1362,9 +1397,10 @@ test("a read with a lost reply waits for the reconnect and runs again", async ()
     f.transport,
     async () => {},
   );
+  skipReconnectDelay();
   try {
     await remote.connect();
-    await expect(remote.client.customAgentRoleList()).resolves.toEqual([]);
+    expect(await remote.client.customAgentRoleList()).toEqual([]);
     expect(reads).toBe(2);
     expect(f.connections()).toBe(2);
   } finally {
@@ -1595,7 +1631,6 @@ test("a read during a manual retry waits for the new connection", async () => {
 test("a failed synchronization reconnects by itself", async () => {
   const f = fixture();
   let attempts = 0;
-  const states: Array<{ status: string; code: string | undefined }> = [];
   const remote = createRemoteHostClient(
     "https://host.example/remote",
     hello,
@@ -1605,17 +1640,17 @@ test("a failed synchronization reconnects by itself", async () => {
       if (attempts === 1) throw new Error("A view could not restore its state.");
     },
   );
-  remote.subscribeState((state) =>
-    states.push({ status: state.status, code: state.failure?.code }),
-  );
+  skipReconnectDelay();
   try {
-    await expect(remote.connect()).rejects.toMatchObject({
+    const failure = await remote.connect().catch((cause: unknown) => cause);
+    expect(failure).toMatchObject({
       failure: { code: "synchronization_failed" },
     });
-    expect(states.at(-1)).toEqual({ status: "disconnected", code: "synchronization_failed" });
-    for (let wait = 0; wait < 100 && states.at(-1)?.status !== "connected"; wait += 1)
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(states.at(-1)?.status).toBe("connected");
+    expect(remote.readState()).toMatchObject({
+      status: "disconnected",
+      failure: { code: "synchronization_failed" },
+    });
+    await waitForConnectionState(remote, "connected");
     expect(attempts).toBe(2);
   } finally {
     await remote.disconnect();

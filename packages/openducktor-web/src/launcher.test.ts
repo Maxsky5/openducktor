@@ -708,7 +708,7 @@ describe("launcher internals", () => {
       "app-token",
       1_000,
       createHostProcess(new Promise<number>(() => {})),
-      { fetch: fetchImpl, sleep: async () => {} },
+      { fetch: fetchImpl, sleep: () => Effect.void },
     ).pipe(runWebBoundary);
 
     expect(requests).toEqual([
@@ -729,7 +729,7 @@ describe("launcher internals", () => {
     await expect(
       waitForBackendEffect("http://127.0.0.1:14327", "app-token", 0, createHostProcess(exited), {
         fetch: async () => new Response(null, { status: 503 }),
-        sleep: async () => {},
+        sleep: () => Effect.void,
       }).pipe(runWebBoundary),
     ).rejects.toMatchObject({
       _tag: "WebOperationError",
@@ -748,7 +748,7 @@ describe("launcher internals", () => {
         createHostProcess(Promise.reject(backgroundFailure)),
         {
           fetch: async () => new Response(null, { status: 503 }),
-          sleep: async () => {},
+          sleep: () => Effect.void,
         },
       ).pipe(runWebBoundary),
     ).rejects.toMatchObject({
@@ -776,7 +776,7 @@ describe("launcher internals", () => {
         createHostProcess(new Promise<number>(() => {})),
         {
           fetch: fetchImpl,
-          sleep: async () => {},
+          sleep: () => Effect.void,
         },
       ).pipe(runWebBoundary),
     ).rejects.toThrow("Timed out waiting for OpenDucktor web host");

@@ -11,7 +11,6 @@ import {
 } from "@openducktor/frontend-core/queries/filesystem";
 import { scheduleWorkspaceRefresh } from "@openducktor/frontend-core/queries/workspace-refresh";
 import type { WorkspaceFileTreeRefreshInput } from "@openducktor/contracts";
-import { createDeferred } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
 
 test("a new branch reads its own host view while the previous sweep's Git callback is pending", async () => {
@@ -36,9 +35,9 @@ test("a new branch reads its own host view while the previous sweep's Git callba
     listFiles: () => Effect.succeed([{ path: `${branch}.txt`, kind: "file" }]),
     listFileRegions: () => Effect.succeed([]),
   });
-  const readComplete = createDeferred<void>();
-  const gitStarted = createDeferred<void>();
-  const releaseGit = createDeferred<void>();
+  const readComplete = Promise.withResolvers<void>();
+  const gitStarted = Promise.withResolvers<void>();
+  const releaseGit = Promise.withResolvers<void>();
   // The test host reads the tree through the real host refresh. Other host commands fail.
   const { queryClient: client } = createTestClientConnection({
     client: {

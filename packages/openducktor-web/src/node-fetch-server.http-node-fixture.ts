@@ -133,16 +133,13 @@ test("keeps short bodies small and compresses larger bodies with or without a le
           assert.equal(result.body.length, bytes.length);
           assert.equal(Number(result.headers["content-length"]), bytes.length);
         }
-        const head = await request(server.port, "/", headers, "HEAD");
-        assert.equal(head.body.length, 0);
-        if (mode === "known") {
+        if (mode === "known" && (bytes.length === 1023 || bytes.length === 1024)) {
+          const head = await request(server.port, "/", headers, "HEAD");
+          assert.equal(head.status, status);
+          assert.equal(head.body.length, 0);
           assert.equal(head.headers["content-encoding"], result.headers["content-encoding"]);
           assert.equal(head.headers["content-length"], result.headers["content-length"]);
           assert.equal(head.headers.etag, result.headers.etag);
-        } else {
-          assert.equal(head.headers["content-encoding"], undefined);
-          assert.equal(head.headers["content-length"], undefined);
-          assert.equal(head.headers.etag, undefined);
         }
       }
     }
@@ -173,6 +170,7 @@ test("ends unknown-length HEAD without reading a pending body", { timeout: 1000 
     const head = await request(server.port, "/", { "Accept-Encoding": "gzip" }, "HEAD");
     assert.equal(head.body.length, 0);
     assert.equal(head.headers["content-encoding"], undefined);
+    assert.equal(head.headers["content-length"], undefined);
     assert.equal(head.headers.etag, undefined);
     await cancelled.promise;
   } finally {

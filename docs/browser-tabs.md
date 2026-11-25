@@ -277,6 +277,7 @@ The tab view sends the anchors of the annotations of the current page, with the 
 
 ## Tests
 
+- The [web runner tab test](testing.md#browser-validation) checks the iframe in a real browser with `Bun.WebView`. It uses an installed browser on Linux and Windows.
 - `packages/host/src/testing/browser-engine-conformance.ts` holds the engine conformance checks. They run against the Chrome for Testing engine and a real browser.
 - One check drives a tab with Playwright through an `agent` proxy client while a `devtools` proxy client uses the same tab. Both clients must keep working.
 - `bun run --filter @openducktor/host test:browser-conformance` runs the checks. It installs the pinned Chrome for Testing into `node_modules/.cache/openducktor-chrome-for-testing` when it is not there.

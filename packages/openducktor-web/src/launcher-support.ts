@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 // Use the package entry point so readiness requests do not use ambient proxy settings.
 import { Agent, fetch as directFetch } from "undici/index.js";
 import {
@@ -38,10 +38,9 @@ type FetchFunction = (
   input: string,
   init?: ReadinessRequestInit,
 ) => Promise<Pick<Response, "ok" | "status">>;
-type SleepFunction = (durationMs: number) => Promise<void>;
 type BackendReadinessDependencies = {
   fetch: FetchFunction;
-  sleep: SleepFunction;
+  sleep: typeof Effect.sleep;
 };
 export type FrontendServer = {
   close(): Promise<void>;
@@ -87,7 +86,7 @@ const fetchBackendDirectly: FetchFunction = async (input, init) => {
 
 const defaultReadinessDependencies: BackendReadinessDependencies = {
   fetch: fetchBackendDirectly,
-  sleep: (durationMs) => new Promise((resolve) => setTimeout(resolve, durationMs)),
+  sleep: Effect.sleep,
 };
 
 export const buildFrontendUrl = (port: number, host: string = LOCALHOST): string =>
@@ -290,7 +289,10 @@ export const waitForBackendEffect = (
   dependencies: BackendReadinessDependencies = defaultReadinessDependencies,
 ): Effect.Effect<void, WebDependencyError | WebOperationError> =>
   Effect.gen(function* () {
-    const startedAt = Date.now();
+    const startedAt = yield* Clock.monotonicTimeNanos;
+    const remainingTime = Clock.monotonicTimeNanos.pipe(
+      Effect.map((now) => timeoutMs - Number(now - startedAt) / 1_000_000),
+    );
     let lastError: unknown;
     const earlyExit: LauncherEarlyExitRef = { current: null };
 
@@ -307,7 +309,7 @@ export const waitForBackendEffect = (
     // Let an already-settled host exit promise win before applying the timeout path.
     yield* Effect.promise(() => Promise.resolve());
 
-    while (Date.now() - startedAt < timeoutMs) {
+    while (true) {
       const observedExit = earlyExit.current;
       if (observedExit?._tag === "failure") {
         return yield* new WebOperationError({
@@ -327,7 +329,7 @@ export const waitForBackendEffect = (
         });
       }
 
-      const remainingMs = timeoutMs - (Date.now() - startedAt);
+      const remainingMs = yield* remainingTime;
       if (remainingMs <= 0) {
         break;
       }
@@ -340,35 +342,8 @@ export const waitForBackendEffect = (
       }
       lastError = causeToWebBoundaryError(readinessExit.cause);
 
-      yield* Effect.tryPromise({
-        try: () => dependencies.sleep(250),
-        catch: (cause) =>
-          new WebDependencyError({
-            dependency: "timer",
-            operation: "wait-for-backend",
-            message: errorMessage(cause),
-            cause,
-          }),
-      });
-    }
-
-    const observedExit = earlyExit.current;
-    if (observedExit?._tag === "failure") {
-      return yield* new WebOperationError({
-        operation: "web.launcher.wait-for-backend",
-        message: `OpenDucktor web host failed before startup completed: ${errorMessage(
-          observedExit.cause,
-        )}`,
-        cause: observedExit.cause,
-        details: { backendUrl },
-      });
-    }
-    if (observedExit?._tag === "exit-code") {
-      return yield* new WebOperationError({
-        operation: "web.launcher.wait-for-backend",
-        message: `OpenDucktor web host exited before startup completed with code ${observedExit.exitCode}.`,
-        details: { backendUrl, exitCode: observedExit.exitCode },
-      });
+      const retryDelayMs = Math.min(250, yield* remainingTime);
+      if (retryDelayMs > 0) yield* dependencies.sleep(retryDelayMs);
     }
 
     const detail = lastError instanceof Error ? ` Last error: ${lastError.message}` : "";

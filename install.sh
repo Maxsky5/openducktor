@@ -46,9 +46,11 @@ else
   command -v sha256sum >/dev/null 2>&1 || error 'sha256sum is required.'
   install_dir="$HOME/.local/bin"
   installed="$install_dir/OpenDucktor.AppImage"
-  marker="$HOME/.local/share/applications/.openducktor-script-install"
-  desktop="$HOME/.local/share/applications/openducktor.desktop"
-  icon="$HOME/.local/share/icons/openducktor.png"
+  desktop_dir="$HOME/.local/share/applications"
+  icon_dir="$HOME/.local/share/icons"
+  marker="$desktop_dir/.openducktor-script-install"
+  desktop="$desktop_dir/openducktor.desktop"
+  icon="$icon_dir/openducktor.png"
   [ ! -e /usr/share/applications/openducktor.desktop ] || error 'A system desktop install exists. Update it with its package manager before using this script.'
   [ ! -e /usr/local/share/applications/openducktor.desktop ] || error 'A system desktop install exists. Remove it before using this script.'
   if command -v openducktor >/dev/null 2>&1; then
@@ -73,7 +75,7 @@ if [ "$os" = Darwin ]; then
     [ "$status" -eq 1 ] || error 'Could not check if OpenDucktor is running. Check pgrep and retry.'
   fi
 elif [ -e "$installed" ]; then
-  pattern=$(python3 - "$installed" <<'PY'
+  pattern=$(python3 -S - "$installed" <<'PY'
 import sys
 
 chars = set(r'\.^$*+?()[]{}|')
@@ -152,7 +154,7 @@ trap 'exit 129' HUP
 
 api=https://api.github.com/repos/Maxsky5/openducktor/releases/latest
 curl -fsSL --proto '=https' --connect-timeout 15 --speed-time 30 --speed-limit 1024 -H 'Accept: application/vnd.github+json' -H 'User-Agent: OpenDucktor-installer' "$api" -o "$work/release.json" || error 'Could not load the latest stable GitHub release.'
-python3 - "$work/release.json" "$target" > "$work/selection" <<'PY' || error 'The latest release has no single matching desktop asset with a SHA-256 digest.'
+python3 -S - "$work/release.json" "$target" > "$work/selection" <<'PY' || error 'The latest release has no single matching desktop asset with a SHA-256 digest.'
 import json
 import re
 import sys
@@ -208,43 +210,40 @@ if [ "$os" = Darwin ]; then
     mv "$stage_marker" "$marker" || error 'Could not record the managed install.'
   fi
 else
-  mkdir -p "$(dirname "$desktop")" || error 'Could not create the desktop launcher directory.'
-  mkdir -p "$(dirname "$icon")" || error 'Could not create the icon directory.'
+  mkdir -p "$desktop_dir" "$icon_dir" || error "Could not create the launcher and icon directories at $desktop_dir and $icon_dir."
   stage_app=$(mktemp "$install_dir/.OpenDucktor.AppImage.stage.XXXXXXXX") || error 'Could not stage the AppImage.'
   cp "$download" "$stage_app" || error 'Could not stage the AppImage.'
   chmod 755 "$stage_app" || error 'Could not make the AppImage executable.'
   (cd "$work" && "$stage_app" --appimage-extract >/dev/null) || error 'Could not extract the AppImage icon.'
   [ -f "$work/squashfs-root/.DirIcon" ] || error 'The AppImage has no icon.'
-  stage_icon=$(mktemp "$(dirname "$icon")/.openducktor-icon.stage.XXXXXXXX") || error 'Could not stage the icon.'
+  stage_icon=$(mktemp "$icon_dir/.openducktor-icon.stage.XXXXXXXX") || error 'Could not stage the icon.'
   cp "$work/squashfs-root/.DirIcon" "$stage_icon" || error 'Could not copy the AppImage icon.'
   # Desktop entry strings and quoted Exec values each escape backslashes.
-  desktop_exec=$(python3 - "$installed" <<'PY'
+  stage_desktop=$(mktemp "$desktop_dir/.openducktor.desktop.stage.XXXXXXXX") || error 'Could not stage the desktop launcher.'
+  python3 -S - "$installed" "$icon" > "$stage_desktop" <<'PY' || error 'Could not write the desktop launcher.'
 import sys
 
 path = sys.argv[1].replace('%', '%%')
 for char in ('\\', '"', '`', '$'):
     path = path.replace(char, '\\' + char)
-print(path.replace('\\', '\\\\'))
+exec_path = path.replace('\\', '\\\\')
+icon_path = sys.argv[2].replace('\\', '\\\\')
+print(
+    '[Desktop Entry]\nType=Application\nName=OpenDucktor\n'
+    f'Exec="{exec_path}"\nIcon={icon_path}\n'
+    'Terminal=false\nCategories=Development;'
+)
 PY
-  )
-  desktop_icon=$(python3 - "$icon" <<'PY'
-import sys
-
-print(sys.argv[1].replace('\\', '\\\\'))
-PY
-  )
-  stage_desktop=$(mktemp "$(dirname "$desktop")/.openducktor.desktop.stage.XXXXXXXX") || error 'Could not stage the desktop launcher.'
-  printf '[Desktop Entry]\nType=Application\nName=OpenDucktor\nExec="%s"\nIcon=%s\nTerminal=false\nCategories=Development;\n' "$desktop_exec" "$desktop_icon" > "$stage_desktop"
   if [ -e "$installed" ]; then
     backup_app="$install_dir/.OpenDucktor.AppImage.backup.$$"
     mv "$installed" "$backup_app" || error 'Could not move the previous AppImage out of the way.'
   fi
   if [ -e "$desktop" ]; then
-    backup_desktop="$(dirname "$desktop")/.openducktor.desktop.backup.$$"
+    backup_desktop="$desktop_dir/.openducktor.desktop.backup.$$"
     mv "$desktop" "$backup_desktop" || error 'Could not move the previous desktop launcher out of the way.'
   fi
   if [ -e "$icon" ]; then
-    backup_icon="$(dirname "$icon")/.openducktor-icon.backup.$$"
+    backup_icon="$icon_dir/.openducktor-icon.backup.$$"
     mv "$icon" "$backup_icon" || error 'Could not move the previous icon out of the way.'
   fi
   new_app=1
@@ -254,7 +253,7 @@ PY
   new_desktop=1
   mv "$stage_desktop" "$desktop" || error 'Could not install the desktop launcher.'
   if [ ! -f "$marker" ]; then
-    stage_marker=$(mktemp "$(dirname "$marker")/.openducktor-marker.stage.XXXXXXXX") || error 'Could not stage the install marker.'
+    stage_marker=$(mktemp "$desktop_dir/.openducktor-marker.stage.XXXXXXXX") || error 'Could not stage the install marker.'
     printf 'Installed by install.sh\n' > "$stage_marker"
     new_marker=1
     mv "$stage_marker" "$marker" || error 'Could not record the managed install.'

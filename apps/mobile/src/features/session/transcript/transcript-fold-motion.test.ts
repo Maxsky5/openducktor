@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, jest, test } from "bun:test";
 import {
   cellStartOffset,
   createFoldMotionController,
@@ -52,27 +52,34 @@ describe("foldMotion", () => {
 });
 
 describe("createFoldMotionController", () => {
-  test("starts a motion, runs it once, and ends it after its time", async () => {
-    let motion: FoldMotion | null = null;
-    const motions = createFoldMotionController((update) => {
-      motion = update(motion);
-    });
-    const id = motions.nextId();
-    motions.start(
-      foldMotion({ id, pivot: 2, inverted: true, latestRowInView: false, delta: 40 }),
-      20,
-    );
+  test("starts a motion, runs it once, and ends it after its time", () => {
+    jest.useFakeTimers();
+    try {
+      let motion: FoldMotion | null = null;
+      const motions = createFoldMotionController((update) => {
+        motion = update(motion);
+      });
+      const id = motions.nextId();
+      motions.start(
+        foldMotion({ id, pivot: 2, inverted: true, latestRowInView: false, delta: 40 }),
+        20,
+      );
 
-    expect(motion).toMatchObject({ id, phase: "start" });
-    motions.advance(id + 1);
-    expect(motion).toMatchObject({ phase: "start" });
-    motions.advance(id);
-    expect(motion).toMatchObject({ phase: "run" });
-    const running = motion;
-    motions.advance(id);
-    expect(motion).toBe(running);
-    expect(motions.nextId()).toBe(id + 1);
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    expect(motion).toBeNull();
+      expect(motion).toMatchObject({ id, phase: "start" });
+      motions.advance(id + 1);
+      expect(motion).toMatchObject({ phase: "start" });
+      motions.advance(id);
+      expect(motion).toMatchObject({ phase: "run" });
+      const running = motion;
+      motions.advance(id);
+      expect(motion).toBe(running);
+      expect(motions.nextId()).toBe(id + 1);
+      jest.advanceTimersByTime(19);
+      expect(motion).toBe(running);
+      jest.advanceTimersByTime(1);
+      expect(motion).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

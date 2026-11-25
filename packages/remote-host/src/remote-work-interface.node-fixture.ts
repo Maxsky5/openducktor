@@ -1,7 +1,9 @@
 import { admittedWorkOptions } from "./remote-approval.test-support";
 import assert from "node:assert/strict";
+import { EventEmitter, once } from "node:events";
 import { request as httpRequest } from "node:http";
 import { test } from "node:test";
+import { setImmediate } from "node:timers/promises";
 import { Effect } from "effect";
 import {
   encodeHostChannelFrame,
@@ -290,15 +292,22 @@ for (const shell of ["electron", "web"] as const) {
 
 const collectGarbage = async () => {
   for (let round = 0; round < 5; round++) {
+    await setImmediate();
     globalThis.gc?.();
-    await new Promise((resolve) => setTimeout(resolve, 20));
   }
 };
 
 test("closing a channel or a terminal on Node clears the client presence", async () => {
   if (!globalThis.gc) throw new Error("Run this fixture with node --expose-gc.");
   const notifications = createNotificationStream();
-  const presence: number[] = [];
+  const presence = new EventEmitter();
+  const nextPresence = async (action: string) => {
+    try {
+      return await once(presence, "change", { signal: AbortSignal.timeout(2_000) });
+    } catch (cause) {
+      throw new Error(`No presence update after ${action}.`, { cause });
+    }
+  };
   const work = createRemoteWorkInterface(
     {
       ...createEffectHostCommandRouter({ handlers: {} }),
@@ -328,7 +337,7 @@ test("closing a channel or a terminal on Node clears the client presence", async
       reportFailure: (cause) => {
         throw cause;
       },
-      onClientsChanged: (clients) => presence.push(clients.size),
+      onClientsChanged: (clients) => presence.emit("change", clients.size),
     },
   );
   const server = await startNodeFetchServer({
@@ -340,11 +349,6 @@ test("closing a channel or a terminal on Node clears the client presence", async
       throw cause;
     },
   });
-  const waitForPresence = async (size: number) => {
-    for (let attempt = 0; attempt < 100 && presence.at(-1) !== size; attempt++)
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    assert.equal(presence.at(-1), size);
-  };
   try {
     const base = `http://127.0.0.1:${server.port}`;
     const admitted = await fetch(`${base}/connections`, {
@@ -360,27 +364,36 @@ test("closing a channel or a terminal on Node clears the client presence", async
     });
     assert.equal(admitted.status, 201);
     const { connectionId, connectionToken } = await admitted.json();
-    const channel = await openChannel(base, connectionId, connectionToken);
-    await waitForPresence(1);
+    const [channelOpened, channel] = await Promise.all([
+      nextPresence("opening the host channel"),
+      openChannel(base, connectionId, connectionToken),
+    ]);
+    assert.deepEqual(channelOpened, [1]);
     // An idle channel must keep its close signal after garbage collection.
     await collectGarbage();
+    const channelClosed = nextPresence("closing the host channel");
     channel.socket.close();
-    await waitForPresence(0);
+    assert.deepEqual(await channelClosed, [0]);
 
+    const terminalOpened = nextPresence("opening the terminal socket");
     const terminal = new WebSocket(`ws://127.0.0.1:${server.port}/terminal`, [
       TERMINAL_PROTOCOL_SUBPROTOCOL,
       `${REMOTE_SOCKET_CONNECTION_PREFIX}${connectionId}`,
       `${REMOTE_SOCKET_AUTHORIZATION_PREFIX}${connectionToken}`,
     ]);
-    await new Promise((resolve, reject) => {
-      terminal.onopen = resolve;
-      terminal.onerror = reject;
-    });
-    await waitForPresence(1);
+    const [, terminalOpenedPresence] = await Promise.all([
+      new Promise((resolve, reject) => {
+        terminal.onopen = resolve;
+        terminal.onerror = reject;
+      }),
+      terminalOpened,
+    ]);
+    assert.deepEqual(terminalOpenedPresence, [1]);
     // The upgrade request ends when the socket opens, so nothing else holds its close signal.
     await collectGarbage();
+    const terminalClosed = nextPresence("closing the terminal socket");
     terminal.close();
-    await waitForPresence(0);
+    assert.deepEqual(await terminalClosed, [0]);
   } finally {
     work.close();
     await server.stop(true);

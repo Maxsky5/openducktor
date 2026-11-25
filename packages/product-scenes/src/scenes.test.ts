@@ -53,7 +53,9 @@ designPixel.textContent = "* { --u: 1px; }";
 document.head.append(designPixel);
 // The document has no layout, so it gives no offset parent. The steps measure an element from
 // a positioned ancestor, so the parent element takes its place.
-Object.defineProperty(HTMLElement.prototype, "offsetParent", {
+const elementPrototype = HTMLElement.prototype;
+const originalOffsetParent = Object.getOwnPropertyDescriptor(elementPrototype, "offsetParent");
+Object.defineProperty(elementPrototype, "offsetParent", {
   configurable: true,
   get(this: HTMLElement) {
     return this.parentElement;
@@ -69,29 +71,10 @@ const modules = await Promise.all([
   import("./views"),
 ]);
 
-/** One run of a scene: the run of a loop scene, or one chapter of a chapter player. */
-type RunCase = { label: string; name: SceneName; chapter: string | null };
-
-const RUN_CASES: RunCase[] = (
-  await Promise.all(
-    SCENE_NAMES.map(async (name): Promise<RunCase[]> => {
-      const [, , , , , { SCENES }, { VIEWS }] = modules;
-      const entry = SCENES[name];
-      await VIEWS[name]();
-      if (!("chapters" in entry)) {
-        await entry.timeline();
-        return [{ label: name, name, chapter: null }];
-      }
-      return Object.keys(await entry.chapters()).map((chapter) => ({
-        label: `${name} (${chapter})`,
-        name,
-        chapter,
-      }));
-    }),
-  )
-).flat();
-
 afterAll(async () => {
+  if (originalOffsetParent)
+    Object.defineProperty(elementPrototype, "offsetParent", originalOffsetParent);
+  else Reflect.deleteProperty(elementPrototype, "offsetParent");
   await GlobalRegistrator.unregister();
 });
 
@@ -111,43 +94,48 @@ async function renderView<Name extends SceneName>(name: Name): Promise<HTMLEleme
   return root;
 }
 
-// The views render before the test cases, as the modules load, so each case only builds and plays
-// its run. A view stays out of the document until its case, because each step of happy-dom costs
-// more in a larger document.
-// A chapter reads only its own panel, so the view of a chapter keeps no other panel.
-const VIEW_ROOTS = new Map(
+type RunCase = {
+  label: string;
+  name: SceneName;
+  chapter: string | null;
+  view: HTMLElement;
+  build: SceneBuilder<string>;
+};
+
+// Render each scene once. Each case mounts a new copy, because playing a timeline changes its DOM.
+const RUN_CASES: RunCase[] = (
   await Promise.all(
-    RUN_CASES.map(async (run) => {
-      const root = await renderView(run.name);
-      for (const panel of root.querySelectorAll("[data-chapter-panel]")) {
-        if (panel.getAttribute("data-chapter-panel") !== run.chapter) panel.remove();
+    SCENE_NAMES.map(async (name): Promise<RunCase[]> => {
+      const [, , , , , { SCENES }] = modules;
+      const entry = SCENES[name];
+      const view = await renderView(name);
+      if (!("chapters" in entry)) {
+        return [{ label: name, name, view, chapter: null, build: await entry.timeline() }];
       }
-      return [run, root] as const;
+      return Object.entries(await entry.chapters()).map(([chapter, build]) => ({
+        label: `${name} (${chapter})`,
+        name,
+        view,
+        chapter,
+        build,
+      }));
     }),
-  ),
-);
+  )
+).flat();
 
-/** The stage of a run and its frame: the view of a loop scene, or the panel of a chapter. */
-type Run = { frame: HTMLElement; stage: HTMLElement; build: SceneBuilder<string> };
+type RunView = { root: HTMLElement; frame: HTMLElement };
 
-async function runOf({ name, chapter }: RunCase, root: HTMLElement): Promise<Run> {
-  const [, , , , , { SCENES }] = modules;
-  const entry = SCENES[name];
-  const stageOf = (frame: HTMLElement): HTMLElement => {
-    const stage = frame.querySelector("[data-stage]");
-    if (!(stage instanceof HTMLElement)) throw new Error(`The ${name} view has no stage.`);
-    return stage;
-  };
-  if (!("chapters" in entry) || chapter === null) {
-    if ("chapters" in entry) throw new Error(`The ${name} case names no chapter.`);
-    return { frame: root, stage: stageOf(root), build: await entry.timeline() };
-  }
-  const build = Object.entries(await entry.chapters()).find(([id]) => id === chapter)?.[1];
-  const panel = root.querySelector(`[data-chapter-panel="${chapter}"]`);
-  if (!build || !(panel instanceof HTMLElement)) {
+function copyRun({ name, chapter, view }: RunCase): RunView {
+  const root = view.cloneNode(chapter === null);
+  if (!(root instanceof HTMLElement)) throw new Error(`The ${name} copy has no root.`);
+  if (chapter === null) return { root, frame: root };
+
+  // A chapter's timeline reads only its own panel.
+  const panel = view.querySelector(`[data-chapter-panel="${chapter}"]`)?.cloneNode(true);
+  if (!(panel instanceof HTMLElement))
     throw new Error(`The ${name} view has no chapter ${chapter}.`);
-  }
-  return { frame: panel, stage: stageOf(panel), build };
+  root.append(panel);
+  return { root, frame: panel };
 }
 
 /**
@@ -165,30 +153,27 @@ function changeTimes(timeline: gsap.core.Timeline): number[] {
 }
 
 describe("each registered scene", () => {
-  test.each(RUN_CASES)(
-    "$label renders its static view, builds its timeline from it, and plays it",
-    async (run) => {
-      const [, , { gsap }, { createScene }] = modules;
-      const root = VIEW_ROOTS.get(run);
-      if (!root) throw new Error(`The ${run.label} case has no view.`);
-      document.body.append(root);
-      try {
-        expect(root.dataset.scene ?? root.dataset.chapters).toBe(run.name);
-        const { frame, stage, build } = await runOf(run, root);
-        const timeline = gsap.timeline({ paused: true });
-        build(createScene(frame, stage, timeline));
-        expect(timeline.duration()).toBeGreaterThan(0);
-        // Each change of the run finds its elements when it runs, so the run plays to its end
-        // in steps. A change that does not find an element, or finds it with the wrong type,
-        // throws here.
-        if (!NEEDS_BROWSER.has(run.name)) {
-          for (const time of changeTimes(timeline)) timeline.time(time);
-          timeline.progress(1);
-        }
-        timeline.kill();
-      } finally {
-        root.remove();
+  test.each(RUN_CASES)("$label builds its timeline from the static view", (run) => {
+    const [, , { gsap }, { createScene }] = modules;
+    const { root, frame } = copyRun(run);
+    const stage = frame.querySelector("[data-stage]");
+    if (!(stage instanceof HTMLElement)) throw new Error(`The ${run.label} view has no stage.`);
+    const timeline = gsap.timeline({ paused: true });
+    document.body.append(root);
+    try {
+      expect(root.dataset.scene ?? root.dataset.chapters).toBe(run.name);
+      run.build(createScene(frame, stage, timeline));
+      expect(timeline.duration()).toBeGreaterThan(0);
+      // Each change of the run finds its elements when it runs, so the run plays to its end
+      // in steps. A change that does not find an element, or finds it with the wrong type,
+      // throws here.
+      if (!NEEDS_BROWSER.has(run.name)) {
+        for (const time of changeTimes(timeline)) timeline.time(time);
+        timeline.progress(1);
       }
-    },
-  );
+    } finally {
+      timeline.kill();
+      root.remove();
+    }
+  });
 });

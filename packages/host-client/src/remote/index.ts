@@ -440,6 +440,7 @@ export const createRemoteHostClient = (
     }
   };
   const connect = (input: RemoteConnectInput = {}): Promise<void> => {
+    if (input.signal?.aborted) return Promise.reject(input.signal.reason);
     selected = true;
     if (!active) return Promise.resolve();
     if (pending) return pending;
@@ -457,8 +458,11 @@ export const createRemoteHostClient = (
       abort.abort(input.signal?.reason);
       publish("idle");
     };
+    if (input.signal?.aborted) {
+      cancelled();
+      return Promise.reject(input.signal.reason);
+    }
     input.signal?.addEventListener("abort", cancelled, { once: true });
-    if (input.signal?.aborted) cancelled();
     const previousHostInstanceId = state.host?.hostInstanceId ?? null;
     const operation = (async () => {
       let pendingAdmission: RemoteAdmission | null = null;

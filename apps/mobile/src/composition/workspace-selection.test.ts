@@ -6,9 +6,10 @@ import {
   useActiveWorkspaceContext,
 } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { ClientConnectionProvider } from "@openducktor/frontend-core/connection/client-connection-react";
+import { workspaceListQueryOptions } from "@openducktor/frontend-core/queries/workspace";
 import { createWorkspaceRecordFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { createElement, type PropsWithChildren, type ReactElement, useMemo, useState } from "react";
 import { useMobileWorkspaces, WorkspaceSelectionProvider } from "./workspace-selection";
 
@@ -26,9 +27,8 @@ function ActiveWorkspaceHost({ children }: PropsWithChildren): ReactElement {
 
 describe("WorkspaceSelectionProvider", () => {
   test("makes a chosen workspace active in the first render that shows it", async () => {
-    const connection = createTestClientConnection({
-      client: { workspaceList: async () => workspaces },
-    });
+    const connection = createTestClientConnection();
+    connection.queryClient.setQueryData(workspaceListQueryOptions().queryKey, workspaces);
     const wrapper = ({ children }: PropsWithChildren) =>
       createElement(
         ClientConnectionProvider,
@@ -40,7 +40,7 @@ describe("WorkspaceSelectionProvider", () => {
         ),
       );
     const renders: { selected: string | null; active: string | null }[] = [];
-    const { result } = renderHook(
+    const { result, unmount } = renderHook(
       () => {
         const selection = useMobileWorkspaces();
         const { activeWorkspace } = useActiveWorkspaceContext();
@@ -52,14 +52,19 @@ describe("WorkspaceSelectionProvider", () => {
       },
       { wrapper },
     );
-    await waitFor(() => expect(renders.at(-1)).toEqual({ selected: "a", active: "a" }));
+    try {
+      expect(renders.at(-1)).toEqual({ selected: "a", active: "a" });
 
-    renders.length = 0;
-    act(() => result.current.selectWorkspace("b"));
+      renders.length = 0;
+      act(() => result.current.selectWorkspace("b"));
 
-    expect(renders.filter((render) => render.selected === "b")).not.toHaveLength(0);
-    expect(renders.filter((render) => render.selected === "b" && render.active !== "b")).toEqual(
-      [],
-    );
+      expect(renders.find((render) => render.selected === "b")).toEqual({
+        selected: "b",
+        active: "b",
+      });
+    } finally {
+      unmount();
+      await connection.dispose();
+    }
   });
 });

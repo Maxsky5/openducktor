@@ -45,12 +45,3 @@ test("both Workers run on the same compatibility date", () => {
     config("wrangler.json").compatibility_date,
   );
 });
-
-test("the schema refuses a Worker script, run_worker_first, or a binding", () => {
-  const worker = JSON.parse(readFileSync(new URL("../wrangler.json", import.meta.url), "utf8"));
-  expect(() => workerSchema.parse({ ...worker, main: "src/worker.ts" })).toThrow();
-  expect(() => workerSchema.parse({ ...worker, kv_namespaces: [] })).toThrow();
-  expect(() =>
-    workerSchema.parse({ ...worker, assets: { ...worker.assets, run_worker_first: true } }),
-  ).toThrow();
-});

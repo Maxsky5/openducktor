@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, onTestFinished, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -15,7 +15,6 @@ import {
   type RuntimeRoute,
   runtimeLifecycleImpactSchema,
   taskCardSchema,
-  type TaskMetadataPayload,
 } from "@openducktor/contracts";
 import {
   createArtifactRuntimeDistribution,
@@ -30,10 +29,8 @@ import {
   type RuntimeHealthPort,
   type RuntimeStarterPort,
   type SystemCommandPort,
-  type TaskStorePort,
   type ProcessInspectorPort,
   type TerminalPtyPort,
-  type WorktreeFilePort,
 } from "@openducktor/host";
 import {
   createElectronEffectHostCommandRouter,
@@ -54,6 +51,7 @@ const testRuntimeDistribution = createArtifactRuntimeDistribution({
     executablePath: process.execPath,
   },
 });
+const quietLifecycleLogger = { info: () => Effect.void, error: () => Effect.void };
 
 const routers: Awaited<ReturnType<typeof createProductionElectronHostCommandRouter>>[] = [];
 const configDirectories: string[] = [];
@@ -115,37 +113,11 @@ const createElectronHostCommandRouter = async ({
   if (config) {
     await writeFile(path.join(root, "config.json"), JSON.stringify(config));
   }
-  if (input.taskStore) {
-    const store = input.taskStore;
-    // Evaluate decisions against the final fixture row, including per-test overrides.
-    const taskStore: TaskStorePort = {
-      ...store,
-      transitionTask: (request) =>
-        store.getTask(request).pipe(
-          Effect.flatMap((current) => {
-            const decision = request.decide(current);
-            return Effect.fromResult(decision).pipe(
-              Effect.andThen(store.transitionTask({ ...request, decide: () => decision })),
-            );
-          }),
-        ),
-      saveWorkflowArtifact: (request) =>
-        store.getTask(request).pipe(
-          Effect.flatMap((current) => {
-            const decision = request.decide(current);
-            return Effect.fromResult(decision).pipe(
-              Effect.andThen(store.saveWorkflowArtifact({ ...request, decide: () => decision })),
-            );
-          }),
-        ),
-    };
-    input = { ...input, taskStore };
-  }
   const router = await createProductionElectronHostCommandRouter({
     isPackaged: false,
     eventBus: createHostEventBus({ report: () => {} }),
     onBackgroundFailure: () => Effect.void,
-    lifecycleLogger: { info: () => Effect.void, error: () => Effect.void },
+    lifecycleLogger: quietLifecycleLogger,
     runtimeDistribution: testRuntimeDistribution,
     browserEngine: () => Effect.succeed(createBrowserEngineTestDouble().engine),
     terminalPty: unexpectedTerminalPty,
@@ -170,18 +142,6 @@ const unexpectedProcessInspector: ProcessInspectorPort = {
   stopProcess: () => Effect.die(new Error("Process stops are not expected in this test.")),
   readStandardInputs: () => Effect.die(new Error("Process reads are not expected in this test.")),
 };
-
-/** Reads one task from the listed tasks, as the real store does. */
-const withGetTaskFromList = (store: TaskStorePort): TaskStorePort => ({
-  ...store,
-  getTask: ({ workspaceId, repoPath, taskId }) =>
-    store.listTasks({ workspaceId, repoPath }).pipe(
-      Effect.flatMap((tasks) => {
-        const task = tasks.find((entry) => entry.id === taskId);
-        return task ? Effect.succeed(task) : Effect.die(new Error(`Missing test task ${taskId}`));
-      }),
-    ),
-});
 
 const pathFailure = (
   error: ProcessEnvironmentError,
@@ -308,25 +268,6 @@ const globalConfig = (overrides: Partial<GlobalConfig> = {}): GlobalConfig => ({
   globalPromptOverrides: {},
   globalPromptAppends: {},
   notifications: createDefaultNotificationSettings(),
-  ...overrides,
-});
-
-/** Router tests must not reach the real worktree file adapter, which changes this machine. */
-const createWorktreeFiles = (overrides: Partial<WorktreeFilePort> = {}): WorktreeFilePort => ({
-  resolveWorktreeRemovalPath: (worktreePath) => Effect.succeed(worktreePath),
-  prepareWorktreeAliasRemoval: () => Effect.succeed({ remove: Effect.void }),
-  ensureDirectory: () => Effect.void,
-  copyConfiguredPaths: () => Effect.void,
-  removePathIfPresent: () => Effect.void,
-  resolveWorktreePath: (_repoPath, worktreePath) => worktreePath,
-  resolvePathWithinRoot: (_root, candidate) =>
-    Effect.succeed({
-      canonicalPath: candidate,
-      cleanupPath: candidate,
-      isSymlink: false,
-      kind: "descendant",
-    }),
-  pathIsWithinRoot: () => Effect.succeed(false),
   ...overrides,
 });
 
@@ -499,326 +440,6 @@ const createRuntimeHealth = (): RuntimeHealthPort => ({
     }),
 });
 
-const createTaskStore = (): TaskStorePort =>
-  createTaskStoreTestDouble({
-    listArtifacts: () => Effect.succeed([]),
-    listAgentSessionsForTasks: ({ taskIds }) =>
-      Effect.succeed(taskIds.map((taskId) => ({ taskId, agentSessions: [] }))),
-    getTask: () =>
-      Effect.succeed({
-        id: "task-1",
-        workflowId: "openducktor-spec-plan-build",
-        workflowVersion: null,
-        title: "Task 1",
-        description: "",
-        status: "blocked",
-        priority: 2,
-        issueType: "task",
-        removeWorktreeOnClose: null,
-        availableActions: [],
-        labels: [],
-        artifactSummary: {
-          spec: { present: false },
-          plan: { present: false },
-          qaReport: { present: false },
-        },
-        agentWorkflows: {
-          spec: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          planner: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          build: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-          qa: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-        },
-        updatedAt: "2026-01-02T00:00:00Z",
-        createdAt: "2026-01-01T00:00:00Z",
-      }),
-    getTaskMetadata: () =>
-      Effect.succeed({
-        artifacts: {
-          spec: {
-            markdown: "# Spec",
-            updatedAt: "2026-01-02T00:00:00Z",
-            revision: 1,
-          },
-          plan: {
-            markdown: "# Plan",
-            updatedAt: "2026-01-02T00:00:00Z",
-            revision: 1,
-          },
-        },
-        agentSessions: [],
-      }),
-    createTask: () =>
-      Effect.succeed({
-        id: "task-2",
-        workflowId: "openducktor-spec-plan-build",
-        workflowVersion: null,
-        title: "Task 2",
-        description: "",
-        status: "open",
-        priority: 2,
-        issueType: "task",
-        removeWorktreeOnClose: null,
-        availableActions: [],
-        labels: [],
-        artifactSummary: {
-          spec: { present: false },
-          plan: { present: false },
-          qaReport: { present: false },
-        },
-        agentWorkflows: {
-          spec: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          planner: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          build: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-          qa: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-        },
-        updatedAt: "2026-01-02T00:00:00Z",
-        createdAt: "2026-01-01T00:00:00Z",
-      }),
-    listTasks: (input) =>
-      Effect.succeed(
-        [
-          {
-            id: "task-1",
-            workflowId: "openducktor-spec-plan-build",
-            workflowVersion: null,
-            title: "Task 1",
-            description: "",
-            status: "open",
-            priority: 2,
-            issueType: "task" as const,
-            removeWorktreeOnClose: null,
-            availableActions: [],
-            labels: [],
-            artifactSummary: {
-              spec: { present: false },
-              plan: { present: false },
-              qaReport: { present: false },
-            },
-            agentWorkflows: {
-              spec: {
-                required: false,
-                canSkip: true,
-                available: false,
-                completed: false,
-              },
-              planner: {
-                required: false,
-                canSkip: true,
-                available: false,
-                completed: false,
-              },
-              build: {
-                required: true,
-                canSkip: false,
-                available: false,
-                completed: false,
-              },
-              qa: {
-                required: true,
-                canSkip: false,
-                available: false,
-                completed: false,
-              },
-            },
-            updatedAt: "2026-01-02T00:00:00Z",
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-        ].flatMap((task) =>
-          input.taskIds === undefined
-            ? [task]
-            : input.taskIds.map((id) => ({
-                ...task,
-                id,
-                title: id === "task-2" ? "Task 2" : task.title,
-              })),
-        ),
-      ),
-    updateTask: () =>
-      Effect.succeed({
-        id: "task-1",
-        workflowId: "openducktor-spec-plan-build",
-        workflowVersion: null,
-        title: "Updated task",
-        description: "",
-        status: "ready_for_dev",
-        priority: 2,
-        issueType: "task",
-        removeWorktreeOnClose: null,
-        availableActions: [],
-        labels: [],
-        artifactSummary: {
-          spec: { present: false },
-          plan: { present: false },
-          qaReport: { present: false },
-        },
-        agentWorkflows: {
-          spec: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          planner: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          build: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-          qa: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-        },
-        updatedAt: "2026-01-02T00:00:00Z",
-        createdAt: "2026-01-01T00:00:00Z",
-      }),
-    saveWorkflowArtifact: (input) =>
-      Effect.succeed({
-        task: {
-          id: input.taskId,
-          workflowId: "openducktor-spec-plan-build",
-          workflowVersion: null,
-          title: "Task 1",
-          description: "",
-          status: input.status ?? "open",
-          priority: 2,
-          issueType: "task",
-          removeWorktreeOnClose: null,
-          availableActions: [],
-          labels: [],
-          artifactSummary: {
-            spec: { present: input.code === "spec" },
-            plan: { present: input.code === "plan" },
-            qaReport: { present: false },
-          },
-          agentWorkflows: {
-            spec: { required: false, canSkip: true, available: false, completed: false },
-            planner: { required: false, canSkip: true, available: false, completed: false },
-            build: { required: true, canSkip: false, available: false, completed: false },
-            qa: { required: true, canSkip: false, available: false, completed: false },
-          },
-          updatedAt: "2026-01-02T00:00:00Z",
-          createdAt: "2026-01-01T00:00:00Z",
-        },
-        artifact: {
-          markdown: input.markdown,
-          updatedAt: "2026-01-02T00:00:00Z",
-          revision: 1,
-        },
-      }),
-    upsertAgentSession: () => Effect.succeed(true),
-    setPullRequest: () => Effect.succeed(true),
-    setDirectMerge: () => Effect.succeed(true),
-    clearAgentSessionsByRoles: () => Effect.succeed(true),
-    clearTaskArtifacts: () => Effect.succeed(true),
-    clearWorkflowArtifacts: () => Effect.succeed(true),
-    transitionTask: (input) =>
-      Effect.succeed({
-        id: input.taskId,
-        workflowId: "openducktor-spec-plan-build",
-        workflowVersion: null,
-        title: "Task 1",
-        description: "",
-        status: input.status,
-        priority: 2,
-        issueType: "task",
-        removeWorktreeOnClose: null,
-        availableActions: [],
-        labels: [],
-        artifactSummary: {
-          spec: { present: false },
-          plan: { present: false },
-          qaReport: { present: false },
-        },
-        agentWorkflows: {
-          spec: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          planner: {
-            required: false,
-            canSkip: true,
-            available: false,
-            completed: false,
-          },
-          build: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-          qa: {
-            required: true,
-            canSkip: false,
-            available: false,
-            completed: false,
-          },
-        },
-        updatedAt: "2026-01-02T00:00:00Z",
-        createdAt: "2026-01-01T00:00:00Z",
-      }),
-    deleteTask: () => Effect.succeed(true),
-    listPullRequestSyncCandidates: () => Effect.succeed([]),
-    diagnoseRepoStore: () =>
-      Effect.succeed({
-        category: "database_unavailable",
-        status: "blocking",
-        isReady: false,
-        detail: "SQLite task store database is unavailable.",
-        databasePath: null,
-      }),
-  });
-
 type RuntimeStartInput = Parameters<RuntimeStarterPort["startRuntime"]>[0];
 type FakeRuntimeStarter = RuntimeStarterPort & {
   starts: RuntimeStartInput[];
@@ -855,29 +476,26 @@ const createRuntimeStarter = (
   };
 };
 
-type ElectronHostCommandRouter = Awaited<ReturnType<typeof createElectronHostCommandRouter>>;
-
-const runtimeStatuses = async (router: ElectronHostCommandRouter): Promise<HostRuntimeStatus[]> =>
-  hostRuntimeSnapshotSchema.parse(await router.invoke("runtime_status")).runtimes;
-
-/** Polls `runtime_status` until every listed kind reaches the state. */
-const waitForRuntimeState = async (
-  router: ElectronHostCommandRouter,
+const observeRuntimeStates = (
   kinds: ReadonlyArray<RuntimeKind>,
   state: HostRuntimeStatus["state"],
-): Promise<HostRuntimeStatus[]> => {
-  const deadline = Date.now() + 800;
-  while (Date.now() < deadline) {
-    const statuses = await runtimeStatuses(router);
-    const matching = statuses.filter(
-      (status) => kinds.includes(status.kind) && status.state === state,
-    );
-    if (matching.length === kinds.length) {
-      return matching;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  throw new Error(`Timed out waiting for the ${kinds.join(", ")} runtimes to become ${state}.`);
+) => {
+  const matches = new Map<RuntimeKind, HostRuntimeStatus>();
+  const statuses = Promise.withResolvers<HostRuntimeStatus[]>();
+  const eventBus = createHostEventBus({ report: ({ cause }) => statuses.reject(cause) });
+  const unsubscribe = eventBus.subscribe("openducktor://runtime-changed", (event) => {
+    if (
+      event.channel !== "openducktor://runtime-changed" ||
+      event.payload.type !== "runtime_changed"
+    )
+      return;
+    const { status } = event.payload;
+    if (!kinds.includes(status.kind) || status.state !== state) return;
+    matches.set(status.kind, status);
+    if (matches.size === kinds.length) statuses.resolve([...matches.values()]);
+  });
+  onTestFinished(unsubscribe);
+  return { eventBus, statuses: statuses.promise };
 };
 
 describe("createElectronHostCommandRouter", () => {
@@ -885,8 +503,10 @@ describe("createElectronHostCommandRouter", () => {
     const configDirectory = await mkdtemp(path.join(tmpdir(), "openducktor-electron-dispose-"));
     const lifecycleLogs: string[] = [];
     const runtimeStarter = createRuntimeStarter();
+    const { eventBus, statuses } = observeRuntimeStates(["opencode", "codex"], "ready");
     try {
       const router = await createElectronHostCommandRouter({
+        eventBus,
         lifecycleLogger: {
           info(message) {
             return Effect.sync(() => lifecycleLogs.push(message));
@@ -905,7 +525,7 @@ describe("createElectronHostCommandRouter", () => {
         config: globalConfig({ agentRuntimes: agentRuntimes({ opencode: true, codex: true }) }),
       });
       await router.initialize();
-      await waitForRuntimeState(router, ["opencode", "codex"], "ready");
+      await statuses;
 
       expect(await router.dispose()).toBeUndefined();
 
@@ -1038,7 +658,9 @@ describe("createElectronHostCommandRouter", () => {
       throw new Error("OpenCode runtime descriptor missing from test fixture.");
     }
     const runtimeStarter = createRuntimeStarter();
+    const { eventBus, statuses } = observeRuntimeStates(["opencode"], "ready");
     const router = await createElectronHostCommandRouter({
+      eventBus,
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1056,7 +678,7 @@ describe("createElectronHostCommandRouter", () => {
       ]);
 
       await router.initialize();
-      const [ready] = await waitForRuntimeState(router, ["opencode"], "ready");
+      const [ready] = await statuses;
       expect(ready).toMatchObject({
         kind: "opencode",
         enabled: true,
@@ -1064,6 +686,8 @@ describe("createElectronHostCommandRouter", () => {
         trigger: "host_startup",
         failure: null,
       });
+      const snapshot = hostRuntimeSnapshotSchema.parse(await router.invoke("runtime_status"));
+      expect(snapshot.runtimes.find(({ kind }) => kind === "opencode")).toEqual(ready);
       expect(await router.invoke("runtime_require", { runtimeKind: "opencode" })).toEqual({
         kind: "opencode",
         runtimeId: "opencode-1",
@@ -1145,7 +769,10 @@ describe("createElectronHostCommandRouter", () => {
       reason: "unexpected_exit",
       shell: "/bin/tcsh",
     });
+    const kinds = ["claude", "codex", "opencode"] as const;
+    const { eventBus, statuses } = observeRuntimeStates(kinds, "error");
     const router = await createElectronHostCommandRouter({
+      eventBus,
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1160,10 +787,10 @@ describe("createElectronHostCommandRouter", () => {
 
     try {
       await router.initialize();
-      const statuses = await waitForRuntimeState(router, ["claude", "codex", "opencode"], "error");
+      const failed = await statuses;
 
-      for (const runtimeKind of ["claude", "codex", "opencode"] as const) {
-        expect(statuses.find((status) => status.kind === runtimeKind)).toMatchObject({
+      for (const runtimeKind of kinds) {
+        expect(failed.find((status) => status.kind === runtimeKind)).toMatchObject({
           runtimeId: null,
           failure: {
             phase: "start",
@@ -1187,7 +814,9 @@ describe("createElectronHostCommandRouter", () => {
       shell: "/bin/zsh",
     });
     const runtimeStarter = createRuntimeStarter();
+    const { eventBus, statuses } = observeRuntimeStates(["opencode"], "error");
     const router = await createElectronHostCommandRouter({
+      eventBus,
       filesystem: createFilesystem(),
       git: createGit(),
       openInTools: createOpenInTools(),
@@ -1202,7 +831,7 @@ describe("createElectronHostCommandRouter", () => {
 
     try {
       await router.initialize();
-      const [status] = await waitForRuntimeState(router, ["opencode"], "error");
+      const [status] = await statuses;
 
       expect(status?.failure).toMatchObject({
         phase: "start",
@@ -1431,6 +1060,7 @@ describe("createElectronHostCommandRouter", () => {
       const router = await Effect.runPromise(
         createElectronEffectHostCommandRouter({
           isPackaged: false,
+          lifecycleLogger: quietLifecycleLogger,
           onBackgroundFailure: () => Effect.void,
           terminalPty: unexpectedTerminalPty,
           processInspector: unexpectedProcessInspector,
@@ -1590,7 +1220,6 @@ describe("createElectronHostCommandRouter", () => {
       if (status.state === "ready") ready.resolve();
       if (status.state === "error") ready.reject(new Error(JSON.stringify(status.failure)));
     });
-    const sessionTaskStore = createTaskStore();
     const sessionStopRouter = await createElectronHostCommandRouter({
       eventBus,
       // The native fixture needs the platform's command shell and PATH.
@@ -1612,8 +1241,7 @@ describe("createElectronHostCommandRouter", () => {
           },
         },
       }),
-      taskStore: {
-        ...sessionTaskStore,
+      taskStore: createTaskStoreTestDouble({
         listAgentSessionsForTasks: ({ taskIds }) =>
           Effect.succeed(
             taskIds.map((taskId) => ({
@@ -1630,7 +1258,7 @@ describe("createElectronHostCommandRouter", () => {
               ],
             })),
           ),
-      },
+      }),
     });
     try {
       await sessionStopRouter.initialize();
@@ -1702,906 +1330,4 @@ describe("createElectronHostCommandRouter", () => {
     }
     // Creates a real database and commits task and artifact writes to disk.
   }, 5_000);
-
-  test("deletes and resets a task through the host router", async () => {
-    const deleteRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      config: globalConfig({
-        workspaces: { repo: repoConfig() },
-        workspaceOrder: ["repo"],
-      }),
-      taskStore: createTaskStore(),
-    });
-    expect(
-      await deleteRouter.invoke("task_delete", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-      }),
-    ).toEqual({ ok: true });
-    expect(
-      await deleteRouter.invoke("task_reset", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-      }),
-    ).toMatchObject({ id: "task-1", status: "open" });
-  });
-
-  test("resets a task implementation with its workflow event through the host router", async () => {
-    const resetImplementationTaskStore = createTaskStore();
-    const resetImplementationRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      config: globalConfig({
-        workspaces: { repo: repoConfig() },
-        workspaceOrder: ["repo"],
-      }),
-      taskStore: {
-        ...resetImplementationTaskStore,
-        getTask: (input) =>
-          resetImplementationTaskStore.getTask(input).pipe(
-            Effect.map((entry) => ({
-              ...entry,
-              status: "ai_review",
-              artifactSummary: {
-                ...entry.artifactSummary,
-                plan: { present: true, updatedAt: "2026-01-02T00:00:00Z" },
-              },
-            })),
-          ),
-      },
-    });
-    expect(
-      await resetImplementationRouter.invoke("task_apply_event", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        eventId: "reset-implementation",
-      }),
-    ).toMatchObject({ id: "task-1", status: "ready_for_dev" });
-  });
-
-  test("unlinks a task pull request through the host router", async () => {
-    const pullRequestTaskStore = createTaskStore();
-    const pullRequestRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      taskStore: {
-        ...pullRequestTaskStore,
-        getTask: (input) =>
-          pullRequestTaskStore.getTask(input).pipe(
-            Effect.map((task) => ({
-              ...task,
-              status: "human_review",
-              pullRequest: {
-                providerId: "github",
-                number: 42,
-                url: "https://github.com/openai/openducktor/pull/42",
-                state: "open",
-                createdAt: "2026-05-01T00:00:00.000Z",
-                updatedAt: "2026-05-02T00:00:00.000Z",
-              },
-            })),
-          ),
-      },
-    });
-    expect(
-      await pullRequestRouter.invoke("task_pull_request_unlink", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-      }),
-    ).toBe(true);
-  });
-
-  test("reads the approval context through the host router", async () => {
-    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
-    const approvalRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      config: globalConfig({
-        workspaces: {
-          repo: repoConfig({
-            git: {
-              provider: {
-                id: "github",
-                enabled: true,
-                repository: {
-                  host: "github.com",
-                  owner: "openai",
-                  name: "openducktor",
-                },
-                autoDetected: false,
-              },
-            },
-          }),
-        },
-        workspaceOrder: ["repo"],
-      }),
-      systemCommands: createSystemCommands(),
-      taskStore: {
-        ...createTaskStore(),
-        getTask: (input) =>
-          createTaskStore()
-            .getTask(input)
-            .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
-      },
-    });
-    const approvalContext = await approvalRouter.invoke("task_approval_context_get", {
-      workspaceId: "repo",
-      repoPath,
-      taskId: "task-1",
-    });
-    expect(approvalContext).toMatchObject({
-      outcome: "ready",
-      approvalContext: {
-        taskId: "task-1",
-        taskStatus: "human_review",
-        sourceBranch: "main",
-        targetBranch: { remote: "origin", branch: "main" },
-        hasUncommittedChanges: true,
-        uncommittedFileCount: 1,
-      },
-    });
-  });
-
-  test("detects a task pull request through the host router", async () => {
-    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
-    const detectPullRequestRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      config: globalConfig({
-        workspaces: {
-          repo: repoConfig({
-            git: {
-              provider: {
-                id: "github",
-                enabled: true,
-                repository: {
-                  host: "github.com",
-                  owner: "openai",
-                  name: "openducktor",
-                },
-                autoDetected: false,
-              },
-            },
-          }),
-        },
-        workspaceOrder: ["repo"],
-      }),
-      systemCommands: {
-        ...createSystemCommands(),
-        runCommandAllowFailure: (_command, args) => {
-          if (args.includes("auth")) {
-            return Effect.succeed({
-              ok: true,
-              stdout: "Logged in to github.com account octocat\n",
-              stderr: "",
-            });
-          }
-          return Effect.succeed({
-            ok: true,
-            stdout: JSON.stringify([
-              {
-                number: 42,
-                html_url: "https://github.com/openai/openducktor/pull/42",
-                draft: false,
-                state: "open",
-                created_at: "2026-05-10T09:00:00.000Z",
-                updated_at: "2026-05-10T10:00:00.000Z",
-                merged_at: null,
-                closed_at: null,
-                head: { ref: "main" },
-                base: { ref: "main" },
-              },
-            ]),
-            stderr: "",
-          });
-        },
-      },
-      taskStore: {
-        ...createTaskStore(),
-        getTask: (input) =>
-          createTaskStore()
-            .getTask(input)
-            .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
-      },
-    });
-    expect(
-      await detectPullRequestRouter.invoke("task_pull_request_detect", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-      }),
-    ).toMatchObject({
-      outcome: "linked",
-      pullRequest: {
-        providerId: "github",
-        number: 42,
-        state: "open",
-      },
-    });
-  });
-
-  test("creates or updates a task pull request through the host router", async () => {
-    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
-    const upsertPullRequestRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: {
-        ...createGit(),
-        getWorktreeStatusSummaryData: () =>
-          Effect.succeed({
-            currentBranch: {
-              name: "main",
-              detached: false,
-              revision: "abc123",
-            },
-            fileStatuses: [],
-            fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-            targetAheadBehind: { ahead: 3, behind: 2 },
-            upstreamAheadBehind: { outcome: "untracked", ahead: 3 },
-          }),
-      },
-      openInTools: createOpenInTools(),
-      config: globalConfig({
-        workspaces: {
-          repo: repoConfig({
-            git: {
-              provider: {
-                id: "github",
-                enabled: true,
-                repository: {
-                  host: "github.com",
-                  owner: "openai",
-                  name: "openducktor",
-                },
-                autoDetected: false,
-              },
-            },
-          }),
-        },
-        workspaceOrder: ["repo"],
-      }),
-      systemCommands: {
-        ...createSystemCommands(),
-        runCommandAllowFailure: (_command, args) => {
-          if (args.includes("auth")) {
-            return Effect.succeed({
-              ok: true,
-              stdout: "Logged in to github.com account octocat\n",
-              stderr: "",
-            });
-          }
-          return Effect.succeed({
-            ok: true,
-            stdout: JSON.stringify({
-              number: 77,
-              html_url: "https://github.com/openai/openducktor/pull/77",
-              draft: false,
-              state: "open",
-              created_at: "2026-05-10T09:00:00.000Z",
-              updated_at: "2026-05-10T10:00:00.000Z",
-              merged_at: null,
-              closed_at: null,
-              head: { ref: "main" },
-              base: { ref: "main" },
-            }),
-            stderr: "",
-          });
-        },
-      },
-      taskStore: {
-        ...createTaskStore(),
-        getTask: (input) =>
-          createTaskStore()
-            .getTask(input)
-            .pipe(Effect.map((task) => ({ ...task, status: "human_review" }))),
-      },
-    });
-    expect(
-      await upsertPullRequestRouter.invoke("task_pull_request_upsert", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        input: { title: "Create PR", body: "Body" },
-      }),
-    ).toMatchObject({
-      providerId: "github",
-      number: 77,
-      state: "open",
-    });
-  });
-
-  test("syncs repository pull requests through the host router", async () => {
-    const pullRequestSyncRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      config: globalConfig({
-        workspaces: {
-          repo: repoConfig({
-            git: {
-              provider: {
-                id: "github",
-                enabled: true,
-                repository: {
-                  host: "github.com",
-                  owner: "openai",
-                  name: "openducktor",
-                },
-                autoDetected: false,
-              },
-            },
-          }),
-        },
-        workspaceOrder: ["repo"],
-      }),
-      systemCommands: {
-        ...createSystemCommands(),
-        runCommandAllowFailure: () =>
-          Effect.succeed({
-            ok: true,
-            stdout: JSON.stringify({
-              number: 42,
-              html_url: "https://github.com/openai/openducktor/pull/42",
-              draft: false,
-              state: "open",
-              created_at: "2026-05-10T09:00:00.000Z",
-              updated_at: "2026-05-10T10:00:00.000Z",
-              merged_at: null,
-              closed_at: null,
-              head: { ref: "main" },
-              base: { ref: "main" },
-            }),
-            stderr: "",
-          }),
-      },
-      taskStore: {
-        ...createTaskStore(),
-        listPullRequestSyncCandidates: () =>
-          Effect.succeed([
-            {
-              id: "task-1",
-              title: "Task 1",
-              description: "",
-              status: "human_review",
-              priority: 2,
-              issueType: "task",
-              removeWorktreeOnClose: null,
-              availableActions: [],
-              labels: [],
-              pullRequest: {
-                providerId: "github",
-                number: 42,
-                url: "https://github.com/openai/openducktor/pull/42",
-                state: "open",
-                createdAt: "2026-05-01T00:00:00.000Z",
-                updatedAt: "2026-05-02T00:00:00.000Z",
-              },
-              artifactSummary: {
-                spec: { present: false },
-                plan: { present: false },
-                qaReport: { present: false },
-              },
-              agentWorkflows: {
-                spec: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                planner: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                build: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-                qa: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-              },
-              updatedAt: "2026-01-02T00:00:00Z",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-      },
-    });
-    expect(
-      await pullRequestSyncRouter.invoke("repo_pull_request_sync", {
-        workspaceId: "repo",
-        repoPath,
-      }),
-    ).toEqual({ ok: true });
-  });
-
-  test("runs review and close commands through the host router", async () => {
-    const reviewRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      config: globalConfig({
-        workspaces: { repo: repoConfig() },
-        workspaceOrder: ["repo"],
-      }),
-      taskStore: {
-        ...createTaskStore(),
-        getTaskMetadata: () =>
-          Effect.succeed({
-            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
-            agentSessions: [],
-          }),
-        getTask: () =>
-          Effect.succeed({
-            id: "task-1",
-            workflowId: "openducktor-spec-plan-build",
-            workflowVersion: null,
-            title: "Task 1",
-            description: "",
-            status: "human_review",
-            priority: 2,
-            issueType: "task",
-            removeWorktreeOnClose: null,
-            availableActions: [],
-            labels: [],
-            artifactSummary: {
-              spec: { present: false },
-              plan: { present: false },
-              qaReport: { present: false },
-            },
-            agentWorkflows: {
-              spec: {
-                required: false,
-                canSkip: true,
-                available: false,
-                completed: false,
-              },
-              planner: {
-                required: false,
-                canSkip: true,
-                available: false,
-                completed: false,
-              },
-              build: {
-                required: true,
-                canSkip: false,
-                available: false,
-                completed: false,
-              },
-              qa: {
-                required: true,
-                canSkip: false,
-                available: false,
-                completed: false,
-              },
-            },
-            updatedAt: "2026-01-02T00:00:00Z",
-            createdAt: "2026-01-01T00:00:00Z",
-          }),
-        listTasks: () =>
-          Effect.succeed([
-            {
-              id: "task-1",
-              workflowId: "openducktor-spec-plan-build",
-              workflowVersion: null,
-              title: "Task 1",
-              description: "",
-              status: "human_review",
-              priority: 2,
-              issueType: "task",
-              removeWorktreeOnClose: null,
-              availableActions: [],
-              labels: [],
-              artifactSummary: {
-                spec: { present: false },
-                plan: { present: false },
-                qaReport: { present: false },
-              },
-              agentWorkflows: {
-                spec: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                planner: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                build: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-                qa: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-              },
-              updatedAt: "2026-01-02T00:00:00Z",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-      },
-    });
-    for (const [verdict, markdown] of [
-      ["approved", "Looks good"],
-      ["rejected", "Needs work"],
-    ] as const) {
-      expect(
-        await reviewRouter.invoke("workflow_artifact_save", {
-          workspaceId: "repo",
-          repoPath,
-          taskId: "task-1",
-          code: "qaReport",
-          markdown,
-          verdict,
-          submit: true,
-        }),
-      ).toMatchObject({ markdown, revision: 1 });
-    }
-    expect(
-      await reviewRouter.invoke("task_apply_event", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        eventId: "human-request-changes",
-      }),
-    ).toMatchObject({
-      id: "task-1",
-      status: "in_progress",
-    });
-    expect(
-      await reviewRouter.invoke("task_close", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        removeWorktree: false,
-      }),
-    ).toMatchObject({
-      id: "task-1",
-      status: "closed",
-    });
-  });
-
-  test("runs a direct merge through the host router", async () => {
-    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
-    const directMergeStartRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: {
-        ...createGit(),
-        getCurrentBranch: () =>
-          Effect.succeed({ name: "odt/task-1", detached: false, revision: "abc123" }),
-        getWorktreeStatusSummaryData: () =>
-          Effect.succeed({
-            currentBranch: {
-              name: "odt/task-1",
-              detached: false,
-              revision: "abc123",
-            },
-            fileStatuses: [],
-            fileStatusCounts: { total: 0, staged: 0, unstaged: 0 },
-            targetAheadBehind: { ahead: 1, behind: 0 },
-            upstreamAheadBehind: { outcome: "untracked", ahead: 1 },
-          }),
-      },
-      openInTools: createOpenInTools(),
-      config: globalConfig({
-        workspaces: { repo: repoConfig() },
-        workspaceOrder: ["repo"],
-      }),
-      taskStore: withGetTaskFromList({
-        ...createTaskStore(),
-        listTasks: () =>
-          Effect.succeed([
-            {
-              id: "task-1",
-              workflowId: "openducktor-spec-plan-build",
-              workflowVersion: null,
-              title: "Task 1",
-              description: "",
-              status: "ai_review",
-              priority: 2,
-              issueType: "task",
-              removeWorktreeOnClose: null,
-              availableActions: [],
-              labels: [],
-              artifactSummary: {
-                spec: { present: false },
-                plan: { present: false },
-                qaReport: { present: false },
-              },
-              agentWorkflows: {
-                spec: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                planner: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                build: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-                qa: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-              },
-              updatedAt: "2026-01-02T00:00:00Z",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-      }),
-    });
-    expect(
-      await directMergeStartRouter.invoke("task_direct_merge", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        input: {
-          mergeMethod: "merge_commit",
-          removeWorktree: true,
-          expected: {
-            taskStatus: "ai_review",
-            sourceBranch: "odt/task-1",
-            targetBranch: { remote: "origin", branch: "main" },
-          },
-        },
-      }),
-    ).toMatchObject({
-      // A merge with a publish target keeps the task state until its publication.
-      outcome: "completed",
-      task: { id: "task-1", status: "ai_review" },
-    });
-  });
-
-  test("completes a direct merge through the host router", async () => {
-    const directMergeRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      worktreeFiles: createWorktreeFiles(),
-      config: globalConfig({
-        workspaces: {
-          repo: repoConfig(),
-        },
-        workspaceOrder: ["repo"],
-      }),
-      taskStore: withGetTaskFromList({
-        ...createTaskStore(),
-        listTasks: () =>
-          Effect.succeed([
-            {
-              id: "task-1",
-              workflowId: "openducktor-spec-plan-build",
-              workflowVersion: null,
-              title: "Task 1",
-              description: "",
-              status: "human_review",
-              priority: 2,
-              issueType: "task",
-              removeWorktreeOnClose: null,
-              availableActions: [],
-              labels: [],
-              artifactSummary: {
-                spec: { present: false },
-                plan: { present: false },
-                qaReport: { present: false },
-              },
-              agentWorkflows: {
-                spec: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                planner: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                build: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-                qa: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-              },
-              updatedAt: "2026-01-02T00:00:00Z",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-        getTaskMetadata: () =>
-          Effect.succeed({
-            artifacts: { spec: { markdown: "# Spec" }, plan: { markdown: "# Plan" } },
-            directMerge: {
-              method: "merge_commit",
-              sourceBranch: "odt/task-1",
-              targetBranch: { branch: "main" },
-              mergedAt: "2026-05-10T11:00:00.000Z",
-            },
-            agentSessions: [],
-          } satisfies TaskMetadataPayload),
-      }),
-    });
-    expect(
-      await directMergeRouter.invoke("task_direct_merge_complete", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        removeWorktree: true,
-      }),
-    ).toMatchObject({
-      id: "task-1",
-      status: "closed",
-    });
-  });
-
-  test("links a merged pull request through the host router", async () => {
-    await mkdir(path.join(worktreeBasePath, "task-1"), { recursive: true });
-    const removedMergedWorktreePaths: string[] = [];
-    const mergedPullRequestRouter = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      worktreeFiles: createWorktreeFiles({
-        removePathIfPresent: (worktreePath) =>
-          Effect.sync(() => {
-            removedMergedWorktreePaths.push(worktreePath);
-          }),
-      }),
-      config: globalConfig({
-        workspaces: {
-          repo: repoConfig({
-            git: {
-              provider: {
-                id: "github",
-                enabled: true,
-                repository: {
-                  host: "github.com",
-                  owner: "acme",
-                  name: "repo",
-                },
-                autoDetected: false,
-              },
-            },
-          }),
-        },
-        workspaceOrder: ["repo"],
-      }),
-      systemCommands: createSystemCommands(),
-      taskStore: withGetTaskFromList({
-        ...createTaskStore(),
-        listTasks: () =>
-          Effect.succeed([
-            {
-              id: "task-1",
-              workflowId: "openducktor-spec-plan-build",
-              workflowVersion: null,
-              title: "Task 1",
-              description: "",
-              status: "human_review",
-              priority: 2,
-              issueType: "task",
-              removeWorktreeOnClose: null,
-              availableActions: [],
-              labels: [],
-              artifactSummary: {
-                spec: { present: false },
-                plan: { present: false },
-                qaReport: { present: false },
-              },
-              agentWorkflows: {
-                spec: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                planner: {
-                  required: false,
-                  canSkip: true,
-                  available: false,
-                  completed: false,
-                },
-                build: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-                qa: {
-                  required: true,
-                  canSkip: false,
-                  available: false,
-                  completed: false,
-                },
-              },
-              updatedAt: "2026-01-02T00:00:00Z",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-          ]),
-      }),
-    });
-    expect(
-      await mergedPullRequestRouter.invoke("task_pull_request_link_merged", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        pullRequest: {
-          providerId: "github",
-          number: 12,
-          url: "https://github.com/acme/repo/pull/12",
-          state: "merged",
-          createdAt: "2026-05-10T10:00:00.000Z",
-          updatedAt: "2026-05-10T11:00:00.000Z",
-          mergedAt: "2026-05-10T11:00:00.000Z",
-        },
-        removeWorktree: true,
-      }),
-    ).toMatchObject({
-      id: "task-1",
-      status: "closed",
-    });
-    expect(removedMergedWorktreePaths).toEqual([path.join(worktreeBasePath, "task-1")]);
-  });
-
-  test("updates a task through the host router", async () => {
-    // The default router runs the commands that need no special fakes.
-    const router = await createElectronHostCommandRouter({
-      filesystem: createFilesystem(),
-      git: createGit(),
-      openInTools: createOpenInTools(),
-      taskStore: createTaskStore(),
-    });
-    expect(
-      await router.invoke("task_update", {
-        workspaceId: "repo",
-        repoPath,
-        taskId: "task-1",
-        patch: { title: "Updated task" },
-      }),
-    ).toMatchObject({
-      id: "task-1",
-      title: "Updated task",
-      availableActions: ["view_details", "set_spec", "set_plan", "build_start"],
-    });
-  });
 });

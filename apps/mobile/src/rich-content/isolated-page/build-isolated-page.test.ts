@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { describe, expect, onTestFinished, test } from "bun:test";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -50,6 +50,7 @@ const unsuppliedBuiltIns = (html: string): string[] =>
 
 const fixtureDirectory = async (): Promise<string> => {
   const directory = await mkdtemp(path.join(tmpdir(), "odt-pages-"));
+  onTestFinished(() => rm(directory, { recursive: true, force: true }));
   await mkdir(path.join(directory, "src", "shared"), { recursive: true });
   await mkdir(path.join(directory, "src", "fonts"), { recursive: true });
   await writeFile(path.join(directory, "src", "fonts", "Demo.woff2"), new Uint8Array([1, 2, 3]));

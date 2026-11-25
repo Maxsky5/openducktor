@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, onTestFinished, spyOn } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -311,6 +311,8 @@ describe("build Electron release artifact", () => {
   });
 
   it("copies channel-specific release metadata for prerelease artifacts", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
     const baseDirectory = await mkdtemp(join(tmpdir(), "openducktor-electron-release-"));
     const releaseDirectory = join(baseDirectory, "release");
     const outputDirectory = join(baseDirectory, "release-publish");
@@ -337,6 +339,9 @@ describe("build Electron release artifact", () => {
       expect((await readdir(outputDirectory)).sort()).toEqual([
         "OpenDucktor-0.4.0-beta.2-mac-arm64.dmg",
         "beta-mac.yml",
+      ]);
+      expect(warn.mock.calls).toEqual([
+        ["No Electron updater companion blockmaps were produced for macos."],
       ]);
     } finally {
       await rm(baseDirectory, { force: true, recursive: true });

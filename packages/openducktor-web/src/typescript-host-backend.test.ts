@@ -99,14 +99,6 @@ type TestHostCommandInvoke = (
   args?: Exclude<HostCommandArgs, undefined>,
 ) => Effect.Effect<HostCommandResult, HostCommandHandlerError>;
 
-const createDeferred = <Value = void>() => {
-  let resolve: (value: Value | PromiseLike<Value>) => void = () => {};
-  const promise = new Promise<Value>((nextResolve) => {
-    resolve = nextResolve;
-  });
-  return { promise, resolve };
-};
-
 const createTestHostCommandRouter = (
   invoke: TestHostCommandInvoke = () => Effect.succeed(null),
 ): EffectHostCommandRouter => {
@@ -406,7 +398,7 @@ const checkCookieChannelStreams = async (url: string, origin: string, cookie: st
     expect(
       await session.request({ method: "events.open", cursor: null, notificationCursor: null }),
     ).toMatchObject({ hostChanged: false, gaps: [] });
-    const received = createDeferred<TaskEventStreamFrame>();
+    const received = Promise.withResolvers<TaskEventStreamFrame>();
     const lease = await session.subscribeTaskEvents({ cursor: null }, received.resolve);
     expect(await received.promise).toMatchObject({ type: "snapshot_required" });
     await session.releaseTaskEvents(lease.subscriptionId);
@@ -938,7 +930,7 @@ describe("TypeScript web host backend", () => {
     }
   });
 
-  test("probes a mapped wildcard with an isolated proxy and loopback bypass", async () => {
+  test("probes a mapped wildcard directly even when the environment proxies loopback", async () => {
     const bindHost = await Effect.runPromise(parseHostEffect("[::ffff:0.0.0.0]", "--host"));
     const server = await createTerminalUpgradeTestServer("/api", bindHost);
     let proxyRequests = 0;
@@ -953,44 +945,39 @@ describe("TypeScript web host backend", () => {
       },
     });
     const proxyUrl = `http://127.0.0.1:${proxy.port}`;
-    const child = Bun.spawn({
-      cmd: [
-        process.execPath,
-        "--eval",
-        `import { Effect } from "effect";
-         import { buildBackendUrl, readinessHostForBind, waitForBackendEffect } from ${JSON.stringify(new URL("./launcher-support.ts", import.meta.url).href)};
-         const control = await fetch("http://proxy-check.invalid/", { signal: AbortSignal.timeout(2000) });
-         if (control.status !== 503 || await control.text() !== "test proxy") throw new Error("Proxy control failed");
-         const host = readinessHostForBind(${JSON.stringify(bindHost)});
-         if (host !== "127.0.0.1") throw new Error("Expected IPv4 loopback readiness host");
-         await Effect.runPromise(waitForBackendEffect(buildBackendUrl(${server.port}, host), ${JSON.stringify(APP_TOKEN)}, 2000, { exited: new Promise(() => {}) }));`,
-      ],
-      env: {
-        ...process.env,
-        HTTP_PROXY: proxyUrl,
-        http_proxy: proxyUrl,
-        HTTPS_PROXY: proxyUrl,
-        https_proxy: proxyUrl,
-        ALL_PROXY: proxyUrl,
-        all_proxy: proxyUrl,
-        NO_PROXY: "127.0.0.1,localhost,::1",
-        no_proxy: "127.0.0.1,localhost,::1",
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const proxyEnvironment = {
+      HTTP_PROXY: proxyUrl,
+      http_proxy: proxyUrl,
+      HTTPS_PROXY: proxyUrl,
+      https_proxy: proxyUrl,
+      ALL_PROXY: proxyUrl,
+      all_proxy: proxyUrl,
+      NO_PROXY: "unrelated.invalid",
+      no_proxy: "unrelated.invalid",
+    };
+    const previous = Object.keys(proxyEnvironment).map((key) => [key, process.env[key]] as const);
     try {
-      const [exitCode, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stderr).text(),
-      ]);
-      expect(exitCode, stderr).toBe(0);
+      Object.assign(process.env, proxyEnvironment);
+      const control = await Bun.fetch("http://proxy-check.invalid/", {
+        signal: AbortSignal.timeout(2_000),
+      });
+      expect(control.status).toBe(503);
+      expect(await control.text()).toBe("test proxy");
+      const readinessHost = readinessHostForBind(bindHost);
+      expect(readinessHost).toBe("127.0.0.1");
+      await Effect.runPromise(
+        waitForBackendEffect(buildBackendUrl(server.port, readinessHost), APP_TOKEN, 2_000, {
+          exited: new Promise(() => {}),
+        }),
+      );
       expect(proxyRequests).toBe(1);
     } finally {
-      child.kill();
-      await child.exited;
+      for (const [key, value] of previous) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
       await server.stop(true);
-      proxy.stop(true);
+      await proxy.stop(true);
     }
   }, 10_000);
 
@@ -1248,7 +1235,7 @@ describe("TypeScript web host backend", () => {
 
   test("interrupts the command and runs its cleanup when the signal aborts", async () => {
     let cleanedUp = false;
-    const started = createDeferred<void>();
+    const started = Promise.withResolvers<void>();
     const hostCommandRouter = createTestHostCommandRouter(() =>
       Effect.sync(() => started.resolve()).pipe(
         Effect.andThen(Effect.never),

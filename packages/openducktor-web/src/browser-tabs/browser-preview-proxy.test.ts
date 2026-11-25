@@ -22,6 +22,7 @@ afterEach(async () => {
 /** A dev server that answers each test path, and a preview of it. */
 const startPreview = async () => {
   let finishStream = () => {};
+  let cutResponse: (() => void) | undefined;
   const eventsClosed = Promise.withResolvers<void>();
   const target = createServer((request, response) => {
     switch (request.url) {
@@ -69,7 +70,7 @@ const startPreview = async () => {
       case "/cut":
         response.writeHead(200, { "content-type": "application/json", "content-length": "100" });
         response.write('{"partial":');
-        setTimeout(() => response.destroy(), 20);
+        cutResponse = () => response.destroy();
         return;
       case "/cookie":
         response.writeHead(200, {
@@ -112,6 +113,10 @@ const startPreview = async () => {
     previews,
     targetPort,
     finishStream: () => finishStream(),
+    cutResponse: () => {
+      if (!cutResponse) throw new Error("The response did not start.");
+      cutResponse();
+    },
     eventsClosed: eventsClosed.promise,
   };
 };
@@ -337,10 +342,20 @@ describe("browser preview proxy", () => {
   });
 
   test("ends a response at once when the dev server drops it", async () => {
-    const { origin } = await startPreview();
+    const { origin, cutResponse } = await startPreview();
     const response = await fetch(`${origin}/cut`);
+    if (!response.body) throw new Error("Expected a response body.");
+    const reader = response.body.getReader();
+    try {
+      const first = await reader.read();
+      expect(new TextDecoder().decode(first.value)).toBe('{"partial":');
 
-    await expect(response.text()).rejects.toThrow();
+      cutResponse();
+
+      await expect(reader.read()).rejects.toThrow();
+    } finally {
+      reader.releaseLock();
+    }
   });
 
   test("shows the error of a dev server that does not answer in the tab", async () => {

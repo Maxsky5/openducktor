@@ -1,5 +1,5 @@
 import "@openducktor/frontend-core/test-support/dom-environment";
-import { expect, mock, test } from "bun:test";
+import { expect, jest, mock, test } from "bun:test";
 import {
   GITHUB_PROVIDER_DESCRIPTOR,
   type IssueItemsListInput,
@@ -11,15 +11,15 @@ import type { ClientConnection } from "@openducktor/frontend-core/connection/cli
 import { repositoryGitProviderContextQueryOptions } from "@openducktor/frontend-core/queries/git-provider-context";
 import { issueItemsQueryKeys } from "@openducktor/frontend-core/queries/issue-items";
 import { issueImportListQueryOptions } from "@openducktor/frontend-core/tasks/issue-import/issue-import-model";
-import {
-  createDeferred,
-  createGitProviderContextFixture,
-} from "@openducktor/frontend-core/test-support/shared-test-fixtures";
+import { createGitProviderContextFixture } from "@openducktor/frontend-core/test-support/shared-test-fixtures";
 import { createTestClientConnection } from "@openducktor/frontend-core/test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
 import { workspaceRefFixture } from "@openducktor/frontend-core/test-support/workspace-ref-fixture";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren } from "react";
 import { useIssueImportReads } from "./use-issue-import-reads";
+
+setupTestingLibraryFakeTimers();
 
 const workspace = workspaceRefFixture("/repo");
 const provider = (options: Parameters<typeof createGitProviderContextFixture>[0] = {}) => ({
@@ -51,8 +51,8 @@ function cacheProvider(connection: ClientConnection) {
 
 for (const cachedProvider of [false, true]) {
   test(`prepares the provider and first issue list together, cached provider=${cachedProvider}`, async () => {
-    const providerRead = createDeferred<RepositoryGitProviderContext>();
-    const listRead = createDeferred<IssueItemsListResult>();
+    const providerRead = Promise.withResolvers<RepositoryGitProviderContext>();
+    const listRead = Promise.withResolvers<IssueItemsListResult>();
     const list = mock(() => listRead.promise);
     const connection = createTestClientConnection({
       client: {
@@ -63,7 +63,7 @@ for (const cachedProvider of [false, true]) {
     if (cachedProvider) {
       cacheProvider(connection);
     }
-    const startedAt = performance.now();
+    const startedAt = Date.now();
     const view = renderReads(connection);
     try {
       expect(view.result.current.loading).toBe(true);
@@ -75,9 +75,11 @@ for (const cachedProvider of [false, true]) {
       expect(view.result.current.loading).toBe(true);
       await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
       await act(async () => listRead.resolve(page));
-      await waitFor(() => expect(view.result.current.loading).toBe(false), { timeout: 800 });
-      expect(performance.now() - startedAt).toBeGreaterThanOrEqual(500);
-      expect(view.result.current.query.data).toEqual(page);
+      await waitFor(() => expect(view.result.current.query.data).toEqual(page));
+      act(() => jest.advanceTimersByTime(startedAt + 499 - Date.now()));
+      expect(view.result.current.loading).toBe(true);
+      act(() => jest.advanceTimersByTime(1));
+      expect(view.result.current.loading).toBe(false);
     } finally {
       view.unmount();
       connection.queryClient.clear();
@@ -85,10 +87,9 @@ for (const cachedProvider of [false, true]) {
   });
 }
 
-// The failed provider read and its retry each keep a 500 ms preparation loader.
 test("a provider read failure stays actionable and retry prepares the first list", async () => {
   let providerReads = 0;
-  const listRead = createDeferred<IssueItemsListResult>();
+  const listRead = Promise.withResolvers<IssueItemsListResult>();
   const list = mock(() => listRead.promise);
   const connection = createTestClientConnection({
     client: {
@@ -101,7 +102,7 @@ test("a provider read failure stays actionable and retry prepares the first list
   });
   const view = renderReads(connection);
   try {
-    await waitFor(() => expect(view.result.current.loading).toBe(false), { timeout: 800 });
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
     expect(view.result.current.state).toEqual({
       kind: "read_failed",
       reason: "Could not read the Git provider. Provider unavailable",
@@ -109,24 +110,23 @@ test("a provider read failure stays actionable and retry prepares the first list
     expect(providerReads).toBe(1);
     expect(list).not.toHaveBeenCalled();
 
-    const retryStartedAt = performance.now();
     await act(async () => {
       await view.result.current.providerQuery.refetch();
     });
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
     expect(view.result.current.loading).toBe(true);
     await act(async () => listRead.resolve(page));
-    await waitFor(() => expect(view.result.current.loading).toBe(false), { timeout: 800 });
-    expect(performance.now() - retryStartedAt).toBeGreaterThanOrEqual(500);
-    expect(view.result.current.query.data).toEqual(page);
+    await waitFor(() => expect(view.result.current.query.data).toEqual(page));
+    expect(view.result.current.loading).toBe(true);
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
   } finally {
     view.unmount();
     connection.queryClient.clear();
   }
-}, 2000);
+});
 
 test("a first-list failure ends preparation and retry keeps the ready view", async () => {
-  const retry = createDeferred<IssueItemsListResult>();
+  const retry = Promise.withResolvers<IssueItemsListResult>();
   let reads = 0;
   const connection = createTestClientConnection({
     client: {
@@ -139,7 +139,7 @@ test("a first-list failure ends preparation and retry keeps the ready view", asy
   cacheProvider(connection);
   const view = renderReads(connection);
   try {
-    await waitFor(() => expect(view.result.current.loading).toBe(false), { timeout: 800 });
+    await waitFor(() => expect(view.result.current.loading).toBe(false));
     expect(view.result.current.query.error?.message).toBe("Issue access denied");
     expect(reads).toBe(1);
     act(() => void view.result.current.query.refetch());
@@ -157,9 +157,9 @@ test("a first-list failure ends preparation and retry keeps the ready view", asy
 
 test("ready content stays during background refresh, search, and pagination", async () => {
   const reads = [
-    createDeferred<IssueItemsListResult>(),
-    createDeferred<IssueItemsListResult>(),
-    createDeferred<IssueItemsListResult>(),
+    Promise.withResolvers<IssueItemsListResult>(),
+    Promise.withResolvers<IssueItemsListResult>(),
+    Promise.withResolvers<IssueItemsListResult>(),
   ];
   const requests: IssueItemsListInput[] = [];
   const connection = createTestClientConnection({

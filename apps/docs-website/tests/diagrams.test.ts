@@ -37,20 +37,6 @@ describe.each(diagrams)("the %s diagram", (_, diagram) => {
   test.each(LAYOUTS)("draws every edge of its %s layout between handles", (which) => {
     expect(loseEdges(diagram[which])).toEqual([]);
   });
-
-  test.each(LAYOUTS)("keeps only the handles that the edges of its %s layout use", (which) => {
-    const { nodes, edges } = diagram[which];
-    const used = new Set(
-      edges.flatMap((edge) => [
-        `${edge.source}/${edge.sourceHandle}`,
-        `${edge.target}/${edge.targetHandle}`,
-      ]),
-    );
-    const unused = nodes.flatMap((node) =>
-      (node.handles ?? []).map((h) => `${node.id}/${h.id}`).filter((id) => !used.has(id)),
-    );
-    expect(unused).toEqual([]);
-  });
 });
 
 const item = (title: string): NodeSpec => ({ type: "item", data: { title, Icon: Box } });
@@ -63,6 +49,7 @@ const pair = (edge: readonly [`${"a" | "b"}.${string}`, `${"a" | "b"}.${string}`
     height: 40,
     boxes: { a: box(0), b: box(200) },
     ports: {
+      a: [{ id: "spare", side: "top" as const, at: 5 }],
       b: [
         { id: "in", side: "left" as const, at: 10 },
         { id: "spare", side: "top" as const, at: 5 },
@@ -175,9 +162,13 @@ describe("defineDiagram", () => {
     ]);
   });
 
-  test("gives a node only the handles that its edges use", () => {
-    const target = pair(["a.r", "b.in"]).wide.nodes.find((node) => node.id === "b");
-    expect(target?.handles?.map((h) => h.id)).toEqual(["in-target"]);
+  test("emits only the ports that the renderer draws for connected edges", () => {
+    const { nodes } = pair(["a.r", "b.in"]).wide;
+    expect(nodes.map((node) => node.handles?.map((handle) => handle.id))).toEqual([
+      ["r-source"],
+      ["in-target"],
+    ]);
+    expect(nodes.map((node) => node.data.ports.map((port) => port.id))).toEqual([["r"], ["in"]]);
   });
 });
 

@@ -3,19 +3,9 @@ import { describe, expect, test } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
 import { usePullRefresh } from "./use-pull-refresh";
 
-const deferred = () => {
-  let resolve: () => void = () => {};
-  let reject: (error: Error) => void = () => {};
-  const promise = new Promise<void>((onResolve, onReject) => {
-    resolve = onResolve;
-    reject = onReject;
-  });
-  return { promise, resolve, reject };
-};
-
 describe("usePullRefresh", () => {
   test("keeps the spinner until the refresh of the pull settles", async () => {
-    const read = deferred();
+    const read = Promise.withResolvers<void>();
     const { result } = renderHook(() => usePullRefresh(() => read.promise));
     expect(result.current.pulling).toBe(false);
 
@@ -30,7 +20,7 @@ describe("usePullRefresh", () => {
   });
 
   test("ends the spinner when the refresh fails", async () => {
-    const read = deferred();
+    const read = Promise.withResolvers<void>();
     const { result } = renderHook(() => usePullRefresh(() => read.promise));
 
     act(() => result.current.pull());
