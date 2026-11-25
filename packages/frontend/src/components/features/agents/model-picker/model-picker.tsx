@@ -143,10 +143,6 @@ function useModelPickerController({
   const wasOpenBeforeReadOnlyRef = useRef(false);
   const lastEmittedValueRef = useRef<ModelPickerValue | null>(null);
 
-  useEffect(() => {
-    lastEmittedValueRef.current = null;
-  }, [value]);
-
   const isSpeedOnly = selectionPolicy.kind === "speed_only";
   const readOnlyReason = selectionPolicy.kind === "read_only" ? selectionPolicy.reason : null;
   if (open && readOnlyReason !== null) {
@@ -258,16 +254,23 @@ function useModelPickerController({
     focusModel(target);
   };
 
-  const onSelect = (index: number, close: boolean): void => {
+  const onSelect = (index: number, close: boolean, skipEmit = false): void => {
     const item = items[index]!;
     if (effectiveGetModelDisabledReason?.(item)) return;
     const alreadySelected =
+      skipEmit ||
       isSameModelPickerValue(value, item.value) ||
       (lastEmittedValueRef.current !== null &&
         isSameModelPickerValue(lastEmittedValueRef.current, item.value));
     if (!alreadySelected) {
-      lastEmittedValueRef.current = item.value;
-      onValueChange(item.value);
+      const emitted = item.value;
+      lastEmittedValueRef.current = emitted;
+      queueMicrotask(() => {
+        if (lastEmittedValueRef.current === emitted) {
+          lastEmittedValueRef.current = null;
+        }
+      });
+      onValueChange(emitted);
     }
     if (close) {
       wasOpenBeforeReadOnlyRef.current = false;

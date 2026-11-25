@@ -172,7 +172,7 @@ type ModelRowProps = {
   onFocus: () => void;
   onBlur: (relatedTarget: EventTarget | null) => void;
   onNavigate: (key: "ArrowDown" | "ArrowUp" | "Home" | "End") => void;
-  onSelect: (close: boolean) => void;
+  onSelect: (close: boolean, skipEmit?: boolean) => void;
   style?: CSSProperties;
   ariaAttributes?: RowComponentProps["ariaAttributes"];
 };
@@ -223,8 +223,12 @@ const ModelSelectionButton = ({
           onSelect(true);
         }
       }}
-      onClick={() => onSelect(false)}
-      onDoubleClick={() => onSelect(true)}
+      onClick={(event) => {
+        if (event.detail <= 1) {
+          onSelect(false);
+        }
+      }}
+      onDoubleClick={(event) => onSelect(true, event.detail >= 2)}
     >
       <AgentRuntimeIcon runtimeKind={item.runtime.kind} />
       <span className="flex min-w-0 flex-1 flex-col items-start overflow-hidden text-left">
@@ -357,7 +361,7 @@ type VirtualModelRowData = {
   onFocus: (modelKey: string) => void;
   onBlur: (modelKey: string, relatedTarget: EventTarget | null) => void;
   onNavigate: (index: number, key: "ArrowDown" | "ArrowUp" | "Home" | "End") => void;
-  onSelect: (index: number, close: boolean) => void;
+  onSelect: (index: number, close: boolean, skipEmit?: boolean) => void;
 };
 
 const modelRowKey = (index: number, data: VirtualModelRowData): string =>
@@ -389,7 +393,7 @@ const VirtualModelRow = ({
       onFocus={() => onFocus(modelKey)}
       onBlur={(relatedTarget) => onBlur(modelKey, relatedTarget)}
       onNavigate={(key) => onNavigate(index, key)}
-      onSelect={(close) => onSelect(index, close)}
+      onSelect={(close, skipEmit) => onSelect(index, close, skipEmit)}
       style={style}
       ariaAttributes={ariaAttributes}
     />
@@ -508,7 +512,7 @@ export function ModelPickerList({
               onFocus={() => onFocus(modelKey)}
               onBlur={(relatedTarget) => onBlur(modelKey, relatedTarget)}
               onNavigate={(key) => onNavigate(index, key)}
-              onSelect={(close) => onSelect(index, close)}
+              onSelect={(close, skipEmit) => onSelect(index, close, skipEmit)}
             />
           );
         })}

@@ -1900,6 +1900,48 @@ describe("ModelPicker", () => {
     expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
   });
 
+  test("allows retrying the same model row in an open picker after a rejected update and deduplicates browser double-click gestures", async () => {
+    const onValueChange = mock(() => {});
+    render(
+      <ModelPicker
+        runtimes={makeRuntimes()}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Codex runtime" }));
+    });
+
+    const codexRow = screen.getByRole("button", { name: "Select GPT 5 Codex model" });
+    // First single click emits; parent does not update `value` (simulating a rejected update).
+    await act(async () => {
+      fireEvent.click(codexRow, { detail: 1 });
+    });
+    expect(onValueChange).toHaveBeenCalledTimes(1);
+
+    // Clicking the same row again while the picker stays open retries the selection.
+    await act(async () => {
+      fireEvent.click(codexRow, { detail: 1 });
+    });
+    expect(onValueChange).toHaveBeenCalledTimes(2);
+
+    // Completing a real browser double-click gesture (detail=2 click + detail=2 dblclick) closes without re-emitting.
+    await act(async () => {
+      fireEvent.click(codexRow, { detail: 2 });
+      fireEvent.doubleClick(codexRow, { detail: 2 });
+    });
+    expect(onValueChange).toHaveBeenCalledTimes(2);
+    expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+  });
+
   test("stacks the options pane below the rail and list when the popover container is narrow", async () => {
     render(
       <ModelPicker
