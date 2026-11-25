@@ -86,8 +86,8 @@ const inlineFontSources = async (css: string, directory: string): Promise<string
 const inlineFontsPlugin = (directory: string): BunPlugin => ({
   name: "inline-css-fonts",
   setup(build) {
-    const folder = directory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    build.onLoad({ filter: new RegExp(`^${folder}/.+\\.css$`) }, async (args) => ({
+    const escapedDirectory = directory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    build.onLoad({ filter: new RegExp(`^${escapedDirectory}/.+\\.css$`) }, async (args) => ({
       contents: await inlineFontSources(await readFile(args.path, "utf8"), path.dirname(args.path)),
       loader: "css",
     }));

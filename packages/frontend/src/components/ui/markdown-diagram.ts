@@ -15,10 +15,7 @@ import { createLazyModule, type LazyModuleState } from "./markdown-lazy-module";
 type PeleRender = (typeof import("pele"))["render"];
 type DiagramRendererEntry = NonNullable<PluginConfig["renderers"]>[number];
 
-/**
- * The fonts of the app text. Pele measures each label in the font that draws it, so a label
- * fits its box and keeps clear of the lines.
- */
+/** Diagrams use the fonts of the app text. */
 const DIAGRAM_OPTIONS = {
   fontFamily: '"Space Grotesk", "Avenir Next", "Segoe UI", sans-serif',
   fontFamilyMono: '"IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace',
@@ -38,8 +35,9 @@ const withPreparation =
   };
 
 /**
- * Pele measures each label in the font that draws it, so it loads with the diagram fonts. Class
- * members use the code font, which the app loads only when a view first shows code.
+ * Pele measures each label in the font that draws it, so a label fits its box. Pele therefore loads
+ * with the diagram fonts. Class members use the code font, which the app loads only when a view
+ * first shows code.
  */
 const pele = createLazyModule(() =>
   Promise.all([
@@ -74,17 +72,21 @@ const draw = (render: PeleRender, source: string): DrawnDiagram => {
   }
 };
 
+/** Draws a diagram, or returns the last drawing of the same source. */
 export const drawDiagram = (render: PeleRender, source: string): DrawnDiagram => {
   const cached = drawings.get(source);
   if (cached) {
+    // The map keeps insertion order, so a reused drawing moves to the end.
     drawings.delete(source);
     drawings.set(source, cached);
     return cached;
   }
   const drawn = draw(render, source);
   drawings.set(source, drawn);
-  const oldest = drawings.keys().next();
-  if (drawings.size > DRAWING_LIMIT && !oldest.done) drawings.delete(oldest.value);
+  if (drawings.size > DRAWING_LIMIT) {
+    const oldest = drawings.keys().next();
+    if (!oldest.done) drawings.delete(oldest.value);
+  }
   return drawn;
 };
 

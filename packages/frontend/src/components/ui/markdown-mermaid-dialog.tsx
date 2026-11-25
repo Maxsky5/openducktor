@@ -1,5 +1,5 @@
 import { Minimize2, Minus, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { type PointerEvent, type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./button";
 import { DialogClose, DialogContent, DialogDescription, DialogTitle } from "./dialog";
 
@@ -10,13 +10,13 @@ const VIEW_BOX = /^<svg\b[^>]*?\sviewBox="[\d.-]+[\s,]+[\d.-]+[\s,]+([\d.]+)[\s,
 
 /** The size of a Pele drawing, from the `viewBox` that Pele writes on its root tag. */
 function readDiagramSize(svg: string): DiagramSize | null {
-  const [, width, height] = VIEW_BOX.exec(svg.trimStart()) ?? [];
-  return Number(width) > 0 && Number(height) > 0
-    ? { width: Number(width), height: Number(height) }
-    : null;
+  const viewBox = VIEW_BOX.exec(svg.trimStart());
+  const width = Number(viewBox?.[1]);
+  const height = Number(viewBox?.[2]);
+  return width > 0 && height > 0 ? { width, height } : null;
 }
 
-export function MarkdownMermaidDialog({ svg }: { svg: string }) {
+export function MarkdownMermaidDialog({ svg }: { svg: string }): ReactElement {
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const [viewportSize, setViewportSize] = useState<DiagramSize | null>(null);

@@ -137,6 +137,7 @@ export const MarkdownView = memo(function MarkdownView({
   };
 
   const hasImages = IMAGE.test(markdown);
+  const hasTaskItems = TASK_ITEM.test(markdown);
   const imageMode = images === "label" ? "label" : "host";
   const hostImages = useMemo<HostImageOptions | null>(
     () =>
@@ -150,26 +151,26 @@ export const MarkdownView = memo(function MarkdownView({
           },
     [images, resolveTaskAssetSource, taskAssetContext],
   );
-  const local = links !== "text" && LINK.test(markdown) ? (links?.local ?? null) : null;
-  const usesUrlHook = local !== null || hasImages;
+  // Local links open in the app. Their hook is on only when the text has a link.
+  const localLinks = links !== "text" && LINK.test(markdown) ? (links?.local ?? null) : null;
+  const usesUrlHook = localLinks !== null || hasImages;
   // A label shows any image, also one whose source the browser cannot load.
   const urlTransform = useMemo(
     () =>
       createMarkdownUrlTransform(
         hostImages ? (src) => isHostImage(src, hostImages) : () => true,
-        local,
+        localLinks,
       ),
-    [hostImages, local],
+    [hostImages, localLinks],
   );
-  const hasTaskItems = TASK_ITEM.test(markdown);
   const hooks = useMemo(
     () =>
       createMarkdownHooks({
-        links: links === "text" ? "text" : local,
+        links: links === "text" ? "text" : localLinks,
         images: hasImages ? imageMode : null,
         taskItems: hasTaskItems,
       }),
-    [hasImages, hasTaskItems, imageMode, links, local],
+    [hasImages, hasTaskItems, imageMode, links, localLinks],
   );
   const islands = useMemo<ReactiveIslands | undefined>(
     () =>
@@ -204,7 +205,7 @@ export const MarkdownView = memo(function MarkdownView({
     const destination = anchor.getAttribute(LOCAL_LINK_ATTRIBUTE);
     if (destination !== null) {
       const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-      if (local && !modified) local.open(destination, anchor);
+      if (localLinks && !modified) localLinks.open(destination, anchor);
       return;
     }
     // Words keeps the text of a link whose destination is unsafe, without a destination.

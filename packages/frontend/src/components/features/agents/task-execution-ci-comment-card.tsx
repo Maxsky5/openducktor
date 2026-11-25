@@ -16,7 +16,7 @@ import {
 } from "@openducktor/frontend-core/review/task-execution-ci-presentation";
 import { TaskExecutionCiRelativeTime } from "./task-execution-ci-relative-time";
 
-function useOpenReviewUrl() {
+function useOpenReviewUrl(): (url: string, failureMessage: string) => void {
   const openExternalUrl = useOpenExternalUrl();
   return useCallback(
     (url: string, failureMessage: string): void => {

@@ -1,6 +1,7 @@
 /**
  * What the desktop and mobile diagram views share when they draw Mermaid diagrams with Pele: the
- * layout options and the header bands of class and entity boxes.
+ * layout options, and the preparation step that adds the shapes and classes that the diagram theme
+ * in `@openducktor/theme/diagrams.css` reads.
  */
 
 /**
@@ -24,6 +25,7 @@ export const DIAGRAM_MONOSPACE: readonly "members"[] = ["members"];
 const DIAGRAM_RADIUS = 10;
 
 const NODE_START = /(?=<g class="pele-node )/;
+const NODE_CLASSES = /^<g class="([^"]*)"/;
 
 const BOX =
   /^<g class="pele-node pele-(?:class|entity)"[^>]*><rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)"[^>]*\/>/;
@@ -50,8 +52,6 @@ const memberShift = (nameEnd: number, attributesEnd: number, bottom: number): nu
   return 0;
 };
 
-const NODE_CLASSES = /^<g class="([^"]*)"/;
-
 /**
  * Gives a class or entity box a name band and the `pele-banded` class. A class with an empty
  * member box loses that box's divider, and its members move by half the empty height, so they sit
@@ -63,23 +63,21 @@ const withNameBand = (node: string): string => {
   const dividers = DIVIDERS.exec(node);
   if (!box || !dividers) return node;
   const [rect, x, y, width, height] = box;
-  const [line, attribute, left, nameEnd, right, attributesEnd] = dividers;
+  const [dividerMarkup, dividerPrefix, left, nameEnd, right, attributesEnd] = dividers;
   const top = Number(y);
   const banded = node
     .replace(rect, rect + headerBand(Number(x), top, Number(width), Number(nameEnd)))
     .replace(NODE_CLASSES, '<g class="$1 pele-banded"');
-  const shift =
-    attributesEnd === undefined
-      ? 0
-      : memberShift(Number(nameEnd), Number(attributesEnd), top + Number(height));
-  return shift === 0
-    ? banded
-    : banded
-        .replace(line, `${attribute}M${left},${nameEnd}H${right}"`)
-        .replace(
-          '<g class="pele-members"',
-          `<g class="pele-members" transform="translate(0,${shift})"`,
-        );
+  if (attributesEnd === undefined) return banded;
+
+  const shift = memberShift(Number(nameEnd), Number(attributesEnd), top + Number(height));
+  if (shift === 0) return banded;
+  return banded
+    .replace(dividerMarkup, `${dividerPrefix}M${left},${nameEnd}H${right}"`)
+    .replace(
+      '<g class="pele-members"',
+      `<g class="pele-members" transform="translate(0,${shift})"`,
+    );
 };
 
 /** The participant hues, in order. The diagram styles define a `pele-hue-<name>` class for each. */
