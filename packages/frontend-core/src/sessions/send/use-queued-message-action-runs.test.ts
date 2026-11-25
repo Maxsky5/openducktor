@@ -1,14 +1,13 @@
 import "../../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { createDeferred } from "../../test-support/shared-test-fixtures";
 import { useQueuedMessageActionRuns } from "./use-queued-message-action-runs";
 
 describe("useQueuedMessageActionRuns", () => {
   test("keeps the running action of a message when an action of another message ends", async () => {
     const { result } = renderHook(() => useQueuedMessageActionRuns());
-    const removeA = createDeferred<void>();
-    const steerB = createDeferred<void>();
+    const removeA = Promise.withResolvers<void>();
+    const steerB = Promise.withResolvers<void>();
     act(() => {
       void result.current.track("a", "remove", () => removeA.promise);
       void result.current.track("b", "steer", () => steerB.promise);
@@ -24,8 +23,8 @@ describe("useQueuedMessageActionRuns", () => {
 
   test("keeps a newer action of the same message when an older one ends", async () => {
     const { result } = renderHook(() => useQueuedMessageActionRuns());
-    const beginEdit = createDeferred<void>();
-    const save = createDeferred<void>();
+    const beginEdit = Promise.withResolvers<void>();
+    const save = Promise.withResolvers<void>();
     let beginEditRun!: Promise<void>;
     act(() => {
       beginEditRun = result.current.track("a", "begin_edit", () => beginEdit.promise);

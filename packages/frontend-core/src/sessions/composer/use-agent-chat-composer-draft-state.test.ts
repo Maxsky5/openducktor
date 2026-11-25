@@ -34,14 +34,6 @@ const buildDraft = (text: string): AgentChatComposerDraft => ({
   attachments: [],
 });
 
-const createDeferred = () => {
-  let resolvePromise: () => void = () => {};
-  const promise = new Promise<void>((resolve) => {
-    resolvePromise = resolve;
-  });
-  return { promise, resolve: resolvePromise };
-};
-
 let fakePersistenceId = 0;
 
 const createFakePersistence = (
@@ -311,7 +303,7 @@ describe("useAgentChatComposerDraftState", () => {
 
   test("flushes the old persistence adapter before switching identities", async () => {
     const events: string[] = [];
-    const pendingFlush = createDeferred();
+    const pendingFlush = Promise.withResolvers<void>();
     const first = createFakePersistence(buildDraft("first"), () => {
       events.push("flush:first");
       return pendingFlush.promise;

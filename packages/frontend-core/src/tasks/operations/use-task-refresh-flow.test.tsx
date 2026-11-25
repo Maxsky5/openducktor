@@ -7,26 +7,6 @@ import { createHookHarness } from "../../test-support/react-hook-harness";
 import { createTaskRefreshController } from "./task-refresh-controller";
 import { useTaskRefreshFlow } from "./use-task-refresh-flow";
 
-type Deferred = {
-  promise: Promise<void>;
-  resolve: () => void;
-  reject: (cause: unknown) => void;
-};
-
-const createDeferred = (): Deferred => {
-  let resolve: (() => void) | undefined;
-  let reject: ((cause: unknown) => void) | undefined;
-  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return {
-    promise,
-    resolve: () => resolve?.(),
-    reject: (reason) => reject?.(reason),
-  };
-};
-
 const createController = () => {
   const loadingStates: boolean[] = [];
   const feedback = createFeedbackFake();
@@ -58,7 +38,7 @@ const createController = () => {
 describe("task refresh flow", () => {
   test("scheduled and manual refreshes join one in-flight repo task read", async () => {
     const { controller } = createController();
-    const deferred = createDeferred();
+    const deferred = Promise.withResolvers<void>();
     let readCount = 0;
     const refreshTaskData = async () => {
       readCount += 1;
@@ -85,7 +65,7 @@ describe("task refresh flow", () => {
 
   test("joined scheduled and manual failures emit one notification", async () => {
     const { controller, errors } = createController();
-    const deferred = createDeferred();
+    const deferred = Promise.withResolvers<void>();
     const refreshTaskData = async () => deferred.promise;
 
     const scheduled = controller.refresh({
@@ -110,8 +90,8 @@ describe("task refresh flow", () => {
 
   test("an earlier manual refresh does not clear a later refresh loading state", async () => {
     const { controller, loadingStates } = createController();
-    const first = createDeferred();
-    const second = createDeferred();
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
     const reads = [first, second];
     let readIndex = 0;
     const refreshTaskData = async () => reads[readIndex++]?.promise;

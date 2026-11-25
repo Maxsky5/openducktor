@@ -1,25 +1,16 @@
 import "../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { IsolatedQueryWrapper } from "../test-support/isolated-query-wrapper";
-import { waitForExpectation } from "../test-support/wait-for-expectation";
+import { setupTestingLibraryFakeTimers } from "../test-support/testing-library-fake-timers";
 import { useSingleFlight, useSingleFlightMutation } from "./use-single-flight";
 
-/** A promise that stays pending until the test settles it. */
-const deferred = <Value,>() => {
-  let resolve: (value: Value) => void = () => {};
-  let reject: (error: Error) => void = () => {};
-  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-};
+setupTestingLibraryFakeTimers();
 
 describe("useSingleFlight", () => {
   test("runs a second action only after the first one ends", async () => {
     const { result } = renderHook(() => useSingleFlight());
-    const first = deferred<string>();
+    const first = Promise.withResolvers<string>();
     const calls: string[] = [];
 
     const firstRun = result.current.start(() => {
@@ -55,7 +46,7 @@ describe("useSingleFlight", () => {
 describe("useSingleFlightMutation", () => {
   test("sends one command for calls that come before the pending state renders", async () => {
     const sent: string[] = [];
-    const reply = deferred<string>();
+    const reply = Promise.withResolvers<string>();
     const { result } = renderHook(
       () =>
         useSingleFlightMutation({
@@ -76,7 +67,7 @@ describe("useSingleFlightMutation", () => {
     await act(async () => reply.resolve("created"));
 
     expect(await Promise.all(joined)).toEqual(["created"]);
-    await waitForExpectation(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(sent).toEqual(["chat"]);
 
     await act(async () => {
@@ -100,11 +91,11 @@ describe("useSingleFlightMutation", () => {
     );
 
     act(() => result.current.mutate());
-    await waitForExpectation(() =>
+    await waitFor(() =>
       expect(result.current.error).toEqual(new Error("The host is not reachable.")),
     );
     act(() => result.current.mutate());
-    await waitForExpectation(() => expect(result.current.data).toBe("archived"));
+    await waitFor(() => expect(result.current.data).toBe("archived"));
     expect(attempts).toBe(2);
   });
 });

@@ -20,7 +20,6 @@ import { createHookHarness } from "../../test-support/react-hook-harness";
 import { createRuntimeDefinitionsContextValue } from "../../test-support/runtime-hook-harness";
 import {
   createAgentSessionFixture,
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
@@ -134,7 +133,7 @@ const renderResolver = (
 
 describe("useTaskGitConflictResolver", () => {
   test("cancels a request when the workspace changes before its prompt loads", async () => {
-    const config = createDeferred<RepoConfig>();
+    const config = Promise.withResolvers<RepoConfig>();
     const startSessionIntent = mock(async (_request: SessionStartFlowRequest) =>
       startedBuilder("build-1"),
     );

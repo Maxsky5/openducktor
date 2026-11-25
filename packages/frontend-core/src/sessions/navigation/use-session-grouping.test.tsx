@@ -8,10 +8,7 @@ import { ClientConnectionProvider } from "../../connection/client-connection-rea
 import { workspaceQueryKeys } from "../../queries/workspace";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
 import { createHookHarness } from "../../test-support/react-hook-harness";
-import {
-  createDeferred,
-  createSettingsSnapshotFixture,
-} from "../../test-support/shared-test-fixtures";
+import { createSettingsSnapshotFixture } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { useSessionGrouping } from "./use-session-grouping";
 
@@ -27,7 +24,7 @@ const createWrapper = (
 
 describe("useSessionGrouping", () => {
   test("starts grouped and prevents writes until settings are loaded", async () => {
-    const read = createDeferred<SettingsSnapshot>();
+    const read = Promise.withResolvers<SettingsSnapshot>();
     const saved = createSettingsSnapshotFixture();
     const workspaceUpdateSidebarSessionGrouping = mock(
       async () => saved.appearance.sidebarSessionGrouping,
@@ -59,7 +56,7 @@ describe("useSessionGrouping", () => {
         theme: "dark",
         appearance: { ...initial.appearance, sidebarSessionGrouping: "none" },
       });
-      const write = createDeferred<SidebarSessionGrouping>();
+      const write = Promise.withResolvers<SidebarSessionGrouping>();
       const workspaceUpdateSidebarSessionGrouping = mock(async () => write.promise);
       const feedback = createFeedbackFake();
       const harness = createHookHarness(
@@ -114,8 +111,8 @@ describe("useSessionGrouping", () => {
   test("saves a change made during a save after it, and keeps the last change", async () => {
     const initial = createSettingsSnapshotFixture();
     const writes = [
-      createDeferred<SidebarSessionGrouping>(),
-      createDeferred<SidebarSessionGrouping>(),
+      Promise.withResolvers<SidebarSessionGrouping>(),
+      Promise.withResolvers<SidebarSessionGrouping>(),
     ];
     const workspaceUpdateSidebarSessionGrouping = mock(
       async (_grouping: "task" | "none") =>

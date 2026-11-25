@@ -6,7 +6,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { ClientConnectionProvider } from "../connection/client-connection-react";
 import { createTestClientConnection } from "../test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "../test-support/testing-library-fake-timers";
 import { type SessionComparisonInput, useSessionComparison } from "./use-session-comparison";
+
+setupTestingLibraryFakeTimers();
 
 const initial: SessionComparisonInput = {
   enabled: true,

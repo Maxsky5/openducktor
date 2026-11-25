@@ -20,7 +20,97 @@ const identityOf = (session: ReturnType<typeof createAgentSessionFixture>) => ({
   workingDirectory: session.workingDirectory,
 });
 
+const createSubagentApprovalFixture = ({
+  childExternalSessionId,
+  parentExternalSessionId,
+}: {
+  childExternalSessionId: string;
+  parentExternalSessionId: string;
+}) => ({
+  requestId: "approval-1",
+  requestType: "permission_grant" as const,
+  title: "Approve permission: read",
+  summary: "Approval request for read.",
+  action: { name: "read" },
+  mutation: "read_only" as const,
+  supportedReplyOutcomes: ["approve_once" as const, "reject" as const],
+  source: {
+    kind: "subagent" as const,
+    parentExternalSessionId,
+    childExternalSessionId,
+  },
+});
+
 describe("agent sessions store visible pending input", () => {
+  test("returns parent-mirrored subagent pending input for the child session identity", () => {
+    const childSession = createAgentSessionFixture({
+      externalSessionId: "child-session",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      pendingApprovals: [],
+      pendingQuestions: [],
+    });
+    const mirroredApproval = {
+      ...createSubagentApprovalFixture({
+        childExternalSessionId: "child-session",
+        parentExternalSessionId: "parent-session",
+      }),
+      responseSession: childSession,
+    };
+    const parentSession = createAgentSessionFixture({
+      externalSessionId: "parent-session",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      pendingApprovals: [mirroredApproval],
+      pendingQuestions: [],
+    });
+    const store = createAgentSessionsStore("/repo-a");
+    store.replaceSession(parentSession);
+
+    expect(store.getVisiblePendingInputSnapshot(identityOf(childSession))).toEqual({
+      pendingApprovals: [mirroredApproval],
+      pendingQuestions: [],
+    });
+  });
+
+  test("keeps child-owned pending input authoritative when the parent also mirrors it", () => {
+    const childApproval = createSubagentApprovalFixture({
+      childExternalSessionId: "child-session",
+      parentExternalSessionId: "parent-session",
+    });
+    const childApprovalInstance = {
+      ...childApproval,
+      requestInstanceId: "runtime-b\u0000approval-1",
+    };
+    const childSession = createAgentSessionFixture({
+      externalSessionId: "child-session",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      pendingApprovals: [childApprovalInstance],
+      pendingQuestions: [],
+    });
+    const parentSession = createAgentSessionFixture({
+      externalSessionId: "parent-session",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo-a",
+      pendingApprovals: [
+        {
+          ...childApproval,
+          requestInstanceId: "runtime-a\u0000approval-1",
+          responseSession: childSession,
+        },
+      ],
+      pendingQuestions: [],
+    });
+    const store = createAgentSessionsStore("/repo-a");
+    store.replaceSession(parentSession);
+    store.replaceSession(childSession);
+
+    expect(store.getVisiblePendingInputSnapshot(identityOf(childSession)).pendingApprovals).toEqual(
+      [childApprovalInstance],
+    );
+  });
+
   test("keeps one stable snapshot for each session while views of two sessions read in turn", () => {
     const store = createAgentSessionsStore("/repo");
     const first = sessionWithApproval("first");

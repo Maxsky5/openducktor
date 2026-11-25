@@ -1,5 +1,5 @@
 import "../../test-support/dom-environment";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, onTestFinished, test } from "bun:test";
 import {
   type CustomAgentRole,
   type GitBranch,
@@ -8,13 +8,13 @@ import {
   type WorkspaceSessionCreateInput,
 } from "@openducktor/contracts";
 import { HostInvokeError, type HostClient } from "@openducktor/host-client";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type PropsWithChildren, type ReactElement } from "react";
 import type { ClientConnection } from "../../connection/client-connection";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
 import { gitQueryKeys } from "../../queries/git";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
-import { waitForExpectation } from "../../test-support/wait-for-expectation";
+import { setupTestingLibraryFakeTimers } from "../../test-support/testing-library-fake-timers";
 import { workspaceSessionRecord } from "../../test-support/workspace-session-fixtures";
 import { createStartupLiveSourceFake } from "../../test-support/startup-live-source-fake";
 import { createAgentSessionsStore } from "../../sessions/agent-sessions-store";
@@ -24,6 +24,8 @@ import {
   useWorkspaceSessionCreate,
   type WorkspaceSessionCreateModel,
 } from "./use-workspace-session-create";
+
+setupTestingLibraryFakeTimers();
 
 const WORKSPACE = { workspaceId: "workspace-1", repoPath: "/repos/alpha" };
 const SELECTION = { runtimeKind: "codex" as const, providerId: "openai", modelId: "gpt-5" };
@@ -101,6 +103,10 @@ const renderCreate = (
     ({ workspace, model }) => useWorkspaceSessionCreate({ workspace, model, onCreated }),
     { wrapper, initialProps: { workspace: WORKSPACE, model: MODEL } },
   );
+  onTestFinished(async () => {
+    view.unmount();
+    await connection.dispose();
+  });
   return { view, connection };
 };
 
@@ -161,16 +167,16 @@ describe("useWorkspaceSessionCreate", () => {
       },
     );
     const live = createStartupLiveSourceFake(connection.queryClient);
-    await waitForExpectation(() => expect(view.result.current.input).not.toBeNull());
+    await waitFor(() => expect(view.result.current.input).not.toBeNull());
     act(() => view.result.current.submit());
-    await waitForExpectation(() => expect(view.result.current.create.isError).toBe(true));
+    await waitFor(() => expect(view.result.current.create.isError).toBe(true));
     view.rerender({
       workspace: { workspaceId: "workspace-2", repoPath: "/repos/beta" },
       model: { selection: SELECTION, selectedModelAvailable: false },
     });
     expect(view.result.current.input).toBeNull();
     act(() => view.result.current.repairSavedSession());
-    await waitForExpectation(() => expect(view.result.current.create.isSuccess).toBe(true));
+    await waitFor(() => expect(view.result.current.create.isSuccess).toBe(true));
     expect(creates).toBe(1);
     expect(starts).toEqual([
       { workspaceId: WORKSPACE.workspaceId, sessionId: draft.id },
@@ -178,8 +184,6 @@ describe("useWorkspaceSessionCreate", () => {
     ]);
     expect(opened).toEqual([]);
     expect(connection.startupAttempts.getSnapshot()[0]?.status.phase).toBe("ready");
-    view.unmount();
-    await connection.dispose();
   });
 
   test("finishes the originating workspace after a scope change without navigating the new scope", async () => {
@@ -199,9 +203,11 @@ describe("useWorkspaceSessionCreate", () => {
         opened.push(record);
       },
     );
-    await waitForExpectation(() => expect(view.result.current.input).not.toBeNull());
-    act(() => view.result.current.submit());
-    await requested.promise;
+    await waitFor(() => expect(view.result.current.input).not.toBeNull());
+    await act(async () => {
+      view.result.current.submit();
+      await requested.promise;
+    });
     view.rerender({
       workspace: { workspaceId: "workspace-2", repoPath: "/repos/beta" },
       model: MODEL,
@@ -209,14 +215,12 @@ describe("useWorkspaceSessionCreate", () => {
     await act(async () => {
       finish.resolve();
     });
-    await waitForExpectation(() => expect(view.result.current.create.isSuccess).toBe(true));
+    await waitFor(() => expect(view.result.current.create.isSuccess).toBe(true));
     expect(opened).toEqual([]);
     const attempt = connection.startupAttempts.getSnapshot()[0];
     expect(attempt?.origin.workspaceId).toBe(WORKSPACE.workspaceId);
     expect(attempt?.ownership.state).toBe("saved");
     expect(attempt?.status.phase).toBe("ready");
-    view.unmount();
-    await connection.dispose();
   });
 
   test("waits for roles, then creates a current checkout chat once with its name and role", async () => {
@@ -224,7 +228,7 @@ describe("useWorkspaceSessionCreate", () => {
     const created = workspaceSessionRecord("chat-1", { externalSessionId: null });
     const createdSessions: WorkspaceSession[] = [];
     let finish: () => void = () => {};
-    const { view, connection } = renderCreate(
+    const { view } = renderCreate(
       {
         workspaceSessionCreate: async (input) => {
           requests.push(input);
@@ -237,10 +241,8 @@ describe("useWorkspaceSessionCreate", () => {
       (session) => createdSessions.push(session),
     );
     expect(view.result.current.input).toBeNull();
-    await waitForExpectation(() => expect(view.result.current.roles.isSuccess).toBe(true));
-    await waitForExpectation(() =>
-      expect(view.result.current.targetBranch).toEqual(DEFAULT_TARGET),
-    );
+    await waitFor(() => expect(view.result.current.roles.isSuccess).toBe(true));
+    await waitFor(() => expect(view.result.current.targetBranch).toEqual(DEFAULT_TARGET));
     act(() => {
       view.result.current.setName("Fix login");
       view.result.current.setRoleId(ROLE.id);
@@ -254,26 +256,26 @@ describe("useWorkspaceSessionCreate", () => {
       manualTitle: "Fix login",
       targetBranch: DEFAULT_TARGET,
     });
-    act(() => view.result.current.submit());
-    await waitForExpectation(() => expect(view.result.current.create.isPending).toBe(true));
+    // The second tap arrives before the pending state renders.
+    act(() => {
+      view.result.current.submit();
+      view.result.current.submit();
+    });
+    await waitFor(() => expect(view.result.current.create.isPending).toBe(true));
     // A pending create ignores another submit.
     act(() => view.result.current.submit());
     await act(async () => finish());
-    await waitForExpectation(() =>
+    await waitFor(() =>
       expect(createdSessions).toEqual([{ ...created, externalSessionId: "native-chat-1" }]),
     );
     expect(requests).toHaveLength(1);
-    view.unmount();
-    await connection.dispose();
   });
 
   test("sends the picked target, and a worktree location drops a Tracked upstream pick", async () => {
-    const { view, connection } = renderCreate({});
-    await waitForExpectation(() =>
-      expect(view.result.current.targetBranch).toEqual(DEFAULT_TARGET),
-    );
+    const { view } = renderCreate({});
+    await waitFor(() => expect(view.result.current.targetBranch).toEqual(DEFAULT_TARGET));
     act(() => view.result.current.pickTarget({ branch: "@{upstream}" }));
-    await waitForExpectation(() =>
+    await waitFor(() =>
       expect(view.result.current.input?.targetBranch).toEqual({ branch: "@{upstream}" }),
     );
     act(() => view.result.current.selectLocation("local_worktree"));
@@ -281,49 +283,20 @@ describe("useWorkspaceSessionCreate", () => {
     act(() => view.result.current.pickTarget({ remote: "origin", branch: "release" }));
     act(() => view.result.current.selectLocation("local_repo_root"));
     expect(view.result.current.targetBranch).toEqual({ remote: "origin", branch: "release" });
-    view.unmount();
-    await connection.dispose();
-  });
-
-  test("creates one chat for a double tap that comes before the pending state renders", async () => {
-    const requests: WorkspaceSessionCreateInput[] = [];
-    const created = workspaceSessionRecord("chat-1", { externalSessionId: null });
-    const createdSessions: WorkspaceSession[] = [];
-    const { view, connection } = renderCreate(
-      {
-        workspaceSessionCreate: async (input) => {
-          requests.push(input);
-          return { session: created };
-        },
-      },
-      (session) => createdSessions.push(session),
-    );
-    await waitForExpectation(() => expect(view.result.current.input).not.toBeNull());
-    act(() => {
-      view.result.current.submit();
-      view.result.current.submit();
-      view.result.current.submit();
-    });
-    await waitForExpectation(() =>
-      expect(createdSessions).toEqual([{ ...created, externalSessionId: "native-chat-1" }]),
-    );
-    expect(requests).toHaveLength(1);
-    view.unmount();
-    await connection.dispose();
   });
 
   test("sends no role for None and reads the branches once for the target and worktree", async () => {
     const branchReads: string[] = [];
     const branches: GitBranch[] = [{ name: "main", isCurrent: true, isRemote: false }];
-    const { view, connection } = renderCreate({
+    const { view } = renderCreate({
       gitGetBranches: async (repoPath) => {
         branchReads.push(repoPath);
         return branches;
       },
     });
-    await waitForExpectation(() => expect(view.result.current.roles.isSuccess).toBe(true));
-    await waitForExpectation(() => expect(view.result.current.branches.isSuccess).toBe(true));
-    await waitForExpectation(() => expect(view.result.current.input).not.toBeNull());
+    await waitFor(() => expect(view.result.current.roles.isSuccess).toBe(true));
+    await waitFor(() => expect(view.result.current.branches.isSuccess).toBe(true));
+    await waitFor(() => expect(view.result.current.input).not.toBeNull());
     expect(view.result.current.roleId).toBe(NO_CUSTOM_AGENT_ROLE);
     expect(view.result.current.input?.customAgentRoleId).toBeNull();
     act(() => view.result.current.selectLocation("local_worktree"));
@@ -342,8 +315,6 @@ describe("useWorkspaceSessionCreate", () => {
       branchName: "main",
     });
     expect(branchReads).toEqual([WORKSPACE.repoPath]);
-    view.unmount();
-    await connection.dispose();
   });
 
   test("shows a host worktree validation error and marks the branch list stale", async () => {
@@ -356,14 +327,14 @@ describe("useWorkspaceSessionCreate", () => {
         });
       },
     });
-    await waitForExpectation(() => expect(view.result.current.roles.isSuccess).toBe(true));
+    await waitFor(() => expect(view.result.current.roles.isSuccess).toBe(true));
     act(() => {
       view.result.current.selectLocation("local_worktree");
       view.result.current.changeWorktree({ mode: "from_branch", name: "main", branchName: "main" });
     });
-    await waitForExpectation(() => expect(view.result.current.input).not.toBeNull());
+    await waitFor(() => expect(view.result.current.input).not.toBeNull());
     act(() => view.result.current.submit());
-    await waitForExpectation(() =>
+    await waitFor(() =>
       expect(view.result.current.worktreeError).toEqual({
         field: "worktree.branchName",
         message: "The branch is checked out elsewhere.",
@@ -376,7 +347,5 @@ describe("useWorkspaceSessionCreate", () => {
     ).toBe(true);
     act(() => view.result.current.selectLocation("local_repo_root"));
     expect(view.result.current.worktreeError).toBeNull();
-    view.unmount();
-    await connection.dispose();
   });
 });

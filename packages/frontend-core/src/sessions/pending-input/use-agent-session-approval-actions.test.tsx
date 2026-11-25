@@ -2,7 +2,7 @@ import "../../test-support/dom-environment";
 import { enableReactActEnvironment } from "../../test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness as createSharedHookHarness } from "../../test-support/react-hook-harness";
-import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "../../test-support/shared-test-fixtures";
+import { TEST_EXTERNAL_SESSION_IDS } from "../../test-support/shared-test-fixtures";
 import type { AgentApprovalRequest, AgentSessionIdentity } from "../../types/agent-orchestrator";
 import { useAgentSessionApprovalActions } from "./use-agent-session-approval-actions";
 
@@ -66,7 +66,7 @@ describe("useAgentSessionApprovalActions", () => {
   });
 
   test("tracks submitting state while sending an approval reply", async () => {
-    const deferredReply = createDeferred<void>();
+    const deferredReply = Promise.withResolvers<void>();
     const replyAgentApproval = mock(async () => deferredReply.promise);
     const harness = createHookHarness(createBaseArgs({ replyAgentApproval }));
 

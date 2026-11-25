@@ -212,21 +212,6 @@ const registerDependencySpies = (): void => {
 
 let latestHarnessValue: ReturnType<typeof useTaskApprovalFlow> | null = null;
 
-function createDeferred<TValue>() {
-  let resolvePromise!: (value: TValue) => void;
-  let rejectPromise!: (cause?: unknown) => void;
-  const promise = new Promise<TValue>((resolve, reject) => {
-    resolvePromise = resolve;
-    rejectPromise = reject;
-  });
-
-  return {
-    promise,
-    resolve: resolvePromise,
-    reject: rejectPromise,
-  };
-}
-
 const mountApprovalHarness = async (
   Harness: () => ReactElement | null,
   options: { storage?: ClientStorage } = {},
@@ -426,8 +411,8 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("opens while provider context loads and then selects Pull Request mode", async () => {
-    const pendingProviderContext = createDeferred<RepositoryGitProviderContext>();
-    const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    const pendingProviderContext = Promise.withResolvers<RepositoryGitProviderContext>();
+    const pendingApprovalContext = Promise.withResolvers<TaskApprovalContextLoadResult>();
     let gitProviderContext: RepositoryGitProviderContext | undefined;
     taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
 
@@ -477,7 +462,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("discards a pending provider context after switching repositories", async () => {
-    const pendingProviderContext = createDeferred<RepositoryGitProviderContext>();
+    const pendingProviderContext = Promise.withResolvers<RepositoryGitProviderContext>();
     let activeWorkspace = createWorkspace("a");
     const harness = await mountApprovalFlow(() =>
       createUseTaskApprovalFlowArgs({
@@ -504,7 +489,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("closes approval when switching repositories during the approval-context read", async () => {
-    const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    const pendingApprovalContext = Promise.withResolvers<TaskApprovalContextLoadResult>();
     taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
     let activeWorkspace = createWorkspace("a");
     const harness = await mountApprovalFlow(() =>
@@ -658,7 +643,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("opens immediately in loading state and does not fetch the settings snapshot", async () => {
-    const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    const pendingApprovalContext = Promise.withResolvers<TaskApprovalContextLoadResult>();
     taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
 
     const Harness = (): ReactElement | null => {
@@ -722,7 +707,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("defaults to pull_request mode when GitHub provider is available", async () => {
-    const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    const pendingApprovalContext = Promise.withResolvers<TaskApprovalContextLoadResult>();
     taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
 
     const Harness = (): ReactElement | null => {
@@ -780,7 +765,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("defaults to direct_merge mode when no git provider is available", async () => {
-    const pendingApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    const pendingApprovalContext = Promise.withResolvers<TaskApprovalContextLoadResult>();
     taskApprovalContextGetMock.mockImplementationOnce(async () => pendingApprovalContext.promise);
 
     const Harness = (): ReactElement | null => {
@@ -1115,7 +1100,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("opens with Close Task selected for a merged task branch and closes with the cleanup choice", async () => {
-    const continuation = createDeferred<void>();
+    const continuation = Promise.withResolvers<void>();
     const onCommitted = mock(() => continuation.promise);
     taskApprovalContextGetMock.mockResolvedValueOnce(createReadyTaskApprovalContextResult());
     hostClientFakes.taskMergeStatusGet = async (scope) => ({
@@ -1489,7 +1474,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("ignores a stale approval-context response from a superseded open cycle", async () => {
-    const firstContext = createDeferred<TaskApprovalContextLoadResult>();
+    const firstContext = Promise.withResolvers<TaskApprovalContextLoadResult>();
     taskApprovalContextGetMock.mockImplementationOnce(async () => firstContext.promise);
     taskApprovalContextGetMock.mockResolvedValueOnce(
       createReadyTaskApprovalContextResult({
@@ -2267,7 +2252,7 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("closes the approval modal only after AI pull request generation starts a builder session", async () => {
-    const requestPullRequestGenerationDeferred = createDeferred<string | undefined>();
+    const requestPullRequestGenerationDeferred = Promise.withResolvers<string | undefined>();
     const requestPullRequestGenerationMock = mock(
       async () => requestPullRequestGenerationDeferred.promise,
     );
@@ -2380,11 +2365,11 @@ describe("useTaskApprovalFlow", () => {
   });
 
   test("does not let a stale PR-generation cancellation unlock a newer loading modal", async () => {
-    const requestPullRequestGenerationDeferred = createDeferred<string | undefined>();
+    const requestPullRequestGenerationDeferred = Promise.withResolvers<string | undefined>();
     const requestPullRequestGenerationMock = mock(
       async () => requestPullRequestGenerationDeferred.promise,
     );
-    const secondApprovalContext = createDeferred<TaskApprovalContextLoadResult>();
+    const secondApprovalContext = Promise.withResolvers<TaskApprovalContextLoadResult>();
 
     taskApprovalContextGetMock.mockImplementation(
       async (_repoPath: import("@openducktor/contracts").WorkspaceRef, taskId: string) => {

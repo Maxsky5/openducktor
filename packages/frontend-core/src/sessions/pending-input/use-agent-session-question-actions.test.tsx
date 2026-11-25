@@ -2,7 +2,7 @@ import "../../test-support/dom-environment";
 import { enableReactActEnvironment } from "../../test-support/react-act-environment";
 import { describe, expect, mock, test } from "bun:test";
 import { createHookHarness } from "../../test-support/react-hook-harness";
-import { createDeferred, TEST_EXTERNAL_SESSION_IDS } from "../../test-support/shared-test-fixtures";
+import { TEST_EXTERNAL_SESSION_IDS } from "../../test-support/shared-test-fixtures";
 import type { AgentQuestionRequest, AgentSessionIdentity } from "../../types/agent-orchestrator";
 import { useAgentSessionQuestionActions } from "./use-agent-session-question-actions";
 
@@ -65,7 +65,7 @@ describe("useAgentSessionQuestionActions", () => {
   });
 
   test("tracks submitting state while sending a question answer", async () => {
-    const answerDeferred = createDeferred<void>();
+    const answerDeferred = Promise.withResolvers<void>();
     const answerAgentQuestion = mock(async () => answerDeferred.promise);
     const harness = createHookHarness(
       useAgentSessionQuestionActions,
@@ -101,7 +101,7 @@ describe("useAgentSessionQuestionActions", () => {
   });
 
   test("submits one answer while the same question is already in flight", async () => {
-    const answerDeferred = createDeferred<void>();
+    const answerDeferred = Promise.withResolvers<void>();
     const answerAgentQuestion = mock(async () => answerDeferred.promise);
     const harness = createHookHarness(
       useAgentSessionQuestionActions,
@@ -118,8 +118,10 @@ describe("useAgentSessionQuestionActions", () => {
       });
 
       expect(answerAgentQuestion).toHaveBeenCalledTimes(1);
-      answerDeferred.resolve(undefined);
-      await Promise.all([first, second]);
+      await harness.run(async () => {
+        answerDeferred.resolve(undefined);
+        await Promise.all([first, second]);
+      });
     } finally {
       answerDeferred.resolve(undefined);
       await harness.unmount();
@@ -236,7 +238,7 @@ describe("useAgentSessionQuestionActions", () => {
   });
 
   test("keeps submitting state scoped by full session identity", async () => {
-    const answerDeferred = createDeferred<void>();
+    const answerDeferred = Promise.withResolvers<void>();
     const answerAgentQuestion = mock(async () => answerDeferred.promise);
     const firstSessionIdentity = sessionIdentity("shared-session", "opencode");
     const secondSessionIdentity = sessionIdentity("shared-session", "codex");
@@ -270,7 +272,7 @@ describe("useAgentSessionQuestionActions", () => {
   });
 
   test("hides submitting state for questions no longer pending", async () => {
-    const answerDeferred = createDeferred<void>();
+    const answerDeferred = Promise.withResolvers<void>();
     const answerAgentQuestion = mock(async () => answerDeferred.promise);
     const harness = createHookHarness(
       useAgentSessionQuestionActions,

@@ -11,16 +11,6 @@ import { boardEvent, eventCursor } from "./task-view-sync.test-support";
 import { taskQueryKeys, type RepoTaskData } from "./tasks";
 import type { ResolvedTaskCard as TaskCard } from "@openducktor/workflows";
 
-const createDeferred = <T>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (error: Error) => void;
-  const promise = new Promise<T>((nextResolve, nextReject) => {
-    resolve = nextResolve;
-    reject = nextReject;
-  });
-  return { promise, resolve, reject };
-};
-
 const createPorts = (overrides: Partial<TaskViewSyncPorts> = {}): TaskViewSyncPorts => ({
   listTasks: async () => [createTaskCardFixture({ id: "task-1", status: "open" })],
   loadFreshDocument: async () => ({ markdown: "# Fresh", updatedAt: "2026-04-10T13:10:00.000Z" }),
@@ -37,7 +27,7 @@ describe("TaskViewSync races", () => {
   test.each(["removed", "failed"] as const)(
     "drops pending changes after a query is %s",
     async (change) => {
-      const result = createDeferred<RepoTaskData>();
+      const result = Promise.withResolvers<RepoTaskData>();
       const { queryClient, sync } = createSync(createPorts());
       const key = taskQueryKeys.repoData(workspaceRefFixture("/repo"));
       const read = queryClient.fetchQuery({ queryKey: key, queryFn: () => result.promise });
@@ -68,8 +58,8 @@ describe("TaskViewSync races", () => {
   );
 
   test("applies a burst once after the original inactive board and ID reads complete", async () => {
-    const result = createDeferred<RepoTaskData>();
-    const ids = createDeferred<string[]>();
+    const result = Promise.withResolvers<RepoTaskData>();
+    const ids = Promise.withResolvers<string[]>();
     const { queryClient, sync } = createSync(createPorts());
     const queryKey = taskQueryKeys.repoData(workspaceRefFixture("/inactive"));
     const idKey = taskQueryKeys.ids(workspaceRefFixture("/inactive"));
@@ -124,8 +114,8 @@ describe("TaskViewSync races", () => {
   test.each(["cached", "pending"] as const)(
     "%s boards preserve deletion, recreation, and closed visibility in event order",
     async (baseline) => {
-      const result = createDeferred<RepoTaskData>();
-      const ids = createDeferred<string[]>();
+      const result = Promise.withResolvers<RepoTaskData>();
+      const ids = Promise.withResolvers<string[]>();
       const { queryClient, sync } = createSync(createPorts());
       const queryKey = taskQueryKeys.repoData(workspaceRefFixture("/repo"));
       const idKey = taskQueryKeys.ids(workspaceRefFixture("/repo"));
@@ -212,7 +202,7 @@ describe("TaskViewSync races", () => {
   );
 
   test("a manual refresh supersedes card patches waiting for a cancelled cold read", async () => {
-    const staleRead = createDeferred<RepoTaskData>();
+    const staleRead = Promise.withResolvers<RepoTaskData>();
     const latest = createTaskCardFixture({ id: "task-1", title: "Latest host snapshot" });
     const queued = createTaskCardFixture({ id: "task-1", title: "Earlier stream change" });
     const { queryClient, sync } = createSync(createPorts({ listTasks: async () => [latest] }));
@@ -255,8 +245,8 @@ describe("TaskViewSync races", () => {
   });
 
   test("uses the snapshot task read for a workspace load started at the same time", async () => {
-    const taskList = createDeferred<TaskCard[]>();
-    const taskListStarted = createDeferred<void>();
+    const taskList = Promise.withResolvers<TaskCard[]>();
+    const taskListStarted = Promise.withResolvers<void>();
     const listTasks = mock(async () => {
       taskListStarted.resolve();
       return taskList.promise;
@@ -286,8 +276,8 @@ describe("TaskViewSync races", () => {
   });
 
   test("queues a task-retention refresh after a workspace load", async () => {
-    const firstTaskList = createDeferred<TaskCard[]>();
-    const firstTaskListStarted = createDeferred<void>();
+    const firstTaskList = Promise.withResolvers<TaskCard[]>();
+    const firstTaskListStarted = Promise.withResolvers<void>();
     const tasks = [createTaskCardFixture({ id: "task-1" })];
     const listTasks = mock(async () => {
       if (listTasks.mock.calls.length === 1) {
@@ -340,8 +330,8 @@ describe("TaskViewSync races", () => {
   });
 
   test("runs task view refreshes one at a time per repository", async () => {
-    const firstCancelStarted = createDeferred<void>();
-    const releaseFirstCancel = createDeferred<void>();
+    const firstCancelStarted = Promise.withResolvers<void>();
+    const releaseFirstCancel = Promise.withResolvers<void>();
     let reads = 0;
     const { queryClient, sync } = createSync(
       createPorts({
@@ -386,8 +376,8 @@ describe("TaskViewSync races", () => {
   });
 
   test("cancels a pre-snapshot document read before invalidation so it cannot restore stale data", async () => {
-    const staleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const staleDocumentStarted = createDeferred<void>();
+    const staleDocument = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
+    const staleDocumentStarted = Promise.withResolvers<void>();
     const { queryClient, sync } = createSync(
       createPorts({
         loadFreshDocument: async () => ({
@@ -448,10 +438,16 @@ describe("TaskViewSync races", () => {
   });
 
   test("cancels snapshot document reads per repo and refreshes only active documents", async () => {
-    const activeStaleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const inactiveStaleDocument = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const activeStaleStarted = createDeferred<void>();
-    const inactiveStaleStarted = createDeferred<void>();
+    const activeStaleDocument = Promise.withResolvers<{
+      markdown: string;
+      updatedAt: string | null;
+    }>();
+    const inactiveStaleDocument = Promise.withResolvers<{
+      markdown: string;
+      updatedAt: string | null;
+    }>();
+    const activeStaleStarted = Promise.withResolvers<void>();
+    const inactiveStaleStarted = Promise.withResolvers<void>();
     const loadFreshDocument = mock(async () => ({
       markdown: "# Fresh snapshot",
       updatedAt: "2026-04-10T13:11:00.000Z",

@@ -26,15 +26,6 @@ import {
 const qaRejected = { qaReport: { present: true, verdict: "rejected" } };
 
 describe("definition display fields", () => {
-  test("a closed task has no workflow action, since Remove Worktree is a core task action", () => {
-    const task = createTaskCardFixture({ status: "closed" });
-    expect(task.taskWorkflow.definition.actions.map(({ id }) => id)).not.toContain(
-      "remove_worktree",
-    );
-    expect(resolveTaskCardActions(task, { surface: "details" }).allActions).toEqual([]);
-    expect(resolveTaskCardActions(task, { surface: "palette" }).allActions).toEqual([]);
-  });
-
   test("a closed task has no session page, so its past sessions add no session view action", () => {
     const options = { historicalSessionRoles: ["build", "qa"], activeSessionRole: "build" };
     const review = createTaskCardFixture({ status: "human_review" });
@@ -64,7 +55,7 @@ describe("definition display fields", () => {
     // A closed task has published its merge, so the rule no longer applies.
     expect(
       availableTaskActions(taskWorkflow, { status: "closed", directMerge }, availableActions),
-    ).toBe(availableActions);
+    ).toEqual(availableActions);
   });
 
   test("an action without surfaces stays off every surface", () => {

@@ -13,7 +13,6 @@ import type {
 import { QueryClient } from "@tanstack/react-query";
 import { runtimeCatalogQueryKeys } from "../../queries/runtime-catalog";
 import {
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createHostRuntimeStatusFixture,
   createRuntimeCatalogFixture,
@@ -682,7 +681,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("requires an explicit pick after the catalog rejects the stale default", async () => {
-    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
+    const catalogDeferred = Promise.withResolvers<AgentRuntimeCatalog>();
     const loadCatalog = mock(async () => catalogDeferred.promise);
     const props = createBaseProps({
       loadCatalog,
@@ -794,7 +793,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("clears previous runtime model while switching to a runtime with a loading catalog", async () => {
-    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
+    const catalogDeferred = Promise.withResolvers<AgentRuntimeCatalog>();
     const loadCatalog = mock(async (runtimeRef: RuntimeWorkingDirectoryRef) => {
       if (runtimeRef.runtimeKind === "claude") {
         return catalogDeferred.promise;
@@ -1554,7 +1553,7 @@ describe("useSessionStartModalState", () => {
         updatedAt: 0,
       },
     );
-    const refresh = createDeferred<AgentRuntimeCatalog>();
+    const refresh = Promise.withResolvers<AgentRuntimeCatalog>();
     const loadCatalog = mock(async () => refresh.promise);
     const props = createBaseProps({ loadCatalog });
     delete props.initialCatalog;
@@ -2332,7 +2331,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("revalidates a fork source model when its catalog loads", async () => {
-    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
+    const catalogDeferred = Promise.withResolvers<AgentRuntimeCatalog>();
     const loadCatalog = mock(async () => catalogDeferred.promise);
     const props = createBaseProps({ loadCatalog });
     delete props.initialCatalog;
@@ -2389,7 +2388,7 @@ describe("useSessionStartModalState", () => {
   });
 
   test("preserves a fork source model while its runtime catalog loads", async () => {
-    const catalogDeferred = createDeferred<AgentRuntimeCatalog>();
+    const catalogDeferred = Promise.withResolvers<AgentRuntimeCatalog>();
     const loadCatalog = mock(async () => catalogDeferred.promise);
     const harness = createHookHarness(
       createBaseProps({

@@ -4,7 +4,6 @@ import type { HostClient } from "@openducktor/host-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { createActiveWorkspaceWrapper } from "../test-support/active-workspace-wrapper";
 import { createHookHarness } from "../test-support/react-hook-harness";
-import { createDeferred } from "../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../test-support/test-client-connection";
 import { useTaskStopImpact } from "./use-task-stop-impact";
 
@@ -54,7 +53,7 @@ describe("useTaskStopImpact", () => {
   });
 
   test("stays pending without a count until the authoritative read resolves", async () => {
-    const deferred = createDeferred<{ stoppableSessionCount: number }>();
+    const deferred = Promise.withResolvers<{ stoppableSessionCount: number }>();
     const harness = createHarness({ enabled: true, taskIds: ["task-1"] }, () => deferred.promise);
 
     try {
@@ -81,8 +80,8 @@ describe("useTaskStopImpact", () => {
   });
 
   test("reports loading again while a background refetch runs after reopen", async () => {
-    const firstRead = createDeferred<{ stoppableSessionCount: number }>();
-    const secondRead = createDeferred<{ stoppableSessionCount: number }>();
+    const firstRead = Promise.withResolvers<{ stoppableSessionCount: number }>();
+    const secondRead = Promise.withResolvers<{ stoppableSessionCount: number }>();
     const reads = [firstRead.promise, secondRead.promise];
     let readCount = 0;
     const initialProps: HarnessProps = { enabled: true, taskIds: ["task-1"] };

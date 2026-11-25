@@ -1,3 +1,4 @@
+import { setImmediate } from "node:timers/promises";
 import { renderHook } from "@testing-library/react";
 import type { ComponentType, PropsWithChildren } from "react";
 import { act } from "react";
@@ -11,21 +12,7 @@ type CreateHookHarnessOptions = {
 
 const flushHookEffects = async (): Promise<void> => {
   await act(async () => {
-    await Promise.resolve();
-    await new Promise<void>((resolve) => {
-      if (MessageChannel === undefined) {
-        setTimeout(resolve, 0);
-        return;
-      }
-
-      const channel = new MessageChannel();
-      channel.port1.onmessage = () => {
-        channel.port1.close();
-        channel.port2.close();
-        resolve();
-      };
-      channel.port2.postMessage(undefined);
-    });
+    await setImmediate();
   });
 };
 

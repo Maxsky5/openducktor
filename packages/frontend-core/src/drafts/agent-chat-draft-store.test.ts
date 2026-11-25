@@ -73,20 +73,6 @@ const createManualScheduler = () => {
   };
 };
 
-const createDeferred = <T>() => {
-  let resolveValue: (value: T) => void = () => {};
-  let rejectValue: (cause: unknown) => void = () => {};
-  const promise = new Promise<T>((resolve, reject) => {
-    resolveValue = resolve;
-    rejectValue = reject;
-  });
-  return {
-    promise,
-    resolve: resolveValue,
-    reject: rejectValue,
-  };
-};
-
 const identity: AgentChatDraftSessionIdentity = {
   workspaceId: "workspace",
   externalSessionId: "session-a",
@@ -355,7 +341,7 @@ describe("agent chat draft store", () => {
 
   test("abandons in-flight staging when the draft entry is replaced", async () => {
     const storage = createMemoryStorage();
-    const staging = createDeferred<string>();
+    const staging = Promise.withResolvers<string>();
     const stagedFile = new File(["pdf"], "brief.pdf", { type: "application/pdf" });
     const stager = mock(() => staging.promise);
     const store = createStore({

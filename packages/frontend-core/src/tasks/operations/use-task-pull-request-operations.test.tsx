@@ -8,7 +8,6 @@ import { pullRequestReviewQueryKeys } from "../../queries/pull-request-review";
 import { writeWorkspaceListToQuery } from "../../queries/workspace";
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import {
-  createDeferred,
   createTaskCardFixture,
   createWorkspaceRecordFixture,
 } from "../../test-support/shared-test-fixtures";
@@ -138,9 +137,9 @@ describe("useTaskPullRequestOperations", () => {
   test.each(["merged", "linked", "not_found", "error", "refresh"] as const)(
     "ignores an old %s completion after closure without clearing a fresh request",
     async (outcome) => {
-      const old = createDeferred<TaskPullRequestDetectResult>();
-      const fresh = createDeferred<TaskPullRequestDetectResult>();
-      const refresh = createDeferred<void>();
+      const old = Promise.withResolvers<TaskPullRequestDetectResult>();
+      const fresh = Promise.withResolvers<TaskPullRequestDetectResult>();
+      const refresh = Promise.withResolvers<void>();
       const detect = mock(() => (detect.mock.calls.length === 1 ? old.promise : fresh.promise));
       const state = createOperationsHarness({
         pullRequestHostPort: createPullRequestHostPort({ taskPullRequestDetect: detect }),
@@ -229,7 +228,7 @@ describe("useTaskPullRequestOperations", () => {
   test.each(["link", "unlink"] as const)(
     "keeps an admitted %s guarded through closure and reopening",
     async (kind) => {
-      const write = createDeferred<void>();
+      const write = Promise.withResolvers<void>();
       const request = mock(() => write.promise);
       const state = createOperationsHarness({
         pullRequestHostPort: createPullRequestHostPort({
@@ -280,8 +279,8 @@ describe("useTaskPullRequestOperations", () => {
   test.each(["detect", "unlink"] as const)(
     "keeps every concurrent %s operation busy in its own workspace until completion",
     async (kind) => {
-      const first = createDeferred<void>();
-      const second = createDeferred<void>();
+      const first = Promise.withResolvers<void>();
+      const second = Promise.withResolvers<void>();
       const request = mock(
         async (_scope: { workspaceId: string; repoPath: string }, taskId: string) => {
           await (taskId === "task-1" ? first.promise : second.promise);
@@ -338,7 +337,7 @@ describe("useTaskPullRequestOperations", () => {
   );
 
   test("refreshes the original task and review cache when linking finishes in an inactive repository", async () => {
-    const detection = createDeferred<TaskPullRequestDetectResult>();
+    const detection = Promise.withResolvers<TaskPullRequestDetectResult>();
     const taskPullRequestDetect = mock(() => detection.promise);
     const testHarness = createOperationsHarness({
       pullRequestHostPort: createPullRequestHostPort({ taskPullRequestDetect }),
@@ -424,7 +423,7 @@ describe("useTaskPullRequestOperations", () => {
   });
 
   test("restores unlink progress after a workspace round trip and invalidates CI review data", async () => {
-    const unlinkResult = createDeferred<{ ok: boolean }>();
+    const unlinkResult = Promise.withResolvers<{ ok: boolean }>();
     const taskPullRequestUnlink = mock(() => unlinkResult.promise);
     const runTaskMutation: TaskMutationRunner["runTaskMutation"] = (options) =>
       options.run("/repo");
@@ -461,7 +460,7 @@ describe("useTaskPullRequestOperations", () => {
   });
 
   test("warns when detection finds no pull request after the repository becomes inactive", async () => {
-    const detection = createDeferred<TaskPullRequestDetectResult>();
+    const detection = Promise.withResolvers<TaskPullRequestDetectResult>();
     const taskPullRequestLinkMerged = mock(async () =>
       createTaskCardFixture({ id: "task-1", pullRequest }),
     );
@@ -529,7 +528,7 @@ describe("useTaskPullRequestOperations", () => {
   });
 
   test("defers a background merged confirmation until its repository is active", async () => {
-    const detection = createDeferred<TaskPullRequestDetectResult>();
+    const detection = Promise.withResolvers<TaskPullRequestDetectResult>();
     const testHarness = createOperationsHarness({
       pullRequestHostPort: createPullRequestHostPort({
         taskPullRequestDetect: () => detection.promise,
@@ -598,8 +597,8 @@ describe("useTaskPullRequestOperations", () => {
   });
 
   test("restores concurrent detection progress and does not clear another repository on completion", async () => {
-    const firstDetection = createDeferred<TaskPullRequestDetectResult>();
-    const secondDetection = createDeferred<TaskPullRequestDetectResult>();
+    const firstDetection = Promise.withResolvers<TaskPullRequestDetectResult>();
+    const secondDetection = Promise.withResolvers<TaskPullRequestDetectResult>();
     const taskPullRequestDetect = mock((scope: { workspaceId: string; repoPath: string }) =>
       scope.repoPath === "/repo" ? firstDetection.promise : secondDetection.promise,
     );
@@ -644,9 +643,9 @@ describe("useTaskPullRequestOperations", () => {
   });
 
   test("keeps the shown merged confirmation when another task finishes detection", async () => {
-    const firstDetection = createDeferred<TaskPullRequestDetectResult>();
-    const secondDetection = createDeferred<TaskPullRequestDetectResult>();
-    const linkResult = createDeferred<ReturnType<typeof createTaskCardFixture>>();
+    const firstDetection = Promise.withResolvers<TaskPullRequestDetectResult>();
+    const secondDetection = Promise.withResolvers<TaskPullRequestDetectResult>();
+    const linkResult = Promise.withResolvers<ReturnType<typeof createTaskCardFixture>>();
     const testHarness = createOperationsHarness({
       pullRequestHostPort: createPullRequestHostPort({
         taskPullRequestDetect: (_repoPath, taskId) =>
@@ -748,8 +747,8 @@ describe("useTaskPullRequestOperations", () => {
   });
 
   test("keeps cancel and duplicate confirmation disabled across a workspace round trip during linking", async () => {
-    const linkResult = createDeferred<ReturnType<typeof createTaskCardFixture>>();
-    const otherLinkResult = createDeferred<ReturnType<typeof createTaskCardFixture>>();
+    const linkResult = Promise.withResolvers<ReturnType<typeof createTaskCardFixture>>();
+    const otherLinkResult = Promise.withResolvers<ReturnType<typeof createTaskCardFixture>>();
     const taskPullRequestLinkMerged = mock((scope: { workspaceId: string; repoPath: string }) =>
       scope.repoPath === "/repo" ? linkResult.promise : otherLinkResult.promise,
     );

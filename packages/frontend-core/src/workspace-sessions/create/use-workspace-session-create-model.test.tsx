@@ -16,7 +16,6 @@ import { runtimeCatalogQueryKeys } from "../../queries/runtime-catalog";
 import { HostRuntimeStatusContext } from "../../sessions/session-contexts";
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import {
-  createDeferred,
   createHostRuntimeStatusContextValue,
   createRuntimeCatalogFixture,
 } from "../../test-support/shared-test-fixtures";
@@ -92,7 +91,7 @@ describe("useWorkspaceSessionCreateModel", () => {
         runtimeCatalogQueryKeys.catalog(runtimeRef),
         createRuntimeCatalogFixture({ models: catalog }),
       );
-      const other = createDeferred<AgentRuntimeCatalog>();
+      const other = Promise.withResolvers<AgentRuntimeCatalog>();
       const definitions = definitionsWith(async () => other.promise);
       definitions.availableRuntimeDefinitions.push(CODEX_RUNTIME_DESCRIPTOR);
       const harness = renderCreateModel(definitions, defaultSelection, connection);
@@ -118,7 +117,7 @@ describe("useWorkspaceSessionCreateModel", () => {
         updatedAt: 0,
       },
     );
-    const refresh = createDeferred<AgentRuntimeCatalog>();
+    const refresh = Promise.withResolvers<AgentRuntimeCatalog>();
     const loadRuntimeCatalog = mock(async () => refresh.promise);
     const harness = renderCreateModel(definitionsWith(loadRuntimeCatalog), null, connection);
     try {
@@ -144,7 +143,7 @@ describe("useWorkspaceSessionCreateModel", () => {
 
   test("starts from the repository Default Model when its catalog is ready", async () => {
     const runtimeCatalog = createRuntimeCatalogFixture({ models: catalog });
-    const pending = createDeferred<AgentRuntimeCatalog>();
+    const pending = Promise.withResolvers<AgentRuntimeCatalog>();
     const harness = renderCreateModel(
       definitionsWith(async () => pending.promise),
       { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },

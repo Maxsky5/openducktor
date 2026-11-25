@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import type { GitCurrentBranch, GitLocalChanges } from "@openducktor/contracts";
 import { QueryObserver } from "@tanstack/react-query";
 import { createTestClientConnection } from "../test-support/test-client-connection";
@@ -10,7 +10,6 @@ import {
 
 const REPO = "/repo";
 const WORKTREE = "/repo/.worktrees/task-1";
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Local changes that name their read in their only file. */
 const localChanges = (read: string): GitLocalChanges => {
@@ -35,24 +34,17 @@ const localChanges = (read: string): GitLocalChanges => {
 const shownRead = (data: GitLocalChanges | undefined): string | undefined =>
   data?.fileStatuses[0]?.path;
 
-let stop: (() => void)[] = [];
-afterEach(() => {
-  for (const unsubscribe of stop) unsubscribe();
-  stop = [];
-});
-
-/** Shows the checkout and the local changes of one directory, as the Git panel does. */
-const showDirectory = (checkout: () => GitCurrentBranch) => {
-  const reads: number[] = [];
+test("keeps the shown changes until the read after a new commit finishes", async () => {
+  const refreshedReadStarted = Promise.withResolvers<void>();
+  const refreshedChanges = Promise.withResolvers<GitLocalChanges>();
+  let revision = "first";
   const { queryClient } = createTestClientConnection({
     client: {
-      gitGetCurrentBranch: async () => checkout(),
+      gitGetCurrentBranch: async () => ({ name: "feature", detached: false, revision }),
       gitGetLocalChanges: async () => {
-        const read = reads.length + 1;
-        reads.push(read);
-        // The local read is slower than the branch read, as with real Git.
-        await sleep(20);
-        return localChanges(`read-${read}`);
+        if (revision === "first") return localChanges("before-commit");
+        refreshedReadStarted.resolve();
+        return refreshedChanges.promise;
       },
     },
   });
@@ -61,74 +53,63 @@ const showDirectory = (checkout: () => GitCurrentBranch) => {
     ...localChangesQueryOptions(REPO, WORKTREE, "branch:feature"),
     staleTime: Number.POSITIVE_INFINITY,
   });
-  stop.push(
-    branch.subscribe(() => {}),
-    local.subscribe(() => {}),
-  );
-  return { queryClient, local, reads };
-};
+  const stopBranch = branch.subscribe(() => {});
+  const stopLocal = local.subscribe(() => {});
 
-describe("a branch read that finds a new commit", () => {
-  test("reads the shown local changes again after an agent turn that committed", async () => {
-    let revision = "first";
-    const view = showDirectory(() => ({ name: "feature", detached: false, revision }));
-    await sleep(50);
-    expect(shownRead(view.local.getCurrentResult().data)).toBe("read-1");
+  try {
+    await branch.refetch();
+    await local.refetch();
+    expect(shownRead(local.getCurrentResult().data)).toBe("before-commit");
 
-    // The agent committed during its turn, and the turn end reads the directory again.
     revision = "second";
-    await refreshGitWorkingDirectory(view.queryClient, REPO, WORKTREE);
-    await sleep(50);
+    const refreshed = refreshGitWorkingDirectory(queryClient, REPO, WORKTREE);
+    await refreshedReadStarted.promise;
+    expect(shownRead(local.getCurrentResult().data)).toBe("before-commit");
+    refreshedChanges.resolve(localChanges("after-commit"));
+    await refreshed;
 
-    const result = view.local.getCurrentResult();
+    const result = local.getCurrentResult();
     expect(result.isFetching).toBe(false);
-    expect(
-      view.queryClient.getQueryState(view.local.getCurrentQuery().queryKey)?.isInvalidated,
-    ).toBe(false);
-    expect(shownRead(result.data)).toBe(`read-${view.reads.length}`);
-    expect(view.reads.length).toBeGreaterThan(1);
-  });
+    expect(result.isStale).toBe(false);
+    expect(shownRead(result.data)).toBe("after-commit");
+  } finally {
+    refreshedChanges.resolve(localChanges("after-commit"));
+    stopBranch();
+    stopLocal();
+    queryClient.clear();
+  }
 });
 
-describe("a branch read that finds another checkout", () => {
-  test("drops the reads of an earlier visit to that checkout and keeps the others", async () => {
-    let branch: GitCurrentBranch = { name: "feature", detached: false, revision: "first" };
-    // Each local read names the cache key of the read that asked for it.
-    let localRead = "";
-    const { queryClient } = createTestClientConnection({
-      client: {
-        gitGetCurrentBranch: async () => branch,
-        gitGetLocalChanges: async () => localChanges(localRead),
-      },
-    });
-    const readBranch = () =>
-      queryClient.fetchQuery({
-        ...worktreeBranchQueryOptions(REPO, WORKTREE),
-        staleTime: 0,
-      });
-    const cachedRead = async (cacheKey: string, checkoutIdentity: string) => {
-      localRead = cacheKey;
-      const observer = new QueryObserver(queryClient, {
-        ...localChangesQueryOptions(REPO, WORKTREE, cacheKey),
-        meta: { checkoutIdentity },
-      });
-      const stopObserving = observer.subscribe(() => {});
-      await sleep(10);
-      stopObserving();
-      return observer.getCurrentQuery().queryKey;
-    };
-    // An earlier rebase left reads of the detached checkout in the cache.
-    const earlierRebase = await cachedRead("detached", "detached");
-    const branchReads = await cachedRead("branch:feature", "branch:feature");
-    await readBranch();
-
-    // A new rebase detaches HEAD again.
-    branch = { detached: true, revision: "rebasing" };
-    await readBranch();
-
-    expect(queryClient.getQueryData(earlierRebase)).toBeUndefined();
-    expect(shownRead(queryClient.getQueryData<GitLocalChanges>(branchReads))).toBe(
-      "branch:feature",
-    );
+test("drops the reads of an earlier visit to that checkout and keeps the others", async () => {
+  let branch: GitCurrentBranch = { name: "feature", detached: false, revision: "first" };
+  // Each local read names the cache key of the read that asked for it.
+  let localRead = "";
+  const { queryClient } = createTestClientConnection({
+    client: {
+      gitGetCurrentBranch: async () => branch,
+      gitGetLocalChanges: async () => localChanges(localRead),
+    },
   });
+  const readBranch = () =>
+    queryClient.fetchQuery({
+      ...worktreeBranchQueryOptions(REPO, WORKTREE),
+      staleTime: 0,
+    });
+  const cachedRead = async (cacheKey: string, checkoutIdentity: string) => {
+    localRead = cacheKey;
+    const options = localChangesQueryOptions(REPO, WORKTREE, cacheKey);
+    await queryClient.fetchQuery({ ...options, meta: { checkoutIdentity } });
+    return options.queryKey;
+  };
+  // An earlier rebase left reads of the detached checkout in the cache.
+  const earlierRebase = await cachedRead("detached", "detached");
+  const branchReads = await cachedRead("branch:feature", "branch:feature");
+  await readBranch();
+
+  // A new rebase detaches HEAD again.
+  branch = { detached: true, revision: "rebasing" };
+  await readBranch();
+
+  expect(queryClient.getQueryData(earlierRebase)).toBeUndefined();
+  expect(shownRead(queryClient.getQueryData<GitLocalChanges>(branchReads))).toBe("branch:feature");
 });

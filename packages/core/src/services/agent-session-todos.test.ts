@@ -4,7 +4,8 @@ import {
   normalizeAgentSessionTodoList,
   normalizeAgentSessionTodoPriority,
   normalizeAgentSessionTodoStatus,
-} from "./agent-session-todos";
+  type NormalizeAgentSessionTodoInput,
+} from "../index";
 
 describe("agent session todo normalizers", () => {
   test("normalizes status aliases and fallbacks", () => {
@@ -39,7 +40,7 @@ describe("agent session todo normalizers", () => {
   });
 
   test("normalizes canonical todo list entries and drops invalid rows", () => {
-    const payload = [
+    const payload: NormalizeAgentSessionTodoInput[] = [
       {
         id: "todo:0",
         content: "second",

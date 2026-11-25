@@ -6,10 +6,7 @@ import type { HostClient } from "@openducktor/host-client";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
 import { createHookHarness } from "../../test-support/react-hook-harness";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
-import {
-  createDeferred,
-  createSettingsSnapshotFixture,
-} from "../../test-support/shared-test-fixtures";
+import { createSettingsSnapshotFixture } from "../../test-support/shared-test-fixtures";
 import { useAgentModelFavorites } from "./use-agent-model-favorites";
 
 const createHostWrapper = (client: Partial<HostClient>) => {
@@ -100,7 +97,7 @@ describe("useAgentModelFavorites", () => {
     const firstSavedSnapshot = createSettingsSnapshotFixture({
       agentModelFavorites: [favorite],
     });
-    const firstWrite = createDeferred<AgentModelFavorite[]>();
+    const firstWrite = Promise.withResolvers<AgentModelFavorite[]>();
     const workspaceGetSettingsSnapshot = mock(async () => initialSnapshot);
     let saveAttempt = 0;
     const saveAgentModelFavorites = mock(

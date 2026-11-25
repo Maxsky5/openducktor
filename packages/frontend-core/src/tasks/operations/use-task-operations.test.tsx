@@ -7,7 +7,6 @@ import { createHookHarness } from "../../test-support/react-hook-harness";
 import { createFeedbackFake } from "../../test-support/feedback-fake";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import {
-  createDeferred,
   createSettingsSnapshotFixture,
   createTaskCardFixture,
   createWorkspaceRecordFixture,
@@ -19,7 +18,7 @@ import { useTaskResetOperations } from "./use-task-reset-operations";
 
 describe("useTaskOperations", () => {
   test("keeps pull request progress when workspace selection clears task reads", async () => {
-    const detection = createDeferred<TaskPullRequestDetectResult>();
+    const detection = Promise.withResolvers<TaskPullRequestDetectResult>();
     const connection = createTestClientConnection({
       client: { taskPullRequestDetect: mock(() => detection.promise) },
     });

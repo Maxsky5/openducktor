@@ -4,7 +4,6 @@ import "../test-support/dom-environment";
 import { describe, expect, test } from "bun:test";
 import { IsolatedQueryWrapper } from "../test-support/isolated-query-wrapper";
 import { createHookHarness } from "../test-support/react-hook-harness";
-import { createDeferred } from "../test-support/shared-test-fixtures";
 import type { TaskStreamController } from "./task-stream-controller";
 import {
   type TaskStreamControllerFactory,
@@ -58,7 +57,7 @@ describe("useHostTaskStream", () => {
     "keeps a replaced stream's late %s out of the current view",
     async (result) => {
       const log: string[] = [];
-      const start = createDeferred<void>();
+      const start = Promise.withResolvers<void>();
       const first = fakeFactory(log, () => start.promise);
       const next = fakeFactory(log);
       const props: StreamProps = {
@@ -140,7 +139,7 @@ describe("useHostTaskStream", () => {
 
   test("describes the stream failures for the platform", async () => {
     const log: string[] = [];
-    const start = createDeferred<void>();
+    const start = Promise.withResolvers<void>();
     const { createController, inputs } = fakeFactory(log, () => start.promise);
     const harness = renderStream({
       openWorkspaces: workspaces("/repo-a"),

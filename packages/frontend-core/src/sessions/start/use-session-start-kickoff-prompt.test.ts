@@ -6,7 +6,6 @@ import { workspaceQueryKeys } from "../../queries/workspace";
 import { createRuntimeHookHarness } from "../../test-support/runtime-hook-harness";
 import {
   createTaskCardFixture,
-  createDeferred,
   createSettingsSnapshotFixture,
 } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
@@ -112,8 +111,8 @@ describe("useSessionStartKickoffPrompt", () => {
   });
 
   test("waits for missing settings and config before showing the preview", async () => {
-    const config = createDeferred<RepoConfig>();
-    const settings = createDeferred<SettingsSnapshot>();
+    const config = Promise.withResolvers<RepoConfig>();
+    const settings = Promise.withResolvers<SettingsSnapshot>();
     const connection = createTestClientConnection({
       client: {
         workspaceGetRepoConfig: async () => config.promise,
@@ -139,7 +138,7 @@ describe("useSessionStartKickoffPrompt", () => {
   });
 
   test("keeps a read error visible until explicit retry", async () => {
-    const retry = createDeferred<RepoConfig>();
+    const retry = Promise.withResolvers<RepoConfig>();
     const readConfig = mock()
       .mockRejectedValueOnce(new Error("Prompt settings unavailable"))
       .mockReturnValueOnce(retry.promise);
@@ -168,7 +167,7 @@ describe("useSessionStartKickoffPrompt", () => {
   });
 
   test("keeps cached content visible during a failed refresh", async () => {
-    const refresh = createDeferred<RepoConfig>();
+    const refresh = Promise.withResolvers<RepoConfig>();
     const connection = createTestClientConnection({
       client: { workspaceGetRepoConfig: async () => refresh.promise },
     });
@@ -190,7 +189,7 @@ describe("useSessionStartKickoffPrompt", () => {
   });
 
   test("does not show an earlier workspace's late result after a new request or close", async () => {
-    const pending = createDeferred<RepoConfig>();
+    const pending = Promise.withResolvers<RepoConfig>();
     const connection = createTestClientConnection({
       client: { workspaceGetRepoConfig: async () => pending.promise },
     });

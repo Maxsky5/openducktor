@@ -17,7 +17,7 @@ import type {
   WorkspaceSession,
 } from "@openducktor/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { createAgentMessageQueuesStore } from "../../agent-message-queues-store";
 import { createAgentSessionCollection } from "../../agent-session-collection";
@@ -90,16 +90,6 @@ const createReadOnlyRepoConfig = (): RepoConfig => ({
   agentStudioState: { openTaskIds: [] },
   agentDefaults: {},
 });
-
-const createDeferred = <T,>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (cause?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, reject, resolve };
-};
 
 type TaskSessionRecordBatch = Array<{
   taskId: string;
@@ -287,8 +277,8 @@ const createRepositoryConflictRetryState = (
   });
 
 const createPendingResponseSend = (state: ReturnType<typeof createState>) => {
-  const response = createDeferred<AgentMessageSubmitResult>();
-  const submitted = createDeferred<AgentMessageSubmitInput>();
+  const response = Promise.withResolvers<AgentMessageSubmitResult>();
+  const submitted = Promise.withResolvers<AgentMessageSubmitInput>();
   const turn = createSessionTurnState();
   const send = createSendAgentMessage({
     workspaceRepoPath: "/repo",
@@ -1170,11 +1160,13 @@ describe("useRepoSessionReadModel", () => {
               "Claude permission mode 'auto' was requested, but Claude reports 'default'. Check your Claude permission settings.",
           },
         };
-        state.emit(
-          type === "snapshot"
-            ? createLiveSnapshotEnvelope({ sessions: [updated] })
-            : { type, session: updated },
-        );
+        act(() => {
+          state.emit(
+            type === "snapshot"
+              ? createLiveSnapshotEnvelope({ sessions: [updated] })
+              : { type, session: updated },
+          );
+        });
         expect(observed).toEqual([
           { title: "New title", status: "running", messages: [updated.policyNotice.message] },
         ]);
@@ -1218,20 +1210,22 @@ describe("useRepoSessionReadModel", () => {
     try {
       await state.harness.mount();
       await state.harness.waitFor((value) => value.sessionReadModelLoadState.kind === "ready");
-      state.emit({ type: "session_upsert", session: liveSession });
-      state.emit({
-        type: "transcript_event",
-        event: {
-          ...policyNotice,
-          type: "session_policy_notice",
-          externalSessionId: ref.externalSessionId,
-          sessionRef: ref,
-        },
+      act(() => {
+        state.emit({ type: "session_upsert", session: liveSession });
+        state.emit({
+          type: "transcript_event",
+          event: {
+            ...policyNotice,
+            type: "session_policy_notice",
+            externalSessionId: ref.externalSessionId,
+            sessionRef: ref,
+          },
+        });
+        expect(state.getStoredSession(ref)).toBeNull();
+        state.replaceSession(session);
+        // The launch can replace a record-hydrated session again before attachment finishes.
+        state.replaceSession(session);
       });
-      expect(state.getStoredSession(ref)).toBeNull();
-      state.replaceSession(session);
-      // The launch can replace a record-hydrated session again before attachment finishes.
-      state.replaceSession(session);
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
         expect.objectContaining({
           id: policyNotice.messageId,
@@ -1247,41 +1241,51 @@ describe("useRepoSessionReadModel", () => {
         message:
           "Claude permission mode 'auto' was requested, but Claude reports 'acceptEdits'. Check your Claude permission settings.",
       };
-      state.emit({ type: "session_upsert", session: { ...liveSession, policyNotice: reported } });
-      state.replaceSession(session);
+      act(() => {
+        state.emit({ type: "session_upsert", session: { ...liveSession, policyNotice: reported } });
+        state.replaceSession(session);
+      });
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
         expect.objectContaining({ id: reported.messageId, content: reported.message }),
       ]);
-      state.emit({ type: "session_upsert", session: snapshot({ ref, activity: "running" }) });
-      state.emit({
-        type: "transcript_event",
-        event: {
-          type: "transcript_retracted",
-          externalSessionId: ref.externalSessionId,
-          sessionRef: ref,
-          timestamp: "2026-10-03T10:00:02Z",
-          messageIds: [reported.messageId],
-        },
+      act(() => {
+        state.emit({ type: "session_upsert", session: snapshot({ ref, activity: "running" }) });
+        state.emit({
+          type: "transcript_event",
+          event: {
+            type: "transcript_retracted",
+            externalSessionId: ref.externalSessionId,
+            sessionRef: ref,
+            timestamp: "2026-10-03T10:00:02Z",
+            messageIds: [reported.messageId],
+          },
+        });
       });
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
-      state.replaceSession(session);
+      act(() => state.replaceSession(session));
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
-      state.emit({ type: "session_upsert", session: { ...liveSession, policyNotice: reported } });
+      act(() => {
+        state.emit({ type: "session_upsert", session: { ...liveSession, policyNotice: reported } });
+      });
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
         expect.objectContaining({ id: reported.messageId }),
       ]);
-      state.emit(
-        createLiveSnapshotEnvelope({ sessions: [{ ...liveSession, policyNotice: reported }] }),
-      );
+      act(() => {
+        state.emit(
+          createLiveSnapshotEnvelope({ sessions: [{ ...liveSession, policyNotice: reported }] }),
+        );
+      });
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([
         expect.objectContaining({ id: reported.messageId, content: reported.message }),
       ]);
       // A reconnect can receive the cleared snapshot without the recovery event.
-      state.emit(
-        createLiveSnapshotEnvelope({ sessions: [snapshot({ ref, activity: "running" })] }),
-      );
+      act(() => {
+        state.emit(
+          createLiveSnapshotEnvelope({ sessions: [snapshot({ ref, activity: "running" })] }),
+        );
+      });
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
-      state.replaceSession(session);
+      act(() => state.replaceSession(session));
       expect(sessionMessagesToArray(state.getStoredSession(ref)!)).toEqual([]);
     } finally {
       consumer.close();
@@ -1584,7 +1588,7 @@ describe("useRepoSessionReadModel", () => {
     }
   });
   test("admits an unbound native root with its live state when its workspace record loads", async () => {
-    const loaded = createDeferred<WorkspaceSession[]>();
+    const loaded = Promise.withResolvers<WorkspaceSession[]>();
     const entry: WorkspaceSession = {
       id: "workspace-session",
       runtimeKind: record.runtimeKind,
@@ -1868,7 +1872,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("keeps a live workflow session when records refresh during an observer restart gap", async () => {
-    const releaseRestartSnapshot = createDeferred<void>();
+    const releaseRestartSnapshot = Promise.withResolvers<void>();
     const state = createState((emit, observeIndex) => {
       if (observeIndex === 1) {
         emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
@@ -1966,7 +1970,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("keeps a removed live session while the switched task set is still hydrating", async () => {
-    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
+    const task2Hydration = Promise.withResolvers<TaskSessionRecordBatch>();
     const state = createState(
       (emit) => {
         emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
@@ -2019,8 +2023,8 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("applies a snapshot that came before its session record when a grown task set hydrates", async () => {
-    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
-    const releaseSnapshot = createDeferred<void>();
+    const task2Hydration = Promise.withResolvers<TaskSessionRecordBatch>();
+    const releaseSnapshot = Promise.withResolvers<void>();
     const lateRecord: AgentSessionRecord = { ...record, externalSessionId: "late", role: "qa" };
     const lateRef = { ...snapshot().ref, externalSessionId: lateRecord.externalSessionId };
     const lateSnapshot = snapshot({
@@ -2082,7 +2086,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("shows live fields on cold start before task records load", async () => {
-    const task2Hydration = createDeferred<TaskSessionRecordBatch>();
+    const task2Hydration = Promise.withResolvers<TaskSessionRecordBatch>();
     const workspaceRef = { ...snapshot().ref, externalSessionId: "workspace-thread" };
     const state = createState(
       (emit) =>
@@ -2194,7 +2198,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("keeps a known task-record failure visible while the observation starts", async () => {
-    const releaseSnapshot = createDeferred<void>();
+    const releaseSnapshot = Promise.withResolvers<void>();
     const state = createState((emit) => {
       void releaseSnapshot.promise.then(() =>
         emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] })),
@@ -2414,7 +2418,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("shows loading while a hydrating task set supersedes a stale failure", async () => {
-    const deferredB = createDeferred<TaskSessionRecordBatch>();
+    const deferredB = Promise.withResolvers<TaskSessionRecordBatch>();
     const batchList = mock(() => deferredB.promise);
     const state = createState(
       (emit) => {
@@ -2720,7 +2724,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("clears a public live failure when the stream recovers during task hydration", async () => {
-    const deferredRecords = createDeferred<TaskSessionRecordBatch>();
+    const deferredRecords = Promise.withResolvers<TaskSessionRecordBatch>();
     const state = createState(
       (emit) => {
         emit(createLiveSnapshotEnvelope({ sessions: [snapshot()] }));
@@ -2805,7 +2809,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("keeps an unresolved live failure public while task sets change and fail", async () => {
-    const deferredB = createDeferred<TaskSessionRecordBatch>();
+    const deferredB = Promise.withResolvers<TaskSessionRecordBatch>();
     const batchList = mock(() => deferredB.promise);
     const state = createState(
       (emit) => {
@@ -3129,7 +3133,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("does not replay stale task records when task IDs change during conflict retry", async () => {
-    const retry = createDeferred<TaskSessionRecordBatch>();
+    const retry = Promise.withResolvers<TaskSessionRecordBatch>();
     const batchList = mock(() => retry.promise);
     const state = createRepositoryConflictRetryState(batchList);
 
@@ -3162,7 +3166,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("does not surface a stale retry failure after task IDs change", async () => {
-    const retry = createDeferred<TaskSessionRecordBatch>();
+    const retry = Promise.withResolvers<TaskSessionRecordBatch>();
     const batchList = mock(() => retry.promise);
     const state = createRepositoryConflictRetryState(batchList);
 
@@ -3194,7 +3198,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("does not restart a new repository for a pending retry from the old repository", async () => {
-    const retry = createDeferred<TaskSessionRecordBatch>();
+    const retry = Promise.withResolvers<TaskSessionRecordBatch>();
     const batchList = mock(() => retry.promise);
     const state = createRepositoryConflictRetryState(batchList, (emit, observeIndex) => {
       const repoPath = observeIndex === 1 ? "/repo" : "/repo-b";
@@ -3531,7 +3535,7 @@ describe("useRepoSessionReadModel", () => {
 
   test("unsubscribes exactly once when repository observation resolves after unmount", async () => {
     const state = createState(() => undefined);
-    const deferredObservation = createDeferred<() => void>();
+    const deferredObservation = Promise.withResolvers<() => void>();
     const unsubscribe = mock(() => undefined);
     const observeAgentSessionLive = mock(async () => deferredObservation.promise);
     state.props.liveSessionPort.observeAgentSessionLive = observeAgentSessionLive;
@@ -4118,7 +4122,7 @@ describe("useRepoSessionReadModel", () => {
   });
 
   test("concurrent explicit retries share a current read and can recover after its failure", async () => {
-    const pendingRetry = createDeferred<TaskSessionRecordBatch>();
+    const pendingRetry = Promise.withResolvers<TaskSessionRecordBatch>();
     const batchList = mock(() =>
       batchList.mock.calls.length === 1
         ? pendingRetry.promise

@@ -43,11 +43,14 @@ test("reset separates the kept task from removed work and names worktree loss", 
   expect(copy.confirmLabel.idle).toBe("Reset task");
 });
 
-test("delete does not invent worktree loss when the read found no worktree", () => {
+test("delete lists only task and history removal when there is nothing to stop or clean up", () => {
   const copy = buildTaskDeleteConfirmCopy({ id: "ODT-3", title: null }, impact());
   expect(copy.subject.id).toBe("ODT-3");
   expect(copy.kept).toEqual([]);
-  expect(copy.changes.some((change) => change.includes("worktree"))).toBe(false);
+  expect(copy.changes).toEqual([
+    "Delete the task and all its artifacts",
+    "Remove linked sessions and task history",
+  ]);
   expect(copy.warning).toBe("This cannot be undone.");
 });
 
@@ -91,10 +94,18 @@ test("implementation reset names its target and preserves the current checkout a
   expect(copy.kept).toContain("Current worktree, its branch and ignored files");
   expect(copy.kept).toContain("Other task artifacts");
   expect(copy.changes).toContain("Delete 2 older worktrees and related local branches");
+  expect(copy.changes).toContain("Remove other related local branches");
   expect(copy.changes).toContain(
     "Reset tracked files to the latest local base commit and delete untracked files",
   );
   expect(copy.warning).toContain("Uncommitted and untracked work");
+});
+
+test("implementation reset lists deletion without retention when only an older worktree exists", () => {
+  const copy = buildTaskResetImplementationConfirmCopy(implementation({ legacyWorktreeCount: 1 }));
+  expect(copy.kept).toEqual(["Other task artifacts"]);
+  expect(copy.changes).toContain("Delete 1 older worktree and related local branches");
+  expect(copy.warning).toContain("Uncommitted and untracked work will be lost");
 });
 
 test("implementation reset does not claim a checkout stays when none exists", () => {

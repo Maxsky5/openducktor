@@ -11,7 +11,6 @@ import {
   TEST_ACTIVE_WORKSPACE,
 } from "../../test-support/active-workspace-wrapper";
 import { createHookHarness } from "../../test-support/react-hook-harness";
-import { createDeferred } from "../../test-support/shared-test-fixtures";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
 import { useTaskCleanupImpact } from "./use-task-cleanup-impact";
 
@@ -156,7 +155,7 @@ describe("useTaskCleanupImpact", () => {
 
   test("refreshes an invalidated session entry through its canonical per-task query", async () => {
     const { calls, connection, sessionFixture } = createHost();
-    const refresh = createDeferred<AgentSessionRecord[]>();
+    const refresh = Promise.withResolvers<AgentSessionRecord[]>();
     calls.agentSessionsListForTasks.mockImplementation(async (_repo, ids) =>
       Promise.all(ids.map(async (taskId) => ({ taskId, agentSessions: await refresh.promise }))),
     );

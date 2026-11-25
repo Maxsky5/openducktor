@@ -22,7 +22,10 @@ import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { type PropsWithChildren, useLayoutEffect } from "react";
 import { ClientConnectionProvider } from "../connection/client-connection-react";
 import { createTestClientConnection } from "../test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "../test-support/testing-library-fake-timers";
 import { useTerminals, type TerminalDependencies, type TerminalScope } from "./use-terminals";
+
+setupTestingLibraryFakeTimers();
 
 /** The tab ID that a start returns inside an act callback. */
 type StartedTerminal = { tabId: string | null };
@@ -400,15 +403,24 @@ describe("useTerminals", () => {
     }
   });
 
-  test("keeps creation blocked after a dismissed discovery failure until Retry reads the list", async () => {
+  test("blocks creation through discovery and a dismissed failure until Retry reads the list", async () => {
     const terminal = existingTerminal();
     const result = { hostInstanceId: "host-1", revision: 1, terminals: [terminal] };
+    const discovery = Promise.withResolvers<typeof result>();
     const retry = Promise.withResolvers<typeof result>();
     const terminalList = mock(async () => result)
-      .mockRejectedValueOnce(new Error("Terminal discovery unavailable."))
+      .mockImplementationOnce(() => discovery.promise)
       .mockImplementationOnce(() => retry.promise);
     const view = renderModel(terminalList);
     try {
+      expect(view.result.current.startBlockedReason).toBe("Terminals are loading.");
+      act(() => {
+        expect(view.result.current.createTerminal()).toBeNull();
+      });
+      await act(async () => {
+        discovery.reject(new Error("Terminal discovery unavailable."));
+        await discovery.promise.catch(() => undefined);
+      });
       await waitFor(() => expect(view.result.current.isLoading).toBe(false), { timeout: 500 });
       act(() => {
         expect(view.result.current.createTerminal()).toBeNull();
@@ -738,29 +750,6 @@ describe("useTerminals", () => {
       expect(filters).not.toContain(JSON.stringify({ kind: "all" }));
     } finally {
       restored.unmount();
-    }
-  });
-
-  test("blocks a new start while discovery runs or failed", async () => {
-    const discovery = Promise.withResolvers<TerminalListResponse>();
-    const view = renderModel(mock(() => discovery.promise));
-    try {
-      expect(view.result.current.startBlockedReason).toBe("Terminals are loading.");
-
-      await act(async () => {
-        discovery.reject(new Error("Discovery failed."));
-        await discovery.promise.catch(() => undefined);
-      });
-
-      await waitFor(
-        () =>
-          expect(view.result.current.startBlockedReason).toBe(
-            "Terminal discovery failed. Retry terminal discovery.",
-          ),
-        { timeout: 500 },
-      );
-    } finally {
-      view.unmount();
     }
   });
 

@@ -4,12 +4,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { createTestClientConnection } from "../../test-support/test-client-connection";
+import { setupTestingLibraryFakeTimers } from "../../test-support/testing-library-fake-timers";
 import type { AppVisibility } from "../../platform/app-visibility";
 import { useWorkspaceSessionBranch } from "./use-workspace-session-branch";
 
-const visibility: AppVisibility = { isHidden: () => false, subscribe: () => () => {} };
 import { filesystemQueryKeys } from "../../queries/filesystem";
 import { currentBranchQueryOptions, worktreeBranchQueryOptions } from "../../queries/git";
+
+setupTestingLibraryFakeTimers();
+
+const visibility: AppVisibility = { isHidden: () => false, subscribe: () => () => {} };
 
 test("switching worktrees refreshes file data when both branches have the same name", async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

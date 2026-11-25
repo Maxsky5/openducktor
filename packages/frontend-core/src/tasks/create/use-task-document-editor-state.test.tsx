@@ -24,22 +24,6 @@ type HookArgs = Parameters<typeof useTaskDocumentEditorState>[0];
 
 const workspace = { workspaceId: "workspace-1", repoPath: "/repo" };
 
-type Deferred<T> = {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (cause?: unknown) => void;
-};
-
-const createDeferred = <T,>(): Deferred<T> => {
-  let resolve: (value: T) => void = () => {};
-  let reject: (cause?: unknown) => void = () => {};
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-};
-
 const createHookHarness = (initialProps: HookArgs) => {
   const connection = createTestClientConnection();
   const wrapper = ({ children }: PropsWithChildren) =>
@@ -278,8 +262,8 @@ describe("useTaskDocumentEditorState", () => {
   });
 
   test("ignores stale response after task context changes", async () => {
-    const first = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const second = createDeferred<{ markdown: string; updatedAt: string | null }>();
+    const first = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
+    const second = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
 
     const harness = createHookHarness(
       createBaseProps({
@@ -331,8 +315,8 @@ describe("useTaskDocumentEditorState", () => {
   });
 
   test("ignores stale rejection after task context changes", async () => {
-    const first = createDeferred<{ markdown: string; updatedAt: string | null }>();
-    const second = createDeferred<{ markdown: string; updatedAt: string | null }>();
+    const first = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
+    const second = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
 
     const loadDocument = async (taskId: string) => {
       if (taskId === "task-1") {
@@ -381,7 +365,7 @@ describe("useTaskDocumentEditorState", () => {
   });
 
   test("ignores stale loadSection callbacks after task context changes", async () => {
-    const first = createDeferred<{ markdown: string; updatedAt: string | null }>();
+    const first = Promise.withResolvers<{ markdown: string; updatedAt: string | null }>();
     const loadedTaskIds: string[] = [];
     const loadDocument = async (taskId: string) => {
       loadedTaskIds.push(taskId);
