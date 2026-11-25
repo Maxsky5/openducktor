@@ -953,7 +953,7 @@ describe("AppShell", () => {
 
     await screen.findByText("Repository open failed");
     expect(screen.getByTestId("current-route").textContent).toBe("/onboarding");
-    expect(screen.getByLabelText<HTMLInputElement>("Repository path").value).toBe("/repo");
+    expect(screen.getByText("/repo")).toBeTruthy();
     expect(backButton.disabled).toBe(false);
     // This flow renders the app shell and several onboarding stages.
   }, 2_500);

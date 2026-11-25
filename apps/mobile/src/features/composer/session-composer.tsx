@@ -1,4 +1,4 @@
-import type { AgentMessageSubmitMode } from "@openducktor/contracts";
+import { type AgentMessageSubmitMode, RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import { draftHasMeaningfulContent } from "@openducktor/frontend-core/drafts/agent-chat-composer-draft";
 import type { QueuedMessageSteerContext } from "@openducktor/frontend-core/sessions/send/agent-chat-steering";
 import type {
@@ -446,6 +446,7 @@ function ComposerControls({
     selectedModel: composer.selectedModel,
     modelName: composer.selectedModelDescriptor?.modelName,
     catalog: composer.modelCatalog,
+    runtime: RUNTIME_DESCRIPTORS_BY_KIND[runtimeKind],
   });
   const openOptions = useCallback((): void => {
     // The field gives up the focus, so Android does not open the keyboard over the options sheet
@@ -475,9 +476,11 @@ function ComposerControls({
         <ComposerAttachButton pickers={pickers} picking={attachmentPickers} />
         <QuietSelector
           leading={<RuntimeIcon runtimeKind={runtimeKind} size={16} />}
+          profile={model.profile}
           label={model.label}
           detail={model.effort}
-          accessibilityLabel={model.info ? `Select model, ${model.info}` : "Select model"}
+          speedTone={model.speedTone}
+          accessibilityLabel={model.accessibilityLabel}
           accessibilityHint="Opens the model, profile, effort, and speed."
           disabled={composer.modelOptionsDisabled}
           onPress={openOptions}

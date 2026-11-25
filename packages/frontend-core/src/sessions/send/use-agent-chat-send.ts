@@ -38,6 +38,11 @@ export type AgentChatResolvedTarget =
       readonly result: AgentChatSendResult;
     };
 
+type AgentChatSendTargetOptions = {
+  /** True when the delivery steers the active turn rather than starting or queuing a new turn. */
+  readonly steersRunningTurn?: boolean;
+};
+
 /** What differs between chat kinds: how a chat finds its session and reports a failure. */
 export type AgentChatSendTarget = {
   /** Counts the sends of each chat context, so a chat still shows its sends after a switch. */
@@ -45,11 +50,14 @@ export type AgentChatSendTarget = {
   /** The chat context of this composer. */
   readonly activityKey: string;
   /** False while the chat cannot take a message, for example while its model saves. */
-  readonly canSend: () => boolean;
+  readonly canSend: (options?: AgentChatSendTargetOptions) => boolean;
   /** Captures the selected recipient before attachment staging starts. */
   readonly capture: () => () => boolean;
   /** Returns a recipient or a completed launch result. Null keeps the draft. */
-  readonly resolve: (parts: AgentUserMessagePart[]) => Promise<AgentChatResolvedTarget | null>;
+  readonly resolve: (
+    parts: AgentUserMessagePart[],
+    options?: AgentChatSendTargetOptions,
+  ) => Promise<AgentChatResolvedTarget | null>;
   /** Turns a failure into the composer result. Without it, the composer gets the failure. */
   readonly onFailure?: (cause: Error) => AgentChatSendResult;
 };
@@ -162,9 +170,11 @@ export function useAgentChatSend({
     supportsAttachments,
   ]);
 
+  const hasActiveForegroundTurn = hasForegroundTurn({ foregroundTurnActive, isSessionWorking });
   const onSend = useCallback(
     async (draft: AgentChatComposerDraft, mode: AgentMessageSubmitMode) => {
-      if (!target.canSend() || isWaitingInput) {
+      const steersTurn = steersRunningTurn(mode, hasActiveForegroundTurn);
+      if (!target.canSend({ steersRunningTurn: steersTurn }) || isWaitingInput) {
         return false;
       }
       const isCurrentRecipient = target.capture();
@@ -175,19 +185,14 @@ export function useAgentChatSend({
           draft: promoteTypedGoalCommand(draft, runtimeDescriptor, runtimeVersion),
           reusablePrompts,
           // A steer joins the running turn, so the model of that turn checks the content.
-          modelDescriptor: steersRunningTurn(
-            mode,
-            hasForegroundTurn({ foregroundTurnActive, isSessionWorking }),
-          )
-            ? runningTurnModel
-            : selectedModelDescriptor,
+          modelDescriptor: steersTurn ? runningTurnModel : selectedModelDescriptor,
           supportsAttachments,
           stageAttachment: stageSendAttachment,
         });
         if (!parts || !isCurrentRecipient()) return false;
         // Without a session, the target refuses a system command with its own reason.
         if (identity) assertGoalCommandAllowed(parts, runtimeDescriptor, runtimeVersion);
-        const resolved = await target.resolve(parts);
+        const resolved = await target.resolve(parts, { steersRunningTurn: steersTurn });
         if (!resolved) return false;
         if ("result" in resolved) return resolved.result;
         await sendAgentMessage(resolved.identity, parts, {
@@ -211,9 +216,8 @@ export function useAgentChatSend({
       }
     },
     [
+      hasActiveForegroundTurn,
       identity,
-      isSessionWorking,
-      foregroundTurnActive,
       isWaitingInput,
       reusablePrompts,
       runningTurnModel,
@@ -228,7 +232,7 @@ export function useAgentChatSend({
   );
 
   const isSending = target.activity.isActive(target.activityKey);
-  const canSend = target.canSend();
+  const canSend = target.canSend({ steersRunningTurn: hasActiveForegroundTurn });
   // Chats spread this into memoized composer models, so it changes only with its values.
   return useMemo(
     () => ({

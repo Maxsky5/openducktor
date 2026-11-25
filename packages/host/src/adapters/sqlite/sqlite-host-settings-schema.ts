@@ -60,6 +60,7 @@ export const workspaceDefaultModels = sqliteTable("workspace_default_models", {
   modelId: text("model_id").notNull(),
   variant: text("variant"),
   profileId: text("profile_id"),
+  speed: text("speed"),
 });
 
 /** The naming model of a workspace, which writes session titles and branch names. */
@@ -86,6 +87,7 @@ export const workspaceRoleDefaults = sqliteTable(
     modelId: text("model_id").notNull(),
     variant: text("variant"),
     profileId: text("profile_id"),
+    speed: text("speed"),
   },
   (table) => [primaryKey({ columns: [table.workspaceId, table.roleId] })],
 );

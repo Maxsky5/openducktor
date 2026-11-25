@@ -1293,6 +1293,116 @@ describe("config-schemas", () => {
     expect(config.notifications).toEqual(createDefaultNotificationSettings());
     expect(snapshot.notifications).toEqual(createDefaultNotificationSettings());
   });
+
+  test("validates optional default model speed by runtime capability and omits it on naming models", () => {
+    const parsed = repoConfigSchema.parse({
+      ...baseRepoConfigInput,
+      defaultModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5",
+        speed: " priority ",
+      },
+      agentDefaults: {
+        build: {
+          runtimeKind: "claude",
+          providerId: "anthropic",
+          modelId: "claude-opus-4",
+          speed: "fast",
+        },
+        qa: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+          speed: null,
+        },
+      },
+    });
+    expect(parsed.defaultModel).toEqual({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5",
+      speed: "priority",
+    });
+    expect(parsed.agentDefaults.build?.speed).toBe("fast");
+    expect(parsed.agentDefaults.qa?.speed).toBeUndefined();
+
+    expect(
+      repoConfigSchema.safeParse({
+        ...baseRepoConfigInput,
+        defaultModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+          speed: "standard",
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      repoConfigSchema.safeParse({
+        ...baseRepoConfigInput,
+        defaultModel: {
+          runtimeKind: "opencode",
+          providerId: "openai",
+          modelId: "gpt-5",
+          speed: "fast",
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      repoConfigSchema.safeParse({
+        ...baseRepoConfigInput,
+        namingModel: {
+          runtimeKind: "codex",
+          providerId: "openai",
+          modelId: "gpt-5",
+          speed: "priority",
+        },
+      }).data?.namingModel,
+    ).toEqual({
+      runtimeKind: "codex",
+      providerId: "openai",
+      modelId: "gpt-5",
+    });
+
+    expect(
+      settingsSnapshotSaveInputSchema.safeParse({
+        workspaces: {
+          repo: {
+            expectedRepoPath: "/repo",
+            namingModel: {
+              type: "set",
+              value: {
+                runtimeKind: "codex",
+                providerId: "openai",
+                modelId: "gpt-5",
+                speed: { type: "set", value: "priority" },
+              },
+            },
+          },
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      settingsSnapshotSaveInputSchema.safeParse({
+        workspaces: {
+          repo: {
+            expectedRepoPath: "/repo",
+            defaultModel: {
+              type: "set",
+              value: {
+                runtimeKind: "opencode",
+                speed: { type: "set", value: "fast" },
+              },
+            },
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("Antigravity runtime policy", () => {

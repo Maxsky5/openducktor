@@ -13,7 +13,7 @@ import { createTaskSessionOperations } from "../task-session-operations";
 import { createWorktreeActionRunner } from "../../actions/worktree-action-runner";
 import { createRuntimeRegistryPort } from "../../tasks/test-support/task-workflow-harness";
 import { createTestRuntimeAdmissionGate } from "../../../test-support/runtime-admission-test-gate";
-import { agentSessionRefKey } from "@openducktor/core";
+import { type AgentModelCatalog, agentSessionRefKey } from "@openducktor/core";
 import {
   type AgentSessionControlSendInput,
   type AgentSessionModelSelection,
@@ -134,6 +134,10 @@ export const createLaunchHarness = async (
   const deletedBranches: string[] = [];
   const envelopes: unknown[] = [];
   let catalogLoads = 0;
+  let catalogSpeedAvailability: import("@openducktor/contracts").AgentSpeedAvailability | undefined;
+  let modelSpeedLevels: import("@openducktor/contracts").AgentSpeedLevel[] = [
+    { id: "fast", label: "Fast" },
+  ];
   let sendFailure: "rejected" | "uncertain" | "accepted" | null = null;
   let publishFailure = false;
   let saveFailure = false;
@@ -594,25 +598,28 @@ export const createLaunchHarness = async (
       loadRuntimeCatalog: () =>
         Effect.sync(() => {
           catalogLoads += 1;
+          const catalog: AgentModelCatalog = {
+            models: [
+              {
+                id: "provider/model",
+                providerId: "provider",
+                providerName: "Provider",
+                modelId: "model",
+                modelName: "Model",
+                aliases: ["model-alias"],
+                variants: ["medium", "high"],
+                speedLevels: modelSpeedLevels,
+              },
+            ],
+            defaultModelsByProvider: {},
+          };
+          if (catalogSpeedAvailability) {
+            catalog.speedAvailability = catalogSpeedAvailability;
+          }
           return {
             models: {
               status: "available" as const,
-              catalog: {
-                models: [
-                  {
-                    id: "provider/model",
-                    providerId: "provider",
-                    providerName: "Provider",
-                    modelId: "model",
-                    modelName: "Model",
-                    aliases: ["model-alias"],
-                    variants: ["medium", "high"],
-                    speedLevels: [{ id: "fast", label: "Fast" }],
-                    supportsReasoning: true,
-                  },
-                ],
-                defaultModelsByProvider: {},
-              },
+              catalog,
             },
           };
         }),
@@ -772,6 +779,12 @@ export const createLaunchHarness = async (
     },
     setModelDefault: (value: typeof config.defaultModel) => {
       config = { ...config, defaultModel: value };
+    },
+    setCatalogSpeedAvailability: (value: typeof catalogSpeedAvailability) => {
+      catalogSpeedAvailability = value;
+    },
+    setModelSpeedLevels: (value: typeof modelSpeedLevels) => {
+      modelSpeedLevels = value;
     },
     setPromptOverrides: (value: typeof config.promptOverrides) => {
       config = { ...config, promptOverrides: value };

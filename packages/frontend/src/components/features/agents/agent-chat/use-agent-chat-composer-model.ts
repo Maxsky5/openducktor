@@ -80,8 +80,6 @@ export type AgentChatComposerConfig = {
   isSubagentsLoading: boolean;
   retrySubagents: (() => void) | null;
   onCatalogMenuOpen: () => void;
-  onAgentSelectorOpen: () => void;
-  onVariantSelectorOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelPicker: AgentChatComposerModel["modelPicker"];
@@ -162,8 +160,6 @@ export function useAgentChatComposerModel({
       isSubagentsLoading: composer.isSubagentsLoading,
       retrySubagents: composer.retrySubagents,
       onCatalogMenuOpen: composer.onCatalogMenuOpen,
-      onAgentSelectorOpen: composer.onAgentSelectorOpen,
-      onVariantSelectorOpen: composer.onVariantSelectorOpen,
       searchFiles: composer.searchFiles,
       agentOptions: composer.agentOptions,
       modelPicker: composer.modelPicker,

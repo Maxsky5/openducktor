@@ -110,6 +110,7 @@ export type NewChatForm = {
   targetPending: boolean;
   selection: AgentModelSelection | null;
   model: NewChatModelState;
+  speedBlockedReason?: string | null | undefined;
   rolesReady: boolean;
   /** The branches of the repository when the list loaded, else null. */
   branches: readonly GitBranch[] | null;
@@ -203,6 +204,7 @@ const branchFieldError = (
 const firstBlockedReason = (form: NewChatForm, errors: NewChatFieldErrors): string => {
   const fieldError = errors.name ?? errors.model ?? errors.worktreeName ?? errors.branch;
   if (fieldError) return "Fix the fields above to create the session.";
+  if (form.speedBlockedReason) return form.speedBlockedReason;
   if (form.model.kind === "loading") return "Loading the model catalog.";
   if (!form.rolesReady) return "Loading the custom roles.";
   if (!form.targetBranch)
@@ -233,7 +235,7 @@ export const buildNewChatRequest = (form: NewChatForm): NewChatRequest => {
     branch: branchFieldError(form, localBranches),
   };
   // Create sends the request of the shared form, so it waits for the same rules.
-  const input = fieldErrors.name === null ? form.input : null;
+  const input = fieldErrors.name === null && !form.speedBlockedReason ? form.input : null;
   const directory =
     form.location === "local_worktree" ? worktreeDirectoryName(form.worktree.name) : null;
   let branch: string | null = null;

@@ -178,7 +178,8 @@ const object = (fields: Record<string, Rule> = {}, rest: Rule | null = "replace"
 const optional = (value: Rule = "replace"): Rule => ({ optional: value });
 const keyed = (value: Rule): Rule => ({ keyed: value });
 
-const modelRule = object({ variant: optional(), profileId: optional() });
+const modelRule = object({ variant: optional(), profileId: optional(), speed: optional() });
+const namingModelRule = object({ variant: optional() });
 const promptRule = object({ enabled: optional() });
 const claudeRule = object(
   {
@@ -226,7 +227,7 @@ const workspaceRule = object({
   abbreviation: optional(),
   tileColor: optional(),
   defaultModel: optional(modelRule),
-  namingModel: optional(modelRule),
+  namingModel: optional(namingModelRule),
   worktreeBasePath: optional(),
   defaultTargetBranch: object({ remote: optional() }),
   git: object({

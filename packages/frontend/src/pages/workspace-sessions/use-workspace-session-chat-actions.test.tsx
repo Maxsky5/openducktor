@@ -406,7 +406,7 @@ test.each([
       if (action !== "model") {
         sendResult = actions.send({ segments: [createTextSegment("Hello")] }, "default");
       } else {
-        actions.updateDraftModel({ providerId: "openai", modelId: "gpt-5" });
+        void actions.updateDraftModel({ providerId: "openai", modelId: "gpt-5" }).catch(() => {});
       }
     });
     // A model change does not lock the chat while it saves.
@@ -427,41 +427,59 @@ test.each([
   }
 });
 
-test.each([false, true])("saves a speed change without the model lock, live=%p", async (live) => {
-  const record = createWorkspaceSessionRecord();
-  const pending = Promise.withResolvers<void>();
-  const saveDraft = mock(async () => {
-    await pending.promise;
-    return record;
-  });
-  const updateLive = mock(async () => {
-    await pending.promise;
-  });
-  const view = renderWorkspaceChat(
-    () => useWorkspaceSessionChatActions(WORKSPACE, record, () => true),
-    createAgentOperationsFixture({ updateAgentSessionModel: updateLive }),
-    undefined,
-    { workspaceSessionSetDraftModel: saveDraft },
-  );
-  const identity = live
-    ? workspaceSessionIdentity({ ...record, externalSessionId: "native" })
-    : null;
-  const selection = { providerId: "codex", modelId: "gpt-5", speed: "priority" };
-  try {
-    let update!: Promise<void>;
-    act(() => {
-      update = view.result.current.updateSpeed(identity, selection);
+test.each([false, true])(
+  "saves overlapping draft and live model changes without locking, live=%p",
+  async (live) => {
+    const record = createWorkspaceSessionRecord();
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
+    let call = 0;
+    const wait = async () => {
+      call += 1;
+      await (call === 1 ? first.promise : second.promise);
+    };
+    const saveDraft = mock(async () => {
+      await wait();
+      return record;
     });
-    await act(async () => {
-      pending.resolve();
-      await update;
+    const updateLive = mock(async () => {
+      await wait();
     });
-    expect((live ? updateLive : saveDraft).mock.calls).toHaveLength(1);
-    expect((live ? saveDraft : updateLive).mock.calls).toHaveLength(0);
-  } finally {
-    view.dispose();
-  }
-});
+    const view = renderWorkspaceChat(
+      () => useWorkspaceSessionChatActions(WORKSPACE, record, () => true),
+      createAgentOperationsFixture({ updateAgentSessionModel: updateLive }),
+      undefined,
+      { workspaceSessionSetDraftModel: saveDraft },
+    );
+    const identity = workspaceSessionIdentity({ ...record, externalSessionId: "native" })!;
+    const selectionA = { providerId: "codex", modelId: "gpt-5", speed: "fast" };
+    const selectionB = { providerId: "codex", modelId: "gpt-5", variant: "high", speed: "fast" };
+    try {
+      let save1!: Promise<void>;
+      let save2!: Promise<void>;
+      act(() => {
+        save1 = live
+          ? view.result.current.updateSessionModel(identity, selectionA)
+          : view.result.current.updateDraftModel(selectionA);
+        save2 = live
+          ? view.result.current.updateSessionModel(identity, selectionB)
+          : view.result.current.updateDraftModel(selectionB);
+      });
+      await act(async () => {
+        first.resolve();
+        await save1;
+      });
+      await act(async () => {
+        second.resolve();
+        await save2;
+      });
+      expect((live ? updateLive : saveDraft).mock.calls).toHaveLength(2);
+      expect((live ? saveDraft : updateLive).mock.calls).toHaveLength(0);
+    } finally {
+      view.dispose();
+    }
+  },
+);
 
 test("blocks a second resume selection before the first one settles", async () => {
   let resolveContinuation = (): void => {};

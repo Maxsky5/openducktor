@@ -206,6 +206,17 @@ describe("session start blocked reason", () => {
       confirmDisabled: true,
     });
   });
+
+  test("blocks start when account speed access is blocked for a non-standard speed", () => {
+    const availability = resolveSessionStartAvailability(createModel(), {
+      kickoffInvalid: false,
+      speedBlockedReason: "Fast mode requires a Pro plan.",
+    });
+    expect(availability).toMatchObject({
+      blockedReason: "Fast mode requires a Pro plan.",
+      confirmDisabled: true,
+    });
+  });
 });
 
 describe("buildSessionStartConfirmDraft", () => {
@@ -214,7 +225,8 @@ describe("buildSessionStartConfirmDraft", () => {
       buildSessionStartConfirmDraft({
         model: createModel(),
         requiresExistingSession: false,
-        speedChange: undefined,
+        effectiveSpeed: "standard",
+        reuseSpeedChange: undefined,
         kickoffPrompt: undefined,
       }),
     ).toEqual({ startMode: "fresh", sourceSessionOptionValue: null });
@@ -222,7 +234,8 @@ describe("buildSessionStartConfirmDraft", () => {
       buildSessionStartConfirmDraft({
         model: createModel({ selectedStartMode: "fork" }),
         requiresExistingSession: true,
-        speedChange: undefined,
+        effectiveSpeed: "standard",
+        reuseSpeedChange: undefined,
         kickoffPrompt: undefined,
       }),
     ).toEqual({ startMode: "fork", sourceSessionOptionValue: "source-1" });
@@ -233,7 +246,8 @@ describe("buildSessionStartConfirmDraft", () => {
       buildSessionStartConfirmDraft({
         model: createModel({ showTargetBranchSelector: true, selectedTargetBranch: "" }),
         requiresExistingSession: false,
-        speedChange: "fast",
+        effectiveSpeed: "fast",
+        reuseSpeedChange: undefined,
         kickoffPrompt: "Build the task.",
       }),
     ).toEqual({
@@ -242,6 +256,31 @@ describe("buildSessionStartConfirmDraft", () => {
       speed: "fast",
       kickoffPrompt: "Build the task.",
       targetBranch: "",
+    });
+    expect(
+      buildSessionStartConfirmDraft({
+        model: createModel({ selectedStartMode: "reuse" }),
+        requiresExistingSession: true,
+        effectiveSpeed: "fast",
+        reuseSpeedChange: undefined,
+        kickoffPrompt: undefined,
+      }),
+    ).toEqual({
+      startMode: "reuse",
+      sourceSessionOptionValue: "source-1",
+    });
+    expect(
+      buildSessionStartConfirmDraft({
+        model: createModel({ selectedStartMode: "reuse" }),
+        requiresExistingSession: true,
+        effectiveSpeed: "standard",
+        reuseSpeedChange: "standard",
+        kickoffPrompt: undefined,
+      }),
+    ).toEqual({
+      startMode: "reuse",
+      sourceSessionOptionValue: "source-1",
+      speed: "standard",
     });
   });
 });

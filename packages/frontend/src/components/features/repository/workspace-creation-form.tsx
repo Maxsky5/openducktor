@@ -1,7 +1,10 @@
-import { ArrowLeft, ArrowRight, FolderOpen, LoaderCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, FolderGit2, FolderOpen, LoaderCircle } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { DefaultTargetBranchField } from "./default-target-branch-field";
-import { ensureDraftAgentDefault } from "@/components/features/repository/model-defaults/model-defaults-model";
+import {
+  applyRepoAgentDefaultField,
+  ensureDraftAgentDefault,
+} from "@/components/features/repository/model-defaults/model-defaults-model";
 import { RepositoryModelDefaultsFields } from "@/components/features/repository/model-defaults/repository-model-defaults-fields";
 import { WorkspaceIdentityFields } from "@/components/features/workspace-identity/workspace-identity-fields";
 import { Button } from "@/components/ui/button";
@@ -281,16 +284,23 @@ function WorkspaceModelsFields({
       </p>
     );
   return (
-    <div className="space-y-5">
-      <div className="grid gap-1">
-        <Label htmlFor="workspace-models-repo-path">Repository path</Label>
-        <Input id="workspace-models-repo-path" value={controller.repoPath} readOnly />
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2">
+          <FolderGit2 className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="shrink-0 font-medium text-foreground">Repository</span>
+          <span
+            className="min-w-0 truncate font-mono text-muted-foreground"
+            title={controller.repoPath}
+          >
+            {controller.repoPath}
+          </span>
+        </div>
+        <span>Choose defaults for this workspace. You can leave every choice blank.</span>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Choose defaults for this workspace. You can leave every choice blank.
-      </p>
       <RepositoryModelDefaultsFields
         presentation="creation"
+        showNamingModel
         selectedRepoConfig={controller.modelDraft}
         availableRuntimeDefinitions={surface.availableRuntimeDefinitions}
         catalogResources={surface.catalogResources}
@@ -316,11 +326,14 @@ function WorkspaceModelsFields({
               ...current,
               agentDefaults: {
                 ...current.agentDefaults,
-                [role]: {
-                  ...ensureDraftAgentDefault(roleDefault),
-                  runtimeKind,
-                  [field]: value,
-                },
+                [role]: applyRepoAgentDefaultField(
+                  {
+                    ...ensureDraftAgentDefault(roleDefault),
+                    runtimeKind,
+                  },
+                  field,
+                  value,
+                ),
               },
             };
           })
@@ -335,13 +348,11 @@ function WorkspaceModelsFields({
           controller.updateModelDraft((current) => ({
             ...current,
             defaultModel: current.defaultModel
-              ? { ...current.defaultModel, [field]: value }
+              ? applyRepoAgentDefaultField(current.defaultModel, field, value)
               : current.defaultModel,
           }))
         }
-        onClearSelectedRepoDefaultModel={() =>
-          controller.updateModelDraft((current) => ({ ...current, defaultModel: undefined }))
-        }
+        onClearSelectedRepoDefaultModel={controller.clearDefaultModel}
       />
       {surface.errors.length > 0 ? (
         <Button type="button" variant="outline" onClick={() => void surface.retry()}>

@@ -8,7 +8,11 @@ import type {
 } from "@openducktor/contracts";
 import { useMemo, useReducer, useRef } from "react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { prepareModelDefaultsForSave } from "@openducktor/frontend-core/lib/repo-agent-defaults";
+import {
+  normalizeNamingModelForSave,
+  prepareModelDefaultsForSave,
+} from "@openducktor/frontend-core/lib/repo-agent-defaults";
+import type { RecommendedDefaultModelSelection } from "@openducktor/frontend-core/sessions/model-selection/recommended-default-model";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import {
   useWorkspaceCreationTargetBranch,
@@ -97,7 +101,9 @@ export function useWorkspaceCreation({
     }
   };
 
-  const submit = async (): Promise<void> => {
+  const submit = async (
+    fallbackDefaultModel?: RecommendedDefaultModelSelection | null,
+  ): Promise<void> => {
     const targetBranch = state.defaultTargetBranch;
     if (
       submitInFlight.current ||
@@ -126,17 +132,23 @@ export function useWorkspaceCreation({
         const abbreviation = state.abbreviation.trim();
         if (abbreviation) details.abbreviation = abbreviation;
         if (state.tileColor) details.tileColor = state.tileColor;
-        const outcome = await provider.commit(
-          {
-            ...details,
-            defaultTargetBranch: targetBranch,
-            ...prepareModelDefaultsForSave(state.modelDraft),
-          },
-          async (input) => {
-            dispatch({ type: "commitAttempted" });
-            return commitWorkspaceProviderSetup(input);
-          },
-        );
+        const modelDraftToSave =
+          !state.defaultModelTouched && !state.modelDraft.defaultModel && fallbackDefaultModel
+            ? { ...state.modelDraft, defaultModel: { ...fallbackDefaultModel } }
+            : state.modelDraft;
+        const namingModel = normalizeNamingModelForSave(modelDraftToSave.namingModel);
+        const commitInput: Omit<WorkspaceProviderSetupCommit, "setupId" | "revision"> = {
+          ...details,
+          defaultTargetBranch: targetBranch,
+          ...prepareModelDefaultsForSave(modelDraftToSave),
+        };
+        if (namingModel) {
+          commitInput.namingModel = namingModel;
+        }
+        const outcome = await provider.commit(commitInput, async (input) => {
+          dispatch({ type: "commitAttempted" });
+          return commitWorkspaceProviderSetup(input);
+        });
         if (outcome.workspace)
           dispatch({ type: "created", workspaceId: outcome.workspace.workspaceId });
         if (outcome.error || outcome.phase !== "complete")
@@ -205,6 +217,7 @@ export function useWorkspaceCreation({
     tileColor: state.tileColor,
     defaultTargetBranch,
     targetBranches,
+    defaultModelTouched: state.defaultModelTouched,
     modelDraft: state.modelDraft,
     createdWorkspaceId: state.createdWorkspaceId,
     committed: state.commitStatus === "complete",
@@ -253,6 +266,7 @@ export function useWorkspaceCreation({
     updateDefaultTargetBranch: (targetBranch) =>
       dispatch({ type: "defaultTargetBranch", targetBranch }),
     updateModelDraft: (updater) => dispatch({ type: "models", updater }),
+    clearDefaultModel: () => dispatch({ type: "clearDefaultModel" }),
     submit,
   };
 }
@@ -299,6 +313,7 @@ const uniquifyWorkspaceId = (candidate: string, existingIds: Set<string>): strin
 
 const emptyModelDraft = (): WorkspaceModelDefaultsDraft => ({
   defaultModel: undefined,
+  namingModel: undefined,
   agentDefaults: {},
 });
 
@@ -316,6 +331,7 @@ type State = {
    */
   defaultTargetBranch: GitTargetBranch | null;
   editedId: boolean;
+  defaultModelTouched: boolean;
   modelDraft: WorkspaceModelDefaultsDraft;
   createdWorkspaceId: string | null;
   commitStatus: "not_attempted" | "attempted" | "complete";
@@ -338,6 +354,7 @@ type Action =
       type: "models";
       updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft;
     }
+  | { type: "clearDefaultModel" }
   | { type: "created"; workspaceId: string }
   | { type: "committed" }
   | { type: "commitAttempted" }
@@ -354,6 +371,7 @@ const initialState: State = {
   tileColor: null,
   defaultTargetBranch: null,
   editedId: false,
+  defaultModelTouched: false,
   modelDraft: emptyModelDraft(),
   createdWorkspaceId: null,
   commitStatus: "not_attempted",
@@ -385,6 +403,7 @@ const reducer = (state: State, action: Action): State => {
         tileColor: null,
         defaultTargetBranch: null,
         editedId: false,
+        defaultModelTouched: false,
         modelDraft: emptyModelDraft(),
         commitStatus: "not_attempted",
         error: null,
@@ -401,8 +420,24 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, tileColor: action.tileColor };
     case "defaultTargetBranch":
       return { ...state, defaultTargetBranch: action.targetBranch };
-    case "models":
-      return { ...state, modelDraft: action.updater(state.modelDraft), error: null };
+    case "models": {
+      const nextModelDraft = action.updater(state.modelDraft);
+      return {
+        ...state,
+        defaultModelTouched:
+          state.defaultModelTouched ||
+          nextModelDraft.defaultModel !== state.modelDraft.defaultModel,
+        modelDraft: nextModelDraft,
+        error: null,
+      };
+    }
+    case "clearDefaultModel":
+      return {
+        ...state,
+        defaultModelTouched: true,
+        modelDraft: { ...state.modelDraft, defaultModel: undefined },
+        error: null,
+      };
     case "created":
       return { ...state, createdWorkspaceId: action.workspaceId };
     case "commitAttempted":
@@ -443,6 +478,7 @@ export type WorkspaceCreationController = {
   tileColor: string | null;
   defaultTargetBranch: GitTargetBranch | null;
   targetBranches: WorkspaceCreationTargetBranches;
+  defaultModelTouched: boolean;
   modelDraft: WorkspaceModelDefaultsDraft;
   createdWorkspaceId: string | null;
   committed: boolean;
@@ -470,5 +506,6 @@ export type WorkspaceCreationController = {
   updateModelDraft: (
     updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft,
   ) => void;
-  submit: () => Promise<void>;
+  clearDefaultModel: () => void;
+  submit: (fallbackDefaultModel?: RecommendedDefaultModelSelection | null) => Promise<void>;
 };

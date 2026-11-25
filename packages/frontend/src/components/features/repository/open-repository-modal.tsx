@@ -22,7 +22,10 @@ import {
   WorkspaceCreationSubmitAction,
 } from "./workspace-creation-form";
 import { useWorkspaceCreation, type WorkspaceCreationController } from "./use-workspace-creation";
-import { useWorkspaceCreationModels } from "./use-workspace-creation-models";
+import {
+  useWorkspaceCreationModels,
+  useWorkspaceCreationWithRecommendedDefault,
+} from "./use-workspace-creation-models";
 
 /** `add` starts the new workspace flow. `reopen` starts on the closed workspace choices. */
 export type OpenRepositoryModalView = "add" | "reopen";
@@ -196,7 +199,7 @@ function OpenRepositoryModalSession({
     ...closedWorkspaces,
     ...incompleteRemovals.map((removal) => removal.workspace),
   ];
-  const creation = useWorkspaceCreation({
+  const rawCreation = useWorkspaceCreation({
     workspaces: configuredWorkspaces,
     commitWorkspaceProviderSetup,
     resolveRepoPath: resolveWorkspacePath,
@@ -213,13 +216,14 @@ function OpenRepositoryModalSession({
   useLayoutEffect(() => {
     if (initialPickerRequested.current || !startsWithCreationFlow) return;
     initialPickerRequested.current = true;
-    creation.openPicker();
-  }, [creation, startsWithCreationFlow]);
+    rawCreation.openPicker();
+  }, [rawCreation, startsWithCreationFlow]);
   const models = useWorkspaceCreationModels({
-    repoPath: creation.repoPath,
-    active: open && showCreationFlow && creation.stage === "models",
+    repoPath: rawCreation.repoPath,
+    active: open && showCreationFlow && rawCreation.stage === "models",
     saveAgentModelFavorites,
   });
+  const creation = useWorkspaceCreationWithRecommendedDefault(rawCreation, models);
   const workspaceChangeLocked = isSwitchingWorkspace || isCreatingWorkspace || isChangingWorkspace;
   const interactionLocked = workspaceChangeLocked || creation.busy;
   const cancellationLocked = workspaceChangeLocked || !creation.canAbandon;

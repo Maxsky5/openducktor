@@ -84,8 +84,6 @@ export function buildWorkspaceSessionComposer({
     ...skills,
     ...subagents,
     onCatalogMenuOpen: refreshCatalogIfStale,
-    onAgentSelectorOpen: refreshCatalogIfStale,
-    onVariantSelectorOpen: refreshCatalogIfStale,
     searchFiles,
     agentOptions: picker.agentProfileOptions,
     variantOptions: picker.variantOptions,

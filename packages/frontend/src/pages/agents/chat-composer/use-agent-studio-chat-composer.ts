@@ -1,17 +1,20 @@
 import type { ReusablePrompt, RuntimeDescriptor } from "@openducktor/contracts";
-import type {
-  AgentFileSearchResult,
-  AgentModelCatalog,
-  AgentModelSelection,
-  AgentRuntimeCatalog,
-  AgentSkillCatalog,
-  AgentSlashCommandCatalog,
-  AgentSubagentCatalog,
-  RuntimeWorkingDirectoryRef,
+import {
+  type AgentFileSearchResult,
+  type AgentModelCatalog,
+  type AgentModelSelection,
+  type AgentRuntimeCatalog,
+  type AgentSkillCatalog,
+  type AgentSlashCommandCatalog,
+  type AgentSubagentCatalog,
+  type RuntimeWorkingDirectoryRef,
+  STANDARD_SPEED,
 } from "@openducktor/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentChatComposerModel } from "@/components/features/agents/agent-chat/agent-chat.types";
+import { useClientConnection } from "@openducktor/frontend-core/connection/client-connection-react";
+import { blockedSpeedReason } from "@openducktor/frontend-core/sessions/model-selection/model-picker-presentation";
 import type {
   ModelPickerFavoriteState,
   ModelPickerRuntime,
@@ -88,6 +91,7 @@ type UseAgentStudioChatComposerArgs = {
 type AgentStudioChatComposerState = {
   runtimeReadiness: RuntimeReadiness;
   speed: SpeedControlModel | null;
+  speedBlockedReason: string | null;
   selectionForNewSession: AgentModelSelection | null;
   selectedModelSelection: AgentModelSelection | null;
   selectedModelDescriptor: AgentModelCatalog["models"][number] | null;
@@ -114,8 +118,6 @@ type AgentStudioChatComposerState = {
   isSubagentsLoading: boolean;
   retrySubagents: (() => void) | null;
   onCatalogMenuOpen: () => void;
-  onAgentSelectorOpen: () => void;
-  onVariantSelectorOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentProfileOptions: ComboboxOption[];
   modelPicker: AgentChatComposerModel["modelPicker"];
@@ -123,6 +125,118 @@ type AgentStudioChatComposerState = {
   selectedSessionContextUsage: AgentStudioContextUsage;
   handleSelectAgentProfile: (profileId: string) => void;
   handleSelectVariant: (variant: string) => void;
+};
+
+const resolveAgentStudioUnsupportedDefaultSpeedKey = ({
+  hasSessionTarget,
+  explicitDraftSelection,
+  composerCatalog,
+  defaultSelection,
+  selectedModelSelection,
+  workspaceRepoPath,
+  role,
+}: {
+  hasSessionTarget: boolean;
+  explicitDraftSelection: AgentModelSelection | null;
+  composerCatalog: AgentModelCatalog | null;
+  defaultSelection: AgentModelSelection | null;
+  selectedModelSelection: AgentModelSelection | null;
+  workspaceRepoPath: string | null;
+  role: AgentRole | null;
+}): string | null => {
+  if (
+    hasSessionTarget ||
+    explicitDraftSelection !== null ||
+    composerCatalog === null ||
+    !defaultSelection?.speed ||
+    defaultSelection.speed === STANDARD_SPEED ||
+    selectedModelSelection === null ||
+    selectedModelSelection.speed ||
+    selectedModelSelection.runtimeKind !== defaultSelection.runtimeKind ||
+    selectedModelSelection.providerId !== defaultSelection.providerId ||
+    selectedModelSelection.modelId !== defaultSelection.modelId
+  ) {
+    return null;
+  }
+  return `${workspaceRepoPath ?? ""}|${role ?? ""}|${defaultSelection.runtimeKind ?? ""}|${defaultSelection.providerId}|${defaultSelection.modelId}|${defaultSelection.speed}`;
+};
+
+const buildAgentStudioModelPickerRuntimes = ({
+  availableRuntimeDefinitions,
+  hasSessionTarget,
+  modelPickerRuntimeDefinitions,
+  repoModelPickerResources,
+  selectedSessionIdentity,
+  sessionModelCatalog,
+  isSessionModelCatalogLoading,
+  catalogError,
+  workspaceRepoPath,
+  queryClient,
+  loadRuntimeCatalog,
+}: {
+  availableRuntimeDefinitions: RuntimeDescriptor[];
+  hasSessionTarget: boolean;
+  modelPickerRuntimeDefinitions: RuntimeDescriptor[];
+  repoModelPickerResources: ReturnType<typeof useRuntimeModelCatalogs>["resources"];
+  selectedSessionIdentity: AgentSessionIdentity | null;
+  sessionModelCatalog: AgentModelCatalog | null;
+  isSessionModelCatalogLoading: boolean;
+  catalogError: string | null;
+  workspaceRepoPath: string | null;
+  queryClient: ReturnType<typeof useQueryClient>;
+  loadRuntimeCatalog: (runtimeRef: RuntimeWorkingDirectoryRef) => Promise<AgentRuntimeCatalog>;
+}): ModelPickerRuntime[] => {
+  const availableKinds = new Set(availableRuntimeDefinitions.map((runtime) => runtime.kind));
+  if (!hasSessionTarget) {
+    return modelPickerRuntimeDefinitions.map((descriptor) => {
+      const resource = repoModelPickerResources.find(
+        (candidate) => candidate.runtimeKind === descriptor.kind,
+      );
+      return {
+        descriptor,
+        isEnabledForFavorites: availableKinds.has(descriptor.kind),
+        resource: modelPickerResourceFromCatalogQuery(resource),
+      };
+    });
+  }
+  return modelPickerRuntimeDefinitions.map((descriptor) => {
+    if (descriptor.kind !== selectedSessionIdentity?.runtimeKind) {
+      return {
+        descriptor,
+        isEnabledForFavorites: availableKinds.has(descriptor.kind),
+        resource: unavailableModelPickerCatalogResource(
+          "Start a new session to use another runtime.",
+        ),
+      };
+    }
+    return {
+      descriptor,
+      isEnabledForFavorites: availableKinds.has(descriptor.kind),
+      resource: toModelPickerCatalogResource({
+        catalog: sessionModelCatalog,
+        isLoading: isSessionModelCatalogLoading,
+        error: catalogError,
+        isAvailable: true,
+        unavailableReason: "The current session model catalog is unavailable.",
+        retry: async (): Promise<void> => {
+          if (!workspaceRepoPath || !selectedSessionIdentity) {
+            throw new Error(
+              "A repository path and session are required to refresh the session model catalog.",
+            );
+          }
+          await retryRuntimeCatalog({
+            queryClient,
+            runtimeRef: {
+              repoPath: workspaceRepoPath,
+              runtimeKind: descriptor.kind,
+              workingDirectory: selectedSessionIdentity.workingDirectory,
+            },
+            loadRuntimeCatalog,
+          });
+        },
+      }),
+    };
+  });
 };
 
 export function useAgentStudioChatComposer({
@@ -136,6 +250,7 @@ export function useAgentStudioChatComposer({
   loadCatalog,
   loadFileSearch,
 }: UseAgentStudioChatComposerArgs): AgentStudioChatComposerState {
+  const { feedback } = useClientConnection();
   const {
     availableRuntimeDefinitions,
     allRuntimeDefinitions,
@@ -267,71 +382,35 @@ export function useAgentStudioChatComposer({
     enabledRuntimeKinds: enabledModelPickerRuntimeKinds,
     loadRuntimeCatalog,
   });
-  const modelPickerRuntimes = useMemo<ModelPickerRuntime[]>(() => {
-    const availableKinds = new Set(availableRuntimeDefinitions.map((runtime) => runtime.kind));
-    if (!hasSessionTarget) {
-      return modelPickerRuntimeDefinitions.map((descriptor) => {
-        const resource = repoModelPickerResources.find(
-          (candidate) => candidate.runtimeKind === descriptor.kind,
-        );
-        return {
-          descriptor,
-          isEnabledForFavorites: availableKinds.has(descriptor.kind),
-          resource: modelPickerResourceFromCatalogQuery(resource),
-        };
-      });
-    }
-    return modelPickerRuntimeDefinitions.map((descriptor) => {
-      if (descriptor.kind !== selectedSessionIdentity?.runtimeKind) {
-        return {
-          descriptor,
-          isEnabledForFavorites: availableKinds.has(descriptor.kind),
-          resource: unavailableModelPickerCatalogResource(
-            "Start a new session to use another runtime.",
-          ),
-        };
-      }
-      return {
-        descriptor,
-        isEnabledForFavorites: availableKinds.has(descriptor.kind),
-        resource: toModelPickerCatalogResource({
-          catalog: sessionModelCatalog,
-          isLoading: isSessionModelCatalogLoading,
-          error: selectedSession.runtimeData.catalogError,
-          isAvailable: true,
-          unavailableReason: "The current session model catalog is unavailable.",
-          retry: async (): Promise<void> => {
-            if (!workspaceRepoPath || !selectedSessionIdentity) {
-              throw new Error(
-                "A repository path and session are required to refresh the session model catalog.",
-              );
-            }
-            await retryRuntimeCatalog({
-              queryClient,
-              runtimeRef: {
-                repoPath: workspaceRepoPath,
-                runtimeKind: descriptor.kind,
-                workingDirectory: selectedSessionIdentity.workingDirectory,
-              },
-              loadRuntimeCatalog,
-            });
-          },
-        }),
-      };
-    });
-  }, [
-    availableRuntimeDefinitions,
-    hasSessionTarget,
-    isSessionModelCatalogLoading,
-    loadRuntimeCatalog,
-    modelPickerRuntimeDefinitions,
-    queryClient,
-    repoModelPickerResources,
-    selectedSession.runtimeData.catalogError,
-    selectedSessionIdentity,
-    sessionModelCatalog,
-    workspaceRepoPath,
-  ]);
+  const modelPickerRuntimes = useMemo<ModelPickerRuntime[]>(
+    () =>
+      buildAgentStudioModelPickerRuntimes({
+        availableRuntimeDefinitions,
+        hasSessionTarget,
+        modelPickerRuntimeDefinitions,
+        repoModelPickerResources,
+        selectedSessionIdentity,
+        sessionModelCatalog,
+        isSessionModelCatalogLoading,
+        catalogError: selectedSession.runtimeData.catalogError,
+        workspaceRepoPath,
+        queryClient,
+        loadRuntimeCatalog,
+      }),
+    [
+      availableRuntimeDefinitions,
+      hasSessionTarget,
+      isSessionModelCatalogLoading,
+      loadRuntimeCatalog,
+      modelPickerRuntimeDefinitions,
+      queryClient,
+      repoModelPickerResources,
+      selectedSession.runtimeData.catalogError,
+      selectedSessionIdentity,
+      sessionModelCatalog,
+      workspaceRepoPath,
+    ],
+  );
   const selectedComposerResource = repoModelPickerResources.find(
     (resource) => resource.runtimeKind === selectedRuntimeKind,
   );
@@ -393,6 +472,30 @@ export function useAgentStudioChatComposer({
   ]);
   const { selectionCatalog, selectedModelSelection, selectionForNewSession } = modelSelections;
 
+  const notifiedUnsupportedDefaultKey = useRef<string | null>(null);
+  const unsupportedDefaultSpeedKey = resolveAgentStudioUnsupportedDefaultSpeedKey({
+    hasSessionTarget,
+    explicitDraftSelection,
+    composerCatalog,
+    defaultSelection,
+    selectedModelSelection,
+    workspaceRepoPath,
+    role,
+  });
+  useEffect(() => {
+    if (
+      !unsupportedDefaultSpeedKey ||
+      notifiedUnsupportedDefaultKey.current === unsupportedDefaultSpeedKey
+    ) {
+      return;
+    }
+    notifiedUnsupportedDefaultKey.current = unsupportedDefaultSpeedKey;
+    feedback.show(
+      "info",
+      "Speed was set to Standard because this model does not support the previous level.",
+    );
+  }, [feedback, unsupportedDefaultSpeedKey]);
+
   const searchFiles = useMemo(
     () =>
       createChatComposerFileSearch({
@@ -411,6 +514,20 @@ export function useAgentStudioChatComposer({
     ? isSessionModelCatalogLoading
     : isLoadingComposerCatalog;
 
+  const {
+    handleSelectAgentProfile,
+    handleSelectModelPair: applyModelPair,
+    handleSelectVariant,
+    handleSelectSpeed,
+  } = useModelSelectionActions({
+    loadedSessionIdentity,
+    updateAgentSessionModel,
+    applyDraftSelection,
+    selectedModelSelection,
+    selectionCatalog,
+    selectedRuntimeKind: selectedTargetRuntimeKind,
+  });
+
   const { selectedModelEntry, agentProfileOptions, variantOptions } = useMemo(
     () =>
       resolveModelSelectionOptions({
@@ -427,19 +544,6 @@ export function useAgentStudioChatComposer({
     selectedModelEntry,
   });
 
-  const {
-    handleSelectAgentProfile,
-    handleSelectModelPair: applyModelPair,
-    handleSelectVariant,
-    handleSelectSpeed,
-  } = useModelSelectionActions({
-    loadedSessionIdentity,
-    updateAgentSessionModel,
-    applyDraftSelection,
-    selectedModelSelection,
-    selectionCatalog,
-    selectedRuntimeKind: selectedTargetRuntimeKind,
-  });
   const handleSelectModelPair = useCallback(
     (value: ModelPickerValue): void => {
       const targetRuntime = modelPickerRuntimes.find(
@@ -492,10 +596,12 @@ export function useAgentStudioChatComposer({
     selection: selectedModelSelection,
     onSelect: handleSelectSpeed,
   });
+  const speedBlockedReason = blockedSpeedReason(speed);
 
   return {
     runtimeReadiness,
     speed,
+    speedBlockedReason,
     selectionForNewSession,
     selectedModelSelection,
     selectedModelDescriptor: selectedModelEntry,
@@ -522,8 +628,6 @@ export function useAgentStudioChatComposer({
     isSubagentsLoading,
     retrySubagents,
     onCatalogMenuOpen: refreshCatalogIfStale,
-    onAgentSelectorOpen: refreshCatalogIfStale,
-    onVariantSelectorOpen: refreshCatalogIfStale,
     searchFiles,
     agentProfileOptions,
     modelPicker,

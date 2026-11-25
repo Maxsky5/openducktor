@@ -1,6 +1,11 @@
-import { type AgentModelSelection, coerceVisibleSelectionToCatalog } from "@openducktor/core";
-import { useCallback, useMemo, useState } from "react";
+import {
+  type AgentModelSelection,
+  coerceVisibleSelectionToCatalog,
+  STANDARD_SPEED,
+} from "@openducktor/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRuntimeAvailabilityContext } from "../../app-state/app-state-contexts";
+import { useClientConnection } from "../../connection/client-connection-react";
 import { useRefreshStaleRuntimeCatalog } from "../../queries/use-runtime-catalog-query";
 import { useRuntimeModelCatalogs } from "../../queries/use-runtime-model-catalogs";
 import {
@@ -9,12 +14,47 @@ import {
   modelPickerResourceFromCatalogQuery,
   selectableModelPickerCatalog,
 } from "../../sessions/model-selection/model-picker-model";
+import { blockedSpeedReason } from "../../sessions/model-selection/model-picker-presentation";
 import { resolveModelSelectionOptions } from "../../sessions/model-selection/model-selection-options";
 import { useModelSelectionActions } from "../../sessions/model-selection/use-model-selection-actions";
 import { useSpeedControl } from "../../sessions/model-selection/use-speed-control";
 
 const rejectSessionUpdate = (): never => {
   throw new Error("The new session has not started yet.");
+};
+
+const resolveUnsupportedDefaultSpeedKey = ({
+  repoPath,
+  draftSelection,
+  defaultSelection,
+  catalogDefault,
+}: {
+  repoPath: string;
+  draftSelection: AgentModelSelection | null;
+  defaultSelection: AgentModelSelection | null;
+  catalogDefault: AgentModelSelection | null;
+}): string | null => {
+  if (
+    draftSelection !== null ||
+    !defaultSelection?.speed ||
+    defaultSelection.speed === STANDARD_SPEED ||
+    catalogDefault === null ||
+    catalogDefault.speed
+  ) {
+    return null;
+  }
+  return `${repoPath}|${defaultSelection.runtimeKind ?? ""}|${defaultSelection.providerId}|${defaultSelection.modelId}|${defaultSelection.speed}`;
+};
+
+const isCatalogLoadingForCreate = (
+  resources: ReturnType<typeof useRuntimeModelCatalogs>["resources"],
+  requiredRuntime: AgentModelSelection["runtimeKind"] | undefined,
+): boolean => {
+  const requiredCatalog = resources.find((entry) => entry.runtimeKind === requiredRuntime);
+  if (requiredCatalog) {
+    return requiredCatalog.isLoading;
+  }
+  return resources.length > 0 && resources.every((entry) => entry.isLoading);
 };
 
 /**
@@ -26,6 +66,7 @@ export function useWorkspaceSessionCreateModel(
   repoPath: string,
   defaultSelection: AgentModelSelection | null,
 ) {
+  const { feedback } = useClientConnection();
   const { availableRuntimeDefinitions, loadRepoRuntimeCatalog } = useRuntimeAvailabilityContext();
   const runtimeKinds = useMemo(
     () => availableRuntimeDefinitions.map((definition) => definition.kind),
@@ -49,11 +90,29 @@ export function useWorkspaceSessionCreateModel(
         : null,
     [defaultCatalog, defaultSelection],
   );
+  const notifiedUnsupportedDefaultKey = useRef<string | null>(null);
+  const unsupportedDefaultSpeedKey = resolveUnsupportedDefaultSpeedKey({
+    repoPath,
+    draftSelection,
+    defaultSelection,
+    catalogDefault,
+  });
+  useEffect(() => {
+    if (
+      !unsupportedDefaultSpeedKey ||
+      notifiedUnsupportedDefaultKey.current === unsupportedDefaultSpeedKey
+    ) {
+      return;
+    }
+    notifiedUnsupportedDefaultKey.current = unsupportedDefaultSpeedKey;
+    feedback.show(
+      "info",
+      "Speed was set to Standard because this model does not support the previous level.",
+    );
+  }, [feedback, unsupportedDefaultSpeedKey]);
   const selection = draftSelection ?? catalogDefault;
   const runtimeKind = selection?.runtimeKind ?? null;
   const catalog = resources.find((entry) => entry.runtimeKind === runtimeKind)?.catalog ?? null;
-  const requiredRuntime = runtimeKind ?? defaultSelection?.runtimeKind;
-  const requiredCatalog = resources.find((entry) => entry.runtimeKind === requiredRuntime);
   const runtimes = useMemo(
     () =>
       availableRuntimeDefinitions.map((descriptor): ModelPickerRuntime => ({
@@ -92,6 +151,7 @@ export function useWorkspaceSessionCreateModel(
     disabled: false,
     onSelect: handleSelectSpeed,
   });
+  const speedBlockedReason = blockedSpeedReason(speed);
   const selectModel = useCallback(
     (value: ModelPickerValue) => {
       const runtime = runtimes.find((entry) => entry.descriptor.kind === value.runtimeKind);
@@ -120,12 +180,11 @@ export function useWorkspaceSessionCreateModel(
     supportsProfiles:
       availableRuntimeDefinitions.find((entry) => entry.kind === runtimeKind)?.capabilities
         .optionalSurfaces.supportsProfiles ?? false,
-    isLoading: requiredCatalog
-      ? requiredCatalog.isLoading
-      : resources.length > 0 && resources.every((entry) => entry.isLoading),
+    isLoading: isCatalogLoadingForCreate(resources, runtimeKind ?? defaultSelection?.runtimeKind),
     ...options,
     ...actions,
     speed,
+    speedBlockedReason,
     selectModel,
     onCatalogSelectorOpen,
     /** True after the user changed the model, its effort, its speed, or its runtime profile. */

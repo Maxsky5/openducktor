@@ -7,7 +7,7 @@ import {
 import { useLocalShortcuts } from "@/features/shortcuts/use-local-shortcuts";
 import { useCommandPalettePageCommands } from "@/features/command-palette/command-palette-context";
 import { useSessionViewActive } from "@openducktor/frontend-core/sessions/navigation/session-view-context";
-import { Bot, BrainCog, Paperclip, Square } from "lucide-react";
+import { Paperclip, Square } from "lucide-react";
 import {
   memo,
   type ReactElement,
@@ -21,10 +21,8 @@ import {
 } from "react";
 import type { AgentMessageSubmitMode } from "@openducktor/contracts";
 import { toast } from "sonner";
-import { SpeedSelect } from "../speed-select";
 import { ModelPicker } from "@/components/features/agents/model-picker";
 import { BorderRay } from "@/components/ui/border-ray";
-import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import type { AgentChatComposerModel } from "./agent-chat.types";
 import { AgentChatAttachmentChip } from "./agent-chat-attachment-chip";
@@ -72,6 +70,31 @@ const MemoizedAgentChatComposerEditor = memo(AgentChatComposerEditor);
 
 export type AgentChatComposerHandle = {
   addFiles: (files: File[]) => void;
+};
+
+const resolveModelPickerReadOnlyReason = ({
+  isReadOnly,
+  readOnlyReason,
+  isSubmitting,
+  isInteractionEnabled,
+  isRuntimeLocked,
+}: {
+  isReadOnly: boolean;
+  readOnlyReason: string | null | undefined;
+  isSubmitting: boolean;
+  isInteractionEnabled: boolean;
+  isRuntimeLocked: boolean;
+}): string | null => {
+  if (isReadOnly) {
+    return readOnlyReason ?? "Model selection is unavailable right now.";
+  }
+  if (isSubmitting) {
+    return "Wait for the current submission to finish.";
+  }
+  if (!isInteractionEnabled && isRuntimeLocked) {
+    return "Model selection is unavailable right now.";
+  }
+  return null;
 };
 
 export function AgentChatComposer({
@@ -178,17 +201,18 @@ export function AgentChatComposer({
     attachmentInputRef.current?.click();
   }, [attachmentIntakeDisabled]);
 
-  const isSendOrModelPending = isSubmitting;
-
   useLayoutEffect(() => {
     draftRef.current = draft;
   }, [draft]);
 
-  const modelPickerDisabled =
-    isSendOrModelPending ||
-    isReadOnly ||
-    (!isInteractionEnabled && model.modelPicker.selectionPolicy.kind === "runtime_locked");
-  const selectorDisabled = composerSelectorDisabledFor(model, modelPickerDisabled);
+  const hardModelPickerReadOnlyReason = resolveModelPickerReadOnlyReason({
+    isReadOnly,
+    readOnlyReason: model.readOnlyReason,
+    isSubmitting,
+    isInteractionEnabled,
+    isRuntimeLocked: model.modelPicker.selectionPolicy.kind === "runtime_locked",
+  });
+  const closedModelPickerDisabledReason = null;
 
   const scheduleComposerFocus = useAgentChatComposerFocus({
     composerEditorRef,
@@ -227,7 +251,7 @@ export function AgentChatComposer({
             keywords: ["submit", "send"],
             target: { kind: "session", key: model.displayedSessionKey ?? "draft" },
             disabledReason: () =>
-              defaultSendDisabled ? (sendBlockedReason ?? "Sending is unavailable.") : null,
+              sendDisabled ? (sendBlockedReason ?? "Sending is unavailable.") : null,
             run: submitComposerAction,
           },
           {
@@ -263,8 +287,8 @@ export function AgentChatComposer({
       isComposerInputDisabled={isComposerInputDisabled}
       isSubmitting={isSubmitting}
       pendingSendBlockedReason={pendingSendBlockedReason}
-      selectorDisabled={selectorDisabled}
-      modelPickerDisabled={modelPickerDisabled}
+      hardModelPickerReadOnlyReason={hardModelPickerReadOnlyReason}
+      closedModelPickerDisabledReason={closedModelPickerDisabledReason}
       sendDisabled={sendDisabled}
       onAddFiles={handleAddFiles}
       onDraftChange={handleDraftChange}
@@ -290,8 +314,8 @@ type AgentChatComposerFormViewProps = {
   isComposerInputDisabled: boolean;
   isSubmitting: boolean;
   pendingSendBlockedReason: string | null;
-  selectorDisabled: boolean;
-  modelPickerDisabled: boolean;
+  hardModelPickerReadOnlyReason: string | null;
+  closedModelPickerDisabledReason: string | null;
   sendDisabled: boolean;
   onAddFiles: (files: File[]) => void;
   onDraftChange: (draft: AgentChatComposerDraft) => void;
@@ -317,13 +341,10 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   modelPicker,
   variantOptions,
   isSelectionCatalogLoading,
-  supportsProfiles,
-  selectorDisabled,
-  modelPickerDisabled,
+  hardModelPickerReadOnlyReason,
+  closedModelPickerDisabledReason,
   onSelectAgent,
   onSelectVariant,
-  onAgentSelectorOpen,
-  onVariantSelectorOpen,
   contextUsage,
   canStopSession,
   onStopSession,
@@ -339,13 +360,10 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   modelPicker: AgentChatComposerModel["modelPicker"];
   variantOptions: AgentChatComposerModel["variantOptions"];
   isSelectionCatalogLoading: boolean;
-  supportsProfiles: boolean;
-  selectorDisabled: boolean;
-  modelPickerDisabled: boolean;
+  hardModelPickerReadOnlyReason: string | null;
+  closedModelPickerDisabledReason: string | null;
   onSelectAgent: AgentChatComposerModel["onSelectAgent"];
   onSelectVariant: AgentChatComposerModel["onSelectVariant"];
-  onAgentSelectorOpen: AgentChatComposerModel["onAgentSelectorOpen"];
-  onVariantSelectorOpen: AgentChatComposerModel["onVariantSelectorOpen"];
   contextUsage: AgentChatComposerModel["contextUsage"];
   canStopSession: boolean;
   onStopSession: AgentChatComposerModel["onStopSession"];
@@ -353,15 +371,15 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
   sendDisabled: boolean;
   pendingSendItems: AgentChatComposerModel["pendingSendItems"];
 }): ReactElement {
-  const hasVariantOptions = variantOptions.length > 0;
   const modelTrigger = useRef<HTMLButtonElement>(null);
+  const shortcutDisabledReason = hardModelPickerReadOnlyReason ?? closedModelPickerDisabledReason;
   const shortcutOwner = useLocalShortcuts(
     modelTrigger,
     [
       {
         id: "session-model" as const,
         run: () => modelTrigger.current?.click(),
-        disabledReason: modelPickerDisabled ? "Model selection is unavailable." : null,
+        disabledReason: shortcutDisabledReason,
       },
     ],
     "form",
@@ -383,31 +401,9 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
           >
             <Paperclip className="size-3.5" />
           </ShortcutButton>
-          {supportsProfiles ? (
-            <div className="relative min-w-0">
-              <Bot className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Combobox
-                value={selectedModelSelection?.profileId ?? ""}
-                options={agentOptions}
-                className="w-[22rem] max-w-[min(90vw,28rem)] p-0"
-                placeholder={isSelectionCatalogLoading ? "Loading agents..." : "Agent"}
-                searchPlaceholder="Search agent..."
-                triggerClassName={cn(
-                  COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-                  "max-w-[min(15rem,100%)] !pl-7 !pr-2",
-                )}
-                disabled={selectorDisabled}
-                onValueChange={onSelectAgent}
-                onOpenChange={(open) => {
-                  if (open) {
-                    onAgentSelectorOpen();
-                  }
-                }}
-              />
-            </div>
-          ) : null}
 
           <ModelPicker
+            triggerVariant="composer"
             shortcutId="session-model"
             triggerRef={modelTrigger}
             popoverSide="top"
@@ -416,54 +412,36 @@ const AgentChatComposerControls = memo(function AgentChatComposerControls({
             value={modelPicker.value}
             favoriteState={modelPicker.favoriteState}
             selectionPolicy={
-              modelPickerDisabled
-                ? { kind: "read_only", reason: "Model selection is unavailable right now." }
+              hardModelPickerReadOnlyReason
+                ? { kind: "read_only", reason: hardModelPickerReadOnlyReason }
                 : modelPicker.selectionPolicy
             }
+            closedTriggerDisabledReason={closedModelPickerDisabledReason}
+            options={{
+              effort: {
+                options: variantOptions,
+                value: selectedModelSelection?.variant,
+                onSelect: onSelectVariant,
+              },
+              profile: {
+                options: agentOptions,
+                value: selectedModelSelection?.profileId,
+                onSelect: onSelectAgent,
+              },
+              speed: {
+                control: speed
+                  ? { ...speed, disabled: speed.disabled || hardModelPickerReadOnlyReason !== null }
+                  : null,
+              },
+            }}
             placeholder={isSelectionCatalogLoading ? "Loading models..." : "Model"}
             triggerClassName={cn(
               COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-              "max-w-[min(19rem,100%)] !px-2",
+              "max-w-[min(26rem,100%)] !px-2",
             )}
             onValueChange={modelPicker.onValueChange}
             onOpenChange={modelPicker.onOpenChange}
           />
-
-          {hasVariantOptions ? (
-            <div className="relative min-w-0">
-              <BrainCog className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Combobox
-                value={selectedModelSelection?.variant ?? ""}
-                options={variantOptions}
-                className="w-[min(16rem,var(--radix-popover-content-available-width))] max-w-[min(90vw,22rem)] p-0"
-                placeholder="Effort"
-                popoverSide="top"
-                popoverAvoidCollisions={false}
-                searchPlaceholder="Search effort..."
-                triggerClassName={cn(
-                  COMPOSER_SELECTOR_TRIGGER_CLASS_NAME,
-                  "max-w-[min(12rem,100%)] !pl-7 !pr-2",
-                )}
-                disabled={selectorDisabled}
-                onValueChange={onSelectVariant}
-                onOpenChange={(open) => {
-                  if (open) {
-                    onVariantSelectorOpen();
-                  }
-                }}
-              />
-            </div>
-          ) : null}
-          {speed && (
-            <SpeedSelect
-              popoverSide="top"
-              popoverAvoidCollisions={false}
-              key={speed.key}
-              model={{ ...speed, disabled: speed.disabled || modelPickerDisabled }}
-              compact
-              triggerClassName="hover:bg-muted hover:text-foreground"
-            />
-          )}
         </div>
 
         <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1">
@@ -566,8 +544,8 @@ function AgentChatComposerFormView({
   isComposerInputDisabled,
   isSubmitting,
   pendingSendBlockedReason,
-  selectorDisabled,
-  modelPickerDisabled,
+  hardModelPickerReadOnlyReason,
+  closedModelPickerDisabledReason,
   sendDisabled,
   onAddFiles,
   onDraftChange,
@@ -582,7 +560,6 @@ function AgentChatComposerFormView({
     isWaitingInput,
     isSelectionCatalogLoading,
     selectedModelSelection,
-    supportsProfiles,
     supportsSlashCommands,
     supportsFileSearch,
     supportsSkillReferences,
@@ -606,8 +583,6 @@ function AgentChatComposerFormView({
     variantOptions,
     onSelectAgent,
     onSelectVariant,
-    onAgentSelectorOpen,
-    onVariantSelectorOpen,
     contextUsage,
     canStopSession,
     onStopSession,
@@ -745,13 +720,10 @@ function AgentChatComposerFormView({
             modelPicker={modelPicker}
             variantOptions={variantOptions}
             isSelectionCatalogLoading={isSelectionCatalogLoading}
-            supportsProfiles={supportsProfiles ?? true}
-            selectorDisabled={selectorDisabled}
-            modelPickerDisabled={modelPickerDisabled}
+            hardModelPickerReadOnlyReason={hardModelPickerReadOnlyReason}
+            closedModelPickerDisabledReason={closedModelPickerDisabledReason}
             onSelectAgent={onSelectAgent}
             onSelectVariant={onSelectVariant}
-            onAgentSelectorOpen={onAgentSelectorOpen}
-            onVariantSelectorOpen={onVariantSelectorOpen}
             contextUsage={contextUsage}
             canStopSession={canStopSession}
             onStopSession={onStopSession}
@@ -844,9 +816,3 @@ function useAgentChatComposerFocus({
 
   return scheduleComposerFocus;
 }
-
-const composerSelectorDisabledFor = (
-  model: AgentChatComposerModel,
-  modelPickerDisabled: boolean,
-): boolean =>
-  model.isSelectionCatalogLoading || modelPickerDisabled || !model.selectedModelSelection;

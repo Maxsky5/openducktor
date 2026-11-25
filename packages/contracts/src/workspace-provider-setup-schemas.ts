@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { agentModelDefaultSchema, repoAgentDefaultsSchema } from "./config-schemas";
+import {
+  agentModelDefaultSchema,
+  namingModelSchema,
+  repoAgentDefaultsSchema,
+} from "./config-schemas";
 import { azureDevOpsConnectionStateSchema } from "./azure-devops-schemas";
 import { gitlabRepositorySchema } from "./gitlab-schemas";
 import {
@@ -80,6 +84,7 @@ export const workspaceProviderSetupCommitSchema = workspaceProviderSetupRefSchem
   tileColor: z.string().optional(),
   defaultTargetBranch: gitTargetBranchSchema,
   defaultModel: agentModelDefaultSchema.optional(),
+  namingModel: namingModelSchema.optional(),
   agentDefaults: repoAgentDefaultsSchema,
 });
 export type WorkspaceProviderSetupCommit = z.infer<typeof workspaceProviderSetupCommitSchema>;

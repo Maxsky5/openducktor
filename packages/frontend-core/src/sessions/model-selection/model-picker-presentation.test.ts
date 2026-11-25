@@ -11,10 +11,12 @@ import type {
   ModelPickerRuntime,
 } from "./model-picker-model";
 import {
+  blockedSpeedReason,
   modelPickerFavoriteDisabledReason,
   modelPickerMetadataDescription,
   resolveModelPickerActiveView,
   resolveModelPickerPresentation,
+  resolveModelTriggerSummary,
 } from "./model-picker-presentation";
 
 const model: AgentModelCatalog["models"][number] = {
@@ -73,45 +75,55 @@ describe("resolveModelPickerActiveView", () => {
     ).toBe("claude");
   });
 
+  test("opens the selected runtime when editable with no favorites", () => {
+    expect(resolveModelPickerActiveView(runtimes, [], { kind: "editable" }, "claude")).toBe(
+      "claude",
+    );
+    expect(
+      resolveModelPickerActiveView(runtimes, [claudeFavorite], { kind: "editable" }, "claude"),
+    ).toBe("favorites");
+    expect(resolveModelPickerActiveView(runtimes, [], { kind: "editable" }, "codex")).toBe(
+      "opencode",
+    );
+  });
+
   test("keeps a locked runtime unless it has a favorite", () => {
     const locked = {
       kind: "runtime_locked" as const,
       runtimeKind: "opencode" as const,
       reason: "x",
     };
-    expect(resolveModelPickerActiveView(runtimes, [claudeFavorite], locked)).toBe("opencode");
+    expect(resolveModelPickerActiveView(runtimes, [claudeFavorite], locked, "claude")).toBe(
+      "opencode",
+    );
     expect(
       resolveModelPickerActiveView(
         runtimes,
         [{ ...claudeFavorite, runtimeKind: "opencode" }],
         locked,
+        "claude",
       ),
     ).toBe("favorites");
   });
 });
 
 describe("resolveModelPickerPresentation", () => {
-  test("names the selected runtime and model in the trigger", () => {
+  test("scopes visible resources to the active runtime or locked runtime", () => {
     const presentation = resolveModelPickerPresentation({
-      runtimes: [runtime(OPENCODE_RUNTIME_DESCRIPTOR)],
-      value: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" },
-      placeholder: "Select a model",
+      runtimes: [runtime(OPENCODE_RUNTIME_DESCRIPTOR), runtime(CLAUDE_RUNTIME_DESCRIPTOR)],
       activeView: "opencode",
       searchQuery: "",
       favoriteState: favoriteState(),
       lockedRuntimeKind: null,
     });
-    expect(presentation.triggerModelLabel).toBe("GPT-5");
-    expect(presentation.triggerAriaLabel).toBe(
-      `Select model, ${OPENCODE_RUNTIME_DESCRIPTOR.label}, GPT-5`,
-    );
+    expect(presentation.visibleResources.map((entry) => entry.descriptor.kind)).toEqual([
+      "opencode",
+    ]);
   });
 
   test("explains an empty favorites view and an empty search", () => {
     const input = {
       runtimes: [runtime(OPENCODE_RUNTIME_DESCRIPTOR)],
-      value: null,
-      placeholder: "Select a model",
       activeView: "favorites" as const,
       searchQuery: "",
       lockedRuntimeKind: null,
@@ -154,5 +166,90 @@ describe("model row text", () => {
         favoriteState({ canMutate: false, isMutationPending: true }),
       ),
     ).toBe("Saving favorite changes.");
+  });
+});
+
+describe("resolveModelTriggerSummary", () => {
+  test("merges OpenCode profile, model, and effort while omitting speed", () => {
+    const summary = resolveModelTriggerSummary({
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      catalog: {
+        models: [
+          {
+            ...model,
+            variants: ["low", "high"],
+          },
+        ],
+        defaultModelsByProvider: {},
+        profiles: [{ name: "builder", label: "Builder", mode: "primary" }],
+      },
+      selection: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "builder",
+        variant: "high",
+      },
+      disabledReason: "Saving model selection...",
+    });
+
+    expect(summary.profileLabel).toBe("Builder");
+    expect(summary.modelLabel).toBe("GPT-5");
+    expect(summary.effortLabel).toBe("high");
+    expect(summary.speedLabel).toBeNull();
+    expect(summary.speedTone).toBe("standard");
+    expect(summary.ariaLabel).toBe(
+      `Select model, ${OPENCODE_RUNTIME_DESCRIPTOR.label}, Builder, GPT-5, Effort high. Saving model selection...`,
+    );
+  });
+
+  test("resolves fast and ultrafast speed tones and blocked speed reason", () => {
+    const summary = resolveModelTriggerSummary({
+      runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+      catalog: {
+        models: [
+          {
+            ...model,
+            providerId: "claude",
+            modelId: "claude-opus-4-6",
+            modelName: "Claude Opus 4.6",
+            variants: ["high"],
+            speedLevels: [
+              { id: "fast", label: "Fast" },
+              { id: "ultrafast", label: "Ultrafast" },
+            ],
+          },
+        ],
+        defaultModelsByProvider: {},
+      },
+      selection: {
+        runtimeKind: "claude",
+        providerId: "claude",
+        modelId: "claude-opus-4-6",
+        variant: "high",
+        speed: "ultrafast",
+      },
+    });
+
+    expect(summary.speedTone).toBe("ultrafast");
+    expect(summary.speedLabel).toBe("Ultrafast");
+    expect(summary.nonStandardSpeedLabel).toBe("Ultrafast");
+    expect(
+      blockedSpeedReason({ choice: "ultrafast", blockedReason: "Account cannot use fast mode." }),
+    ).toBe("Account cannot use fast mode.");
+    expect(
+      blockedSpeedReason({ choice: "standard", blockedReason: "Account cannot use fast mode." }),
+    ).toBeNull();
+  });
+
+  test("locks speed_only policy to the target runtime view", () => {
+    const runtimes = [runtime(OPENCODE_RUNTIME_DESCRIPTOR), runtime(CLAUDE_RUNTIME_DESCRIPTOR)];
+    expect(
+      resolveModelPickerActiveView(
+        runtimes,
+        [{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }],
+        { kind: "speed_only", runtimeKind: "claude", reason: "Reused session" },
+      ),
+    ).toBe("claude");
   });
 });

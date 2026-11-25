@@ -1,5 +1,6 @@
 import "../../test-support/dom-environment";
 import { describe, expect, mock, test } from "bun:test";
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelSelection } from "@openducktor/core";
 import type { PropsWithChildren, ReactElement } from "react";
 import { ClientConnectionProvider } from "../../connection/client-connection-react";
@@ -588,6 +589,257 @@ describe("useModelSelectionActions", () => {
     } finally {
       firstUpdate.resolve();
       await speedResult;
+      await harness.unmount();
+    }
+  });
+
+  test("ignores reselecting the already-selected model pair so unlisted options stay intact", async () => {
+    const updateAgentSessionModel = mock(async () => {});
+    const harness = createHarness(
+      createBaseProps({
+        selectedModelSelection: {
+          ...claudeSelection,
+          variant: "legacy-effort",
+          speed: "legacy-speed",
+        },
+        updateAgentSessionModel,
+      }),
+    );
+
+    await harness.mount();
+    await harness.run((state) => {
+      state.handleSelectModelPair(
+        { runtimeKind: "claude", providerId: "claude", modelId: "claude-opus-4-6" },
+        claudeCatalog,
+      );
+    });
+
+    expect(updateAgentSessionModel).not.toHaveBeenCalled();
+    await harness.unmount();
+  });
+
+  test("shows the Standard speed notice only after the host accepts the model change", async () => {
+    const feedback = createFeedbackFake();
+    let shouldFail = true;
+    const updateAgentSessionModel = mock(async () => {
+      if (shouldFail) {
+        throw new Error("model switch refused");
+      }
+    });
+    const selectionCatalog: AgentModelCatalog = {
+      ...claudeCatalog,
+      models: [
+        { ...claudeCatalog.models[0]!, speedLevels: [{ id: "fast", label: "Fast" }] },
+        { ...claudeCatalog.models[0]!, id: "claude/sonnet", modelId: "sonnet", speedLevels: [] },
+      ],
+    };
+    const harness = createHarness(
+      createBaseProps({
+        selectedModelSelection: { ...claudeSelection, speed: "fast" },
+        selectionCatalog,
+        updateAgentSessionModel,
+      }),
+      feedback,
+    );
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleSelectModelPair(
+          { runtimeKind: "claude", providerId: "claude", modelId: "sonnet" },
+          selectionCatalog,
+        );
+      });
+      await harness.waitFor(() => feedback.shownOf("error").length === 1);
+
+      expect(feedback.shownOf("error")).toHaveLength(1);
+      expect(feedback.shownOf("info")).toEqual([]);
+
+      shouldFail = false;
+      await harness.update(
+        createBaseProps({
+          selectedModelSelection: { ...claudeSelection, speed: "fast" },
+          selectionCatalog,
+          updateAgentSessionModel,
+        }),
+      );
+      await harness.run((state) => {
+        state.handleSelectModelPair(
+          { runtimeKind: "claude", providerId: "claude", modelId: "sonnet" },
+          selectionCatalog,
+        );
+      });
+      await harness.waitFor(() => feedback.shownOf("info").length === 1);
+
+      expect(feedback.shownOf("info")).toHaveLength(1);
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("rejects selecting an unavailable agent profile and skips reselecting the active profile", async () => {
+    const writes: AgentModelSelection[] = [];
+    const feedback = createFeedbackFake();
+    const opencodeSession: AgentSessionIdentity = {
+      externalSessionId: "opencode-session-1",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+    };
+    const opencodeCatalog: AgentModelCatalog = {
+      runtime: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      models: [
+        {
+          id: "anthropic/claude-opus-4-6",
+          providerId: "anthropic",
+          providerName: "Anthropic",
+          modelId: "claude-opus-4-6",
+          modelName: "Claude Opus 4.6",
+          variants: ["medium", "high"],
+          liveSessionUpdates: { profile: true },
+        },
+      ],
+      defaultModelsByProvider: { anthropic: "claude-opus-4-6" },
+      profiles: [{ name: "primary", mode: "primary" }],
+    };
+    const initialSelection: AgentModelSelection = {
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-opus-4-6",
+      variant: "medium",
+      profileId: "primary",
+    };
+    const updateAgentSessionModel = mock(
+      async (_session: AgentSessionIdentity, selection: AgentModelSelection | null) => {
+        if (selection) writes.push(selection);
+      },
+    );
+    const harness = createHarness(
+      createBaseProps({
+        loadedSessionIdentity: opencodeSession,
+        selectedRuntimeKind: "opencode",
+        selectedModelSelection: initialSelection,
+        selectionCatalog: opencodeCatalog,
+        updateAgentSessionModel,
+      }),
+      feedback,
+    );
+
+    try {
+      await harness.mount();
+      await harness.run((state) => {
+        state.handleSelectAgentProfile("primary");
+        state.handleSelectAgentProfile("missing-profile");
+      });
+      await harness.waitFor(() => feedback.shownOf("error").length === 1);
+
+      expect(writes).toEqual([]);
+      expect(feedback.shownOf("error")[0]?.options?.description).toContain("agent profile");
+    } finally {
+      await harness.unmount();
+    }
+  });
+
+  test("restores optimistic selection refs on rejection so retrying without a prop change succeeds", async () => {
+    const feedback = createFeedbackFake();
+    const opencodeSession: AgentSessionIdentity = {
+      externalSessionId: "opencode-session-retry",
+      runtimeKind: "opencode",
+      workingDirectory: "/repo",
+    };
+    const opencodeCatalog: AgentModelCatalog = {
+      runtime: RUNTIME_DESCRIPTORS_BY_KIND.opencode,
+      models: [
+        {
+          id: "anthropic/claude-opus-4-6",
+          providerId: "anthropic",
+          providerName: "Anthropic",
+          modelId: "claude-opus-4-6",
+          modelName: "Claude Opus 4.6",
+          variants: ["medium", "high"],
+          liveSessionUpdates: { profile: true },
+        },
+        {
+          id: "anthropic/claude-sonnet-4-6",
+          providerId: "anthropic",
+          providerName: "Anthropic",
+          modelId: "claude-sonnet-4-6",
+          modelName: "Claude Sonnet 4.6",
+          variants: ["medium", "high"],
+          liveSessionUpdates: { profile: true },
+        },
+      ],
+      defaultModelsByProvider: { anthropic: "claude-opus-4-6" },
+      profiles: [
+        { name: "primary", mode: "primary" },
+        { name: "builder", mode: "primary" },
+      ],
+    };
+    const initialSelection: AgentModelSelection = {
+      runtimeKind: "opencode",
+      providerId: "anthropic",
+      modelId: "claude-opus-4-6",
+      variant: "medium",
+      profileId: "primary",
+    };
+    let rejectNext = true;
+    const updateAgentSessionModel = mock(async () => {
+      if (rejectNext) {
+        rejectNext = false;
+        throw new Error("busy");
+      }
+    });
+    const harness = createHarness(
+      createBaseProps({
+        loadedSessionIdentity: opencodeSession,
+        selectedRuntimeKind: "opencode",
+        selectedModelSelection: initialSelection,
+        selectionCatalog: opencodeCatalog,
+        updateAgentSessionModel,
+      }),
+      feedback,
+    );
+
+    try {
+      await harness.mount();
+
+      // Reject model change without updating props, then retry the exact same model.
+      await harness.run((state) => {
+        state.handleSelectModelPair(
+          { runtimeKind: "opencode", providerId: "anthropic", modelId: "claude-sonnet-4-6" },
+          opencodeCatalog,
+        );
+      });
+      await harness.waitFor(() => feedback.shownOf("error").length === 1);
+      await harness.run((state) => {
+        state.handleSelectModelPair(
+          { runtimeKind: "opencode", providerId: "anthropic", modelId: "claude-sonnet-4-6" },
+          opencodeCatalog,
+        );
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(2);
+
+      // Reset to initial selection via rejected effort change, then retry effort.
+      rejectNext = true;
+      await harness.run((state) => {
+        void state.handleSelectVariant("high");
+      });
+      await harness.waitFor(() => feedback.shownOf("error").length === 2);
+      await harness.run((state) => {
+        void state.handleSelectVariant("high");
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(4);
+
+      // Reject profile change, then retry the same profile without prop changes.
+      rejectNext = true;
+      await harness.run((state) => {
+        state.handleSelectAgentProfile("builder");
+      });
+      await harness.waitFor(() => feedback.shownOf("error").length === 3);
+      await harness.run((state) => {
+        state.handleSelectAgentProfile("builder");
+      });
+      expect(updateAgentSessionModel).toHaveBeenCalledTimes(6);
+    } finally {
       await harness.unmount();
     }
   });

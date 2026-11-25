@@ -7,6 +7,7 @@ import {
   type AgentSessionStartMode,
   type RuntimeWorkingDirectoryRef,
   findCatalogModel,
+  resolveSavedModelAlias,
 } from "@openducktor/core";
 import { useCallback, useMemo, useState } from "react";
 import { toPrimaryAgentOptions } from "../model-selection/catalog-select-options";
@@ -50,6 +51,7 @@ type UseSessionStartModalStateResult = {
   intent: SessionStartModalIntent | null;
   isOpen: boolean;
   selection: AgentModelSelection | null;
+  initialFreshSpeed: string | undefined;
   eligibleRuntimeDefinitions: RuntimeDescriptor[];
   selectedRuntimeDescriptor: RuntimeDescriptor | null;
   selectedRuntimeKind: RuntimeKind | null;
@@ -287,9 +289,15 @@ export function useSessionStartModalState({
   );
 
   const selectedModelEntry = useMemo(
-    () => findCatalogModel(catalog, visibleSelection),
+    () =>
+      catalog && visibleSelection
+        ? findCatalogModel(catalog, resolveSavedModelAlias(catalog, visibleSelection))
+        : null,
     [catalog, visibleSelection],
   );
+  const initialFreshSpeed = intent?.selectedModel
+    ? intent.selectedModel.speed
+    : activeRoleDefaultSelection?.speed;
 
   const runtimeProfileOptions = useMemo<SelectOption[]>(() => {
     const options = toPrimaryAgentOptions(catalog);
@@ -350,6 +358,7 @@ export function useSessionStartModalState({
     intent,
     isOpen: intent !== null,
     selection: visibleSelection,
+    initialFreshSpeed,
     eligibleRuntimeDefinitions,
     selectedRuntimeDescriptor,
     selectedRuntimeKind,

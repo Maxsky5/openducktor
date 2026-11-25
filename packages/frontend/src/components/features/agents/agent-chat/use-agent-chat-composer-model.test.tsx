@@ -62,8 +62,6 @@ const buildComposerConfig = (
   retrySlashCommands: null,
   retrySkills: null,
   retrySubagents: null,
-  onAgentSelectorOpen: () => {},
-  onVariantSelectorOpen: () => {},
   onCatalogMenuOpen: () => {},
   searchFiles: async () => [],
   agentOptions: [],

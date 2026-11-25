@@ -39,16 +39,22 @@ type RepoConfigQueryKey =
 
 const toRepoAgentDefaultInput = (
   value: AgentModelDefault | undefined,
-): RepoAgentDefaultInput | null =>
-  value
-    ? {
-        runtimeKind: value.runtimeKind,
-        providerId: value.providerId,
-        modelId: value.modelId,
-        variant: value.variant ?? "",
-        profileId: value.profileId ?? "",
-      }
-    : null;
+): RepoAgentDefaultInput | null => {
+  if (!value) {
+    return null;
+  }
+  const input: RepoAgentDefaultInput = {
+    runtimeKind: value.runtimeKind,
+    providerId: value.providerId,
+    modelId: value.modelId,
+    variant: value.variant ?? "",
+    profileId: value.profileId ?? "",
+  };
+  if (value.speed) {
+    input.speed = value.speed;
+  }
+  return input;
+};
 
 export const toRepoSettingsInput = (config: RepoConfig): RepoSettingsInput => ({
   defaultModel: toRepoAgentDefaultInput(config.defaultModel),
@@ -63,6 +69,12 @@ export const toRepoSettingsInput = (config: RepoConfig): RepoSettingsInput => ({
     planner: toRepoAgentDefaultInput(config.agentDefaults.planner),
     build: toRepoAgentDefaultInput(config.agentDefaults.build),
     qa: toRepoAgentDefaultInput(config.agentDefaults.qa),
+    ...Object.fromEntries(
+      Object.entries(config.agentDefaults).map(([role, entry]) => [
+        role,
+        toRepoAgentDefaultInput(entry),
+      ]),
+    ),
   },
 });
 

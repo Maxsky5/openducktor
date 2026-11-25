@@ -792,7 +792,14 @@ describe("useAgentStudioChatComposer", () => {
 
       await harness.update(
         createBaseProps({
-          loadedSession,
+          loadedSession: {
+            ...loadedSession,
+            selectedModel: {
+              runtimeKind: "opencode",
+              providerId: "anthropic",
+              modelId: "claude-sonnet",
+            },
+          },
           sessionRuntimeData: createSessionRuntimeData({
             modelCatalog: CATALOG,
             catalogError: "Catalog refresh failed",

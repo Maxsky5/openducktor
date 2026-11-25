@@ -92,8 +92,8 @@ export const decideAutomaticLaunch = (
       runtimeKind: latest.runtimeKind,
       workingDirectory: latest.workingDirectory,
     };
-    const configuredModel = () =>
-      resolveConfiguredDefaultModel(deps, repoPath, config, role, request.workspaceId);
+    const configuredModel = (options: { validateSpeed: boolean }) =>
+      resolveConfiguredDefaultModel(deps, repoPath, config, role, request.workspaceId, options);
     const canStartFresh = allowedStartModes.includes("fresh");
     // A role that writes a review starts each Autopilot review fresh when the setting asks for it.
     const forceFresh =
@@ -112,7 +112,7 @@ export const decideAutomaticLaunch = (
         // A fork starts at standard speed.
         selectedModel: latest.selectedModel
           ? withSpeed(latest.selectedModel, null)
-          : yield* configuredModel(),
+          : withSpeed(yield* configuredModel({ validateSpeed: false }), null),
       };
       return { kind: "decided" as const, decision };
     }
@@ -150,7 +150,7 @@ export const decideAutomaticLaunch = (
     }
     const decision: WorkflowLaunchDecision = {
       startMode: "fresh",
-      selectedModel: yield* configuredModel(),
+      selectedModel: yield* configuredModel({ validateSpeed: true }),
     };
     return { kind: "decided" as const, decision };
   });
@@ -162,6 +162,7 @@ const resolveConfiguredDefaultModel = (
   config: RepoConfig,
   role: string,
   workspaceId: string,
+  options: { validateSpeed: boolean },
 ) =>
   Effect.gen(function* () {
     const savedDefault = config.agentDefaults[role] ?? config.defaultModel;
@@ -199,6 +200,17 @@ const resolveConfiguredDefaultModel = (
       return yield* launchValidationError(
         `The ${role} default model '${configured.providerId}/${configured.modelId}' is not available for runtime ${runtimeKind}. Update the default in repository settings.`,
       );
+    if (options.validateSpeed && configured.speed !== undefined) {
+      const supportsSpeed = entry.speedLevels?.some((level) => level.id === configured.speed);
+      if (!supportsSpeed)
+        return yield* launchValidationError(
+          `The ${role} default speed '${configured.speed}' is not supported by model '${configured.providerId}/${configured.modelId}' on runtime ${runtimeKind}. Update the default in repository settings.`,
+        );
+      if (models.catalog.speedAvailability?.status === "blocked")
+        return yield* launchValidationError(
+          `The ${role} default speed '${configured.speed}' cannot be used on runtime ${runtimeKind}: ${models.catalog.speedAvailability.reason.message} Update the default in repository settings.`,
+        );
+    }
     const model: AgentSessionModelSelection = { ...configured };
     const variant = configured.variant ?? entry.variants[0];
     if (variant) model.variant = variant;

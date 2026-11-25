@@ -10,7 +10,8 @@ import { openCodePermissionRulesSchema } from "./opencode-permission-schemas";
 import { azureDevOpsRepositorySchema } from "./azure-devops-schemas";
 import { gitlabRepositorySchema } from "./gitlab-schemas";
 import { systemOpenInToolIdSchema } from "./system-open-schemas";
-import { runtimeKindSchema } from "./agent-runtime-schemas";
+import { type RuntimeKind, runtimeKindSchema } from "./agent-runtime-schemas";
+import { RUNTIME_DESCRIPTORS_BY_KIND } from "./runtime-descriptors";
 import { DEFAULT_REMOTE_ACCESS_SETTINGS, remoteAccessSettingsSchema } from "./remote-host-schemas";
 import { agentRoleSchema } from "./agent-workflow-schemas";
 import {
@@ -540,17 +541,50 @@ const persistedRepoActionsSchema = repoActionsSchema
   .safeExtend({ items: z.array(repoActionSchema.strict()) })
   .strict();
 
-export const agentModelDefaultSchema = z.object({
+const checkAgentModelDefaultSpeed = (
+  value: { runtimeKind?: RuntimeKind | undefined; speed?: string | undefined },
+  context: z.RefinementCtx,
+): void => {
+  if (value.speed === undefined) return;
+  if (value.speed === "standard") {
+    context.addIssue({
+      code: "custom",
+      path: ["speed"],
+      message: 'Standard speed is represented by omitting "speed".',
+    });
+    return;
+  }
+  if (
+    value.runtimeKind !== undefined &&
+    RUNTIME_DESCRIPTORS_BY_KIND[value.runtimeKind].capabilities.speed.support === "none"
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["speed"],
+      message: `Runtime "${value.runtimeKind}" does not support model speed settings.`,
+    });
+  }
+};
+
+const agentModelDefaultBaseSchema = z.object({
   runtimeKind: runtimeKindSchema,
   providerId: z.string().min(1),
   modelId: z.string().min(1),
   variant: nullableToOptional(z.string().min(1)),
   profileId: nullableToOptional(z.string().min(1)),
+  speed: nullableToOptional(z.string().trim().min(1)),
 });
+
+export const agentModelDefaultSchema = agentModelDefaultBaseSchema.superRefine(
+  checkAgentModelDefaultSpeed,
+);
 export type AgentModelDefault = z.infer<typeof agentModelDefaultSchema>;
 
-/** The model that writes session titles and branch names for a workspace. It has no profile. */
-export const namingModelSchema = agentModelDefaultSchema.omit({ profileId: true });
+/** The model that writes session titles and branch names for a workspace. It has no profile or speed. */
+export const namingModelSchema = agentModelDefaultBaseSchema.omit({
+  profileId: true,
+  speed: true,
+});
 export type NamingModel = z.infer<typeof namingModelSchema>;
 
 /** A null value clears the default of a role. */
@@ -569,7 +603,9 @@ const roleRecordSchema = <T extends z.ZodTypeAny>(value: T) =>
 export const repoAgentDefaultsSchema = roleRecordSchema(agentModelDefaultSchema);
 export type RepoAgentDefaults = z.infer<typeof repoAgentDefaultsSchema>;
 
-const persistedAgentModelDefaultSchema = agentModelDefaultSchema.strict();
+const persistedAgentModelDefaultSchema = agentModelDefaultBaseSchema
+  .strict()
+  .superRefine(checkAgentModelDefaultSpeed);
 const persistedRepoAgentDefaultsSchema = roleRecordSchema(persistedAgentModelDefaultSchema);
 
 const persistedPromptOverridesSchema = z
@@ -1061,18 +1097,29 @@ const agentRuntimesPatchSchema = z
   })
   .catchall(agentRuntimeFieldsPatchSchema);
 
-export const modelDefaultPatchSchema = z.strictObject({
-  ...settingsFieldsPatchSchema(agentModelDefaultSchema.omit({ variant: true, profileId: true }))
-    .shape,
+const modelDefaultPatchBaseSchema = z.strictObject({
+  ...settingsFieldsPatchSchema(
+    agentModelDefaultBaseSchema.omit({ variant: true, profileId: true, speed: true }),
+  ).shape,
   variant: setOrClearSchema(z.string().min(1)).optional(),
   profileId: setOrClearSchema(z.string().min(1)).optional(),
+  speed: setOrClearSchema(z.string().trim().min(1)).optional(),
+});
+export const modelDefaultPatchSchema = modelDefaultPatchBaseSchema.superRefine((patch, context) => {
+  if (patch.speed?.type !== "set") return;
+  checkAgentModelDefaultSpeed(
+    { runtimeKind: patch.runtimeKind, speed: patch.speed.value },
+    context,
+  );
 });
 export const workspaceSettingsPatchSchema = z.strictObject({
   expectedRepoPath: trimmedRequiredString("Expected repository path"),
   ...settingsFieldsPatchSchema(workspaceEditableFieldsSchema).shape,
   actions: repoActionsSchema.optional(),
   defaultModel: setOrClearSchema(modelDefaultPatchSchema).optional(),
-  namingModel: setOrClearSchema(modelDefaultPatchSchema.omit({ profileId: true })).optional(),
+  namingModel: setOrClearSchema(
+    modelDefaultPatchBaseSchema.omit({ profileId: true, speed: true }),
+  ).optional(),
   promptOverrides: promptOverrideEditsSchema.optional(),
   promptAppends: promptAppendEditsSchema.optional(),
   agentDefaults: keyedSettingsEditsSchema(

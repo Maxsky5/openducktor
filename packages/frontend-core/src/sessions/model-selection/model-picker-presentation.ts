@@ -1,21 +1,179 @@
-import type { AgentModelFavorite, RuntimeKind } from "@openducktor/contracts";
-import { type AgentModelAttachmentSupport, findCatalogModel } from "@openducktor/core";
+import type { AgentModelFavorite, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
+import {
+  type AgentModelAttachmentSupport,
+  type AgentModelCatalog,
+  type AgentModelSelection,
+  findCatalogModel,
+  resolveSavedModelAlias,
+  STANDARD_SPEED,
+} from "@openducktor/core";
 import { formatTokenCompact } from "../../lib/format-token-count";
+import type { SelectOption } from "../../lib/select-option";
 import type {
   ModelPickerFavoriteState,
   ModelPickerItem,
   ModelPickerRuntime,
   ModelPickerSelectionPolicy,
-  ModelPickerValue,
   ModelPickerView,
 } from "./model-picker-model";
+import type { SpeedControlModel } from "./use-speed-control";
 
-/** The view that a picker opens on: favorites when the runtimes have any, else a runtime. */
+export const SPEED_RESET_TO_STANDARD_NOTICE =
+  "Speed was set to Standard because this model does not support the previous level.";
+
+export type ModelSpeedTone = "standard" | "fast" | "ultrafast";
+
+export const speedToneFor = (speed: string | undefined): ModelSpeedTone => {
+  if (!speed || speed === STANDARD_SPEED) {
+    return "standard";
+  }
+  return speed.toLowerCase() === "ultrafast" ? "ultrafast" : "fast";
+};
+
+/** Returns the active account speed block reason when a non-standard speed is selected. */
+export const blockedSpeedReason = (
+  speed: Pick<SpeedControlModel, "choice" | "blockedReason"> | null | undefined,
+): string | null => {
+  if (!speed || speed.choice === STANDARD_SPEED || !speed.blockedReason) {
+    return null;
+  }
+  return speed.blockedReason;
+};
+
+export type ModelTriggerSummary = {
+  runtime: RuntimeDescriptor | null;
+  profileLabel: string | null;
+  modelLabel: string;
+  effortLabel: string | null;
+  speedTone: ModelSpeedTone;
+  speedLabel: string | null;
+  nonStandardSpeedLabel: string | null;
+  ariaLabel: string;
+};
+
+const catalogProfileLabelFor = (
+  catalog: AgentModelCatalog | null,
+  profileId: string,
+  profileOptions?: readonly SelectOption[],
+): string => {
+  const fromOption = profileOptions?.find((option) => option.value === profileId)?.label;
+  if (fromOption) {
+    return fromOption;
+  }
+  const fromCatalog = catalog?.profiles?.find(
+    (profile) => (profile.id ?? profile.name) === profileId,
+  );
+  return fromCatalog?.label ?? fromCatalog?.name ?? profileId;
+};
+
+/**
+ * Resolves the shared trigger summary used by desktop, web, and mobile merged model triggers.
+ */
+export const resolveModelTriggerSummary = ({
+  runtime,
+  catalog,
+  selection,
+  speed,
+  profileOptions,
+  effortOptions,
+  placeholder = "Select a model",
+  disabledReason = null,
+  supportsProfiles,
+  supportsVariants,
+  supportsSpeed,
+}: {
+  runtime: RuntimeDescriptor | null;
+  catalog: AgentModelCatalog | null;
+  selection: AgentModelSelection | null;
+  speed?: Pick<SpeedControlModel, "choice" | "levels"> | null | undefined;
+  profileOptions?: readonly SelectOption[] | undefined;
+  effortOptions?: readonly SelectOption[] | undefined;
+  placeholder?: string;
+  disabledReason?: string | null;
+  supportsProfiles?: boolean | undefined;
+  supportsVariants?: boolean | undefined;
+  supportsSpeed?: boolean | undefined;
+}): ModelTriggerSummary => {
+  const effectiveSupportsProfiles =
+    supportsProfiles ?? runtime?.capabilities.optionalSurfaces.supportsProfiles ?? false;
+  const effectiveSupportsVariants =
+    supportsVariants ?? runtime?.capabilities.optionalSurfaces.supportsVariants ?? true;
+  const effectiveSupportsSpeed =
+    supportsSpeed ?? (runtime ? runtime.capabilities.speed.support !== "none" : false);
+
+  const catalogModel =
+    catalog && selection
+      ? findCatalogModel(catalog, resolveSavedModelAlias(catalog, selection))
+      : null;
+  const modelLabel = catalogModel?.modelName ?? selection?.modelId ?? placeholder;
+
+  const profileId = selection?.profileId?.trim() || undefined;
+  const profileLabel =
+    effectiveSupportsProfiles && profileId
+      ? catalogProfileLabelFor(catalog, profileId, profileOptions)
+      : null;
+
+  const variant = selection?.variant?.trim() || undefined;
+  const modelAllowsEfforts = !catalogModel || catalogModel.variants.length > 0;
+  const effortLabel =
+    effectiveSupportsVariants && variant && modelAllowsEfforts
+      ? (effortOptions?.find((option) => option.value === variant)?.label ?? variant)
+      : null;
+
+  const activeSpeedChoice = speed?.choice ?? selection?.speed ?? STANDARD_SPEED;
+  const speedTone = speedToneFor(activeSpeedChoice);
+  const speedLevels = speed?.levels ?? catalogModel?.speedLevels ?? [];
+  const showsSpeed =
+    activeSpeedChoice !== STANDARD_SPEED || (effectiveSupportsSpeed && speedLevels.length > 0);
+  const speedLabel = showsSpeed
+    ? activeSpeedChoice === STANDARD_SPEED
+      ? "Standard"
+      : (speedLevels.find((level) => level.id === activeSpeedChoice)?.label ?? activeSpeedChoice)
+    : null;
+  const nonStandardSpeedLabel = speedTone !== "standard" ? speedLabel : null;
+
+  const detailParts: string[] = [];
+  if (runtime) {
+    detailParts.push(runtime.label);
+  }
+  if (profileLabel) {
+    detailParts.push(profileLabel);
+  }
+  detailParts.push(modelLabel);
+  if (effortLabel) {
+    detailParts.push(`Effort ${effortLabel}`);
+  }
+  if (speedLabel) {
+    detailParts.push(`Speed ${speedLabel}`);
+  }
+  const baseAriaLabel = `Select model, ${detailParts.join(", ")}`;
+  const ariaLabel = disabledReason ? `${baseAriaLabel}. ${disabledReason}` : baseAriaLabel;
+
+  return {
+    runtime,
+    profileLabel,
+    modelLabel,
+    effortLabel,
+    speedTone,
+    speedLabel,
+    nonStandardSpeedLabel,
+    ariaLabel,
+  };
+};
+
+/**
+ * The view that a picker opens on: favorites when the runtimes have any, else the selected
+ * model's runtime when editable, else the first usable runtime.
+ */
 export const resolveModelPickerActiveView = (
   runtimes: readonly ModelPickerRuntime[],
   favorites: readonly AgentModelFavorite[] | null,
   selectionPolicy: ModelPickerSelectionPolicy,
+  selectedRuntimeKind?: RuntimeKind | null,
 ): ModelPickerView => {
+  if (selectionPolicy.kind === "speed_only") {
+    return selectionPolicy.runtimeKind;
+  }
   const availableFavorites = favorites?.filter((favorite) =>
     runtimes.some(
       (runtime) =>
@@ -32,6 +190,12 @@ export const resolveModelPickerActiveView = (
   }
   if (availableFavorites?.length) {
     return "favorites";
+  }
+  if (
+    selectedRuntimeKind &&
+    runtimes.some((runtime) => runtime.descriptor.kind === selectedRuntimeKind)
+  ) {
+    return selectedRuntimeKind;
   }
   return (
     runtimes.find((runtime) => runtime.isEnabledForFavorites)?.descriptor.kind ??
@@ -105,30 +269,17 @@ export const modelPickerFavoriteDisabledReason = (
 
 export function resolveModelPickerPresentation({
   runtimes,
-  value,
-  placeholder,
   activeView,
   searchQuery,
   favoriteState,
   lockedRuntimeKind,
 }: {
   runtimes: readonly ModelPickerRuntime[];
-  value: ModelPickerValue | null;
-  placeholder: string;
   activeView: ModelPickerView;
   searchQuery: string;
   favoriteState: Pick<ModelPickerFavoriteState, "isLoading" | "readError">;
   lockedRuntimeKind: RuntimeKind | null;
 }) {
-  const selectedRuntime = runtimes.find(
-    (runtime) => runtime.descriptor.kind === value?.runtimeKind,
-  );
-  const selectedModel = findCatalogModel(selectedRuntime?.resource.catalog, value);
-  const triggerRuntime = selectedRuntime?.descriptor ?? null;
-  const triggerModelLabel = selectedModel?.modelName ?? value?.modelId ?? placeholder;
-  const triggerAriaLabel = triggerRuntime
-    ? `Select model, ${triggerRuntime.label}, ${triggerModelLabel}`
-    : `Select model, ${triggerModelLabel}`;
   const visibleResources = runtimes.filter((runtime) => {
     if (lockedRuntimeKind && runtime.descriptor.kind !== lockedRuntimeKind) {
       return false;
@@ -162,5 +313,5 @@ export function resolveModelPickerPresentation({
     return `No ${activeRuntime?.descriptor.label ?? "runtime"} models are available.`;
   })();
 
-  return { triggerRuntime, triggerModelLabel, triggerAriaLabel, visibleResources, emptyMessage };
+  return { visibleResources, emptyMessage };
 }

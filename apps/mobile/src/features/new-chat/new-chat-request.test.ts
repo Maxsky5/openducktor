@@ -274,6 +274,17 @@ describe("buildNewChatRequest", () => {
     });
   });
 
+  test("blocks creation and surfaces the reason when account speed access is blocked", () => {
+    const request = buildNewChatRequest(
+      form({
+        selection: { ...SELECTION, speed: "fast" },
+        speedBlockedReason: "Fast mode requires an active subscription.",
+      }),
+    );
+    expect(request.input).toBeNull();
+    expect(request.blockedReason).toBe("Fast mode requires an active subscription.");
+  });
+
   test("shows the worktree error that the host reported", () => {
     const request = buildNewChatRequest(
       form({

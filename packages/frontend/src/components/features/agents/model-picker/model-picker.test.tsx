@@ -100,48 +100,82 @@ const favoriteState = (
   ...overrides,
 });
 
+const defaultOptions = {
+  effort: {
+    options: [],
+    value: undefined,
+    onSelect: () => {},
+  },
+};
+
 describe("ModelPicker", () => {
   test.each([
     {
       name: "Favorites when a favorite exists",
+      selectedValue: { runtimeKind: "codex" as const, providerId: "openai", modelId: "gpt-5" },
+      triggerName: "Select model, Codex, GPT 5 Codex",
       favorites: [value],
       expectedView: "Favorite models",
       expectedModel: "Select GPT Five model",
+      switchToView: "Codex runtime",
     },
     {
-      name: "the first runtime when there are no favorites",
+      name: "the selected runtime when there are no favorites",
+      selectedValue: { runtimeKind: "codex" as const, providerId: "openai", modelId: "gpt-5" },
+      triggerName: "Select model, Codex, GPT 5 Codex",
+      favorites: [],
+      expectedView: "Codex runtime",
+      expectedModel: "Select GPT 5 Codex model",
+      switchToView: "OpenCode runtime",
+    },
+    {
+      name: "the first runtime when no model is selected and there are no favorites",
+      selectedValue: null,
+      triggerName: "Select model, Select a model",
       favorites: [],
       expectedView: "OpenCode runtime",
       expectedModel: "Select GPT Five model",
+      switchToView: "Codex runtime",
     },
-  ])("opens $name on every opening", async ({ favorites, expectedView, expectedModel }) => {
-    render(
-      <ModelPicker
-        runtimes={makeRuntimes()}
-        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
-        favoriteState={favoriteState({ favorites: [...favorites] })}
-        selectionPolicy={{ kind: "editable" }}
-        onValueChange={() => {}}
-      />,
-    );
-
-    const trigger = screen.getByRole("button", { name: "Select model, Codex, GPT 5 Codex" });
-    for (let opening = 0; opening < 2; opening += 1) {
-      await act(async () => {
-        fireEvent.click(trigger);
-      });
-      expect(screen.getByRole("button", { name: expectedView }).getAttribute("aria-pressed")).toBe(
-        "true",
+  ])(
+    "opens $name on every opening",
+    async ({
+      selectedValue,
+      triggerName,
+      favorites,
+      expectedView,
+      expectedModel,
+      switchToView,
+    }) => {
+      render(
+        <ModelPicker
+          runtimes={makeRuntimes()}
+          value={selectedValue}
+          favoriteState={favoriteState({ favorites: [...favorites] })}
+          selectionPolicy={{ kind: "editable" }}
+          options={defaultOptions}
+          onValueChange={() => {}}
+        />,
       );
-      expect(screen.getByRole("button", { name: expectedModel })).toBeTruthy();
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Codex runtime" }));
-        fireEvent.keyDown(screen.getByRole("button", { name: "Codex runtime" }), {
-          key: "Escape",
+
+      const trigger = screen.getByRole("button", { name: triggerName });
+      for (let opening = 0; opening < 2; opening += 1) {
+        await act(async () => {
+          fireEvent.click(trigger);
         });
-      });
-    }
-  });
+        expect(
+          screen.getByRole("button", { name: expectedView }).getAttribute("aria-pressed"),
+        ).toBe("true");
+        expect(screen.getByRole("button", { name: expectedModel })).toBeTruthy();
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: switchToView }));
+          fireEvent.keyDown(screen.getByRole("button", { name: switchToView }), {
+            key: "Escape",
+          });
+        });
+      }
+    },
+  );
 
   test("opens the available runtime when its only favorite belongs to a disabled runtime", async () => {
     const disabledRuntime = { ...makeRuntimes()[0]!, isEnabledForFavorites: false };
@@ -151,6 +185,7 @@ describe("ModelPicker", () => {
         value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
         favoriteState={favoriteState({ favorites: [value] })}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -175,6 +210,7 @@ describe("ModelPicker", () => {
           favorites: [value, { ...value, runtimeKind: "codex" }],
         })}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -201,6 +237,7 @@ describe("ModelPicker", () => {
           runtimeKind: "opencode",
           reason: "An existing session cannot change runtime.",
         }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -237,6 +274,7 @@ describe("ModelPicker", () => {
           runtimeKind: "opencode",
           reason: "Start a new session to switch runtimes.",
         }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -258,6 +296,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -278,6 +317,7 @@ describe("ModelPicker", () => {
           runtimeKind: "opencode",
           reason: "Start a new session to switch runtimes.",
         }}
+        options={defaultOptions}
         onValueChange={onValueChange}
       />,
     );
@@ -321,13 +361,14 @@ describe("ModelPicker", () => {
             kind: "read_only",
             reason: "Reuse mode keeps the source session runtime and model.",
           }}
+          options={defaultOptions}
           onValueChange={onValueChange}
           onOpenChange={onOpenChange}
         />,
       );
 
       const trigger = screen.getByRole("button", {
-        name: "Select model, OpenCode, GPT Five",
+        name: "Select model, OpenCode, GPT Five. Reuse mode keeps the source session runtime and model.",
         description: "Reuse mode keeps the source session runtime and model.",
       });
       await act(async () => {
@@ -375,6 +416,7 @@ describe("ModelPicker", () => {
               ? { kind: "read_only", reason: "Saving model selection." }
               : { kind: "runtime_locked", runtimeKind: "opencode", reason: "Session runtime." }
           }
+          options={defaultOptions}
           onValueChange={(nextSelection) => {
             onValueChange();
             setSelection(nextSelection);
@@ -426,6 +468,7 @@ describe("ModelPicker", () => {
         value={null}
         favoriteState={favoriteState({ favorites: [value] })}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -464,6 +507,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState({ favorites: [savedAlias], toggleFavorite })}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={mock(() => {})}
       />,
     );
@@ -487,6 +531,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState({ toggleFavorite })}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={onValueChange}
       />,
     );
@@ -517,6 +562,7 @@ describe("ModelPicker", () => {
           value={value}
           favoriteState={favoriteState({ favorites: isFavorite ? [value] : [] })}
           selectionPolicy={{ kind: "editable" }}
+          options={defaultOptions}
           onValueChange={() => {}}
         />,
       );
@@ -557,6 +603,7 @@ describe("ModelPicker", () => {
           toggleFavorite,
         })}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -592,6 +639,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -619,6 +667,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={onValueChange}
       />,
     );
@@ -654,6 +703,7 @@ describe("ModelPicker", () => {
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
         getModelDisabledReason={(item) => (item.model.modelId === "model-1" ? "Unavailable" : null)}
+        options={defaultOptions}
         onValueChange={onValueChange}
       />,
     );
@@ -731,6 +781,7 @@ describe("ModelPicker", () => {
         value={null}
         favoriteState={favorites}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={onValueChange}
       />
     );
@@ -792,6 +843,7 @@ describe("ModelPicker", () => {
           getModelDisabledReason={(item) =>
             disableModel79 && item.model.modelId === "model-79" ? "Unavailable" : null
           }
+          options={defaultOptions}
           onValueChange={() => {}}
         />
       );
@@ -825,6 +877,7 @@ describe("ModelPicker", () => {
           value={null}
           favoriteState={favoriteState()}
           selectionPolicy={{ kind: "editable" }}
+          options={defaultOptions}
           onValueChange={() => {}}
         />,
       );
@@ -861,6 +914,7 @@ describe("ModelPicker", () => {
           value={null}
           favoriteState={favorites}
           selectionPolicy={{ kind: "editable" }}
+          options={defaultOptions}
           onValueChange={() => {}}
         />
       );
@@ -889,6 +943,7 @@ describe("ModelPicker", () => {
         value={null}
         favoriteState={favorites}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />
     );
@@ -921,6 +976,7 @@ describe("ModelPicker", () => {
             toggleFavorite: (favorite) => setFavorites([favorite]),
           })}
           selectionPolicy={{ kind: "editable" }}
+          options={defaultOptions}
           onValueChange={() => {}}
         />
       );
@@ -964,6 +1020,7 @@ describe("ModelPicker", () => {
           retryMutation,
         })}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -993,6 +1050,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState({ toggleFavorite })}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={onValueChange}
       />,
     );
@@ -1023,6 +1081,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -1070,15 +1129,16 @@ describe("ModelPicker", () => {
       render(
         <ModelPicker
           runtimes={failedRuntimes}
-          value={value}
+          value={null}
           favoriteState={favoriteState()}
           selectionPolicy={policy}
+          options={defaultOptions}
           onValueChange={onValueChange}
         />,
       );
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+        fireEvent.click(screen.getByRole("button", { name: "Select model, Select a model" }));
       });
 
       const alert = screen.getByRole("alert");
@@ -1101,6 +1161,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -1125,6 +1186,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -1171,13 +1233,14 @@ describe("ModelPicker", () => {
     );
   });
 
-  test("marks the selected row with a paint-only accent bar", async () => {
+  test("marks the selected row with a paint-only selected indicator", async () => {
     render(
       <ModelPicker
         runtimes={makeRuntimes()}
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -1195,13 +1258,13 @@ describe("ModelPicker", () => {
     const unselectedButton = screen.getByRole("button", { name: "Select GPT 5 Codex model" });
 
     expect(selectedButton.getAttribute("aria-pressed")).toBe("true");
-    expect(selectedButton.querySelector(".absolute.bg-primary")).not.toBeNull();
+    expect(selectedButton.querySelector("[data-selected-indicator]")).not.toBeNull();
     expect(selectedButton.getAttribute("aria-description")).toContain("200K token context window");
     expect(selectedButton.getAttribute("aria-description")).toContain(
       "Supports images, videos, pdf files",
     );
     expect(unselectedButton.getAttribute("aria-pressed")).toBe("false");
-    expect(unselectedButton.querySelector(".bg-primary")).toBeNull();
+    expect(unselectedButton.querySelector("[data-selected-indicator]")).toBeNull();
   });
 
   test("omits context and capability icons when the model descriptor lacks them", async () => {
@@ -1231,6 +1294,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -1272,6 +1336,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -1317,6 +1382,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={() => {}}
       />,
     );
@@ -1330,7 +1396,7 @@ describe("ModelPicker", () => {
     expect(screen.queryByRole("img", { name: "Supports videos" })).toBeNull();
   });
 
-  test("emits the exact pair and closes after model selection", async () => {
+  test("single-clicking selects the model and keeps the popover open; double-clicking closes it", async () => {
     const onValueChange = mock(() => {});
     render(
       <ModelPicker
@@ -1338,6 +1404,7 @@ describe("ModelPicker", () => {
         value={value}
         favoriteState={favoriteState()}
         selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
         onValueChange={onValueChange}
       />,
     );
@@ -1357,6 +1424,806 @@ describe("ModelPicker", () => {
       providerId: "openai",
       modelId: "gpt-5",
     });
+    expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.doubleClick(screen.getByText("GPT 5 Codex"));
+    });
     expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+  });
+
+  test("Space selects and stays open while Enter selects and closes", async () => {
+    const onValueChange = mock(() => {});
+    render(
+      <ModelPicker
+        runtimes={makeRuntimes()}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Codex runtime" }));
+    });
+    const codexRow = screen.getByRole("button", { name: "Select GPT 5 Codex model" });
+    await act(async () => {
+      codexRow.focus();
+      fireEvent.keyDown(codexRow, { key: " " });
+    });
+
+    expect(onValueChange).toHaveBeenCalledTimes(1);
+    expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.keyDown(codexRow, { key: "Enter" });
+    });
+    expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+  });
+
+  test("renders effort stepped slider for 2 to 7 levels and inline list fallback otherwise", async () => {
+    const onSelectEffort = mock(() => {});
+    const runtimes = makeRuntimes();
+    const { rerender } = render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={{
+          effort: {
+            options: [
+              { value: "low", label: "Low" },
+              { value: "medium", label: "Medium" },
+              { value: "high", label: "High" },
+            ],
+            value: "medium",
+            onSelect: onSelectEffort,
+          },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, Codex, GPT 5 Codex/ }));
+    });
+    const slider = screen.getByRole("slider", { name: "Effort" });
+    expect(slider.getAttribute("aria-valuetext")).toBe("Medium");
+    await act(async () => {
+      fireEvent.keyDown(slider, { key: "ArrowRight" });
+    });
+    expect(onSelectEffort).toHaveBeenCalledWith("high");
+
+    rerender(
+      <ModelPicker
+        runtimes={runtimes}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={{
+          effort: {
+            options: [
+              { value: "legacy", label: "legacy", disabled: true },
+              { value: "low", label: "Low" },
+              { value: "high", label: "High" },
+            ],
+            value: "legacy",
+            onSelect: onSelectEffort,
+          },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("slider", { name: "Effort" })).toBeNull();
+    const legacyBtn = screen.getByRole("button", { name: "legacy" });
+    expect(legacyBtn.hasAttribute("disabled")).toBe(true);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Low" }));
+    });
+    expect(onSelectEffort).toHaveBeenCalledWith("low");
+  });
+
+  test("renders speed stepped slider, skips blocked stops, and falls back to list for unlisted speed", async () => {
+    const onSelectSpeed = mock(() => {});
+    const runtimes = makeRuntimes();
+    const { rerender } = render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={{
+          effort: { options: [], value: undefined, onSelect: () => {} },
+          speed: {
+            control: {
+              key: "s1",
+              choice: "standard",
+              levels: [
+                { id: "fast", label: "Fast" },
+                { id: "ultrafast", label: "Ultrafast" },
+              ],
+              blockedReason: undefined,
+              pending: false,
+              disabled: false,
+              error: null,
+              onChange: onSelectSpeed,
+            },
+          },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, Codex, GPT 5 Codex/ }));
+    });
+    const slider = screen.getByRole("slider", { name: "Speed" });
+    expect(slider.getAttribute("aria-valuetext")).toBe("Standard");
+    await act(async () => {
+      fireEvent.keyDown(slider, { key: "End" });
+    });
+    expect(onSelectSpeed).toHaveBeenCalledWith("ultrafast");
+
+    rerender(
+      <ModelPicker
+        runtimes={runtimes}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={{
+          effort: { options: [], value: undefined, onSelect: () => {} },
+          speed: {
+            control: {
+              key: "s1",
+              choice: "standard",
+              levels: [{ id: "fast", label: "Fast" }],
+              blockedReason: "Fast mode requires an active plan.",
+              pending: false,
+              disabled: false,
+              error: null,
+              onChange: onSelectSpeed,
+            },
+          },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("Fast mode requires an active plan.")).toBeTruthy();
+    onSelectSpeed.mockClear();
+    await act(async () => {
+      fireEvent.keyDown(screen.getByRole("slider", { name: "Speed" }), { key: "ArrowRight" });
+    });
+    expect(onSelectSpeed).not.toHaveBeenCalled();
+
+    rerender(
+      <ModelPicker
+        runtimes={runtimes}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={{
+          effort: { options: [], value: undefined, onSelect: () => {} },
+          speed: {
+            control: {
+              key: "s1",
+              choice: "turbo",
+              levels: [],
+              blockedReason: undefined,
+              pending: false,
+              disabled: false,
+              error: null,
+              onChange: onSelectSpeed,
+            },
+          },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("slider", { name: "Speed" })).toBeNull();
+    const speedGroup = screen.getByRole("group", { name: "Speed levels" });
+    expect(within(speedGroup).getByRole("button", { name: /turbo/ }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    await act(async () => {
+      fireEvent.click(within(speedGroup).getByRole("button", { name: "Standard" }));
+    });
+    expect(onSelectSpeed).toHaveBeenCalledWith("standard");
+  });
+
+  test("focuses speed slider in speed_only mode and keeps Retry clickable on catalog failure", async () => {
+    const retry = mock(async () => {});
+    const onSelectSpeed = mock(() => {});
+    const codexReady: ModelPickerRuntime[] = [
+      {
+        descriptor: CODEX_RUNTIME_DESCRIPTOR,
+        isEnabledForFavorites: true,
+        resource: resource("codex"),
+      },
+    ];
+    const { rerender } = render(
+      <ModelPicker
+        runtimes={codexReady}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{
+          kind: "speed_only",
+          runtimeKind: "codex",
+          reason: "Reuse keeps source model.",
+        }}
+        options={{
+          effort: {
+            options: [
+              { value: "low", label: "Low" },
+              { value: "high", label: "High" },
+            ],
+            value: "high",
+            onSelect: () => {},
+          },
+          speed: {
+            control: {
+              key: "s1",
+              choice: "standard",
+              levels: [{ id: "fast", label: "Fast" }],
+              blockedReason: undefined,
+              pending: false,
+              disabled: false,
+              error: null,
+              onChange: onSelectSpeed,
+            },
+          },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, Codex, GPT 5 Codex/ }));
+    });
+    expect(screen.getByRole("textbox", { name: "Search models" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(document.activeElement).toBe(screen.getByRole("slider", { name: "Speed" }));
+
+    rerender(
+      <ModelPicker
+        runtimes={[
+          {
+            descriptor: CODEX_RUNTIME_DESCRIPTOR,
+            isEnabledForFavorites: true,
+            resource: {
+              status: "failed",
+              catalog: null,
+              error: "Catalog load failed",
+              retry,
+            },
+          },
+        ]}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{
+          kind: "speed_only",
+          runtimeKind: "codex",
+          reason: "Reuse keeps source model.",
+        }}
+        options={{
+          effort: { options: [], value: undefined, onSelect: () => {} },
+          speed: { control: null },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+    const retryButtons = screen.getAllByRole("button", { name: "Retry" });
+    await act(async () => {
+      fireEvent.click(retryButtons[0]!);
+    });
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  test("closedTriggerDisabledReason blocks opening when closed without closing an open popover", async () => {
+    const runtimes = makeRuntimes();
+    const { rerender } = render(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        closedTriggerDisabledReason="Saving model selection..."
+        options={defaultOptions}
+        onValueChange={() => {}}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: /Select model, OpenCode, GPT Five/ });
+    expect(trigger.getAttribute("aria-disabled")).toBe("true");
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+    expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+
+    rerender(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        closedTriggerDisabledReason={null}
+        options={defaultOptions}
+        onValueChange={() => {}}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, OpenCode, GPT Five/ }));
+    });
+    expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
+
+    rerender(
+      <ModelPicker
+        runtimes={runtimes}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        closedTriggerDisabledReason="Saving model selection..."
+        options={defaultOptions}
+        onValueChange={() => {}}
+      />,
+    );
+    expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
+  });
+
+  test("renders composer trigger with icon-only non-standard speed and form trigger with speed label", () => {
+    const speedControl = {
+      key: "s1",
+      choice: "fast",
+      levels: [{ id: "fast", label: "Fast" }],
+      blockedReason: undefined,
+      pending: false,
+      disabled: false,
+      error: null,
+      onChange: () => {},
+    };
+    const { rerender, container } = render(
+      <ModelPicker
+        triggerVariant="composer"
+        runtimes={makeRuntimes()}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={{
+          effort: {
+            options: [{ value: "high", label: "High" }],
+            value: "high",
+            onSelect: () => {},
+          },
+          speed: { control: speedControl },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+    expect(container.querySelector('[data-slot="trigger-speed"]')?.textContent).toBe("");
+    expect(container.querySelector('[data-speed-tone="fast"]')).toBeTruthy();
+
+    rerender(
+      <ModelPicker
+        triggerVariant="form"
+        runtimes={makeRuntimes()}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={{
+          effort: {
+            options: [{ value: "high", label: "High" }],
+            value: "high",
+            onSelect: () => {},
+          },
+          speed: { control: speedControl },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+    expect(container.querySelector('[data-slot="trigger-speed"]')?.textContent).toBe("Fast");
+  });
+
+  test("emits one callback across a browser double-click sequence and ignores active-row clicks", async () => {
+    const onValueChange = mock(() => {});
+    const twoModelCatalog: AgentModelCatalog = {
+      ...catalog("opencode"),
+      models: [
+        ...catalog("opencode").models,
+        {
+          id: "proxy/sonnet",
+          providerId: "proxy",
+          providerName: "Anthropic Proxy",
+          modelId: "sonnet",
+          modelName: "Claude Sonnet",
+          variants: [],
+        },
+      ],
+    };
+    render(
+      <ModelPicker
+        runtimes={[
+          {
+            descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+            isEnabledForFavorites: true,
+            resource: { status: "ready", catalog: twoModelCatalog },
+          },
+        ]}
+        value={{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, OpenCode, GPT Five/ }));
+    });
+
+    // Clicking the already-selected row does not emit a write and keeps the popover open.
+    const activeRow = screen.getByRole("button", { name: "Select GPT Five model" });
+    await act(async () => {
+      fireEvent.click(activeRow);
+    });
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText("Search models...")).toBeTruthy();
+
+    // Double-clicking the already-selected row closes without emitting a write.
+    await act(async () => {
+      fireEvent.click(activeRow);
+      fireEvent.doubleClick(activeRow);
+    });
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+
+    // Reopen and perform a full double-click sequence (click, click, dblclick) on an unselected row.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, OpenCode, GPT Five/ }));
+    });
+    const sonnetRow = screen.getByRole("button", { name: "Select Claude Sonnet model" });
+    await act(async () => {
+      fireEvent.click(sonnetRow);
+      fireEvent.click(sonnetRow);
+      fireEvent.doubleClick(sonnetRow);
+    });
+    expect(onValueChange).toHaveBeenCalledTimes(1);
+    expect(onValueChange).toHaveBeenCalledWith({
+      runtimeKind: "opencode",
+      providerId: "proxy",
+      modelId: "sonnet",
+    });
+    expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+  });
+
+  test("allows retrying the same model row in an open picker after a rejected update and deduplicates browser double-click gestures", async () => {
+    const onValueChange = mock(() => {});
+    render(
+      <ModelPicker
+        runtimes={makeRuntimes()}
+        value={value}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Select model, OpenCode, GPT Five" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Codex runtime" }));
+    });
+
+    const codexRow = screen.getByRole("button", { name: "Select GPT 5 Codex model" });
+    // First single click emits; parent does not update `value` (simulating a rejected update).
+    await act(async () => {
+      fireEvent.click(codexRow, { detail: 1 });
+    });
+    expect(onValueChange).toHaveBeenCalledTimes(1);
+
+    // Clicking the same row again while the picker stays open retries the selection.
+    await act(async () => {
+      fireEvent.click(codexRow, { detail: 1 });
+    });
+    expect(onValueChange).toHaveBeenCalledTimes(2);
+
+    // Completing a real browser double-click gesture (detail=2 click + detail=2 dblclick) closes without re-emitting.
+    await act(async () => {
+      fireEvent.click(codexRow, { detail: 2 });
+      fireEvent.doubleClick(codexRow, { detail: 2 });
+    });
+    expect(onValueChange).toHaveBeenCalledTimes(2);
+    expect(screen.queryByPlaceholderText("Search models...")).toBeNull();
+  });
+
+  test("stacks the options pane below the rail and list when the popover container is narrow", async () => {
+    render(
+      <ModelPicker
+        runtimes={makeRuntimes()}
+        value={{ runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={defaultOptions}
+        onValueChange={() => {}}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, OpenCode, GPT Five/ }));
+    });
+
+    const dialog = screen.getByRole("dialog");
+    const optionsPane = screen.getByLabelText("Model options");
+    const topGrid = optionsPane.previousElementSibling;
+    expect(dialog.className).toContain("@container");
+    expect(topGrid?.className).toContain("grid-cols-[3.5rem_minmax(0,1fr)]");
+    expect(optionsPane.className).toContain("border-t");
+  });
+
+  test("omits redundant trigger tooltip when enabled and shows disabled reason when blocked", async () => {
+    const { rerender } = render(
+      <ModelPicker
+        runtimes={makeRuntimes()}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={{
+          effort: {
+            options: [{ value: "high", label: "high" }],
+            value: "high",
+            onSelect: () => {},
+          },
+        }}
+        onValueChange={() => {}}
+      />,
+    );
+    const enabledTrigger = screen.getByRole("button", {
+      name: "Select model, Codex, GPT 5 Codex",
+    });
+    expect(enabledTrigger.getAttribute("title")).toBe("");
+    await act(async () => {
+      fireEvent.pointerMove(enabledTrigger);
+      fireEvent.focus(enabledTrigger);
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    rerender(
+      <ModelPicker
+        runtimes={makeRuntimes()}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "read_only", reason: "Session is read-only." }}
+        options={defaultOptions}
+        onValueChange={() => {}}
+      />,
+    );
+    const blockedTrigger = screen.getByRole("button", {
+      name: /Select model, Codex, GPT 5 Codex/,
+    });
+    await act(async () => {
+      fireEvent.focus(blockedTrigger);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("tooltip").textContent).toContain("Session is read-only.");
+    });
+  });
+
+  test("preserves keyboard focus in Reuse mode across catalog retry loading and settlement", async () => {
+    const retry = mock(async () => {});
+    const renderReuseState = (
+      resource: ModelPickerRuntime["resource"],
+      levels: { id: string; label: string }[] = [],
+    ) => (
+      <ModelPicker
+        runtimes={[
+          {
+            descriptor: CODEX_RUNTIME_DESCRIPTOR,
+            isEnabledForFavorites: true,
+            resource,
+          },
+        ]}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{
+          kind: "speed_only",
+          runtimeKind: "codex",
+          reason: "Reusing the existing session keeps its model.",
+        }}
+        options={{
+          effort: { options: [], value: undefined, onSelect: () => {} },
+          speed: {
+            control: {
+              key: "reuse-retry",
+              choice: "standard",
+              levels,
+              blockedReason: undefined,
+              pending: false,
+              disabled: false,
+              error: null,
+              onChange: () => {},
+            },
+          },
+        }}
+        onValueChange={() => {}}
+      />
+    );
+
+    const { rerender } = render(
+      renderReuseState({
+        status: "failed",
+        catalog: null,
+        error: "Catalog unavailable",
+        retry,
+      }),
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, Codex, gpt-5/ }));
+    });
+
+    const speedRegion = screen.getByRole("region", { name: "Speed" });
+    const retryButton = within(speedRegion).getByRole("button", { name: "Retry" });
+    retryButton.focus();
+    expect(document.activeElement).toBe(retryButton);
+
+    await act(async () => {
+      fireEvent.click(retryButton);
+      rerender(renderReuseState({ status: "loading", catalog: null, retry }));
+    });
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(speedRegion);
+
+    await act(async () => {
+      rerender(
+        renderReuseState({ status: "ready", catalog: catalog("codex") }, [
+          { id: "priority", label: "Fast" },
+        ]),
+      );
+    });
+    expect(document.activeElement).toBe(screen.getByRole("slider", { name: "Speed" }));
+
+    // A subsequent retry that fails again moves focus back to the Retry button.
+    await act(async () => {
+      rerender(renderReuseState({ status: "loading", catalog: null, retry }));
+    });
+    expect(document.activeElement).toBe(screen.getByRole("region", { name: "Speed" }));
+    await act(async () => {
+      rerender(
+        renderReuseState({
+          status: "failed",
+          catalog: null,
+          error: "Still offline",
+          retry,
+        }),
+      );
+    });
+    expect(document.activeElement).toBe(
+      within(screen.getByRole("region", { name: "Speed" })).getByRole("button", { name: "Retry" }),
+    );
+  });
+
+  test("preserves keyboard focus when Reuse speed switches between list and slider", async () => {
+    const runtimes = makeRuntimes();
+    let currentChoice = "turbo";
+    const renderReusePicker = (choice: string, onChange: (next: string) => void) => (
+      <ModelPicker
+        runtimes={runtimes}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{
+          kind: "speed_only",
+          runtimeKind: "codex",
+          reason: "Reusing the existing session keeps its model.",
+        }}
+        options={{
+          effort: { options: [], value: undefined, onSelect: () => {} },
+          speed: {
+            control: {
+              key: "reuse-1",
+              choice,
+              levels: [{ id: "priority", label: "Fast" }],
+              blockedReason: undefined,
+              pending: false,
+              disabled: false,
+              error: null,
+              onChange,
+            },
+          },
+        }}
+        onValueChange={() => {}}
+      />
+    );
+
+    const handleChange = (next: string) => {
+      currentChoice = next;
+    };
+    const { rerender } = render(renderReusePicker(currentChoice, handleChange));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, Codex, GPT 5 Codex/ }));
+    });
+
+    const speedGroup = screen.getByRole("group", { name: "Speed levels" });
+    const standardButton = within(speedGroup).getByRole("button", { name: /Standard/ });
+    standardButton.focus();
+    expect(document.activeElement).toBe(standardButton);
+
+    await act(async () => {
+      fireEvent.click(standardButton);
+      rerender(renderReusePicker(currentChoice, handleChange));
+    });
+
+    const speedSlider = screen.getByRole("slider", { name: "Speed" });
+    expect(document.activeElement).toBe(speedSlider);
+
+    // Switching back to an unlisted speed keeps focus on the replacement speed list control.
+    await act(async () => {
+      rerender(renderReusePicker("turbo", handleChange));
+    });
+    const replacedStandardButton = within(
+      screen.getByRole("group", { name: "Speed levels" }),
+    ).getByRole("button", { name: /Standard/ });
+    expect(document.activeElement).toBe(replacedStandardButton);
+  });
+
+  test("moves focus to search when selecting Standard removes the last unlisted speed option", async () => {
+    const runtimes = makeRuntimes();
+    const renderPicker = (choice: string, pending: boolean, onChange: (next: string) => void) => (
+      <ModelPicker
+        runtimes={runtimes}
+        value={{ runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" }}
+        favoriteState={favoriteState()}
+        selectionPolicy={{ kind: "editable" }}
+        options={{
+          effort: { options: [], value: undefined, onSelect: () => {} },
+          speed: {
+            control: {
+              key: "clear-unlisted-speed",
+              choice,
+              levels: [],
+              blockedReason: undefined,
+              pending,
+              disabled: false,
+              error: null,
+              onChange,
+            },
+          },
+        }}
+        onValueChange={() => {}}
+      />
+    );
+
+    const onChange = mock((_next: string) => {});
+    const { rerender } = render(renderPicker("turbo", false, onChange));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Select model, Codex, GPT 5 Codex/ }));
+    });
+
+    const speedGroup = screen.getByRole("group", { name: "Speed levels" });
+    const standardButton = within(speedGroup).getByRole("button", { name: /Standard/ });
+    standardButton.focus();
+    expect(document.activeElement).toBe(standardButton);
+
+    // Clicking Standard optimistically switches to Standard while pending, hiding the Speed section.
+    await act(async () => {
+      fireEvent.click(standardButton);
+      rerender(renderPicker("standard", true, onChange));
+    });
+    expect(onChange).toHaveBeenCalledWith("standard");
+    expect(screen.queryByRole("region", { name: "Speed" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Search models" }));
+
+    // Focus stays on search after the save settles.
+    await act(async () => {
+      rerender(renderPicker("standard", false, onChange));
+    });
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Search models" }));
   });
 });

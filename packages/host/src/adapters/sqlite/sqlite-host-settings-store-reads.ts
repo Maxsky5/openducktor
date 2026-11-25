@@ -205,7 +205,7 @@ const workspaceQuery = (db: SqliteDrizzleExecutor<typeof hostDatabaseSchema>, wh
       removal: schema.workspaceRemovals,
       agentDefaults: sql<string>`(select json_group_object(role_id, json_object(
     'runtimeKind', runtime_kind, 'providerId', provider_id, 'modelId', model_id,
-    'variant', variant, 'profileId', profile_id
+    'variant', variant, 'profileId', profile_id, 'speed', speed
   )) from workspace_role_defaults where workspace_id = ${schema.workspaces.workspaceId})`.mapWith(
         JSON.parse,
       ),

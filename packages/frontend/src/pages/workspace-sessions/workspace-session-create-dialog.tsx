@@ -65,6 +65,7 @@ export function WorkspaceSessionCreateDialog({
     model: {
       selection: model.selection,
       selectedModelAvailable: Boolean(model.selectedModelEntry),
+      speedBlockedReason: model.speedBlockedReason,
     },
     open,
     onCreated: (record, attemptId) => {

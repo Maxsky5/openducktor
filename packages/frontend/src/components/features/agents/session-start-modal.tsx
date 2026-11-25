@@ -1,8 +1,7 @@
 import { SessionStartGoalField } from "./session-start-goal-field";
 import { SessionStartKickoffField } from "./session-start-kickoff-field";
-import { SpeedSelect } from "./speed-select";
-import type { SpeedControlModel } from "@openducktor/frontend-core/sessions/model-selection/use-speed-control";
-import type { AgentModelSelection, AgentSessionStartMode } from "@openducktor/core";
+import { type AgentSessionStartMode, STANDARD_SPEED } from "@openducktor/core";
+import type { ModelPickerSelectionPolicy } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { Layers, Play, LoaderCircle, RefreshCw } from "lucide-react";
 import type { FormEvent, ReactElement } from "react";
 import { ModelPicker } from "@/components/features/agents/model-picker";
@@ -24,9 +23,7 @@ import {
   sessionStartModeButtonLabel,
   sessionStartModelPlaceholder,
   sessionStartModelReadOnlyReason,
-  sessionStartRuntimeProfileHelperText,
   sessionStartTargetBranchPlaceholder,
-  sessionStartVariantPlaceholder,
 } from "@openducktor/frontend-core/sessions/start/session-start-display";
 import {
   buildSessionStartConfirmDraft,
@@ -133,12 +130,9 @@ function SessionStartForm({
     confirmLabel,
     backgroundConfirmLabel = "Run in background",
     cancelLabel = "Cancel",
-    selectedModelSelection,
     supportsProfiles,
-    supportsVariants,
     isSelectionCatalogLoading,
     runtimeProfileOptions,
-    variantOptions,
     availableStartModes,
     selectedStartMode,
     existingSessionOptions,
@@ -149,32 +143,24 @@ function SessionStartForm({
     onSelectStartMode,
     onSelectSourceSessionValue,
     onSelectTargetBranch,
-    onSelectRuntimeProfile,
-    onSelectVariant,
     allowRunInBackground = false,
     onOpenChange,
     onConfirm,
   } = model;
   const isStarting = model.isStarting || model.phase.kind === "progress";
 
-  const selectedProfileId = selectedModelSelection?.profileId ?? "";
-  const selectedVariant = selectedModelSelection?.variant ?? "";
   const availability = resolveSessionStartAvailability(model, {
     kickoffInvalid: kickoffDraft.invalid,
     goalError: goalDraft.blockedReason,
+    speedBlockedReason: speed.blockedReason,
   });
-  const {
-    hasExistingSessionOptions,
-    isReuseMode,
-    requiresExistingSession,
-    runtimeProfileDisabled,
-    variantDisabled,
-  } = availability;
-  const { confirmDisabled } = availability;
+  const { hasExistingSessionOptions, isReuseMode, requiresExistingSession, confirmDisabled } =
+    availability;
   const confirmInput = buildSessionStartConfirmDraft({
     model,
     requiresExistingSession,
-    speedChange: speed.change,
+    effectiveSpeed: speed.effectiveSpeed,
+    reuseSpeedChange: speed.reuseSpeedChange,
     kickoffPrompt: kickoffDraft.value,
     goalObjective: goalDraft.value,
   });
@@ -190,11 +176,6 @@ function SessionStartForm({
     handleConfirm();
   };
 
-  const runtimeProfileHelperText = sessionStartRuntimeProfileHelperText({
-    runtimeProfileCount: runtimeProfileOptions.length,
-    isReuseMode,
-    isSelectionCatalogLoading,
-  });
   return (
     <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
       <DialogBody className="pt-2 pb-4">
@@ -225,32 +206,22 @@ function SessionStartForm({
             />
           ) : null}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5" data-testid="session-start-model-picker-field">
-              <p className="text-sm font-medium text-foreground">Runtime and model</p>
-              <SessionStartModelPicker model={model} />
-            </div>
-            <ModelVariantFields
-              speed={speed.control}
-              isSelectionCatalogLoading={isSelectionCatalogLoading}
-              selectedModelSelection={selectedModelSelection}
-              selectedVariant={selectedVariant}
-              supportsVariants={supportsVariants}
-              variantDisabled={variantDisabled}
-              variantOptions={variantOptions}
-              onSelectVariant={onSelectVariant}
-            />
+          <div className="grid gap-1.5" data-testid="session-start-model-picker-field">
+            <p className="text-sm font-medium text-foreground">Runtime and model</p>
+            <SessionStartModelPicker model={model} speed={speed} />
+            {speed.blockedReason ? (
+              <p role="alert" className="text-sm text-destructive">
+                {speed.blockedReason}
+              </p>
+            ) : supportsProfiles &&
+              !isReuseMode &&
+              !isSelectionCatalogLoading &&
+              runtimeProfileOptions.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No profiles are available for this runtime.
+              </p>
+            ) : null}
           </div>
-
-          {supportsProfiles ? (
-            <RuntimeProfileField
-              runtimeProfileOptions={runtimeProfileOptions}
-              disabled={runtimeProfileDisabled}
-              helperText={runtimeProfileHelperText}
-              selectedProfileId={selectedProfileId}
-              onSelectRuntimeProfile={onSelectRuntimeProfile}
-            />
-          ) : null}
 
           {/* One block: each reveal owns the space above it, so a closing field ends flush. */}
           <div className="flex flex-col">
@@ -397,89 +368,6 @@ function TargetBranchField({
   );
 }
 
-type RuntimeProfileFieldProps = {
-  runtimeProfileOptions: ComboboxOption[];
-  disabled: boolean;
-  helperText: string | null;
-  selectedProfileId: string;
-  onSelectRuntimeProfile: (profileId: string) => void;
-};
-
-function RuntimeProfileField({
-  runtimeProfileOptions,
-  disabled,
-  helperText,
-  selectedProfileId,
-  onSelectRuntimeProfile,
-}: RuntimeProfileFieldProps): ReactElement {
-  return (
-    <div className="grid gap-1.5" data-testid="session-start-runtime-profile-field">
-      <label
-        className="text-sm font-medium text-foreground"
-        htmlFor="session-start-runtime-profile"
-      >
-        Runtime profile
-      </label>
-      <Combobox
-        value={selectedProfileId}
-        options={runtimeProfileOptions}
-        placeholder="Select runtime profile"
-        disabled={disabled}
-        className="sm:min-w-[20rem]"
-        onValueChange={onSelectRuntimeProfile}
-      />
-      {helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null}
-    </div>
-  );
-}
-
-type ModelVariantFieldsProps = {
-  speed: SpeedControlModel | null;
-  isSelectionCatalogLoading: boolean;
-  selectedModelSelection: AgentModelSelection | null;
-  selectedVariant: string;
-  supportsVariants: boolean;
-  variantDisabled: boolean;
-  variantOptions: ComboboxOption[];
-  onSelectVariant: (variant: string) => void;
-};
-
-function ModelVariantFields({
-  speed,
-  isSelectionCatalogLoading,
-  selectedModelSelection,
-  selectedVariant,
-  supportsVariants,
-  variantDisabled,
-  variantOptions,
-  onSelectVariant,
-}: ModelVariantFieldsProps): ReactElement {
-  return (
-    <div className="flex items-end gap-2" data-testid="session-start-variant-field">
-      <div className="grid min-w-0 flex-1 gap-1.5">
-        <p className="text-sm font-medium text-foreground" id="session-start-variant-label">
-          Effort
-        </p>
-        <Combobox
-          triggerAriaLabelledBy="session-start-variant-label"
-          value={selectedVariant}
-          options={variantOptions}
-          placeholder={sessionStartVariantPlaceholder({
-            isSelectionCatalogLoading,
-            hasSelectedModel: selectedModelSelection !== null,
-            supportsVariants,
-            variantCount: variantOptions.length,
-          })}
-          disabled={variantDisabled}
-          className="w-full"
-          onValueChange={onSelectVariant}
-        />
-      </div>
-      <SpeedSelect key={speed?.key} model={speed} label="Speed" />
-    </div>
-  );
-}
-
 type SessionStartModalFooterProps = {
   allowRunInBackground: boolean;
   backgroundConfirmLabel: string;
@@ -544,7 +432,13 @@ function SessionStartModalFooter({
   );
 }
 
-function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): ReactElement {
+function SessionStartModelPicker({
+  model,
+  speed,
+}: {
+  model: SessionStartModalModel;
+  speed: ReturnType<typeof useSessionStartSpeed>;
+}): ReactElement {
   const {
     selectedModelSelection,
     selectedStartMode,
@@ -559,7 +453,11 @@ function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): 
     isRuntimeSettingsLoading,
     onRetryRuntimeSettings,
     isSelectionCatalogLoading,
+    runtimeProfileOptions,
+    variantOptions,
     onSelectModelPair,
+    onSelectRuntimeProfile,
+    onSelectVariant,
   } = model;
   const isReuseMode = selectedStartMode === "reuse";
   const selectedPickerValue =
@@ -619,19 +517,62 @@ function SessionStartModelPicker({ model }: { model: SessionStartModalModel }): 
       </div>
     );
   }
+
+  const reusedRuntime = isReuseMode
+    ? modelPickerRuntimes.find(
+        (runtime) => runtime.descriptor.kind === selectedModelSelection?.runtimeKind,
+      )
+    : undefined;
+  const selectionPolicy: ModelPickerSelectionPolicy = (() => {
+    if (isStarting) {
+      return { kind: "read_only", reason: modelReadOnlyReason };
+    }
+    if (isReuseMode) {
+      const runtimeSupportsSpeed =
+        reusedRuntime !== undefined &&
+        reusedRuntime.descriptor.capabilities.speed.support !== "none";
+      if (!runtimeSupportsSpeed) {
+        return { kind: "read_only", reason: modelReadOnlyReason };
+      }
+      const catalogLoadingOrFailed =
+        reusedRuntime.resource.status === "loading" || reusedRuntime.resource.status === "failed";
+      const hasEditableSpeed =
+        (speed.control !== null && speed.control.levels.length > 0) ||
+        speed.effectiveSpeed !== STANDARD_SPEED;
+      if (catalogLoadingOrFailed || hasEditableSpeed) {
+        return {
+          kind: "speed_only",
+          runtimeKind: reusedRuntime.descriptor.kind,
+          reason: modelReadOnlyReason,
+        };
+      }
+      return { kind: "read_only", reason: modelReadOnlyReason };
+    }
+    return { kind: "editable" };
+  })();
+
   return (
     <ModelPicker
+      triggerVariant="form"
       runtimes={modelPickerRuntimes}
       value={selectedPickerValue}
       favoriteState={favoriteState}
-      selectionPolicy={
-        isReuseMode || isStarting
-          ? {
-              kind: "read_only",
-              reason: modelReadOnlyReason,
-            }
-          : { kind: "editable" }
-      }
+      selectionPolicy={selectionPolicy}
+      options={{
+        effort: {
+          options: variantOptions,
+          value: selectedModelSelection?.variant,
+          onSelect: onSelectVariant,
+        },
+        profile: {
+          options: runtimeProfileOptions,
+          value: selectedModelSelection?.profileId,
+          onSelect: onSelectRuntimeProfile,
+        },
+        speed: {
+          control: speed.control,
+        },
+      }}
       placeholder={sessionStartModelPlaceholder(isSelectionCatalogLoading)}
       triggerClassName="w-full justify-between"
       onValueChange={onSelectModelPair}

@@ -130,6 +130,7 @@ export type ModelPickerFavoriteState = {
 export type ModelPickerSelectionPolicy =
   | { kind: "editable" }
   | { kind: "runtime_locked"; runtimeKind: RuntimeKind; reason: string }
+  | { kind: "speed_only"; runtimeKind: RuntimeKind; reason: string }
   | { kind: "read_only"; reason: string };
 
 export type ModelPickerItem = {

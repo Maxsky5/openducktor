@@ -139,6 +139,8 @@ test("live model picker retains a disabled runtime and refreshes when catalog or
         modelId: "gpt-5",
       }),
     );
+    expect(update).not.toHaveBeenCalled();
+    await harness.run((state) => state.handleSelectVariant("medium"));
     expect(update).toHaveBeenCalledWith(
       target.identity,
       expect.objectContaining({ variant: "medium" }),

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { CLAUDE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
+import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
+  CODEX_RUNTIME_DESCRIPTOR,
+  OPENCODE_RUNTIME_DESCRIPTOR,
+} from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import {
   composerCardState,
@@ -126,8 +130,10 @@ describe("composerModelText", () => {
   test("names the control Model while the session has no model", () => {
     expect(composerModelText({ selectedModel: null, modelName: undefined, catalog })).toEqual({
       label: "Model",
+      profile: null,
       effort: null,
-      info: null,
+      speedTone: "standard",
+      accessibilityLabel: "Select model",
     });
   });
 
@@ -143,8 +149,102 @@ describe("composerModelText", () => {
       catalog,
     });
     expect(text.label).toBe("Opus 4");
-    expect(text.effort).not.toBeNull();
-    expect(text.info).toContain("Opus 4");
+    expect(text.profile).toBeNull();
+    expect(text.effort).toBe("high");
+    expect(text.speedTone).toBe("standard");
+    expect(text.accessibilityLabel).toContain("Claude");
+    expect(text.accessibilityLabel).toContain("Opus 4");
+    expect(text.accessibilityLabel).toContain("Effort high");
+  });
+
+  test("shows OpenCode profile label and falls back to profile ID when unlisted", () => {
+    const opencodeCatalog: AgentModelCatalog = {
+      runtime: OPENCODE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["high"],
+        },
+      ],
+      profiles: [{ id: "build", name: "build", label: "Builder", mode: "primary" }],
+      defaultModelsByProvider: {},
+    };
+    const listed = composerModelText({
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "build",
+        variant: "high",
+      },
+      modelName: "GPT-5",
+      catalog: opencodeCatalog,
+    });
+    expect(listed.profile).toBe("Builder");
+    expect(listed.speedTone).toBe("standard");
+    expect(listed.accessibilityLabel).toContain("Builder");
+
+    const unlisted = composerModelText({
+      selectedModel: {
+        runtimeKind: "opencode",
+        providerId: "openai",
+        modelId: "gpt-5",
+        profileId: "legacy-agent",
+      },
+      modelName: "GPT-5",
+      catalog: opencodeCatalog,
+    });
+    expect(unlisted.profile).toBe("legacy-agent");
+  });
+
+  test("reports fast and ultrafast speed tones and accessible speed labels", () => {
+    const codexCatalog: AgentModelCatalog = {
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["high"],
+          speedLevels: [
+            { id: "fast", label: "Fast" },
+            { id: "ultrafast", label: "Ultrafast" },
+          ],
+        },
+      ],
+      defaultModelsByProvider: {},
+    };
+    const fast = composerModelText({
+      selectedModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5",
+        speed: "fast",
+      },
+      modelName: "GPT-5",
+      catalog: codexCatalog,
+    });
+    expect(fast.speedTone).toBe("fast");
+    expect(fast.accessibilityLabel).toContain("Speed Fast");
+
+    const ultrafast = composerModelText({
+      selectedModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5",
+        speed: "ultrafast",
+      },
+      modelName: "GPT-5",
+      catalog: codexCatalog,
+    });
+    expect(ultrafast.speedTone).toBe("ultrafast");
+    expect(ultrafast.accessibilityLabel).toContain("Speed Ultrafast");
   });
 
   test("shows no effort for a model without effort levels", () => {
@@ -165,7 +265,7 @@ describe("composerModelText", () => {
       catalog: noEfforts,
     });
     expect(text.effort).toBeNull();
-    expect(text.info).toBe("anthropic/Big Pickle");
+    expect(text.accessibilityLabel).toBe("Select model, Claude, Big Pickle");
   });
 
   test("shows the model ID of a model that the catalog does not have", () => {
@@ -175,6 +275,6 @@ describe("composerModelText", () => {
         modelName: undefined,
         catalog,
       }),
-    ).toMatchObject({ label: "gpt-5", effort: null });
+    ).toMatchObject({ label: "gpt-5", effort: null, profile: null, speedTone: "standard" });
   });
 });

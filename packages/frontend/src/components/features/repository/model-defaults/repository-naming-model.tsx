@@ -30,13 +30,14 @@ export function RepositoryNamingModelBlock({
       {...block}
       title="Naming model"
       description="Writes short session titles and branch names. When empty, task branches use the task title, and new chat worktrees need a name."
-      presentation="settings"
-      showProfile={false}
+      optionScope="effort_only"
       value={selectedRepoConfig.namingModel ?? null}
       runtimeDefinitions={availableRuntimeDefinitions}
       onSelectModel={(value, targetCatalog) =>
         onUpdateSelectedRepoConfig((repoConfig) => {
-          const next = selectPickedModel(repoConfig.namingModel, value, targetCatalog);
+          const next = selectPickedModel(repoConfig.namingModel, value, targetCatalog, {
+            includeSpeed: false,
+          });
           if (!next) return repoConfig;
           const { runtimeKind, providerId, modelId, variant } = next;
           return { ...repoConfig, namingModel: { runtimeKind, providerId, modelId, variant } };

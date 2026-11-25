@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
+import { applyRepoAgentDefaultField } from "./model-defaults-model";
 import { buildRepositoryAgentControls } from "./repository-agent-controls";
+import { didResetDefaultSpeed, selectPickedModel } from "./repository-agent-selection";
 
 const savedDefault = {
   runtimeKind: "opencode",
@@ -190,5 +193,129 @@ describe("buildRepositoryAgentControls", () => {
     expect(controls.profile.options.map((option) => option.value)).toEqual(["build"]);
     expect(controls.profile.disabled).toBeTrue();
     expect(controls.profile.placeholder).toBe("Select a model first");
+  });
+
+  test("builds speed controls only for speed-capable runtimes when enabled", () => {
+    const codexCatalog: AgentModelCatalog = {
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["high"],
+          speedLevels: [{ id: "priority", label: "Fast" }],
+        },
+      ],
+      defaultModelsByProvider: { openai: "gpt-5" },
+      speedAvailability: {
+        status: "blocked",
+        reason: { code: "plan_required", message: "Fast mode requires an active plan." },
+      },
+    };
+
+    const enabled = buildRepositoryAgentControls({
+      value: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "",
+        speed: "priority",
+      },
+      runtimeKind: "codex",
+      runtimeDescriptor: CODEX_RUNTIME_DESCRIPTOR,
+      catalog: codexCatalog,
+      isCatalogLoading: false,
+      isSaving: false,
+      includeSpeed: true,
+      onSelectSpeed: () => {},
+    });
+    expect(enabled.speed?.choice).toBe("priority");
+    expect(enabled.speed?.levels).toEqual([{ id: "priority", label: "Fast" }]);
+    expect(enabled.speed?.blockedReason).toBe("Fast mode requires an active plan.");
+
+    const disabledForNaming = buildRepositoryAgentControls({
+      value: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "gpt-5",
+        variant: "high",
+        profileId: "",
+      },
+      runtimeKind: "codex",
+      runtimeDescriptor: CODEX_RUNTIME_DESCRIPTOR,
+      catalog: codexCatalog,
+      isCatalogLoading: false,
+      isSaving: false,
+      includeSpeed: false,
+    });
+    expect(disabledForNaming.speed).toBeNull();
+  });
+
+  test("maps speed across runtimes, clears unsupported speed, and omits standard", () => {
+    const claudeCatalog: AgentModelCatalog = {
+      runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "claude/claude-opus-4-6",
+          providerId: "claude",
+          providerName: "Claude",
+          modelId: "claude-opus-4-6",
+          modelName: "Claude Opus 4.6",
+          variants: ["high"],
+          speedLevels: [{ id: "fast", label: "Fast" }],
+        },
+      ],
+      defaultModelsByProvider: {},
+    };
+    const codexCatalog: AgentModelCatalog = {
+      runtime: CODEX_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "openai/gpt-5",
+          providerId: "openai",
+          providerName: "OpenAI",
+          modelId: "gpt-5",
+          modelName: "GPT-5",
+          variants: ["high"],
+          speedLevels: [{ id: "priority", label: "Fast" }],
+        },
+      ],
+      defaultModelsByProvider: {},
+    };
+
+    const current = {
+      runtimeKind: "claude" as const,
+      providerId: "claude",
+      modelId: "claude-opus-4-6",
+      variant: "high",
+      profileId: "",
+      speed: "fast",
+    };
+
+    const mapped = selectPickedModel(
+      current,
+      { runtimeKind: "codex", providerId: "openai", modelId: "gpt-5" },
+      codexCatalog,
+      { currentCatalog: claudeCatalog, includeSpeed: true },
+    );
+    expect(mapped?.speed).toBe("priority");
+    expect(didResetDefaultSpeed(current, mapped)).toBe(false);
+
+    const dropped = selectPickedModel(
+      current,
+      { runtimeKind: "opencode", providerId: "anthropic", modelId: "claude-sonnet" },
+      opencodeCatalog,
+      { currentCatalog: claudeCatalog, includeSpeed: true },
+    );
+    expect(dropped?.speed).toBeUndefined();
+    expect(didResetDefaultSpeed(current, dropped)).toBe(true);
+
+    const resetToStandard = applyRepoAgentDefaultField(current, "speed", "standard");
+    expect(resetToStandard.speed).toBeUndefined();
+    expect("speed" in resetToStandard).toBe(false);
   });
 });

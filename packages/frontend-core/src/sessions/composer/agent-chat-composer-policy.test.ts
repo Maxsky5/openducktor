@@ -148,4 +148,90 @@ describe("useComposerPolicy", () => {
   test("closes send when the chat cannot send now", async () => {
     expect((await resolve({ model: model({ canSend: false }) })).sendDisabled).toBe(true);
   });
+
+  test("blocks send when a non-standard speed is blocked by account availability", async () => {
+    const blocked = await resolve({
+      model: model({
+        speed: {
+          key: "session-1",
+          choice: "fast",
+          levels: [{ id: "fast", label: "Fast" }],
+          blockedReason: "Fast mode requires an active plan.",
+          pending: false,
+          disabled: false,
+          error: null,
+          onChange: () => {},
+        },
+      }),
+    });
+    expect(blocked.sendDisabled).toBe(true);
+    expect(blocked.sendBlockedReason).toBe("Fast mode requires an active plan.");
+
+    const standard = await resolve({
+      model: model({
+        speed: {
+          key: "session-1",
+          choice: "standard",
+          levels: [{ id: "fast", label: "Fast" }],
+          blockedReason: "Fast mode requires an active plan.",
+          pending: false,
+          disabled: false,
+          error: null,
+          onChange: () => {},
+        },
+      }),
+    });
+    expect(standard.sendDisabled).toBe(false);
+    expect(standard.sendBlockedReason).toBeNull();
+  });
+
+  test("keeps active-turn steering enabled when next-turn speed is blocked", async () => {
+    const blockedSpeed = {
+      key: "session-1",
+      choice: "fast",
+      levels: [{ id: "fast", label: "Fast" }],
+      blockedReason: "Fast mode requires an active plan.",
+      pending: false,
+      disabled: false,
+      error: null,
+      onChange: () => {},
+    };
+
+    const steerPrimary = await resolve({
+      primaryMode: "steer",
+      model: model({
+        isSessionWorking: true,
+        foregroundTurnActive: true,
+        speed: blockedSpeed,
+      }),
+    });
+    expect(steerPrimary.sendInputBlocked).toBe(false);
+    expect(steerPrimary.sendDisabled).toBe(false);
+    expect(steerPrimary.sendBlockedReason).toBeNull();
+    expect(steerPrimary.defaultSendDisabled).toBe(true);
+
+    const queuePrimary = await resolve({
+      primaryMode: "default",
+      model: model({
+        isSessionWorking: true,
+        foregroundTurnActive: true,
+        speed: blockedSpeed,
+      }),
+    });
+    expect(queuePrimary.sendInputBlocked).toBe(false);
+    expect(queuePrimary.defaultSendDisabled).toBe(true);
+    expect(queuePrimary.sendDisabled).toBe(true);
+    expect(queuePrimary.sendBlockedReason).toBe("Fast mode requires an active plan.");
+
+    const idleSteer = await resolve({
+      primaryMode: "steer",
+      model: model({
+        isSessionWorking: false,
+        foregroundTurnActive: false,
+        speed: blockedSpeed,
+      }),
+    });
+    expect(idleSteer.sendDisabled).toBe(true);
+    expect(idleSteer.sendBlockedReason).toBe("Fast mode requires an active plan.");
+  });
 });

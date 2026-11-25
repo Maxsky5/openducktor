@@ -1,6 +1,6 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
-import type { ReactElement } from "react";
+import { type ReactElement, useId } from "react";
 import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import {
   findRuntimeDefinition,
@@ -8,21 +8,21 @@ import {
 } from "@openducktor/frontend-core/lib/agent-runtime";
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import { Button } from "@/components/ui/button";
-import { Combobox } from "@/components/ui/combobox";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import type { RepoAgentDefaultDraft } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { ModelPickerValue } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
 import { ensureDraftAgentDefault } from "./model-defaults-model";
-import { buildRepositoryAgentControls } from "./repository-agent-controls";
+import {
+  buildRepositoryAgentControls,
+  type RepositoryModelOptionScope,
+  toRepositoryModelPickerOptions,
+} from "./repository-agent-controls";
 import { RepositoryModelPickerField } from "./repository-model-picker-field";
 
 export type RepositoryModelBlockProps = {
   title: string;
   description: string;
-  presentation: "settings" | "creation";
-  /** Shows the agent profile picker. */
-  showProfile: boolean;
+  /** Whether the picker exposes profile and speed alongside effort, or effort only. */
+  optionScope: RepositoryModelOptionScope;
   value: RepoAgentDefaultDraft | null;
   runtimeDefinitions: RuntimeDescriptor[];
   catalogResources: RuntimeModelCatalogQueryResource[];
@@ -32,16 +32,15 @@ export type RepositoryModelBlockProps = {
   isCatalogLoadingForRuntime: (runtimeKind: RuntimeKind) => boolean;
   /** Takes the picker choice. Resolve it with `selectPickedModel` against the current draft. */
   onSelectModel: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
-  onUpdateField: (field: "variant" | "profileId", value: string) => void;
+  onUpdateField: (field: "variant" | "profileId" | "speed", value: string) => void;
   onClear: () => void;
 };
 
-/** A card that selects one model of a runtime, its effort, and optionally an agent profile. */
+/** A compact card that selects one model of a runtime, its effort, and optionally profile and speed. */
 export function RepositoryModelBlock({
   title,
   description,
-  presentation,
-  showProfile,
+  optionScope,
   value: model,
   runtimeDefinitions,
   catalogResources,
@@ -53,6 +52,7 @@ export function RepositoryModelBlock({
   onUpdateField,
   onClear,
 }: RepositoryModelBlockProps): ReactElement {
+  const titleId = useId();
   const runtimeKind = resolveRuntimeKindSelection({
     runtimeDefinitions,
     requestedRuntimeKind: model?.runtimeKind ?? null,
@@ -69,69 +69,51 @@ export function RepositoryModelBlock({
     catalog: runtimeKind ? getCatalogForRuntime(runtimeKind) : null,
     isCatalogLoading,
     isSaving,
+    includeSpeed: optionScope === "full",
+    onSelectSpeed: (speed) => onUpdateField("speed", speed),
   });
-  const isCreation = presentation === "creation";
+  const pickerOptions = toRepositoryModelPickerOptions({
+    controls,
+    value,
+    optionScope,
+    onUpdateField,
+  });
+  const hasSelection = controls.selectedPickerValue !== null;
 
   return (
-    <div
-      className={cn(
-        "@container grid border border-border bg-card",
-        isCreation ? "gap-3 rounded-xl p-4 sm:p-5" : "gap-2 rounded-md p-3",
-      )}
+    <section
+      aria-labelledby={titleId}
+      className="flex min-w-0 flex-col justify-between gap-3 rounded-xl border border-border bg-card p-4"
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="grid gap-1">
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          <p className="text-xs text-muted-foreground">{description}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h3 id={titleId} className="text-sm font-semibold text-foreground">
+            {title}
+          </h3>
+          <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
         </div>
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          disabled={isLoadingSettings || isSaving || model === null}
+          size="xs"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          disabled={isLoadingSettings || isSaving || !hasSelection}
           onClick={onClear}
         >
           Clear
         </Button>
       </div>
 
-      <div className={cn("grid gap-3", showProfile ? "@2xl:grid-cols-3" : "@2xl:grid-cols-2")}>
-        <RepositoryModelPickerField
-          runtimeDefinitions={runtimeDefinitions}
-          catalogResources={catalogResources}
-          value={controls.selectedPickerValue}
-          favoriteState={favoriteState}
-          isReadOnly={isSaving || isLoadingSettings}
-          isLoadingCatalog={isCatalogLoading}
-          onSelect={onSelectModel}
-        />
-
-        {showProfile ? (
-          <div className="grid min-w-0 gap-1">
-            <Label className="text-xs">Agent profile</Label>
-            <Combobox
-              value={value.profileId}
-              options={controls.profile.options}
-              placeholder={controls.profile.placeholder}
-              disabled={controls.profile.disabled}
-              className="w-full min-w-0"
-              onValueChange={(profileId) => onUpdateField("profileId", profileId)}
-            />
-          </div>
-        ) : null}
-
-        <div className="grid min-w-0 gap-1">
-          <Label className="text-xs">Effort</Label>
-          <Combobox
-            value={value.variant}
-            options={controls.variant.options}
-            placeholder={controls.variant.placeholder}
-            disabled={controls.variant.disabled}
-            className="w-full min-w-0"
-            onValueChange={(variant) => onUpdateField("variant", variant)}
-          />
-        </div>
-      </div>
-    </div>
+      <RepositoryModelPickerField
+        runtimeDefinitions={runtimeDefinitions}
+        catalogResources={catalogResources}
+        value={controls.selectedPickerValue}
+        favoriteState={favoriteState}
+        options={pickerOptions}
+        isReadOnly={isSaving || isLoadingSettings}
+        isLoadingCatalog={isCatalogLoading}
+        onSelect={onSelectModel}
+      />
+    </section>
   );
 }

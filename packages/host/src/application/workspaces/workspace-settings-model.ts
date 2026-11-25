@@ -155,6 +155,7 @@ type WorkspaceAddInput = {
   defaultTargetBranch: RepoConfig["defaultTargetBranch"];
   git?: RepoConfig["git"];
   defaultModel?: RepoConfig["defaultModel"];
+  namingModel?: RepoConfig["namingModel"];
   agentDefaults?: RepoConfig["agentDefaults"];
   onRegistered?: (workspace: WorkspaceRecord) => void;
 };

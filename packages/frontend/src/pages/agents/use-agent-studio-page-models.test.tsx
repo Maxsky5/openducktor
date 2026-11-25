@@ -260,8 +260,6 @@ const createHookArgs = (overrides: HookArgsOverrides = {}): HookArgs => {
     retrySlashCommands: null,
     retrySkills: null,
     retrySubagents: null,
-    onAgentSelectorOpen: () => {},
-    onVariantSelectorOpen: () => {},
     onCatalogMenuOpen: () => {},
     searchFiles: async () => [],
     agentOptions: [{ value: "spec", label: "Spec" }],

@@ -47,7 +47,14 @@ export const saveWorkspace = (
         );
       if (defaultModel)
         yield* session.execute(
-          (db) => db.insert(schema.workspaceDefaultModels).values({ workspaceId, ...defaultModel }),
+          (db) =>
+            db.insert(schema.workspaceDefaultModels).values({
+              workspaceId,
+              ...defaultModel,
+              variant: defaultModel.variant ?? null,
+              profileId: defaultModel.profileId ?? null,
+              speed: defaultModel.speed ?? null,
+            }),
           operation,
         );
     }
@@ -93,6 +100,7 @@ export const saveWorkspace = (
         ...model,
         variant: model.variant ?? null,
         profileId: model.profileId ?? null,
+        speed: model.speed ?? null,
       })),
     ))
       yield* session.execute(
@@ -111,6 +119,7 @@ export const saveWorkspace = (
                 modelId: sql`excluded.model_id`,
                 variant: sql`excluded.variant`,
                 profileId: sql`excluded.profile_id`,
+                speed: sql`excluded.speed`,
               },
             }),
         operation,

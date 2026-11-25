@@ -1,0 +1,109 @@
+:root,
+.light {
+  --step-track-shell: color-mix(in oklch, var(--foreground) 8%, var(--popover));
+  --step-track-line: color-mix(in oklch, var(--foreground) 12%, transparent);
+  --step-track-label: var(--foreground);
+  --step-track-tick: color-mix(in oklch, var(--foreground) 26%, transparent);
+  --step-track-tick-on-thumb: color-mix(in oklch, var(--foreground) 45%, transparent);
+  --step-track-thumb-bg: var(--primary-foreground);
+  --step-track-thumb-shadow:
+    0 1px 3px color-mix(in oklch, var(--foreground) 18%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent);
+  --step-track-shake-distance: 6px;
+  --step-track-shake-overshoot: 4px;
+  --step-track-shake-dur-a: 80ms;
+  --step-track-shake-dur-b: 60ms;
+}
+
+.dark {
+  --step-track-shell: color-mix(in oklch, var(--foreground) 9%, var(--popover));
+  --step-track-line: color-mix(in oklch, var(--foreground) 14%, transparent);
+  --step-track-label: var(--foreground);
+  --step-track-tick: color-mix(in oklch, var(--foreground) 30%, transparent);
+  --step-track-tick-on-thumb: color-mix(in oklch, var(--background) 55%, transparent);
+  --step-track-thumb-bg: var(--primary-foreground);
+  --step-track-thumb-shadow:
+    0 1px 3px color-mix(in oklch, var(--background) 65%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent);
+}
+
+.step-track-slider {
+  touch-action: none;
+  user-select: none;
+}
+
+.step-track-thumb {
+  background: var(--step-track-thumb-bg);
+  box-shadow: var(--step-track-thumb-shadow);
+  will-change: transform;
+}
+
+.step-track-label {
+  color: var(--step-track-label);
+}
+
+.step-track-label-swap {
+  animation: step-track-label-swap 180ms var(--motion-ease-out);
+}
+
+.step-track-streak {
+  background: color-mix(in oklch, var(--primary-foreground) 90%, transparent);
+  transform-origin: right center;
+}
+
+.step-track-shake.is-shaking {
+  animation: step-track-shake
+    calc(var(--step-track-shake-dur-a) * 2 + var(--step-track-shake-dur-b) * 2) linear;
+}
+
+.model-speed-icon[data-speed-tone="fast"] {
+  color: var(--speed-fast);
+}
+
+.model-speed-icon[data-speed-tone="ultrafast"] {
+  color: var(--speed-ultrafast);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 40%, transparent));
+}
+
+@keyframes step-track-label-swap {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes step-track-shake {
+  0% {
+    transform: translateX(0);
+    animation-timing-function: var(--motion-ease-out);
+  }
+  28.57% {
+    transform: translateX(var(--step-track-shake-distance));
+    animation-timing-function: var(--motion-ease-out);
+  }
+  57.14% {
+    transform: translateX(calc(var(--step-track-shake-distance) * -1));
+    animation-timing-function: var(--motion-ease-out);
+  }
+  78.57% {
+    transform: translateX(var(--step-track-shake-overshoot));
+    animation-timing-function: var(--motion-ease-out);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-track-label-swap {
+    animation: none !important;
+  }
+
+  .step-track-shake,
+  .step-track-shake.is-shaking {
+    animation: none !important;
+    transform: none !important;
+  }
+}

@@ -97,12 +97,7 @@ export const openingModelPickerView = ({
   const policy = lock
     ? { kind: "runtime_locked" as const, ...lock }
     : { kind: "editable" as const };
-  const resolved = resolveModelPickerActiveView(runtimes, favorites, policy);
-  if (resolved === "favorites") return resolved;
-  return selectionRuntimeKind &&
-    runtimes.some((runtime) => runtime.descriptor.kind === selectionRuntimeKind)
-    ? selectionRuntimeKind
-    : resolved;
+  return resolveModelPickerActiveView(runtimes, favorites, policy, selectionRuntimeKind);
 };
 
 /**

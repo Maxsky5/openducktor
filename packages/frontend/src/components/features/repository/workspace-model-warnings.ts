@@ -1,3 +1,5 @@
+import { STANDARD_SPEED } from "@openducktor/core";
+import type { RepoAgentDefaultDraft } from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import { toPrimaryAgentOptions } from "@openducktor/frontend-core/sessions/model-selection/catalog-select-options";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
@@ -27,10 +29,11 @@ export const getModelWarnings = (
         ) ?? [],
     ),
   );
-  const entries = [
+  const entries: ReadonlyArray<readonly [string, RepoAgentDefaultDraft | undefined]> = [
     ["Default model", draft.defaultModel],
+    ["Naming model", draft.namingModel],
     ...Object.entries(draft.agentDefaults).map(([role, entry]) => [role, entry] as const),
-  ] as const;
+  ];
   for (const [label, entry] of entries) {
     if (!entry?.runtimeKind || !entry.providerId.trim() || !entry.modelId.trim()) {
       continue;
@@ -59,6 +62,17 @@ export const getModelWarnings = (
     ) {
       warnings.push(
         `${label} has an unavailable agent profile. Choose an available profile before starting a session.`,
+      );
+    }
+    const speed = entry.speed?.trim();
+    if (
+      speed &&
+      speed !== STANDARD_SPEED &&
+      (definition.capabilities.speed.support === "none" ||
+        !model.speedLevels?.some((level) => level.id === speed))
+    ) {
+      warnings.push(
+        `${label} has an unavailable speed. Choose an available speed before starting a session.`,
       );
     }
   }

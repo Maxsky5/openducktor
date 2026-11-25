@@ -1,3 +1,4 @@
+import { OPENCODE_RUNTIME_DESCRIPTOR } from "@openducktor/contracts";
 import { QueryProvider } from "@/test-utils/query-provider";
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { RenderOptions } from "@testing-library/react";
@@ -734,19 +735,59 @@ describe("AgentChatComposer attachments", () => {
 });
 
 describe("AgentChatComposer selection controls", () => {
-  test("disables the agent selector when no model is selected", () => {
+  test("shows profile and model in one merged trigger once a model is selected", () => {
     const withoutSelection = render(
-      <AgentChatComposer model={{ ...buildModel(), selectedModelSelection: null }} />,
+      <AgentChatComposer
+        model={{
+          ...buildModel(),
+          selectedModelSelection: null,
+          modelPicker: { ...buildModel().modelPicker, value: null },
+        }}
+      />,
     );
 
-    expect(screen.getByRole("button", { name: "Agent" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Select model, Model" })).toBeTruthy();
     withoutSelection.unmount();
 
-    const withSelection = render(<AgentChatComposer model={buildModel()} />);
+    const base = buildModel();
+    const withSelection = render(
+      <AgentChatComposer
+        model={{
+          ...base,
+          modelPicker: {
+            ...base.modelPicker,
+            runtimes: [
+              {
+                descriptor: OPENCODE_RUNTIME_DESCRIPTOR,
+                isEnabledForFavorites: true,
+                resource: {
+                  status: "ready",
+                  catalog: {
+                    models: [
+                      {
+                        id: "openai/gpt-5.3-codex",
+                        providerId: "openai",
+                        providerName: "OpenAI",
+                        modelId: "gpt-5.3-codex",
+                        modelName: "GPT-5.3 Codex",
+                        variants: ["high"],
+                      },
+                    ],
+                    defaultModelsByProvider: { openai: "gpt-5.3-codex" },
+                  },
+                },
+              },
+            ],
+            value: { runtimeKind: "opencode", providerId: "openai", modelId: "gpt-5.3-codex" },
+          },
+        }}
+      />,
+    );
 
-    expect(
-      screen.getByRole("button", { name: "Hephaestus (Deep Agent)" }).hasAttribute("disabled"),
-    ).toBe(false);
+    const trigger = screen.getByRole("button", {
+      name: /Select model, OpenCode, Hephaestus \(Deep Agent\), GPT-5\.3 Codex, Effort high/,
+    });
+    expect(trigger.getAttribute("aria-disabled")).toBe("false");
     withSelection.unmount();
   });
 });

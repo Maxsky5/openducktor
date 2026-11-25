@@ -48,6 +48,7 @@ import {
 } from "./use-workspace-conflict-chat-actions";
 import { useWorkspaceSessionChatActions } from "./use-workspace-session-chat-actions";
 import { useWorkspaceSessionTranscript } from "./use-workspace-session-transcript";
+import { blockedSpeedReason } from "@openducktor/frontend-core/sessions/model-selection/model-picker-presentation";
 import { useWorkspaceSessionModelPicker } from "./use-workspace-session-model-picker";
 import { useWorkspaceSessionModelTarget } from "./use-workspace-session-model-target";
 import { useWorkspaceSessionToolRefresh } from "./use-workspace-session-tool-refresh";
@@ -147,7 +148,6 @@ export function WorkspaceSessionChat({
       ? actions.pendingDraftModel.selection
       : chatState.selectedModel,
     updateDraft: actions.updateDraftModel,
-    updateSpeed: actions.updateSpeed,
     update: actions.updateSessionModel,
   });
   const { catalog: modelCatalog, error: catalogError } = modelTarget;
@@ -241,14 +241,16 @@ export function WorkspaceSessionChat({
     sessionScope: { kind: "repository", workspaceId: workspace.workspaceId },
   });
   const isWaitingInput = isAgentSessionBlockedOnInput(chatState);
+  const speedBlockedReason = blockedSpeedReason(picker.speed);
   const { sendTarget } = actions;
   const target = useMemo(
     () =>
       sendTarget({
         canSend: canInteract,
+        speedBlockedReason,
         assertCanSubmit,
       }),
-    [assertCanSubmit, canInteract, sendTarget],
+    [assertCanSubmit, canInteract, sendTarget, speedBlockedReason],
   );
   const messageDelivery = useAgentChatSend({
     identity,

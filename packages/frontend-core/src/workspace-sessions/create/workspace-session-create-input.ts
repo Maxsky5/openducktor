@@ -21,6 +21,7 @@ export function buildWorkspaceSessionCreateInput({
   targetBranch,
   selection,
   selectedModelAvailable,
+  speedBlockedReason = null,
   rolesReady,
   availableBranches,
   hasNamingModel,
@@ -35,12 +36,19 @@ export function buildWorkspaceSessionCreateInput({
   targetBranch: GitTargetBranch | null;
   selection: AgentModelSelection | null;
   selectedModelAvailable: boolean;
+  speedBlockedReason?: string | null | undefined;
   rolesReady: boolean;
   availableBranches: readonly GitBranch[] | null;
   /** True when the workspace has a naming model, so a new branch worktree can have a blank name. */
   hasNamingModel: boolean;
 }): WorkspaceSessionCreateInput | null {
-  if (!selection?.runtimeKind || !selectedModelAvailable || !rolesReady || !targetBranch)
+  if (
+    !selection?.runtimeKind ||
+    !selectedModelAvailable ||
+    Boolean(speedBlockedReason) ||
+    !rolesReady ||
+    !targetBranch
+  )
     return null;
   const common = {
     workspaceId,

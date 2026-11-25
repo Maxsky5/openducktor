@@ -286,6 +286,90 @@ test.each([
   },
 );
 
+test("automatic fresh launch validates configured default speed against catalog levels and availability", async () => {
+  const supported = await createLaunchHarness("codex");
+  supported.setModelDefault({ ...modelFor("codex"), speed: "fast" });
+  const ok = await Effect.runPromise(
+    supported.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: "startBuilder" },
+    }),
+  );
+  expect(ok).toMatchObject({
+    status: "completed",
+    model: { ...modelFor("codex"), speed: "fast" },
+  });
+
+  const unsupported = await createLaunchHarness("codex");
+  unsupported.setModelDefault({ ...modelFor("codex"), speed: "ultrafast" });
+  const badSpeed = await Effect.runPromise(
+    unsupported.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: "startBuilder" },
+    }),
+  );
+  expect(badSpeed.status).toBe("failed");
+  expect(badSpeed.failure?.message).toContain("ultrafast");
+  expect(badSpeed.failure?.message).toContain("repository settings");
+  expect(unsupported.starts).toHaveLength(0);
+
+  const blocked = await createLaunchHarness("codex");
+  blocked.setModelDefault({ ...modelFor("codex"), speed: "fast" });
+  blocked.setCatalogSpeedAvailability({
+    status: "blocked",
+    reason: { code: "plan_required", message: "Fast mode requires a Pro plan." },
+  });
+  const blockedResult = await Effect.runPromise(
+    blocked.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: "startBuilder" },
+    }),
+  );
+  expect(blockedResult.status).toBe("failed");
+  expect(blockedResult.failure?.message).toContain("Fast mode requires a Pro plan.");
+  expect(blockedResult.failure?.message).toContain("repository settings");
+  expect(blocked.starts).toHaveLength(0);
+
+  const blockedStandard = await createLaunchHarness("codex");
+  blockedStandard.setModelDefault(modelFor("codex"));
+  blockedStandard.setCatalogSpeedAvailability({
+    status: "blocked",
+    reason: { code: "plan_required", message: "Fast mode requires a Pro plan." },
+  });
+  const standardOk = await Effect.runPromise(
+    blockedStandard.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: "startBuilder" },
+    }),
+  );
+  expect(standardOk).toMatchObject({ status: "completed", model: modelFor("codex") });
+
+  const forkFallback = await createLaunchHarness("codex");
+  forkFallback.setTaskStatus("human_review");
+  forkFallback.enablePullRequests();
+  forkFallback.setModelDefault({ ...modelFor("codex"), speed: "ultrafast" });
+  forkFallback.setCatalogSpeedAvailability({
+    status: "blocked",
+    reason: { code: "plan_required", message: "Fast mode requires a Pro plan." },
+  });
+  const source = forkFallback.addTaskSession("builder");
+  forkFallback.records[0]!.selectedModel = null;
+  const forked = await Effect.runPromise(
+    forkFallback.launchAutomatic({
+      ...requestFor("codex"),
+      policy: { kind: "automatic", actionId: "startGeneratePullRequest" },
+      instruction: { kind: "kickoff" },
+    }),
+  );
+  expect(forked).toMatchObject({
+    status: "completed",
+    startMode: "fork",
+    model: modelFor("codex"),
+  });
+  expect(forked.model?.speed).toBeUndefined();
+  expect(forkFallback.forks).toEqual([source.externalSessionId]);
+});
+
 test("preparation-only launch sends no first instruction", async () => {
   const h = await createLaunchHarness();
   const result = await Effect.runPromise(

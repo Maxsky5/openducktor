@@ -123,8 +123,6 @@ type AgentStudioPageModelsModelSelectionContext = Pick<
   | "retrySkills"
   | "retrySubagents"
   | "onCatalogMenuOpen"
-  | "onAgentSelectorOpen"
-  | "onVariantSelectorOpen"
   | "searchFiles"
   | "agentProfileOptions"
   | "modelPicker"
@@ -216,6 +214,7 @@ export function useAgentStudioOrchestrationController({
     selectionForNewSession,
     selectedModelSelection,
     speed,
+    speedBlockedReason,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
     supportsProfiles,
@@ -240,8 +239,6 @@ export function useAgentStudioOrchestrationController({
     retrySkills,
     retrySubagents,
     onCatalogMenuOpen,
-    onAgentSelectorOpen,
-    onVariantSelectorOpen,
     searchFiles,
     agentProfileOptions,
     modelPicker,
@@ -320,6 +317,7 @@ export function useAgentStudioOrchestrationController({
     runtimeDefinitions,
     selectedModelDescriptor,
     isSelectionCatalogLoading,
+    speedBlockedReason,
     supportsAttachments,
     sessionsForTask: view.sessionsForTask,
     selectedTask: view.selectedTask,
@@ -441,8 +439,6 @@ export function useAgentStudioOrchestrationController({
       retrySkills,
       retrySubagents,
       onCatalogMenuOpen,
-      onAgentSelectorOpen,
-      onVariantSelectorOpen,
       searchFiles,
       agentProfileOptions,
       modelPicker,

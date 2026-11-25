@@ -127,8 +127,6 @@ export type AgentChatComposerModel = {
   isSubagentsLoading: boolean;
   retrySubagents: (() => void) | null;
   onCatalogMenuOpen: () => void;
-  onAgentSelectorOpen: () => void;
-  onVariantSelectorOpen: () => void;
   searchFiles: (query: string) => Promise<AgentFileSearchResult[]>;
   agentOptions: ComboboxOption[];
   modelPicker: AgentChatModelPicker;

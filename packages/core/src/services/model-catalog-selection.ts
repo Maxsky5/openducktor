@@ -112,6 +112,36 @@ export const withSpeed = (selection: AgentModelSelection, speed: string): AgentM
   return speed === STANDARD_SPEED ? rest : { ...rest, speed };
 };
 
+export const listSelectableCatalogProfiles = (
+  catalog: AgentModelCatalog | null | undefined,
+): CatalogProfile[] => {
+  if (!catalog) {
+    return [];
+  }
+  const profiles = catalogProfilesFor(catalog);
+  const primaryProfiles = profiles.filter(
+    (profile) => !profile.hidden && (profile.mode === "primary" || profile.mode === "all"),
+  );
+  if (primaryProfiles.length > 0) {
+    return primaryProfiles;
+  }
+  return profiles.filter((profile) => !profile.hidden && profile.mode !== "subagent");
+};
+
+export const isSelectableCatalogProfileId = (
+  catalog: AgentModelCatalog,
+  profileId: string,
+): boolean => {
+  // Catalogs that omit `profiles` do not restrict selectable profile IDs; an explicit empty list
+  // (`profiles: []`) means no profile is selectable.
+  if (catalog.profiles === undefined) {
+    return true;
+  }
+  return listSelectableCatalogProfiles(catalog).some(
+    (profile) => (profile.id ?? profile.name ?? profile.label) === profileId,
+  );
+};
+
 export const pickVisibleCatalogDefaultProfileId = (
   catalog: AgentModelCatalog,
 ): string | undefined => {
