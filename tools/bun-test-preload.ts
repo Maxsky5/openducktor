@@ -1,6 +1,6 @@
+import { afterAll, afterEach, beforeAll, beforeEach } from "bun:test";
 import { createRequire } from "node:module";
-import { mkdirSync, rmSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -14,25 +14,15 @@ const usesWorkerTempDirectory =
 const removeDirectory = (directory: string): Error | null => {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) Bun.sleepSync(50);
     try {
       rmSync(directory, { force: true, recursive: true });
       return null;
     } catch (cause) {
       lastError = cause;
-      Bun.sleepSync(50);
     }
   }
   return lastError instanceof Error ? lastError : new Error(String(lastError));
-};
-
-const clearStaleWorkerDirectory = (directory: string): void => {
-  const failure = removeDirectory(directory);
-  if (failure !== null) {
-    throw new Error(
-      `Cannot start the test worker because '${directory}' is still locked: ${failure.message}. Close the process that holds it and rerun the tests.`,
-      { cause: failure },
-    );
-  }
 };
 
 let warnedAboutCleanup = false;
@@ -47,46 +37,42 @@ const removeWorkerDirectoryAfterFile = (directory: string): void => {
 };
 
 const systemTmpDir = tmpdir();
-let workerTmpDir: string | null = null;
-let configDir: string;
-if (usesWorkerTempDirectory) {
-  workerTmpDir = path.join(systemTmpDir, `openducktor-worker-tmp-${process.pid}`);
-  // A reused PID must not inherit the temp tree of an earlier worker.
-  clearStaleWorkerDirectory(workerTmpDir);
-  mkdirSync(workerTmpDir, { recursive: true });
+const workerTmpDir = usesWorkerTempDirectory
+  ? mkdtempSync(path.join(systemTmpDir, "openducktor-worker-tmp-"))
+  : null;
+const configDir =
+  workerTmpDir === null
+    ? mkdtempSync(path.join(systemTmpDir, "openducktor-test-"))
+    : path.join(workerTmpDir, `openducktor-test-${process.pid}`);
+if (workerTmpDir !== null) {
+  mkdirSync(configDir);
   process.env.TMPDIR = workerTmpDir;
   process.env.TMP = workerTmpDir;
   process.env.TEMP = workerTmpDir;
-  configDir = path.join(workerTmpDir, `openducktor-test-${process.pid}`);
-  mkdirSync(configDir, { recursive: true });
-} else {
-  configDir = await mkdtemp(path.join(systemTmpDir, "openducktor-test-"));
 }
 process.env.OPENDUCKTOR_CONFIG_DIR = configDir;
 
-const { afterAll, afterEach, beforeAll } = await import("bun:test");
-if (usesWorkerTempDirectory) {
-  // Creating the worker temp tree again can exceed the 1000 ms test budget on a loaded Windows runner.
-  beforeAll((): void => {
-    mkdirSync(configDir, { recursive: true });
-    if (workerTmpDir !== null) {
-      mkdirSync(workerTmpDir, { recursive: true });
-    }
-  }, 5_000);
-}
+let tempDirectoryRemoved = false;
+const restoreTestDirectory = (): void => {
+  if (!tempDirectoryRemoved) return;
+  mkdirSync(configDir, { recursive: true });
+  tempDirectoryRemoved = false;
+};
+beforeAll(restoreTestDirectory, 5_000);
+// Bun can repeat a file without calling the preload's beforeAll again.
+beforeEach(restoreTestDirectory, 5_000);
+
 // Removing a worker temp tree can exceed the 1000 ms test budget on a loaded Windows runner.
 afterAll((): void => {
   // Windows keeps handles on the temp tree while the worker runs, so a failure here is a leak, not a defect.
-  removeWorkerDirectoryAfterFile(configDir);
-  if (workerTmpDir !== null) {
-    removeWorkerDirectoryAfterFile(workerTmpDir);
-  }
+  removeWorkerDirectoryAfterFile(workerTmpDir ?? configDir);
+  tempDirectoryRemoved = true;
   if (globalThis.document !== undefined) {
     globalThis.document.documentElement.classList.remove("light", "dark");
   }
 }, 5_000);
 
-if (testRoot === repoRoot || testRoot === frontendRoot) {
+if (testRoot === frontendRoot) {
   const frontendRequire = createRequire(
     new URL("../packages/frontend/package.json", import.meta.url),
   );
@@ -95,9 +81,17 @@ if (testRoot === repoRoot || testRoot === frontendRoot) {
   );
 
   if (globalThis.document === undefined) {
-    // An iframe in a test must not load its page from the network.
+    // DOM fixtures must not load pages from the network.
     GlobalRegistrator.register({
       settings: { navigation: { disableChildFrameNavigation: true } },
+    });
+    // Electron and the web app open an HTML5 document. Happy DOM starts without a doctype
+    // or compatMode, so give its document the same standards mode as those entry pages.
+    const document = globalThis.window.document;
+    document.prepend(document.implementation.createDocumentType("html", "", ""));
+    Object.defineProperty(document, "compatMode", {
+      configurable: true,
+      get: () => (document.doctype ? "CSS1Compat" : "BackCompat"),
     });
   }
 
@@ -107,12 +101,17 @@ if (testRoot === repoRoot || testRoot === frontendRoot) {
     writable: true,
   });
 
-  const { cleanup } = await import(frontendRequire.resolve("@testing-library/react"));
+  const libraryPath = frontendRequire.resolve("@testing-library/react");
+  const pureLibraryPath = frontendRequire.resolve("@testing-library/react/pure");
+  const sonnerPath = Bun.resolveSync("sonner", frontendRoot);
 
-  // Unmounting every tree after a file can exceed the 1000 ms test budget on a loaded Windows runner.
-  // Files share one window without isolation, so app writes to web storage must not reach the next test.
+  // Run cleanup on each Bun repeat without loading Testing Library for files that do not use it.
   afterEach((): void => {
-    cleanup();
+    const library = frontendRequire.cache[libraryPath] ?? frontendRequire.cache[pureLibraryPath];
+    library?.exports.cleanup();
+    document.body.replaceChildren();
+    // Sonner replays active toasts to the next mounted toaster.
+    frontendRequire.cache[sonnerPath]?.exports.toast.dismiss();
     localStorage.clear();
     sessionStorage.clear();
   }, 5_000);

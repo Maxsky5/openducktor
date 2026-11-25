@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { workspacePackageJsonPaths } from "./workspace-packages";
 
 const packageManifestSchema = z.object({
   name: z.string().optional(),
@@ -12,20 +13,12 @@ const packageManifestSchema = z.object({
 const ROOT = path.resolve(import.meta.dir, "..");
 const PRELOAD_PATH = "../../tools/bun-test-preload.ts";
 
-const workspacePackagePaths = (): string[] =>
-  ["apps", "packages", "tools/oxlint"]
-    .flatMap((directory) =>
-      readdirSync(path.join(ROOT, directory), { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => path.join(ROOT, directory, entry.name, "package.json")),
-    )
-    .filter(existsSync);
-
-const runFrontendFixtures = async (
+const runFixtures = async (
+  cwd: string,
+  command: string[],
   files: string[],
-): Promise<{ exitCode: number; output: string }> => {
-  const frontendRoot = path.join(ROOT, "packages/frontend");
-  const fixtureDir = await mkdtemp(path.join(frontendRoot, ".test-isolation-"));
+): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
+  const fixtureDir = await mkdtemp(path.join(cwd, ".test-isolation-"));
   try {
     const paths = await Promise.all(
       files.map(async (content, index) => {
@@ -35,8 +28,8 @@ const runFrontendFixtures = async (
       }),
     );
     const child = Bun.spawn({
-      cmd: [process.execPath, "run", "test", ...paths],
-      cwd: frontendRoot,
+      cmd: [process.execPath, ...command, ...paths],
+      cwd,
       stderr: "pipe",
       stdout: "pipe",
     });
@@ -45,7 +38,7 @@ const runFrontendFixtures = async (
       new Response(child.stderr).text(),
       new Response(child.stdout).text(),
     ]);
-    return { exitCode, output: stdout + stderr };
+    return { exitCode, stderr, stdout };
   } finally {
     await rm(fixtureDir, { recursive: true, force: true });
   }
@@ -53,7 +46,8 @@ const runFrontendFixtures = async (
 
 describe("Bun test preload", () => {
   test("loads the shared config guard from each workspace Bun test command", () => {
-    const missingPreload = workspacePackagePaths().flatMap((packagePath) => {
+    const missingPreload = workspacePackageJsonPaths(ROOT).flatMap((relativePath) => {
+      const packagePath = path.resolve(ROOT, relativePath);
       const manifest = packageManifestSchema.parse(JSON.parse(readFileSync(packagePath, "utf8")));
       const testCommand = manifest.scripts?.test;
       if (!testCommand?.startsWith("bun test")) {
@@ -67,30 +61,34 @@ describe("Bun test preload", () => {
       if (commandLoadsPreload || bunfigLoadsPreload) {
         return [];
       }
-      return [manifest.name ?? path.relative(ROOT, packagePath)];
+      return [manifest.name ?? relativePath];
     });
 
     expect(missingPreload).toEqual([]);
   });
 
-  test("loads the root test environment and removes its temporary directories", async () => {
-    const child = Bun.spawn({
-      cmd: [
-        process.execPath,
-        "test",
-        path.join(ROOT, "scripts/test-support/bun-test-preload-fixture.test.ts"),
-      ],
-      cwd: ROOT,
-      stderr: "pipe",
-      stdout: "pipe",
-    });
-    const [exitCode, stderr, stdout] = await Promise.all([
-      child.exited,
-      new Response(child.stderr).text(),
-      new Response(child.stdout).text(),
-    ]);
-
+  test("restores the root test directories on repeat and removes them when done", async () => {
+    const fixture = `import { expect, test } from "bun:test";
+import { statSync } from "node:fs";
+import { tmpdir } from "node:os";
+test("uses temporary directories without browser globals", () => {
+  const configDir = process.env.OPENDUCKTOR_CONFIG_DIR;
+  if (!configDir) throw new Error("The test config directory is missing.");
+  const workerTmpDir = tmpdir();
+  expect(workerTmpDir).toBe(process.env.TMPDIR);
+  expect(statSync(configDir).isDirectory()).toBe(true);
+  expect(globalThis.document).toBeUndefined();
+  console.log("test config: " + configDir);
+  console.log("worker tmp: " + workerTmpDir);
+});
+`;
+    const { exitCode, stderr, stdout } = await runFixtures(
+      ROOT,
+      ["test", "--rerun-each=3"],
+      [fixture, fixture],
+    );
     expect(exitCode, stderr).toBe(0);
+    expect(stdout.match(/test config:/g)).toHaveLength(6);
     const configDir = stdout.match(/test config: (.+)/)?.[1];
     const workerTmpDir = stdout.match(/worker tmp: (.+)/)?.[1];
     if (!configDir || !workerTmpDir) {
@@ -100,29 +98,99 @@ describe("Bun test preload", () => {
     await expect(access(workerTmpDir)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  test("gives a later frontend file a fresh DOM after a successful file leaves unmanaged nodes", async () => {
-    const { exitCode, output } = await runFrontendFixtures([
-      `import { test } from "bun:test";
-test("leaves unmanaged DOM", () => {
-  document.body.textContent = "left by the previous file";
+  test("removes mounted React content after every Bun repeat", async () => {
+    const { exitCode, stderr, stdout } = await runFixtures(
+      path.join(ROOT, "packages/frontend"),
+      ["run", "test", "--rerun-each=3"],
+      ["@testing-library/react", "@testing-library/react/pure"].map(
+        (entry) => `import { expect, test } from "bun:test";
+import { render, screen } from "${entry}";
+import { createElement } from "react";
+test("a repeat starts without the previous render", () => {
+  expect(screen.queryAllByRole("button", { name: "Run check" }).length).toBe(0);
+  render(createElement("button", null, "Run check"));
+  expect(screen.getByRole("button", { name: "Run check" })).toBeDefined();
+  console.log("REPEAT_CHECKED");
 });
 `,
-      `import { expect, test } from "bun:test";
-test("starts with an empty DOM", () => {
-  expect(document.body.textContent).toBe("");
-  console.log("FRESH_DOM_CHECKED");
-});
-`,
-    ]);
-    expect(exitCode, output).toBe(0);
-    expect(output).toContain("FRESH_DOM_CHECKED");
+      ),
+    );
+    expect(exitCode, stderr).toBe(0);
+    expect(stdout.match(/REPEAT_CHECKED/g)).toHaveLength(6);
   });
 
-  test("stops the frontend suite after a timeout before shared DOM state can affect later tests", async () => {
-    const { exitCode, output } = await runFrontendFixtures([
-      `import { test } from "bun:test";
-import { render } from "@testing-library/react";
-import { createElement } from "react";
+  test("delivers zero-delay DOM timers before and after a file uses fake timers", async () => {
+    const { exitCode, stderr } = await runFixtures(
+      path.join(ROOT, "packages/frontend"),
+      ["test", "--only-failures", "--timeout=1000"],
+      [
+        `import { beforeAll, expect, mock, test } from "bun:test";
+import { setupTestingLibraryFakeTimers } from "@openducktor/frontend-core/test-support/testing-library-fake-timers";
+const scheduleInWindow = globalThis.setTimeout;
+const realCallback = mock(() => {});
+beforeAll(() => { scheduleInWindow(realCallback, 0); });
+setupTestingLibraryFakeTimers();
+test("the real callback runs and a fake callback is still due when the file ends", () => {
+  expect(realCallback).toHaveBeenCalled();
+  const callback = mock(() => {});
+  scheduleInWindow(callback, 0);
+  expect(callback).not.toHaveBeenCalled();
+});
+`,
+        `import { expect, test } from "bun:test";
+test("the next callback runs on the real clock", async () => {
+  const outcome = await new Promise(resolve => setTimeout(() => resolve("ran"), 0));
+  expect(outcome).toBe("ran");
+});
+`,
+      ],
+    );
+    expect(exitCode, stderr).toBe(0);
+  });
+
+  test("clears frontend DOM state between files and stops on a timeout", async () => {
+    const { exitCode, stderr, stdout } = await runFixtures(
+      path.join(ROOT, "packages/frontend"),
+      ["run", "test"],
+      [
+        `import { expect, test } from "bun:test";
+import { toast } from "sonner";
+test("leaves unmanaged DOM", () => {
+  document.body.textContent = "left by the previous file";
+  sessionStorage.setItem("isolated", "first test");
+  toast("Saved by the previous test");
+  expect(toast.getToasts().map(item => item.title)).toEqual(["Saved by the previous test"]);
+  console.log("DIRTY_DOM_SET");
+});
+test("clears storage and notifications without Testing Library", () => {
+  expect(sessionStorage.getItem("isolated")).toBeNull();
+  expect(toast.getToasts()).toEqual([]);
+});
+`,
+        `import { expect, test } from "bun:test";
+import { render, screen } from "@testing-library/react";
+import { createElement, useEffect } from "react";
+let unmounted = false;
+function WritesOnUnmount() {
+  useEffect(() => () => {
+    unmounted = true;
+    localStorage.setItem("isolated", "unmount");
+  }, []);
+  return createElement("button", null, "Mounted by the first test");
+}
+test("starts with an empty DOM", () => {
+  expect(document.body.textContent).toBe("");
+  expect(document.doctype?.name).toBe("html");
+  expect(document.compatMode).toBe("CSS1Compat");
+  render(createElement(WritesOnUnmount));
+  expect(screen.getByRole("button", { name: "Mounted by the first test" })).toBeDefined();
+  console.log("FRESH_DOM_CHECKED");
+});
+test("unmounts before clearing storage", () => {
+  expect(unmounted).toBe(true);
+  expect(screen.queryByRole("button", { name: "Mounted by the first test" })).toBeNull();
+  expect(localStorage.getItem("isolated")).toBeNull();
+});
 test("intentional timeout", async () => {
   render(createElement("button", null, "mounted before timeout"));
   await Bun.sleep(100);
@@ -132,15 +200,17 @@ test("same file after timeout", () => {
   console.log("CASCADE_SAME_FILE");
 });
 `,
-      `import { test } from "bun:test";
+        `import { test } from "bun:test";
 test("later file after timeout", () => {
   console.log("CASCADE_LATER_FILE");
 });
 `,
-    ]);
-    expect(exitCode, output).toBe(1);
-    expect(output).toContain("this test timed out after 20ms");
-    expect(output).not.toContain("CASCADE_SAME_FILE");
-    expect(output).not.toContain("CASCADE_LATER_FILE");
+      ],
+    );
+    expect(exitCode, stdout + stderr).toBe(1);
+    expect(stdout, stderr).toMatch(/^DIRTY_DOM_SET\r?\nFRESH_DOM_CHECKED\r?$/m);
+    expect(stderr).toContain("this test timed out after 20ms");
+    expect(stdout).not.toContain("CASCADE_SAME_FILE");
+    expect(stdout).not.toContain("CASCADE_LATER_FILE");
   });
 });

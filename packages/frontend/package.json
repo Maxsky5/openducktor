@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --pass-with-no-tests --timeout 1000 --isolate --bail=1",
+    "test": "bun test --only-failures --timeout 1000 --bail=1",
     "lint": "oxlint -c ../../.oxlintrc.json src"
   },
   "dependencies": {

@@ -12,7 +12,7 @@
   "scripts": {
     "build": "bun run scripts/build-native.ts",
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --timeout 5000",
+    "test": "bun test --only-failures --timeout 5000",
     "lint": "oxlint -c ../../.oxlintrc.json src scripts",
     "lint:rust": "cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked"
   },

@@ -13,7 +13,7 @@
     "build": "bun run build:page && expo export --platform ios --platform android --output-dir dist",
     "build:page": "bun run scripts/build-isolated-page.ts",
     "typecheck": "bun check -p tsconfig.json && bun check -p tsconfig.test.json && bun check -p tsconfig.native-tests.json",
-    "test": "bun test --parallel --pass-with-no-tests --timeout 1000 ./src ./plugins",
+    "test": "bun test --only-failures --parallel --timeout 1000",
     "test:native-layout": "bun run native-tests/layout-smoke.test.ts",
     "lint": "oxlint -c ../../.oxlintrc.json src modules plugins scripts native-tests index.ts app.config.ts"
   },
