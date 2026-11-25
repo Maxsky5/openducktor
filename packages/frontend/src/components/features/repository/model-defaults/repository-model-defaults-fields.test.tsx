@@ -90,13 +90,7 @@ const renderNamingFields = ({
     />,
   );
 
-const namingCard = (): HTMLElement => {
-  // The heading sits in the title group, inside the header row of the card.
-  const card = screen.getByRole("heading", { name: "Naming model" }).parentElement?.parentElement
-    ?.parentElement;
-  if (!card) throw new Error("Naming model card is missing");
-  return card;
-};
+const namingCard = (): HTMLElement => screen.getByRole("region", { name: "Naming model" });
 
 test("settings show a naming model with no agent profile or speed, and creation hides it", async () => {
   const creation = renderNamingFields({ presentation: "creation" });
@@ -260,8 +254,7 @@ test("role model pickers show only runtimes that support that role", async () =>
     />,
   );
 
-  const qaCard = screen.getByText("QA").parentElement?.parentElement;
-  if (!qaCard) throw new Error("QA card is missing");
+  const qaCard = screen.getByLabelText("QA");
   await act(async () => {
     fireEvent.click(within(qaCard).getByRole("button", { name: "Select model, Select a model" }));
   });
@@ -374,4 +367,29 @@ test("emits the speed reset notice when switching a role default through a reduc
   } finally {
     infoSpy.mockRestore();
   }
+});
+
+test("shows workspace default inheritance hints on empty roles and disables their Clear button", () => {
+  renderNamingFields({
+    presentation: "creation",
+    selectedRepoConfig: {
+      defaultModel: {
+        runtimeKind: "codex",
+        providerId: "openai",
+        modelId: "codex-model",
+        variant: "high",
+        profileId: "",
+      },
+      agentDefaults: {},
+    },
+  });
+
+  const qaRow = screen.getByLabelText("QA");
+  expect(within(qaRow).getByText("Uses workspace default")).toBeTruthy();
+  expect(
+    within(qaRow).getByRole("button", { name: "Select model, Use workspace default" }),
+  ).toBeTruthy();
+  expect(within(qaRow).getByRole<HTMLButtonElement>("button", { name: "Clear" }).disabled).toBe(
+    true,
+  );
 });

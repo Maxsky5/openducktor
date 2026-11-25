@@ -1,7 +1,10 @@
 import type { AgentModelFavorite, RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import { useMemo, useState } from "react";
+import { filterRuntimeDefinitionsForDefaultSelection } from "@openducktor/frontend-core/lib/agent-runtime";
+import { useWorkflowSettings } from "@openducktor/frontend-core/queries/workflow-settings";
 import type { ModelPickerFavoriteState } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
+import { resolveRecommendedDefaultModel } from "@openducktor/frontend-core/sessions/model-selection/recommended-default-model";
 import { useRuntimeAvailabilityContext } from "@openducktor/frontend-core/app-state/app-state-contexts";
 import { useAgentModelFavorites } from "@openducktor/frontend-core/sessions/model-selection/use-agent-model-favorites";
 import {
@@ -10,6 +13,7 @@ import {
 } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { useHostClient } from "@openducktor/frontend-core/connection/client-connection-react";
+import type { WorkspaceCreationController } from "./use-workspace-creation";
 
 export type WorkspaceCreationModelSurface = {
   availableRuntimeDefinitions: RuntimeDescriptor[];
@@ -88,5 +92,62 @@ export function useWorkspaceCreationModels({
         setRetryError(errorMessage(cause));
       }
     },
+  };
+}
+
+export function useWorkspaceCreationWithRecommendedDefault(
+  controller: WorkspaceCreationController,
+  modelSurface?: WorkspaceCreationModelSurface,
+): WorkspaceCreationController {
+  const workflows = useWorkflowSettings();
+  const defaultRuntimeDefinitions = useMemo(
+    () =>
+      modelSurface
+        ? filterRuntimeDefinitionsForDefaultSelection(
+            modelSurface.availableRuntimeDefinitions,
+            workflows.data?.roles.map(({ definition }) => definition) ?? [],
+          )
+        : [],
+    [modelSurface, workflows.data],
+  );
+  const recommendedDefault = useMemo(
+    () =>
+      modelSurface
+        ? resolveRecommendedDefaultModel({
+            runtimeDefinitions: defaultRuntimeDefinitions,
+            catalogResources: modelSurface.catalogResources,
+          })
+        : null,
+    [defaultRuntimeDefinitions, modelSurface],
+  );
+  const shouldApplyRecommended =
+    !controller.defaultModelTouched &&
+    !controller.modelDraft.defaultModel &&
+    recommendedDefault !== null;
+
+  const effectiveModelDraft = useMemo(
+    () =>
+      shouldApplyRecommended
+        ? { ...controller.modelDraft, defaultModel: { ...recommendedDefault.selection } }
+        : controller.modelDraft,
+    [controller.modelDraft, recommendedDefault, shouldApplyRecommended],
+  );
+
+  if (!shouldApplyRecommended) {
+    return controller;
+  }
+
+  return {
+    ...controller,
+    modelDraft: effectiveModelDraft,
+    updateModelDraft: (updater) =>
+      controller.updateModelDraft((current) =>
+        updater(
+          !current.defaultModel
+            ? { ...current, defaultModel: { ...recommendedDefault.selection } }
+            : current,
+        ),
+      ),
+    submit: () => controller.submit(recommendedDefault.selection),
   };
 }

@@ -12,7 +12,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { HostClient } from "@openducktor/host-client";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryProvider } from "@/test-utils/query-provider";
 import {
@@ -29,7 +29,10 @@ import {
 } from "./workspace-creation-form";
 import { getModelWarnings } from "./workspace-model-warnings";
 import { useWorkspaceCreation } from "./use-workspace-creation";
-import type { WorkspaceCreationModelSurface } from "./use-workspace-creation-models";
+import {
+  type WorkspaceCreationModelSurface,
+  useWorkspaceCreationWithRecommendedDefault,
+} from "./use-workspace-creation-models";
 
 const views = new Set<ReturnType<typeof render>>();
 afterEach(() => {
@@ -107,11 +110,12 @@ function CreationHarness({
   onSuccess?: () => void;
   modelSurface?: WorkspaceCreationModelSurface;
 }): ReactElement {
-  const creation = useWorkspaceCreation({
+  const rawCreation = useWorkspaceCreation({
     workspaces: [],
     commitWorkspaceProviderSetup: commit,
     onSuccess,
   });
+  const creation = useWorkspaceCreationWithRecommendedDefault(rawCreation, modelSurface);
   return (
     <>
       <button type="button" onClick={() => void creation.confirmRepo("/repo")}>
@@ -707,7 +711,7 @@ describe("workspace creation", () => {
     await skipProvider();
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "Renamed" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
-    expect(screen.getAllByText("Runtime and model")).toHaveLength(5);
+    expect(screen.getAllByRole("button", { name: "Select model, Select a model" })).toHaveLength(5);
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByLabelText<HTMLInputElement>("Workspace name").value).toBe("Renamed");
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
@@ -754,6 +758,87 @@ describe("workspace creation", () => {
       defaultModel: { runtimeKind: "codex", providerId: "openai", modelId: "o3", variant: "low" },
     });
     expect(commit.mock.calls[0]?.[0].defaultModel).not.toHaveProperty("profileId");
+  });
+
+  test("proposes the latest Claude Opus in high effort on creation and preserves an explicit Clear across Back and Next", async () => {
+    const claudeCatalog: AgentModelCatalog = {
+      runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "claude-opus-4-8",
+          providerId: "claude",
+          providerName: "Claude",
+          modelId: "claude-opus-4-8",
+          modelName: "Opus 4.8",
+          variants: ["low", "medium", "high"],
+        },
+        {
+          id: "claude-opus-5-5",
+          providerId: "claude",
+          providerName: "Claude",
+          modelId: "claude-opus-5-5",
+          modelName: "Opus 5.5",
+          aliases: ["opus"],
+          variants: ["low", "medium", "high", "max"],
+        },
+      ],
+      defaultModelsByProvider: { claude: "claude-opus-5-5" },
+    };
+    const claudeSurface: WorkspaceCreationModelSurface = {
+      ...surface,
+      availableRuntimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR, CODEX_RUNTIME_DESCRIPTOR],
+      catalogResources: [
+        {
+          runtimeKind: "claude",
+          catalog: claudeCatalog,
+          isLoading: false,
+          unavailableReason: null,
+          isEnabled: true,
+          error: null,
+          retry: async () => {},
+        },
+        ...surface.catalogResources,
+      ],
+      getCatalogForRuntime: (kind) => (kind === "claude" ? claudeCatalog : catalog),
+    };
+    const commit = mock(async (input) => outcome(workspaceProviderSetupCommitSchema.parse(input)));
+    const onSuccess = mock(() => {});
+
+    renderHarness({ commit, onSuccess, modelSurface: claudeSurface });
+    await advanceToModels();
+
+    // Auto-proposed latest Claude Opus in high effort.
+    expect(
+      await screen.findByRole("button", { name: /Select model, Claude, Opus 5.5, Effort high/ }),
+    ).toBeTruthy();
+    expect(screen.getByText("Recommended")).toBeTruthy();
+
+    // Clearing removes the proposal and stays cleared across Back -> Continue to models.
+    const defaultSection = screen.getByRole("region", { name: "Default model" });
+    fireEvent.click(within(defaultSection).getByRole("button", { name: "Clear" }));
+    expect(
+      screen.getByRole("button", { name: "Use recommended: Claude · Opus 5.5 · high" }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to models" }));
+    await screen.findByRole("button", { name: "Open repository" });
+    expect(
+      screen.getByRole("button", { name: "Use recommended: Claude · Opus 5.5 · high" }),
+    ).toBeTruthy();
+
+    // Re-applying via the suggestion submits Claude Opus 5.5 in high effort.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended: Claude · Opus 5.5 · high" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(commit.mock.calls[0]?.[0].defaultModel).toEqual({
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "claude-opus-5-5",
+      variant: "high",
+    });
   });
   test("retains a partial workspace and retries the same setup", async () => {
     let calls = 0;

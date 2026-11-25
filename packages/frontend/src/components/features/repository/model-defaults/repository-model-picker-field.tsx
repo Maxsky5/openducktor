@@ -12,7 +12,6 @@ import {
   type ModelPickerValue,
   selectableModelPickerCatalog,
 } from "@openducktor/frontend-core/sessions/model-selection/model-picker-model";
-import { Label } from "@/components/ui/label";
 import type { RuntimeModelCatalogQueryResource } from "@openducktor/frontend-core/queries/use-runtime-model-catalogs";
 
 type RepositoryModelPickerFieldProps = {
@@ -23,6 +22,7 @@ type RepositoryModelPickerFieldProps = {
   options: ModelPickerOptionsPane;
   isReadOnly: boolean;
   isLoadingCatalog: boolean;
+  placeholder?: string;
   onSelect: (value: ModelPickerValue, targetCatalog: AgentModelCatalog) => void;
 };
 
@@ -34,6 +34,7 @@ export function RepositoryModelPickerField({
   options,
   isReadOnly,
   isLoadingCatalog,
+  placeholder = "Select a model",
   onSelect,
 }: RepositoryModelPickerFieldProps): ReactElement {
   const runtimes = useMemo(
@@ -42,32 +43,29 @@ export function RepositoryModelPickerField({
   );
 
   return (
-    <div className="grid min-w-0 gap-1">
-      <Label className="text-xs">Runtime and model</Label>
-      <ModelPicker
-        triggerVariant="form"
-        runtimes={runtimes}
-        value={value}
-        favoriteState={favoriteState}
-        options={options}
-        selectionPolicy={
-          isReadOnly
-            ? { kind: "read_only", reason: "Settings are being saved or loaded." }
-            : { kind: "editable" }
+    <ModelPicker
+      triggerVariant="form"
+      runtimes={runtimes}
+      value={value}
+      favoriteState={favoriteState}
+      options={options}
+      selectionPolicy={
+        isReadOnly
+          ? { kind: "read_only", reason: "Settings are being saved or loaded." }
+          : { kind: "editable" }
+      }
+      placeholder={isLoadingCatalog ? "Loading models…" : placeholder}
+      onValueChange={(selectedValue) => {
+        const targetRuntime = runtimes.find(
+          (candidate) => candidate.descriptor.kind === selectedValue.runtimeKind,
+        );
+        const catalog = selectableModelPickerCatalog(targetRuntime?.resource);
+        if (!catalog) {
+          return;
         }
-        placeholder={isLoadingCatalog ? "Loading models…" : "Select a model"}
-        onValueChange={(selectedValue) => {
-          const targetRuntime = runtimes.find(
-            (candidate) => candidate.descriptor.kind === selectedValue.runtimeKind,
-          );
-          const catalog = selectableModelPickerCatalog(targetRuntime?.resource);
-          if (!catalog) {
-            return;
-          }
-          onSelect(selectedValue, catalog);
-        }}
-      />
-    </div>
+        onSelect(selectedValue, catalog);
+      }}
+    />
   );
 }
 
