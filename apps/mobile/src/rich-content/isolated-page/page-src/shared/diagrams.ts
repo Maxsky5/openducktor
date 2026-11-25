@@ -31,8 +31,8 @@ const HUES = {
     "--diagram-violet": "oklch(0.606 0.25 292.717)",
     "--diagram-lime": "oklch(0.648 0.2 131.684)",
     "--diagram-fill-mix": "15%",
-    "--diagram-line-mix": "62%",
-    "--diagram-text-mix": "58%",
+    "--diagram-border-mix": "66%",
+    "--diagram-text-mix": "35%",
     "--diagram-solid-mix": "85%",
     "--diagram-event-opacity": "0.1",
     "--diagram-node-base": "white",
@@ -52,8 +52,8 @@ const HUES = {
     "--diagram-violet": "oklch(0.702 0.183 293.541)",
     "--diagram-lime": "oklch(0.841 0.238 128.85)",
     "--diagram-fill-mix": "20%",
-    "--diagram-line-mix": "70%",
-    "--diagram-text-mix": "30%",
+    "--diagram-border-mix": "66%",
+    "--diagram-text-mix": "25%",
     "--diagram-solid-mix": "100%",
     "--diagram-event-opacity": "0.14",
     "--diagram-node-base": "var(--pele-bg)",
@@ -73,7 +73,7 @@ const diagramColors = ({ colors, theme }: BlockRenderMessage) => ({
   "--pele-fg-on-light": "oklch(0.21 0.034 264.665)",
   "--pele-fg-on-dark": "oklch(0.984 0.003 247.858)",
   "--pele-muted": colors.secondaryLabel,
-  "--pele-line": `color-mix(in oklab, ${HUES[theme]["--diagram-indigo"]} 25%, ${colors.secondaryLabel})`,
+  "--pele-line": `color-mix(in oklab, ${colors.foreground} 75%, ${colors.background})`,
   "--pele-surface": colors.codeBackground,
   "--pele-surface-alt": colors.fill,
   "--pele-border": colors.separator,
@@ -106,7 +106,7 @@ const THEME_STYLE = `<style>
   --tint-base: var(--diagram-node-base);
   --_s: color-mix(in oklab, var(--hue) var(--diagram-fill-mix), var(--tint-base));
   --_a: var(--_s);
-  --_b: color-mix(in oklab, var(--hue) var(--diagram-line-mix), var(--pele-bg));
+  --_b: color-mix(in oklab, var(--hue) var(--diagram-border-mix), var(--pele-fg));
   --_c: var(--hue);
 }
 :is(.pele-flowchart, .pele-state, .pele-sequence, .pele-class, .pele-er, .pele-gantt) :is(.pele-node, .pele-note, .pele-task) .pele-label,
@@ -134,20 +134,18 @@ const THEME_STYLE = `<style>
 .pele-frame > rect:has(+ .pele-frame-label) { fill: none; }
 .pele-cluster-label, .pele-frame-label, .pele-frame-kind { fill: color-mix(in oklab, var(--hue) 66%, var(--pele-fg)); font-weight: 600; }
 .pele .pele-note rect { fill: var(--_s); stroke: var(--_b); }
-.pele-sequence > * { --_l: color-mix(in oklab, var(--pele-fg) 78%, var(--pele-bg)); }
 .pele.pele-sequence .pele-hue-0 { --hue: var(--diagram-fuchsia); --tint-base: var(--diagram-warm-base); }
 .pele.pele-sequence .pele-hue-1 { --hue: var(--diagram-emerald); }
 .pele.pele-sequence .pele-hue-2 { --hue: var(--diagram-amber); --tint-base: var(--diagram-warm-base); }
 .pele.pele-sequence .pele-hue-3 { --hue: var(--diagram-sky); }
 .pele.pele-sequence .pele-hue-4 { --hue: var(--diagram-rose); --tint-base: var(--diagram-warm-base); }
 .pele.pele-sequence .pele-hue-5 { --hue: var(--diagram-lime); }
-.pele.pele-sequence :is(.pele-actor, .pele-lifeline, .pele-activation) { --_b: color-mix(in oklab, var(--hue) 66%, var(--pele-fg)); }
+.pele.pele-sequence :is(.pele-lifeline, .pele-activation) { --_b: color-mix(in oklab, var(--hue) var(--diagram-border-mix), var(--pele-fg)); }
 .pele.pele-sequence .pele-note { --_s: color-mix(in oklab, var(--pele-fg) 5%, var(--diagram-node-base)); --_b: color-mix(in oklab, var(--pele-fg) 30%, var(--pele-bg)); }
 .pele.pele-sequence .pele-note .pele-label { fill: var(--pele-fg); }
 .pele.pele-sequence :is(.pele-edge-label text, .pele-frame-label) { paint-order: stroke; stroke: var(--pele-bg); stroke-width: 3px; stroke-linejoin: round; }
 .pele.pele-sequence .pele-activation { fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) * 1.6), var(--diagram-node-base)); stroke: var(--_b); }
 .pele.pele-sequence .pele-actor .pele-label { fill: var(--pele-fg); }
-.pele.pele-sequence .pele-edge-label { fill: color-mix(in oklab, var(--pele-fg) 90%, var(--pele-muted)); }
 .pele-sequence-number > rect { fill: var(--pele-fg); }
 .pele-sequence [style*="--author-fill"] { fill: oklch(from var(--author-fill) var(--diagram-author-l) var(--diagram-author-c) h / var(--diagram-author-alpha)); }
 .pele-sequence .pele-message { stroke: var(--_l); }
@@ -194,15 +192,15 @@ const THEME_STYLE = `<style>
 .pele-journey .pele-grid { stroke: var(--diagram-rule); }
 .pele-journey .pele-section > rect { fill: color-mix(in oklab, var(--diagram-indigo) 26%, var(--pele-bg)); stroke: none; }
 .pele-journey .pele-section > text { fill: color-mix(in oklab, var(--diagram-indigo) var(--diagram-text-mix), var(--pele-fg)); }
-.pele-journey .pele-task { --diagram-line-mix: 45%; }
+.pele-journey .pele-task { --_b: color-mix(in oklab, var(--hue) 45%, var(--pele-bg)); }
 .pele-journey path.pele-edge { stroke-width: 1.5; }
 .pele-node .pele-label { font-weight: 500; }
 .pele-sequence .pele-actor .pele-label { font-weight: 500; }
 .pele-mindmap .pele-root .pele-label { font-weight: 600; }
 .pele-edge path:not(.pele-marker) { stroke-width: 1.5; }
 .pele-edge .pele-marker { stroke: var(--_l); stroke-width: 1.5; stroke-linejoin: round; }
-.pele-edge-label { fill: color-mix(in oklab, var(--pele-fg) 40%, var(--pele-muted)); font-weight: 500; }
-.pele-cardinality { fill: color-mix(in oklab, var(--pele-fg) 40%, var(--pele-muted)); font-weight: 500; paint-order: stroke; stroke: var(--pele-bg); stroke-width: 3px; stroke-linejoin: round; }
+.pele-edge-label { fill: color-mix(in oklab, var(--pele-fg) 88%, var(--pele-muted)); font-weight: 500; }
+.pele-cardinality { fill: color-mix(in oklab, var(--pele-fg) 88%, var(--pele-muted)); font-weight: 500; paint-order: stroke; stroke: var(--pele-bg); stroke-width: 3px; stroke-linejoin: round; }
 .pele-lifeline { stroke: var(--diagram-rule); stroke-dasharray: 2 4; }
 .pele.pele-sequence .pele-lifeline { stroke: var(--_b); stroke-width: 1.5; stroke-dasharray: none; }
 </style>`;

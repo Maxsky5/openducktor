@@ -121,8 +121,9 @@
   --diagram-violet: oklch(0.606 0.25 292.717);
   --diagram-lime: oklch(0.648 0.2 131.684);
   --diagram-fill-mix: 15%;
-  --diagram-line-mix: 62%;
-  --diagram-text-mix: 58%;
+  /* Borders and text move from the hue toward the text color, so they keep contrast. */
+  --diagram-border-mix: 66%;
+  --diagram-text-mix: 35%;
   /* Pie slices mix with white, so their dark labels stay readable. */
   --diagram-solid-mix: 85%;
   --diagram-event-opacity: 0.1;
@@ -149,8 +150,8 @@
   --diagram-violet: oklch(0.702 0.183 293.541);
   --diagram-lime: oklch(0.841 0.238 128.85);
   --diagram-fill-mix: 20%;
-  --diagram-line-mix: 70%;
-  --diagram-text-mix: 30%;
+  --diagram-border-mix: 66%;
+  --diagram-text-mix: 25%;
   --diagram-solid-mix: 100%;
   --diagram-event-opacity: 0.14;
   /* Authors pick sequence colors for a light page, so the dark theme keeps only their hue. */
@@ -171,7 +172,7 @@
   --pele-fg-on-light: var(--diagram-on-solid);
   --pele-fg-on-dark: oklch(0.984 0.003 247.858);
   --pele-muted: var(--muted-foreground);
-  --pele-line: color-mix(in oklab, var(--diagram-indigo) 25%, var(--muted-foreground));
+  --pele-line: color-mix(in oklab, var(--foreground) 75%, var(--diagram-canvas));
   --pele-surface: var(--diagram-surface);
   --pele-surface-alt: var(--diagram-surface-alt);
   --pele-border: var(--input);
@@ -199,7 +200,7 @@
   --tint-base: var(--diagram-node-base);
   --_s: color-mix(in oklab, var(--hue) var(--diagram-fill-mix), var(--tint-base));
   --_a: var(--_s);
-  --_b: color-mix(in oklab, var(--hue) var(--diagram-line-mix), var(--diagram-canvas));
+  --_b: color-mix(in oklab, var(--hue) var(--diagram-border-mix), var(--foreground));
   --_c: var(--hue);
 }
 
@@ -327,10 +328,6 @@
  * stays for blocks. Messages, their labels, the step numbers, and the notes stay near the text
  * color, so they read on every lifeline and belong to no participant.
  */
-.pele.pele-sequence {
-  --pele-line: color-mix(in oklab, var(--foreground) 78%, var(--diagram-canvas));
-}
-
 .pele.pele-sequence .pele-hue-0 {
   --hue: var(--diagram-fuchsia);
   --tint-base: var(--diagram-warm-base);
@@ -359,8 +356,8 @@
 }
 
 /* The lines of a participant move from its hue toward the text color, so they keep contrast. */
-.pele.pele-sequence :is(.pele-actor, .pele-lifeline, .pele-activation) {
-  --_b: color-mix(in oklab, var(--hue) 66%, var(--foreground));
+.pele.pele-sequence :is(.pele-lifeline, .pele-activation) {
+  --_b: color-mix(in oklab, var(--hue) var(--diagram-border-mix), var(--foreground));
 }
 
 .pele.pele-sequence .pele-lifeline {
@@ -397,10 +394,6 @@
 
 .pele.pele-sequence .pele-actor .pele-label {
   fill: var(--foreground);
-}
-
-.pele.pele-sequence .pele-edge-label {
-  fill: color-mix(in oklab, var(--foreground) 90%, var(--muted-foreground));
 }
 
 .pele .pele-sequence-number > rect {
@@ -605,7 +598,7 @@
 }
 
 .pele-journey .pele-task {
-  --diagram-line-mix: 45%;
+  --_b: color-mix(in oklab, var(--hue) 45%, var(--diagram-canvas));
 }
 
 .pele-journey path.pele-edge {
@@ -636,13 +629,13 @@
 }
 
 .pele .pele-edge-label {
-  fill: color-mix(in oklab, var(--foreground) 40%, var(--muted-foreground));
+  fill: color-mix(in oklab, var(--foreground) 88%, var(--muted-foreground));
   font-weight: 500;
 }
 
 /* Class multiplicities sit at the line ends. A canvas halo keeps the lines off their text. */
 .pele .pele-cardinality {
-  fill: color-mix(in oklab, var(--foreground) 40%, var(--muted-foreground));
+  fill: color-mix(in oklab, var(--foreground) 88%, var(--muted-foreground));
   font-weight: 500;
   paint-order: stroke;
   stroke: var(--pele-bg);
