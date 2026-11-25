@@ -108,7 +108,7 @@ A floating window stays over the app while the user works on something else, suc
 - A run folds and opens like an accordion with `CssPresenceReveal` and its `tool-run-reveal` motion.
 - Each run is one row of the row window: its first row, which shows the whole run. `buildToolRunWindowRows` in `agent-chat-tool-run-layout.ts` gives these rows to the window. A new call, a fold, or a page of earlier calls changes only the height of that row, as a streamed message does. Do not change the row window for tool runs.
 - A press on a run control stops the transcript from following its end, so scroll anchoring keeps the run where the reader pressed it.
-- Rows that a live session adds come in with a short fade and rise from `useAgentChatRowEntryMotion`. A new run comes in with its header. A run brings in its later calls itself. Rows of a session load, of loaded history, and of a row window move show at once.
+- Rows that a live session adds come in with short motion from `useAgentChatRowEntryMotion`. When the transcript follows its bottom and overflows, the turns container slides up while entering rows fade in. An open run also slides up as its early calls arrive. While an entry slide runs, streamed content growth extends the slide so earlier rows do not jump. A duration separator inserted before an existing final answer fades in place without moving that answer. User scroll stops the slide at the current visible position, and explicit navigation cancels the slide at once. Rows of a session load, of loaded history, and of a row window move show at once.
 - The mobile transcript shows a run as one list item. Its rules are in the [mobile README](../apps/mobile/README.md#transcript-list).
 
 ## Command palette

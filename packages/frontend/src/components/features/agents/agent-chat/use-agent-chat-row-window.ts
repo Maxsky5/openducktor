@@ -35,6 +35,8 @@ type UseAgentChatRowWindowResult = {
   visibleTurnAnchors: AgentChatTurnAnchor[];
   selectFirstRowWindow: () => void;
   selectLatestRowWindow: () => void;
+  anchorCurrentRowWindow: () => void;
+  followLatestOnAppend: () => void;
   selectRowWindowAround: (rowIndex: number) => void;
   expandRowWindowEnd: () => void;
   rereadRowAnchor: () => void;
@@ -53,6 +55,22 @@ type SessionRowRange = {
   lastRowKey: string | null;
 };
 
+type LatestWindowMode = {
+  kind: "latest";
+  sessionKey: string | null;
+  /** Grown by viewport fill when `AGENT_CHAT_ROW_WINDOW_SIZE` compact rows do not fill the pane. */
+  rowLimit: number;
+};
+
+type AnchoredWindowMode = SessionRowRange & {
+  kind: "anchored";
+  rowCount: number;
+  followOnAppend: boolean;
+  latestRowLimit: number;
+};
+
+type WindowMode = LatestWindowMode | AnchoredWindowMode;
+
 // A mounted row, with its index among the mounted rows and its distance from the viewport top.
 type RowAnchor = {
   rowKey: string;
@@ -70,8 +88,8 @@ type ExpandAfterOptions = {
 
 const MAX_MOUNTED_ROW_COUNT = AGENT_CHAT_ROW_WINDOW_SIZE * 3;
 
-const latestWindowStart = (rowCount: number): number =>
-  Math.max(0, rowCount - AGENT_CHAT_ROW_WINDOW_SIZE);
+const latestWindowStart = (rowCount: number, rowLimit = AGENT_CHAT_ROW_WINDOW_SIZE): number =>
+  Math.max(0, rowCount - rowLimit);
 
 const clampStart = (startRow: number, rowCount: number): number =>
   Math.max(0, Math.min(startRow, rowCount));
@@ -79,10 +97,16 @@ const clampStart = (startRow: number, rowCount: number): number =>
 const clampEnd = (endRowExclusive: number, rowCount: number): number =>
   Math.max(0, Math.min(endRowExclusive, rowCount));
 
-const latestRange = (rowCount: number): RowRange => ({
-  startRow: latestWindowStart(rowCount),
+const latestRange = (rowCount: number, rowLimit = AGENT_CHAT_ROW_WINDOW_SIZE): RowRange => ({
+  startRow: latestWindowStart(rowCount, rowLimit),
   endRowExclusive: rowCount,
 });
+
+const readLatestRowLimit = (mode: WindowMode): number =>
+  mode.kind === "latest" ? mode.rowLimit : mode.latestRowLimit;
+
+const growRowLimit = (rowLimit: number): number =>
+  Math.min(MAX_MOUNTED_ROW_COUNT, rowLimit + AGENT_CHAT_ROW_WINDOW_SIZE);
 
 const firstRange = (rowCount: number): RowRange => ({
   startRow: 0,
@@ -152,6 +176,92 @@ const followRangeRows = (
 const rowCountForRange = (range: RowRange): number =>
   Math.max(0, range.endRowExclusive - range.startRow);
 
+const hasHiddenRowsForRange = (range: RowRange, rowCount: number): boolean =>
+  range.startRow > 0 || range.endRowExclusive < rowCount;
+
+const shouldFollowLatestAppend = (mode: AnchoredWindowMode, rowCount: number): boolean =>
+  mode.followOnAppend && rowCount !== mode.rowCount && mode.range.endRowExclusive === mode.rowCount;
+
+type ResolvedWindowMode = {
+  mode: WindowMode;
+  range: RowRange;
+};
+
+const resolveWindowMode = (
+  mode: WindowMode,
+  displayedSessionKey: string | null,
+  rows: AgentChatTranscriptRow[],
+): ResolvedWindowMode => {
+  if (mode.sessionKey !== displayedSessionKey) {
+    return {
+      mode: {
+        kind: "latest",
+        sessionKey: displayedSessionKey,
+        rowLimit: AGENT_CHAT_ROW_WINDOW_SIZE,
+      },
+      range: latestRange(rows.length),
+    };
+  }
+
+  if (mode.kind === "latest") {
+    return { mode, range: latestRange(rows.length, mode.rowLimit) };
+  }
+
+  if (shouldFollowLatestAppend(mode, rows.length)) {
+    return {
+      mode: {
+        kind: "latest",
+        sessionKey: displayedSessionKey,
+        rowLimit: mode.latestRowLimit,
+      },
+      range: latestRange(rows.length, mode.latestRowLimit),
+    };
+  }
+
+  let nextRange: RowRange;
+  if (rows.length > 0 && mode.range.startRow >= rows.length) {
+    nextRange = latestRange(rows.length, mode.latestRowLimit);
+  } else {
+    const followed = followRangeRows(mode, rows);
+    // Keep every row mounted in a single-window transcript unless history was prepended above it.
+    if (
+      followed.startRow === 0 &&
+      mode.range.endRowExclusive === mode.rowCount &&
+      rows.length <= mode.latestRowLimit
+    ) {
+      nextRange = { startRow: 0, endRowExclusive: rows.length };
+    } else {
+      nextRange = followed;
+    }
+  }
+
+  const clamped = clampRange(nextRange, rows.length);
+  const next = sessionRowRange(displayedSessionKey, clamped, rows);
+  const shouldSyncSingleWindowGrowth =
+    clamped.startRow === 0 &&
+    clamped.endRowExclusive === rows.length &&
+    mode.rowCount !== rows.length;
+  if (
+    !areRangesEqual(mode.range, next.range) ||
+    mode.firstRowKey !== next.firstRowKey ||
+    mode.lastRowKey !== next.lastRowKey ||
+    shouldSyncSingleWindowGrowth
+  ) {
+    return {
+      mode: {
+        kind: "anchored",
+        ...next,
+        rowCount: rows.length,
+        followOnAppend: mode.followOnAppend,
+        latestRowLimit: mode.latestRowLimit,
+      },
+      range: clamped,
+    };
+  }
+
+  return { mode, range: clamped };
+};
+
 const trimRowCount = (range: RowRange): number =>
   Math.max(0, rowCountForRange(range) - MAX_MOUNTED_ROW_COUNT);
 
@@ -195,14 +305,27 @@ export function useAgentChatRowWindow({
   isFollowingLatestWindow,
   messagesContainerRef,
 }: UseAgentChatRowWindowInput): UseAgentChatRowWindowResult {
-  const [sessionRange, setSessionRange] = useState<SessionRowRange>(() =>
-    sessionRowRange(displayedSessionKey, latestRange(rows.length), rows),
+  const [mode, setMode] = useState<WindowMode>(() => ({
+    kind: "latest",
+    sessionKey: displayedSessionKey,
+    rowLimit: AGENT_CHAT_ROW_WINDOW_SIZE,
+  }));
+  const resolved = resolveWindowMode(mode, displayedSessionKey, rows);
+  if (resolved.mode !== mode) {
+    setMode(resolved.mode);
+  }
+
+  const effectiveStartRow = resolved.range.startRow;
+  const effectiveEndRowExclusive = resolved.range.endRowExclusive;
+  const effectiveRange = useMemo<RowRange>(
+    () => ({ startRow: effectiveStartRow, endRowExclusive: effectiveEndRowExclusive }),
+    [effectiveStartRow, effectiveEndRowExclusive],
   );
-  const didSessionChange = sessionRange.sessionKey !== displayedSessionKey;
-  const range = didSessionChange ? latestRange(rows.length) : followRangeRows(sessionRange, rows);
-  const rangeRef = useRef(range);
-  const pendingLatestResetRef = useRef(shouldResetForTranscriptLoad && rows.length === 0);
-  const previousRowsLengthRef = useRef(rows.length);
+  const isFullTranscriptVisible =
+    effectiveStartRow === 0 && effectiveEndRowExclusive === rows.length;
+  const latestInputsRef = useRef({ rows, displayedSessionKey, shouldResetForTranscriptLoad });
+  const modeRef = useRef(resolved.mode);
+  const rangeRef = useRef(effectiveRange);
   // A row that stays mounted while rows mount or unmount above it, to keep it in place.
   const pendingRowAnchorRef = useRef<RowAnchor | null>(null);
   const shouldTrimBottomAfterPrependRef = useRef(false);
@@ -210,46 +333,127 @@ export function useAgentChatRowWindow({
   const lastScrollTopRef = useRef(0);
 
   useLayoutEffect(() => {
-    if (!didSessionChange) {
-      return;
-    }
+    void displayedSessionKey;
+    pendingRowAnchorRef.current = null;
+    shouldTrimBottomAfterPrependRef.current = false;
+    shouldTrimTopAfterAppendRef.current = false;
+  }, [displayedSessionKey]);
 
-    const nextRange = latestRange(rows.length);
-    rangeRef.current = nextRange;
-    pendingLatestResetRef.current = shouldResetForTranscriptLoad && rows.length === 0;
-    previousRowsLengthRef.current = rows.length;
-    setSessionRange(sessionRowRange(displayedSessionKey, nextRange, rows));
-  }, [didSessionChange, displayedSessionKey, rows, shouldResetForTranscriptLoad]);
+  // Keep imperative handlers current after each committed window.
+  useLayoutEffect(() => {
+    latestInputsRef.current = { rows, displayedSessionKey, shouldResetForTranscriptLoad };
+    modeRef.current = resolved.mode;
+    rangeRef.current = effectiveRange;
+  }, [displayedSessionKey, effectiveRange, resolved.mode, rows, shouldResetForTranscriptLoad]);
 
   const setRange = useCallback(
     (nextRange: RowRange) => {
-      const clampedRange = clampRange(nextRange, rows.length);
-      rangeRef.current = clampedRange;
-      const next = sessionRowRange(displayedSessionKey, clampedRange, rows);
-      setSessionRange((current) =>
-        current.sessionKey === next.sessionKey &&
-        areRangesEqual(current.range, next.range) &&
-        current.firstRowKey === next.firstRowKey &&
-        current.lastRowKey === next.lastRowKey
-          ? current
-          : next,
-      );
+      const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
+      const nextClampedRange = clampRange(nextRange, currentRows.length);
+      const next = sessionRowRange(currentSessionKey, nextClampedRange, currentRows);
+      rangeRef.current = nextClampedRange;
+      setMode((current) => {
+        const nextFollowOnAppend =
+          isFollowingLatestWindow() && next.range.endRowExclusive === currentRows.length;
+        const nextLatestRowLimit =
+          current.sessionKey === currentSessionKey
+            ? readLatestRowLimit(current)
+            : AGENT_CHAT_ROW_WINDOW_SIZE;
+        if (
+          current.kind === "anchored" &&
+          current.sessionKey === next.sessionKey &&
+          areRangesEqual(current.range, next.range) &&
+          current.firstRowKey === next.firstRowKey &&
+          current.lastRowKey === next.lastRowKey &&
+          current.rowCount === currentRows.length &&
+          current.followOnAppend === nextFollowOnAppend &&
+          current.latestRowLimit === nextLatestRowLimit
+        ) {
+          return current;
+        }
+        return {
+          kind: "anchored",
+          ...next,
+          rowCount: currentRows.length,
+          followOnAppend: nextFollowOnAppend,
+          latestRowLimit: nextLatestRowLimit,
+        };
+      });
     },
-    [displayedSessionKey, rows],
+    [isFollowingLatestWindow],
   );
 
   const selectFirstRowWindow = useCallback(() => {
-    setRange(firstRange(rows.length));
-  }, [rows.length, setRange]);
+    setRange(firstRange(latestInputsRef.current.rows.length));
+  }, [setRange]);
 
   const selectLatestRowWindow = useCallback(() => {
-    if (shouldResetForTranscriptLoad && rows.length === 0) {
-      pendingLatestResetRef.current = true;
-      return;
-    }
+    const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
+    const rowLimit =
+      modeRef.current.sessionKey === currentSessionKey
+        ? readLatestRowLimit(modeRef.current)
+        : AGENT_CHAT_ROW_WINDOW_SIZE;
+    rangeRef.current = latestRange(currentRows.length, rowLimit);
+    setMode((current) => {
+      const nextRowLimit =
+        current.sessionKey === currentSessionKey
+          ? readLatestRowLimit(current)
+          : AGENT_CHAT_ROW_WINDOW_SIZE;
+      return current.kind === "latest" &&
+        current.sessionKey === currentSessionKey &&
+        current.rowLimit === nextRowLimit
+        ? current
+        : { kind: "latest", sessionKey: currentSessionKey, rowLimit: nextRowLimit };
+    });
+  }, []);
 
-    setRange(latestRange(rows.length));
-  }, [rows.length, setRange, shouldResetForTranscriptLoad]);
+  const anchorCurrentRowWindow = useCallback(() => {
+    const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
+    const currentRange = clampRange(rangeRef.current, currentRows.length);
+    const next = sessionRowRange(currentSessionKey, currentRange, currentRows);
+    setMode((current) => {
+      const nextLatestRowLimit =
+        current.sessionKey === currentSessionKey
+          ? readLatestRowLimit(current)
+          : AGENT_CHAT_ROW_WINDOW_SIZE;
+      if (
+        current.kind === "anchored" &&
+        current.sessionKey === currentSessionKey &&
+        !current.followOnAppend &&
+        areRangesEqual(current.range, next.range) &&
+        current.firstRowKey === next.firstRowKey &&
+        current.lastRowKey === next.lastRowKey &&
+        current.rowCount === currentRows.length &&
+        current.latestRowLimit === nextLatestRowLimit
+      ) {
+        return current;
+      }
+      return {
+        kind: "anchored",
+        ...next,
+        rowCount: currentRows.length,
+        followOnAppend: false,
+        latestRowLimit: nextLatestRowLimit,
+      };
+    });
+  }, []);
+
+  const followLatestOnAppend = useCallback(() => {
+    const { rows: currentRows, displayedSessionKey: currentSessionKey } = latestInputsRef.current;
+    setMode((current) => {
+      if (current.kind !== "anchored" || current.sessionKey !== currentSessionKey) {
+        return current;
+      }
+      if (current.range.endRowExclusive !== currentRows.length || current.followOnAppend) {
+        return current;
+      }
+      return {
+        ...current,
+        rowCount: currentRows.length,
+        followOnAppend: true,
+      };
+    });
+  }, []);
 
   // A jump mounts a full row window with its target near the start. The pending anchor and trims
   // belong to the previous row window, so the jump drops them.
@@ -258,9 +462,9 @@ export function useAgentChatRowWindow({
       pendingRowAnchorRef.current = null;
       shouldTrimBottomAfterPrependRef.current = false;
       shouldTrimTopAfterAppendRef.current = false;
-      setRange(rangeAround(rowIndex, rows.length));
+      setRange(rangeAround(rowIndex, latestInputsRef.current.rows.length));
     },
-    [rows.length, setRange],
+    [setRange],
   );
 
   // Rows that mount or unmount above the viewport move every row below them.
@@ -280,7 +484,7 @@ export function useAgentChatRowWindow({
 
       // A prepend that did not commit yet keeps its anchor, because the rows it adds are not mounted.
       if (!pendingRowAnchorRef.current) {
-        anchorRow(rows[currentRange.startRow]?.key);
+        anchorRow(latestInputsRef.current.rows[currentRange.startRow]?.key);
       }
       shouldTrimBottomAfterPrependRef.current = options?.trimBottomAfterPrepend !== false;
       setRange({
@@ -289,25 +493,26 @@ export function useAgentChatRowWindow({
       });
       return true;
     },
-    [anchorRow, rows, setRange],
+    [anchorRow, setRange],
   );
 
   const expandAfter = useCallback(
     (options?: ExpandAfterOptions) => {
       const currentRange = rangeRef.current;
-      if (currentRange.endRowExclusive >= rows.length) return false;
+      const rowCount = latestInputsRef.current.rows.length;
+      if (currentRange.endRowExclusive >= rowCount) return false;
 
       shouldTrimTopAfterAppendRef.current = options?.trimTopAfterAppend !== false;
       setRange({
         startRow: currentRange.startRow,
         endRowExclusive: Math.min(
-          rows.length,
+          rowCount,
           currentRange.endRowExclusive + AGENT_CHAT_ROW_WINDOW_SIZE,
         ),
       });
       return true;
     },
-    [rows.length, setRange],
+    [setRange],
   );
 
   // Adds rows below without a trim, for a jump target that cannot reach the top yet.
@@ -364,12 +569,29 @@ export function useAgentChatRowWindow({
     if (rowsToTrim <= 0) return;
 
     const startRow = currentRange.startRow + rowsToTrim;
-    anchorRow(rows[startRow]?.key);
+    anchorRow(latestInputsRef.current.rows[startRow]?.key);
     setRange({ startRow, endRowExclusive: currentRange.endRowExclusive });
   });
 
+  const growLatestRowWindow = useCallback(() => {
+    const currentRange = rangeRef.current;
+    if (currentRange.startRow === 0) return false;
+    if (rowCountForRange(currentRange) >= MAX_MOUNTED_ROW_COUNT) return false;
+
+    if (!pendingRowAnchorRef.current) {
+      anchorRow(latestInputsRef.current.rows[currentRange.startRow]?.key);
+    }
+    setMode((current) => {
+      if (current.kind !== "latest") return current;
+      const nextRowLimit = growRowLimit(current.rowLimit);
+      return nextRowLimit === current.rowLimit ? current : { ...current, rowLimit: nextRowLimit };
+    });
+    return true;
+  }, [anchorRow]);
+
   const fillViewport = useEffectEvent(() => {
     const currentRange = rangeRef.current;
+    if (!hasHiddenRowsForRange(currentRange, latestInputsRef.current.rows.length)) return;
     if (rowCountForRange(currentRange) >= MAX_MOUNTED_ROW_COUNT) return;
 
     const container = messagesContainerRef.current;
@@ -380,17 +602,43 @@ export function useAgentChatRowWindow({
     if (scrollHeight - height > CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX) return;
 
     if (currentRange.startRow > 0) {
+      if (modeRef.current.kind === "latest") {
+        growLatestRowWindow();
+        return;
+      }
       expandBefore({ trimBottomAfterPrepend: false });
       return;
     }
 
     expandAfter({ trimTopAfterAppend: false });
   });
+  // Before the latest window crosses its row limit and evicts its first row, expand the limit
+  // whenever evicting that row would underfill the viewport and trigger a 1-frame collapse.
+  const latestRowLimit = resolved.mode.kind === "latest" ? resolved.mode.rowLimit : null;
+  useEffect(() => {
+    if (latestRowLimit === null || latestRowLimit >= MAX_MOUNTED_ROW_COUNT) return;
+    if (rows.length !== latestRowLimit) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const height = container.clientHeight;
+    const scrollHeight = container.scrollHeight;
+    if (height <= 0 || scrollHeight <= 0) return;
+    const firstRowHeight = readMountedRows(container)[0]?.getBoundingClientRect().height ?? 0;
+    if (scrollHeight - firstRowHeight - height > CHAT_TURN_REVEAL_EDGE_THRESHOLD_PX) return;
+
+    setMode((current) => {
+      if (current.kind !== "latest" || current.sessionKey !== displayedSessionKey) return current;
+      const nextRowLimit = growRowLimit(current.rowLimit);
+      return nextRowLimit === current.rowLimit ? current : { ...current, rowLimit: nextRowLimit };
+    });
+  }, [displayedSessionKey, latestRowLimit, messagesContainerRef, rows.length]);
   // The fill reads layout, so it waits for the next frame. A switch then paints the rows it
   // already has, and a streamed row does not lay out the transcript before each paint.
   const fillFrameRef = useRef<number | null>(null);
   const scheduleFillViewport = useEffectEvent(() => {
     if (fillFrameRef.current !== null) return;
+    if (!hasHiddenRowsForRange(rangeRef.current, latestInputsRef.current.rows.length)) return;
     if (rowCountForRange(rangeRef.current) >= MAX_MOUNTED_ROW_COUNT) return;
     fillFrameRef.current = requestAnimationFrame(() => {
       fillFrameRef.current = null;
@@ -405,10 +653,12 @@ export function useAgentChatRowWindow({
       }
     };
   }, []);
-  // Row content can shrink without a range change, so fill again when the rows change.
+  // Row content can shrink without a range change, so fill again when hidden rows remain.
   useEffect(() => {
-    scheduleFillViewport();
-  }, [range, rows]);
+    if (!isFullTranscriptVisible) {
+      scheduleFillViewport();
+    }
+  }, [effectiveEndRowExclusive, effectiveStartRow, isFullTranscriptVisible, rows]);
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -418,41 +668,6 @@ export function useAgentChatRowWindow({
     observer.observe(container);
     return () => observer.disconnect();
   }, [messagesContainerRef]);
-
-  useLayoutEffect(() => {
-    const previousRowsLength = previousRowsLengthRef.current;
-    const previousRange = rangeRef.current;
-    previousRowsLengthRef.current = rows.length;
-
-    if (didSessionChange) {
-      return;
-    }
-
-    if (pendingLatestResetRef.current && rows.length > 0) {
-      pendingLatestResetRef.current = false;
-      setRange(latestRange(rows.length));
-      return;
-    }
-
-    if (
-      rows.length !== previousRowsLength &&
-      isFollowingLatestWindow() &&
-      previousRange.endRowExclusive === previousRowsLength
-    ) {
-      setRange(latestRange(rows.length));
-      return;
-    }
-
-    if (rows.length > 0 && previousRange.startRow >= rows.length) {
-      setRange(latestRange(rows.length));
-      return;
-    }
-
-    if (range !== sessionRange.range) {
-      // Keep the range that followed its moved rows, with the keys of its new edge rows.
-      setRange(range);
-    }
-  }, [didSessionChange, isFollowingLatestWindow, range, rows, sessionRange.range, setRange]);
 
   // A prepend commits after a scroll, so its anchor follows the scroll until then.
   const rereadRowAnchor = useCallback(() => {
@@ -468,7 +683,9 @@ export function useAgentChatRowWindow({
 
     const previousScrollTop = lastScrollTopRef.current;
     lastScrollTopRef.current = container.scrollTop;
-    if (isFollowingLatestWindow() && rangeRef.current.endRowExclusive === rows.length) return;
+    const rowCount = latestInputsRef.current.rows.length;
+    if (!hasHiddenRowsForRange(rangeRef.current, rowCount)) return;
+    if (isFollowingLatestWindow() && rangeRef.current.endRowExclusive === rowCount) return;
 
     const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
     const isScrollingUp = container.scrollTop < previousScrollTop;
@@ -499,20 +716,20 @@ export function useAgentChatRowWindow({
     return () => container.removeEventListener("scroll", onScroll);
   }, [messagesContainerRef]);
 
-  const effectiveRange = clampRange(range, rows.length);
-  const effectiveStartRow = effectiveRange.startRow;
-  const effectiveEndRowExclusive = effectiveRange.endRowExclusive;
   const visibleRows = useMemo(
-    () => rows.slice(effectiveStartRow, effectiveEndRowExclusive),
-    [effectiveEndRowExclusive, effectiveStartRow, rows],
+    () =>
+      isFullTranscriptVisible ? rows : rows.slice(effectiveStartRow, effectiveEndRowExclusive),
+    [effectiveEndRowExclusive, effectiveStartRow, isFullTranscriptVisible, rows],
   );
   const visibleTurnAnchors = useMemo(
     () =>
-      selectTurnAnchorsForWindow(turnAnchors, {
-        startRow: effectiveStartRow,
-        endRowExclusive: effectiveEndRowExclusive,
-      }),
-    [effectiveEndRowExclusive, effectiveStartRow, turnAnchors],
+      isFullTranscriptVisible
+        ? turnAnchors
+        : selectTurnAnchorsForWindow(turnAnchors, {
+            startRow: effectiveStartRow,
+            endRowExclusive: effectiveEndRowExclusive,
+          }),
+    [effectiveEndRowExclusive, effectiveStartRow, isFullTranscriptVisible, turnAnchors],
   );
 
   return {
@@ -522,6 +739,8 @@ export function useAgentChatRowWindow({
     visibleTurnAnchors,
     selectFirstRowWindow,
     selectLatestRowWindow,
+    anchorCurrentRowWindow,
+    followLatestOnAppend,
     selectRowWindowAround,
     expandRowWindowEnd,
     rereadRowAnchor,

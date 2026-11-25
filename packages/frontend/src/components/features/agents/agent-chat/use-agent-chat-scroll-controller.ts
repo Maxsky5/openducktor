@@ -3,12 +3,17 @@ import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "rea
 import { REVEAL_ELEMENT_EVENT } from "@/lib/reveal-element";
 import { CHAT_SCROLL_EDGE_THRESHOLD_PX } from "./agent-chat-window-shared";
 
+export type AgentChatScrollUnpinReason = "user" | "programmatic";
+
 type UseAgentChatScrollControllerInput = {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
   pinnedRef: RefObject<boolean>;
   // Only the latest row window contains the transcript end, so only it can stay pinned.
   canPin: boolean;
+  onUnpin?: ((reason: AgentChatScrollUnpinReason) => void) | undefined;
+  onPin?: (() => void) | undefined;
+  onPinnedResize?: (() => void) | undefined;
 };
 
 type UseAgentChatScrollControllerResult = {
@@ -87,8 +92,14 @@ export function useAgentChatScrollController({
   messagesContentRef,
   pinnedRef,
   canPin,
+  onUnpin,
+  onPin,
+  onPinnedResize,
 }: UseAgentChatScrollControllerInput): UseAgentChatScrollControllerResult {
   const canPinRef = useRef(canPin);
+  const onUnpinRef = useRef(onUnpin);
+  const onPinRef = useRef(onPin);
+  const onPinnedResizeRef = useRef(onPinnedResize);
   const isPointerPressedRef = useRef(false);
   const lastPointerDownTargetRef = useRef<EventTarget | null>(null);
   const lastScrollTopRef = useRef(0);
@@ -101,7 +112,10 @@ export function useAgentChatScrollController({
   // The caller runs its scroll effects after this one, so they use the committed row window.
   useLayoutEffect(() => {
     canPinRef.current = canPin;
-  }, [canPin]);
+    onUnpinRef.current = onUnpin;
+    onPinRef.current = onPin;
+    onPinnedResizeRef.current = onPinnedResize;
+  }, [canPin, onPin, onPinnedResize, onUnpin]);
 
   const refreshEdges = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -120,8 +134,14 @@ export function useAgentChatScrollController({
   }, [messagesContainerRef]);
 
   const setPinned = useCallback(
-    (pinned: boolean) => {
+    (pinned: boolean, reason: AgentChatScrollUnpinReason = "programmatic") => {
+      const wasPinned = pinnedRef.current;
       pinnedRef.current = pinned;
+      if (wasPinned && !pinned) {
+        onUnpinRef.current?.(reason);
+      } else if (!wasPinned && pinned) {
+        onPinRef.current?.();
+      }
       const container = messagesContainerRef.current;
       if (container) {
         // Scroll anchoring keeps the reading position, which only an unpinned transcript needs.
@@ -168,7 +188,7 @@ export function useAgentChatScrollController({
         return;
       }
       if (isUpwardWheel(event) && pinnedRef.current && canScroll(container)) {
-        setPinned(false);
+        setPinned(false, "user");
       }
       container.scrollTop += readWheelDeltaYPx(event, container.clientHeight);
     },
@@ -194,12 +214,12 @@ export function useAgentChatScrollController({
         canScroll(container) &&
         !hasInnerScrollAbove(scrollTarget, container)
       ) {
-        setPinned(false);
+        setPinned(false, "user");
       }
     };
 
     const handleWheel = (event: WheelEvent) => {
-      if (isUpwardWheel(event)) {
+      if (!event.ctrlKey && isUpwardWheel(event)) {
         unpinForUserScroll(event.target);
       }
     };
@@ -226,7 +246,7 @@ export function useAgentChatScrollController({
     };
 
     const handleRevealElement = () => {
-      setPinned(false);
+      setPinned(false, "user");
     };
 
     // Touch input uses touch events, because a touch pan cancels its pointer before it scrolls.
@@ -261,12 +281,12 @@ export function useAgentChatScrollController({
       if (event.target !== container) return;
 
       const hasDraggedUp = isPointerPressedRef.current && hasMovedUpFromBottom();
-      const isMovingUp = container.scrollTop < lastScrollTopRef.current;
+      const isMovingDown = container.scrollTop > lastScrollTopRef.current;
       lastScrollTopRef.current = container.scrollTop;
 
       if (pinnedRef.current) {
         if (hasDraggedUp) {
-          setPinned(false);
+          setPinned(false, "user");
           refreshEdges();
           return;
         }
@@ -274,7 +294,7 @@ export function useAgentChatScrollController({
         return;
       }
 
-      if (!isMovingUp && isAtBottom(container) && canPinRef.current) {
+      if (isMovingDown && isAtBottom(container) && canPinRef.current) {
         pin();
         return;
       }
@@ -302,7 +322,12 @@ export function useAgentChatScrollController({
     ownerDocument.addEventListener("touchcancel", handleDocumentTouchEnd, { passive: true });
 
     // The viewport shrinks without a scroll event when a panel such as the terminal opens.
-    const resizeObserver = new ResizeObserver(syncScrollPosition);
+    const resizeObserver = new ResizeObserver(() => {
+      syncScrollPosition();
+      if (pinnedRef.current && canPinRef.current) {
+        onPinnedResizeRef.current?.();
+      }
+    });
     resizeObserver.observe(container);
     resizeObserver.observe(content);
 

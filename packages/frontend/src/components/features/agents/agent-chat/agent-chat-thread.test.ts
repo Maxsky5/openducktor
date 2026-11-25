@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { act, createElement, createRef } from "react";
+import { act, createElement, createRef, Profiler } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { agentSessionIdentityKey } from "@openducktor/frontend-core/lib/agent-session-identity";
 import { createSessionMessagesState } from "@openducktor/frontend-core/sessions/agent-orchestrator/support/messages";
@@ -8,6 +8,7 @@ import {
   createAnimationFrameTestDriver,
   withAnimationFrameTestDriver,
 } from "@openducktor/frontend-core/test-support/animation-frame-test-driver";
+import { restoreAfterTestBody } from "@/test-utils/restore-after-test-body";
 import { createChatSettingsFixture } from "@/test-utils/shared-test-fixtures";
 import { enableReactActEnvironment } from "@openducktor/frontend-core/test-support/react-act-environment";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -29,6 +30,7 @@ import {
   buildSession,
 } from "@openducktor/frontend-core/test-support/agent-chat-transcript-fixtures";
 import { AgentChatThread as AgentChatThreadComponent } from "./agent-chat-thread";
+import { AgentChatThreads } from "./agent-chat-threads";
 
 enableReactActEnvironment();
 
@@ -1734,6 +1736,221 @@ describe("AgentChatThread", () => {
     ]);
     animate.mockRestore();
     rendered.unmount();
+  });
+
+  test("appending live messages in grouped mode commits once per update and slides open tool runs", async () => {
+    setGlobalWindow(window);
+    const animatedKeyframes: Array<{
+      isRow: boolean;
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null;
+    }> = [];
+    const runAnimation = HTMLElement.prototype.animate;
+    const animate = spyOn(HTMLElement.prototype, "animate").mockImplementation(function (
+      this: HTMLElement,
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      animatedKeyframes.push({ isRow: this.hasAttribute("data-row-key"), keyframes });
+      return runAnimation.call(this, keyframes, options);
+    });
+    const rectSpy = spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.tagName === "LI") return new DOMRect(0, 0, 600, 26);
+        if (this.hasAttribute("data-row-key")) return new DOMRect(0, 0, 600, 56);
+        return new DOMRect(0, 0, 600, 180);
+      },
+    );
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const groupedSettings = createChatSettingsFixture({
+      groupToolCalls: true,
+      collapseFinishedToolCalls: true,
+      showThinkingMessages: false,
+    });
+    const baseModel = buildBaseModel();
+    const bashMessage = (id: string, status: "running" | "completed" = "completed") =>
+      buildMessage("tool", `Tool ${id}`, {
+        id,
+        meta: {
+          kind: "tool",
+          partId: `${id}-part`,
+          callId: `${id}-call`,
+          tool: "bash",
+          toolType: "bash",
+          status,
+          input: { command: `echo ${id}` },
+        },
+      });
+    let commits = 0;
+    let nestedCommits = 0;
+    let version = 1;
+    const renderTree = (
+      messages: ReturnType<typeof buildMessage>[],
+      settings = groupedSettings,
+    ) => {
+      version += 1;
+      const session = {
+        // Keep message object references intact across updates; buildSession clones messages.
+        ...buildSession({
+          externalSessionId: "session-grouped-commits",
+          status: "running",
+        }),
+        messages: createSessionMessagesState("session-grouped-commits", messages, version),
+      };
+      return createElement(
+        Profiler,
+        {
+          id: "grouped-transcript",
+          onRender: (_id: string, phase: "mount" | "update" | "nested-update") => {
+            commits += 1;
+            if (phase === "nested-update") nestedCommits += 1;
+          },
+        },
+        createElement(
+          AgentChatSettingsProvider,
+          { value: settings },
+          createElement(AgentChatThreads, {
+            visitKey: 0,
+            model: completeThreadModel({
+              ...baseModel,
+              messagesContainerRef,
+              transcript: buildSessionTranscript(session),
+            }),
+          }),
+        ),
+      );
+    };
+
+    const messages = [
+      buildMessage("user", "Q1", { id: "u1" }),
+      buildMessage("assistant", "A1", { id: "a1", meta: { kind: "assistant", isFinal: true } }),
+      buildMessage("user", "Q2", { id: "u2" }),
+      buildMessage("assistant", "A2", { id: "a2", meta: { kind: "assistant", isFinal: true } }),
+      buildMessage("user", "Q3", { id: "u3" }),
+      buildMessage("assistant", "Working", {
+        id: "a3",
+        meta: { kind: "assistant", isFinal: false },
+      }),
+    ];
+    const rendered = render(renderTree(messages));
+    const dispose = restoreAfterTestBody(() => {
+      rectSpy.mockRestore();
+      animate.mockRestore();
+      rendered.unmount();
+    });
+
+    try {
+      await act(flush);
+
+      const container = messagesContainerRef.current;
+      if (!container) throw new Error("Expected messages container");
+      let scrollTopValue = 156;
+      Object.defineProperty(container, "clientHeight", { configurable: true, value: 180 });
+      Object.defineProperty(container, "scrollHeight", {
+        configurable: true,
+        get: () =>
+          container.querySelectorAll("[data-row-key]").length * 56 +
+          container.querySelectorAll("li").length * 26,
+      });
+      Object.defineProperty(container, "scrollTop", {
+        configurable: true,
+        get: () => scrollTopValue,
+        set: (value: number) => {
+          const max = Math.max(0, container.scrollHeight - container.clientHeight);
+          scrollTopValue = Math.max(0, Math.min(value, max));
+        },
+      });
+      // Sync initial overflow edges (nearTop=false) before profiling live updates.
+      await act(async () => {
+        container.dispatchEvent(new Event("scroll"));
+        await flush();
+      });
+
+      // Mounting a brand-new ToolRunGroup (with CssPresenceReveal) commits once with zero nested renders.
+      commits = 0;
+      nestedCommits = 0;
+      messages.push(bashMessage("t1", "running"));
+      rendered.rerender(renderTree([...messages]));
+      await act(flush);
+      expect(commits).toBe(1);
+      expect(nestedCommits).toBe(0);
+
+      // Adding call 2 to the open tail run commits once and slides the transcript by the new line height.
+      commits = 0;
+      nestedCommits = 0;
+      animatedKeyframes.length = 0;
+      messages.push(bashMessage("t2", "running"));
+      rendered.rerender(renderTree([...messages]));
+      await act(flush);
+      expect(commits).toBe(1);
+      expect(nestedCommits).toBe(0);
+      expect(container.scrollTop).toBe(container.scrollHeight - container.clientHeight);
+      expect(animatedKeyframes).toContainEqual({
+        isRow: false,
+        keyframes: [{ transform: "translateY(26px)" }, { transform: "none" }],
+      });
+
+      // Toggling groupToolCalls off expands the run into individual rows without animating history.
+      animatedKeyframes.length = 0;
+      const ungroupedSettings = createChatSettingsFixture({
+        groupToolCalls: false,
+        collapseFinishedToolCalls: true,
+        showThinkingMessages: false,
+      });
+      rendered.rerender(renderTree([...messages], ungroupedSettings));
+      await act(flush);
+      expect(animatedKeyframes).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("skips transcript slide and row entry motion when reduced motion is preferred", async () => {
+    setGlobalWindow(window);
+    const animate = spyOn(HTMLElement.prototype, "animate");
+    const originalMatchMedia = window.matchMedia.bind(window);
+    const matchMedia = spyOn(window, "matchMedia").mockImplementation((query: string) => {
+      const list = originalMatchMedia(query);
+      Object.defineProperty(list, "matches", {
+        configurable: true,
+        value: query === "(prefers-reduced-motion: reduce)",
+      });
+      return list;
+    });
+    const messagesContainerRef = createRef<HTMLDivElement>();
+    const sessionOf = (messages: ReturnType<typeof buildMessage>[]) =>
+      createElement(AgentChatThread, {
+        model: {
+          ...buildBaseModel(),
+          messagesContainerRef,
+          transcript: buildSessionTranscript(
+            buildSession({ externalSessionId: "session-reduced-motion", messages }),
+          ),
+        },
+      });
+    const loaded = [
+      buildMessage("user", "Hello", { id: "user-hello" }),
+      buildMessage("assistant", "Hi", { id: "assistant-hi" }),
+    ];
+    const rendered = render(sessionOf(loaded));
+    const dispose = restoreAfterTestBody(() => {
+      matchMedia.mockRestore();
+      animate.mockRestore();
+      rendered.unmount();
+    });
+
+    try {
+      await act(flush);
+      animate.mockClear();
+
+      rendered.rerender(
+        sessionOf([...loaded, buildMessage("assistant", "Next", { id: "assistant-next" })]),
+      );
+      await act(flush);
+
+      expect(animate).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
   });
 
   test("a finished tool run folds once a message follows it, and stays open once opened", async () => {

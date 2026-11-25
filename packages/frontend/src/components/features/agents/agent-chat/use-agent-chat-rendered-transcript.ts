@@ -1,22 +1,30 @@
 import { type RefObject, useLayoutEffect, useMemo, useRef } from "react";
+import { arraysEqual } from "@/lib/arrays-equal";
 import type { AgentChatThreadModel } from "./agent-chat.types";
 import type { AgentChatTranscriptPresentation } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript.types";
 import { useAgentChatSettings } from "./agent-chat-settings-context";
 import { isAssistantMessageStreaming } from "@openducktor/frontend-core/sessions/transcript/agent-chat-streaming";
 import type {
   AgentChatTranscriptRow,
+  AgentChatTurnAnchor,
   AgentChatUserMessageAnchor,
 } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import { useAgentChatTranscriptModel } from "@openducktor/frontend-core/sessions/transcript/use-agent-chat-transcript-model";
 import type { AgentChatTranscriptNavigation } from "./use-agent-chat-transcript-navigation";
 import { useAgentChatWindow } from "./use-agent-chat-window";
-import { useAgentChatRowEntryMotion } from "./use-agent-chat-row-entry-motion";
-import { groupToolRuns } from "@openducktor/frontend-core/sessions/transcript/tool-runs";
+import type { TailOpenToolRun } from "./use-agent-chat-row-entry-motion";
+import {
+  groupToolRuns,
+  NO_TOOL_RUNS,
+  readEarlierCalls,
+} from "@openducktor/frontend-core/sessions/transcript/tool-runs";
 import {
   type AgentChatTurnItem,
   buildToolRunWindowRows,
   buildTurnItems,
   foldUserMessageAnchors,
+  type ToolRunFolds,
+  type ToolRunWindowRows,
 } from "./agent-chat-tool-run-layout";
 import { buildAgentChatTurnAnchors } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
 import {
@@ -41,8 +49,58 @@ export type AgentChatRenderedTurn = {
   rows: AgentChatTranscriptRow[];
   /** The rows of the turn, with the calls of each tool run together. */
   items: AgentChatTurnItem[];
-  isActive: boolean;
   activeStreamingAssistantMessageId: string | null;
+};
+
+const areTurnAnchorsEqual = (
+  left: readonly AgentChatTurnAnchor[],
+  right: readonly AgentChatTurnAnchor[],
+): boolean =>
+  arraysEqual(
+    left,
+    right,
+    (anchor, next) =>
+      anchor.key === next.key &&
+      anchor.startRow === next.startRow &&
+      anchor.endRowExclusive === next.endRowExclusive,
+  );
+
+const areTurnRowsIdentical = (
+  previousRows: readonly AgentChatTranscriptRow[],
+  visibleRows: readonly AgentChatTranscriptRow[],
+  startRow: number,
+  endRowExclusive: number,
+): boolean => {
+  const length = endRowExclusive - startRow;
+  if (previousRows.length !== length) return false;
+  for (let index = 0; index < length; index += 1) {
+    if (previousRows[index] !== visibleRows[startRow + index]) return false;
+  }
+  return true;
+};
+
+const areTurnItemsIdentical = (
+  previousItems: readonly AgentChatTurnItem[],
+  nextItems: readonly AgentChatTurnItem[],
+): boolean =>
+  arraysEqual(previousItems, nextItems, (item, nextItem) => {
+    if (item.kind !== nextItem.kind) return false;
+    return item.kind === "row"
+      ? nextItem.kind === "row" && item.row === nextItem.row
+      : item === nextItem;
+  });
+
+const readTailOpenToolRun = (
+  windowRows: ToolRunWindowRows,
+  folds: ToolRunFolds,
+): TailOpenToolRun | null => {
+  const lastRow = windowRows.rows.at(-1);
+  if (!lastRow) return null;
+  const run = windowRows.runs.get(lastRow.key);
+  if (!run || folds.choices.get(run.runKey) === "folded") return null;
+  const earlier = readEarlierCalls(run.rows.length, folds.keptHidden.get(run.runKey));
+  if (earlier.earlierCallCount > 0) return null;
+  return { runKey: run.runKey, callCount: run.rows.length };
 };
 
 export const getTurnActiveStreamingAssistantMessageId = (
@@ -65,6 +123,63 @@ export const getTurnActiveStreamingAssistantMessageId = (
     : null;
 };
 
+const buildRenderedTurn = ({
+  turn,
+  previous,
+  visibleRows,
+  windowRows,
+  folds,
+  collapseFinishedRuns,
+  sessionStreamingAssistantMessageId,
+}: {
+  turn: AgentChatTurnAnchor;
+  previous: AgentChatRenderedTurn | undefined;
+  visibleRows: readonly AgentChatTranscriptRow[];
+  windowRows: ReturnType<typeof buildToolRunWindowRows>;
+  folds: ReturnType<typeof useToolRunFolds>;
+  collapseFinishedRuns: boolean;
+  sessionStreamingAssistantMessageId: string | null;
+}): AgentChatRenderedTurn => {
+  if (
+    previous &&
+    areTurnRowsIdentical(previous.rows, visibleRows, turn.startRow, turn.endRowExclusive)
+  ) {
+    const activeStreamingAssistantMessageId = getTurnActiveStreamingAssistantMessageId(
+      previous.rows,
+      sessionStreamingAssistantMessageId,
+    );
+    const hasToolRunInTurn =
+      previous.items.some((item) => item.kind === "tool_run") ||
+      previous.rows.some((row) => windowRows.runs.has(row.key));
+    const items = hasToolRunInTurn
+      ? buildTurnItems(previous.rows, windowRows, folds, collapseFinishedRuns)
+      : previous.items;
+    if (
+      previous.activeStreamingAssistantMessageId === activeStreamingAssistantMessageId &&
+      (items === previous.items || areTurnItemsIdentical(previous.items, items))
+    ) {
+      return previous;
+    }
+    return {
+      key: turn.key,
+      rows: previous.rows,
+      items,
+      activeStreamingAssistantMessageId,
+    };
+  }
+
+  const rows = visibleRows.slice(turn.startRow, turn.endRowExclusive);
+  return {
+    key: turn.key,
+    rows,
+    items: buildTurnItems(rows, windowRows, folds, collapseFinishedRuns),
+    activeStreamingAssistantMessageId: getTurnActiveStreamingAssistantMessageId(
+      rows,
+      sessionStreamingAssistantMessageId,
+    ),
+  };
+};
+
 type UseAgentChatRenderedTranscriptArgs = {
   transcript: AgentChatThreadModel["transcript"];
   runtimePresentation: AgentChatThreadModel["runtimePresentation"];
@@ -75,6 +190,8 @@ type UseAgentChatRenderedTranscriptArgs = {
 
 type UseAgentChatRenderedTranscriptResult = {
   messagesContentRef: RefObject<HTMLDivElement | null>;
+  turnsClipRef: RefObject<HTMLDivElement | null>;
+  turnsRef: RefObject<HTMLDivElement | null>;
   renderedTurns: AgentChatRenderedTurn[];
   transcriptNotice: AgentChatTranscriptPresentation["notice"];
   isNearBottom: boolean;
@@ -96,6 +213,8 @@ export function useAgentChatRenderedTranscript({
   const { session, displayedSessionKey, shouldResetWindow, notice } = transcript;
   const showThinkingMessages = useAgentChatSettings()?.showThinkingMessages ?? false;
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
+  const turnsClipRef = useRef<HTMLDivElement | null>(null);
+  const turnsRef = useRef<HTMLDivElement | null>(null);
   const { transcriptState: transcriptModelState, isTranscriptModelMissing } =
     useAgentChatTranscriptModel({
       session,
@@ -116,17 +235,21 @@ export function useAgentChatRenderedTranscript({
   );
   const folds = useToolRunFolds(toolRunFolds);
   const collapseFinishedRuns = useCollapseFinishedToolRuns();
-  const turnAnchors = useMemo(
-    () =>
+  const previousTurnAnchorsRef = useRef<AgentChatTurnAnchor[]>([]);
+  const turnAnchors = useMemo(() => {
+    const next =
       windowRows.layoutKey === ""
         ? transcriptModelState.turnAnchors
-        : buildAgentChatTurnAnchors(windowRows.rows),
-    [windowRows, transcriptModelState.turnAnchors],
-  );
+        : buildAgentChatTurnAnchors(windowRows.rows);
+    return areTurnAnchorsEqual(previousTurnAnchorsRef.current, next)
+      ? previousTurnAnchorsRef.current
+      : next;
+  }, [windowRows, transcriptModelState.turnAnchors]);
   const userMessageAnchors = useMemo(
     () => foldUserMessageAnchors(transcriptModelState.userMessageAnchors, windowRows.layoutKey),
     [transcriptModelState.userMessageAnchors, windowRows.layoutKey],
   );
+  const tailOpenRun = useMemo(() => readTailOpenToolRun(windowRows, folds), [folds, windowRows]);
   const {
     visibleRows,
     visibleTurnAnchors,
@@ -142,48 +265,48 @@ export function useAgentChatRenderedTranscript({
     shouldResetForTranscriptLoad: effectiveShouldResetTranscriptWindow,
     messagesContainerRef,
     messagesContentRef,
+    turnsClipRef,
+    turnsRef,
+    isGrouped: classify !== NO_TOOL_RUNS,
+    tailOpenRun,
   });
-  useAgentChatRowEntryMotion({
-    sessionKey: displayedSessionKey,
-    rows: transcriptModelState.rows,
-    contentRef: messagesContentRef,
-    mountedRows: visibleRows,
-  });
-  const latestUserTurnKey = useMemo(() => {
-    if (!displayedSessionKey || !transcriptModelState.lastUserMessageKey) {
-      return null;
-    }
-
-    return transcriptModelState.lastUserMessageKey;
-  }, [displayedSessionKey, transcriptModelState.lastUserMessageKey]);
+  const previousTurnsRef = useRef<AgentChatRenderedTurn[]>([]);
+  const previousTurnsByKeyRef = useRef<Map<string, AgentChatRenderedTurn>>(new Map());
   const renderedTurns = useMemo<AgentChatRenderedTurn[]>(() => {
     if (visibleRows.length === 0) {
-      return [];
+      return previousTurnsRef.current.length === 0 ? previousTurnsRef.current : [];
     }
 
-    return visibleTurnAnchors.map((turn) => {
-      const rows = visibleRows.slice(turn.startRow, turn.endRowExclusive);
-      const activeStreamingAssistantMessageId = getTurnActiveStreamingAssistantMessageId(
-        rows,
-        transcriptModelState.activeStreamingAssistantMessageId,
-      );
-      return {
-        key: turn.key,
-        rows,
-        items: buildTurnItems(rows, windowRows, folds, collapseFinishedRuns),
-        isActive: turn.key === latestUserTurnKey,
-        activeStreamingAssistantMessageId,
-      };
-    });
+    const previousByKey = previousTurnsByKeyRef.current;
+    const turns = visibleTurnAnchors.map((turn) =>
+      buildRenderedTurn({
+        turn,
+        previous: previousByKey.get(turn.key),
+        visibleRows,
+        windowRows,
+        folds,
+        collapseFinishedRuns,
+        sessionStreamingAssistantMessageId: transcriptModelState.activeStreamingAssistantMessageId,
+      }),
+    );
+    const previousTurns = previousTurnsRef.current;
+    return arraysEqual(previousTurns, turns, (previousTurn, nextTurn) => previousTurn === nextTurn)
+      ? previousTurns
+      : turns;
   }, [
     collapseFinishedRuns,
     folds,
-    latestUserTurnKey,
     visibleRows,
     visibleTurnAnchors,
     windowRows,
     transcriptModelState.activeStreamingAssistantMessageId,
   ]);
+
+  useLayoutEffect(() => {
+    previousTurnAnchorsRef.current = turnAnchors;
+    previousTurnsRef.current = renderedTurns;
+    previousTurnsByKeyRef.current = new Map(renderedTurns.map((turn) => [turn.key, turn]));
+  }, [renderedTurns, turnAnchors]);
 
   // A transcript that follows its end stops following, so the run stays where the reader pressed
   // it. Scroll anchoring then keeps the content in view while the run changes its height.
@@ -213,6 +336,8 @@ export function useAgentChatRenderedTranscript({
 
   return {
     messagesContentRef,
+    turnsClipRef,
+    turnsRef,
     renderedTurns,
     transcriptNotice: effectiveTranscriptNotice,
     isNearBottom,

@@ -93,8 +93,8 @@ export const foldUserMessageAnchors = (
 ): AgentChatUserMessageAnchor[] => {
   if (layoutKey === "") return anchors;
   const folded = foldAnchorRows(anchors, layoutKey);
-  const previous = lastFoldedAnchors.get(anchors);
-  if (previous?.every((anchor, index) => anchor.rowIndex === folded[index]?.rowIndex)) {
+  const previous = lastFoldedAnchors.get(anchors) ?? anchors;
+  if (previous.every((anchor, index) => anchor.rowIndex === folded[index]?.rowIndex)) {
     return previous;
   }
   lastFoldedAnchors.set(anchors, folded);

@@ -58,15 +58,17 @@ export const RegularToolMessage = ({
 
   return (
     <div className="space-y-1 px-1 py-0.5">
-      {details && hasDetails ? (
+      {details ? (
         <button
           type="button"
-          aria-pressed={details.isShown}
+          disabled={!hasDetails}
+          aria-pressed={hasDetails ? details.isShown : undefined}
           className={cn(
-            "relative -mx-2 block w-[calc(100%+1rem)] cursor-pointer rounded-[7px] px-2 text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-            details.isShown ? TOOL_ROW_SELECTED : TOOL_ROW_HOVER,
+            "relative -mx-2 block w-[calc(100%+1rem)] rounded-[7px] px-2 text-left text-inherit outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+            hasDetails && "cursor-pointer",
+            hasDetails && (details.isShown ? TOOL_ROW_SELECTED : TOOL_ROW_HOVER),
           )}
-          onClick={details.onClick}
+          onClick={hasDetails ? details.onClick : undefined}
         >
           {summaryRow}
         </button>

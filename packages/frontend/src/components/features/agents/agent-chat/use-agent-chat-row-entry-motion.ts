@@ -1,104 +1,451 @@
-import { type RefObject, useLayoutEffect, useMemo, useRef } from "react";
+import { type RefObject, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AgentChatTranscriptRow } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
-import { MOTION_EASE_OUT, prefersReducedMotion } from "@/components/ui/motion";
+import { prefersReducedMotion } from "@/components/ui/motion";
+import {
+  createTranscriptSlideController,
+  ENTRY_TIMING,
+  type TranscriptSlideController,
+  type TranscriptSlideElements,
+} from "./agent-chat-transcript-slide-controller";
+import { readMountedRows } from "./agent-chat-window-shared";
 
 /** The rows of the transcript of a session that the hook saw at its last commit. */
 type KnownRows = {
   sessionKey: string | null;
+  isGrouped: boolean;
   count: number;
+  firstKey: string | null;
+  lastKey: string | null;
   keys: Set<string>;
 };
 
-const NO_ROWS: readonly string[] = [];
+export type TailOpenToolRun = {
+  runKey: string;
+  callCount: number;
+};
+
+type EnteringRows = {
+  /**
+   * "append": rows added after the previous final row (autoscroll shifts prior rows up).
+   * "inserted-before-tail": a turn duration separator inserted directly above an already-mounted
+   * final answer (autoscroll keeps that answer stationary, so the turns container must not slide).
+   */
+  mode: "append" | "inserted-before-tail";
+  keys: readonly string[];
+};
+
+type ShownEnteringRows = {
+  entering: EnteringRows;
+  keys: Set<string>;
+};
+
+const NO_ENTERING_ROWS: EnteringRows = { mode: "append", keys: [] };
 
 const ENTRY_KEYFRAMES: Keyframe[] = [
   { opacity: 0, transform: "translateY(6px)" },
   { opacity: 1, transform: "none" },
 ];
-const ENTRY_TIMING: KeyframeAnimationOptions = { duration: 200, easing: MOTION_EASE_OUT };
+const ENTRY_FADE_KEYFRAMES: Keyframe[] = [{ opacity: 0 }, { opacity: 1 }];
 
 /**
  * The rows that a live update added at the end of the transcript. A row that a session load gives,
  * a row of history that the transcript loads above the others, and a row whose message changed its
  * id, such as a sent message that the runtime confirms, are not new.
  */
-const readEnteringRowKeys = (
+const readEnteringRows = (
   known: KnownRows | null,
   sessionKey: string | null,
+  isGrouped: boolean,
   rows: readonly AgentChatTranscriptRow[],
-): readonly string[] => {
-  if (!known || known.sessionKey !== sessionKey || known.count === 0) return NO_ROWS;
-  const entering: string[] = [];
+): EnteringRows => {
+  if (!known || known.sessionKey !== sessionKey || known.isGrouped !== isGrouped) {
+    return NO_ENTERING_ROWS;
+  }
+  if (known.count === 0 || rows.length <= known.count) return NO_ENTERING_ROWS;
+
+  // Pure tail append: previous last row stayed at its exact index.
+  if (rows[known.count - 1]?.key === known.lastKey) {
+    const keys: string[] = [];
+    for (let index = known.count; index < rows.length; index += 1) {
+      const key = rows[index]?.key;
+      if (key !== undefined && !known.keys.has(key)) keys.push(key);
+    }
+    return keys.length > 0 ? { mode: "append", keys } : NO_ENTERING_ROWS;
+  }
+
+  // Do not animate history prepended above the previously known start of the transcript.
+  if (known.firstKey === null) return NO_ENTERING_ROWS;
+  if (rows[0]?.key !== known.firstKey) {
+    // A history prepend shifts the previous first row to a later index.
+    const movedFirstRowForward = rows.some((row, index) => index > 0 && row.key === known.firstKey);
+    if (movedFirstRowForward) return NO_ENTERING_ROWS;
+    // Allow an in-place first-row id replacement (such as confirming an optimistic user message)
+    // while still rejecting a full transcript replacement that shares no prior rows.
+    const preservedPriorTranscript =
+      known.count === 1 || rows.slice(1).some((row) => known.keys.has(row.key));
+    if (!preservedPriorTranscript) return NO_ENTERING_ROWS;
+  }
+
+  // Rows inserted before an already-mounted final row (e.g., turn duration separator or a
+  // timestamp-ordered tool row arriving after the current tail row).
+  if (rows.at(-1)?.key === known.lastKey) {
+    const keys: string[] = [];
+    for (let index = 1; index < rows.length - 1; index += 1) {
+      const key = rows[index]?.key;
+      if (key !== undefined && !known.keys.has(key)) keys.push(key);
+    }
+    return keys.length > 0 ? { mode: "inserted-before-tail", keys } : NO_ENTERING_ROWS;
+  }
+
+  // Tail append coinciding with an in-place id swap earlier in the transcript (e.g., a streaming
+  // assistant message adopting part identity or a confirmed optimistic user message).
+  const appendedKeys: string[] = [];
   for (let index = known.count; index < rows.length; index += 1) {
     const key = rows[index]?.key;
-    if (key !== undefined && !known.keys.has(key)) entering.push(key);
+    if (key !== undefined && !known.keys.has(key)) appendedKeys.push(key);
   }
-  return entering.length > 0 ? entering : NO_ROWS;
+  return appendedKeys.length > 0 ? { mode: "append", keys: appendedKeys } : NO_ENTERING_ROWS;
 };
 
 const rememberRows = (
   known: KnownRows | null,
   sessionKey: string | null,
+  isGrouped: boolean,
   rows: readonly AgentChatTranscriptRow[],
 ): KnownRows => {
   // Rows that the transcript appends follow the known rows. Any other change reads all rows again.
-  if (!known || known.sessionKey !== sessionKey || rows.length < known.count) {
-    return { sessionKey, count: rows.length, keys: new Set(rows.map((row) => row.key)) };
+  if (
+    !known ||
+    known.sessionKey !== sessionKey ||
+    known.isGrouped !== isGrouped ||
+    rows.length < known.count ||
+    (known.count > 0 && rows[known.count - 1]?.key !== known.lastKey)
+  ) {
+    return {
+      sessionKey,
+      isGrouped,
+      count: rows.length,
+      firstKey: rows[0]?.key ?? null,
+      lastKey: rows.at(-1)?.key ?? null,
+      keys: new Set(rows.map((row) => row.key)),
+    };
   }
   for (let index = known.count; index < rows.length; index += 1) {
     const key = rows[index]?.key;
     if (key !== undefined) known.keys.add(key);
   }
+  if (known.firstKey === null) {
+    known.firstKey = rows[0]?.key ?? null;
+  }
   known.count = rows.length;
+  known.lastKey = rows.at(-1)?.key ?? null;
   return known;
 };
 
+const measureVerticalSpan = (elements: readonly HTMLElement[]): number => {
+  const first = elements[0];
+  const last = elements.at(-1);
+  if (!first || !last) return 0;
+  if (first === last) return Math.max(0, first.getBoundingClientRect().height);
+  return Math.max(0, last.getBoundingClientRect().bottom - first.getBoundingClientRect().top);
+};
+
+const collectUnshownEnteringRows = (
+  turns: HTMLElement,
+  entering: EnteringRows,
+  shownRef: RefObject<ShownEnteringRows>,
+): HTMLElement[] => {
+  if (entering.keys.length === 0) return [];
+  if (shownRef.current.entering !== entering) {
+    shownRef.current = { entering, keys: new Set() };
+  }
+  const shown = shownRef.current.keys;
+  const newlyMounted: HTMLElement[] = [];
+  for (const key of entering.keys) {
+    if (shown.has(key)) continue;
+    const row = turns.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(key)}"]`);
+    if (!row) continue;
+    shown.add(key);
+    newlyMounted.push(row);
+  }
+  return newlyMounted;
+};
+
+const collectVisibleRowsAbove = (
+  turns: HTMLElement,
+  container: HTMLDivElement | null,
+  firstInserted: HTMLElement,
+  offsetPx: number,
+): HTMLElement[] => {
+  const mounted = readMountedRows(turns);
+  const stopIndex = mounted.indexOf(firstInserted);
+  if (stopIndex <= 0) return [];
+  const containerTop = container ? container.getBoundingClientRect().top : 0;
+  const rowsAbove: HTMLElement[] = [];
+  for (let index = 0; index < stopIndex; index += 1) {
+    const row = mounted[index];
+    if (!row) continue;
+    // Include rows currently inside the viewport and rows that just moved past the top edge.
+    if (!container || row.getBoundingClientRect().bottom + offsetPx >= containerTop) {
+      rowsAbove.push(row);
+    }
+  }
+  return rowsAbove;
+};
+
+type UseAgentChatRowEntryMotionInput = {
+  sessionKey: string | null;
+  isGrouped: boolean;
+  rows: readonly AgentChatTranscriptRow[];
+  containerRef: RefObject<HTMLDivElement | null>;
+  turnsClipRef: RefObject<HTMLDivElement | null> | undefined;
+  turnsRef: RefObject<HTMLDivElement | null> | undefined;
+  /** The rows in the row window. A new value means that the window mounted other rows. */
+  mountedRows: readonly AgentChatTranscriptRow[];
+  /** The open tool run at the end of the transcript while it grows below the latest-5 cap. */
+  tailOpenRun: TailOpenToolRun | null;
+  isPinned: () => boolean;
+  isLatestWindow: boolean;
+  syncScrollPosition: () => void;
+  slideController?: TranscriptSlideController;
+};
+
 /**
- * Brings the rows that a live update adds in with a short fade and rise, so the transcript does
- * not jump to its new content. A new tool run comes in with its header. The calls that a run gets
- * later are not rows of the transcript window, so the run brings them in itself. The row window
- * can mount a new row one commit later, so each commit looks for the new rows that it mounted.
+ * Brings the rows that a live update adds in with short motion so autoscroll does not snap
+ * existing messages upward. When pinned to an overflowing transcript, slides the turns container
+ * via GPU transform (FLIP) while fading entering rows in; otherwise fades and rises entering rows.
  */
 export function useAgentChatRowEntryMotion({
   sessionKey,
+  isGrouped,
   rows,
-  contentRef,
+  containerRef,
+  turnsClipRef,
+  turnsRef,
   mountedRows,
-}: {
-  sessionKey: string | null;
-  rows: readonly AgentChatTranscriptRow[];
-  contentRef: RefObject<HTMLDivElement | null>;
-  /** The rows in the row window. A new value means that the window mounted other rows. */
-  mountedRows: readonly AgentChatTranscriptRow[];
-}): void {
+  tailOpenRun,
+  isPinned,
+  isLatestWindow,
+  syncScrollPosition,
+  slideController: externalSlideController,
+}: UseAgentChatRowEntryMotionInput): TranscriptSlideController {
+  const [ownSlideController] = useState(createTranscriptSlideController);
+  const slideController = externalSlideController ?? ownSlideController;
   const knownRef = useRef<KnownRows | null>(null);
   // The known rows change only after a commit, so a render reads the rows of the last commit.
   const entering = useMemo(
-    () => readEnteringRowKeys(knownRef.current, sessionKey, rows),
-    [rows, sessionKey],
+    () => readEnteringRows(knownRef.current, sessionKey, isGrouped, rows),
+    [isGrouped, rows, sessionKey],
   );
-  const shownRef = useRef<{ entering: readonly string[]; keys: Set<string> }>({
-    entering: NO_ROWS,
+  const shownRef = useRef<ShownEnteringRows>({
+    entering: NO_ENTERING_ROWS,
     keys: new Set(),
   });
+  const previousTailOpenRunRef = useRef<(TailOpenToolRun & { sessionKey: string | null }) | null>(
+    null,
+  );
+  const previousLastRowRef = useRef<{
+    sessionKey: string | null;
+    isGrouped: boolean;
+    row: AgentChatTranscriptRow | null;
+    heightPx: number | null;
+  } | null>(null);
 
   useLayoutEffect(() => {
-    knownRef.current = rememberRows(knownRef.current, sessionKey, rows);
-  }, [rows, sessionKey]);
+    void sessionKey;
+    void isGrouped;
+    slideController.reset({
+      container: containerRef.current,
+      turnsClip: turnsClipRef?.current ?? null,
+      turns: turnsRef?.current ?? null,
+    });
+  }, [containerRef, isGrouped, sessionKey, slideController, turnsClipRef, turnsRef]);
+
+  useLayoutEffect(
+    () => () => {
+      // Reset refs and active slides when hidden in <Activity> or unmounted so returning to a
+      // retained thread never slides background messages or leaves overflow-y: clip stranded.
+      slideController.reset({
+        container: containerRef.current,
+        turnsClip: turnsClipRef?.current ?? null,
+        turns: turnsRef?.current ?? null,
+      });
+      knownRef.current = null;
+      previousTailOpenRunRef.current = null;
+      previousLastRowRef.current = null;
+    },
+    [containerRef, slideController, turnsClipRef, turnsRef],
+  );
 
   useLayoutEffect(() => {
-    void mountedRows;
-    const content = contentRef.current;
-    if (entering.length === 0 || !content) return;
-    if (prefersReducedMotion()) return;
-    if (shownRef.current.entering !== entering) shownRef.current = { entering, keys: new Set() };
-    const shown = shownRef.current.keys;
-    for (const key of entering) {
-      if (shown.has(key)) continue;
-      const row = content.querySelector(`[data-row-key="${CSS.escape(key)}"]`);
-      if (!row) continue;
-      shown.add(key);
-      row.animate(ENTRY_KEYFRAMES, ENTRY_TIMING);
+    knownRef.current = rememberRows(knownRef.current, sessionKey, isGrouped, rows);
+  }, [isGrouped, rows, sessionKey]);
+
+  useLayoutEffect(() => {
+    const previousTailRun = previousTailOpenRunRef.current;
+    previousTailOpenRunRef.current = tailOpenRun ? { sessionKey, ...tailOpenRun } : null;
+    const previousLastRow = previousLastRowRef.current;
+    const currentLastRow = rows.at(-1) ?? null;
+
+    const elements: TranscriptSlideElements = {
+      container: containerRef.current,
+      turnsClip: turnsClipRef?.current ?? null,
+      turns: turnsRef?.current ?? null,
+    };
+    const firstMountedKey = mountedRows[0]?.key ?? null;
+    const isFollowingTail = isPinned() && isLatestWindow;
+    if (!elements.turns || prefersReducedMotion()) {
+      previousLastRowRef.current = {
+        sessionKey,
+        isGrouped,
+        row: currentLastRow,
+        heightPx: null,
+      };
+      slideController.syncBaseline(elements.container, firstMountedKey);
+      return;
     }
-  }, [contentRef, entering, mountedRows]);
+
+    const currentLastRowHeightPx =
+      isFollowingTail && currentLastRow
+        ? (elements.turns
+            .querySelector<HTMLElement>(`[data-row-key="${CSS.escape(currentLastRow.key)}"]`)
+            ?.getBoundingClientRect().height ?? null)
+        : null;
+    previousLastRowRef.current = {
+      sessionKey,
+      isGrouped,
+      row: currentLastRow,
+      heightPx: currentLastRowHeightPx,
+    };
+
+    const newlyMounted = collectUnshownEnteringRows(elements.turns, entering, shownRef);
+    if (newlyMounted.length > 0) {
+      if (entering.mode === "inserted-before-tail") {
+        // Following the bottom keeps the existing answer below this row stationary. Fade the
+        // inserted row in place, slide only actual tail growth on the turns container, and shift
+        // visible rows above the insertion via GPU transform so they glide upward without snapping.
+        for (const row of newlyMounted) {
+          row.animate(ENTRY_FADE_KEYFRAMES, ENTRY_TIMING);
+        }
+        if (!isFollowingTail) {
+          slideController.syncBaseline(elements.container, firstMountedKey);
+          return;
+        }
+        syncScrollPosition();
+        const insertedSpanPx = measureVerticalSpan(newlyMounted);
+        const netGrowthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
+        const measuredTailGrowthPx =
+          previousLastRow &&
+          previousLastRow.sessionKey === sessionKey &&
+          previousLastRow.isGrouped === isGrouped &&
+          previousLastRow.row !== null &&
+          currentLastRow !== null &&
+          previousLastRow.row.key === currentLastRow.key &&
+          previousLastRow.heightPx !== null &&
+          currentLastRowHeightPx !== null
+            ? Math.max(0, currentLastRowHeightPx - previousLastRow.heightPx)
+            : 0;
+        const rawTailGrowthPx =
+          netGrowthPx !== null ? Math.max(0, netGrowthPx - insertedSpanPx) : measuredTailGrowthPx;
+        const maxScrollTop = elements.container
+          ? Math.max(0, elements.container.scrollHeight - elements.container.clientHeight)
+          : 0;
+        const effectiveScrollDeltaPx =
+          netGrowthPx !== null ? Math.max(0, netGrowthPx) : maxScrollTop;
+        const tailSlidePx = Math.min(
+          rawTailGrowthPx,
+          Math.max(0, effectiveScrollDeltaPx - insertedSpanPx),
+        );
+        const aboveSlidePx = Math.min(
+          insertedSpanPx,
+          Math.max(0, effectiveScrollDeltaPx - tailSlidePx),
+        );
+        const firstInserted = newlyMounted[0];
+        if (firstInserted && aboveSlidePx > 0.5) {
+          slideController.slideRows(
+            collectVisibleRowsAbove(
+              elements.turns,
+              elements.container,
+              firstInserted,
+              aboveSlidePx,
+            ),
+            aboveSlidePx,
+          );
+        }
+        if (tailSlidePx > 0.5) {
+          slideController.slide(elements, tailSlidePx, firstMountedKey);
+        } else {
+          slideController.syncBaseline(elements.container, firstMountedKey);
+        }
+        return;
+      }
+
+      const measuredGrowthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
+      const addedHeightPx =
+        measuredGrowthPx !== null ? measuredGrowthPx : measureVerticalSpan(newlyMounted);
+      const didSlide = isFollowingTail
+        ? slideController.slide(elements, addedHeightPx, firstMountedKey)
+        : false;
+      const rowKeyframes = didSlide ? ENTRY_FADE_KEYFRAMES : ENTRY_KEYFRAMES;
+      let lastRowAnimation: Animation | null = null;
+      for (const row of newlyMounted) {
+        lastRowAnimation = row.animate(rowKeyframes, ENTRY_TIMING);
+      }
+      if (!didSlide && isFollowingTail && lastRowAnimation && !slideController.isSliding()) {
+        slideController.trackPendingEntry(lastRowAnimation, elements.container, firstMountedKey);
+      } else if (!didSlide) {
+        slideController.syncBaseline(elements.container, firstMountedKey);
+      }
+      return;
+    }
+
+    if (!isFollowingTail) {
+      slideController.syncBaseline(elements.container, firstMountedKey);
+      return;
+    }
+
+    const didTailOpenRunGrow = Boolean(
+      tailOpenRun &&
+      previousTailRun &&
+      previousTailRun.sessionKey === sessionKey &&
+      previousTailRun.runKey === tailOpenRun.runKey &&
+      tailOpenRun.callCount > previousTailRun.callCount,
+    );
+    const didTailRowUpdate = Boolean(
+      previousLastRow &&
+      previousLastRow.sessionKey === sessionKey &&
+      previousLastRow.isGrouped === isGrouped &&
+      previousLastRow.row !== null &&
+      currentLastRow !== null &&
+      previousLastRow.row.key === currentLastRow.key &&
+      previousLastRow.row !== currentLastRow,
+    );
+
+    syncScrollPosition();
+    if (didTailOpenRunGrow || didTailRowUpdate || slideController.isActive()) {
+      const growthPx = slideController.readGrowthPx(elements.container, firstMountedKey);
+      if (growthPx !== null && growthPx > 0.5) {
+        slideController.slide(elements, growthPx, firstMountedKey);
+        return;
+      }
+    }
+
+    slideController.syncBaseline(elements.container, firstMountedKey);
+  }, [
+    containerRef,
+    entering,
+    isGrouped,
+    isLatestWindow,
+    isPinned,
+    mountedRows,
+    rows,
+    sessionKey,
+    slideController,
+    syncScrollPosition,
+    tailOpenRun,
+    turnsClipRef,
+    turnsRef,
+  ]);
+
+  return slideController;
 }

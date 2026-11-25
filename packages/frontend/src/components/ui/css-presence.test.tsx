@@ -3,6 +3,32 @@ import { act, render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { CssPresenceList, useCssPresence } from "./css-presence";
 
+test("initial mount renders children once while still animating later additions", () => {
+  let initialItemRenders = 0;
+  function Item({ label, countMount = false }: { label: string; countMount?: boolean }) {
+    if (countMount) initialItemRenders += 1;
+    const { presenceProps } = useCssPresence();
+    return <li {...presenceProps}>{label}</li>;
+  }
+  const initialItem = <Item key="a" label="A" countMount />;
+  const list = (items: ReactElement[]) => (
+    <ul aria-label="Items">
+      <CssPresenceList>{items}</CssPresenceList>
+    </ul>
+  );
+  const view = render(list([initialItem]));
+  try {
+    expect(initialItemRenders).toBe(1);
+    expect(view.getByText("A").getAttribute("data-animate-entry")).toBe("false");
+
+    view.rerender(list([initialItem, <Item key="b" label="B" />]));
+    expect(initialItemRenders).toBe(1);
+    expect(view.getByText("B").getAttribute("data-animate-entry")).toBe("true");
+  } finally {
+    view.unmount();
+  }
+});
+
 test("a list render does not render a child that keeps its element", () => {
   let renders = 0;
   function Item() {

@@ -1,11 +1,19 @@
 import type { RefObject } from "react";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentChatTranscriptRow,
   AgentChatTurnAnchor,
 } from "@openducktor/frontend-core/sessions/transcript/agent-chat-transcript-model";
+import { createTranscriptSlideController } from "./agent-chat-transcript-slide-controller";
+import {
+  type TailOpenToolRun,
+  useAgentChatRowEntryMotion,
+} from "./use-agent-chat-row-entry-motion";
 import { useAgentChatRowWindow } from "./use-agent-chat-row-window";
-import { useAgentChatScrollController } from "./use-agent-chat-scroll-controller";
+import {
+  type AgentChatScrollUnpinReason,
+  useAgentChatScrollController,
+} from "./use-agent-chat-scroll-controller";
 import {
   type AgentChatTranscriptNavigation,
   useAgentChatTranscriptNavigation,
@@ -18,6 +26,10 @@ type UseAgentChatWindowInput = {
   shouldResetForTranscriptLoad: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesContentRef: RefObject<HTMLDivElement | null>;
+  turnsClipRef?: RefObject<HTMLDivElement | null> | undefined;
+  turnsRef?: RefObject<HTMLDivElement | null> | undefined;
+  isGrouped?: boolean | undefined;
+  tailOpenRun?: TailOpenToolRun | null | undefined;
 };
 
 type UseAgentChatWindowResult = {
@@ -38,12 +50,18 @@ export function useAgentChatWindow({
   shouldResetForTranscriptLoad,
   messagesContainerRef,
   messagesContentRef,
+  turnsClipRef,
+  turnsRef,
+  isGrouped = false,
+  tailOpenRun = null,
 }: UseAgentChatWindowInput): UseAgentChatWindowResult {
   const prevSessionKeyRef = useRef<string | null>(null);
   const prevShouldResetForTranscriptLoadRef = useRef(shouldResetForTranscriptLoad);
-  // The window owns the pin state, because the row window reads it and the controller changes it.
+  // The window owns the pin state and slide controller so scroll, windowing, and entry motion stay
+  // unidirectional without ref bridges across hooks.
   const pinnedRef = useRef(true);
   const isPinned = useCallback(() => pinnedRef.current, []);
+  const [slideController] = useState(createTranscriptSlideController);
   const {
     windowStart,
     isLatestWindow,
@@ -51,6 +69,8 @@ export function useAgentChatWindow({
     visibleTurnAnchors,
     selectFirstRowWindow,
     selectLatestRowWindow,
+    anchorCurrentRowWindow,
+    followLatestOnAppend,
     selectRowWindowAround,
     expandRowWindowEnd,
     rereadRowAnchor,
@@ -62,12 +82,36 @@ export function useAgentChatWindow({
     displayedSessionKey,
     messagesContainerRef,
   });
+  const handleUnpin = useCallback(
+    (reason: AgentChatScrollUnpinReason) => {
+      anchorCurrentRowWindow();
+      slideController.cancel(
+        {
+          container: messagesContainerRef.current,
+          turnsClip: turnsClipRef?.current ?? null,
+          turns: turnsRef?.current ?? null,
+        },
+        { preserveVisualPosition: reason === "user" },
+      );
+    },
+    [anchorCurrentRowWindow, messagesContainerRef, slideController, turnsClipRef, turnsRef],
+  );
+  const handlePinnedResize = useCallback(() => {
+    slideController.handlePinnedResize({
+      container: messagesContainerRef.current,
+      turnsClip: turnsClipRef?.current ?? null,
+      turns: turnsRef?.current ?? null,
+    });
+  }, [messagesContainerRef, slideController, turnsClipRef, turnsRef]);
   const { isNearBottom, isNearTop, pin, unpin, syncScrollPosition, scrollByWheel } =
     useAgentChatScrollController({
       messagesContainerRef,
       messagesContentRef,
       pinnedRef,
       canPin: isLatestWindow,
+      onUnpin: handleUnpin,
+      onPin: followLatestOnAppend,
+      onPinnedResize: handlePinnedResize,
     });
   // The scroll position depends on whether the row window is the latest one, so that also counts.
   const committedRowWindowVersion = `${windowStart}:${visibleRows.length}:${isLatestWindow}`;
@@ -102,6 +146,22 @@ export function useAgentChatWindow({
     void committedRowWindowVersion;
     syncScrollPosition();
   }, [committedRowWindowVersion, syncScrollPosition]);
+
+  // Runs right after the committed-window scroll sync so entry slides read the settled scrollTop.
+  useAgentChatRowEntryMotion({
+    sessionKey: displayedSessionKey,
+    isGrouped,
+    rows,
+    containerRef: messagesContainerRef,
+    turnsClipRef,
+    turnsRef,
+    mountedRows: visibleRows,
+    tailOpenRun,
+    isPinned,
+    isLatestWindow,
+    syncScrollPosition,
+    slideController,
+  });
 
   // Scroll anchoring does not apply at scroll offset zero, so the first rows mount at the top.
   const scrollToTop = useCallback(() => {

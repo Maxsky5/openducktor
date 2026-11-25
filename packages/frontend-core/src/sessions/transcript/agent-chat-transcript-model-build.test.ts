@@ -140,4 +140,47 @@ describe("updateTranscriptModelAtOnce", () => {
       updateTranscriptModelAtOnce({ session: next, showThinkingMessages: true, previous }),
     ).toBeNull();
   });
+
+  test("keeps the previous transcript model when hidden thinking messages append or stream at the tail", () => {
+    const initial = [message("user", "user-1"), message("assistant", "assistant-1")];
+    const previous = cached(transcript(initial, 1), false);
+
+    const withThinking = transcript([...initial, message("thinking", "thinking-tail", "a")], 2);
+    const appendedModel = updateTranscriptModelAtOnce({
+      session: withThinking,
+      showThinkingMessages: false,
+      previous,
+    });
+    expect(appendedModel).toBe(previous);
+
+    const cachedWithThinking = cached(withThinking, false);
+    const streamedThinking = transcript(
+      [...initial, message("thinking", "thinking-tail", "ab")],
+      3,
+    );
+    const streamedModel = updateTranscriptModelAtOnce({
+      session: streamedThinking,
+      showThinkingMessages: false,
+      previous: cachedWithThinking,
+    });
+    expect(streamedModel).toBe(cachedWithThinking);
+
+    const withFollowingAssistant = transcript(
+      [
+        ...initial,
+        message("thinking", "thinking-tail", "abc"),
+        message("assistant", "assistant-2", "Answer"),
+      ],
+      4,
+    );
+    const followedModel = updateTranscriptModelAtOnce({
+      session: withFollowingAssistant,
+      showThinkingMessages: false,
+      previous: cachedWithThinking,
+    });
+    expect(followedModel).not.toBeNull();
+    expect(renderedRows(followedModel!)).toEqual(
+      renderedRows(fullModel(withFollowingAssistant, false)),
+    );
+  });
 });

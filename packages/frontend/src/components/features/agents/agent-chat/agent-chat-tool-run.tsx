@@ -367,6 +367,12 @@ type ToolRunLineProps = {
   workingDirectory: string | null;
 };
 
+// `entersWithMotion` is intentionally omitted because `ToolRunLine` captures it once at mount via `useValueAtMount`.
+const areToolRunLinePropsEqual = (previous: ToolRunLineProps, next: ToolRunLineProps): boolean =>
+  previous.row === next.row &&
+  previous.runtimePresentation === next.runtimePresentation &&
+  previous.workingDirectory === next.workingDirectory;
+
 const ToolRunLine = memo(function ToolRunLine({
   row,
   entersWithMotion,
@@ -399,7 +405,7 @@ const ToolRunLine = memo(function ToolRunLine({
       )}
     </li>
   );
-});
+}, areToolRunLinePropsEqual);
 
 const ToolRunLineContent = ({
   row,
@@ -411,9 +417,18 @@ const ToolRunLineContent = ({
   const phase = getToolLifecyclePhase(meta);
   const line = readToolRunCallLine(row, runtimePresentation.presentToolCall, workingDirectory);
   // A part that a new state of the call brings fades in. A line that mounts shows at once.
-  const swapIn = useChangedSinceMount(phase);
+  const displayedSummary =
+    line.kind === "command" ? (line.isPreparing ? "" : line.text) : (line.summary ?? "");
+  const summarySwapClassName = useChangedSinceMount(displayedSummary)
+    ? "tool-line-swap-in"
+    : undefined;
+  const changesSwapClassName = useChangedSinceMount(line.kind === "call" && line.changes !== null)
+    ? "tool-line-swap-in"
+    : undefined;
+  const cancelledSwapClassName = useChangedSinceMount(phase === "cancelled")
+    ? "tool-line-swap-in"
+    : undefined;
   const errorOpens = useChangedSinceMount(line.errorPreview !== null);
-  const swapClassName = swapIn ? "tool-line-swap-in" : undefined;
   // The icon and the timing stay on the line of the call. The error opens under it.
   return (
     <span className="flex min-w-0 flex-1 flex-col">
@@ -422,16 +437,16 @@ const ToolRunLineContent = ({
         <span className="flex min-w-0 flex-1 items-baseline gap-2 leading-5">
           <span className="shrink-0 font-medium">{line.name}</span>
           {line.kind === "command" ? (
-            <ShellCommandText line={line} swapClassName={swapClassName} />
+            <ShellCommandText line={line} swapClassName={summarySwapClassName} />
           ) : (
-            <ToolCallSummary line={line} swapClassName={swapClassName} />
+            <ToolCallSummary line={line} swapClassName={summarySwapClassName} />
           )}
         </span>
         {line.kind === "call" && line.changes ? (
-          <FileChanges changes={line.changes} className={swapClassName} />
+          <FileChanges changes={line.changes} className={changesSwapClassName} />
         ) : null}
         {phase === "cancelled" ? (
-          <span className={cn("shrink-0 text-[11px] text-cancelled-muted", swapClassName)}>
+          <span className={cn("shrink-0 text-[11px] text-cancelled-muted", cancelledSwapClassName)}>
             Cancelled
           </span>
         ) : null}
