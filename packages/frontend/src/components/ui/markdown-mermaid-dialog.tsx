@@ -6,28 +6,24 @@ import { DialogClose, DialogContent, DialogDescription, DialogTitle } from "./di
 type DiagramSize = { width: number; height: number };
 const controlClassName = "size-8 text-muted-foreground hover:text-foreground";
 
+const SVG_TAG = /^<svg\b[^>]*>/;
+const ATTRIBUTE_VALUE = (name: string) => new RegExp(`\\s${name}="([^"]*)"`);
+
+/**
+ * The size of the drawing, from the `viewBox` or the `width` and `height` of its root tag. The
+ * markup comes from the page, so it is HTML, not strict XML.
+ */
 function readDiagramSize(svg: string): DiagramSize | null {
-  const document = new DOMParser().parseFromString(svg, "image/svg+xml");
-  if (document.querySelector("parsererror")) return null;
-  const root = document.documentElement;
-  const viewBox = root
-    .getAttribute("viewBox")
-    ?.trim()
+  const tag = SVG_TAG.exec(svg.trimStart())?.[0] ?? "";
+  const [, , viewBoxWidth, viewBoxHeight] = (ATTRIBUTE_VALUE("viewBox").exec(tag)?.[1] ?? "")
+    .trim()
     .split(/[\s,]+/)
     .map(Number);
-  const [, , viewBoxWidth, viewBoxHeight] = viewBox ?? [];
-  if (
-    viewBoxWidth &&
-    viewBoxHeight &&
-    Number.isFinite(viewBoxWidth) &&
-    Number.isFinite(viewBoxHeight) &&
-    viewBoxWidth > 0 &&
-    viewBoxHeight > 0
-  ) {
+  if (viewBoxWidth && viewBoxHeight && viewBoxWidth > 0 && viewBoxHeight > 0) {
     return { width: viewBoxWidth, height: viewBoxHeight };
   }
-  const width = Number.parseFloat(root.getAttribute("width") ?? "");
-  const height = Number.parseFloat(root.getAttribute("height") ?? "");
+  const width = Number.parseFloat(ATTRIBUTE_VALUE("width").exec(tag)?.[1] ?? "");
+  const height = Number.parseFloat(ATTRIBUTE_VALUE("height").exec(tag)?.[1] ?? "");
   return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0
     ? { width, height }
     : null;

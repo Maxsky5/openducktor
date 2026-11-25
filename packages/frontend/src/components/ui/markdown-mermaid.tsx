@@ -97,7 +97,7 @@ export function MarkdownMermaid({
         role="group"
         aria-busy={renderer.status === "loading"}
         aria-label="Mermaid diagram"
-        className="my-3 overflow-hidden rounded-md border border-border bg-card"
+        className="my-3 overflow-hidden rounded-xl border border-border bg-card"
       >
         <div className="flex min-h-40 items-center justify-center p-3">{content}</div>
       </div>

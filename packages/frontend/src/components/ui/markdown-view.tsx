@@ -19,8 +19,8 @@ import { Dialog } from "./dialog";
 import { useDialogPresence } from "./dialog-presence";
 import { mayHaveCodeFence, useCodeHighlighter } from "./markdown-code";
 import {
-  createDiagramPlugin,
-  DIAGRAM_EXPAND_ATTRIBUTE,
+  createDiagramRenderer,
+  DIAGRAM_ATTRIBUTE,
   mayHaveDiagram,
   useDiagramRenderer,
 } from "./markdown-diagram";
@@ -57,7 +57,6 @@ export type MarkdownViewProps = {
   taskAssetContext?: Omit<TaskAssetRenderContext, "assetId"> | undefined;
 };
 
-const CODE_CONTROLS = { code: { copy: true, download: false } } as const;
 const TASK_ITEM = /\[[ xX]\]/;
 
 const showOpenFailure = (cause: unknown): void => {
@@ -82,7 +81,16 @@ const scrollToFragment = (href: string): void => {
 
 type DiagramPreview = { svg: string; open: boolean };
 
-/** Mounts only while a diagram preview shows, so the views of a transcript do not watch the session view. */
+/**
+ * Closes the diagram preview when the session view hides, because the dialog sits outside the
+ * hidden view. It mounts with a view that shows diagrams, so the views without diagrams do not
+ * watch the session view.
+ */
+function ClosesOnViewHide({ onHide }: { onHide: () => void }): null {
+  useOnSessionViewHide(onHide);
+  return null;
+}
+
 function DiagramPreviewDialog({
   preview,
   onClose,
@@ -90,8 +98,6 @@ function DiagramPreviewDialog({
   preview: DiagramPreview;
   onClose: () => void;
 }): ReactElement {
-  // The dialog sits outside the hidden view, so a switch closes it.
-  useOnSessionViewHide(onClose);
   return (
     <Dialog open={preview.open} onOpenChange={(open) => !open && onClose()}>
       <MarkdownMermaidDialog svg={preview.svg} />
@@ -117,6 +123,9 @@ export const MarkdownView = memo(function MarkdownView({
   const highlighter = useCodeHighlighter(showsCode);
   const [preview, setPreview] = useState<DiagramPreview | null>(null);
   const previewMounted = useDialogPresence(preview?.open ?? false);
+  const closePreview = (): void => {
+    setPreview((current) => current && { ...current, open: false });
+  };
 
   // Words formats in place only without plugins, hooks, and a URL hook, so each one is on only
   // when the text can use it.
@@ -180,8 +189,8 @@ export const MarkdownView = memo(function MarkdownView({
   const plugins = useMemo(() => {
     const config: PluginConfig = {};
     if (showsCode && highlighter.status === "ready") config.code = highlighter.value;
-    if (showsDiagrams) config.mermaid = createDiagramPlugin(diagrams);
-    return config.code || config.mermaid ? config : undefined;
+    if (showsDiagrams) config.renderers = [createDiagramRenderer(diagrams)];
+    return config.code || config.renderers ? config : undefined;
   }, [diagrams, highlighter, showsCode, showsDiagrams]);
 
   const openLink = (anchor: HTMLAnchorElement, event: LinkEvent): void => {
@@ -209,16 +218,16 @@ export const MarkdownView = memo(function MarkdownView({
   };
 
   const handleClick = (event: MouseEvent<HTMLDivElement>): void => {
-    const expand =
-      event.target instanceof Element
-        ? event.target.closest(`[${DIAGRAM_EXPAND_ATTRIBUTE}]`)
+    const anchor = closestLink(event);
+    const diagram =
+      !anchor && event.target instanceof Element
+        ? event.target.closest(`[${DIAGRAM_ATTRIBUTE}]`)
         : null;
-    if (expand && event.currentTarget.contains(expand)) {
-      const svg = expand.closest("[data-diagram]")?.querySelector("svg");
+    if (diagram && event.currentTarget.contains(diagram)) {
+      const svg = diagram.querySelector("svg.pele");
       if (svg) setPreview({ svg: svg.outerHTML, open: true });
       return;
     }
-    const anchor = closestLink(event);
     if (!anchor) return;
     event.preventDefault();
     if (event.button === 0) openLink(anchor, event);
@@ -254,7 +263,7 @@ export const MarkdownView = memo(function MarkdownView({
         mode={streaming ? "streaming" : "static"}
         isAnimating={streaming}
         math={!lightweight}
-        controls={CODE_CONTROLS}
+        controls={false}
         lineNumbers={false}
         components={hooks}
         {...(islands ? { islands } : {})}
@@ -268,11 +277,9 @@ export const MarkdownView = memo(function MarkdownView({
       >
         {markdown}
       </Markdown>
+      {showsDiagrams ? <ClosesOnViewHide onHide={closePreview} /> : null}
       {previewMounted && preview ? (
-        <DiagramPreviewDialog
-          preview={preview}
-          onClose={() => setPreview((current) => current && { ...current, open: false })}
-        />
+        <DiagramPreviewDialog preview={preview} onClose={closePreview} />
       ) : null}
     </>
   );

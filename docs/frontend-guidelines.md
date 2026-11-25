@@ -75,7 +75,8 @@ Read views show Markdown with `MarkdownRenderer` for a complete text and `Markdo
 - The view handles link clicks, middle clicks, and Enter on the view root. A local link, such as a file citation in a chat reply, keeps its destination in `data-local-link` and points nowhere.
 - Images that the host loads, such as task assets, host files, and issue attachments, mount as Words islands with their React components.
 - Words draws math as SVG. A `$` opens inline math only with the Pandoc rules, so prices such as `$5 and $10` stay text.
-- `@pierre/highlights` highlights code in the Pierre themes of the diff views. Pele draws Mermaid diagrams. Both load the first time that a view shows a code fence or a diagram.
+- `@pierre/highlights` highlights code in the Pierre themes of the diff views. Pele draws Mermaid diagrams in the slate tokens of `markdown.css`, with the app fonts. Both load the first time that a view shows a code fence or a diagram.
+- Code blocks and diagrams have no header. A click on a diagram opens it in the preview dialog.
 - A `lightweight` view shows math and diagram fences as text, for short previews.
 
 ## Floating windows

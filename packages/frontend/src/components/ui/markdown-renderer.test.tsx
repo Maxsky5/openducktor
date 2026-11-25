@@ -2,7 +2,7 @@ import { withShellPlatform } from "@/test-utils/focused-fixture";
 import { IsolatedMarkdownWrapper } from "@/test-utils/isolated-markdown-wrapper";
 import { describe, expect, mock, spyOn, test } from "bun:test";
 import { fireEvent, render as renderView, waitFor, within } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { StrictMode, type ReactNode } from "react";
 import { toast } from "sonner";
 import { createUnavailableShellBridge } from "@/lib/shell-bridge";
 import { MarkdownMermaid } from "./markdown-mermaid";
@@ -286,11 +286,24 @@ describe("host images", () => {
 describe("diagrams", () => {
   const FLOWCHART = "```mermaid\nflowchart LR\n  A[Start] --> B[Done]\n```";
 
-  test("draws a Mermaid fence and opens it in the preview dialog", async () => {
-    const view = render(<MarkdownRenderer markdown={`Intro\n\n${FLOWCHART}\n\nOutro`} />);
+  // The app renders in StrictMode, which mounts each effect twice.
+  test.each([
+    ["the expand button", "button"],
+    ["the diagram", "diagram"],
+  ])("opens a drawn diagram in the preview dialog from %s", async (_name, target) => {
+    const view = render(
+      <StrictMode>
+        <MarkdownRenderer markdown={`Intro\n\n${FLOWCHART}\n\nOutro`} />
+      </StrictMode>,
+    );
 
     await waitFor(() => expect(view.container.querySelector("svg.pele")).not.toBeNull());
-    fireEvent.click(view.getByRole("button", { name: "Open diagram preview" }));
+    expect(view.container.querySelector('[data-markdown="code-block"]')).toBeNull();
+    const diagram = view.container.querySelector("svg.pele");
+    if (!diagram) throw new Error("The diagram is missing.");
+    fireEvent.click(
+      target === "button" ? view.getByRole("button", { name: "Open diagram preview" }) : diagram,
+    );
 
     const dialog = await view.findByRole("dialog");
     expect(within(dialog).getByText("Diagram preview")).toBeTruthy();
