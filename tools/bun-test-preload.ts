@@ -95,6 +95,18 @@ if (testRoot === frontendRoot) {
     });
   }
 
+  // happy-dom has no FontFaceSet. Tests load no web fonts, so every font load ends at once.
+  if (!("fonts" in document)) {
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: Object.assign(new EventTarget(), {
+        status: "loaded",
+        ready: Promise.resolve(),
+        load: async (): Promise<never[]> => [],
+      }),
+    });
+  }
+
   Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
     configurable: true,
     value: true,

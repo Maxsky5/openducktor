@@ -126,6 +126,10 @@
   --diagram-solid-mix: 85%;
   --diagram-event-opacity: 0.1;
   --diagram-on-solid: oklch(0.21 0.034 264.665);
+  /* Sequence author colors keep their lightness and chroma. */
+  --diagram-author-l: l;
+  --diagram-author-c: c;
+  --diagram-author-alpha: alpha;
 }
 
 /* Tailwind 400 shades stay clear on the dark canvas. Surfaces sit above the canvas. */
@@ -147,13 +151,23 @@
   --diagram-text-mix: 30%;
   --diagram-solid-mix: 100%;
   --diagram-event-opacity: 0.14;
+  /* Authors pick sequence colors for a light page, so the dark theme keeps only their hue. */
+  --diagram-author-l: 0.3;
+  --diagram-author-c: min(c * 0.9 + 0.02, 0.07);
+  --diagram-author-alpha: max(alpha, 0.6);
 }
 
+/*
+ * Diagram text keeps geometric precision. With the `optimizeLegibility` of the app text, Chromium
+ * paints SVG text through a scaled font that goes stale after a style change, and the labels then
+ * drift away from their shapes.
+ */
 .pele {
+  text-rendering: geometricPrecision;
   --pele-bg: var(--diagram-canvas);
   --pele-fg: var(--foreground);
   --pele-fg-on-light: var(--diagram-on-solid);
-  --pele-fg-on-dark: var(--diagram-on-solid);
+  --pele-fg-on-dark: oklch(0.984 0.003 247.858);
   --pele-muted: var(--muted-foreground);
   --pele-line: color-mix(in oklab, var(--diagram-indigo) 25%, var(--muted-foreground));
   --pele-surface: var(--diagram-surface);
@@ -261,8 +275,17 @@
   stroke-dasharray: 5 4;
 }
 
+/* Critical blocks are rose and break blocks are amber, so they stand out from the other blocks. */
+.pele .pele-frame-critical {
+  --hue: var(--diagram-rose);
+}
+
+.pele .pele-frame-break {
+  --hue: var(--diagram-amber);
+}
+
 .pele .pele-frame > rect:first-child {
-  fill: color-mix(in oklab, var(--diagram-violet) 3%, transparent);
+  fill: color-mix(in oklab, var(--hue) 3%, transparent);
 }
 
 /* A sequence frame holds dashed replies and a dashed divider, so its outline stays solid. Pele
@@ -277,11 +300,16 @@
 
 /* The kind tab of a sequence frame, such as `alt`, is a violet pill. */
 .pele .pele-frame > rect:has(+ .pele-frame-kind) {
-  fill: color-mix(in oklab, var(--diagram-violet) 18%, var(--diagram-canvas));
+  fill: color-mix(in oklab, var(--hue) 18%, var(--diagram-canvas));
+}
+
+/* The label of an else branch sits on the frame, like the label of the first branch. */
+.pele .pele-frame > rect:has(+ .pele-frame-label) {
+  fill: none;
 }
 
 .pele :is(.pele-cluster-label, .pele-frame-label, .pele-frame-kind) {
-  fill: color-mix(in oklab, var(--diagram-violet) 66%, var(--foreground));
+  fill: color-mix(in oklab, var(--hue) 66%, var(--foreground));
   font-weight: 600;
 }
 
@@ -290,8 +318,51 @@
   stroke: var(--_b);
 }
 
+/* Pele paints activation bars from their group, so the bars take the sky tint here. */
 .pele .pele-activation {
-  --_s: color-mix(in oklab, var(--diagram-sky) 30%, var(--diagram-canvas));
+  fill: color-mix(in oklab, var(--diagram-sky) 30%, var(--diagram-node-base));
+  stroke: color-mix(in oklab, var(--diagram-sky) var(--diagram-line-mix), var(--diagram-canvas));
+}
+
+.pele .pele-sequence-number > rect {
+  fill: var(--diagram-indigo);
+}
+
+/*
+ * Sequence highlights and boxes paint their author color from `--author-fill`, through the
+ * lightness and chroma of the theme. The messages on them keep the line and label colors of the
+ * theme, not the contrast colors that Pele picks for the author color.
+ */
+.pele-sequence [style*="--author-fill"] {
+  fill: oklch(
+    from var(--author-fill) var(--diagram-author-l) var(--diagram-author-c) h /
+      var(--diagram-author-alpha)
+  );
+}
+
+.pele-sequence .pele-message {
+  stroke: var(--_l);
+}
+
+.pele-sequence .pele-marker[fill^="var(--pele-fg-on"] {
+  fill: var(--_l);
+}
+
+.pele-sequence .pele-edge-label text[fill^="var(--pele-fg-on"] {
+  fill: inherit;
+}
+
+/* Actor icons draw with the weight of the message lines. */
+.pele-sequence
+  :is(
+    .pele-actor-actor,
+    .pele-actor-boundary,
+    .pele-actor-control,
+    .pele-actor-entity,
+    .pele-actor-database
+  )
+  > :is(circle, path) {
+  stroke-width: 1.5;
 }
 
 /* Gantt bars take their tint, not a solid accent, so their labels stay readable. */
@@ -319,20 +390,52 @@
   rx: 6px;
 }
 
-/* Entity rows alternate with a lighter tint, and their types stay readable. */
+/*
+ * Class and entity boxes have a name band in a strong tint over a light body. A box without
+ * members is all name band. Entity rows alternate between the body and a lighter tint.
+ */
+.pele :is(.pele-node.pele-class, .pele-node.pele-entity) {
+  --diagram-header-fill: color-mix(
+    in oklab,
+    var(--hue) calc(var(--diagram-fill-mix) * 1.6),
+    var(--tint-base)
+  );
+}
+
+.pele .pele-node-header {
+  fill: var(--diagram-header-fill);
+  stroke: none;
+}
+
+.pele :is(.pele-node.pele-class, .pele-node.pele-entity):not(:has(.pele-node-header)) > rect {
+  fill: var(--diagram-header-fill);
+}
+
+.pele :is(.pele-node.pele-class, .pele-node.pele-entity):has(.pele-node-header) > rect:first-child {
+  fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) / 3), var(--tint-base));
+}
+
 .pele .pele-er-stripes {
-  fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) / 2), var(--tint-base));
+  fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) * 0.8), var(--tint-base));
 }
 
 .pele :is(.pele-er-type, .pele-member) {
   fill: color-mix(in oklab, var(--muted-foreground) 60%, var(--foreground));
 }
 
+.pele-class .pele-attribute {
+  fill: color-mix(in oklab, var(--foreground) 85%, var(--muted-foreground));
+}
+
+.pele .pele-annotation {
+  fill: color-mix(in oklab, var(--muted-foreground) 45%, var(--foreground));
+}
+
 .pele-class .pele-method {
   fill: color-mix(in oklab, var(--hue) var(--diagram-text-mix), var(--foreground));
 }
 
-.pele :is(.pele-class, .pele-er) .pele-node > .pele-label {
+.pele:is(.pele-class, .pele-er) .pele-node > .pele-label {
   font-weight: 600;
 }
 
@@ -455,11 +558,13 @@
   font-weight: 500;
 }
 
-/* A halo in the canvas color keeps the lines clear of the label text. */
-.pele .pele-edge-label text {
+/* Class multiplicities sit at the line ends. A canvas halo keeps the lines off their text. */
+.pele .pele-cardinality {
+  fill: color-mix(in oklab, var(--foreground) 40%, var(--muted-foreground));
+  font-weight: 500;
   paint-order: stroke;
   stroke: var(--pele-bg);
-  stroke-width: 4px;
+  stroke-width: 3px;
   stroke-linejoin: round;
 }
 
@@ -474,7 +579,6 @@
   display: flex;
   justify-content: safe center;
   margin-block: 0.75rem;
-  overflow-x: auto;
   padding: 1.5rem 1.25rem;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
@@ -485,19 +589,11 @@
   cursor: zoom-in;
 }
 
+/* A drawn diagram shrinks to the view width and never grows above its size. The preview shows it
+   at full size. */
 .markdown-body [data-markdown="mermaid"] svg.pele {
   max-width: 100%;
   height: auto;
-}
-
-/*
- * A drawn diagram shrinks to the view width, but not below 85% of its size, so its text stays
- * readable. A wider diagram scrolls. Pele writes `max-width: 100%` on the drawing itself.
- */
-.markdown-body [data-diagram] svg.pele {
-  flex-shrink: 0;
-  width: max(min(100%, var(--diagram-width)), calc(var(--diagram-width) * 0.85));
-  max-width: none !important;
 }
 
 /* The button gives the preview to the keyboard. It shows on hover and on focus. */

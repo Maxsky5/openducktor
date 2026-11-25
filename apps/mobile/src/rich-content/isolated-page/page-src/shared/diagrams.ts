@@ -1,4 +1,10 @@
 /** Mermaid diagrams for the diagram page, drawn with Pele. Pele escapes diagram text and filters links. */
+import {
+  DIAGRAM_CONFIG,
+  DIAGRAM_MONOSPACE,
+  DIAGRAM_RADIUS,
+  prepareDiagram,
+} from "@openducktor/frontend-core/lib/diagram-drawing";
 import { render } from "pele";
 import { type BlockRenderMessage, MAX_SNAPSHOT_LENGTH } from "../../block-page-messages";
 import type { BlockSnapshotter, DiagramRenderer } from "./block-page";
@@ -7,6 +13,7 @@ import { drawElementPng, pageDocument } from "./page-runtime";
 // Diagrams keep the system font, unlike the text of the page. The diagram picture draws the SVG
 // as an image, which cannot use the fonts of the page.
 const FONT_FAMILY = "-apple-system, system-ui, sans-serif";
+const FONT_FAMILY_MONO = "ui-monospace, Menlo, monospace";
 
 /**
  * The tint hues of diagram parts, as on desktop: Tailwind 500 shades on light and 400 shades on
@@ -30,6 +37,9 @@ const HUES = {
     "--diagram-node-base": "white",
     "--diagram-surface": "white",
     "--diagram-warm-base": "white",
+    "--diagram-author-l": "l",
+    "--diagram-author-c": "c",
+    "--diagram-author-alpha": "alpha",
   },
   dark: {
     "--diagram-indigo": "oklch(0.673 0.182 276.935)",
@@ -47,6 +57,9 @@ const HUES = {
     "--diagram-node-base": "var(--pele-bg)",
     "--diagram-surface": "color-mix(in oklab, var(--pele-fg) 5%, var(--pele-bg))",
     "--diagram-warm-base": "oklch(0.17 0.008 265)",
+    "--diagram-author-l": "0.28",
+    "--diagram-author-c": "min(c * 0.9 + 0.02, 0.07)",
+    "--diagram-author-alpha": "max(alpha, 0.6)",
   },
 } as const;
 
@@ -56,7 +69,7 @@ const diagramColors = ({ colors, theme }: BlockRenderMessage) => ({
   "--pele-bg": colors.background,
   "--pele-fg": colors.label,
   "--pele-fg-on-light": "oklch(0.21 0.034 264.665)",
-  "--pele-fg-on-dark": "oklch(0.21 0.034 264.665)",
+  "--pele-fg-on-dark": "oklch(0.984 0.003 247.858)",
   "--pele-muted": colors.secondaryLabel,
   "--pele-line": `color-mix(in oklab, ${HUES[theme]["--diagram-indigo"]} 25%, ${colors.secondaryLabel})`,
   "--pele-surface": colors.codeBackground,
@@ -66,7 +79,7 @@ const diagramColors = ({ colors, theme }: BlockRenderMessage) => ({
   "--pele-critical": HUES[theme]["--diagram-rose"],
   "--pele-error": colors.error,
   "--pele-font": FONT_FAMILY,
-  "--pele-radius": "10px",
+  "--pele-radius": `${DIAGRAM_RADIUS}px`,
   "--diagram-rule": colors.separator,
 });
 
@@ -76,6 +89,7 @@ const diagramColors = ({ colors, theme }: BlockRenderMessage) => ({
  */
 const THEME_STYLE = `<style>
 .pele {
+  text-rendering: geometricPrecision;
   --pele-series-1: var(--diagram-indigo);
   --pele-series-2: var(--diagram-sky);
   --pele-series-3: var(--diagram-emerald);
@@ -109,22 +123,37 @@ const THEME_STYLE = `<style>
 .pele :is(.pele-state-start, .pele-state-end) { --_l: var(--hue); --_fg: var(--hue); stroke-width: 1.5; }
 .pele :is(.pele-cluster, .pele-frame) { --hue: var(--diagram-violet); --_s: color-mix(in oklab, var(--hue) 4%, var(--pele-bg)); }
 .pele-cluster > rect, .pele-frame > rect:first-child { stroke: var(--_b); stroke-dasharray: 5 4; }
-.pele-frame > rect:first-child { fill: color-mix(in oklab, var(--diagram-violet) 3%, transparent); }
+.pele .pele-frame-critical { --hue: var(--diagram-rose); }
+.pele .pele-frame-break { --hue: var(--diagram-amber); }
+.pele-frame > rect:first-child { fill: color-mix(in oklab, var(--hue) 3%, transparent); }
 .pele-sequence .pele-frame > rect:first-child { stroke-dasharray: none; }
 .pele-frame > path { stroke: var(--_b); }
-.pele-frame > rect:has(+ .pele-frame-kind) { fill: color-mix(in oklab, var(--diagram-violet) 18%, var(--pele-bg)); }
-.pele-cluster-label, .pele-frame-label, .pele-frame-kind { fill: color-mix(in oklab, var(--diagram-violet) 66%, var(--pele-fg)); font-weight: 600; }
+.pele-frame > rect:has(+ .pele-frame-kind) { fill: color-mix(in oklab, var(--hue) 18%, var(--pele-bg)); }
+.pele-frame > rect:has(+ .pele-frame-label) { fill: none; }
+.pele-cluster-label, .pele-frame-label, .pele-frame-kind { fill: color-mix(in oklab, var(--hue) 66%, var(--pele-fg)); font-weight: 600; }
 .pele .pele-note rect { fill: var(--_s); stroke: var(--_b); }
-.pele .pele-activation { --_s: color-mix(in oklab, var(--diagram-sky) 30%, var(--pele-bg)); }
+.pele .pele-activation { fill: color-mix(in oklab, var(--diagram-sky) 30%, var(--diagram-node-base)); stroke: color-mix(in oklab, var(--diagram-sky) var(--diagram-line-mix), var(--pele-bg)); }
+.pele-sequence-number > rect { fill: var(--diagram-indigo); }
+.pele-sequence [style*="--author-fill"] { fill: oklch(from var(--author-fill) var(--diagram-author-l) var(--diagram-author-c) h / var(--diagram-author-alpha)); }
+.pele-sequence .pele-message { stroke: var(--_l); }
+.pele-sequence .pele-marker[fill^="var(--pele-fg-on"] { fill: var(--_l); }
+.pele-sequence .pele-edge-label text[fill^="var(--pele-fg-on"] { fill: inherit; }
+.pele-sequence :is(.pele-actor-actor, .pele-actor-boundary, .pele-actor-control, .pele-actor-entity, .pele-actor-database) > :is(circle, path) { stroke-width: 1.5; }
 .pele-gantt .pele-task { --_r: 4px; }
 .pele-gantt .pele-task > rect { fill: var(--_s); fill-opacity: 1; stroke: var(--_b); }
 .pele-gantt :is(.pele-task .pele-label, .pele-section-label) { font-weight: 500; }
 .pele-gantt .pele-section-label { fill: var(--pele-fg); }
 .pele-gantt .pele-section:not([fill="none"]) { fill: color-mix(in oklab, var(--pele-muted) 7%, transparent); rx: 6px; }
-.pele-er-stripes { fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) / 2), var(--tint-base)); }
+.pele :is(.pele-node.pele-class, .pele-node.pele-entity) { --diagram-header-fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) * 1.6), var(--tint-base)); }
+.pele .pele-node-header { fill: var(--diagram-header-fill); stroke: none; }
+.pele :is(.pele-node.pele-class, .pele-node.pele-entity):not(:has(.pele-node-header)) > rect { fill: var(--diagram-header-fill); }
+.pele :is(.pele-node.pele-class, .pele-node.pele-entity):has(.pele-node-header) > rect:first-child { fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) / 3), var(--tint-base)); }
+.pele-er-stripes { fill: color-mix(in oklab, var(--hue) calc(var(--diagram-fill-mix) * 0.8), var(--tint-base)); }
+.pele-class .pele-attribute { fill: color-mix(in oklab, var(--pele-fg) 85%, var(--pele-muted)); }
+.pele .pele-annotation { fill: color-mix(in oklab, var(--pele-muted) 45%, var(--pele-fg)); }
 .pele-class .pele-method { fill: color-mix(in oklab, var(--hue) var(--diagram-text-mix), var(--pele-fg)); }
 .pele :is(.pele-er-type, .pele-member) { fill: color-mix(in oklab, var(--pele-muted) 60%, var(--pele-fg)); }
-:is(.pele-class, .pele-er) .pele-node > .pele-label { font-weight: 600; }
+.pele:is(.pele-class, .pele-er) .pele-node > .pele-label { font-weight: 600; }
 :is(.pele-timeline .pele-period, .pele-gitGraph .pele-branch) > rect { fill-opacity: 0.32; }
 :is(.pele-timeline .pele-period, .pele-gitGraph .pele-branch) text { fill: var(--pele-fg); font-weight: 600; }
 .pele-timeline .pele-event > rect { fill-opacity: var(--diagram-event-opacity); }
@@ -157,24 +186,18 @@ const THEME_STYLE = `<style>
 .pele-edge path:not(.pele-marker) { stroke-width: 1.5; }
 .pele-edge .pele-marker { stroke: var(--_l); stroke-width: 1.5; stroke-linejoin: round; }
 .pele-edge-label { fill: color-mix(in oklab, var(--pele-fg) 40%, var(--pele-muted)); font-weight: 500; }
-.pele-edge-label text { paint-order: stroke; stroke: var(--pele-bg); stroke-width: 4px; stroke-linejoin: round; }
+.pele-cardinality { fill: color-mix(in oklab, var(--pele-fg) 40%, var(--pele-muted)); font-weight: 500; paint-order: stroke; stroke: var(--pele-bg); stroke-width: 3px; stroke-linejoin: round; }
 .pele-lifeline { stroke: var(--diagram-rule); stroke-dasharray: 2 4; }
 </style>`;
 
 const SVG_OPEN_TAG = /^<svg\b[^>]*>/;
 
-/**
- * As on desktop: right-angle edges with rounded corners, one row of sequence actors, and flat
- * commit labels.
- */
+/** The layout options of desktop, with the system fonts. */
 const RENDER_OPTIONS = {
   fontFamily: FONT_FAMILY,
-  config: {
-    flowchart: { curve: "step" },
-    state: { curve: "step" },
-    sequence: { mirrorActors: false },
-    gitGraph: { rotateCommitLabel: false },
-  },
+  fontFamilyMono: FONT_FAMILY_MONO,
+  monospace: DIAGRAM_MONOSPACE,
+  config: DIAGRAM_CONFIG,
 };
 
 let colors: Record<string, string> | null = null;
@@ -193,7 +216,7 @@ export const renderDiagrams: DiagramRenderer = (root, message) => {
     // Pele escapes diagram text and filters links and styles, and the page policy runs only the
     // page script.
     // react-doctor-disable-next-line react-doctor/dangerous-html-sink
-    figure.innerHTML = render(source, RENDER_OPTIONS).svg.replace(
+    figure.innerHTML = prepareDiagram(render(source, RENDER_OPTIONS).svg).replace(
       SVG_OPEN_TAG,
       (tag) => tag + THEME_STYLE,
     );

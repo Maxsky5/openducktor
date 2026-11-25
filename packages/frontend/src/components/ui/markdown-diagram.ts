@@ -4,6 +4,11 @@
  */
 import { escapeHtml, type PluginConfig } from "@pierre/words/html";
 import { createMermaidPlugin } from "@pierre/words/mermaid";
+import {
+  DIAGRAM_CONFIG,
+  DIAGRAM_MONOSPACE,
+  prepareDiagram,
+} from "@openducktor/frontend-core/lib/diagram-drawing";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
 import { createLazyModule, type LazyModuleState } from "./markdown-lazy-module";
 
@@ -18,18 +23,23 @@ const DIAGRAM_OPTIONS = {
   fontFamily: '"Space Grotesk", "Avenir Next", "Segoe UI", sans-serif',
   fontFamilyMono: '"IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace',
   fontSize: 14,
-  // Right-angle edges with rounded corners, one row of sequence actors, and flat commit labels.
-  config: {
-    flowchart: { curve: "step" },
-    state: { curve: "step" },
-    sequence: { mirrorActors: false },
-    gitGraph: { rotateCommitLabel: false },
-  },
+  monospace: DIAGRAM_MONOSPACE,
+  config: DIAGRAM_CONFIG,
 };
 
 export type DiagramRenderer = LazyModuleState<PeleRender>;
 
-const pele = createLazyModule(() => import("pele").then((module) => module.render));
+/**
+ * Pele measures each label in the font that draws it, so it loads with the diagram fonts. Class
+ * members use the code font, which the app loads only when a view first shows code.
+ */
+const pele = createLazyModule(() =>
+  Promise.all([
+    import("pele"),
+    document.fonts.load('500 14px "Space Grotesk"'),
+    document.fonts.load('12px "IBM Plex Mono"'),
+  ]).then(([module]) => module.render),
+);
 
 /** The diagram renderer. It starts to load when `needed` is true. */
 export const useDiagramRenderer = (needed: boolean): DiagramRenderer => pele.useModule(needed);
@@ -41,7 +51,7 @@ export type DrawnDiagram = { status: "ready"; svg: string } | { status: "error";
 
 export const drawDiagram = (render: PeleRender, source: string): DrawnDiagram => {
   try {
-    return { status: "ready", svg: render(source, DIAGRAM_OPTIONS).svg };
+    return { status: "ready", svg: prepareDiagram(render(source, DIAGRAM_OPTIONS).svg) };
   } catch (cause) {
     return { status: "error", message: errorMessage(cause) };
   }
@@ -56,11 +66,8 @@ const EXPAND_ICON =
 /** The attribute of a drawn diagram. A click on it opens the diagram in the preview dialog. */
 export const DIAGRAM_ATTRIBUTE = "data-diagram";
 
-const SVG_WIDTH = /^<svg\b[^>]*?\swidth="([\d.]+)"/;
-
-/** The drawing keeps its width for the CSS minimum scale in `markdown.css`. */
 const diagramHtml = (svg: string): string =>
-  `<div data-markdown="mermaid" ${DIAGRAM_ATTRIBUTE}="" style="--diagram-width:${Number(SVG_WIDTH.exec(svg)?.[1] ?? 0)}px">${svg}` +
+  `<div data-markdown="mermaid" ${DIAGRAM_ATTRIBUTE}="">${svg}` +
   `<button type="button" data-diagram-expand="" aria-label="Open diagram preview" title="Open diagram preview">${EXPAND_ICON}</button></div>`;
 
 const diagramErrorHtml = (title: string, message: string, action: string): string =>

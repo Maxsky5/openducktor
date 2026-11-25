@@ -327,6 +327,22 @@ describe("diagrams", () => {
     expect(view.container.querySelector("code")?.textContent).toContain("flowchart LR");
   });
 
+  test("gives each class box with members a name band, and none to a class without members", async () => {
+    const view = render(
+      <MarkdownRenderer
+        markdown={
+          "```mermaid\nclassDiagram\n  class Task {\n    +string id\n    +start() void\n  }\n  class Runtime\n  Task --> Runtime\n```"
+        }
+      />,
+    );
+
+    await waitFor(() => expect(view.container.querySelector("svg.pele")).not.toBeNull());
+    const bandOf = (id: string) =>
+      view.container.querySelector(`.pele-class[data-id="${id}"] .pele-node-header`);
+    expect(bandOf("Task")).not.toBeNull();
+    expect(bandOf("Runtime")).toBeNull();
+  });
+
   test("draws a diagram outside a Markdown view", async () => {
     const view = render(<MarkdownMermaid source={"flowchart LR\n  A --> B"} expandable />);
 
