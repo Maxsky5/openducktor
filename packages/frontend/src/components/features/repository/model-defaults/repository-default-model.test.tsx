@@ -1,7 +1,6 @@
 import { renderWithWorkflow as render } from "@/test-utils/render-with-workflow";
 import { describe, expect, spyOn, test } from "bun:test";
 import {
-  CLAUDE_RUNTIME_DESCRIPTOR,
   CODEX_RUNTIME_DESCRIPTOR,
   OPENCODE_RUNTIME_DESCRIPTOR,
   type RuntimeDescriptor,
@@ -320,77 +319,5 @@ describe("RepositoryDefaultModelBlock", () => {
     } finally {
       infoSpy.mockRestore();
     }
-  });
-
-  test("offers a one-click recommended default model action when unset and marks it Recommended once applied", async () => {
-    const claudeCatalog: AgentModelCatalog = {
-      runtime: CLAUDE_RUNTIME_DESCRIPTOR,
-      models: [
-        {
-          id: "claude-opus-5-5",
-          providerId: "claude",
-          providerName: "Claude",
-          modelId: "claude-opus-5-5",
-          modelName: "Opus 5.5",
-          aliases: ["opus"],
-          variants: ["low", "medium", "high", "max"],
-        },
-      ],
-      defaultModelsByProvider: { claude: "claude-opus-5-5" },
-    };
-
-    function SettingsDefaultModelHarness() {
-      const [draft, dispatch] = useReducer(
-        (
-          state: WorkspaceModelDefaultsDraft,
-          updater: (current: WorkspaceModelDefaultsDraft) => WorkspaceModelDefaultsDraft,
-        ) => updater(state),
-        { agentDefaults: {} },
-      );
-      return (
-        <RepositoryDefaultModelBlock
-          selectedRepoConfig={draft}
-          availableRuntimeDefinitions={[CLAUDE_RUNTIME_DESCRIPTOR]}
-          catalogResources={[
-            {
-              runtimeKind: "claude",
-              catalog: claudeCatalog,
-              isLoading: false,
-              unavailableReason: null,
-              isEnabled: true,
-              error: null,
-              retry: async () => {},
-            },
-          ]}
-          favoriteState={favoriteState}
-          loadingState={{ isLoadingSettings: false, isSaving: false }}
-          getCatalogForRuntime={() => claudeCatalog}
-          isCatalogLoadingForRuntime={() => false}
-          onUpdateSelectedRepoConfig={(updater) => dispatch(updater)}
-          onUpdateSelectedRepoDefaultModel={() => {}}
-          onClearSelectedRepoDefaultModel={() =>
-            dispatch((current) => ({ ...current, defaultModel: undefined }))
-          }
-        />
-      );
-    }
-
-    render(<SettingsDefaultModelHarness />);
-    const applyButton = screen.getByRole("button", {
-      name: "Use recommended: Claude · Opus 5.5 · high",
-    });
-    expect(screen.queryByText("Recommended")).toBeNull();
-
-    await act(async () => {
-      fireEvent.click(applyButton);
-    });
-
-    expect(screen.getByText("Recommended")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: /Select model, Claude, Opus 5.5, Effort high/ }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Use recommended: Claude · Opus 5.5 · high" }),
-    ).toBeNull();
   });
 });

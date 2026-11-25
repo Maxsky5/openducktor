@@ -711,7 +711,7 @@ describe("workspace creation", () => {
     await skipProvider();
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "Renamed" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue to models" }));
-    expect(screen.getAllByRole("button", { name: "Select model, Select a model" })).toHaveLength(5);
+    expect(screen.getAllByRole("button", { name: "Select model, Select a model" })).toHaveLength(6);
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByLabelText<HTMLInputElement>("Workspace name").value).toBe("Renamed");
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
@@ -807,30 +807,23 @@ describe("workspace creation", () => {
     renderHarness({ commit, onSuccess, modelSurface: claudeSurface });
     await advanceToModels();
 
-    // Auto-proposed latest Claude Opus in high effort.
+    // Auto-proposed latest Claude Opus in high effort without any "Recommended" badge.
     expect(
       await screen.findByRole("button", { name: /Select model, Claude, Opus 5.5, Effort high/ }),
     ).toBeTruthy();
-    expect(screen.getByText("Recommended")).toBeTruthy();
+    expect(screen.queryByText(/Recommended/i)).toBeNull();
 
-    // Clearing removes the proposal and stays cleared across Back -> Continue to models.
-    const defaultSection = screen.getByRole("region", { name: "Default model" });
-    fireEvent.click(within(defaultSection).getByRole("button", { name: "Clear" }));
-    expect(
-      screen.getByRole("button", { name: "Use recommended: Claude · Opus 5.5 · high" }),
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Continue to models" }));
-    await screen.findByRole("button", { name: "Open repository" });
-    expect(
-      screen.getByRole("button", { name: "Use recommended: Claude · Opus 5.5 · high" }),
-    ).toBeTruthy();
-
-    // Re-applying via the suggestion submits Claude Opus 5.5 in high effort.
+    // Naming model is shown on creation and submits alongside the proposed default model.
+    const namingSection = screen.getByRole("region", { name: "Naming model" });
     fireEvent.click(
-      screen.getByRole("button", { name: "Use recommended: Claude · Opus 5.5 · high" }),
+      within(namingSection).getByRole("button", { name: "Select model, Select a model" }),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Select Opus 4.8 model" }));
+    expect(
+      within(namingSection).getByRole("button", { name: /Select model, Claude, Opus 4.8/ }),
+    ).toBeTruthy();
+
+    // Submitting sends both the proposed default model and the chosen naming model.
     fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(commit.mock.calls[0]?.[0].defaultModel).toEqual({
@@ -839,6 +832,76 @@ describe("workspace creation", () => {
       modelId: "claude-opus-5-5",
       variant: "high",
     });
+    expect(commit.mock.calls[0]?.[0].namingModel).toEqual({
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "claude-opus-4-8",
+      variant: "low",
+    });
+  });
+
+  test("preserves an explicit Clear on the proposed default model across Back and Next", async () => {
+    const claudeCatalog: AgentModelCatalog = {
+      runtime: CLAUDE_RUNTIME_DESCRIPTOR,
+      models: [
+        {
+          id: "claude-opus-5-5",
+          providerId: "claude",
+          providerName: "Claude",
+          modelId: "claude-opus-5-5",
+          modelName: "Opus 5.5",
+          aliases: ["opus"],
+          variants: ["low", "medium", "high", "max"],
+        },
+      ],
+      defaultModelsByProvider: { claude: "claude-opus-5-5" },
+    };
+    const claudeSurface: WorkspaceCreationModelSurface = {
+      ...surface,
+      availableRuntimeDefinitions: [CLAUDE_RUNTIME_DESCRIPTOR],
+      catalogResources: [
+        {
+          runtimeKind: "claude",
+          catalog: claudeCatalog,
+          isLoading: false,
+          unavailableReason: null,
+          isEnabled: true,
+          error: null,
+          retry: async () => {},
+        },
+      ],
+      getCatalogForRuntime: (kind) => (kind === "claude" ? claudeCatalog : null),
+    };
+    const commit = mock(async (input) => outcome(workspaceProviderSetupCommitSchema.parse(input)));
+    const onSuccess = mock(() => {});
+
+    renderHarness({ commit, onSuccess, modelSurface: claudeSurface });
+    await advanceToModels();
+
+    const defaultSection = screen.getByRole("region", { name: "Default model" });
+    expect(
+      within(defaultSection).getByRole("button", {
+        name: /Select model, Claude, Opus 5.5, Effort high/,
+      }),
+    ).toBeTruthy();
+
+    fireEvent.click(within(defaultSection).getByRole("button", { name: "Clear" }));
+    expect(
+      within(defaultSection).getByRole("button", { name: "Select model, Select a model" }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue to models" }));
+    await screen.findByRole("button", { name: "Open repository" });
+    expect(
+      within(screen.getByRole("region", { name: "Default model" })).getByRole("button", {
+        name: "Select model, Select a model",
+      }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open repository" }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(commit.mock.calls[0]?.[0].defaultModel).toBeUndefined();
   });
   test("retains a partial workspace and retries the same setup", async () => {
     let calls = 0;

@@ -1,6 +1,5 @@
 import type { RuntimeDescriptor, RuntimeKind } from "@openducktor/contracts";
 import type { AgentModelCatalog, AgentModelDescriptor } from "@openducktor/core";
-import type { RepoAgentDefaultDraft } from "../../lib/repo-agent-defaults";
 import type { RuntimeModelCatalogQueryResource } from "../../queries/use-runtime-model-catalogs";
 
 export type RecommendedDefaultModelSelection = {
@@ -9,13 +8,6 @@ export type RecommendedDefaultModelSelection = {
   modelId: string;
   variant: string;
   profileId: string;
-};
-
-type RecommendedDefaultModel = {
-  selection: RecommendedDefaultModelSelection;
-  runtimeLabel: string;
-  modelLabel: string;
-  effortLabel: string | null;
 };
 
 const PRIORITY_RUNTIMES: readonly RuntimeKind[] = ["claude", "codex", "antigravity"];
@@ -206,7 +198,7 @@ export const resolveRecommendedDefaultModel = ({
 }: {
   runtimeDefinitions: readonly RuntimeDescriptor[];
   catalogResources: readonly RuntimeModelCatalogQueryResource[];
-}): RecommendedDefaultModel | null => {
+}): RecommendedDefaultModelSelection | null => {
   const descriptorsByKind = new Map(
     runtimeDefinitions.map((descriptor) => [descriptor.kind, descriptor]),
   );
@@ -227,30 +219,12 @@ export const resolveRecommendedDefaultModel = ({
 
     const variant = supportsPreferredEffort(model) ? PREFERRED_EFFORT : (model.variants[0] ?? "");
     return {
-      selection: {
-        runtimeKind,
-        providerId: model.providerId,
-        modelId: model.modelId,
-        variant,
-        profileId: "",
-      },
-      runtimeLabel: descriptor.label,
-      modelLabel: model.modelName,
-      effortLabel: variant || null,
+      runtimeKind,
+      providerId: model.providerId,
+      modelId: model.modelId,
+      variant,
+      profileId: "",
     };
   }
   return null;
-};
-
-export const matchesRecommendedDefaultModel = (
-  current: RepoAgentDefaultDraft | null | undefined,
-  recommended: RecommendedDefaultModel | null,
-): boolean => {
-  if (!current || !recommended) return false;
-  return (
-    current.runtimeKind === recommended.selection.runtimeKind &&
-    current.providerId === recommended.selection.providerId &&
-    current.modelId === recommended.selection.modelId &&
-    (current.variant ?? "") === (recommended.selection.variant ?? "")
-  );
 };

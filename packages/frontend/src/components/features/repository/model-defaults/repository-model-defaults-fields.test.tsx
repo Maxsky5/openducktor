@@ -369,7 +369,7 @@ test("emits the speed reset notice when switching a role default through a reduc
   }
 });
 
-test("shows workspace default inheritance hints on empty roles and disables their Clear button", () => {
+test("shows workspace default placeholder on empty roles and disables their Clear button", () => {
   renderNamingFields({
     presentation: "creation",
     selectedRepoConfig: {
@@ -385,7 +385,6 @@ test("shows workspace default inheritance hints on empty roles and disables thei
   });
 
   const qaRow = screen.getByLabelText("QA");
-  expect(within(qaRow).getByText("Uses workspace default")).toBeTruthy();
   expect(
     within(qaRow).getByRole("button", { name: "Select model, Use workspace default" }),
   ).toBeTruthy();

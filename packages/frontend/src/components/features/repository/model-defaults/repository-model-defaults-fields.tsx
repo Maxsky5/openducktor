@@ -54,7 +54,7 @@ export type RepositoryModelDefaultsFieldsProps = {
   onClearSelectedRepoAgentDefault: (role: string) => void;
   onUpdateSelectedRepoDefaultModel: (field: RepoAgentDefaultField, value: string) => void;
   onClearSelectedRepoDefaultModel: () => void;
-  /** Shows the naming model. Only the settings show it. */
+  /** Shows the naming model card alongside the workspace default model. */
   showNamingModel?: boolean;
 };
 
@@ -92,11 +92,9 @@ export function RepositoryModelDefaultsFields({
   }
 
   return (
-    <div className={cn("grid gap-4", isCreation ? "" : "p-4")}>
-      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+    <div className={cn("@container grid gap-4", isCreation ? "" : "p-4")}>
+      <div className={cn("grid grid-cols-1 gap-3", showNamingModel && "@[40rem]:grid-cols-2")}>
         <RepositoryDefaultModelBlock
-          presentation={presentation}
-          embedded
           selectedRepoConfig={selectedRepoConfig}
           availableRuntimeDefinitions={availableRuntimeDefinitions}
           catalogResources={catalogResources}
@@ -111,7 +109,6 @@ export function RepositoryModelDefaultsFields({
 
         {showNamingModel ? (
           <RepositoryNamingModelBlock
-            embedded
             selectedRepoConfig={selectedRepoConfig}
             availableRuntimeDefinitions={availableRuntimeDefinitions}
             catalogResources={catalogResources}
@@ -140,7 +137,7 @@ export function RepositoryModelDefaultsFields({
           isLoadingCatalog={isLoadingCatalog}
         />
 
-        <div className="divide-y divide-border">
+        <div className="grid grid-cols-1 gap-3 p-3.5 @[40rem]:grid-cols-2">
           {workflows.data.roles.map(({ role, label, definition }) => (
             <RepositoryRoleDefaultRow
               key={role}
@@ -295,67 +292,61 @@ function RepositoryRoleDefaultRow({
   const rolePlaceholder = hasDefaultModel ? "Use workspace default" : "Select a model";
 
   return (
-    <div aria-label={label} className="@container px-4 py-2.5">
-      <div className="grid grid-cols-1 gap-2 @[34rem]:grid-cols-[minmax(0,1fr)_minmax(19rem,26rem)] @[34rem]:items-center @[34rem]:gap-6">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{label}</p>
-          {!hasRoleOverride && hasDefaultModel ? (
-            <p className="text-[11px] text-muted-foreground">Uses workspace default</p>
-          ) : null}
-        </div>
-
-        <div className="flex min-w-0 items-center gap-1.5">
-          <div className="min-w-0 flex-1">
-            <RepositoryModelPickerField
-              runtimeDefinitions={runtimeDefinitions}
-              catalogResources={catalogResources}
-              value={controls.selectedPickerValue}
-              favoriteState={favoriteState}
-              options={toRepositoryModelPickerOptions({
-                controls,
-                value,
-                optionScope: "full",
-                onUpdateField: (field, nextValue) =>
-                  onUpdateSelectedRepoAgentDefault(role, field, nextValue),
-              })}
-              isReadOnly={isSaving || isLoadingSettings}
-              isLoadingCatalog={isRoleCatalogLoading}
-              placeholder={rolePlaceholder}
-              onSelect={(selectedValue, targetCatalog) =>
-                applyPickedModelDraft({
-                  currentConfig: selectedRepoConfig,
-                  readCurrent: (config) => config.agentDefaults[role],
-                  resolveRuntimeKind: (config) =>
-                    resolveRepoAgentDefaultRuntimeKind({
-                      selectedRepoConfig: config,
-                      runtimeDefinitions,
-                      role,
-                    }),
-                  getCatalogForRuntime,
-                  targetCatalog,
-                  value: selectedValue,
-                  applyNext: (config, next) => ({
-                    ...config,
-                    agentDefaults: { ...config.agentDefaults, [role]: next },
-                  }),
-                  updateConfig: onUpdateSelectedRepoConfig,
-                  onSpeedReset: () => toast.info(REPOSITORY_SPEED_RESET_NOTICE),
-                })
-              }
-            />
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-            disabled={isLoadingSettings || isSaving || !hasRoleOverride}
-            onClick={() => onClearSelectedRepoAgentDefault(role)}
-          >
-            Clear
-          </Button>
-        </div>
+    <div
+      aria-label={label}
+      className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/80 bg-muted/20 p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="truncate text-sm font-medium text-foreground">{label}</p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          disabled={isLoadingSettings || isSaving || !hasRoleOverride}
+          onClick={() => onClearSelectedRepoAgentDefault(role)}
+        >
+          Clear
+        </Button>
       </div>
+
+      <RepositoryModelPickerField
+        runtimeDefinitions={runtimeDefinitions}
+        catalogResources={catalogResources}
+        value={controls.selectedPickerValue}
+        favoriteState={favoriteState}
+        options={toRepositoryModelPickerOptions({
+          controls,
+          value,
+          optionScope: "full",
+          onUpdateField: (field, nextValue) =>
+            onUpdateSelectedRepoAgentDefault(role, field, nextValue),
+        })}
+        isReadOnly={isSaving || isLoadingSettings}
+        isLoadingCatalog={isRoleCatalogLoading}
+        placeholder={rolePlaceholder}
+        onSelect={(selectedValue, targetCatalog) =>
+          applyPickedModelDraft({
+            currentConfig: selectedRepoConfig,
+            readCurrent: (config) => config.agentDefaults[role],
+            resolveRuntimeKind: (config) =>
+              resolveRepoAgentDefaultRuntimeKind({
+                selectedRepoConfig: config,
+                runtimeDefinitions,
+                role,
+              }),
+            getCatalogForRuntime,
+            targetCatalog,
+            value: selectedValue,
+            applyNext: (config, next) => ({
+              ...config,
+              agentDefaults: { ...config.agentDefaults, [role]: next },
+            }),
+            updateConfig: onUpdateSelectedRepoConfig,
+            onSpeedReset: () => toast.info(REPOSITORY_SPEED_RESET_NOTICE),
+          })
+        }
+      />
     </div>
   );
 }

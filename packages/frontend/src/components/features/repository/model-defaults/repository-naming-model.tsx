@@ -11,7 +11,6 @@ type RepositoryNamingModelBlockProps = Pick<
   | "getCatalogForRuntime"
   | "isCatalogLoadingForRuntime"
 > & {
-  embedded?: boolean;
   selectedRepoConfig: WorkspaceModelDefaultsDraft;
   availableRuntimeDefinitions: RepositoryModelBlockProps["runtimeDefinitions"];
   onUpdateSelectedRepoConfig: (
@@ -21,7 +20,6 @@ type RepositoryNamingModelBlockProps = Pick<
 
 /** The model that writes short session titles and branch names. It has no agent profile. */
 export function RepositoryNamingModelBlock({
-  embedded = false,
   selectedRepoConfig,
   availableRuntimeDefinitions,
   onUpdateSelectedRepoConfig,
@@ -32,8 +30,6 @@ export function RepositoryNamingModelBlock({
       {...block}
       title="Naming model"
       description="Writes short session titles and branch names. When empty, task branches use the task title, and new chat worktrees need a name."
-      presentation="settings"
-      embedded={embedded}
       optionScope="effort_only"
       value={selectedRepoConfig.namingModel ?? null}
       runtimeDefinitions={availableRuntimeDefinitions}

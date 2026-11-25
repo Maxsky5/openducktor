@@ -8,7 +8,10 @@ import type {
 } from "@openducktor/contracts";
 import { useMemo, useReducer, useRef } from "react";
 import { errorMessage } from "@openducktor/frontend-core/lib/errors";
-import { prepareModelDefaultsForSave } from "@openducktor/frontend-core/lib/repo-agent-defaults";
+import {
+  normalizeNamingModelForSave,
+  prepareModelDefaultsForSave,
+} from "@openducktor/frontend-core/lib/repo-agent-defaults";
 import type { RecommendedDefaultModelSelection } from "@openducktor/frontend-core/sessions/model-selection/recommended-default-model";
 import type { WorkspaceModelDefaultsDraft } from "@/types/state-slices";
 import {
@@ -133,17 +136,19 @@ export function useWorkspaceCreation({
           !state.defaultModelTouched && !state.modelDraft.defaultModel && fallbackDefaultModel
             ? { ...state.modelDraft, defaultModel: { ...fallbackDefaultModel } }
             : state.modelDraft;
-        const outcome = await provider.commit(
-          {
-            ...details,
-            defaultTargetBranch: targetBranch,
-            ...prepareModelDefaultsForSave(modelDraftToSave),
-          },
-          async (input) => {
-            dispatch({ type: "commitAttempted" });
-            return commitWorkspaceProviderSetup(input);
-          },
-        );
+        const namingModel = normalizeNamingModelForSave(modelDraftToSave.namingModel);
+        const commitInput: Omit<WorkspaceProviderSetupCommit, "setupId" | "revision"> = {
+          ...details,
+          defaultTargetBranch: targetBranch,
+          ...prepareModelDefaultsForSave(modelDraftToSave),
+        };
+        if (namingModel) {
+          commitInput.namingModel = namingModel;
+        }
+        const outcome = await provider.commit(commitInput, async (input) => {
+          dispatch({ type: "commitAttempted" });
+          return commitWorkspaceProviderSetup(input);
+        });
         if (outcome.workspace)
           dispatch({ type: "created", workspaceId: outcome.workspace.workspaceId });
         if (outcome.error || outcome.phase !== "complete")
@@ -308,6 +313,7 @@ const uniquifyWorkspaceId = (candidate: string, existingIds: Set<string>): strin
 
 const emptyModelDraft = (): WorkspaceModelDefaultsDraft => ({
   defaultModel: undefined,
+  namingModel: undefined,
   agentDefaults: {},
 });
 

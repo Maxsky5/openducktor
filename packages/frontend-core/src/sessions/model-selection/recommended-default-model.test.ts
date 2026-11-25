@@ -8,10 +8,7 @@ import {
 } from "@openducktor/contracts";
 import type { AgentModelCatalog } from "@openducktor/core";
 import type { RuntimeModelCatalogQueryResource } from "../../queries/use-runtime-model-catalogs";
-import {
-  matchesRecommendedDefaultModel,
-  resolveRecommendedDefaultModel,
-} from "./recommended-default-model";
+import { resolveRecommendedDefaultModel } from "./recommended-default-model";
 
 const makeResource = (
   descriptor: RuntimeDescriptor,
@@ -162,18 +159,12 @@ describe("resolveRecommendedDefaultModel", () => {
     });
 
     expect(result).toEqual({
-      selection: {
-        runtimeKind: "claude",
-        providerId: "claude",
-        modelId: "claude-opus-5-5",
-        variant: "high",
-        profileId: "",
-      },
-      runtimeLabel: "Claude",
-      modelLabel: "Opus 5.5",
-      effortLabel: "high",
+      runtimeKind: "claude",
+      providerId: "claude",
+      modelId: "claude-opus-5-5",
+      variant: "high",
+      profileId: "",
     });
-    expect(matchesRecommendedDefaultModel(result?.selection, result)).toBe(true);
   });
 
   test("ignores trailing release dates when comparing Claude Opus versions", () => {
@@ -213,8 +204,8 @@ describe("resolveRecommendedDefaultModel", () => {
       catalogResources: [makeResource(CLAUDE_RUNTIME_DESCRIPTOR, datedClaudeCatalog)],
     });
 
-    expect(result?.selection.modelId).toBe("claude-opus-4-6");
-    expect(result?.selection.variant).toBe("high");
+    expect(result?.modelId).toBe("claude-opus-4-6");
+    expect(result?.variant).toBe("high");
   });
 
   test("falls back to latest Codex GPT X Sol in high effort when Claude is unavailable or disabled", () => {
@@ -232,16 +223,11 @@ describe("resolveRecommendedDefaultModel", () => {
     });
 
     expect(result).toEqual({
-      selection: {
-        runtimeKind: "codex",
-        providerId: "codex",
-        modelId: "gpt-6.1-sol",
-        variant: "high",
-        profileId: "",
-      },
-      runtimeLabel: "Codex",
-      modelLabel: "GPT-6.1-Sol",
-      effortLabel: "high",
+      runtimeKind: "codex",
+      providerId: "codex",
+      modelId: "gpt-6.1-sol",
+      variant: "high",
+      profileId: "",
     });
   });
 
@@ -252,16 +238,11 @@ describe("resolveRecommendedDefaultModel", () => {
     });
 
     expect(result).toEqual({
-      selection: {
-        runtimeKind: "antigravity",
-        providerId: "antigravity",
-        modelId: "gemini-neon",
-        variant: "high",
-        profileId: "",
-      },
-      runtimeLabel: "Antigravity",
-      modelLabel: "Gemini Neon",
-      effortLabel: "high",
+      runtimeKind: "antigravity",
+      providerId: "antigravity",
+      modelId: "gemini-neon",
+      variant: "high",
+      profileId: "",
     });
   });
 
@@ -272,16 +253,11 @@ describe("resolveRecommendedDefaultModel", () => {
     });
 
     expect(result).toEqual({
-      selection: {
-        runtimeKind: "antigravity",
-        providerId: "antigravity",
-        modelId: "gemini-3.8-flash",
-        variant: "high",
-        profileId: "",
-      },
-      runtimeLabel: "Antigravity",
-      modelLabel: "Gemini 3.8 Flash",
-      effortLabel: "high",
+      runtimeKind: "antigravity",
+      providerId: "antigravity",
+      modelId: "gemini-3.8-flash",
+      variant: "high",
+      profileId: "",
     });
   });
 

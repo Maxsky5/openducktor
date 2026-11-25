@@ -300,6 +300,7 @@ function WorkspaceModelsFields({
       </div>
       <RepositoryModelDefaultsFields
         presentation="creation"
+        showNamingModel
         selectedRepoConfig={controller.modelDraft}
         availableRuntimeDefinitions={surface.availableRuntimeDefinitions}
         catalogResources={surface.catalogResources}

@@ -128,7 +128,7 @@ export function useWorkspaceCreationWithRecommendedDefault(
   const effectiveModelDraft = useMemo(
     () =>
       shouldApplyRecommended
-        ? { ...controller.modelDraft, defaultModel: { ...recommendedDefault.selection } }
+        ? { ...controller.modelDraft, defaultModel: { ...recommendedDefault } }
         : controller.modelDraft,
     [controller.modelDraft, recommendedDefault, shouldApplyRecommended],
   );
@@ -143,11 +143,9 @@ export function useWorkspaceCreationWithRecommendedDefault(
     updateModelDraft: (updater) =>
       controller.updateModelDraft((current) =>
         updater(
-          !current.defaultModel
-            ? { ...current, defaultModel: { ...recommendedDefault.selection } }
-            : current,
+          !current.defaultModel ? { ...current, defaultModel: { ...recommendedDefault } } : current,
         ),
       ),
-    submit: () => controller.submit(recommendedDefault.selection),
+    submit: () => controller.submit(recommendedDefault),
   };
 }
