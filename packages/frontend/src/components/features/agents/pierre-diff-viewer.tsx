@@ -44,13 +44,10 @@ import { useWorkerPool } from "./pierre-diff-viewer-react";
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export type PierreDiffStyle = NonNullable<BaseDiffOptions["diffStyle"]>;
-export type PierreDiffIndicators = NonNullable<BaseDiffOptions["diffIndicators"]>;
-export type PierreLineOverflow = NonNullable<BaseDiffOptions["overflow"]>;
-export type PierreHunkSeparators = Exclude<
-  NonNullable<BaseDiffOptions["hunkSeparators"]>,
-  "custom"
->;
-export type PierreDiffHeightMode = "full" | "scroll";
+type PierreDiffIndicators = NonNullable<BaseDiffOptions["diffIndicators"]>;
+type PierreLineOverflow = NonNullable<BaseDiffOptions["overflow"]>;
+type PierreHunkSeparators = Exclude<NonNullable<BaseDiffOptions["hunkSeparators"]>, "custom">;
+type PierreDiffHeightMode = "full" | "scroll";
 /** A control shown at the end of each text chunk. */
 export type PierreHunkAction = {
   id: string;

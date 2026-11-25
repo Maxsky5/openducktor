@@ -4,7 +4,7 @@ import webKnipConfig from "./packages/openducktor-web/knip.config";
 export default {
   workspaces: {
     ".": {
-      entry: [".agents/skills/pr-spotlight/scripts/render.ts", "scripts/test-support/*.test.ts"],
+      entry: [".agents/skills/pr-spotlight/scripts/render.ts"],
     },
     "apps/docs-website": {
       entry: ["app/**/*.{ts,tsx}", "scripts/*.ts", "tests/*.test.ts", "browser-tests/*.ts"],
